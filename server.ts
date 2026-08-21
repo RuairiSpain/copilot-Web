@@ -9,6 +9,12 @@
  * are attached directly to this server rather than routed through a
  * separate service.
  */
+// Order matters: load-dotenv (loads .env locally) must run before
+// bootstrap-env (synthesizes DATABASE_URL from discrete PG* env vars —
+// Azure Container Apps deployments), which must run before anything
+// below transitively instantiates PrismaClient.
+import "./src/server/load-dotenv";
+import "./src/server/bootstrap-env";
 import { createServer } from "node:http";
 import next from "next";
 import { attachSessionWebSocketServer } from "./src/server/ws";

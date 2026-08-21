@@ -1,0 +1,15 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "namePrefix": { "value": "copilotweb" },
+    "containerImage": { "value": "ghcr.io/YOUR_GH_USERNAME/copilot-web:latest" },
+    "registryUsername": { "value": "YOUR_GH_USERNAME" },
+    "registryPassword": { "value": "REPLACE_ME_GH_PAT_WITH_READ_PACKAGES" },
+    "githubClientId": { "value": "REPLACE_ME_OAUTH_APP_CLIENT_ID" },
+    "githubClientSecret": { "value": "REPLACE_ME_OAUTH_APP_CLIENT_SECRET" },
+    "authSecret": { "value": "REPLACE_ME_RUN_NPX_AUTH_SECRET" },
+    "tokenEncryptionKey": { "value": "REPLACE_ME_RUN_OPENSSL_RAND_BASE64_32" },
+    "postgresAdminPassword": { "value": "REPLACE_ME_STRONG_PASSWORD" }
+  }
+}
