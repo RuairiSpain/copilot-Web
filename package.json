@@ -1,0 +1,49 @@
+{
+  "name": "copilot-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Mobile-friendly multi-session chat UI over the GitHub Copilot SDK",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "tsx server.ts",
+    "build": "next build",
+    "start": "NODE_ENV=production tsx server.ts",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy"
+  },
+  "dependencies": {
+    "@assistant-ui/react": "^0.15.16",
+    "@github/copilot-sdk": "^1.0.11",
+    "@octokit/rest": "^22.0.1",
+    "@prisma/client": "^6.3.1",
+    "next": "^16.3.2",
+    "next-auth": "5.0.0-beta.32",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "ws": "^8.18.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "@types/ws": "^8.5.13",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9.17.0",
+    "eslint-config-next": "^16.3.2",
+    "postcss": "^8.4.49",
+    "prisma": "^6.3.1",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

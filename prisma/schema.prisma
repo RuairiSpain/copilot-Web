@@ -1,0 +1,143 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SessionMode {
+  planning
+  interactive
+  auto
+}
+
+enum SessionStatus {
+  idle
+  running
+  archived
+}
+
+enum McpServerType {
+  stdio
+  http
+}
+
+model User {
+  id                  String    @id @default(cuid())
+  githubId            String    @unique
+  login               String
+  name                String?
+  avatarUrl           String?
+  // AES-256-GCM ciphertext of the GitHub OAuth user access token, base64.
+  encryptedAccessToken String
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  sessions            Session[]
+}
+
+model Session {
+  id              String        @id @default(cuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title           String
+  repoFullName    String
+  repoDefaultBranch String
+  mode            SessionMode   @default(interactive)
+  status          SessionStatus @default(idle)
+  // Set once an in-process CopilotSession has been created for this row;
+  // used to resume rather than re-create on the next server-side attach.
+  sdkSessionId    String?
+  lastEventSeq    Int           @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  lastActiveAt    DateTime      @default(now())
+
+  agents          SessionAgent[]
+  skills          SessionSkill[]
+  mcpServers      SessionMcpServer[]
+  functions       SessionFunction[]
+  events          SessionEvent[]
+
+  @@index([userId])
+}
+
+model SessionAgent {
+  id          String   @id @default(cuid())
+  sessionId   String
+  session     Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  name        String
+  displayName String?
+  description String?
+  prompt      String
+  // null/omitted = all tools available to this agent
+  tools       String[]
+  createdAt   DateTime @default(now())
+
+  @@unique([sessionId, name])
+}
+
+model SessionSkill {
+  id         String  @id @default(cuid())
+  sessionId  String
+  session    Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  skillName  String
+  enabled    Boolean @default(true)
+
+  @@unique([sessionId, skillName])
+}
+
+model SessionMcpServer {
+  id         String        @id @default(cuid())
+  sessionId  String
+  session    Session       @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  name       String
+  type       McpServerType
+  // stdio: command; http: URL
+  target     String
+  // JSON-encoded, AES-256-GCM-encrypted blob of extra config (args/env for
+  // stdio, headers/bearer token for http). Never sent to the client.
+  encryptedConfig String?
+  createdAt  DateTime      @default(now())
+
+  @@unique([sessionId, name])
+}
+
+// A user-defined "function": a custom tool backed by an outbound webhook
+// rather than arbitrary code, since arbitrary handler code can't be safely
+// authored from a mobile settings screen. The agent calls it like any
+// other tool; the handler POSTs the call's arguments to `webhookUrl` and
+// returns the response body as the tool result.
+model SessionFunction {
+  id          String   @id @default(cuid())
+  sessionId   String
+  session     Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  name        String
+  description String
+  // JSON Schema (object) describing the function's parameters.
+  parametersSchema Json
+  webhookUrl  String
+  // JSON-encoded, AES-256-GCM-encrypted extra headers (e.g. an API key) to
+  // send with the webhook request. Never sent to the client.
+  encryptedHeaders String?
+  createdAt   DateTime @default(now())
+
+  @@unique([sessionId, name])
+}
+
+// Append-only mirror of SDK SessionEvents, used to replay history to a
+// client (re)connecting to a session, possibly from a different device,
+// and to let auto-mode sessions keep progressing while nobody is attached.
+model SessionEvent {
+  id        String   @id @default(cuid())
+  sessionId String
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  seq       Int
+  type      String
+  data      Json
+  createdAt DateTime @default(now())
+
+  @@unique([sessionId, seq])
+  @@index([sessionId, seq])
+}
