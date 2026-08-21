@@ -9,6 +9,7 @@ import {
     type MCPServerConfig,
     type SessionEvent as SdkSessionEvent,
 } from "@github/copilot-sdk";
+import type { SessionFunction } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getGitHubTokenForUser } from "@/lib/octokit";
 import { decryptSecret } from "@/lib/crypto";
@@ -18,6 +19,7 @@ import {
     createExitPlanModeHandler,
     createPermissionHandler,
     createPreToolUseGuard,
+    createUserInputHandler,
     type PermissionBridge,
 } from "./permission-modes";
 import type { ClientSessionEvent, ClientToServerMessage, PermissionDecisionKind, SessionMode } from "@/types/session";
@@ -50,7 +52,10 @@ interface PendingPermission {
     resolve: (decision: PermissionDecisionKind | "timeout") => void;
 }
 interface PendingPlan {
-    resolve: (result: { approved: boolean; feedback?: string } | "timeout") => void;
+    resolve: (result: { approved: boolean; selectedAction?: string; feedback?: string } | "timeout") => void;
+}
+interface PendingUserInput {
+    resolve: (result: { answer: string; wasFreeform: boolean } | "timeout") => void;
 }
 
 interface LiveSession {
@@ -62,6 +67,7 @@ interface LiveSession {
     sockets: Set<WebSocket>;
     pendingPermissions: Map<string, PendingPermission>;
     pendingPlans: Map<string, PendingPlan>;
+    pendingUserInputs: Map<string, PendingUserInput>;
     evictionTimer?: ReturnType<typeof setTimeout>;
 }
 
@@ -117,12 +123,23 @@ class SessionManager {
             }
             case "plan.respond": {
                 const pending = live.pendingPlans.get(message.requestId);
-                pending?.resolve({ approved: message.approved, feedback: message.feedback });
+                pending?.resolve({ approved: message.approved, selectedAction: message.selectedAction, feedback: message.feedback });
                 live.pendingPlans.delete(message.requestId);
                 this.broadcastAppEvent(sessionId, "app.plan_resolved", {
                     requestId: message.requestId,
                     approved: message.approved,
+                    selectedAction: message.selectedAction,
                     feedback: message.feedback,
+                });
+                return;
+            }
+            case "ask_user.respond": {
+                const pending = live.pendingUserInputs.get(message.requestId);
+                pending?.resolve({ answer: message.answer, wasFreeform: message.wasFreeform });
+                live.pendingUserInputs.delete(message.requestId);
+                this.broadcastAppEvent(sessionId, "app.ask_user_resolved", {
+                    requestId: message.requestId,
+                    answer: message.answer,
                 });
                 return;
             }
@@ -143,6 +160,7 @@ class SessionManager {
         if (live) {
             for (const p of live.pendingPermissions.values()) p.resolve("timeout");
             for (const p of live.pendingPlans.values()) p.resolve("timeout");
+            for (const p of live.pendingUserInputs.values()) p.resolve("timeout");
             if (row.sdkSessionId) {
                 await live.client.deleteSession(row.sdkSessionId).catch(() => undefined);
             }
@@ -162,7 +180,7 @@ class SessionManager {
 
         const row = await prisma.session.findUniqueOrThrow({
             where: { id: sessionId },
-            include: { agents: true, skills: true, mcpServers: true },
+            include: { agents: true, skills: true, mcpServers: true, functions: true },
         });
         if (row.userId !== userId) throw new Error("Not authorized to access this session");
 
@@ -177,16 +195,17 @@ class SessionManager {
 
         const pendingPermissions = new Map<string, PendingPermission>();
         const pendingPlans = new Map<string, PendingPlan>();
+        const pendingUserInputs = new Map<string, PendingUserInput>();
         // The bridge emits its own `app.*` events into the same persisted/
         // broadcast stream as SDK events (rather than only invoking the SDK
         // handler callback), so the chat UI has one reliable channel to
-        // render pending approval/plan cards from — independent of whether
-        // the SDK also happens to emit a matching `permission.requested`
-        // session event for a given request kind.
+        // render pending approval/plan/question cards from — independent of
+        // whether the SDK also happens to emit a matching session event for
+        // a given request kind.
         const bridge: PermissionBridge = {
             requestPermission: (request) =>
                 new Promise((resolve) => {
-                    const requestId = String(request.requestId ?? randomUUID());
+                    const requestId = randomUUID();
                     pendingPermissions.set(requestId, { resolve });
                     this.broadcastAppEvent(sessionId, "app.permission_requested", { ...request, requestId });
                     setTimeout(() => {
@@ -195,11 +214,20 @@ class SessionManager {
                 }),
             requestPlanApproval: (request) =>
                 new Promise((resolve) => {
-                    const requestId = String(request.requestId ?? randomUUID());
+                    const requestId = randomUUID();
                     pendingPlans.set(requestId, { resolve });
                     this.broadcastAppEvent(sessionId, "app.plan_requested", { ...request, requestId });
                     setTimeout(() => {
                         if (pendingPlans.delete(requestId)) resolve("timeout");
+                    }, PERMISSION_TIMEOUT_MS);
+                }),
+            requestUserInput: (request) =>
+                new Promise((resolve) => {
+                    const requestId = randomUUID();
+                    pendingUserInputs.set(requestId, { resolve });
+                    this.broadcastAppEvent(sessionId, "app.ask_user_requested", { ...request, requestId });
+                    setTimeout(() => {
+                        if (pendingUserInputs.delete(requestId)) resolve("timeout");
                     }, PERMISSION_TIMEOUT_MS);
                 }),
         };
@@ -213,6 +241,7 @@ class SessionManager {
             tools: a.tools.length > 0 ? a.tools : null,
         }));
         const disabledSkills = row.skills.filter((s) => !s.enabled).map((s) => s.skillName);
+        const functionTools = row.functions.map((fn) => createFunctionTool(fn));
         const mcpServers: Record<string, MCPServerConfig> = {};
         for (const server of row.mcpServers) {
             const extra = server.encryptedConfig ? (JSON.parse(decryptSecret(server.encryptedConfig)) as Record<string, unknown>) : {};
@@ -249,6 +278,7 @@ class SessionManager {
             sockets: new Set(),
             pendingPermissions,
             pendingPlans,
+            pendingUserInputs,
             // sdkSession assigned just below; typed as definite-assignment here
             // since createSession/resumeSession both need the handlers above.
             sdkSession: undefined as unknown as CopilotSession,
@@ -259,9 +289,10 @@ class SessionManager {
             customAgents,
             disabledSkills,
             mcpServers,
-            tools: [createCommitAndPushTool(fsProvider, row.repoDefaultBranch)],
+            tools: [createCommitAndPushTool(fsProvider, row.repoDefaultBranch), ...functionTools],
             onPermissionRequest: createPermissionHandler(mode, bridge),
             onExitPlanModeRequest: createExitPlanModeHandler(mode, bridge),
+            onUserInputRequest: createUserInputHandler(mode, bridge),
             hooks: { onPreToolUse: createPreToolUseGuard() },
             onEvent: (event: SdkSessionEvent) => this.handleSdkEvent(sessionId, event),
             createSessionFsProvider: () => fsProvider,
@@ -360,6 +391,52 @@ function createCommitAndPushTool(fsProvider: GitHubFsProvider, defaultBranch: st
             return result.pullRequestUrl
                 ? `Committed ${result.commitSha} and opened pull request: ${result.pullRequestUrl}`
                 : `Committed ${result.commitSha} to ${branch ?? defaultBranch}.`;
+        },
+    });
+}
+
+const FUNCTION_CALL_TIMEOUT_MS = 30_000;
+
+/**
+ * A user-defined "function" (src/components/settings, SessionFunction
+ * model) is a custom tool backed by an outbound webhook rather than
+ * arbitrary code — safe to configure from a mobile settings screen. The
+ * tool's JSON Schema `parameters` is the row's `parametersSchema` verbatim
+ * (defineTool accepts a raw JSON Schema object as well as a Zod schema);
+ * calling it POSTs the arguments to `webhookUrl` and returns the response
+ * body as the tool result.
+ */
+function createFunctionTool(fn: SessionFunction) {
+    const extraHeaders = fn.encryptedHeaders
+        ? (JSON.parse(decryptSecret(fn.encryptedHeaders)) as { headers: Record<string, string> }).headers
+        : undefined;
+
+    return defineTool(fn.name, {
+        description: fn.description,
+        parameters: fn.parametersSchema as Record<string, unknown>,
+        handler: async (args) => {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), FUNCTION_CALL_TIMEOUT_MS);
+            try {
+                const res = await fetch(fn.webhookUrl, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", ...extraHeaders },
+                    body: JSON.stringify(args),
+                    signal: controller.signal,
+                });
+                const text = await res.text();
+                if (!res.ok) return `Error: webhook returned HTTP ${res.status}: ${text.slice(0, 2000)}`;
+                try {
+                    return JSON.parse(text);
+                } catch {
+                    return text;
+                }
+            } catch (err) {
+                const message = err instanceof Error ? err.message : String(err);
+                return `Error: failed to call function "${fn.name}": ${message}`;
+            } finally {
+                clearTimeout(timeout);
+            }
         },
     });
 }

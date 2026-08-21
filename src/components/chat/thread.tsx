@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { AssistantRuntimeProvider, ThreadPrimitive, ComposerPrimitive, type ThreadMessageLike } from "@assistant-ui/react";
 import { useSessionRuntime } from "./runtime";
 import { useSessionSocket } from "./use-session-socket";
@@ -112,6 +113,9 @@ function MessagePartView({ part, socket }: { part: unknown; socket: ReturnType<t
     if (p.type === "tool-call" && p.toolName === "__plan_review") {
         return <PlanCard requestId={p.toolCallId!} args={p.args} result={p.result as string | undefined} socket={socket} />;
     }
+    if (p.type === "tool-call" && p.toolName === "__ask_user") {
+        return <AskUserCard requestId={p.toolCallId!} args={p.args} result={p.result as string | undefined} socket={socket} />;
+    }
     if (p.type === "tool-call") {
         return <ToolCard toolName={p.toolName!} args={p.args} result={p.result} isError={p.isError} />;
     }
@@ -189,7 +193,9 @@ function PermissionCard({
 }
 
 /** Planning mode's core UI: gates leaving the CLI's read-only plan mode
- * until the user reviews and approves. */
+ * until the user reviews and approves. Fields match the SDK's real
+ * `ExitPlanModeRequest` (`summary`/`planContent`/`actions`/
+ * `recommendedAction`) — see permission-modes.ts. */
 function PlanCard({
     requestId,
     args,
@@ -201,7 +207,7 @@ function PlanCard({
     result?: string;
     socket: ReturnType<typeof useSessionSocket>;
 }) {
-    const request = args as { plan?: string; summary?: string };
+    const request = args as { summary?: string; planContent?: string; actions?: string[]; recommendedAction?: string };
     if (result) {
         return (
             <div className="rounded-card border border-border bg-surface px-3 py-2 text-xs text-muted">
@@ -213,22 +219,90 @@ function PlanCard({
         <div className="space-y-2 rounded-card border border-accent/40 bg-accent/5 px-3 py-2 text-sm">
             <p className="font-medium">Review plan</p>
             <div className="whitespace-pre-wrap rounded-card bg-surface px-2 py-1.5 text-xs">
-                {request.plan ?? request.summary ?? "No plan details provided."}
+                {request.planContent ?? request.summary ?? "No plan details provided."}
             </div>
             <div className="flex gap-2">
                 <button
                     className="rounded-card bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground"
-                    onClick={() => socket.respondPlan(requestId, true)}
+                    onClick={() => socket.respondPlan(requestId, true, request.recommendedAction)}
                 >
                     Approve &amp; start
                 </button>
                 <button
                     className="rounded-card border border-border px-3 py-1.5 text-xs"
-                    onClick={() => socket.respondPlan(requestId, false, "Please revise the plan.")}
+                    onClick={() => socket.respondPlan(requestId, false, undefined, "Please revise the plan.")}
                 >
                     Request changes
                 </button>
             </div>
         </div>
+    );
+}
+
+/** Interactive/planning modes' `ask_user` card: the agent's `ask_user`
+ * tool (enabled only when `onUserInputRequest` is registered — never in
+ * auto mode, see permission-modes.ts) surfaces a question here, with
+ * either free-form text or one of a fixed set of choices. */
+function AskUserCard({
+    requestId,
+    args,
+    result,
+    socket,
+}: {
+    requestId: string;
+    args: unknown;
+    result?: string;
+    socket: ReturnType<typeof useSessionSocket>;
+}) {
+    const request = args as { question?: string; choices?: string[]; allowFreeform?: boolean };
+    if (result !== undefined) {
+        return (
+            <div className="rounded-card border border-border bg-surface px-3 py-2 text-xs text-muted">
+                You answered: {result}
+            </div>
+        );
+    }
+    return (
+        <div className="space-y-2 rounded-card border border-accent/40 bg-accent/5 px-3 py-2 text-sm">
+            <p className="font-medium">{request.question ?? "Copilot has a question"}</p>
+            {request.choices && request.choices.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                    {request.choices.map((choice) => (
+                        <button
+                            key={choice}
+                            className="rounded-card border border-border px-3 py-1.5 text-xs"
+                            onClick={() => socket.respondAskUser(requestId, choice, false)}
+                        >
+                            {choice}
+                        </button>
+                    ))}
+                </div>
+            )}
+            {(request.allowFreeform ?? true) && <AskUserFreeformInput requestId={requestId} socket={socket} />}
+        </div>
+    );
+}
+
+function AskUserFreeformInput({ requestId, socket }: { requestId: string; socket: ReturnType<typeof useSessionSocket> }) {
+    const [text, setText] = useState("");
+    return (
+        <form
+            className="flex gap-2"
+            onSubmit={(e) => {
+                e.preventDefault();
+                if (!text.trim()) return;
+                socket.respondAskUser(requestId, text.trim(), true);
+            }}
+        >
+            <input
+                className="flex-1 rounded-card border border-border bg-surface px-2 py-1.5 text-xs"
+                placeholder="Type an answer…"
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+            />
+            <button type="submit" className="rounded-card bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground">
+                Send
+            </button>
+        </form>
     );
 }

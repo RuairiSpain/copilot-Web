@@ -15,7 +15,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
     const row = await prisma.session.findUnique({
         where: { id },
-        include: { agents: true, skills: true, mcpServers: true },
+        include: { agents: true, skills: true, mcpServers: true, functions: true },
     });
     if (!row || row.userId !== session.user.id) {
         return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -44,6 +44,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
             type: m.type as SessionDetailDto["mcpServers"][number]["type"],
             target: m.target,
             hasSecret: Boolean(m.encryptedConfig),
+        })),
+        functions: row.functions.map((fn) => ({
+            name: fn.name,
+            description: fn.description,
+            parametersSchema: fn.parametersSchema as Record<string, unknown>,
+            webhookUrl: fn.webhookUrl,
+            hasSecret: Boolean(fn.encryptedHeaders),
         })),
     };
     return NextResponse.json({ session: dto });

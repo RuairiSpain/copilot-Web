@@ -1,36 +1,54 @@
-import { approveAll, type ExitPlanModeHandler, type PermissionHandler } from "@github/copilot-sdk";
+import { approveAll, type ExitPlanModeHandler, type PermissionHandler, type SessionConfigBase } from "@github/copilot-sdk";
 import type { PermissionDecisionKind, SessionMode } from "@/types/session";
 
+// `UserInputHandler` isn't re-exported from the package root (unlike
+// `PermissionHandler`/`ExitPlanModeHandler`) — derive it structurally from
+// the exported `SessionConfigBase` field instead of importing a name that
+// doesn't exist at the public API boundary.
+type UserInputHandler = NonNullable<SessionConfigBase["onUserInputRequest"]>;
+
 /**
- * Maps the app's three user-facing modes onto the SDK's permission/plan
- * primitives (see docs/auth + nodejs/docs/extensions.md, and
- * `PermissionHandler` / `ExitPlanModeHandler` in src/types.ts):
+ * Maps the app's three user-facing modes onto the SDK's permission/plan/
+ * ask-user primitives (`PermissionHandler` / `ExitPlanModeHandler` /
+ * `UserInputHandler` in `@github/copilot-sdk`'s types.ts):
  *
  * - planning:    read-only until the user approves a plan
  *                (`onExitPlanModeRequest`).
  * - interactive: every tool permission is forwarded to whichever client(s)
- *                are attached and awaited (`onPermissionRequest`).
+ *                are attached and awaited (`onPermissionRequest`), and the
+ *                agent can ask free-form questions (`onUserInputRequest`).
  * - auto:        approved automatically so the session keeps working while
  *                nobody's connected — the "work in the background even if
  *                I'm offline" mode — with a hard-coded deny for
  *                obviously destructive shell patterns as a safety net.
+ *                `onUserInputRequest` is intentionally left unregistered in
+ *                auto mode: leaving it unset disables the agent's
+ *                `ask_user` tool entirely, rather than leaving a question
+ *                that can never be answered by anyone.
  */
 
-/** What SessionManager exposes to bridge a permission/plan request to
- * whichever WebSocket client(s) are currently attached to a session, and
- * to correlate their eventual `permission.respond` / `plan.respond`
- * message back to the pending request. */
+/** What SessionManager exposes to bridge a permission/plan/user-input
+ * request to whichever WebSocket client(s) are currently attached to a
+ * session, and to correlate their eventual `*.respond` message back to the
+ * pending request. None of the SDK's request types carry a `requestId` of
+ * their own (that only exists on the wrapping session *event*, e.g.
+ * `PermissionRequestedData`) — bridge implementations mint their own id
+ * per pending request. */
 export interface PermissionBridge {
-    requestPermission(request: {
-        requestId: string;
-        kind: string;
-        [key: string]: unknown;
-    }): Promise<PermissionDecisionKind | "timeout">;
+    requestPermission(request: { kind: string; [key: string]: unknown }): Promise<PermissionDecisionKind | "timeout">;
 
     requestPlanApproval(request: {
-        requestId: string;
-        [key: string]: unknown;
-    }): Promise<{ approved: boolean; feedback?: string } | "timeout">;
+        summary: string;
+        planContent?: string;
+        actions: string[];
+        recommendedAction: string;
+    }): Promise<{ approved: boolean; selectedAction?: string; feedback?: string } | "timeout">;
+
+    requestUserInput(request: {
+        question: string;
+        choices?: string[];
+        allowFreeform?: boolean;
+    }): Promise<{ answer: string; wasFreeform: boolean } | "timeout">;
 }
 
 const DESTRUCTIVE_SHELL_PATTERN = /\brm\s+-rf\s+\/|\bmkfs\b|:\(\)\{.*:\|:.*\};:/i;
@@ -70,7 +88,7 @@ export function createPermissionHandler(mode: SessionMode, bridge: PermissionBri
 
     // planning + interactive: forward every request and wait for a human.
     return async (request) => {
-        const decision = await bridge.requestPermission(request as unknown as { requestId: string; kind: string });
+        const decision = await bridge.requestPermission(request as unknown as { kind: string });
         return toPermissionResult(decision);
     };
 }
@@ -82,11 +100,22 @@ export function createExitPlanModeHandler(mode: SessionMode, bridge: PermissionB
         return () => ({ approved: true });
     }
     return async (request) => {
-        const result = await bridge.requestPlanApproval(request as unknown as { requestId: string });
+        const result = await bridge.requestPlanApproval(request);
         if (result === "timeout" || !result.approved) {
             return { approved: false, feedback: result === "timeout" ? "Timed out waiting for review." : result.feedback };
         }
-        return { approved: true };
+        return { approved: true, selectedAction: result.selectedAction };
+    };
+}
+
+/** Only registered for planning/interactive — see the module doc for why
+ * auto mode deliberately leaves `ask_user` disabled. */
+export function createUserInputHandler(mode: SessionMode, bridge: PermissionBridge): UserInputHandler | undefined {
+    if (mode === "auto") return undefined;
+    return async (request) => {
+        const result = await bridge.requestUserInput(request);
+        if (result === "timeout") return { answer: "", wasFreeform: true };
+        return result;
     };
 }
 

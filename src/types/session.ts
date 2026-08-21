@@ -48,10 +48,24 @@ export interface SessionSummaryDto {
     lastActiveAt: string;
 }
 
+/** A user-defined "function": a custom tool backed by an outbound webhook
+ * rather than arbitrary code (which can't be safely authored from a mobile
+ * settings screen). Calling it POSTs `parametersSchema`-shaped args to
+ * `webhookUrl` and returns the response body as the tool result. */
+export interface SessionFunctionDto {
+    name: string;
+    description: string;
+    parametersSchema: Record<string, unknown>;
+    webhookUrl: string;
+    /** Only ever present on write; the server never echoes secrets back. */
+    hasSecret?: boolean;
+}
+
 export interface SessionDetailDto extends SessionSummaryDto {
     agents: SessionAgentDto[];
     skills: SessionSkillDto[];
     mcpServers: SessionMcpServerDto[];
+    functions: SessionFunctionDto[];
 }
 
 export interface CreateSessionInput {
@@ -87,5 +101,6 @@ export type PermissionDecisionKind = "approve-once" | "approve-for-session" | "r
 export type ClientToServerMessage =
     | { kind: "prompt"; text: string }
     | { kind: "permission.respond"; requestId: string; decision: PermissionDecisionKind }
-    | { kind: "plan.respond"; requestId: string; approved: boolean; feedback?: string }
+    | { kind: "plan.respond"; requestId: string; approved: boolean; selectedAction?: string; feedback?: string }
+    | { kind: "ask_user.respond"; requestId: string; answer: string; wasFreeform: boolean }
     | { kind: "abort" };

@@ -10,6 +10,7 @@ function makeBridge(overrides: Partial<PermissionBridge> = {}): PermissionBridge
     return {
         requestPermission: vi.fn(async () => "reject" as const),
         requestPlanApproval: vi.fn(async () => ({ approved: false })),
+        requestUserInput: vi.fn(async () => ({ answer: "", wasFreeform: true })),
         ...overrides,
     };
 }

@@ -6,6 +6,13 @@ export const metadata: Metadata = {
     title: "Copilot Web",
     description: "Chat with GitHub Copilot across your repos, from your phone.",
     manifest: "/manifest.webmanifest",
+    icons: {
+        icon: [
+            { url: "/icons/icon.svg", type: "image/svg+xml" },
+            { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+        ],
+        apple: "/icons/apple-touch-icon.png",
+    },
     appleWebApp: {
         capable: true,
         statusBarStyle: "black-translucent",

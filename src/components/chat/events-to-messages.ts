@@ -197,6 +197,18 @@ export function eventsToMessages(events: WireEvent[]): ThreadMessageLike[] {
                 builder.patchStandalone(`plan-${String(data.requestId)}`, { result: data.approved ? "approved" : "rejected" });
                 break;
 
+            case "app.ask_user_requested":
+                builder.pushStandalone(`ask-${String(data.requestId)}`, {
+                    type: "tool-call",
+                    toolCallId: String(data.requestId),
+                    toolName: "__ask_user",
+                    args: data,
+                });
+                break;
+            case "app.ask_user_resolved":
+                builder.patchStandalone(`ask-${String(data.requestId)}`, { result: data.answer });
+                break;
+
             case "session.error":
                 builder.flush();
                 builder.messages.push({

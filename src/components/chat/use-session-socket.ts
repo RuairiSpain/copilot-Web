@@ -74,8 +74,10 @@ export function useSessionSocket(sessionId: string) {
         abort: () => send({ kind: "abort" }),
         respondPermission: (requestId: string, decision: PermissionDecisionKind) =>
             send({ kind: "permission.respond", requestId, decision }),
-        respondPlan: (requestId: string, approved: boolean, feedback?: string) =>
-            send({ kind: "plan.respond", requestId, approved, feedback }),
+        respondPlan: (requestId: string, approved: boolean, selectedAction?: string, feedback?: string) =>
+            send({ kind: "plan.respond", requestId, approved, selectedAction, feedback }),
+        respondAskUser: (requestId: string, answer: string, wasFreeform: boolean) =>
+            send({ kind: "ask_user.respond", requestId, answer, wasFreeform }),
     };
 }
 

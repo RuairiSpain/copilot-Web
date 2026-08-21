@@ -57,6 +57,7 @@ model Session {
   agents          SessionAgent[]
   skills          SessionSkill[]
   mcpServers      SessionMcpServer[]
+  functions       SessionFunction[]
   events          SessionEvent[]
 
   @@index([userId])
@@ -99,6 +100,28 @@ model SessionMcpServer {
   // stdio, headers/bearer token for http). Never sent to the client.
   encryptedConfig String?
   createdAt  DateTime      @default(now())
+
+  @@unique([sessionId, name])
+}
+
+// A user-defined "function": a custom tool backed by an outbound webhook
+// rather than arbitrary code, since arbitrary handler code can't be safely
+// authored from a mobile settings screen. The agent calls it like any
+// other tool; the handler POSTs the call's arguments to `webhookUrl` and
+// returns the response body as the tool result.
+model SessionFunction {
+  id          String   @id @default(cuid())
+  sessionId   String
+  session     Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  name        String
+  description String
+  // JSON Schema (object) describing the function's parameters.
+  parametersSchema Json
+  webhookUrl  String
+  // JSON-encoded, AES-256-GCM-encrypted extra headers (e.g. an API key) to
+  // send with the webhook request. Never sent to the client.
+  encryptedHeaders String?
+  createdAt   DateTime @default(now())
 
   @@unique([sessionId, name])
 }
