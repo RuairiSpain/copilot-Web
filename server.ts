@@ -12,6 +12,7 @@
 import { createServer } from "node:http";
 import next from "next";
 import { attachSessionWebSocketServer } from "./src/server/ws";
+import { formatEnvProblems, validateEnv } from "./src/server/env";
 
 const port = Number(process.env.PORT ?? 3000);
 const dev = process.env.NODE_ENV !== "production";
@@ -20,6 +21,14 @@ const app = next({ dev });
 const handle = app.getRequestHandler();
 
 async function main() {
+    // Fail fast with a clear message rather than the first login attempt
+    // hitting an obscure error deep in NextAuth or src/lib/crypto.ts.
+    const envProblems = validateEnv();
+    if (envProblems.length > 0) {
+        console.error(formatEnvProblems(envProblems));
+        process.exit(1);
+    }
+
     await app.prepare();
 
     const httpServer = createServer((req, res) => {

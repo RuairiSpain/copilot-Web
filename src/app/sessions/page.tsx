@@ -25,5 +25,5 @@ export default async function SessionsPage() {
         lastActiveAt: row.lastActiveAt.toISOString(),
     }));
 
-    return <SessionList sessions={sessions} />;
+    return <SessionList sessions={sessions} userLogin={session.user.login} />;
 }
