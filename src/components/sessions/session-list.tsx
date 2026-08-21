@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { NewSessionDialog } from "./new-session-dialog";
+import { SignOutButton } from "@/components/sign-out-button";
 import type { SessionSummaryDto } from "@/types/session";
 
 const MODE_LABEL: Record<SessionSummaryDto["mode"], string> = {
@@ -11,12 +12,12 @@ const MODE_LABEL: Record<SessionSummaryDto["mode"], string> = {
     auto: "Auto accept",
 };
 
-export function SessionList({ sessions }: { sessions: SessionSummaryDto[] }) {
+export function SessionList({ sessions, userLogin }: { sessions: SessionSummaryDto[]; userLogin?: string }) {
     const [showNew, setShowNew] = useState(false);
 
     return (
         <div className="mx-auto flex min-h-dvh max-w-lg flex-col">
-            <header className="flex items-center justify-between border-b border-border px-4 py-4">
+            <header className="flex items-center justify-between border-b border-border px-4 py-3">
                 <h1 className="text-lg font-semibold">Sessions</h1>
                 <button
                     type="button"
@@ -26,6 +27,10 @@ export function SessionList({ sessions }: { sessions: SessionSummaryDto[] }) {
                     + New
                 </button>
             </header>
+            <div className="flex items-center justify-between border-b border-border px-4 py-2 text-xs text-muted">
+                {userLogin ? <span>Signed in as {userLogin}</span> : <span />}
+                <SignOutButton className="text-xs text-muted underline underline-offset-2" />
+            </div>
 
             <ul className="flex-1 divide-y divide-border overflow-y-auto">
                 {sessions.length === 0 && (
