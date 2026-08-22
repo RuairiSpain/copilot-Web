@@ -1,4 +1,5 @@
 import type { Server as HttpServer, IncomingMessage } from "node:http";
+import type { Duplex } from "node:stream";
 import { WebSocketServer, type WebSocket } from "ws";
 import { getToken } from "next-auth/jwt";
 import { sessionManager } from "./session-manager";
@@ -11,6 +12,12 @@ import type { ClientSessionEvent, ClientToServerMessage } from "@/types/session"
  * stay in the same process without a pub/sub layer between them.
  */
 
+/** Matches Next's own (unexported-from-the-public-API) `UpgradeHandler`
+ * type (`next/dist/server/next.d.ts`) — declared locally rather than
+ * imported from that internal path so this doesn't depend on Next's
+ * internal module layout across versions. */
+type NextUpgradeHandler = (req: IncomingMessage, socket: Duplex, head: Buffer) => Promise<void>;
+
 function toWebRequest(req: IncomingMessage): Request {
     const host = req.headers.host ?? "localhost";
     const url = `http://${host}${req.url ?? ""}`;
@@ -22,14 +29,23 @@ function toWebRequest(req: IncomingMessage): Request {
     return new Request(url, { headers });
 }
 
-export function attachSessionWebSocketServer(httpServer: HttpServer) {
+export function attachSessionWebSocketServer(httpServer: HttpServer, nextUpgradeHandler: NextUpgradeHandler) {
     const wss = new WebSocketServer({ noServer: true });
 
     httpServer.on("upgrade", (req, socket, head) => {
         const url = new URL(req.url ?? "", "http://internal");
         const match = url.pathname.match(/^\/ws\/sessions\/([^/]+)$/);
         if (!match) {
-            socket.destroy();
+            // Not one of ours — most notably `next dev`'s own Turbopack/HMR
+            // websocket. Hand it to Next instead of destroying the socket:
+            // destroying it left the dev client's hot-reload handshake
+            // stuck forever, which turned out to also stall hydration
+            // itself — plain DOM was there, but no client component's
+            // event handlers ever attached. Found via the Playwright E2E
+            // suite (e2e/): a button click that should open a dialog did
+            // nothing, with no console error to point at, because nothing
+            // downstream of the broken HMR socket ever finished booting.
+            void nextUpgradeHandler(req, socket, head);
             return;
         }
         const sessionId = match[1]!;

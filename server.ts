@@ -41,7 +41,7 @@ async function main() {
         handle(req, res);
     });
 
-    attachSessionWebSocketServer(httpServer);
+    attachSessionWebSocketServer(httpServer, app.getUpgradeHandler());
 
     httpServer.listen(port, () => {
         console.log(`> copilot-web listening on http://localhost:${port}`);

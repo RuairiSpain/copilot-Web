@@ -58,6 +58,10 @@ docker compose up   # app + Postgres
 npm install
 npm run prisma:migrate
 npm run dev
+
+# to run the E2E suite too (needs a Chromium build once):
+npx playwright install chromium
+npm run test:e2e
 ```
 
 ## Scripts
@@ -68,6 +72,7 @@ npm run dev
 | `npm run build` / `npm run start` | Production build/run |
 | `npm run lint` / `npm run typecheck` | ESLint / `tsc --noEmit` |
 | `npm test` | Vitest tests (unit + Postgres integration — see Status) |
+| `npm run test:e2e` | Playwright E2E suite (`e2e/` — see Status) |
 | `npm run prisma:migrate` / `prisma:deploy` | DB migrations (dev / prod) |
 
 ## Known limitations (by design, this pass)
@@ -100,12 +105,30 @@ npm run dev
 - `npm run typecheck`, `npm run lint`, `npm run build` all pass, checked
   against the *installed* `@github/copilot-sdk` and `@assistant-ui/react`
   type definitions (not just their docs).
-- `npm test` — 25 tests, including integration tests against a real local
+- `npm test` — 36 tests, including integration tests against a real local
   Postgres (`tests/event-log.test.ts`, `tests/session-manager.test.ts` —
   the latter mocks only `@github/copilot-sdk`'s native runtime and
   `@octokit/rest`, since neither can run without a real Copilot
   subscription/GitHub token; every call *into* the mock is still
   type-checked against the real SDK).
+- `npm run test:e2e` — a Playwright suite (`e2e/`) that drives the real app
+  in a real browser end-to-end: sign in → create a session against a repo →
+  send a prompt → see the assistant's reply render → the session shows up
+  back on the list. Two things are mocked, both explained in `e2e/`: login
+  (a session cookie is minted directly with Auth.js's own `encode()` rather
+  than driving GitHub's real OAuth screen — see `e2e/global-setup.ts`) and
+  the session WebSocket's "backend" (`page.routeWebSocket`, so the suite
+  doesn't need a live `@github/copilot-sdk` runtime or real Copilot access
+  — see `e2e/mocks.ts`). Everything else — routing, session create/list
+  APIs, the real DB row, the chat UI's event-to-message rendering, the
+  composer — is real. This suite is also what caught a genuine bug:
+  `server.ts`'s WebSocket upgrade handler was destroying *every* upgrade
+  request that wasn't one of ours, including `next dev`'s own Turbopack/HMR
+  socket, which silently stalled hydration entirely in dev mode. Fixed by
+  forwarding non-matching upgrades to `app.getUpgradeHandler()` instead
+  (`src/server/ws.ts`) — a dev-only symptom, but a real bug, found by
+  actually running a browser against the app rather than by reasoning about
+  the code.
 - A full local smoke test booting the real server against a real Postgres
   database (migrated with `prisma migrate deploy`), covering: unauthenticated
   requests correctly redirected/401'd on every page and API route; the
