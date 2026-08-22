@@ -12,3 +12,7 @@ prisma/dev.db
 prisma/dev.db-journal
 *.tsbuildinfo
 infra/**/*.local.json
+/e2e/.auth
+/playwright-report
+/test-results
+/blob-report
