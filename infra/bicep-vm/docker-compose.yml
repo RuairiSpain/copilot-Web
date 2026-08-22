@@ -1,0 +1,49 @@
+## Deployed to /opt/copilot-web on the VM by infra/scripts/deploy-vm.sh —
+## not run locally. Uses a pre-built image (pushed to ghcr.io by CI)
+## rather than `build: .` (the repo source isn't on this VM), and adds
+## Caddy for automatic free Let's Encrypt HTTPS in front of the app.
+services:
+  app:
+    image: ${CONTAINER_IMAGE}
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "3000"
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: copilot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: copilot_web
+    volumes:
+      - copilot_web_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U copilot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  copilot_web_db:
+  caddy_data:
+  caddy_config:

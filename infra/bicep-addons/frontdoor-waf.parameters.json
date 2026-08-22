@@ -1,0 +1,10 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "namePrefix": { "value": "copilotweb" },
+    "skuName": { "value": "Standard_AzureFrontDoor" },
+    "originHostname": { "value": "REPLACE_ME_containerAppFqdn_OUTPUT_FROM_MAIN_DEPLOY" },
+    "rateLimitThreshold": { "value": 300 }
+  }
+}
