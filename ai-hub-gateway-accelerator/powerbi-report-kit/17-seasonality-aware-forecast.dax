@@ -1,0 +1,69 @@
+// Seasonality-aware month-end forecast — replaces [Forecast Month-End
+// Cost]'s flat linear extrapolation (days elapsed ÷ days in month) with
+// one that weights each remaining day by its historical day-of-week
+// share of volume, using data the heatmap (file 10) already proves is
+// real: a naive linear forecast assumes every remaining day looks like
+// the average day so far, which is wrong if, say, weekends run at a
+// fraction of weekday volume — the linear version would systematically
+// over- or under-forecast depending on which weekdays are left in the
+// month.
+//
+// REQUIRES `Day Of Week Number` and `Date Only` from
+// 10-heatmap-moving-average.dax, and one new calculated table.
+
+// ============================================================
+// CALCULATED TABLE — one row per weekday (1-7), that weekday's average
+// daily cost across all history in the model. (Swap the outer
+// FILTER('llm-usage-container', ...) for a trailing-N-day window, same
+// pattern as CostCenterDailyCost in file 14, if you'd rather the profile
+// reflect recent behavior than all-time history — all-time is the
+// simpler default and fine once a few weeks of data exist.)
+// ============================================================
+
+WeekdayProfile =
+ADDCOLUMNS(
+    SUMMARIZE('llm-usage-container', 'llm-usage-container'[Day Of Week Number]),
+    "AvgDailyCost",
+    CALCULATE(
+        DIVIDE([Total Cost (incl. PTU)], DISTINCTCOUNT('llm-usage-container'[Date Only]))
+    )
+)
+
+// ============================================================
+// FORECAST MEASURE
+// ============================================================
+
+Seasonality-Aware Forecast Month-End Cost =
+VAR CurrentDate = INT(MAX('llm-usage-container'[timestamp]))
+VAR MonthEnd = EOMONTH(CurrentDate, 0)
+VAR RemainingDays = MonthEnd - CurrentDate
+VAR ActualSoFar = [Total Cost (incl. PTU)]
+VAR ForecastRemaining =
+    IF(
+        RemainingDays > 0,
+        SUMX(
+            GENERATESERIES(CurrentDate + 1, MonthEnd, 1),
+            VAR ThisWeekdayNum = WEEKDAY([Value], 2)
+            RETURN
+                CALCULATE(
+                    SELECTEDVALUE(WeekdayProfile[AvgDailyCost]),
+                    WeekdayProfile[Day Of Week Number] = ThisWeekdayNum
+                )
+        ),
+        0
+    )
+    // GENERATESERIES is only ever called inside this branch, evaluated
+    // only when RemainingDays > 0 — guarantees CurrentDate+1 <= MonthEnd,
+    // so the series is never called with a reversed/invalid range (e.g.
+    // on the last day of the month, where naively calling it unconditionally
+    // could pass start > end).
+RETURN
+    ActualSoFar + ForecastRemaining
+
+Forecast Delta (Seasonality vs Linear) =
+[Seasonality-Aware Forecast Month-End Cost] - [Forecast Month-End Cost]
+// Put both forecasts and this delta on the same KPI row — makes the
+// improvement visible instead of silently swapping one number for
+// another. A consistently large delta one direction is itself useful
+// information about how lumpy this organization's weekly usage pattern
+// really is.

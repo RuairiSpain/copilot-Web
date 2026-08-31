@@ -1,0 +1,141 @@
+<fragment>
+    <!--
+        Fragment: Load Quota Allowance
+        Purpose: Resolves the tier-2 (per-user/per-team) dynamic
+                 sub-quota this request should be limited to, per
+                 guides/quota-override-approval.md §1/§4. Must run AFTER
+                 frag-resolve-quota-scope.xml (needs quotaScopeType /
+                 quotaScopeId / quotaScopeCacheKey) and after the product
+                 policy has set quotaBaselineQuota to its OWN tier-1
+                 token-quota literal (this fragment has no way to know
+                 that value on its own — see usage note below).
+
+        Required input variables (set by the including product policy):
+        - quotaScopeType / quotaScopeId / quotaScopeCacheKey (from frag-resolve-quota-scope.xml)
+        - quotaBaselineQuota: Number - the contract's own tier-1 token-quota, e.g.:
+            <set-variable name="quotaBaselineQuota" value="100000" />
+            <include-fragment fragment-id="resolve-quota-scope" />
+            <include-fragment fragment-id="load-quota-allowance" />
+            <llm-token-limit counter-key="@((string)context.Variables["quotaScopeCacheKey"])"
+                tokens-per-minute="@((string)context.Variables["quotaTpmTier"] == "elevated" ? 5000 : 1000)"
+                token-quota="@((int)context.Variables["quotaEffectiveQuota"])"
+                token-quota-period="Monthly" />
+          (tokens-per-minute does NOT support policy expressions per
+          Microsoft's own llm-token-limit reference — see
+          guides/quota-override-approval.md §1 — so it must stay a
+          <choose>/ternary over a small fixed set of literals, never an
+          arbitrary variable value.)
+
+        Cache behavior: APIM's own internal distributed cache
+        (cache-lookup-value / cache-store-value), 300s TTL — same
+        mechanism and TTL frag-central-cache-manager.xml already uses
+        for metadata-config, not a new infrastructure dependency.
+
+        FAIL-OPEN BY DESIGN (see guides/quota-override-approval.md, Phase
+        A step 1): if quota-service is unreachable, slow, or returns a
+        non-2xx, this fragment falls back to quotaBaselineQuota with
+        tier "standard" — i.e. tier 2 becomes a no-op and only the
+        contract's existing tier-1 llm-token-limit enforces anything.
+        A quota-service outage must never be able to block gateway
+        traffic that already worked before this feature existed.
+
+        Output Variables:
+        - quotaEffectiveQuota: Number
+        - quotaTpmTier: String - "standard" | "elevated"
+
+        Named values required (create these against your quota-service
+        deployment — see src/quota-service/README.md):
+        - {{quota-service-url}}: base URL, e.g. https://<app>.azurewebsites.net/api/getQuotaAllowance
+        - {{quota-service-function-key}}: the function's auth key
+
+        HONESTY NOTE: not exercised against a live APIM instance in this
+        session — same caveat as frag-resolve-quota-scope.xml.
+    -->
+
+    <set-variable name="quotaBaselineQuota" value="@(context.Variables.ContainsKey("quotaBaselineQuota") ? (int)context.Variables["quotaBaselineQuota"] : 0)" />
+
+    <!-- No resolvable scope (no JWT, or neither oid nor department
+         present) — tier 2 is a deliberate no-op, skip the cache/network
+         round trip entirely rather than looking anything up. -->
+    <choose>
+        <when condition="@((string)context.Variables["quotaScopeType"] == "none")">
+            <set-variable name="quotaEffectiveQuota" value="@((int)context.Variables["quotaBaselineQuota"])" />
+            <set-variable name="quotaTpmTier" value="standard" />
+        </when>
+        <otherwise>
+            <cache-lookup-value key="@((string)context.Variables["quotaScopeCacheKey"])" variable-name="quotaCachedAllowance" default-value="" />
+            <choose>
+                <when condition="@(!string.IsNullOrEmpty((string)context.Variables["quotaCachedAllowance"]))">
+                    <set-variable name="quotaAllowanceJson" value="@{
+                        try {
+                            return JObject.Parse((string)context.Variables["quotaCachedAllowance"]);
+                        } catch {
+                            return new JObject(new JProperty("effectiveQuota", (int)context.Variables["quotaBaselineQuota"]), new JProperty("tpmTier", "standard"));
+                        }
+                    }" />
+                </when>
+                <otherwise>
+                    <send-request mode="new" response-variable-name="quotaAllowanceResponse" timeout="3" ignore-error="true">
+                        <set-url>{{quota-service-url}}</set-url>
+                        <set-method>POST</set-method>
+                        <set-header name="Content-Type" exists-action="override">
+                            <value>application/json</value>
+                        </set-header>
+                        <set-header name="x-functions-key" exists-action="override">
+                            <value>{{quota-service-function-key}}</value>
+                        </set-header>
+                        <set-body>@{
+                            return new JObject(
+                                new JProperty("scopeType", (string)context.Variables["quotaScopeType"]),
+                                new JProperty("scopeId", (string)context.Variables["quotaScopeId"]),
+                                new JProperty("subscriptionId", context.Subscription.Id),
+                                new JProperty("baselineQuota", (int)context.Variables["quotaBaselineQuota"])
+                            ).ToString();
+                        }</set-body>
+                    </send-request>
+
+                    <set-variable name="quotaAllowanceJson" value="@{
+                        var response = context.Variables.GetValueOrDefault<IResponse>("quotaAllowanceResponse");
+                        var fallback = new JObject(
+                            new JProperty("effectiveQuota", (int)context.Variables["quotaBaselineQuota"]),
+                            new JProperty("tpmTier", "standard")
+                        );
+                        if (response == null || response.StatusCode < 200 || response.StatusCode >= 300) {
+                            // Fail open — see the FAIL-OPEN BY DESIGN note above.
+                            return fallback;
+                        }
+                        try {
+                            return JObject.Parse(response.Body.As<string>(preserveContent: true));
+                        } catch {
+                            return fallback;
+                        }
+                    }" />
+
+                    <!-- Cache whatever we resolved — including the
+                         fail-open fallback. This bounds how often a
+                         struggling quota-service gets hammered by retry
+                         traffic to the same window a healthy lookup
+                         would use (300s), at the cost of a
+                         since-recovered override taking up to 300s
+                         longer to apply after an outage — an accepted
+                         tradeoff, not an oversight. -->
+                    <cache-store-value key="@((string)context.Variables["quotaScopeCacheKey"])" value="@(((JObject)context.Variables["quotaAllowanceJson"]).ToString())" duration="300" />
+                </otherwise>
+            </choose>
+
+            <set-variable name="quotaEffectiveQuota" value="@{
+                var allowance = (JObject)context.Variables["quotaAllowanceJson"];
+                var value = allowance["effectiveQuota"]?.Value<int?>();
+                return value ?? (int)context.Variables["quotaBaselineQuota"];
+            }" />
+            <set-variable name="quotaTpmTier" value="@{
+                var allowance = (JObject)context.Variables["quotaAllowanceJson"];
+                return allowance["tpmTier"]?.ToString() ?? "standard";
+            }" />
+        </otherwise>
+    </choose>
+
+    <trace source="Load-Quota-Allowance" severity="information">
+        <message>@($"Quota scope={context.Variables["quotaScopeType"]} effectiveQuota={context.Variables["quotaEffectiveQuota"]} tpmTier={context.Variables["quotaTpmTier"]}")</message>
+    </trace>
+</fragment>

@@ -1,0 +1,79 @@
+<fragment>
+    <!--
+        Fragment: Resolve Agent Hierarchy
+        Purpose: Captures the sub-agent/MCP-tool call-chain attribution
+                 headers (guides/agent-hierarchy-attribution.md, section 1)
+                 and emits them as a trace, correlated to this same
+                 request's llm-usage metric via Application Insights' own
+                 operation_Id — not a bespoke correlation scheme.
+
+        WHY A TRACE, NOT A 7TH llm-emit-token-metric DIMENSION:
+        frag-set-llm-usage.xml's <llm-emit-token-metric> is already at its
+        documented 6-dimension cap (productName, deploymentName,
+        Backend ID, appId, customDimension1, customDimension2 — the
+        latter two now claimed by cost-center and end-user-id, see
+        guides/power-bi-dashboard.md). There is no 7th slot. A <trace>
+        element writes to Application Insights' `traces` table instead —
+        a genuinely separate telemetry stream, joined back to the
+        `customMetrics` (llm-usage) row at ingestion time via
+        `operation_Id`, which Application Insights stamps on EVERY
+        telemetry item (metrics, traces, requests) emitted within the
+        same logical request — a real, built-in correlation mechanism,
+        not something invented here. See
+        llm-usage-ingestion/workflow.json's Run_query_and_list_results
+        KQL for the actual join.
+
+        Include this fragment right alongside set-llm-usage (same
+        request-lifecycle point) in each product policy that should
+        capture hierarchy attribution — azure-open-ai-api-policy.xml,
+        universal-llm-api-policy-v2.xml, unified-ai-api-policy.xml.
+
+        TRUST TIERS (guides/agent-hierarchy-attribution.md section 4/7):
+        - "Verified": x-agent-root-id present AND a validated JWT is
+          present. A correctly-performed OBO exchange (section 4) puts
+          the ORIGINAL user's own oid in the resulting token — meaning
+          tier-1/tier-2 quota enforcement (frag-resolve-quota-scope.xml)
+          ALREADY decrements the right person's budget for this call, no
+          separate enforcement primitive needed here. This fragment adds
+          ATTRIBUTION/REPORTING on top of enforcement that already works,
+          it does not itself enforce anything.
+        - "SelfAsserted": x-agent-root-id present but no validated JWT —
+          a plain, spoofable header. Never treat this the same as
+          Verified in a report; a Budget Holder or auditor must be able
+          to tell them apart (why agentTrustTier is captured at all, not
+          just agentRootId).
+        - "None": no x-agent-root-id header at all — an ordinary,
+          non-hierarchical request. The vast majority of traffic.
+          Skips the trace emission entirely (see the outer <choose>
+          below) — no reason to write a trace row for every single
+          ordinary request just to say "not part of a hierarchy."
+
+        HONESTY NOTE: not exercised against a live APIM instance in this
+        session, same as every other fragment in this fork.
+    -->
+
+    <set-variable name="agentRootId" value="@(context.Request.Headers.GetValueOrDefault("x-agent-root-id", ""))" />
+
+    <choose>
+        <when condition="@(!string.IsNullOrEmpty((string)context.Variables["agentRootId"]))">
+            <set-variable name="agentCallerType" value="@(context.Request.Headers.GetValueOrDefault("x-agent-caller-type", "unknown"))" />
+            <set-variable name="agentDepth" value="@(context.Request.Headers.GetValueOrDefault("x-agent-depth", "0"))" />
+            <set-variable name="agentTrustTier" value="@(context.Variables.ContainsKey("validated-jwt") ? "Verified" : "SelfAsserted")" />
+
+            <!-- Structured as key=value pairs (not JSON) so the ingestion
+                 KQL query can parse it with a plain `parse` operator
+                 without a JSON-escaping round trip through App Insights'
+                 own message-truncation behavior on very long messages —
+                 consistent with keeping this fragment's own footprint
+                 small per request. -->
+            <trace source="Agent-Hierarchy" severity="information">
+                <message>@($"agentRootId={context.Variables["agentRootId"]} agentCallerType={context.Variables["agentCallerType"]} agentDepth={context.Variables["agentDepth"]} agentTrustTier={context.Variables["agentTrustTier"]} appId={context.Variables.GetValueOrDefault<string>("appId", context.Subscription?.Id ?? "Portal-Admin-Sub")}")</message>
+            </trace>
+        </when>
+        <otherwise>
+            <set-variable name="agentCallerType" value="" />
+            <set-variable name="agentDepth" value="" />
+            <set-variable name="agentTrustTier" value="None" />
+        </otherwise>
+    </choose>
+</fragment>

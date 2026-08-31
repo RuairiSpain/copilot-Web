@@ -1,0 +1,89 @@
+// Cost-center cross-comparison for Budget Holders/Admin — same
+// statistical shape as file 13, one level up: instead of comparing a
+// user's average against their team's peer distribution, compares a cost
+// center's WINDOWED (trailing 30-day) average daily spend against the
+// distribution of that same statistic across every other cost center.
+//
+// Needs one calculated table (Modeling -> New table) — a per-day,
+// per-cost-center rolling window can't be expressed cleanly as a pure
+// measure the way file 13's comparison could, since it needs to filter
+// rows by date range before grouping, not just re-filter an existing
+// aggregation.
+
+// ============================================================
+// CALCULATED TABLE
+// ============================================================
+
+CostCenterDailyCost =
+SUMMARIZE(
+    FILTER(
+        'llm-usage-container',
+        'llm-usage-container'[Date Only] > MAX('llm-usage-container'[Date Only]) - 30
+    ),
+    'llm-usage-container'[customDimension1],
+    'llm-usage-container'[Date Only],
+    "DailyCost", CALCULATE([Total Cost (incl. PTU)])
+)
+// One row per (cost center, day) for the trailing 30 days as of the
+// latest data in the model (a snapshot as of last refresh, not a fully
+// dynamic per-day rolling window — see the note on Page 9 in
+// 04-report-build-guide.md for what a fuller version would need).
+// Requires `Date Only` from 10-heatmap-moving-average.dax.
+
+// ============================================================
+// THIS COST CENTER'S WINDOWED STATS
+// ============================================================
+
+Cost Center Avg Daily Cost (Windowed) =
+CALCULATE(
+    AVERAGE(CostCenterDailyCost[DailyCost]),
+    ALLEXCEPT(CostCenterDailyCost, CostCenterDailyCost[customDimension1])
+)
+
+Cost Center StdDev Daily Cost (Windowed) =
+CALCULATE(
+    STDEV.P(CostCenterDailyCost[DailyCost]),
+    ALLEXCEPT(CostCenterDailyCost, CostCenterDailyCost[customDimension1])
+)
+// Note this one IS the raw day-to-day volatility within the cost center
+// itself (how spiky is this team's daily spend) — a genuinely different
+// number from the cross-cost-center comparison below, and useful on its
+// own (Budget Holders may want to know how volatile their own spend is,
+// independent of how they compare to anyone else).
+
+// ============================================================
+// ORG-WIDE PEER BASELINE (every other cost center's windowed average)
+// ============================================================
+
+Org Avg of Cost Center Daily Cost =
+AVERAGEX(
+    VALUES(CostCenterDailyCost[customDimension1]),
+    [Cost Center Avg Daily Cost (Windowed)]
+)
+
+Org StdDev of Cost Center Daily Cost =
+STDEVX.P(
+    VALUES(CostCenterDailyCost[customDimension1]),
+    [Cost Center Avg Daily Cost (Windowed)]
+)
+
+// ============================================================
+// COMPARISON
+// ============================================================
+
+Cost Center Cost Z-Score =
+DIVIDE(
+    [Cost Center Avg Daily Cost (Windowed)] - [Org Avg of Cost Center Daily Cost],
+    [Org StdDev of Cost Center Daily Cost]
+)
+
+Has Sufficient Data for Cost Center Comparison =
+// Guard against a brand-new or tiny org with too few cost centers for
+// "typical range" to mean anything statistically.
+CALCULATE(DISTINCTCOUNT(CostCenterDailyCost[customDimension1]), ALL(CostCenterDailyCost)) >= 3
+
+Is Cost Center Outside Typical Band =
+IF(
+    NOT [Has Sufficient Data for Cost Center Comparison], "Insufficient data",
+    IF(ABS([Cost Center Cost Z-Score]) > 2, "Outside typical range", "Typical")
+)

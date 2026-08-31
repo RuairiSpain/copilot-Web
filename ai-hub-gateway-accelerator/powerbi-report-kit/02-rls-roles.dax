@@ -1,0 +1,70 @@
+// Modeling -> Manage roles -> New. Create these roles (four, after files
+// 18-20 added Developer below), each with a table
+// filter on 'llm-usage-container' using the DAX expression shown (paste
+// just the expression into the filter box for that table, not the role
+// name/comment lines).
+//
+// Test each with Modeling -> View As -> tick the role (and "Other user",
+// entering a UPN) BEFORE publishing. In the Power BI Service, assign an
+// Entra ID security group to each role via the workspace dataset's
+// Security settings — group-based, not per-user.
+
+// ----------------------------------------------------------------
+// Role: Employee
+// Sees only their own usage.
+// ----------------------------------------------------------------
+[customDimension2] = USERPRINCIPALNAME()
+// NOT [appId]: that field holds an APIM subscription id/custom app
+// string, never a UPN, so filtering on it here would match nobody.
+// [customDimension2] IS the right field — the active
+// frag-set-llm-usage.xml fragment now defaults it to a UPN-shaped claim
+// (preferred_username/upn/email) from the caller's validated JWT when no
+// access contract already set it to something else — see
+// guides/power-bi-dashboard.md's "Individual-user page" section. A
+// request with no validated JWT still gets "NA" here, so this role
+// correctly shows nothing (not someone else's data) for API-key-only
+// traffic — a real, honestly documented limitation, not a leak.
+// Optional: right-click the column in the Fields pane -> Rename to "End
+// User Id" for readability on visuals — purely cosmetic, this filter
+// works against the raw customDimension2 name either way.
+
+// ----------------------------------------------------------------
+// Role: BudgetHolder
+// Sees only the cost center(s) they're authorized for, via the
+// AuthorizedCostCenters table from 03-supporting-tables.m.
+// ----------------------------------------------------------------
+[customDimension1] IN
+    CALCULATETABLE(
+        VALUES(AuthorizedCostCenters[costCenter]),
+        AuthorizedCostCenters[upn] = USERPRINCIPALNAME()
+    )
+
+// ----------------------------------------------------------------
+// Role: Admin
+// Org-wide, no filter — assign to Platform Administrators and Executives
+// alike (both are "consume everything" personas in the PRD; split into
+// two roles later only if you need genuinely different page access, not
+// just different data scope).
+// ----------------------------------------------------------------
+TRUE()
+
+// ----------------------------------------------------------------
+// Role: Developer  (added alongside files 18-20)
+// Sees only the app(s)/agent(s) they own, via the AuthorizedApps table
+// from 19-developer-role.m — a different scope shape than BudgetHolder
+// (app ownership, not cost center), since one developer's apps can span
+// multiple cost centers and one cost center has many developers.
+// ----------------------------------------------------------------
+[appId] IN
+    CALCULATETABLE(
+        VALUES(AuthorizedApps[appId]),
+        AuthorizedApps[upn] = USERPRINCIPALNAME()
+    )
+// Apply the same filter shape to GatewayPerformanceLog (file 18):
+// [AppId] IN CALCULATETABLE(VALUES(AuthorizedApps[appId]), AuthorizedApps[upn] = USERPRINCIPALNAME())
+// 18-failures-latency-source.md's KQL now projects AppId (aliased from
+// ApimSubscriptionId) specifically so this applies to the failure/
+// latency page too, not just the Cosmos-backed pages — add this as a
+// second table filter on the GatewayPerformanceLog table within the
+// same Developer role (Manage roles lets one role filter multiple
+// tables).

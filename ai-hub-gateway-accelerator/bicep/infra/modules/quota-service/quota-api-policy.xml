@@ -1,0 +1,135 @@
+<!--
+    quota-api-policy.xml — API-level policy for the standalone Quota Override API
+    (bicep/infra/modules/quota-service/quota-api.bicep).
+
+    This is a NEW, standalone Microsoft.ApiManagement/service/apis resource
+    (created via the accelerator's existing generic ../apim/api.bicep module,
+    not an operation added to one of the three baseline inference APIs), so
+    <base/> here inherits only the global/all-APIs policy — it does NOT pick
+    up security-handler automatically the way Azure OpenAI/Universal LLM/
+    Unified AI's own policies do. security-handler is therefore included
+    explicitly below, exactly the same way azure-open-ai-api-policy.xml does
+    it, not implicitly.
+
+    Purpose: closes the authorization gap flagged in
+    guides/enterprise-hardening-checklist.md — decideQuotaRequest previously
+    trusted a client-supplied "decidedBy" string. This policy requires a
+    validated Entra ID JWT for every operation, requires the Quota.Approve
+    app role for /decide and /pending (deciding, and seeing what there is
+    to decide, are the same privilege — /submit stays open to any
+    authenticated employee), and — the actual fix — overwrites
+    whatever identity the client claims with the oid claim from the
+    VALIDATED token before forwarding to quota-service. quota-service's
+    submitQuotaRequest/decideQuotaRequest now require this header and
+    ignore any client-supplied identity field entirely (see
+    src/quota-service/src/functions/*.ts).
+
+    Scope of what this closes, stated plainly (see guides/quota-override-approval.md's
+    "Implementation status" and enterprise-hardening-checklist.md §1): this
+    proves the caller is a REAL, role-holding person. As of the
+    approver-resolution addition below, it ALSO proves — for a
+    team-scoped request — that they're the RIGHT approver for that
+    request's department. It does NOT resolve the right approver for an
+    individual (user-scoped) request; there's no org-hierarchy/manager
+    data source anywhere in this fork to do that, stated as a residual
+    gap in guides/quota-override-approval.md rather than silently
+    narrowed.
+
+    HONESTY NOTE: not exercised against a live APIM instance in this session.
+-->
+<policies>
+    <inbound>
+        <base />
+
+        <!-- Every operation requires a validated JWT (API key is also always
+             required at the API level — see quota-api.bicep's
+             subscriptionRequired: true, matching this accelerator's own
+             stated default). -->
+        <set-variable name="jwtRequired" value="true" />
+
+        <!-- /decide and /pending require the Quota.Approve app role —
+             /submit is deliberately open to any authenticated employee
+             (self-service for anyone, per guides/quota-override-approval.md §5). -->
+        <choose>
+            <when condition="@(context.Operation.Id == "decide-quota-request" || context.Operation.Id == "list-pending-quota-requests")">
+                <set-variable name="requiredRoles" value="Quota.Approve" />
+            </when>
+        </choose>
+
+        <!-- Validates the JWT (audience/issuer/signature/expiry), and when
+             requiredRoles is set, also checks the roles claim — see
+             citadel-access-contracts-policy.md's "App Role Authorization
+             Policy" section for the full mechanics of this fragment. -->
+        <include-fragment fragment-id="security-handler" />
+
+        <!-- THE ACTUAL FIX: pull oid from the JWT security-handler already
+             validated, and stamp it onto the request as a header quota-service
+             trusts completely — overriding (not merging with) anything the
+             client's request body claims. A client cannot spoof this: it's
+             computed from the signature-verified token, not copied from the
+             inbound request body/headers. -->
+        <set-header name="x-verified-oid" exists-action="override">
+            <value>@{
+                var jwt = (Jwt)context.Variables["validated-jwt"];
+                return jwt.Claims.GetValueOrDefault("oid", "");
+            }</value>
+        </set-header>
+
+        <!-- Best-effort, not required (unlike oid above): whichever of
+             these claims the token actually carries, used only so
+             submitQuotaRequest can email the requester once their
+             request is decided (guides/quota-override-approval.md §6).
+             A token missing all three still passes the oid check above
+             fine — it just means that particular request can't be
+             emailed later, handled explicitly in
+             listRecentlyDecidedQuotaRequests.ts rather than guessed at. -->
+        <set-header name="x-verified-email" exists-action="override">
+            <value>@{
+                var jwt = (Jwt)context.Variables["validated-jwt"];
+                var preferred = jwt.Claims.GetValueOrDefault("preferred_username", "");
+                if (!string.IsNullOrEmpty(preferred)) { return preferred; }
+                var upn = jwt.Claims.GetValueOrDefault("upn", "");
+                if (!string.IsNullOrEmpty(upn)) { return upn; }
+                return jwt.Claims.GetValueOrDefault("email", "");
+            }</value>
+        </set-header>
+
+        <!-- Approver-resolution (claim-based) — also best-effort, not
+             required: a token with no department claim still passes the
+             oid check fine, it just means decideQuotaRequest.ts's
+             approverAuthorizedForScope() can never authorize that caller
+             for a team-scoped request (fails closed on that specific
+             check, not on the whole call). Same GetValueOrDefault
+             pattern frag-resolve-quota-scope.xml already uses for this
+             exact claim on the tier-2 quota path — reused, not
+             reinvented. quota-service independently re-verifies this
+             value against the raw bearer token too (see
+             tokenValidation.ts/requestAuth.ts) rather than trusting this
+             header alone, same defense-in-depth as x-verified-oid. -->
+        <set-header name="x-verified-department" exists-action="override">
+            <value>@{
+                var jwt = (Jwt)context.Variables["validated-jwt"];
+                return jwt.Claims.GetValueOrDefault("department", "");
+            }</value>
+        </set-header>
+
+        <!-- quota-service's own endpoints are still function-key protected
+             (authLevel: 'function') — this policy is what's actually
+             gatekeeping real access; the function key just stops the
+             Function App's raw URL from being callable with zero
+             credentials at all, same posture as pricing-service's
+             enrichPricing. -->
+        <set-header name="x-functions-key" exists-action="override">
+            <value>{{quota-service-function-key}}</value>
+        </set-header>
+    </inbound>
+    <backend>
+        <base />
+    </backend>
+    <outbound>
+        <base />
+    </outbound>
+    <on-error>
+        <base />
+    </on-error>
+</policies>

@@ -1,0 +1,23 @@
+{
+  "name": "pricing-service",
+  "version": "1.0.0",
+  "description": "Cost-attribution pricing service for the AI Hub Gateway accelerator: per-record cost enrichment + daily price-catalog refresh.",
+  "main": "dist/src/index.js",
+  "scripts": {
+    "build": "tsc -p .",
+    "watch": "tsc -w -p .",
+    "prestart": "npm run build",
+    "start": "func start",
+    "test": "node --test dist/test"
+  },
+  "dependencies": {
+    "@azure/cosmos": "^4.1.1",
+    "@azure/functions": "^4.5.1",
+    "@azure/identity": "^4.4.1",
+    "@azure/storage-blob": "^12.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.9",
+    "typescript": "^5.5.4"
+  }
+}

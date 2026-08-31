@@ -1,0 +1,138 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "Quota Override API",
+    "description": "Front door for the quota-override/approval mechanism (guides/quota-override-approval.md). Proxies to src/quota-service's submitQuotaRequest and decideQuotaRequest endpoints. Every operation requires a validated Entra ID JWT; /decide additionally requires the Quota.Approve app role. The caller's oid claim is the sole source of truth for who is requesting/deciding — see quota-api-policy.xml.",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/submit": {
+      "post": {
+        "summary": "Submit a quota override request",
+        "operationId": "submit-quota-request",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/SubmitQuotaRequestBody" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Request created.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/QuotaOverrideRequest" }
+              }
+            }
+          },
+          "400": { "description": "Malformed request body." },
+          "401": { "description": "Missing or invalid JWT." },
+          "409": {
+            "description": "A pending request already exists for this scope — see guides/quota-override-approval.md §7."
+          }
+        }
+      }
+    },
+    "/pending": {
+      "get": {
+        "summary": "List pending quota override requests",
+        "description": "Requires the Quota.Approve role — same as /decide. Returns every Pending request platform-wide, not scoped to the caller's own department (the approver-resolution table that scoping needs isn't built yet — see guides/quota-override-approval.md).",
+        "operationId": "list-pending-quota-requests",
+        "responses": {
+          "200": {
+            "description": "Pending requests, escalation-flagged ones first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/QuotaOverrideRequest" }
+                }
+              }
+            }
+          },
+          "401": { "description": "Missing or invalid JWT, or caller lacks the Quota.Approve role." }
+        }
+      }
+    },
+    "/decide": {
+      "post": {
+        "summary": "Approve or deny a quota override request",
+        "operationId": "decide-quota-request",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/DecideQuotaRequestBody" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Decision recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "request": { "$ref": "#/components/schemas/QuotaOverrideRequest" },
+                    "override": { "type": "object", "description": "Present only when decision is Approved." }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Malformed request body." },
+          "401": { "description": "Missing or invalid JWT, or caller lacks the Quota.Approve role." },
+          "404": { "description": "No such request for that subscriptionId." },
+          "409": { "description": "Request is already decided (not Pending)." }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "SubmitQuotaRequestBody": {
+        "type": "object",
+        "required": ["scopeType", "scopeId", "subscriptionId", "currentQuota", "requestedQuota", "reason"],
+        "properties": {
+          "scopeType": { "type": "string", "enum": ["user", "team"] },
+          "scopeId": { "type": "string", "description": "The oid (user) or department claim value (team) this request is for." },
+          "subscriptionId": { "type": "string", "description": "The APIM access-contract subscription this quota belongs to." },
+          "currentQuota": { "type": "integer" },
+          "requestedQuota": { "type": "integer", "description": "Must be greater than currentQuota." },
+          "reason": { "type": "string" },
+          "durationDays": { "type": "integer", "nullable": true, "description": "Omit for the service default (30 days); null for a permanent request." }
+        }
+      },
+      "DecideQuotaRequestBody": {
+        "type": "object",
+        "required": ["requestId", "subscriptionId", "decision"],
+        "properties": {
+          "requestId": { "type": "string" },
+          "subscriptionId": { "type": "string" },
+          "decision": { "type": "string", "enum": ["Approved", "Denied"] },
+          "note": { "type": "string" },
+          "tpmTier": { "type": "string", "enum": ["standard", "elevated"] }
+        }
+      },
+      "QuotaOverrideRequest": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "scopeType": { "type": "string" },
+          "scopeId": { "type": "string" },
+          "subscriptionId": { "type": "string" },
+          "requestedBy": { "type": "string" },
+          "currentQuota": { "type": "integer" },
+          "requestedQuota": { "type": "integer" },
+          "reason": { "type": "string" },
+          "status": { "type": "string" },
+          "requiresEscalation": { "type": "boolean" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  }
+}
