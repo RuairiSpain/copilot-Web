@@ -403,9 +403,9 @@ Built, as of this fork's next patch:
   one-pending-request guard, verified-identity resolution, monthly-reset
   eligibility, and impersonation cross-check) lives in a pure
   `quotaLogic.ts` module, plus `emailTemplates.ts` for notification
-  content — **117 unit tests total, run and passing in this session**
-  (`npm test`), **100% line coverage on every `src/` file, 98.72%
-  line / 92.84% branch / 94.22% function overall** (measured via
+  content — **164 unit tests total, run and passing in this session**
+  (`npm test`), **100% line coverage on every `src/` file, 98.84%
+  line / 93.67% branch / 93.98% function overall** (measured via
   `node --test --experimental-test-coverage`, not estimated — see
   `src/quota-service/README.md` for the full breakdown and the one
   named residual gap). Every I/O boundary (Cosmos, SMTP, JWKS/JWT

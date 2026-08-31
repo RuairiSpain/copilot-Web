@@ -35,21 +35,40 @@ SUMMARIZE(
 // ============================================================
 
 Cost Center Avg Daily Cost (Windowed) =
-CALCULATE(
-    AVERAGE(CostCenterDailyCost[DailyCost]),
-    ALLEXCEPT(CostCenterDailyCost, CostCenterDailyCost[customDimension1])
+// CORRECTED: AVERAGE(CostCenterDailyCost[DailyCost]) only averages over
+// rows that exist — and CostCenterDailyCost (via SUMMARIZE, above) has a
+// row only for (cost center, day) combinations with actual usage, so a
+// cost center active on only 10 of the trailing 30 days got its "typical
+// daily spend" computed over those 10 days alone, overstating it by up
+// to 3x. Fixed the same way 10-heatmap-moving-average.dax's own
+// `7-Day Moving Avg Cost` already correctly handles this: SUM the
+// existing rows (a missing day contributes $0, which is what you want)
+// and divide by the FIXED window size, not by a count of only the days
+// that happened to have traffic.
+DIVIDE(
+    CALCULATE(
+        SUM(CostCenterDailyCost[DailyCost]),
+        ALLEXCEPT(CostCenterDailyCost, CostCenterDailyCost[customDimension1])
+    ),
+    30
 )
 
 Cost Center StdDev Daily Cost (Windowed) =
+// Scoped caveat, stated plainly rather than silently left: unlike the
+// AVG measure above, STDEV.P needs an actual $0 data point per missing
+// day to correctly zero-fill (not just a fixed divisor trick), which
+// would need a full calendar-day spine joined against
+// CostCenterDailyCost — not built here. This measure is therefore still
+// computed only over days with actual usage, and understates volatility
+// for a cost center with gaps in its trailing-30-day usage. This does
+// NOT feed the peer-comparison z-score pipeline below (which now uses
+// the corrected AVG measure only) — it's a standalone "how spiky is
+// this team's own spend" number, so the residual bias is scoped to this
+// one measure, not the outlier detection.
 CALCULATE(
     STDEV.P(CostCenterDailyCost[DailyCost]),
     ALLEXCEPT(CostCenterDailyCost, CostCenterDailyCost[customDimension1])
 )
-// Note this one IS the raw day-to-day volatility within the cost center
-// itself (how spiky is this team's daily spend) — a genuinely different
-// number from the cross-cost-center comparison below, and useful on its
-// own (Budget Holders may want to know how volatile their own spend is,
-// independent of how they compare to anyone else).
 
 // ============================================================
 // ORG-WIDE PEER BASELINE (every other cost center's windowed average)

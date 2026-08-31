@@ -37,7 +37,16 @@ export async function markRequesterNotified(
   }
 
   const container = deps.getContainer();
-  const quotaRequest = await readItemOrUndefined<QuotaOverrideRequest>(container, requestId, subscriptionId);
+  let quotaRequest: QuotaOverrideRequest | undefined;
+  try {
+    quotaRequest = await readItemOrUndefined<QuotaOverrideRequest>(container, requestId, subscriptionId);
+  } catch (err) {
+    // Consistent error-response shape fix — see
+    // listPendingQuotaRequests.ts's identical comment for the full
+    // reasoning.
+    context.error(`markRequesterNotified: Cosmos read failed for ${requestId}`, err);
+    return { status: 502, jsonBody: { error: 'Failed to look up the quota request due to a temporary data-access error. Please retry.' } };
+  }
   if (!quotaRequest) {
     return { status: 404, jsonBody: { error: `No request ${requestId} found for subscription ${subscriptionId}` } };
   }
@@ -47,7 +56,12 @@ export async function markRequesterNotified(
   }
 
   quotaRequest.requesterNotifiedAt = new Date().toISOString();
-  await container.item(requestId, subscriptionId).replace(quotaRequest);
+  try {
+    await container.item(requestId, subscriptionId).replace(quotaRequest);
+  } catch (err) {
+    context.error(`markRequesterNotified: Cosmos write failed for ${requestId}`, err);
+    return { status: 502, jsonBody: { error: 'Failed to update the quota request due to a temporary data-access error. Please retry.' } };
+  }
   context.log(`markRequesterNotified: ${requestId}`);
   return { jsonBody: quotaRequest };
 }

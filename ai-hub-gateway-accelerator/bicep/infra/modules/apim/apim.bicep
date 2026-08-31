@@ -12,6 +12,19 @@ param publisherName string = 'n/a'
 param sku string = 'Developer'
 var isV2SKU = sku == 'StandardV2' || sku == 'PremiumV2'
 param skuCount int = 1
+
+@description('Enable Azure Monitor autoscale on APIM\'s Capacity metric. Fixes this session\'s own scalability review finding: gateway capacity was previously a purely deploy-time-fixed skuCount, with scale-out for a traffic spike a manual/operational action. Only applies to the classic (STV1) Basic/Standard/Premium SKUs, which is the ONLY APIM tier family that supports Microsoft.Insights/autoscalesettings — Developer supports just 1 unit and never scales, Consumption is serverless with no unit concept, and the newer StandardV2/PremiumV2 SKUs scale automatically on their own without this resource. Left false by default (a real behavior/cost change, opt in deliberately) and silently has no effect on Developer/Consumption/V2 SKUs regardless of this flag, so it\'s always safe to leave on across environments that use different SKUs.')
+param enableApimAutoscale bool = false
+
+@minValue(1)
+@description('Minimum APIM capacity units when enableApimAutoscale is true.')
+param apimAutoscaleMinCapacity int = 1
+
+@minValue(1)
+@description('Maximum APIM capacity units when enableApimAutoscale is true.')
+param apimAutoscaleMaxCapacity int = 4
+
+var apimClassicMultiUnitSku = sku == 'Basic' || sku == 'Standard' || sku == 'Premium'
 param applicationInsightsName string
 
 param managedIdentityName string
@@ -972,6 +985,77 @@ resource apimDiagnosticSettings 'Microsoft.Insights/diagnosticSettings@2021-05-0
       {
         category: 'AllMetrics'
         enabled: true
+      }
+    ]
+  }
+}
+
+// Gateway capacity autoscale — this session's own scalability review
+// flagged that capacity was a purely deploy-time-fixed skuCount param
+// with no automatic response to a traffic spike. Only deployed when
+// enableApimAutoscale is true AND the SKU is one of the classic
+// (STV1) multi-unit tiers Microsoft.Insights/autoscalesettings actually
+// supports for APIM — Developer/Consumption/StandardV2/PremiumV2 all
+// silently get no autoscale resource regardless of the flag (see
+// enableApimAutoscale's own param description for why each is exempt).
+// Rule thresholds (scale out >70% Capacity for 10 min, scale in <30%
+// for 10 min, 1-unit steps, 10-minute cooldown between scale actions)
+// match Microsoft's own published APIM-autoscale reference example —
+// not independently load-tested in this session (no live APIM instance
+// available), same disclosure as every other bicep change in this fork.
+resource apimAutoscale 'Microsoft.Insights/autoscalesettings@2022-10-01' = if (enableApimAutoscale && apimClassicMultiUnitSku) {
+  name: '${name}-autoscale'
+  location: location
+  tags: tags
+  properties: {
+    targetResourceUri: apimService.id
+    enabled: true
+    profiles: [
+      {
+        name: 'Default'
+        capacity: {
+          minimum: string(apimAutoscaleMinCapacity)
+          maximum: string(apimAutoscaleMaxCapacity)
+          default: string(apimAutoscaleMinCapacity)
+        }
+        rules: [
+          {
+            metricTrigger: {
+              metricName: 'Capacity'
+              metricResourceUri: apimService.id
+              timeGrain: 'PT1M'
+              statistic: 'Average'
+              timeWindow: 'PT10M'
+              timeAggregation: 'Average'
+              operator: 'GreaterThan'
+              threshold: 70
+            }
+            scaleAction: {
+              direction: 'Increase'
+              type: 'ChangeCount'
+              value: '1'
+              cooldown: 'PT10M'
+            }
+          }
+          {
+            metricTrigger: {
+              metricName: 'Capacity'
+              metricResourceUri: apimService.id
+              timeGrain: 'PT1M'
+              statistic: 'Average'
+              timeWindow: 'PT10M'
+              timeAggregation: 'Average'
+              operator: 'LessThan'
+              threshold: 30
+            }
+            scaleAction: {
+              direction: 'Decrease'
+              type: 'ChangeCount'
+              value: '1'
+              cooldown: 'PT10M'
+            }
+          }
+        ]
       }
     ]
   }

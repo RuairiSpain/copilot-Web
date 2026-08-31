@@ -6,17 +6,15 @@ import { makeFakeContext, makeFakeRequest } from './helpers/fakeHttpRequest';
 
 type CorroborationResult = { ok: true; department?: string } | { ok: false; status: number; message: string };
 // Typed with the same arity as the real corroborateIdentity (request,
-// headerOid, context, deps, headerDepartment?, requiredRole?) so a spy
-// that wants to inspect requiredRole (below) can be passed to deps()
-// without a function-arity type error — a 0-arg stub like
-// okCorroboration is still assignable to this (fewer params is fine).
+// headerOid, context, options?) so a spy that wants to inspect
+// options.requiredRole (below) can be passed to deps() without a
+// function-arity type error — a 0-arg stub like okCorroboration is
+// still assignable to this (fewer params is fine).
 type CorroborateFn = (
   request: unknown,
   headerOid: unknown,
   context: unknown,
-  deps: unknown,
-  headerDepartment?: unknown,
-  requiredRole?: unknown
+  options?: { deps?: unknown; headerDepartment?: unknown; requiredRole?: unknown }
 ) => Promise<CorroborationResult>;
 const okCorroboration: CorroborateFn = async () => ({ ok: true });
 function okCorroborationWithDepartment(department: string | undefined): CorroborateFn {
@@ -74,11 +72,9 @@ test('decideQuotaRequest: passes "Quota.Approve" as corroborateIdentity\'s requi
     _request: unknown,
     _headerOid: unknown,
     _context: unknown,
-    _deps: unknown,
-    _headerDepartment: unknown,
-    requiredRole: unknown
+    options?: { deps?: unknown; headerDepartment?: unknown; requiredRole?: unknown }
   ): Promise<{ ok: true; department?: string }> => {
-    capturedRequiredRole = requiredRole;
+    capturedRequiredRole = options?.requiredRole;
     return { ok: true };
   };
   const res = await decideQuotaRequest(request, context, deps(requestsContainer, overridesContainer, spyCorroborate));
@@ -297,4 +293,62 @@ test('decideQuotaRequest: team-scoped request — approver has no resolvable dep
   );
   assert.equal(res.status, 403);
   assert.equal(requestsContainer.all()[0].status, 'Pending');
+});
+
+// --- validation and error-response-shape fixes (this session's own
+// code-quality review) ---
+
+test('decideQuotaRequest: invalid tpmTier — 400, not silently written', async () => {
+  const requestsContainer = new FakeCosmosContainer();
+  seedPendingRequest(requestsContainer);
+  const request = makeFakeRequest({
+    headers: { 'x-verified-oid': 'approver-oid' },
+    body: { requestId: 'req-1', subscriptionId: 'sub-1', decision: 'Approved', tpmTier: 'premium' },
+  });
+  const context = makeFakeContext();
+  const res = await decideQuotaRequest(request, context, deps(requestsContainer, new FakeCosmosContainer()));
+  assert.equal(res.status, 400);
+  assert.equal(requestsContainer.all()[0].status, 'Pending'); // never decided
+});
+
+test('decideQuotaRequest: Cosmos read failure — 502, consistent error shape', async () => {
+  const request = makeFakeRequest({
+    headers: { 'x-verified-oid': 'approver-oid' },
+    body: { requestId: 'req-1', subscriptionId: 'sub-1', decision: 'Approved' },
+  });
+  const context = makeFakeContext();
+  const brokenRequestsContainer = { item: () => ({ read: async () => { throw new Error('Cosmos unavailable'); } }) } as never;
+  const res = await decideQuotaRequest(request, context, deps(brokenRequestsContainer, new FakeCosmosContainer()));
+  assert.equal(res.status, 502);
+  assert.match((res.jsonBody as { error: string }).error, /temporary data-access error/);
+});
+
+test('decideQuotaRequest: Cosmos write failure recording the decision — 502', async () => {
+  const requestsContainer = new FakeCosmosContainer();
+  seedPendingRequest(requestsContainer);
+  const request = makeFakeRequest({
+    headers: { 'x-verified-oid': 'approver-oid' },
+    body: { requestId: 'req-1', subscriptionId: 'sub-1', decision: 'Denied' },
+  });
+  const context = makeFakeContext();
+  const original = requestsContainer.item.bind(requestsContainer);
+  const brokenRequestsContainer = {
+    item: (id: string, pk: string) => ({ ...original(id, pk), replace: async () => { throw new Error('Cosmos unavailable'); } }),
+  } as never;
+  const res = await decideQuotaRequest(request, context, deps(brokenRequestsContainer, new FakeCosmosContainer()));
+  assert.equal(res.status, 502);
+});
+
+test('decideQuotaRequest: Cosmos write failure creating the override — 502, decision was still recorded', async () => {
+  const requestsContainer = new FakeCosmosContainer();
+  seedPendingRequest(requestsContainer);
+  const request = makeFakeRequest({
+    headers: { 'x-verified-oid': 'approver-oid' },
+    body: { requestId: 'req-1', subscriptionId: 'sub-1', decision: 'Approved' },
+  });
+  const context = makeFakeContext();
+  const brokenOverridesContainer = { items: { upsert: async () => { throw new Error('Cosmos unavailable'); } } } as never;
+  const res = await decideQuotaRequest(request, context, deps(requestsContainer, brokenOverridesContainer));
+  assert.equal(res.status, 502);
+  assert.equal(requestsContainer.all()[0].status, 'Approved'); // the residual-risk case the fragment's own comment names
 });

@@ -61,9 +61,27 @@
     <choose>
         <when condition="@((string)context.Variables["agentTrustTier"] != "None")">
 
-            <!-- Depth check — log-only or enforcing, per {{agent-limits-enforce}}. -->
+            <!-- Depth check — log-only or enforcing, per {{agent-limits-enforce}}.
+                 agentDepth is client-controlled (self-asserted x-agent-depth
+                 header, resolved as-is even in the SelfAsserted trust tier —
+                 see frag-resolve-agent-hierarchy.xml), so a non-numeric
+                 value must not reach this fragment's own condition. An
+                 earlier revision used int.Parse directly here, which throws
+                 on a malformed value and crashes the whole policy pipeline
+                 with an unhandled error — exactly the outcome this
+                 fragment's own "observe before enforce, never block
+                 legitimate traffic" design goal exists to avoid. int.TryParse
+                 below defaults to depth=0 on a parse failure instead, which
+                 correctly evaluates the comparison as false (assuming a
+                 sane, non-negative {{agent-max-depth}}) rather than
+                 rejecting or erroring on a header this fragment already
+                 treats as untrusted. -->
             <choose>
-                <when condition="@(int.Parse((string)context.Variables["agentDepth"]) > {{agent-max-depth}})">
+                <when condition="@{
+                    int depth;
+                    int.TryParse((string)context.Variables["agentDepth"], out depth);
+                    return depth > {{agent-max-depth}};
+                }">
                     <choose>
                         <when condition="@(bool.Parse("{{agent-limits-enforce}}"))">
                             <return-response>

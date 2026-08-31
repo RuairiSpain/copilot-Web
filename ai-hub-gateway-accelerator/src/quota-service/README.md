@@ -252,10 +252,13 @@ coverage — its `defaultDeps.newRequestId: () => \`req-${randomUUID()}\``
 real-ID generator is never invoked directly (every test injects a fixed
 id via `deps`, deliberately, so test runs are deterministic), the same
 "thin, un-faked edge" residual flagged as an accepted possibility when
-this coverage effort was planned. `pricing-service` still has **zero**
-test files at all — 0% automated coverage, compile-only verification, a
-real gap this fork hasn't closed (not asked to, but worth knowing if
-anyone assumes otherwise from `quota-service`'s numbers).
+this coverage effort was planned. `pricing-service` **used to have zero**
+test files at all — 0% automated coverage, compile-only verification —
+until this session's own code-quality review flagged it and the same
+`deps`-injection pattern was retrofitted there too; see
+`src/pricing-service/README.md`'s own "Testing" section for its current
+real numbers (51 tests, 97.30%/90.91%/93.66%), no longer a gap between
+the two services' verification rigor.
 
 The I/O-touching code now has real, executed test coverage (not just a
 clean `npm run build`) but was still **not** exercised against a real

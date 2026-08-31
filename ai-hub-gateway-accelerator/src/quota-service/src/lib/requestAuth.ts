@@ -15,6 +15,21 @@ export type CorroborateIdentityResult =
   | { ok: false; status: number; message: string };
 
 /**
+ * Everything after (request, headerOid, context) is optional, so it's
+ * collapsed into one options object rather than three trailing
+ * positional parameters — the original shape forced every call site
+ * that wanted `requiredRole` (decideQuotaRequest.ts,
+ * listPendingQuotaRequests.ts) to also pass an explicit `undefined` for
+ * `deps` just to reach it, and nothing stopped a future addition from
+ * landing in the wrong positional slot the way named fields can't.
+ */
+export interface CorroborateIdentityOptions {
+  deps?: CorroborateIdentityDeps;
+  headerDepartment?: string;
+  requiredRole?: string;
+}
+
+/**
  * Shared wiring for submitQuotaRequest.ts and decideQuotaRequest.ts —
  * the impersonation defense-in-depth described in tokenValidation.ts's
  * own doc comment, factored out once rather than duplicated at both
@@ -63,10 +78,9 @@ export async function corroborateIdentity(
   request: HttpRequest,
   headerOid: string,
   context: InvocationContext,
-  deps: CorroborateIdentityDeps = defaultDeps,
-  headerDepartment?: string,
-  requiredRole?: string
+  options: CorroborateIdentityOptions = {}
 ): Promise<CorroborateIdentityResult> {
+  const { deps = defaultDeps, headerDepartment, requiredRole } = options;
   const requireRevalidation = (process.env.QuotaOverride_RequireTokenRevalidation ?? 'true').toLowerCase() !== 'false';
   if (!requireRevalidation) {
     context.warn(

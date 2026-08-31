@@ -5,6 +5,31 @@ import { writeCurrentPricingCache } from '../lib/priceCacheBlob';
 import { PriceSnapshot, CurrentPricePointer } from '../lib/types';
 
 /**
+ * DI seam (this session's own code-quality review) — same optional,
+ * defaulted `deps` parameter pattern as enrichPricing.ts and every
+ * quota-service handler. Production call sites (`app.timer` below) never
+ * pass a third argument, so real behavior is unchanged; tests inject
+ * in-memory fakes for the Cosmos reads/writes, the source-price file
+ * read, and the blob cache write instead of needing a live Cosmos
+ * account, filesystem, and storage account.
+ */
+export interface RefreshPricingCacheDeps {
+  loadSourcePrices: typeof loadSourcePrices;
+  loadAllSnapshots: typeof loadAllSnapshots;
+  upsertSnapshot: typeof upsertSnapshot;
+  upsertCurrentPointer: typeof upsertCurrentPointer;
+  writeCurrentPricingCache: typeof writeCurrentPricingCache;
+}
+
+const defaultDeps: RefreshPricingCacheDeps = {
+  loadSourcePrices,
+  loadAllSnapshots,
+  upsertSnapshot,
+  upsertCurrentPointer,
+  writeCurrentPricingCache,
+};
+
+/**
  * Daily (24h) price refresh:
  *   1. Diff the source price list against the latest snapshot per
  *      deployment.
@@ -24,12 +49,16 @@ import { PriceSnapshot, CurrentPricePointer } from '../lib/types';
  * resolveEffectivePrice() in cosmos.ts) — not the display-only
  * `modelFamily` field.
  */
-export async function refreshPricingCache(_timer: Timer, context: InvocationContext): Promise<void> {
+export async function refreshPricingCache(
+  _timer: Timer,
+  context: InvocationContext,
+  deps: RefreshPricingCacheDeps = defaultDeps
+): Promise<void> {
   const now = new Date().toISOString();
 
   const [sourcePrices, existingSnapshots] = await Promise.all([
-    loadSourcePrices(),
-    loadAllSnapshots(),
+    deps.loadSourcePrices(),
+    deps.loadAllSnapshots(),
   ]);
 
   const latestByDeployment = new Map<string, PriceSnapshot>();
@@ -65,9 +94,9 @@ export async function refreshPricingCache(_timer: Timer, context: InvocationCont
     if (latest) {
       // Close out the previous snapshot so it stops matching
       // resolveEffectivePrice() from `now` onward.
-      await upsertSnapshot({ ...latest, effectiveTo: now });
+      await deps.upsertSnapshot({ ...latest, effectiveTo: now });
     }
-    await upsertSnapshot(newSnapshot);
+    await deps.upsertSnapshot(newSnapshot);
 
     const pointer: CurrentPricePointer = {
       ...newSnapshot,
@@ -75,13 +104,13 @@ export async function refreshPricingCache(_timer: Timer, context: InvocationCont
       docType: 'currentPricePointer',
       snapshotId: newSnapshot.id,
     };
-    await upsertCurrentPointer(pointer);
+    await deps.upsertCurrentPointer(pointer);
 
     currentPointers.push(newSnapshot);
     changedCount += 1;
   }
 
-  await writeCurrentPricingCache(currentPointers);
+  await deps.writeCurrentPricingCache(currentPointers);
 
   context.log(
     `refreshPricingCache: ${sourcePrices.length} models checked, ${changedCount} price change(s) written, cache refreshed.`

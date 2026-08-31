@@ -40,10 +40,18 @@
     plainCompletionTokens =
         List.Max({0, [responseTokens] - [completionAudioTokens] - [completionReasoningTokens]}),
     unit = if price = null then 1000000 else price[CostUnit],
+    // Mirrors src/pricing-service/src/lib/costCalculator.ts's calculateCost()
+    // exactly — all 5 cost components. Audio and reasoning terms were
+    // missing here in an earlier revision, understating paygEquivalentCost
+    // (and therefore PTU vs PAYG Savings and the breakeven calculation) for
+    // any deployment whose traffic includes audio or reasoning tokens.
     result =
         if price = null then null else
         (plainPromptTokens / unit * price[CostPerInputUnit])
         + (plainCompletionTokens / unit * price[CostPerOutputUnit])
         + ([promptCachedTokens] / unit * price[CostPerCachedInputUnit])
+        + ([promptAudioTokens] / unit * price[CostPerAudioInputUnit])
+        + ([completionAudioTokens] / unit * price[CostPerAudioOutputUnit])
+        + ([completionReasoningTokens] / unit * price[CostPerReasoningOutputUnit])
   in
     result

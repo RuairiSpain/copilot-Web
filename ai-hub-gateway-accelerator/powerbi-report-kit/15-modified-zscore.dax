@@ -48,9 +48,23 @@ DIVIDE(
 // unchanged, only the comparison baseline changes here.
 
 Is Outside Typical Prompt-Length Band (Modified) =
+// CORRECTED: when the peer group has zero variance (MAD = 0 — common
+// with a small/uniform peer group), DIVIDE([...], 0) correctly returns
+// BLANK() rather than erroring, but ABS(BLANK()) > 3.5 evaluates FALSE —
+// silently reporting "Typical" for exactly the case a modified z-score
+// exists to catch (a member whose value differs from an otherwise
+// identical peer group). Handled explicitly below instead of falling
+// through the blank-coercion.
+VAR MAD = [Team MAD of User Averages]
+VAR Diff = [User Avg Input Tokens] - [Team Median of User Averages]
+RETURN
 IF(
     NOT [Has Sufficient Data for Comparison], "Insufficient data",
-    IF(ABS([User Prompt Length Modified Z-Score]) > 3.5, "Outside typical range", "Typical")
+    IF(
+        MAD = 0,
+        IF(Diff <> 0, "Outside typical range (zero-variance peer group)", "Typical"),
+        IF(ABS([User Prompt Length Modified Z-Score]) > 3.5, "Outside typical range", "Typical")
+    )
 )
 // [Has Sufficient Data for Comparison] is from file 13 — same guard,
 // reused as-is.
@@ -77,7 +91,16 @@ DIVIDE(
 )
 
 Is Cost Center Outside Typical Band (Modified) =
+// Same MAD = 0 correction as the user-level measure above — see its
+// comment for the full reasoning.
+VAR MAD = [Org MAD of Cost Center Daily Cost]
+VAR Diff = [Cost Center Avg Daily Cost (Windowed)] - [Org Median of Cost Center Daily Cost]
+RETURN
 IF(
     NOT [Has Sufficient Data for Cost Center Comparison], "Insufficient data",
-    IF(ABS([Cost Center Cost Modified Z-Score]) > 3.5, "Outside typical range", "Typical")
+    IF(
+        MAD = 0,
+        IF(Diff <> 0, "Outside typical range (zero-variance peer group)", "Typical"),
+        IF(ABS([Cost Center Cost Modified Z-Score]) > 3.5, "Outside typical range", "Typical")
+    )
 )

@@ -110,9 +110,11 @@ Consistent with every other guide in this fork: no live Azure
 subscription or APIM instance was available in this session. Everything
 above is grounded in reading real source (bicep, policy XML, Function
 code) and, where code exists, in actually building and testing it
-(`quota-service`'s 117 unit tests — 100% line coverage on every `src/`
-file, measured via `node --test --experimental-test-coverage`, not
-estimated — plus both services' clean `tsc` builds) — but
+(`quota-service`'s 164 unit tests and `pricing-service`'s 51 — both now
+100% line coverage on every `src/` file except a small, documented,
+thin-SDK-wrapper edge in each — measured via
+`node --test --experimental-test-coverage`, not estimated — plus both
+services' clean `tsc` builds) — but
 none of the following was exercised end-to-end: actual RBAC assignment
 correctness once deployed, NSG/private-endpoint enforcement, the policy
 fragments' behavior inside a real APIM gateway, or the Logic App's

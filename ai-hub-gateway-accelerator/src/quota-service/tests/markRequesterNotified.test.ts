@@ -71,3 +71,25 @@ test('markRequesterNotified: already notified — idempotent no-op, does not ove
   const body = res.jsonBody as { requesterNotifiedAt?: string };
   assert.equal(body.requesterNotifiedAt, '2026-08-30T02:00:00.000Z');
 });
+
+test('markRequesterNotified: Cosmos read failure — 502, consistent error shape (this session\'s own code-quality review)', async () => {
+  const request = makeFakeRequest({ body: { requestId: 'req-1', subscriptionId: 'sub-1' } });
+  const context = makeFakeContext();
+  const brokenContainer = { item: () => ({ read: async () => { throw new Error('Cosmos unavailable'); } }) } as never;
+  const res = await markRequesterNotified(request, context, { getContainer: () => brokenContainer });
+  assert.equal(res.status, 502);
+  assert.match((res.jsonBody as { error: string }).error, /temporary data-access error/);
+});
+
+test('markRequesterNotified: Cosmos write failure — 502', async () => {
+  const request = makeFakeRequest({ body: { requestId: 'req-1', subscriptionId: 'sub-1' } });
+  const context = makeFakeContext();
+  const container = new FakeCosmosContainer();
+  seedRequest(container);
+  const original = container.item.bind(container);
+  const brokenContainer = {
+    item: (id: string, pk: string) => ({ ...original(id, pk), replace: async () => { throw new Error('Cosmos unavailable'); } }),
+  } as never;
+  const res = await markRequesterNotified(request, context, { getContainer: () => brokenContainer });
+  assert.equal(res.status, 502);
+});

@@ -153,9 +153,26 @@ CALCULATE(
 )
 
 PTU Deployment Monthly Weight Total =
+// Keeps deploymentName + billingMonth (needed for the "this deployment,
+// this month" grouping the measure name promises) AND [timestamp] —
+// [timestamp] is included defensively: if a report page scopes "this
+// month" via a date slicer bound to [timestamp] rather than an explicit
+// filter on the [billingMonth] column, an ALLEXCEPT that only names
+// billingMonth would silently strip that filter too (both are ordinary
+// columns on the same table — no relationship makes one imply the
+// other), reverting this denominator to all-time weight for the
+// deployment instead of the intended month and diluting the proportional
+// PTU allocation for every month after the first. Keeping [timestamp]
+// too means whichever column a page actually filters by, this measure
+// stays correctly scoped.
 CALCULATE(
     SUM('llm-usage-container'[ptuWeightTokens]),
-    ALLEXCEPT('llm-usage-container', 'llm-usage-container'[deploymentName], 'llm-usage-container'[billingMonth])
+    ALLEXCEPT(
+        'llm-usage-container',
+        'llm-usage-container'[deploymentName],
+        'llm-usage-container'[billingMonth],
+        'llm-usage-container'[timestamp]
+    )
 )
 
 PTU Allocated Cost =

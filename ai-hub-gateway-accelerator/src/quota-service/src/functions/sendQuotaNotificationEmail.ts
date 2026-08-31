@@ -36,7 +36,7 @@ export async function sendQuotaNotificationEmail(
     return { status: 400, jsonBody: { error: 'Request body must be JSON' } };
   }
 
-  const { to, templateType, quotaRequest } = { to: body.to, templateType: body.templateType, quotaRequest: body.request };
+  const { to, templateType, request: quotaRequest } = body;
   if (!to || (templateType !== 'requestCreated' && templateType !== 'decision') || !quotaRequest) {
     return {
       status: 400,

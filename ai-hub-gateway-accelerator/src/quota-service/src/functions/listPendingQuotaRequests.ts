@@ -72,19 +72,30 @@ export async function listPendingQuotaRequests(
   if (verifiedOid) {
     const headerDepartment = resolveVerifiedIdentity(request.headers.get('x-verified-department')) ?? undefined;
     const corroborate = deps.corroborateIdentity ?? corroborateIdentity;
-    const corroboration = await corroborate(request, verifiedOid, context, undefined, headerDepartment, 'Quota.Approve');
+    const corroboration = await corroborate(request, verifiedOid, context, { headerDepartment, requiredRole: 'Quota.Approve' });
     if (!corroboration.ok) {
       return { status: corroboration.status, jsonBody: { error: corroboration.message } };
     }
   }
 
   const container = deps.getContainer();
-  const { resources } = await container.items
-    .query<QuotaOverrideRequest>({
-      query:
-        'SELECT * FROM c WHERE c.status = "Pending" AND NOT IS_DEFINED(c.notifiedAt) ORDER BY c.requiresEscalation DESC, c.createdAt ASC',
-    })
-    .fetchAll();
+  let resources: QuotaOverrideRequest[];
+  try {
+    ({ resources } = await container.items
+      .query<QuotaOverrideRequest>({
+        query:
+          'SELECT * FROM c WHERE c.status = "Pending" AND NOT IS_DEFINED(c.notifiedAt) ORDER BY c.requiresEscalation DESC, c.createdAt ASC',
+      })
+      .fetchAll());
+  } catch (err) {
+    // Consistent error-response shape fix (this session's own
+    // code-quality review): previously this Cosmos call had no try/catch
+    // at all, so a transient failure (throttling, timeout) surfaced as
+    // the Functions runtime's default error body instead of this
+    // service's own { error: "..." } shape every caller expects.
+    context.error('listPendingQuotaRequests: Cosmos query failed', err);
+    return { status: 502, jsonBody: { error: 'Failed to list pending quota requests due to a temporary data-access error. Please retry.' } };
+  }
 
   context.log(`listPendingQuotaRequests: ${resources.length} pending request(s)`);
   return { jsonBody: resources };

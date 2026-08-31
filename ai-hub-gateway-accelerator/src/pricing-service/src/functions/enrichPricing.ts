@@ -4,6 +4,24 @@ import { calculateCost } from '../lib/costCalculator';
 import { EnrichedUsageMetricRecord, UsageMetricRecord } from '../lib/types';
 
 /**
+ * DI seam (this session's own code-quality review): retrofit of the same
+ * optional, defaulted `deps` parameter pattern quota-service's own
+ * handlers already use — production call sites (`app.http` below) never
+ * pass a third argument, so real behavior is byte-for-byte unchanged, but
+ * tests can inject an in-memory catalog instead of needing a live Cosmos
+ * account. Fixes the root cause of this service having zero automated
+ * tests: without a seam here, `loadAllSnapshots()` (a direct Cosmos call)
+ * was unavoidable in any code path through this handler.
+ */
+export interface EnrichPricingDeps {
+  loadAllSnapshots: typeof loadAllSnapshots;
+}
+
+const defaultDeps: EnrichPricingDeps = {
+  loadAllSnapshots,
+};
+
+/**
  * Called once per llm-usage-ingestion Logic App run (see the
  * Enrich_With_Pricing action added to
  * src/usage-ingestion-logicapp/llm-usage-ingestion/workflow.json), not
@@ -14,7 +32,8 @@ import { EnrichedUsageMetricRecord, UsageMetricRecord } from '../lib/types';
  */
 export async function enrichPricing(
   request: HttpRequest,
-  context: InvocationContext
+  context: InvocationContext,
+  deps: EnrichPricingDeps = defaultDeps
 ): Promise<HttpResponseInit> {
   let records: UsageMetricRecord[];
   try {
@@ -27,7 +46,18 @@ export async function enrichPricing(
     return { status: 400, jsonBody: { error: 'Request body must be a JSON array of usage records' } };
   }
 
-  const catalog = await loadAllSnapshots();
+  let catalog: Awaited<ReturnType<typeof loadAllSnapshots>>;
+  try {
+    catalog = await deps.loadAllSnapshots();
+  } catch (err) {
+    // Consistent error-response shape (this session's own code-quality
+    // review, applied here for the same reason as quota-service's
+    // handlers): a transient Cosmos failure now returns this service's
+    // own { error: "..." } shape instead of the Functions runtime's
+    // default error body.
+    context.error('enrichPricing: failed to load the pricing catalog', err);
+    return { status: 502, jsonBody: { error: 'Failed to load the pricing catalog due to a temporary data-access error. Please retry.' } };
+  }
 
   let unresolvedCount = 0;
   const enriched: EnrichedUsageMetricRecord[] = records.map((record) => {

@@ -25,12 +25,20 @@ export async function listRecentlyDecidedQuotaRequests(
   deps: ListRecentlyDecidedQuotaRequestsDeps = defaultDeps
 ): Promise<HttpResponseInit> {
   const container = deps.getContainer();
-  const { resources } = await container.items
-    .query<QuotaOverrideRequest>({
-      query:
-        'SELECT * FROM c WHERE (c.status = "Approved" OR c.status = "Denied") AND IS_DEFINED(c.requestedByEmail) AND NOT IS_DEFINED(c.requesterNotifiedAt) ORDER BY c.createdAt ASC',
-    })
-    .fetchAll();
+  let resources: QuotaOverrideRequest[];
+  try {
+    ({ resources } = await container.items
+      .query<QuotaOverrideRequest>({
+        query:
+          'SELECT * FROM c WHERE (c.status = "Approved" OR c.status = "Denied") AND IS_DEFINED(c.requestedByEmail) AND NOT IS_DEFINED(c.requesterNotifiedAt) ORDER BY c.createdAt ASC',
+      })
+      .fetchAll());
+  } catch (err) {
+    // Consistent error-response shape fix — see listPendingQuotaRequests.ts's
+    // identical comment for the full reasoning.
+    context.error('listRecentlyDecidedQuotaRequests: Cosmos query failed', err);
+    return { status: 502, jsonBody: { error: 'Failed to list recently decided quota requests due to a temporary data-access error. Please retry.' } };
+  }
 
   context.log(`listRecentlyDecidedQuotaRequests: ${resources.length} decided-and-unnotified request(s)`);
   return { jsonBody: resources };

@@ -24,6 +24,10 @@ param tags object = {}
 @description('Existing storage account name used for the Functions runtime (AzureWebJobsStorage) and, unless overridden, the pricing-cache blob container.')
 param storageAccountName string
 
+@description('Existing Cosmos DB account NAME (not just the endpoint — needed to grant this Function App'
+  + ' data-plane RBAC via the existing modules/cosmos-db/cosmos-sql-role-assignment.bicep module).')
+param cosmosDbAccountName string
+
 @description('Existing Cosmos DB account endpoint (from the cosmos-db module output cosmosDbEndpoint).')
 param cosmosDbEndpoint string
 
@@ -131,15 +135,41 @@ resource networkConfig 'Microsoft.Web/sites/networkConfig@2023-01-01' = if (vnet
   }
 }
 
-// Grants below use the built-in Storage Blob Data Contributor role.
-// Cosmos DB's data-plane RBAC (Cosmos DB Built-in Data Contributor) is a
-// database-account-scoped SQL role assignment, not a standard Azure RBAC
-// roleDefinition — assign it with the
-// Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments resource
-// against your existing Cosmos account (same pattern the accelerator's
-// own Logic App identity already uses — see
-// bicep/infra/apim-gateway-upgrade/services/logic-app.bicep for the
-// existing precedent to copy).
+// Data-plane RBAC via the accelerator's own existing reusable module
+// (bicep/infra/modules/cosmos-db/cosmos-sql-role-assignment.bicep) — same
+// "Cosmos DB Built-in Data Contributor" role and same module
+// quota-service.bicep uses for its own two containers.
+//
+// CORRECTED (this session's own review found the grant this comment used
+// to only describe was never actually created): every Cosmos call in
+// enrichPricing.ts/refreshPricingCache.ts (loadAllSnapshots, upsertSnapshot,
+// upsertCurrentPointer) authenticates via DefaultAzureCredential() against
+// this Function App's managed identity — without this module call, that
+// identity held zero Cosmos data-plane RBAC and every one of those calls
+// would fail with an authorization error on first real use.
+//
+// Same account-wide-not-container-scoped caveat as quota-service.bicep's
+// identical grant — see that module's own comment and
+// guides/enterprise-hardening-checklist.md for the reasoning; not
+// re-duplicated here.
+//
+// Also per that module's own comment: deploy this in a separate stage
+// from functionApp's own creation so the new managed identity has time
+// to replicate in Entra ID first (Cosmos validates the principal
+// synchronously and does not accept a principalType hint) — same
+// ordering constraint as every other identity this accelerator grants
+// Cosmos access to.
+module cosmosRoleAssignment '../cosmos-db/cosmos-sql-role-assignment.bicep' = {
+  name: '${functionAppName}-cosmos-rbac'
+  params: {
+    cosmosDbAccountName: cosmosDbAccountName
+    principalId: functionApp.identity.principalId
+  }
+}
+
+// Grant below uses the built-in Storage Blob Data Contributor role, for
+// the pricing-cache blob container (the customer-facing price page's
+// cached read path) — a separate concern from the Cosmos grant above.
 resource storageBlobDataContributorRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
   scope: subscription()
   name: 'ba92f5b4-2d11-453d-a403-e96b0029c9fe' // Storage Blob Data Contributor

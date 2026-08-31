@@ -1,22 +1,50 @@
-import { BlobServiceClient } from '@azure/storage-blob';
+import { BlobServiceClient, ContainerClient } from '@azure/storage-blob';
 import { DefaultAzureCredential } from '@azure/identity';
 import { PriceSnapshot } from './types';
 
 /**
- * Writes the small "current prices" JSON that the customer-facing cost
- * price page reads. One cheap blob read per page load — never a live
- * Cosmos query — refreshed once a day by refreshPricingCache.
+ * Exported (not just internal), same DI-seam pattern as
+ * quota-service/src/lib/email.ts's getTransporter() — `BlobServiceClient`
+ * construction, like nodemailer's createTransport()/Cosmos's
+ * CosmosClient, is lazy and doesn't make a network call until an actual
+ * operation (createIfNotExists/upload below) runs, so this can be called
+ * directly in tests to exercise its own env-var-driven construction
+ * logic (the missing-account-URL error) without a live storage account.
  */
-export async function writeCurrentPricingCache(currentPrices: PriceSnapshot[]): Promise<void> {
+export function getContainerClient(): ContainerClient {
   const accountUrl = process.env.PricingCache_StorageAccountUrl;
   if (!accountUrl) {
     throw new Error('PricingCache_StorageAccountUrl app setting is required');
   }
   const containerName = process.env.PricingCache_ContainerName ?? 'pricing-cache';
+  const blobService = new BlobServiceClient(accountUrl, new DefaultAzureCredential());
+  return blobService.getContainerClient(containerName);
+}
+
+export interface WriteCurrentPricingCacheDeps {
+  getContainerClient: typeof getContainerClient;
+}
+
+const defaultDeps: WriteCurrentPricingCacheDeps = {
+  getContainerClient,
+};
+
+/**
+ * Writes the small "current prices" JSON that the customer-facing cost
+ * price page reads. One cheap blob read per page load — never a live
+ * Cosmos query — refreshed once a day by refreshPricingCache.
+ *
+ * `deps` follows the same optional, defaulted pattern as every other
+ * DI seam in this fork (this session's own code-quality review) —
+ * production callers never pass a second argument.
+ */
+export async function writeCurrentPricingCache(
+  currentPrices: PriceSnapshot[],
+  deps: WriteCurrentPricingCacheDeps = defaultDeps
+): Promise<void> {
   const blobName = process.env.PricingCache_BlobName ?? 'current-pricing.json';
 
-  const blobService = new BlobServiceClient(accountUrl, new DefaultAzureCredential());
-  const container = blobService.getContainerClient(containerName);
+  const container = deps.getContainerClient();
   await container.createIfNotExists({ access: 'blob' }); // public-read on the blob only, not the account
 
   const payload = JSON.stringify(

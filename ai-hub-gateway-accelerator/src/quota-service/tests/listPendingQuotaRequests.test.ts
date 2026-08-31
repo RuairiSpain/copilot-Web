@@ -104,11 +104,9 @@ test('listPendingQuotaRequests: x-verified-oid present, corroboration passes wit
       _request: unknown,
       _headerOid: unknown,
       _context: unknown,
-      _deps: unknown,
-      _headerDepartment: unknown,
-      requiredRole: unknown
+      options?: { deps?: unknown; headerDepartment?: unknown; requiredRole?: unknown }
     ) => {
-      capturedRequiredRole = requiredRole;
+      capturedRequiredRole = options?.requiredRole;
       return { ok: true };
     }) as never,
   });
@@ -140,4 +138,13 @@ test('listPendingQuotaRequests: x-verified-oid present, deps.corroborateIdentity
   delete process.env.Entra_Audience; // force the real verifyBearerTokenClaims to reject cleanly, not hang on a live tenant
   const res = await listPendingQuotaRequests(request, context, { getContainer: () => container as never });
   assert.equal(res.status, 401); // real corroborateIdentity ran and rejected — not silently bypassed
+});
+
+test('listPendingQuotaRequests: Cosmos query failure — 502, consistent error shape (this session\'s own code-quality review)', async () => {
+  const request = makeFakeRequest({});
+  const context = makeFakeContext();
+  const brokenContainer = { items: { query: () => ({ fetchAll: async () => { throw new Error('Cosmos unavailable'); } }) } } as never;
+  const res = await listPendingQuotaRequests(request, context, { getContainer: () => brokenContainer });
+  assert.equal(res.status, 502);
+  assert.match((res.jsonBody as { error: string }).error, /temporary data-access error/);
 });

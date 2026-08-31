@@ -9,46 +9,49 @@
 // month.
 //
 // REQUIRES `Day Of Week Number` and `Date Only` from
-// 10-heatmap-moving-average.dax, and one new calculated table.
-
-// ============================================================
-// CALCULATED TABLE — one row per weekday (1-7), that weekday's average
-// daily cost across all history in the model. (Swap the outer
-// FILTER('llm-usage-container', ...) for a trailing-N-day window, same
-// pattern as CostCenterDailyCost in file 14, if you'd rather the profile
-// reflect recent behavior than all-time history — all-time is the
-// simpler default and fine once a few weeks of data exist.)
-// ============================================================
-
-WeekdayProfile =
-ADDCOLUMNS(
-    SUMMARIZE('llm-usage-container', 'llm-usage-container'[Day Of Week Number]),
-    "AvgDailyCost",
-    CALCULATE(
-        DIVIDE([Total Cost (incl. PTU)], DISTINCTCOUNT('llm-usage-container'[Date Only]))
-    )
-)
-
-// ============================================================
-// FORECAST MEASURE
-// ============================================================
+// 10-heatmap-moving-average.dax.
+//
+// CORRECTED (this session's own review): an earlier revision computed
+// each weekday's average cost via a calculated table (`WeekdayProfile`),
+// built once at model refresh from the WHOLE, unfiltered container with
+// no relationship back to it. That table couldn't respond to a page
+// slicer/filter (cost center, product, deployment...) — the entire point
+// of the Cost-Center and Individual-User pages this kit builds — so
+// `ActualSoFar` (filter-aware) and `ForecastRemaining` (always org-wide)
+// ended up on different scales the moment a report page was filtered,
+// making the sum meaningless for anything but the unfiltered Org page.
+// It also silently zeroed a remaining day's contribution (SUMX treats a
+// blank SELECTEDVALUE as 0) whenever a weekday had no historical rows
+// yet in the active filter context — understating the forecast in
+// exactly the low-data regime this measure should be most careful about.
+//
+// Fixed below by computing each weekday's average INLINE inside the
+// measure, via a CALCULATE that only ADDS a weekday filter on top of
+// whatever context is already active — so it inherits the same cost-
+// center/product/deployment scoping ActualSoFar already has — with an
+// explicit COALESCE fallback to the (also filter-aware) overall average
+// when a specific weekday has no history yet.
 
 Seasonality-Aware Forecast Month-End Cost =
 VAR CurrentDate = INT(MAX('llm-usage-container'[timestamp]))
 VAR MonthEnd = EOMONTH(CurrentDate, 0)
 VAR RemainingDays = MonthEnd - CurrentDate
 VAR ActualSoFar = [Total Cost (incl. PTU)]
+VAR OverallAvgDailyCost =
+    DIVIDE([Total Cost (incl. PTU)], DISTINCTCOUNT('llm-usage-container'[Date Only]))
 VAR ForecastRemaining =
     IF(
         RemainingDays > 0,
         SUMX(
             GENERATESERIES(CurrentDate + 1, MonthEnd, 1),
             VAR ThisWeekdayNum = WEEKDAY([Value], 2)
-            RETURN
+            VAR ThisWeekdayAvg =
                 CALCULATE(
-                    SELECTEDVALUE(WeekdayProfile[AvgDailyCost]),
-                    WeekdayProfile[Day Of Week Number] = ThisWeekdayNum
+                    DIVIDE([Total Cost (incl. PTU)], DISTINCTCOUNT('llm-usage-container'[Date Only])),
+                    'llm-usage-container'[Day Of Week Number] = ThisWeekdayNum
                 )
+            RETURN
+                COALESCE(ThisWeekdayAvg, OverallAvgDailyCost)
         ),
         0
     )

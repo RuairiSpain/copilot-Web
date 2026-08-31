@@ -47,11 +47,20 @@ let
 
     unit = if price = null then 1000000 else price[CostUnit],
 
+    // Mirrors src/pricing-service/src/lib/costCalculator.ts's calculateCost()
+    // exactly — all 5 cost components (input/output/cached/audio/reasoning),
+    // not just the first 3. The audio and reasoning terms were missing here
+    // in an earlier revision, which understated PremiumEquivalentCost (and
+    // therefore Cost Avoidance $/%) for any request that used audio or
+    // reasoning tokens against the premium benchmark model.
     result =
         if price = null then null else
         (plainPromptTokens / unit * price[CostPerInputUnit])
         + (plainCompletionTokens / unit * price[CostPerOutputUnit])
         + ([promptCachedTokens] / unit * price[CostPerCachedInputUnit])
+        + ([promptAudioTokens] / unit * price[CostPerAudioInputUnit])
+        + ([completionAudioTokens] / unit * price[CostPerAudioOutputUnit])
+        + ([completionReasoningTokens] / unit * price[CostPerReasoningOutputUnit])
 in
     result
 

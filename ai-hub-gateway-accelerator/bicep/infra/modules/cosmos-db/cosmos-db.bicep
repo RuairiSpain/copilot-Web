@@ -68,8 +68,23 @@ param quotaOverrideRequestsContainerName string = 'quota-override-requests'
 
 @minValue(400)
 @maxValue(1000000)
-@description('The throughput for the container')
+@description('The manual (fixed) throughput for the container, used only when enableAutoscale is false.')
 param throughput int = 400
+
+@description('When true (default), every container in this module uses Cosmos autoscale throughput instead of a fixed manual RU/s. Fixes this session\'s own scalability review finding: previously every container shared one fixed, manually-provisioned RU/s value with no ability to absorb the bursty per-record writes the usage-ingestion Logic Apps do in each batch run. Set false only if you have a specific reason to manage RU/s manually (e.g. a committed reserved-capacity purchase already sized for your load).')
+param enableAutoscale bool = true
+
+@minValue(1000)
+@maxValue(1000000)
+@description('Autoscale ceiling (RU/s) when enableAutoscale is true — Cosmos scales each container automatically between this value ÷ 10 and this value based on load. 1000 is the Cosmos-enforced minimum for autoscale; size this per your expected peak ingestion burst, not your steady-state average. Applied uniformly to every container in this module for simplicity — if your containers have meaningfully different load profiles, consider giving the highest-volume ones (llmUsageContainer, mcpUsageContainer, agentUsageContainer) their own ceiling in a follow-up, since this module intentionally keeps one shared value rather than guessing per-container numbers with no real traffic data to size them against.')
+param maxAutoscaleThroughput int = 4000
+
+// Shared `options` block every container below uses — keeps the
+// autoscale-vs-manual choice in exactly one place rather than repeated
+// per container.
+var containerThroughputOptions = enableAutoscale
+  ? { autoscaleSettings: { maxThroughput: maxAutoscaleThroughput } }
+  : { throughput: throughput }
 
 var consistencyPolicy = {
   Eventual: {
@@ -149,6 +164,15 @@ resource database 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2024-02-15
   }
 }
 
+// SCOPED OUT of this session's own partition-key fix (see
+// llmUsageContainer's comment below for the fix applied to this fork's
+// three new usage containers): /productName has the identical
+// low-cardinality problem here, but this is the base accelerator's
+// original legacy container (fed by ai-usage-ingestion, a workflow this
+// fork didn't touch or trace in full) — repartitioning it would need
+// coordinated changes to that upstream writer too, outside what this
+// pass verified end to end. Flagged here rather than silently left
+// unaddressed; treat as a real follow-up, not a non-issue.
 resource container 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-02-15-preview' = {
   parent: database
   name: containerName
@@ -166,9 +190,7 @@ resource container 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/container
         automatic: true
       }
     }
-    options: {
-      throughput: throughput
-    }
+    options: containerThroughputOptions
   }
 }
 
@@ -206,9 +228,7 @@ resource modelPricingContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabas
         ]
       }
     }
-    options: {
-      throughput: throughput
-    }
+    options: containerThroughputOptions
   }
 }
 
@@ -229,12 +249,22 @@ resource streamingExportConfigContainer 'Microsoft.DocumentDB/databaseAccounts/s
         automatic: true
       }
     }
-    options: {
-      throughput: throughput
-    }
+    options: containerThroughputOptions
   }
 }
 
+// SCOPED OUT of this session's own partition-key fix, and actually the
+// WORST case of the pattern flagged there: /type isn't just
+// low-cardinality, frag-pii-state-saving.xml sets it to the single
+// hardcoded constant "PII_Processing" for every document — every write
+// to this container lands in ONE logical partition, always, with no
+// per-request variation at all. Left as-is here because this container
+// carries raw/deanonymized PII (a materially higher-stakes write path to
+// touch without full end-to-end tracing of every reader), and its writer
+// (frag-pii-state-saving.xml, an APIM policy fragment, not a Logic App
+// this session edited) needs the same fix in lockstep with any container
+// change. Flagged here rather than silently left unaddressed; treat as
+// a real, higher-priority follow-up, not a non-issue.
 resource piiUsageContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-02-15-preview' = {
   parent: database
   name: piiUsageContainerName
@@ -252,12 +282,31 @@ resource piiUsageContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/c
         automatic: true
       }
     }
-    options: {
-      throughput: throughput
-    }
+    options: containerThroughputOptions
   }
 }
 
+// Partitioned by /pkShard, NOT /productName — this session's own
+// scalability review flagged /productName as a low-cardinality key
+// (tens of distinct values at most, per citadel-access-contracts'
+// one-subscription-per-use-case model): a single logical partition's
+// throughput is capped regardless of the container's total provisioned
+// RU/s, so the busiest product's writes throttle long before the
+// account's RU budget is exhausted, while the rest sits idle.
+// `pkShard` (written by llm-usage-ingestion's Create_Usage_Log, e.g.
+// "AcmeCorp-Prod_20260831") is `{productName}_{yyyyMMdd}` — spreads a
+// single popular product's writes across many logical partitions
+// (bounded further by date, so old partitions naturally stop taking
+// writes) while every existing analytical query pattern (Power BI
+// already filters/aggregates by time range and product) is unaffected,
+// since nothing here relies on a point-read keyed on productName alone.
+//
+// BREAKING CHANGE ON UPGRADE, stated plainly: Cosmos partition keys are
+// immutable — this only takes effect for a NEW container. An
+// already-deployed account keeps its existing /productName-partitioned
+// container as-is; adopting this fix there needs a real data migration
+// (a new container + a backfill copy, e.g. via Azure Data Factory or the
+// Cosmos DB change feed), not just a redeploy of this template.
 resource llmUsageContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-02-15-preview' = {
   parent: database
   name: llmUsageContainerName
@@ -266,7 +315,7 @@ resource llmUsageContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/c
       id: llmUsageContainerName
       partitionKey: {
         paths: [
-          '/productName'
+          '/pkShard'
         ]
         kind: 'Hash'
       }
@@ -275,14 +324,15 @@ resource llmUsageContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/c
         automatic: true
       }
     }
-    options: {
-      throughput: throughput
-    }
+    options: containerThroughputOptions
   }
 }
 
 // Published Tools (MCP) usage. Fed by the mcp-usage-ingestion Logic App which aggregates the
 // 'mcp-usage' App Insights custom metrics (mirrors the LLM usage pipeline).
+// Partitioned by /pkShard ({productName}_{yyyyMMdd}) — see llmUsageContainer's
+// comment above for the full scalability rationale and the breaking-change
+// note; the same reasoning applies here.
 resource mcpUsageContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-02-15-preview' = {
   parent: database
   name: mcpUsageContainerName
@@ -291,7 +341,7 @@ resource mcpUsageContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/c
       id: mcpUsageContainerName
       partitionKey: {
         paths: [
-          '/productName'
+          '/pkShard'
         ]
         kind: 'Hash'
       }
@@ -300,14 +350,15 @@ resource mcpUsageContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/c
         automatic: true
       }
     }
-    options: {
-      throughput: throughput
-    }
+    options: containerThroughputOptions
   }
 }
 
 // Published Agents (A2A) usage. Fed by the agent-usage-ingestion Logic App which aggregates the
 // 'a2a-usage' App Insights custom metrics.
+// Partitioned by /pkShard ({productName}_{yyyyMMdd}) — see llmUsageContainer's
+// comment above for the full scalability rationale and the breaking-change
+// note; the same reasoning applies here.
 resource agentUsageContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-02-15-preview' = {
   parent: database
   name: agentUsageContainerName
@@ -316,7 +367,7 @@ resource agentUsageContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases
       id: agentUsageContainerName
       partitionKey: {
         paths: [
-          '/productName'
+          '/pkShard'
         ]
         kind: 'Hash'
       }
@@ -325,9 +376,7 @@ resource agentUsageContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases
         automatic: true
       }
     }
-    options: {
-      throughput: throughput
-    }
+    options: containerThroughputOptions
   }
 }
 
@@ -356,9 +405,7 @@ resource quotaOverridesContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatab
         automatic: true
       }
     }
-    options: {
-      throughput: throughput
-    }
+    options: containerThroughputOptions
   }
 }
 
@@ -383,9 +430,7 @@ resource quotaOverrideRequestsContainer 'Microsoft.DocumentDB/databaseAccounts/s
         automatic: true
       }
     }
-    options: {
-      throughput: throughput
-    }
+    options: containerThroughputOptions
   }
 }
 

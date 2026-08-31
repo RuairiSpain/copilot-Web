@@ -79,7 +79,6 @@ export async function submitQuotaRequest(
   }
 
   const { scopeType, scopeId, subscriptionId, currentQuota, requestedQuota, reason } = body;
-  const durationDays = body.durationDays === undefined ? Number(process.env.QuotaOverride_DefaultDurationDays ?? '30') : body.durationDays;
 
   if (
     (scopeType !== 'user' && scopeType !== 'team') ||
@@ -89,31 +88,54 @@ export async function submitQuotaRequest(
     typeof requestedQuota !== 'number' ||
     requestedQuota <= currentQuota ||
     !reason ||
-    reason.trim().length === 0
+    reason.trim().length === 0 ||
+    // BUG FIX (this session's own code-quality review): durationDays was
+    // previously never validated at all. A non-numeric value (e.g. a
+    // client bug sending "30d") turned Number(durationDays) into NaN,
+    // which JSON.stringify silently renders as `null` on the Cosmos
+    // write — and `null` means PERMANENT per this service's own schema
+    // (types.ts). A malformed request that should have been rejected
+    // with 400 instead silently created the most privileged grant this
+    // system supports. Explicitly required to be null, undefined, or a
+    // finite non-negative number before it's ever used.
+    (body.durationDays !== undefined &&
+      body.durationDays !== null &&
+      (typeof body.durationDays !== 'number' || !Number.isFinite(body.durationDays) || body.durationDays < 0))
   ) {
     return {
       status: 400,
       jsonBody: {
         error:
-          'Request body must be { scopeType: "user"|"team", scopeId, subscriptionId, currentQuota: number, requestedQuota: number > currentQuota, reason: non-empty string, durationDays?: number|null }. requestedBy is no longer read from the body — it comes from the verified x-verified-oid header.',
+          'Request body must be { scopeType: "user"|"team", scopeId, subscriptionId, currentQuota: number, requestedQuota: number > currentQuota, reason: non-empty string, durationDays?: number >= 0 | null }. requestedBy is no longer read from the body — it comes from the verified x-verified-oid header.',
       },
     };
   }
 
+  const durationDays = body.durationDays === undefined ? Number(process.env.QuotaOverride_DefaultDurationDays ?? '30') : body.durationDays;
+
   const container = deps.getContainer();
 
   // §7 guardrail — one Pending request per scope at a time.
-  const { resources: pending } = await container.items
-    .query<{ id: string }>({
-      query:
-        'SELECT c.id FROM c WHERE c.subscriptionId = @subscriptionId AND c.scopeType = @scopeType AND c.scopeId = @scopeId AND c.status = "Pending"',
-      parameters: [
-        { name: '@subscriptionId', value: subscriptionId },
-        { name: '@scopeType', value: scopeType },
-        { name: '@scopeId', value: scopeId },
-      ],
-    })
-    .fetchAll();
+  let pending: { id: string }[];
+  try {
+    ({ resources: pending } = await container.items
+      .query<{ id: string }>({
+        query:
+          'SELECT c.id FROM c WHERE c.subscriptionId = @subscriptionId AND c.scopeType = @scopeType AND c.scopeId = @scopeId AND c.status = "Pending"',
+        parameters: [
+          { name: '@subscriptionId', value: subscriptionId },
+          { name: '@scopeType', value: scopeType },
+          { name: '@scopeId', value: scopeId },
+        ],
+      })
+      .fetchAll());
+  } catch (err) {
+    // Consistent error-response shape fix — see
+    // listPendingQuotaRequests.ts's identical comment for the full
+    // reasoning.
+    context.error('submitQuotaRequest: Cosmos query failed checking for an open request', err);
+    return { status: 502, jsonBody: { error: 'Failed to check for an existing pending request due to a temporary data-access error. Please retry.' } };
+  }
 
   if (hasOpenRequest(pending.length)) {
     return {
@@ -145,7 +167,12 @@ export async function submitQuotaRequest(
     createdAt: now,
   };
 
-  await container.items.create(doc);
+  try {
+    await container.items.create(doc);
+  } catch (err) {
+    context.error(`submitQuotaRequest: Cosmos write failed for ${doc.id}`, err);
+    return { status: 502, jsonBody: { error: 'Failed to create the quota request due to a temporary data-access error. Please retry.' } };
+  }
   context.log(`submitQuotaRequest: created ${doc.id} for ${scopeType}:${scopeId} (escalation=${doc.requiresEscalation})`);
 
   return { status: 201, jsonBody: doc };

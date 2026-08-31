@@ -144,3 +144,63 @@ test('submitQuotaRequest: requiresEscalation is computed from the configured mul
   assert.equal((res.jsonBody as { requiresEscalation: boolean }).requiresEscalation, true);
   if (originalMultiplier !== undefined) process.env.QuotaOverride_EscalationMultiplier = originalMultiplier;
 });
+
+// --- validation and error-response-shape fixes (this session's own
+// code-quality review) ---
+
+test('submitQuotaRequest: non-numeric durationDays — 400, not silently coerced into a permanent grant', async () => {
+  const request = makeFakeRequest({
+    headers: { 'x-verified-oid': 'oid-abc' },
+    body: validBody({ durationDays: '30d' }),
+  });
+  const context = makeFakeContext();
+  const container = new FakeCosmosContainer();
+  const res = await submitQuotaRequest(request, context, deps(container));
+  assert.equal(res.status, 400);
+  assert.equal(container.all().length, 0); // nothing was written
+});
+
+test('submitQuotaRequest: negative durationDays — 400', async () => {
+  const request = makeFakeRequest({
+    headers: { 'x-verified-oid': 'oid-abc' },
+    body: validBody({ durationDays: -5 }),
+  });
+  const context = makeFakeContext();
+  const container = new FakeCosmosContainer();
+  const res = await submitQuotaRequest(request, context, deps(container));
+  assert.equal(res.status, 400);
+});
+
+test('submitQuotaRequest: durationDays: null is still accepted — an explicit permanent request, distinct from an invalid one', async () => {
+  const request = makeFakeRequest({
+    headers: { 'x-verified-oid': 'oid-abc' },
+    body: validBody({ durationDays: null }),
+  });
+  const context = makeFakeContext();
+  const container = new FakeCosmosContainer();
+  const res = await submitQuotaRequest(request, context, deps(container));
+  assert.equal(res.status, 201);
+  assert.equal((res.jsonBody as { durationDays: null }).durationDays, null);
+});
+
+test('submitQuotaRequest: Cosmos query failure checking for an open request — 502, consistent error shape', async () => {
+  const request = makeFakeRequest({ headers: { 'x-verified-oid': 'oid-abc' }, body: validBody() });
+  const context = makeFakeContext();
+  const brokenContainer = { items: { query: () => ({ fetchAll: async () => { throw new Error('Cosmos unavailable'); } }) } } as never;
+  const res = await submitQuotaRequest(request, context, deps(brokenContainer));
+  assert.equal(res.status, 502);
+  assert.match((res.jsonBody as { error: string }).error, /temporary data-access error/);
+});
+
+test('submitQuotaRequest: Cosmos write failure creating the request — 502', async () => {
+  const request = makeFakeRequest({ headers: { 'x-verified-oid': 'oid-abc' }, body: validBody() });
+  const context = makeFakeContext();
+  const brokenContainer = {
+    items: {
+      query: () => ({ fetchAll: async () => ({ resources: [] }) }),
+      create: async () => { throw new Error('Cosmos unavailable'); },
+    },
+  } as never;
+  const res = await submitQuotaRequest(request, context, deps(brokenContainer));
+  assert.equal(res.status, 502);
+});

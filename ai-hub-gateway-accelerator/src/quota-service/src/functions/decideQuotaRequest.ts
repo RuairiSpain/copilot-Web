@@ -76,7 +76,7 @@ export async function decideQuotaRequest(
   }
 
   const headerDepartment = resolveVerifiedIdentity(request.headers.get('x-verified-department')) ?? undefined;
-  const corroboration = await deps.corroborateIdentity(request, decidedBy, context, undefined, headerDepartment, 'Quota.Approve');
+  const corroboration = await deps.corroborateIdentity(request, decidedBy, context, { headerDepartment, requiredRole: 'Quota.Approve' });
   if (!corroboration.ok) {
     return { status: corroboration.status, jsonBody: { error: corroboration.message } };
   }
@@ -90,18 +90,39 @@ export async function decideQuotaRequest(
   }
 
   const { requestId, subscriptionId, decision } = body;
-  if (!requestId || !subscriptionId || (decision !== 'Approved' && decision !== 'Denied')) {
+  if (
+    !requestId ||
+    !subscriptionId ||
+    (decision !== 'Approved' && decision !== 'Denied') ||
+    // BUG FIX (this session's own code-quality review): tpmTier was
+    // previously cast straight through `as QuotaOverride['tpmTier']`
+    // with no runtime check, letting an arbitrary string (a client bug,
+    // or a future UI edit that doesn't respect the swagger enum) get
+    // written verbatim into a typed field every downstream reader
+    // (quotaLogic.ts's resolveAllowance, frag-load-quota-allowance.xml)
+    // assumes is only ever "standard" or "elevated".
+    (body.tpmTier !== undefined && body.tpmTier !== 'standard' && body.tpmTier !== 'elevated')
+  ) {
     return {
       status: 400,
       jsonBody: {
         error:
-          'Request body must be { requestId, subscriptionId, decision: "Approved"|"Denied", note?, tpmTier? }. decidedBy is no longer read from the body — it comes from the verified x-verified-oid header.',
+          'Request body must be { requestId, subscriptionId, decision: "Approved"|"Denied", note?, tpmTier?: "standard"|"elevated" }. decidedBy is no longer read from the body — it comes from the verified x-verified-oid header.',
       },
     };
   }
 
   const requestsContainer = deps.getRequestsContainer();
-  const quotaRequest = await readItemOrUndefined<QuotaOverrideRequest>(requestsContainer, requestId, subscriptionId);
+  let quotaRequest: QuotaOverrideRequest | undefined;
+  try {
+    quotaRequest = await readItemOrUndefined<QuotaOverrideRequest>(requestsContainer, requestId, subscriptionId);
+  } catch (err) {
+    // Consistent error-response shape fix (this session's own
+    // code-quality review) — see listPendingQuotaRequests.ts's identical
+    // comment for the full reasoning.
+    context.error(`decideQuotaRequest: Cosmos read failed for ${requestId}`, err);
+    return { status: 502, jsonBody: { error: 'Failed to look up the quota request due to a temporary data-access error. Please retry.' } };
+  }
   if (!quotaRequest) {
     return { status: 404, jsonBody: { error: `No request ${requestId} found for subscription ${subscriptionId}` } };
   }
@@ -126,7 +147,12 @@ export async function decideQuotaRequest(
   const now = new Date().toISOString();
   quotaRequest.status = decision;
   quotaRequest.statusHistory.push({ status: decision, at: now, by: decidedBy, note: body.note });
-  await requestsContainer.item(requestId, subscriptionId).replace(quotaRequest);
+  try {
+    await requestsContainer.item(requestId, subscriptionId).replace(quotaRequest);
+  } catch (err) {
+    context.error(`decideQuotaRequest: Cosmos write failed recording the decision for ${requestId}`, err);
+    return { status: 502, jsonBody: { error: 'Failed to record the decision due to a temporary data-access error. Please retry.' } };
+  }
 
   if (decision === 'Denied') {
     context.log(`decideQuotaRequest: ${requestId} denied by ${decidedBy}`);
@@ -151,7 +177,21 @@ export async function decideQuotaRequest(
     expiresAt: computeExpiresAt(quotaRequest.durationDays),
     updatedAt: now,
   };
-  await overridesContainer.items.upsert(override);
+  try {
+    await overridesContainer.items.upsert(override);
+  } catch (err) {
+    // Residual risk stated plainly, not new to this fix: the request
+    // document above is already marked Approved by this point (Cosmos
+    // has no cross-container transaction to roll that back with), so a
+    // failure here leaves a request recorded as Approved without the
+    // override document the APIM policy fragment actually reads —
+    // pre-existing to the two-step write sequence itself, not introduced
+    // by adding this try/catch (an unhandled throw here previously had
+    // the identical net effect). A future fix would need a reconciliation
+    // sweep or a Cosmos change-feed-driven retry, out of scope here.
+    context.error(`decideQuotaRequest: Cosmos write failed creating the override for ${requestId}`, err);
+    return { status: 502, jsonBody: { error: 'The decision was recorded, but applying the quota override failed due to a temporary data-access error. Please retry the decision to re-apply the override.' } };
+  }
 
   context.log(`decideQuotaRequest: ${requestId} approved by ${decidedBy}, effectiveQuota=${override.effectiveQuota}, expiresAt=${override.expiresAt}`);
   return { jsonBody: { request: quotaRequest, override } };

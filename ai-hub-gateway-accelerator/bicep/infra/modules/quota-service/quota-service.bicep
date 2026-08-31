@@ -122,7 +122,18 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
       linuxFxVersion: 'Node|20'
       vnetRouteAllEnabled: vnetIntegrated
       functionsRuntimeScaleMonitoringEnabled: vnetIntegrated
-      minimumElasticInstanceCount: vnetIntegrated ? 1 : 0
+      // Deliberately NOT tied to vnetIntegrated (unlike pricing-service's
+      // identical-looking line): getQuotaAllowance sits synchronously in
+      // APIM's request hot path (frag-load-quota-allowance.xml calls it
+      // on every tier-2 quota-cache miss, ~every 5 minutes per scope),
+      // not a background/batch job like pricing-service's timer-triggered
+      // refreshPricingCache. A cold start here adds latency variance
+      // correlated with quota-service's idle/wake cycle to every P95 that
+      // happens to land on a cache miss — this session's own scalability
+      // review flagged 0 pre-warmed instances as a real gap on this
+      // specific path, unlike pricing-service where it's a reasonable
+      // default. Always keep at least 1 warm instance, VNet or not.
+      minimumElasticInstanceCount: 1
       appSettings: concat([
         { name: 'AzureWebJobsStorage__accountName', value: storageAccount.name }
         { name: 'FUNCTIONS_EXTENSION_VERSION', value: '~4' }

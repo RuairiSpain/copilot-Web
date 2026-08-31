@@ -87,3 +87,12 @@ test('listRecentlyDecidedQuotaRequests: sorts by createdAt ascending', async () 
     ['req-old', 'req-new']
   );
 });
+
+test('listRecentlyDecidedQuotaRequests: Cosmos query failure — 502, consistent error shape (this session\'s own code-quality review)', async () => {
+  const request = makeFakeRequest({});
+  const context = makeFakeContext();
+  const brokenContainer = { items: { query: () => ({ fetchAll: async () => { throw new Error('Cosmos unavailable'); } }) } } as never;
+  const res = await listRecentlyDecidedQuotaRequests(request, context, { getContainer: () => brokenContainer });
+  assert.equal(res.status, 502);
+  assert.match((res.jsonBody as { error: string }).error, /temporary data-access error/);
+});

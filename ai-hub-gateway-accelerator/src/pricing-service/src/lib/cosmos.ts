@@ -94,3 +94,13 @@ export async function upsertCurrentPointer(pointer: CurrentPricePointer): Promis
   const container = getPricingContainer();
   await container.items.upsert(pointer);
 }
+
+/**
+ * TEST-ONLY. Clears the cached CosmosClient so tests/cosmos.test.ts can
+ * exercise getClient()'s env-var-driven construction repeatedly
+ * (including its missing-endpoint error) — same pattern as
+ * quota-service/src/lib/cosmos.ts's identical helper.
+ */
+export function _resetClientCacheForTests(): void {
+  cachedClient = undefined;
+}
