@@ -435,8 +435,32 @@ Built, as of this fork's next patch:
   (`bicep/infra/entra-id-setup/setup.ps1`) for the latter two, and
   stamping a **verified** `oid` onto every request — `submitQuotaRequest`/
   `decideQuotaRequest` now reject (401) any call missing it, with no
-  fallback to a client-supplied identity field. Scope, stated precisely:
-  this proves the caller is a real, role-holding person.
+  fallback to a client-supplied identity field.
+  **Correction, from a later security review of this fork**: this
+  bullet used to claim the fix "proves the caller is a real,
+  role-holding person" — that was wrong. Proving *real* (a genuinely
+  valid, signature-verified token whose oid matches) and proving
+  *role-holding* (that token's `roles` claim actually contains
+  `Quota.Approve`) are two different checks, and only the first one was
+  ever implemented in `quota-service` itself — the `Quota.Approve`
+  requirement was enforced *only* by APIM's `quota-api-policy.xml`. A
+  caller who obtained `quota-service`'s function key and held ANY
+  genuinely valid token for this app registration — i.e. any
+  authenticated employee, no special role required — could call
+  `/decide` or `/pending` directly, bypassing APIM (and its role check)
+  entirely, and approve/deny as themselves. This is now actually fixed:
+  `tokenValidation.ts`'s `verifyBearerTokenClaims` (renamed from an
+  earlier `oid`-only version) also extracts and returns the token's
+  `roles` claim, and `requestAuth.ts`'s `corroborateIdentity` takes an
+  optional `requiredRole` parameter — `decideQuotaRequest.ts` and
+  `listPendingQuotaRequests.ts` (when called with `x-verified-oid` set,
+  i.e. through the external API, not the internal notification Logic
+  App) both pass `'Quota.Approve'` and get a 403 if the independently
+  re-verified token doesn't carry it. `submitQuotaRequest.ts` is
+  correctly unaffected — `/submit` has no role requirement by design.
+  Scope, stated precisely now: this proves the caller is a real,
+  role-holding person, checked independently in code, not solely
+  trusted from having reached this far past APIM.
 - **Approver-resolution — claim-based, now built**: `Quota.Approve` used
   to be genuinely all-or-nothing platform-wide (the gap the previous
   bullet used to end on). It no longer is, for **team-scoped** requests:

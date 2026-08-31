@@ -67,3 +67,77 @@ test('listPendingQuotaRequests: sorts escalation-required requests first, then b
     ['req-escalated', 'req-old', 'req-new']
   );
 });
+
+// --- x-verified-oid / Quota.Approve re-check (security-review fix) ---
+//
+// This route is shared by two callers: the internal notification Logic
+// App (no x-verified-oid header — the tests above, which never set one,
+// already cover that path staying open) and the external Quota Override
+// API's GET /quota/pending (always sets x-verified-oid via APIM). These
+// tests cover the second path.
+
+test('listPendingQuotaRequests: no x-verified-oid header — corroboration is never invoked, internal caller unaffected', async () => {
+  const container = new FakeCosmosContainer();
+  const request = makeFakeRequest({ headers: {} });
+  const context = makeFakeContext();
+  let corroborateCalled = false;
+  const res = await listPendingQuotaRequests(request, context, {
+    getContainer: () => container as never,
+    corroborateIdentity: (async () => {
+      corroborateCalled = true;
+      return { ok: true };
+    }) as never,
+  });
+  assert.equal(corroborateCalled, false);
+  assert.deepEqual(res.jsonBody, []);
+});
+
+test('listPendingQuotaRequests: x-verified-oid present, corroboration passes with Quota.Approve — list returned', async () => {
+  const container = new FakeCosmosContainer();
+  seed(container, [baseDoc()]);
+  const request = makeFakeRequest({ headers: { 'x-verified-oid': 'approver-oid' } });
+  const context = makeFakeContext();
+  let capturedRequiredRole: unknown;
+  const res = await listPendingQuotaRequests(request, context, {
+    getContainer: () => container as never,
+    corroborateIdentity: (async (
+      _request: unknown,
+      _headerOid: unknown,
+      _context: unknown,
+      _deps: unknown,
+      _headerDepartment: unknown,
+      requiredRole: unknown
+    ) => {
+      capturedRequiredRole = requiredRole;
+      return { ok: true };
+    }) as never,
+  });
+  assert.equal(capturedRequiredRole, 'Quota.Approve');
+  assert.equal((res.jsonBody as unknown[]).length, 1);
+});
+
+test('listPendingQuotaRequests: x-verified-oid present, corroboration rejects (missing role) — 403, container never queried', async () => {
+  const container = new FakeCosmosContainer();
+  seed(container, [baseDoc()]);
+  const request = makeFakeRequest({ headers: { 'x-verified-oid': 'employee-oid' } });
+  const context = makeFakeContext();
+  const res = await listPendingQuotaRequests(request, context, {
+    getContainer: () => container as never,
+    corroborateIdentity: (async () => ({
+      ok: false,
+      status: 403,
+      message: 'This operation requires the "Quota.Approve" app role, which the caller\'s token does not carry.',
+    })) as never,
+  });
+  assert.equal(res.status, 403);
+  assert.match((res.jsonBody as { error: string }).error, /Quota\.Approve/);
+});
+
+test('listPendingQuotaRequests: x-verified-oid present, deps.corroborateIdentity omitted — falls back to the real corroborateIdentity rather than skipping the check', async () => {
+  const container = new FakeCosmosContainer();
+  const request = makeFakeRequest({ headers: { 'x-verified-oid': 'employee-oid' } });
+  const context = makeFakeContext();
+  delete process.env.Entra_Audience; // force the real verifyBearerTokenClaims to reject cleanly, not hang on a live tenant
+  const res = await listPendingQuotaRequests(request, context, { getContainer: () => container as never });
+  assert.equal(res.status, 401); // real corroborateIdentity ran and rejected — not silently bypassed
+});

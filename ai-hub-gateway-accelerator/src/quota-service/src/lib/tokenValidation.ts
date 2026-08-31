@@ -99,10 +99,26 @@ export class TokenValidationError extends Error {}
  *  `department` still verifies fine — it just means the caller has no
  *  claim-based approver scope resolvable from it (see
  *  requestAuth.ts/decideQuotaRequest.ts, which handle an empty
- *  department explicitly, not by assuming one). */
+ *  department explicitly, not by assuming one).
+ *
+ *  `roles` closes the gap flagged by this session's security review of
+ *  this fork: quota-api-policy.xml already requires the `Quota.Approve`
+ *  Entra app role for /decide and /pending at the APIM layer, but
+ *  nothing downstream of APIM ever re-checked it — a caller who leaked
+ *  quota-service's function key and held ANY genuinely valid token for
+ *  this app registration (i.e. any authenticated employee, no special
+ *  role required) could call decideQuotaRequest directly and approve/
+ *  deny as themselves, since corroborateIdentity only verified oid/
+ *  department, never role membership. `roles` is extracted here (best-
+ *  effort, like `department`: a token with none still verifies fine,
+ *  it just carries `[]`) so requestAuth.ts's corroborateIdentity can
+ *  independently re-check role membership the same defense-in-depth
+ *  way it already re-checks oid, instead of trusting that a call which
+ *  reached this far necessarily came through APIM's own role gate. */
 export interface VerifiedTokenClaims {
   oid: string;
   department: string | undefined;
+  roles: string[];
 }
 
 /**
@@ -151,7 +167,16 @@ export async function verifyBearerTokenClaims(authorizationHeader: string | null
     throw new TokenValidationError('Bearer token has no oid claim');
   }
   const department = typeof payload.department === 'string' && payload.department.length > 0 ? payload.department : undefined;
-  return { oid, department };
+  // Entra ID app-role assignments arrive as a JSON array of role-value
+  // strings under the `roles` claim (not a comma-separated string — that
+  // string shape is an APIM policy-expression convention used elsewhere
+  // in this fork, e.g. frag-security-handler.xml's jwt-roles variable,
+  // not the raw JWT's own claim shape). A token with no roles assigned
+  // still verifies fine; it just carries an empty array, same
+  // best-effort posture as `department` above.
+  const rolesClaim = payload.roles;
+  const roles = Array.isArray(rolesClaim) ? rolesClaim.filter((r): r is string => typeof r === 'string') : [];
+  return { oid, department, roles };
 }
 
 /**

@@ -44,26 +44,46 @@ export type CorroborateIdentityResult =
  * corroborates fine (returns `department: undefined`) — it just means
  * that caller can't be scope-checked against a team-scoped request,
  * handled explicitly by the caller, not assumed here.
+ *
+ * `requiredRole` closes the direct-call authorization bypass this
+ * session's security review found: quota-api-policy.xml already
+ * requires the `Quota.Approve` Entra app role for /decide and /pending
+ * at the APIM layer, but until now nothing downstream re-checked it —
+ * a caller who obtained quota-service's function key and held ANY
+ * genuinely valid token for this app registration (any authenticated
+ * employee, no special role needed) could call these endpoints
+ * directly, bypassing APIM's role gate entirely, since oid/department
+ * corroboration alone proves "this is a real person," not "this real
+ * person is actually allowed to approve." When `requiredRole` is set,
+ * a token whose independently re-verified `roles` claim doesn't include
+ * it is rejected with 403 — fails closed, the same posture as every
+ * other check in this function, never assumed present.
  */
 export async function corroborateIdentity(
   request: HttpRequest,
   headerOid: string,
   context: InvocationContext,
   deps: CorroborateIdentityDeps = defaultDeps,
-  headerDepartment?: string
+  headerDepartment?: string,
+  requiredRole?: string
 ): Promise<CorroborateIdentityResult> {
   const requireRevalidation = (process.env.QuotaOverride_RequireTokenRevalidation ?? 'true').toLowerCase() !== 'false';
   if (!requireRevalidation) {
     context.warn(
       'corroborateIdentity: QuotaOverride_RequireTokenRevalidation=false — skipping independent bearer-token re-validation. ' +
         'This relies solely on the x-verified-oid/x-verified-department headers and reopens the impersonation gap this check exists to close. ' +
+        (requiredRole ? `It also skips the "${requiredRole}" role check below entirely. ` : '') +
         'Only acceptable for local development against a function key with no real Entra tenant.'
     );
     return { ok: true, department: headerDepartment };
   }
 
   try {
-    const { oid: tokenOid, department: tokenDepartment } = await deps.verifyBearerTokenClaims(request.headers.get('Authorization'));
+    const {
+      oid: tokenOid,
+      department: tokenDepartment,
+      roles: tokenRoles,
+    } = await deps.verifyBearerTokenClaims(request.headers.get('Authorization'));
     if (!identityMatchesToken(headerOid, tokenOid)) {
       return { ok: false, status: 401, message: 'Bearer token identity does not match the gateway-verified identity — request rejected.' };
     }
@@ -75,6 +95,10 @@ export async function corroborateIdentity(
     // source of truth returned to the caller, never the header's.
     if (headerDepartment && tokenDepartment && headerDepartment !== tokenDepartment) {
       return { ok: false, status: 401, message: 'Bearer token department claim does not match the gateway-verified department — request rejected.' };
+    }
+    if (requiredRole && !tokenRoles.includes(requiredRole)) {
+      context.warn(`corroborateIdentity: ${tokenOid} rejected — bearer token is missing the required "${requiredRole}" app role.`);
+      return { ok: false, status: 403, message: `This operation requires the "${requiredRole}" app role, which the caller's token does not carry.` };
     }
     return { ok: true, department: tokenDepartment };
   } catch (err) {

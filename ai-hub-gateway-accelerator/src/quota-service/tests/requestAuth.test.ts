@@ -18,7 +18,7 @@ test('corroborateIdentity: matching oid, no department claim — ok, department 
   const request = makeFakeRequest({ headers: { authorization: 'Bearer whatever' } });
   const context = makeFakeContext();
   const result = await corroborateIdentity(request, 'oid-abc', context, {
-    verifyBearerTokenClaims: async () => ({ oid: 'oid-abc', department: undefined }),
+    verifyBearerTokenClaims: async () => ({ oid: 'oid-abc', department: undefined, roles: [] }),
   });
   assert.equal(result.ok, true);
   if (result.ok) {
@@ -31,7 +31,7 @@ test('corroborateIdentity: mismatched oid — 401, the actual anti-impersonation
   const request = makeFakeRequest({ headers: { authorization: 'Bearer whatever' } });
   const context = makeFakeContext();
   const result = await corroborateIdentity(request, 'attacker-claimed-oid', context, {
-    verifyBearerTokenClaims: async () => ({ oid: 'real-token-oid', department: undefined }),
+    verifyBearerTokenClaims: async () => ({ oid: 'real-token-oid', department: undefined, roles: [] }),
   });
   assert.equal(result.ok, false);
   if (!result.ok) {
@@ -83,7 +83,7 @@ test('corroborateIdentity: QuotaOverride_RequireTokenRevalidation=false skips ve
     {
       verifyBearerTokenClaims: async () => {
         verifyCalled = true;
-        return { oid: 'oid-abc', department: undefined };
+        return { oid: 'oid-abc', department: undefined, roles: [] };
       },
     },
     'Finance'
@@ -114,7 +114,7 @@ test('corroborateIdentity: matching header/token department — ok, returns the 
     request,
     'oid-abc',
     context,
-    { verifyBearerTokenClaims: async () => ({ oid: 'oid-abc', department: 'Finance' }) },
+    { verifyBearerTokenClaims: async () => ({ oid: 'oid-abc', department: 'Finance', roles: [] }) },
     'Finance'
   );
   assert.equal(result.ok, true);
@@ -131,7 +131,7 @@ test('corroborateIdentity: header department contradicts the independently-verif
     request,
     'oid-abc',
     context,
-    { verifyBearerTokenClaims: async () => ({ oid: 'oid-abc', department: 'Engineering' }) },
+    { verifyBearerTokenClaims: async () => ({ oid: 'oid-abc', department: 'Engineering', roles: [] }) },
     'Finance'
   );
   assert.equal(result.ok, false);
@@ -149,12 +149,113 @@ test('corroborateIdentity: header department present but token has none — trus
     request,
     'oid-abc',
     context,
-    { verifyBearerTokenClaims: async () => ({ oid: 'oid-abc', department: undefined }) },
+    { verifyBearerTokenClaims: async () => ({ oid: 'oid-abc', department: undefined, roles: [] }) },
     'Finance'
   );
   assert.equal(result.ok, true);
   if (result.ok) {
     assert.equal(result.department, undefined);
   }
+  restoreEnv();
+});
+
+// --- requiredRole (security-review fix: role re-verification, closing
+// the direct-call bypass where corroborateIdentity proved "a real
+// person" but never "the RIGHT kind of real person") ---
+
+test('corroborateIdentity: no requiredRole given — unaffected regardless of the token\'s roles (backward compatible, e.g. submitQuotaRequest.ts)', async () => {
+  const request = makeFakeRequest({ headers: { authorization: 'Bearer whatever' } });
+  const context = makeFakeContext();
+  const result = await corroborateIdentity(request, 'oid-abc', context, {
+    verifyBearerTokenClaims: async () => ({ oid: 'oid-abc', department: undefined, roles: [] }),
+  });
+  assert.equal(result.ok, true);
+  restoreEnv();
+});
+
+test('corroborateIdentity: requiredRole set, token carries it — ok', async () => {
+  const request = makeFakeRequest({ headers: { authorization: 'Bearer whatever' } });
+  const context = makeFakeContext();
+  const result = await corroborateIdentity(
+    request,
+    'approver-oid',
+    context,
+    { verifyBearerTokenClaims: async () => ({ oid: 'approver-oid', department: undefined, roles: ['Quota.Approve', 'Models.Read'] }) },
+    undefined,
+    'Quota.Approve'
+  );
+  assert.equal(result.ok, true);
+  restoreEnv();
+});
+
+test('corroborateIdentity: requiredRole set, token has other roles but not it — 403, the actual bypass this closes', async () => {
+  const request = makeFakeRequest({ headers: { authorization: 'Bearer whatever' } });
+  const context = makeFakeContext();
+  const result = await corroborateIdentity(
+    request,
+    'employee-oid',
+    context,
+    { verifyBearerTokenClaims: async () => ({ oid: 'employee-oid', department: undefined, roles: ['Models.Read'] }) },
+    undefined,
+    'Quota.Approve'
+  );
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.status, 403);
+    assert.match(result.message, /Quota\.Approve/);
+  }
+  restoreEnv();
+});
+
+test('corroborateIdentity: requiredRole set, token has zero roles — 403, fails closed', async () => {
+  const request = makeFakeRequest({ headers: { authorization: 'Bearer whatever' } });
+  const context = makeFakeContext();
+  const result = await corroborateIdentity(
+    request,
+    'employee-oid',
+    context,
+    { verifyBearerTokenClaims: async () => ({ oid: 'employee-oid', department: undefined, roles: [] }) },
+    undefined,
+    'Quota.Approve'
+  );
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.status, 403);
+  }
+  restoreEnv();
+});
+
+test('corroborateIdentity: the oid check still runs first — a spoofed oid is rejected 401 even with the right role, role check never reached', async () => {
+  const request = makeFakeRequest({ headers: { authorization: 'Bearer whatever' } });
+  const context = makeFakeContext();
+  const result = await corroborateIdentity(
+    request,
+    'attacker-claimed-oid',
+    context,
+    { verifyBearerTokenClaims: async () => ({ oid: 'real-token-oid', department: undefined, roles: ['Quota.Approve'] }) },
+    undefined,
+    'Quota.Approve'
+  );
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.status, 401); // identity mismatch, not the 403 a role failure would give
+  }
+  restoreEnv();
+});
+
+test('corroborateIdentity: QuotaOverride_RequireTokenRevalidation=false also skips the role check (documented, not silently narrowed) and logs that it did', async () => {
+  process.env.QuotaOverride_RequireTokenRevalidation = 'false';
+  const request = makeFakeRequest({ headers: {} });
+  const context = makeFakeContext();
+  const result = await corroborateIdentity(
+    request,
+    'oid-abc',
+    context,
+    { verifyBearerTokenClaims: async () => ({ oid: 'oid-abc', department: undefined, roles: [] }) },
+    undefined,
+    'Quota.Approve'
+  );
+  assert.equal(result.ok, true);
+  assert.match(String(context.warns[0][0]), /skips the "Quota\.Approve" role check/);
   restoreEnv();
 });

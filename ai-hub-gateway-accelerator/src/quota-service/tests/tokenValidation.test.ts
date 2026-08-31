@@ -63,14 +63,25 @@ beforeEach(() => {
 });
 
 async function signToken(
-  overrides: { audience?: string; issuer?: string; expiresIn?: string; key?: KeyLike; oid?: string | null; department?: string } = {}
+  overrides: {
+    audience?: string;
+    issuer?: string;
+    expiresIn?: string;
+    key?: KeyLike;
+    oid?: string | null;
+    department?: string;
+    roles?: unknown;
+  } = {}
 ): Promise<string> {
-  const claims: Record<string, string> = {};
+  const claims: Record<string, unknown> = {};
   if (overrides.oid !== null) {
     claims.oid = overrides.oid ?? 'abc-oid-123';
   }
   if (overrides.department !== undefined) {
     claims.department = overrides.department;
+  }
+  if (overrides.roles !== undefined) {
+    claims.roles = overrides.roles;
   }
   const builder = new SignJWT(claims)
     .setProtectedHeader({ alg: 'RS256', kid: 'test-key-1' })
@@ -178,4 +189,36 @@ test('verifyBearerTokenClaims: discovery document is cached — a second call wi
   const token2 = await signToken({ oid: 'second' });
   assert.equal((await verifyBearerTokenClaims(`Bearer ${token1}`)).oid, 'first');
   assert.equal((await verifyBearerTokenClaims(`Bearer ${token2}`)).oid, 'second');
+});
+
+// --- roles claim (security-review fix: role re-verification) ---
+
+test('verifyBearerTokenClaims: a token with a roles array returns it verbatim', async () => {
+  const token = await signToken({ oid: 'user-oid-42', roles: ['Quota.Approve', 'Models.Read'] });
+  const claims = await verifyBearerTokenClaims(`Bearer ${token}`);
+  assert.deepEqual(claims.roles, ['Quota.Approve', 'Models.Read']);
+});
+
+test('verifyBearerTokenClaims: a token with a single-element roles array returns it', async () => {
+  const token = await signToken({ oid: 'user-oid-42', roles: ['Quota.Approve'] });
+  const claims = await verifyBearerTokenClaims(`Bearer ${token}`);
+  assert.deepEqual(claims.roles, ['Quota.Approve']);
+});
+
+test('verifyBearerTokenClaims: a token with no roles claim returns an empty array, not undefined or a throw', async () => {
+  const token = await signToken({ oid: 'user-oid-42' });
+  const claims = await verifyBearerTokenClaims(`Bearer ${token}`);
+  assert.deepEqual(claims.roles, []);
+});
+
+test('verifyBearerTokenClaims: a roles claim that is not an array (defensive — should never happen from real Entra ID) is treated as no roles, not a throw', async () => {
+  const token = await signToken({ oid: 'user-oid-42', roles: 'Quota.Approve' });
+  const claims = await verifyBearerTokenClaims(`Bearer ${token}`);
+  assert.deepEqual(claims.roles, []);
+});
+
+test('verifyBearerTokenClaims: non-string entries in a roles array are filtered out rather than propagated', async () => {
+  const token = await signToken({ oid: 'user-oid-42', roles: ['Quota.Approve', 42, null] });
+  const claims = await verifyBearerTokenClaims(`Bearer ${token}`);
+  assert.deepEqual(claims.roles, ['Quota.Approve']);
 });

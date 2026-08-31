@@ -5,9 +5,22 @@ import { FakeCosmosContainer } from './helpers/fakeCosmosContainer';
 import { makeFakeContext, makeFakeRequest } from './helpers/fakeHttpRequest';
 
 type CorroborationResult = { ok: true; department?: string } | { ok: false; status: number; message: string };
-const okCorroboration = async (): Promise<CorroborationResult> => ({ ok: true });
-function okCorroborationWithDepartment(department: string | undefined) {
-  return async (): Promise<CorroborationResult> => ({ ok: true, department });
+// Typed with the same arity as the real corroborateIdentity (request,
+// headerOid, context, deps, headerDepartment?, requiredRole?) so a spy
+// that wants to inspect requiredRole (below) can be passed to deps()
+// without a function-arity type error — a 0-arg stub like
+// okCorroboration is still assignable to this (fewer params is fine).
+type CorroborateFn = (
+  request: unknown,
+  headerOid: unknown,
+  context: unknown,
+  deps: unknown,
+  headerDepartment?: unknown,
+  requiredRole?: unknown
+) => Promise<CorroborationResult>;
+const okCorroboration: CorroborateFn = async () => ({ ok: true });
+function okCorroborationWithDepartment(department: string | undefined): CorroborateFn {
+  return async () => ({ ok: true, department });
 }
 
 function seedPendingRequest(container: FakeCosmosContainer, overrides: Record<string, unknown> = {}) {
@@ -45,6 +58,55 @@ test('decideQuotaRequest: missing x-verified-oid header — 401', async () => {
   const context = makeFakeContext();
   const res = await decideQuotaRequest(request, context, deps(new FakeCosmosContainer(), new FakeCosmosContainer()));
   assert.equal(res.status, 401);
+});
+
+test('decideQuotaRequest: passes "Quota.Approve" as corroborateIdentity\'s requiredRole — security-review fix, closing the direct-call role-bypass', async () => {
+  const requestsContainer = new FakeCosmosContainer();
+  seedPendingRequest(requestsContainer);
+  const overridesContainer = new FakeCosmosContainer();
+  const request = makeFakeRequest({
+    headers: { 'x-verified-oid': 'approver-oid' },
+    body: { requestId: 'req-1', subscriptionId: 'sub-1', decision: 'Approved' },
+  });
+  const context = makeFakeContext();
+  let capturedRequiredRole: unknown;
+  const spyCorroborate = async (
+    _request: unknown,
+    _headerOid: unknown,
+    _context: unknown,
+    _deps: unknown,
+    _headerDepartment: unknown,
+    requiredRole: unknown
+  ): Promise<{ ok: true; department?: string }> => {
+    capturedRequiredRole = requiredRole;
+    return { ok: true };
+  };
+  const res = await decideQuotaRequest(request, context, deps(requestsContainer, overridesContainer, spyCorroborate));
+  assert.equal(res.status, undefined); // 200 default — corroboration passed
+  assert.equal(capturedRequiredRole, 'Quota.Approve');
+});
+
+test('decideQuotaRequest: corroboration rejects for a missing app role — 403 propagates, request never decided', async () => {
+  const requestsContainer = new FakeCosmosContainer();
+  seedPendingRequest(requestsContainer);
+  const overridesContainer = new FakeCosmosContainer();
+  const request = makeFakeRequest({
+    headers: { 'x-verified-oid': 'employee-oid' },
+    body: { requestId: 'req-1', subscriptionId: 'sub-1', decision: 'Approved' },
+  });
+  const context = makeFakeContext();
+  const res = await decideQuotaRequest(
+    request,
+    context,
+    deps(requestsContainer, overridesContainer, async () => ({
+      ok: false,
+      status: 403,
+      message: 'This operation requires the "Quota.Approve" app role, which the caller\'s token does not carry.',
+    }))
+  );
+  assert.equal(res.status, 403);
+  assert.equal(requestsContainer.all()[0].status, 'Pending'); // never decided
+  assert.equal(overridesContainer.all().length, 0);
 });
 
 test('decideQuotaRequest: corroboration failure — propagates', async () => {

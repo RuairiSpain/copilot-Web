@@ -40,6 +40,17 @@ const defaultDeps: DecideQuotaRequestDeps = {
  * its own dedicated real-token tests in tests/requestAuth.test.ts and
  * tests/tokenValidation.test.ts, not re-verified redundantly here).
  *
+ * Role re-check, closing this session's security-review finding: passes
+ * `'Quota.Approve'` as corroborateIdentity's `requiredRole` so a direct
+ * call to this endpoint (bypassing APIM with a leaked function key, but
+ * a genuinely valid token for SOME authenticated employee) is rejected
+ * with 403 unless that employee's own token actually carries the
+ * `Quota.Approve` app role — previously this endpoint only confirmed
+ * the caller was a real person, never that they were the right KIND of
+ * real person. APIM's quota-api-policy.xml still enforces this role too
+ * (defense-in-depth: the fix here means quota-service no longer relies
+ * on APIM alone to have been the only path in).
+ *
  * Approver-resolution (claim-based) — closes "is this the RIGHT
  * approver for this specific request," the gap the paragraph above used
  * to flag as still open. For a `team`-scoped request, the approver's
@@ -65,7 +76,7 @@ export async function decideQuotaRequest(
   }
 
   const headerDepartment = resolveVerifiedIdentity(request.headers.get('x-verified-department')) ?? undefined;
-  const corroboration = await deps.corroborateIdentity(request, decidedBy, context, undefined, headerDepartment);
+  const corroboration = await deps.corroborateIdentity(request, decidedBy, context, undefined, headerDepartment, 'Quota.Approve');
   if (!corroboration.ok) {
     return { status: corroboration.status, jsonBody: { error: corroboration.message } };
   }

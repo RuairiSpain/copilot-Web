@@ -172,6 +172,42 @@ a function key with no real tenant; doing so in a real deployment
 silently reopens the exact gap this closes, and logs a loud warning
 every time it's bypassed so that can't happen unnoticed.
 
+### The identity re-check above was not the whole fix — role re-check, added later
+
+A security review of this fork found that the section above only ever
+closed half the direct-call bypass. Re-validating the caller's real
+bearer token and matching its `oid` against `x-verified-oid` proves the
+caller is a **genuine, authenticated person** — it never checked that
+person actually held the `Quota.Approve` role. `Quota.Approve` was
+required *only* by APIM's `quota-api-policy.xml`; nothing downstream in
+this service ever re-derived or checked the token's `roles` claim. The
+practical consequence: anyone who obtained the function key and held
+**any** valid token for this app registration — any authenticated
+employee, no special role needed — could call `/decide` or `/pending`
+directly, skip APIM's role gate entirely, and approve/deny requests (or
+list every pending one) as themselves.
+
+Fixed the same way the oid/department checks already work:
+`verifyBearerTokenClaims()` (`tokenValidation.ts`) now also extracts and
+returns the token's `roles` claim (a JSON array of app-role strings on a
+real Entra ID token, not the comma-separated string shape APIM's own
+policy-expression `jwt-roles` variable uses — extracted and normalized
+here, not assumed). `corroborateIdentity()` (`requestAuth.ts`) takes an
+optional `requiredRole` parameter and rejects (403) when the
+independently re-verified token doesn't carry it.
+`decideQuotaRequest.ts` passes `'Quota.Approve'` unconditionally;
+`listPendingQuotaRequests.ts` passes it only when `x-verified-oid` is
+present — that header distinguishes a call that came through the
+external Quota Override API (which always sets it) from the internal
+`quota-approval-notification` Logic App's function-key-only poll
+(which never does, and still needs unauthenticated internal access to
+do its job). `submitQuotaRequest.ts` is deliberately unaffected: `/submit`
+has no role requirement by design, any authenticated employee can
+request quota for themselves. All new behavior is 100%-line-covered by
+new unit tests in `tests/tokenValidation.test.ts`,
+`tests/requestAuth.test.ts`, `tests/decideQuotaRequest.test.ts`, and
+`tests/listPendingQuotaRequests.test.ts`.
+
 ## What's genuinely tested here (not just built)
 
 Every I/O boundary in this service (Cosmos reads/writes, SMTP send, JWKS
@@ -181,9 +217,10 @@ sites (`app.http`/`app.timer`) never pass a third argument, so real
 behavior is byte-for-byte unchanged, but tests can inject fakes instead
 of needing a live Cosmos account, SMTP server, or Entra tenant. Every
 `src/lib/*.ts` file and every `src/functions/*.ts` file now has a
-matching `tests/*.test.ts` file — **117 tests total, run and passing in
+matching `tests/*.test.ts` file — **149 tests total, run and passing in
 this session** (`npm install && npm run build && npm test`, verified
-clean, not just asserted).
+clean, not just asserted; grew from 132 with the `Quota.Approve`
+role-re-check fix above).
 
 The `tokenValidation.ts` tests are worth calling out specifically: they
 use `jose`'s own `generateKeyPair`/`SignJWT`/`exportJWK` to build real,
@@ -207,7 +244,7 @@ dist/tests/*.js`, run in this session, not estimated):
 | Scope | Line | Branch | Function |
 | --- | --- | --- | --- |
 | Every file under `src/` | **100.00%** | 97–100% (per file) | 100% (except one file's un-invoked production-only default, see below) |
-| All files (incl. test files themselves) | **98.72%** | **92.84%** | **94.22%** |
+| All files (incl. test files themselves) | **98.84%** | **93.67%** | **93.98%** |
 
 Every single `src/**/*.ts` file is at 100% line coverage. The only
 residual gap worth naming: `submitQuotaRequest.js` reports 50% function
