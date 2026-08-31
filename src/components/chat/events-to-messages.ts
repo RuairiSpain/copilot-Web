@@ -107,6 +107,40 @@ class MessageBuilder {
     }
 }
 
+/**
+ * The real SDK shape of `tool.execution_complete`'s `error` field
+ * (`ToolExecutionCompleteError` in `@github/copilot-sdk`'s generated
+ * types) is `{ code?: string; message: string }`, not a plain string —
+ * extract the human-readable message so `ToolCard` renders text instead
+ * of a raw `{"message": "..."}` JSON blob. Falls back to the raw value
+ * (still renderable via `ToolCard`'s own `JSON.stringify` branch) if the
+ * shape doesn't match, so a future SDK change degrades gracefully rather
+ * than silently swallowing the error.
+ */
+function toolErrorMessage(error: unknown): unknown {
+    if (error && typeof error === "object" && "message" in error) {
+        const message = (error as { message?: unknown }).message;
+        if (typeof message === "string" && message) return message;
+    }
+    return error ?? "Failed";
+}
+
+/**
+ * The real SDK shape of `tool.execution_complete`'s `result` field
+ * (`ToolExecutionCompleteResult`) is a structured object with a
+ * `content: string` field (plus `citableSources`, `binaryResultsForLlm`,
+ * etc.) — not a plain string. Surface just the model-facing text instead
+ * of dumping the whole structured object into the tool-result card.
+ * Falls back to the raw value if the shape doesn't match.
+ */
+function toolResultContent(result: unknown): unknown {
+    if (result && typeof result === "object" && "content" in result) {
+        const content = (result as { content?: unknown }).content;
+        if (typeof content === "string") return content;
+    }
+    return result;
+}
+
 export function eventsToMessages(events: WireEvent[]): ThreadMessageLike[] {
     const builder = new MessageBuilder();
 
@@ -168,7 +202,7 @@ export function eventsToMessages(events: WireEvent[]): ThreadMessageLike[] {
                 if (current && idx !== undefined) {
                     const part = current.parts[idx] as ToolCallPart;
                     part.isError = data.success === false;
-                    part.result = data.success === false ? (data.error ?? "Failed") : data.result;
+                    part.result = data.success === false ? toolErrorMessage(data.error) : toolResultContent(data.result);
                 }
                 break;
             }
