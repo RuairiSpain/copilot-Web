@@ -1,0 +1,84 @@
+// Data Quality / Attribution Coverage report — measures the Vision doc's
+// own success criterion ("cost attribution accuracy > 95%") directly,
+// which nothing else in this kit reports on. Platform Admin-facing —
+// see the new page in 04-report-build-guide.md.
+//
+// No new columns or tables needed — everything here reads fields
+// pricing-service already writes (cost.calculationMethod) or that already
+// exist on llm-usage-container (customDimension1).
+
+// ============================================================
+// PRICE RESOLUTION (did every token-priced request actually get a cost?)
+// ============================================================
+
+Unresolved Price Count =
+CALCULATE(
+    COUNTROWS('llm-usage-container'),
+    'llm-usage-container'[cost.calculationMethod] = "unknown"
+        || ISBLANK('llm-usage-container'[cost.calculationMethod])
+)
+// "unknown" is what calculateCost() in pricing-service writes when a
+// record's model/timestamp had no matching price snapshot — see
+// costCalculator.ts. This measure is the aggregate view of the same
+// signal enrichPricing already logs a warning for per-batch.
+//
+// ISBLANK matters and is not optional: a record ingested BEFORE the
+// cost-attribution change went live has no `cost` field at all (see
+// guides/cost-attribution-guide.md's "Backfilling history"), so
+// [cost.calculationMethod] on that row is blank, not "unknown". Without
+// the ISBLANK check, every un-backfilled historical row would silently
+// count as "resolved" (it matches neither branch) and inflate this
+// report's own headline accuracy number — measuring the very success
+// criterion (Vision doc: cost-attribution accuracy >95%) this report
+// exists to catch a regression in, while masking one.
+
+Price Resolution Rate =
+DIVIDE([Total Requests] - [Unresolved Price Count], [Total Requests])
+
+Price Resolution Rate vs Target =
+[Price Resolution Rate] - 0.95
+// Vision doc's own success criterion is "cost attribution accuracy
+// greater than 95%". Positive = above target, negative = below. Put a
+// data bar or conditional-format color on this in the table below rather
+// than reading raw decimals.
+
+// ============================================================
+// COST-CENTER COVERAGE (is chargeback actually complete?)
+// ============================================================
+
+Missing Cost Center Count =
+CALCULATE(
+    COUNTROWS('llm-usage-container'),
+    'llm-usage-container'[customDimension1] = "NA"
+        || ISBLANK('llm-usage-container'[customDimension1])
+)
+
+Cost Center Coverage Rate =
+DIVIDE([Total Requests] - [Missing Cost Center Count], [Total Requests])
+
+// ============================================================
+// BY-MODEL AND BY-PRODUCT BREAKDOWNS (which model/team needs fixing)
+// ============================================================
+
+Unresolved Price Rate (Current Row Context) =
+// Use on a table visual with deploymentName on rows — DAX table/matrix
+// visuals evaluate this per row automatically, no extra filter needed.
+// Same ISBLANK reasoning as Unresolved Price Count above — a
+// pre-cutover row with no cost field must count as unresolved here too.
+DIVIDE(
+    CALCULATE(
+        COUNTROWS('llm-usage-container'),
+        'llm-usage-container'[cost.calculationMethod] = "unknown" || ISBLANK('llm-usage-container'[cost.calculationMethod])
+    ),
+    CALCULATE(COUNTROWS('llm-usage-container'))
+)
+
+Missing Cost Center Rate (Current Row Context) =
+// Use on a table visual with productName on rows.
+DIVIDE(
+    CALCULATE(
+        COUNTROWS('llm-usage-container'),
+        'llm-usage-container'[customDimension1] = "NA" || ISBLANK('llm-usage-container'[customDimension1])
+    ),
+    CALCULATE(COUNTROWS('llm-usage-container'))
+)

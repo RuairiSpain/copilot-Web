@@ -1,0 +1,79 @@
+// User input-token-length vs. team peers — z-score outlier detection.
+// No new columns/tables needed — pure measures over existing fields.
+//
+// STATISTICAL NOTE: compares each user's AVERAGE prompt length against
+// the distribution of AVERAGE prompt lengths across their peers on the
+// same team (customDimension1) — a two-level comparison (peer-of-peers),
+// not a comparison against the pooled distribution of every individual
+// request. That distinction matters: comparing against raw pooled
+// requests would be dominated by whichever teammate sends the most
+// requests and conflate "this user's typical prompt" with "how many
+// requests everyone sent" — comparing averages-of-averages is the
+// statistically correct way to ask "is this person's typical prompt
+// length unusual for their team."
+//
+// SAME CAVEAT AS FILE 12: an atypical prompt length isn't inherently
+// "wrong" — could reflect a genuinely different, valid task mix (someone
+// doing long-document analysis on a team that mostly does short Q&A).
+// Use this to prompt a conversation, not as a scorecard — see the
+// visibility note in 12-prompt-chain-efficiency-measures.dax, the same
+// guidance applies here.
+
+// ============================================================
+// THIS USER
+// ============================================================
+
+User Avg Input Tokens = AVERAGE('llm-usage-container'[promptTokens])
+
+// ============================================================
+// PEER BASELINE (all users sharing this user's cost center)
+// ============================================================
+
+// NOTE: a DAX measure always returns a scalar, never a table — so unlike
+// the rest of this kit there's no way to factor "every appId on this
+// user's team" out into its own reusable measure the way [Total Cost] is
+// reused elsewhere. The CALCULATETABLE(...) below is repeated verbatim in
+// both measures that need it; that's necessary duplication, not an
+// oversight, given the syntax constraint.
+
+Team Avg of User Averages =
+AVERAGEX(
+    CALCULATETABLE(
+        VALUES('llm-usage-container'[appId]),
+        ALLEXCEPT('llm-usage-container', 'llm-usage-container'[customDimension1])
+    ),
+    CALCULATE(AVERAGE('llm-usage-container'[promptTokens]))
+)
+
+Team StdDev of User Averages =
+STDEVX.P(
+    CALCULATETABLE(
+        VALUES('llm-usage-container'[appId]),
+        ALLEXCEPT('llm-usage-container', 'llm-usage-container'[customDimension1])
+    ),
+    CALCULATE(AVERAGE('llm-usage-container'[promptTokens]))
+)
+
+// ============================================================
+// COMPARISON
+// ============================================================
+
+User Prompt Length Z-Score =
+DIVIDE(
+    [User Avg Input Tokens] - [Team Avg of User Averages],
+    [Team StdDev of User Averages]
+)
+
+Has Sufficient Data for Comparison =
+// Minimum-sample guard — a z-score from 2 requests or a 2-person "team"
+// is noise, not a signal. Hide/gray out the outlier flag below this
+// threshold rather than showing a confident-looking number built on
+// nothing.
+[Total Requests] >= 20
+    && CALCULATE(DISTINCTCOUNT('llm-usage-container'[appId]), ALLEXCEPT('llm-usage-container', 'llm-usage-container'[customDimension1])) >= 3
+
+Is Outside Typical Prompt-Length Band =
+IF(
+    NOT [Has Sufficient Data for Comparison], "Insufficient data",
+    IF(ABS([User Prompt Length Z-Score]) > 2, "Outside typical range", "Typical")
+)

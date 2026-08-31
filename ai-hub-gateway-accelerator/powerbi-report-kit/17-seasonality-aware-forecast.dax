@@ -1,0 +1,72 @@
+// Seasonality-aware month-end forecast — replaces [Forecast Month-End
+// Cost]'s flat linear extrapolation (days elapsed ÷ days in month) with
+// one that weights each remaining day by its historical day-of-week
+// share of volume, using data the heatmap (file 10) already proves is
+// real: a naive linear forecast assumes every remaining day looks like
+// the average day so far, which is wrong if, say, weekends run at a
+// fraction of weekday volume — the linear version would systematically
+// over- or under-forecast depending on which weekdays are left in the
+// month.
+//
+// REQUIRES `Day Of Week Number` and `Date Only` from
+// 10-heatmap-moving-average.dax.
+//
+// CORRECTED (this session's own review): an earlier revision computed
+// each weekday's average cost via a calculated table (`WeekdayProfile`),
+// built once at model refresh from the WHOLE, unfiltered container with
+// no relationship back to it. That table couldn't respond to a page
+// slicer/filter (cost center, product, deployment...) — the entire point
+// of the Cost-Center and Individual-User pages this kit builds — so
+// `ActualSoFar` (filter-aware) and `ForecastRemaining` (always org-wide)
+// ended up on different scales the moment a report page was filtered,
+// making the sum meaningless for anything but the unfiltered Org page.
+// It also silently zeroed a remaining day's contribution (SUMX treats a
+// blank SELECTEDVALUE as 0) whenever a weekday had no historical rows
+// yet in the active filter context — understating the forecast in
+// exactly the low-data regime this measure should be most careful about.
+//
+// Fixed below by computing each weekday's average INLINE inside the
+// measure, via a CALCULATE that only ADDS a weekday filter on top of
+// whatever context is already active — so it inherits the same cost-
+// center/product/deployment scoping ActualSoFar already has — with an
+// explicit COALESCE fallback to the (also filter-aware) overall average
+// when a specific weekday has no history yet.
+
+Seasonality-Aware Forecast Month-End Cost =
+VAR CurrentDate = INT(MAX('llm-usage-container'[timestamp]))
+VAR MonthEnd = EOMONTH(CurrentDate, 0)
+VAR RemainingDays = MonthEnd - CurrentDate
+VAR ActualSoFar = [Total Cost (incl. PTU)]
+VAR OverallAvgDailyCost =
+    DIVIDE([Total Cost (incl. PTU)], DISTINCTCOUNT('llm-usage-container'[Date Only]))
+VAR ForecastRemaining =
+    IF(
+        RemainingDays > 0,
+        SUMX(
+            GENERATESERIES(CurrentDate + 1, MonthEnd, 1),
+            VAR ThisWeekdayNum = WEEKDAY([Value], 2)
+            VAR ThisWeekdayAvg =
+                CALCULATE(
+                    DIVIDE([Total Cost (incl. PTU)], DISTINCTCOUNT('llm-usage-container'[Date Only])),
+                    'llm-usage-container'[Day Of Week Number] = ThisWeekdayNum
+                )
+            RETURN
+                COALESCE(ThisWeekdayAvg, OverallAvgDailyCost)
+        ),
+        0
+    )
+    // GENERATESERIES is only ever called inside this branch, evaluated
+    // only when RemainingDays > 0 — guarantees CurrentDate+1 <= MonthEnd,
+    // so the series is never called with a reversed/invalid range (e.g.
+    // on the last day of the month, where naively calling it unconditionally
+    // could pass start > end).
+RETURN
+    ActualSoFar + ForecastRemaining
+
+Forecast Delta (Seasonality vs Linear) =
+[Seasonality-Aware Forecast Month-End Cost] - [Forecast Month-End Cost]
+// Put both forecasts and this delta on the same KPI row — makes the
+// improvement visible instead of silently swapping one number for
+// another. A consistently large delta one direction is itself useful
+// information about how lumpy this organization's weekly usage pattern
+// really is.

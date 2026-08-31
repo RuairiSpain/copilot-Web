@@ -1,0 +1,27 @@
+// Measures for 12-prompt-chain-efficiency-column.m.
+//
+// A NOTE ON WHO SHOULD SEE THIS PAGE: this data is about individual
+// prompting behavior. Recommend restricting the per-user detail table to
+// the Employee role viewing only their OWN row (self-awareness: "am I
+// doing a lot of rapid retries?") plus the Admin role for aggregate
+// platform-health monitoring (are rapid-fire chains costing meaningfully
+// more overall) — NOT exposing a per-user leaderboard to Budget Holders
+// as a way to rank their team's individual members. If your organization
+// wants managers to see this, that's a real governance decision to make
+// deliberately, not a default this kit should set for you.
+
+Rapid-Fire Request Count =
+CALCULATE(COUNTROWS('llm-usage-container'), 'llm-usage-container'[isRapidFire] = TRUE)
+
+Rapid-Fire Rate = DIVIDE([Rapid-Fire Request Count], [Total Requests])
+
+Rapid-Fire Chain Cost =
+CALCULATE([Total Cost (incl. PTU)], 'llm-usage-container'[isRapidFire] = TRUE)
+// What fraction of spend sits inside rapid-succession chains — more
+// useful as a platform-level "is this costing us anything material"
+// number than a per-person one.
+
+Median Seconds Between Requests =
+MEDIANX('llm-usage-container', 'llm-usage-container'[secondsSincePreviousRequest])
+// Median, not mean — a few very-slow gaps (someone stepping away) would
+// otherwise skew a mean far more than they should.

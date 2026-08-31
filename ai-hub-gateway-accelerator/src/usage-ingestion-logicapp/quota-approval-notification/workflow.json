@@ -1,0 +1,208 @@
+{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "actions": {
+            "List_Pending_Requests": {
+                "type": "Http",
+                "inputs": {
+                    "method": "GET",
+                    "uri": "@{appsetting('QuotaService_ListPendingUrl')}",
+                    "headers": {
+                        "x-functions-key": "@{appsetting('QuotaService_FunctionKey')}"
+                    },
+                    "retryPolicy": {
+                        "type": "exponential",
+                        "count": 3,
+                        "interval": "PT5S"
+                    }
+                },
+                "runAfter": {}
+            },
+            "For_each_pending_request": {
+                "type": "Foreach",
+                "foreach": "@body('List_Pending_Requests')",
+                "actions": {
+                    "Notify_Approver": {
+                        "type": "Http",
+                        "inputs": {
+                            "method": "POST",
+                            "uri": "@{appsetting('QuotaApproval_NotificationWebhookUrl')}",
+                            "headers": {
+                                "Content-Type": "application/json"
+                            },
+                            "body": {
+                                "requestId": "@{items('For_each_pending_request')?['id']}",
+                                "subscriptionId": "@{items('For_each_pending_request')?['subscriptionId']}",
+                                "scopeType": "@{items('For_each_pending_request')?['scopeType']}",
+                                "scopeId": "@{items('For_each_pending_request')?['scopeId']}",
+                                "requestedBy": "@{items('For_each_pending_request')?['requestedBy']}",
+                                "currentQuota": "@{items('For_each_pending_request')?['currentQuota']}",
+                                "requestedQuota": "@{items('For_each_pending_request')?['requestedQuota']}",
+                                "reason": "@{items('For_each_pending_request')?['reason']}",
+                                "requiresEscalation": "@{items('For_each_pending_request')?['requiresEscalation']}",
+                                "createdAt": "@{items('For_each_pending_request')?['createdAt']}"
+                            },
+                            "retryPolicy": {
+                                "type": "exponential",
+                                "count": 2,
+                                "interval": "PT10S"
+                            }
+                        },
+                        "runAfter": {}
+                    },
+                    "Email_Approver_If_Configured": {
+                        "type": "If",
+                        "expression": {
+                            "and": [
+                                {
+                                    "not": {
+                                        "equals": [
+                                            "@appsetting('QuotaApproval_ApproverEmail')",
+                                            ""
+                                        ]
+                                    }
+                                }
+                            ]
+                        },
+                        "actions": {
+                            "Email_Approver": {
+                                "type": "Http",
+                                "inputs": {
+                                    "method": "POST",
+                                    "uri": "@{appsetting('QuotaService_SendEmailUrl')}",
+                                    "headers": {
+                                        "Content-Type": "application/json",
+                                        "x-functions-key": "@{appsetting('QuotaService_FunctionKey')}"
+                                    },
+                                    "body": {
+                                        "to": "@{appsetting('QuotaApproval_ApproverEmail')}",
+                                        "templateType": "requestCreated",
+                                        "request": "@items('For_each_pending_request')"
+                                    },
+                                    "retryPolicy": {
+                                        "type": "exponential",
+                                        "count": 2,
+                                        "interval": "PT10S"
+                                    }
+                                }
+                            }
+                        },
+                        "else": {
+                            "actions": {}
+                        },
+                        "runAfter": {}
+                    },
+                    "Mark_Request_Notified": {
+                        "type": "Http",
+                        "inputs": {
+                            "method": "POST",
+                            "uri": "@{appsetting('QuotaService_MarkNotifiedUrl')}",
+                            "headers": {
+                                "Content-Type": "application/json",
+                                "x-functions-key": "@{appsetting('QuotaService_FunctionKey')}"
+                            },
+                            "body": {
+                                "requestId": "@{items('For_each_pending_request')?['id']}",
+                                "subscriptionId": "@{items('For_each_pending_request')?['subscriptionId']}"
+                            }
+                        },
+                        "runAfter": {
+                            "Notify_Approver": [
+                                "SUCCEEDED"
+                            ],
+                            "Email_Approver_If_Configured": [
+                                "SUCCEEDED"
+                            ]
+                        }
+                    }
+                },
+                "runAfter": {
+                    "List_Pending_Requests": [
+                        "SUCCEEDED"
+                    ]
+                }
+            },
+            "List_Decided_Requests": {
+                "type": "Http",
+                "inputs": {
+                    "method": "GET",
+                    "uri": "@{appsetting('QuotaService_ListDecidedUrl')}",
+                    "headers": {
+                        "x-functions-key": "@{appsetting('QuotaService_FunctionKey')}"
+                    },
+                    "retryPolicy": {
+                        "type": "exponential",
+                        "count": 3,
+                        "interval": "PT5S"
+                    }
+                },
+                "runAfter": {}
+            },
+            "For_each_decided_request": {
+                "type": "Foreach",
+                "foreach": "@body('List_Decided_Requests')",
+                "actions": {
+                    "Email_Requester": {
+                        "type": "Http",
+                        "inputs": {
+                            "method": "POST",
+                            "uri": "@{appsetting('QuotaService_SendEmailUrl')}",
+                            "headers": {
+                                "Content-Type": "application/json",
+                                "x-functions-key": "@{appsetting('QuotaService_FunctionKey')}"
+                            },
+                            "body": {
+                                "to": "@{items('For_each_decided_request')?['requestedByEmail']}",
+                                "templateType": "decision",
+                                "request": "@items('For_each_decided_request')"
+                            },
+                            "retryPolicy": {
+                                "type": "exponential",
+                                "count": 2,
+                                "interval": "PT10S"
+                            }
+                        },
+                        "runAfter": {}
+                    },
+                    "Mark_Requester_Notified": {
+                        "type": "Http",
+                        "inputs": {
+                            "method": "POST",
+                            "uri": "@{appsetting('QuotaService_MarkDecidedNotifiedUrl')}",
+                            "headers": {
+                                "Content-Type": "application/json",
+                                "x-functions-key": "@{appsetting('QuotaService_FunctionKey')}"
+                            },
+                            "body": {
+                                "requestId": "@{items('For_each_decided_request')?['id']}",
+                                "subscriptionId": "@{items('For_each_decided_request')?['subscriptionId']}"
+                            }
+                        },
+                        "runAfter": {
+                            "Email_Requester": [
+                                "SUCCEEDED"
+                            ]
+                        }
+                    }
+                },
+                "runAfter": {
+                    "List_Decided_Requests": [
+                        "SUCCEEDED"
+                    ]
+                }
+            }
+        },
+        "contentVersion": "1.0.0.0",
+        "outputs": {},
+        "triggers": {
+            "Recurrence": {
+                "type": "Recurrence",
+                "recurrence": {
+                    "frequency": "Minute",
+                    "interval": 5
+                }
+            }
+        }
+    },
+    "kind": "Stateful"
+}

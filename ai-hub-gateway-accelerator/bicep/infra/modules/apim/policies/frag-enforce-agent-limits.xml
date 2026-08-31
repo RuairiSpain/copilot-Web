@@ -1,0 +1,121 @@
+<fragment>
+    <!--
+        Fragment: Enforce Agent Limits
+        Purpose: Depth and fan-out guards for agent/sub-agent/MCP-tool
+                 call chains (guides/agent-hierarchy-attribution.md,
+                 section 5). MUST run after frag-resolve-agent-hierarchy
+                 (needs agentRootId/agentDepth/agentTrustTier) — include
+                 this fragment immediately after that one.
+
+        No-op entirely for ordinary, non-hierarchical requests
+        (agentTrustTier == "None", the vast majority of traffic) — both
+        checks below are skipped, not evaluated-and-passed, so this adds
+        zero overhead to the common case.
+
+        DEPTH — genuinely log-only until you flip the switch:
+        {{agent-limits-enforce}} named value (default "false") gates
+        whether an over-depth request is actually rejected or just
+        traced as a warning. Per the design doc's own "observe before
+        enforce" posture: run in log-only mode first, look at the real
+        depth distribution your actual agent traffic produces via the
+        Agent-Depth-Exceeded trace source, THEN pick a real
+        {{agent-max-depth}} threshold and flip the switch — a guessed
+        threshold enforced from day one either blocks legitimate deep
+        workflows or is set so loose it catches nothing.
+
+        Rejection is a structured, distinctly-coded 400
+        (agent_depth_exceeded) — deliberately NOT 429/5xx, which a naive
+        retry loop would treat as transient and hammer again. A
+        depth-limit rejection is non-transient: retrying the identical
+        call hits the identical rejection.
+
+        FAN-OUT — a real technical constraint, stated plainly rather than
+        faked: APIM's quota-by-key has no "count but don't block" mode —
+        it always rejects once the counter is exceeded, so there is no
+        way to make this genuinely log-only the way the depth check
+        above is. The honest rollout strategy instead: deploy with a
+        deliberately generous {{agent-max-fanout}} initially, watch the
+        quota-exceeded alert rate (throttling-events-handling.md already
+        covers this alert category), and tighten the threshold once you
+        have real traffic data — same "observe before enforce" goal,
+        different mechanism because the underlying primitive doesn't
+        support the same rollout pattern the depth check does.
+
+        Counter TTL ({{agent-fanout-window-seconds}}, default 3600 =
+        1 hour) doubles as the orphaned-counter safety net the design doc
+        calls for (section 5's "a crashed sub-agent won't decrement its
+        own count") — quota-by-key's own renewal-period IS the reset,
+        no separate cleanup job needed.
+
+        Named values required (create these against your deployment):
+        - {{agent-max-depth}}: integer, e.g. "10"
+        - {{agent-max-fanout}}: integer, e.g. "50"
+        - {{agent-fanout-window-seconds}}: integer, e.g. "3600"
+        - {{agent-limits-enforce}}: "true" | "false" (default posture:
+          create it set to "false" until you've observed real traffic)
+
+        HONESTY NOTE: not exercised against a live APIM instance in this
+        session.
+    -->
+
+    <choose>
+        <when condition="@((string)context.Variables["agentTrustTier"] != "None")">
+
+            <!-- Depth check — log-only or enforcing, per {{agent-limits-enforce}}.
+                 agentDepth is client-controlled (self-asserted x-agent-depth
+                 header, resolved as-is even in the SelfAsserted trust tier —
+                 see frag-resolve-agent-hierarchy.xml), so a non-numeric
+                 value must not reach this fragment's own condition. An
+                 earlier revision used int.Parse directly here, which throws
+                 on a malformed value and crashes the whole policy pipeline
+                 with an unhandled error — exactly the outcome this
+                 fragment's own "observe before enforce, never block
+                 legitimate traffic" design goal exists to avoid. int.TryParse
+                 below defaults to depth=0 on a parse failure instead, which
+                 correctly evaluates the comparison as false (assuming a
+                 sane, non-negative {{agent-max-depth}}) rather than
+                 rejecting or erroring on a header this fragment already
+                 treats as untrusted. -->
+            <choose>
+                <when condition="@{
+                    int depth;
+                    int.TryParse((string)context.Variables["agentDepth"], out depth);
+                    return depth > {{agent-max-depth}};
+                }">
+                    <choose>
+                        <when condition="@(bool.Parse("{{agent-limits-enforce}}"))">
+                            <return-response>
+                                <set-status code="400" reason="Bad Request" />
+                                <set-header name="Content-Type" exists-action="override">
+                                    <value>application/json</value>
+                                </set-header>
+                                <set-body>@{
+                                    return new JObject(
+                                        new JProperty("error", "agent_depth_exceeded"),
+                                        new JProperty("message", $"Agent call chain depth {context.Variables["agentDepth"]} exceeds the configured maximum ({{agent-max-depth}}). This is not a transient error — retrying the identical call will fail again."),
+                                        new JProperty("agentRootId", (string)context.Variables["agentRootId"]),
+                                        new JProperty("agentDepth", (string)context.Variables["agentDepth"])
+                                    ).ToString();
+                                }</set-body>
+                            </return-response>
+                        </when>
+                        <otherwise>
+                            <trace source="Agent-Depth-Exceeded" severity="warning">
+                                <message>@($"LOG-ONLY (agent-limits-enforce=false): would have rejected — agentRootId={context.Variables["agentRootId"]} agentDepth={context.Variables["agentDepth"]} max={{agent-max-depth}}")</message>
+                            </trace>
+                        </otherwise>
+                    </choose>
+                </when>
+            </choose>
+
+            <!-- Fan-out check — always enforcing (see HONESTY NOTE above
+                 on why this one can't be log-only). Only reached if the
+                 depth check above didn't already return a response. -->
+            <quota-by-key
+                counter-key="@((string)context.Variables["agentRootId"] + ":fanout")"
+                calls="{{agent-max-fanout}}"
+                renewal-period="{{agent-fanout-window-seconds}}"
+                increment-condition="@(true)" />
+        </when>
+    </choose>
+</fragment>

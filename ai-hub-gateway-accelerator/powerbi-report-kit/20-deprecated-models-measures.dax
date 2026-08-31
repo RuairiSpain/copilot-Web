@@ -1,0 +1,52 @@
+// Measures for 20-deprecated-models.m. Matches on model — if your
+// deploymentName and model values differ (a custom deployment name for a
+// standard model), join ModelDeprecationSchedule[model] against
+// 'llm-usage-container'[model] instead of [deploymentName] below.
+
+Deprecation Status =
+VAR ThisModel = SELECTEDVALUE('llm-usage-container'[deploymentName])
+VAR DepDate =
+    CALCULATE(MAX(ModelDeprecationSchedule[deprecationDate]), ModelDeprecationSchedule[model] = ThisModel)
+VAR RetDate =
+    CALCULATE(MAX(ModelDeprecationSchedule[retirementDate]), ModelDeprecationSchedule[model] = ThisModel)
+RETURN
+SWITCH(
+    TRUE(),
+    ISBLANK(DepDate), "OK",
+    TODAY() >= RetDate, "RETIRED — should not be receiving traffic",
+    TODAY() >= DepDate, "Deprecated — migrate",
+    RetDate - TODAY() <= 30, "Retiring soon (<30 days)",
+    "Deprecation notice issued"
+)
+// Uses TODAY() (real calendar date), not the data's own MAX(timestamp) —
+// deliberately different from every other date measure in this kit.
+// Deprecation status is a real-world-calendar fact, not something that
+// should shift depending on which date range a report happens to be
+// filtered to.
+
+Requests on Deprecated Models (Trailing 30 Days) =
+CALCULATE(
+    [Total Requests],
+    FILTER(
+        VALUES('llm-usage-container'[deploymentName]),
+        VAR ThisModel = 'llm-usage-container'[deploymentName]
+        VAR DepDate = CALCULATE(MAX(ModelDeprecationSchedule[deprecationDate]), ModelDeprecationSchedule[model] = ThisModel)
+        RETURN NOT ISBLANK(DepDate) && TODAY() >= DepDate
+    ),
+    'llm-usage-container'[Date Only] > TODAY() - 30
+)
+// KPI-card version of the same check — how much live traffic is
+// currently hitting something already past its deprecation date. Should
+// be zero; if it isn't, that's the number to put in front of whoever
+// owns migrating those callers.
+
+Deployments Needing Migration =
+CALCULATE(
+    DISTINCTCOUNT('llm-usage-container'[deploymentName]),
+    FILTER(
+        VALUES('llm-usage-container'[deploymentName]),
+        VAR ThisModel = 'llm-usage-container'[deploymentName]
+        VAR DepDate = CALCULATE(MAX(ModelDeprecationSchedule[deprecationDate]), ModelDeprecationSchedule[model] = ThisModel)
+        RETURN NOT ISBLANK(DepDate) && TODAY() >= DepDate
+    )
+)
