@@ -1,0 +1,236 @@
+"""Unit tests for the parts of the demos that don't need Azure.
+
+The Azure calls themselves are not exercised here — there is no subscription in
+CI — so `azure.identity` is stubbed at import time and the tests cover the
+logic that is genuinely ours: corpus chunking and classification, the trace
+renderer, the toolbox YAML emitter, tool selection and the inventory's
+degradation and Markdown rendering.
+
+    python -m unittest discover -s demos/tests -v
+"""
+
+from __future__ import annotations
+
+import sys
+import types
+import unittest
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO / "demos" / "foundry-iq" / "scripts"))
+sys.path.insert(0, str(REPO / "demos" / "foundry-toolbox" / "scripts"))
+
+# Stub azure.identity: importing the real one needs a working cffi build, and
+# none of these tests authenticate.
+if "azure.identity" not in sys.modules:
+    azure = types.ModuleType("azure")
+    identity = types.ModuleType("azure.identity")
+
+    class _Credential:  # pragma: no cover - never called
+        def get_token(self, *_args, **_kwargs):
+            raise AssertionError("tests must not authenticate")
+
+    identity.DefaultAzureCredential = _Credential
+    azure.identity = identity
+    sys.modules.setdefault("azure", azure)
+    sys.modules["azure.identity"] = identity
+
+import inventory  # noqa: E402
+import trace_view  # noqa: E402
+from index_schema import FILTERABLE_METADATA, SEMANTIC_CONFIG, VECTOR_PROFILE, build_index  # noqa: E402
+
+sys.modules.pop("create_toolbox", None)
+import create_toolbox  # noqa: E402
+
+
+class TestIndexSchema(unittest.TestCase):
+    def setUp(self) -> None:
+        self.index = build_index(
+            "hr-templates-index",
+            aoai_endpoint="https://example.openai.azure.com",
+            embedding_deployment="text-embedding-3-large",
+            embedding_model="text-embedding-3-large",
+            dimensions=3072,
+        )
+        self.fields = {f["name"]: f for f in self.index["fields"]}
+
+    def test_hybrid_retrieval_is_configured(self) -> None:
+        # BM25 side.
+        self.assertTrue(self.fields["content"]["searchable"])
+        # Vector side, wired to the profile that carries the vectorizer.
+        self.assertEqual(self.fields["content_vector"]["vectorSearchProfile"], VECTOR_PROFILE)
+        self.assertEqual(self.fields["content_vector"]["dimensions"], 3072)
+        profile = self.index["vectorSearch"]["profiles"][0]
+        self.assertEqual(profile["name"], VECTOR_PROFILE)
+        self.assertEqual(profile["vectorizer"], self.index["vectorSearch"]["vectorizers"][0]["name"])
+
+    def test_every_declared_metadata_field_is_filterable(self) -> None:
+        # The knowledge source's queryHints promise the planner these fields
+        # can be filtered on; if one stopped being filterable the filter would
+        # fail at query time, not at deploy time.
+        for name in FILTERABLE_METADATA:
+            with self.subTest(field=name):
+                self.assertTrue(self.fields[name].get("filterable"), f"{name} must be filterable")
+
+    def test_semantic_configuration_matches_the_knowledge_source(self) -> None:
+        names = [c["name"] for c in self.index["semantic"]["configurations"]]
+        self.assertIn(SEMANTIC_CONFIG, names)
+
+    def test_vector_field_is_not_returned_to_callers(self) -> None:
+        # 3072 floats per chunk in every result is pure payload weight.
+        self.assertFalse(self.fields["content_vector"]["retrievable"])
+
+
+class TestCorpusProcessing(unittest.TestCase):
+    def setUp(self) -> None:
+        import importlib
+
+        self.provision = importlib.import_module("2_provision") if "2_provision" in sys.modules else None
+        if self.provision is None:
+            spec = importlib.util.spec_from_file_location(
+                "provision_mod", REPO / "demos" / "foundry-iq" / "scripts" / "2_provision.py"
+            )
+            self.provision = importlib.util.module_from_spec(spec)
+            assert spec.loader is not None
+            spec.loader.exec_module(self.provision)
+
+    def test_chunks_overlap_and_cover_the_text(self) -> None:
+        text = "\n\n".join(f"Paragraph {i} " + "word " * 80 for i in range(20))
+        chunks = list(self.provision.chunk(text))
+        self.assertGreater(len(chunks), 1)
+        self.assertTrue(all(c.strip() for c in chunks))
+        # First and last content must both survive chunking.
+        self.assertIn("Paragraph 0", chunks[0])
+        self.assertIn("Paragraph 19", chunks[-1])
+
+    def test_chunking_terminates_on_a_single_long_unbroken_run(self) -> None:
+        # A boundary-free string is the case where a naive overlap loop spins.
+        chunks = list(self.provision.chunk("x" * 9000))
+        self.assertGreater(len(chunks), 1)
+        self.assertLess(len(chunks), 20)
+
+    def test_empty_text_yields_no_chunks(self) -> None:
+        self.assertEqual(list(self.provision.chunk("   \n\n  ")), [])
+
+    def test_classification_picks_type_and_tags(self) -> None:
+        doc_type, tags = self.provision.classify(
+            "This grievance procedure explains dismissal and notice period rules.", fallback="guidance"
+        )
+        self.assertEqual(doc_type, "procedure")
+        self.assertIn("dismissal", tags)
+
+    def test_classification_falls_back_when_nothing_matches(self) -> None:
+        doc_type, tags = self.provision.classify("Nothing relevant here at all.", fallback="guidance")
+        self.assertEqual(doc_type, "guidance")
+        self.assertEqual(tags, [])
+
+    def test_slugify_produces_a_valid_search_document_key(self) -> None:
+        # Search keys allow letters, digits, _, - and =; anything else breaks
+        # the upload with a 400 that is tedious to trace back.
+        key = self.provision.slugify("hr-templates/Écrit type (v2).pdf")
+        self.assertRegex(key, r"^[A-Za-z0-9_\-=]+$")
+
+
+class TestTraceView(unittest.TestCase):
+    ACTIVITY = [
+        {"type": "modelQueryPlanning", "id": 0, "elapsedMs": 420, "inputTokens": 1204, "outputTokens": 88,
+         "model": {"modelName": "gpt-5.4-mini"}},
+        {"type": "searchIndex", "id": 1, "elapsedMs": 310, "knowledgeSourceName": "eu-directives-ks", "count": 6,
+         "searchIndexArguments": {"search": "written statement", "filter": "language eq 'en'"}},
+        {"type": "searchIndex", "id": 2, "elapsedMs": 290, "knowledgeSourceName": "hr-templates-ks", "count": 4,
+         "searchIndexArguments": {"search": "template", "filter": "doc_type eq 'contract'"}},
+        {"type": "modelAnswerSynthesis", "id": 3, "elapsedMs": 980, "inputTokens": 8102, "outputTokens": 412,
+         "model": {"modelName": "gpt-5.4-mini"}},
+    ]
+
+    def test_totals_add_up(self) -> None:
+        counts = trace_view.totals(self.ACTIVITY)
+        self.assertEqual(counts["subqueries"], 2)
+        self.assertEqual(counts["docs"], 10)
+        self.assertEqual(counts["in"], 9306)
+        self.assertEqual(counts["out"], 500)
+
+    def test_filters_are_surfaced(self) -> None:
+        # The filter line is the point of the trace: it shows metadata
+        # narrowing the candidate set before vectors are compared.
+        rendered = "\n".join(line for r in self.ACTIVITY for line in trace_view.format_record(r))
+        self.assertIn("doc_type eq 'contract'", rendered)
+        self.assertIn("eu-directives-ks", rendered)
+
+    def test_summary_mentions_wall_time(self) -> None:
+        self.assertIn("2,041 ms wall", trace_view.summarize(self.ACTIVITY, 2041))
+
+    def test_unknown_activity_type_does_not_crash(self) -> None:
+        lines = trace_view.format_record({"type": "somethingNew", "elapsedMs": 10})
+        self.assertEqual(len(lines), 1)
+
+
+class TestToolboxSpec(unittest.TestCase):
+    def test_tool_search_is_included_and_flagged(self) -> None:
+        tools, _ = create_toolbox.select_tools(only=[], skip=[], require_all=False)
+        self.assertIn("toolbox_search", [t["type"] for t in tools])
+
+    def test_tools_missing_prerequisites_are_skipped_not_fatal(self) -> None:
+        tools, notes = create_toolbox.select_tools(only=["mcp", "web_search"], skip=[], require_all=False)
+        self.assertEqual([t["type"] for t in tools], ["web_search"])
+        self.assertTrue(any("needs MCP_SERVER_URL" in n for n in notes))
+
+    def test_require_all_makes_missing_prerequisites_fatal(self) -> None:
+        with self.assertRaises(SystemExit):
+            create_toolbox.select_tools(only=["mcp"], skip=[], require_all=True)
+
+    def test_unresolved_placeholders_are_pruned_not_sent_empty(self) -> None:
+        resolved = create_toolbox.prune_empty(create_toolbox.resolve({"a": "${NOT_SET_ANYWHERE}", "b": "kept"}))
+        self.assertEqual(resolved, {"b": "kept"})
+
+    def test_yaml_round_trips_through_a_real_parser(self) -> None:
+        try:
+            import yaml  # type: ignore[import-not-found]
+        except ImportError:
+            self.skipTest("PyYAML not installed")
+        tools, _ = create_toolbox.select_tools(only=["toolbox_search", "web_search"], skip=[], require_all=False)
+        parsed = yaml.safe_load(create_toolbox.to_yaml("A toolbox: with a colon", tools, ["conn-1"]))
+        self.assertEqual(parsed["description"], "A toolbox: with a colon")
+        self.assertEqual(parsed["connections"], [{"name": "conn-1"}])
+        self.assertEqual([t["type"] for t in parsed["tools"]], ["toolbox_search", "web_search"])
+
+    def test_knowledge_base_tool_pins_the_allowed_tool(self) -> None:
+        tool = create_toolbox.knowledge_base_tool("es-employment-kb", "https://s.search.windows.net/kb/mcp")
+        self.assertEqual(tool["type"], "mcp")
+        self.assertEqual(tool["allowed_tools"], ["knowledge_base_retrieve"])
+
+
+class TestInventory(unittest.TestCase):
+    def test_values_handles_the_shapes_azure_actually_returns(self) -> None:
+        self.assertEqual(inventory.values({"value": [{"a": 1}]}), [{"a": 1}])
+        self.assertEqual(inventory.values({"data": [{"a": 2}]}), [{"a": 2}])
+        self.assertEqual(inventory.values([{"a": 3}]), [{"a": 3}])
+        self.assertEqual(inventory.values({"name": "single"}), [{"name": "single"}])
+
+    def test_pick_falls_through_alternative_names(self) -> None:
+        self.assertEqual(inventory.pick({"displayName": "x"}, "name", "displayName"), "x")
+        self.assertEqual(inventory.pick({"name": ""}, "name", default="fallback"), "fallback")
+
+    def test_markdown_reports_unavailable_sections_with_a_reason(self) -> None:
+        sections = [
+            inventory.Section(key="agents", title="Agents", columns=["name"], items=[{"name": "a1"}], source="GET /agents"),
+            inventory.Section(key="gateways", title="AI gateways", error="LookupError: not available at /aigateways (HTTP 404)"),
+        ]
+        markdown = inventory.render_markdown(sections, {"project endpoint": "https://example"})
+        self.assertIn("| Agents | 1 | ok |", markdown)
+        self.assertIn("unavailable", markdown)
+        self.assertIn("HTTP 404", markdown)
+        # A probe that didn't answer must not read as "you don't have it".
+        self.assertIn("does not mean the capability doesn't exist", markdown)
+
+    def test_markdown_escapes_pipes_so_tables_survive(self) -> None:
+        section = inventory.Section(key="t", title="T", columns=["name"], items=[{"name": "a|b"}])
+        self.assertIn("a\\|b", inventory.render_markdown([section], {}))
+
+    def test_empty_section_renders_none_rather_than_an_empty_table(self) -> None:
+        section = inventory.Section(key="t", title="T", columns=["name"], items=[])
+        self.assertIn("_none_", inventory.render_markdown([section], {}))
+
+
+if __name__ == "__main__":
+    unittest.main()

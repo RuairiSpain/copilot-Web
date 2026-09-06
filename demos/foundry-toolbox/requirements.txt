@@ -1,0 +1,9 @@
+azure-identity>=1.19
+requests>=2.32
+
+# Only needed for `create_toolbox.py --via sdk`. The --via yaml and --via rest
+# paths have no SDK dependency.
+azure-ai-projects>=1.0.0b1
+
+# Optional: used by the tests to round-trip the emitted YAML through a real parser.
+PyYAML>=6.0
