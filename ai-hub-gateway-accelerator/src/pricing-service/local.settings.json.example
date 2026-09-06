@@ -1,0 +1,17 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+
+    "CosmosDB_Endpoint": "https://<your-cosmos-account>.documents.azure.com:443/",
+    "CosmosDB_Database": "ai-usage-db",
+    "CosmosDB_PricingContainer": "model-pricing",
+
+    "PricingCache_StorageAccountUrl": "https://<your-storage-account>.blob.core.windows.net",
+    "PricingCache_ContainerName": "pricing-cache",
+    "PricingCache_BlobName": "current-pricing.json",
+
+    "PriceSource_FilePath": "./priceSource.json"
+  }
+}

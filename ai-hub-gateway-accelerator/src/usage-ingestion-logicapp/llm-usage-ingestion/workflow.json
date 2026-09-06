@@ -1,0 +1,397 @@
+{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "actions": {
+            "Enrich_With_Pricing": {
+                "type": "Http",
+                "inputs": {
+                    "method": "POST",
+                    "uri": "@{appsetting('PricingService_EnrichPricingUrl')}",
+                    "headers": {
+                        "Content-Type": "application/json",
+                        "x-functions-key": "@{appsetting('PricingService_FunctionKey')}"
+                    },
+                    "body": "@body('Parse_Metrics_Logs')?['value']",
+                    "retryPolicy": {
+                        "type": "exponential",
+                        "count": 3,
+                        "interval": "PT5S"
+                    }
+                },
+                "runAfter": {
+                    "Parse_Metrics_Logs": [
+                        "SUCCEEDED"
+                    ]
+                }
+            },
+            "For_each": {
+                "type": "Foreach",
+                "foreach": "@body('Enrich_With_Pricing')",
+                "actions": {
+                    "Create_Usage_Log": {
+                        "type": "ServiceProvider",
+                        "inputs": {
+                            "parameters": {
+                                "databaseId": "@appsetting('CosmosDBDatabase')",
+                                "containerId": "@appsetting('CosmosDBContainerLLMUsage')",
+                                "item": "{\n  \"id\": \"@{concat('llm-', guid())}\",\n  \"pkShard\": \"@{concat(coalesce(body('ParseMetricEntry')?['productName'], 'unknown'), '_', formatDateTime(body('ParseMetricEntry')?['timestamp'], 'yyyyMMdd'))}\",\n  \"timestamp\": \"@{body('ParseMetricEntry')?['timestamp']}\",\n  \"appId\": \"@{body('ParseMetricEntry')?['appId']}\",\n  \"productName\": \"@{body('ParseMetricEntry')?['productName']}\",\n  \"deploymentName\": \"@{body('ParseMetricEntry')?['deploymentName']}\",\n  \"backendId\": \"@{body('ParseMetricEntry')?['backendId']}\",\n  \"customDimension1\": \"@{body('ParseMetricEntry')?['customDimension1']}\",\n  \"customDimension2\": \"@{body('ParseMetricEntry')?['customDimension2']}\",\n  \"gatewayName\": \"@{body('ParseMetricEntry')?['gatewayName']}\",\n  \"gatewayRegion\": \"@{body('ParseMetricEntry')?['gatewayRegion']}\",\n  \"promptTokens\": \"@{body('ParseMetricEntry')?['promptTokens']}\",\n  \"responseTokens\": \"@{body('ParseMetricEntry')?['responseTokens']}\",\n  \"totalTokens\": \"@{body('ParseMetricEntry')?['totalTokens']}\",\n  \"completionAcceptedPredictionTokens\": \"@{body('ParseMetricEntry')?['completionAcceptedPredictionTokens']}\",\n  \"completionAudioTokens\": \"@{body('ParseMetricEntry')?['completionAudioTokens']}\",\n  \"completionReasoningTokens\": \"@{body('ParseMetricEntry')?['completionReasoningTokens']}\",\n  \"completionRejectedPredictionTokens\": \"@{body('ParseMetricEntry')?['completionRejectedPredictionTokens']}\",\n  \"promptAudioTokens\": \"@{body('ParseMetricEntry')?['promptAudioTokens']}\",\n  \"promptCachedTokens\": \"@{body('ParseMetricEntry')?['promptCachedTokens']}\",\n  \"agentRootId\": \"@{body('ParseMetricEntry')?['agentRootId']}\",\n  \"agentCallerType\": \"@{body('ParseMetricEntry')?['agentCallerType']}\",\n  \"agentDepth\": \"@{body('ParseMetricEntry')?['agentDepth']}\",\n  \"agentTrustTier\": \"@{body('ParseMetricEntry')?['agentTrustTier']}\",\n  \"targetService\": \"NA\",\n  \"model\": \"@{body('ParseMetricEntry')?['deploymentName']}\",\n  \"aiGatewayId\": \"managed\",\n  \"RequestIp\": \"NA\",\n  \"operationName\": \"NA\",\n  \"cost\": @{body('ParseMetricEntry')?['cost']}\n}",
+                                "isUpsert": true
+                            },
+                            "serviceProviderConfiguration": {
+                                "connectionName": "AzureCosmosDB",
+                                "operationId": "CreateOrUpdateDocument",
+                                "serviceProviderId": "/serviceProviders/AzureCosmosDB"
+                            }
+                        },
+                        "runAfter": {
+                            "ParseMetricEntry": [
+                                "SUCCEEDED"
+                            ]
+                        }
+                    },
+                    "ParseMetricEntry": {
+                        "type": "ParseJson",
+                        "inputs": {
+                            "content": "@items('For_each')",
+                            "schema": {
+                                "properties": {
+                                    "timestamp": {
+                                        "type": "string"
+                                    },
+                                    "appId": {
+                                        "type": "string"
+                                    },
+                                    "productName": {
+                                        "type": "string"
+                                    },
+                                    "deploymentName": {
+                                        "type": "string"
+                                    },
+                                    "backendId": {
+                                        "type": "string"
+                                    },
+                                    "customDimension1": {
+                                        "type": "string"
+                                    },
+                                    "customDimension2": {
+                                        "type": "string"
+                                    },
+                                    "gatewayName": {
+                                        "type": "string"
+                                    },
+                                    "gatewayRegion": {
+                                        "type": "string"
+                                    },
+                                    "promptTokens": {
+                                        "type": "integer"
+                                    },
+                                    "responseTokens": {
+                                        "type": "integer"
+                                    },
+                                    "totalTokens": {
+                                        "type": "integer"
+                                    },
+                                    "completionAcceptedPredictionTokens": {
+                                        "type": "integer"
+                                    },
+                                    "completionAudioTokens": {
+                                        "type": "integer"
+                                    },
+                                    "completionReasoningTokens": {
+                                        "type": "integer"
+                                    },
+                                    "completionRejectedPredictionTokens": {
+                                        "type": "integer"
+                                    },
+                                    "promptAudioTokens": {
+                                        "type": "integer"
+                                    },
+                                    "promptCachedTokens": {
+                                        "type": "integer"
+                                    },
+                                    "cost": {
+                                        "type": "object",
+                                        "properties": {
+                                            "inputCost": {
+                                                "type": "number"
+                                            },
+                                            "outputCost": {
+                                                "type": "number"
+                                            },
+                                            "cachedCost": {
+                                                "type": "number"
+                                            },
+                                            "audioCost": {
+                                                "type": "number"
+                                            },
+                                            "reasoningCost": {
+                                                "type": "number"
+                                            },
+                                            "totalCost": {
+                                                "type": [
+                                                    "number",
+                                                    "null"
+                                                ]
+                                            },
+                                            "currency": {
+                                                "type": "string"
+                                            },
+                                            "pricingVersion": {
+                                                "type": [
+                                                    "integer",
+                                                    "null"
+                                                ]
+                                            },
+                                            "calculationMethod": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    },
+                                    "agentRootId": {
+                                        "type": "string"
+                                    },
+                                    "agentCallerType": {
+                                        "type": "string"
+                                    },
+                                    "agentDepth": {
+                                        "type": "string"
+                                    },
+                                    "agentTrustTier": {
+                                        "type": "string"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "runAfter": {
+                    "Enrich_With_Pricing": [
+                        "SUCCEEDED"
+                    ]
+                }
+            },
+            "Parse_Metrics_Logs": {
+                "type": "ParseJson",
+                "inputs": {
+                    "content": "@body('Run_query_and_list_results')",
+                    "schema": {
+                        "properties": {
+                            "value": {
+                                "items": {
+                                    "properties": {
+                                        "timestamp": {
+                                            "type": "string"
+                                        },
+                                        "appId": {
+                                            "type": "string"
+                                        },
+                                        "productName": {
+                                            "type": "string"
+                                        },
+                                        "deploymentName": {
+                                            "type": "string"
+                                        },
+                                        "backendId": {
+                                            "type": "string"
+                                        },
+                                        "customDimension1": {
+                                            "type": "string"
+                                        },
+                                        "customDimension2": {
+                                            "type": "string"
+                                        },
+                                        "gatewayName": {
+                                            "type": "string"
+                                        },
+                                        "gatewayRegion": {
+                                            "type": "string"
+                                        },
+                                        "promptTokens": {
+                                            "type": "integer"
+                                        },
+                                        "responseTokens": {
+                                            "type": "integer"
+                                        },
+                                        "totalTokens": {
+                                            "type": "integer"
+                                        },
+                                        "completionAcceptedPredictionTokens": {
+                                            "type": "integer"
+                                        },
+                                        "completionAudioTokens": {
+                                            "type": "integer"
+                                        },
+                                        "completionReasoningTokens": {
+                                            "type": "integer"
+                                        },
+                                        "completionRejectedPredictionTokens": {
+                                            "type": "integer"
+                                        },
+                                        "promptAudioTokens": {
+                                            "type": "integer"
+                                        },
+                                        "promptCachedTokens": {
+                                            "type": "integer"
+                                        },
+                                        "agentRootId": {
+                                            "type": "string"
+                                        },
+                                        "agentCallerType": {
+                                            "type": "string"
+                                        },
+                                        "agentDepth": {
+                                            "type": "string"
+                                        },
+                                        "agentTrustTier": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "timestamp",
+                                        "appId",
+                                        "productName",
+                                        "backendId",
+                                        "deploymentName",
+                                        "gatewayName",
+                                        "gatewayRegion",
+                                        "promptTokens",
+                                        "responseTokens",
+                                        "totalTokens",
+                                        "completionAcceptedPredictionTokens",
+                                        "completionAudioTokens",
+                                        "completionReasoningTokens",
+                                        "completionRejectedPredictionTokens",
+                                        "promptAudioTokens",
+                                        "promptCachedTokens",
+                                        "agentRootId",
+                                        "agentCallerType",
+                                        "agentDepth",
+                                        "agentTrustTier"
+                                    ],
+                                    "type": "object"
+                                },
+                                "type": "array"
+                            }
+                        },
+                        "type": "object"
+                    }
+                },
+                "runAfter": {
+                    "Run_query_and_list_results": [
+                        "SUCCEEDED"
+                    ]
+                }
+            },
+            "Run_query_and_list_results": {
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "referenceName": "azuremonitorlogs"
+                        }
+                    },
+                    "method": "post",
+                    "body": "let startTime = todatetime('@{variables('LastExportDate')}');\nlet endTime = todatetime('@{variables('CurrentTime')}');\n\nlet timeInterval = 1h;\nlet timeBinFormat = \"yyyy-MM-ddTHH:mm:ssZ\"; // ISO 8601 UTC, unambiguous across locales/timezones (was M/dd/yyyy h:mm:ss tt)\n\n// Agent hierarchy attribution (guides/agent-hierarchy-attribution.md) —\n// frag-resolve-agent-hierarchy.xml emits one trace per request that\n// carries an x-agent-root-id header, correlated to this same request's\n// customMetrics rows via Application Insights' own operation_Id (not a\n// bespoke key) — a real per-request join, not a coarse appId+hour one.\nlet AgentHierarchy = traces\n| where ingestion_time() between(startTime .. endTime) and source == \"Agent-Hierarchy\"\n| parse message with \"agentRootId=\" agentRootId \" agentCallerType=\" agentCallerType \" agentDepth=\" agentDepth \" agentTrustTier=\" agentTrustTier \" appId=\"  *\n| summarize arg_max(TimeGenerated, agentRootId, agentCallerType, agentDepth, agentTrustTier) by operation_Id\n| project operation_Id, agentRootId, agentCallerType, agentDepth, agentTrustTier;\n\ncustomMetrics\n| extend appId = tostring(customDimensions[\"appId\"]),\n         productName = tostring(customDimensions[\"productName\"]),\n         deploymentName = tostring(customDimensions[\"deploymentName\"]),\n         backendId = tostring(customDimensions[\"Backend ID\"]),\n         gatewayName = tostring(customDimensions[\"Service Name\"]),\n         gatewayRegion = tostring(customDimensions[\"Region\"]),\n         customDimension1 = tostring(customDimensions[\"customDimension1\"]),\n         customDimension2 = tostring(customDimensions[\"customDimension2\"]),\n         timeBin = bin(timestamp, timeInterval)\n| where ingestion_time() between(startTime .. endTime) and name in ('Prompt Tokens', 'Completion Tokens', 'Total Tokens', 'Completion Accepted Prediction Tokens', 'Completion Audio Tokens', 'Completion Reasoning Tokens', 'Completion Rejected Prediction Tokens', 'Prompt Audio Tokens', 'Prompt Cached Tokens')\n| join kind=leftouter (AgentHierarchy) on operation_Id\n| extend agentRootId = coalesce(agentRootId, \"\"),\n         agentCallerType = coalesce(agentCallerType, \"\"),\n         agentDepth = coalesce(agentDepth, \"\"),\n         agentTrustTier = coalesce(agentTrustTier, \"None\")\n| summarize totalTokens = sumif(value, name == \"Total Tokens\"),\n            responseTokens = sumif(value, name == \"Completion Tokens\"),\n            promptTokens = sumif(value, name == \"Prompt Tokens\"),\n            completionAcceptedPredictionTokens = sumif(value, name == \"Completion Accepted Prediction Tokens\"),\n            completionAudioTokens = sumif(value, name == \"Completion Audio Tokens\"),\n            completionReasoningTokens = sumif(value, name == \"Completion Reasoning Tokens\"),\n            completionRejectedPredictionTokens = sumif(value, name == \"Completion Rejected Prediction Tokens\"),\n            promptAudioTokens = sumif(value, name == \"Prompt Audio Tokens\"),\n            promptCachedTokens = sumif(value, name == \"Prompt Cached Tokens\")\n            by appId, deploymentName, productName, backendId, gatewayName, gatewayRegion, customDimension1, customDimension2, timeBin, agentRootId, agentCallerType, agentDepth, agentTrustTier\n| project timestamp = format_datetime(timeBin, \"yyyy-MM-ddTHH:mm:ssZ\"), appId, deploymentName, productName, backendId, gatewayName, gatewayRegion, customDimension1, customDimension2, promptTokens, responseTokens, totalTokens, completionAcceptedPredictionTokens, completionAudioTokens, completionReasoningTokens, completionRejectedPredictionTokens, promptAudioTokens, promptCachedTokens, agentRootId, agentCallerType, agentDepth, agentTrustTier",
+                    "path": "/queryData",
+                    "queries": {
+                        "subscriptions": "@appsetting('AppInsights_SubscriptionId')",
+                        "resourcegroups": "@appsetting('AppInsights_ResourceGroup')",
+                        "resourcetype": "Application Insights",
+                        "resourcename": "@appsetting('AppInsights_Name')",
+                        "timerange": "Set in query"
+                    }
+                },
+                "runAfter": {
+                    "Initialize_Logs_Time_Range": [
+                        "SUCCEEDED"
+                    ]
+                }
+            },
+            "Update_Export_Config": {
+                "type": "ServiceProvider",
+                "inputs": {
+                    "parameters": {
+                        "databaseId": "@appsetting('CosmosDBDatabase')",
+                        "containerId": "@appsetting('CosmosDBContainerConfig')",
+                        "item": "{ \"id\": \"002\", \"type\": \"default\", \"lastExportDate\": \"@{variables('CurrentTime')}\", \"totalExportedRecords\": @{length(body('Run_query_and_list_results')?['value'])} }",
+                        "isUpsert": true
+                    },
+                    "serviceProviderConfiguration": {
+                        "connectionName": "AzureCosmosDB",
+                        "operationId": "CreateOrUpdateDocument",
+                        "serviceProviderId": "/serviceProviders/AzureCosmosDB"
+                    }
+                },
+                "runAfter": {
+                    "For_each": [
+                        "SUCCEEDED"
+                    ]
+                }
+            },
+            "Call_Shared_Export_Checkpoint": {
+                "type": "Workflow",
+                "inputs": {
+                    "host": {
+                        "workflow": {
+                            "id": "shared-export-checkpoint"
+                        }
+                    },
+                    "body": {
+                        "databaseId": "@appsetting('CosmosDBDatabase')",
+                        "containerId": "@appsetting('CosmosDBContainerConfig')",
+                        "configItemId": "002"
+                    }
+                },
+                "runAfter": {}
+            },
+            "Initialize_Logs_Time_Range": {
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "LastExportDate",
+                            "type": "string",
+                            "value": "@body('Call_Shared_Export_Checkpoint')?['lastExportDate']"
+                        },
+                        {
+                            "name": "CurrentTime",
+                            "type": "string",
+                            "value": "@body('Call_Shared_Export_Checkpoint')?['currentTime']"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Call_Shared_Export_Checkpoint": [
+                        "SUCCEEDED"
+                    ]
+                }
+            }
+        },
+        "contentVersion": "1.0.0.0",
+        "outputs": {},
+        "triggers": {
+            "Recurrence": {
+                "type": "Recurrence",
+                "recurrence": {
+                    "frequency": "Day",
+                    "interval": 1,
+                    "schedule": {
+                        "hours": [
+                            "3",
+                            "6",
+                            "9",
+                            "12",
+                            "15",
+                            "18",
+                            "21",
+                            "23"
+                        ]
+                    },
+                    "timeZone": "GMT Standard Time"
+                }
+            }
+        }
+    },
+    "kind": "Stateful"
+}

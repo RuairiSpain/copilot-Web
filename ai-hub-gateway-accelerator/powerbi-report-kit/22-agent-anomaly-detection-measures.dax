@@ -1,0 +1,38 @@
+// Measures over the AgentAnomalyLog query from
+// 22-agent-anomaly-detection-source.md. Every row in that table is
+// already an anomaly (the KQL filters to FailureAnomalyFlag != 0 or
+// LatencyAnomalyFlag != 0) — these measures are about summarizing and
+// prioritizing, not detecting.
+
+Anomalous Hours This Deployment =
+COUNTROWS(AgentAnomalyLog)
+// Use with DeploymentName on rows — count of flagged hours per
+// deployment over the query's window (30 days as shipped).
+
+Most Recent Anomaly =
+MAX(AgentAnomalyLog[TimeGenerated])
+
+Anomaly Type =
+VAR HasFailureAnomaly = MAX(AgentAnomalyLog[FailureAnomalyFlag]) <> 0
+VAR HasLatencyAnomaly = MAX(AgentAnomalyLog[LatencyAnomalyFlag]) <> 0
+RETURN
+SWITCH(
+    TRUE(),
+    HasFailureAnomaly && HasLatencyAnomaly, "Failures + Latency",
+    HasFailureAnomaly, "Failures",
+    HasLatencyAnomaly, "Latency",
+    "—"
+)
+
+Anomaly Direction (Failures) =
+VAR Flag = MAX(AgentAnomalyLog[FailureAnomalyFlag])
+RETURN IF(Flag = 1, "Higher than expected", IF(Flag = -1, "Lower than expected", "—"))
+
+Anomaly Direction (Latency) =
+VAR Flag = MAX(AgentAnomalyLog[LatencyAnomalyFlag])
+RETURN IF(Flag = 1, "Slower than expected", IF(Flag = -1, "Faster than expected", "—"))
+// "Lower than expected" failures / "faster than expected" latency are
+// still worth showing, not just filtering to the bad direction — a
+// deployment that suddenly got much faster or much more reliable is
+// itself worth knowing about (a fix landed, traffic shifted, etc.), not
+// only regressions.

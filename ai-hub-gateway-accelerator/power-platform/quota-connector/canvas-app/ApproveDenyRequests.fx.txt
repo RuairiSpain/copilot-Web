@@ -1,0 +1,159 @@
+Power Fx source for the "Approve / Deny Requests" screen — see
+canvas-app/README.md for how to turn this into a real screen. Same
+convention as RequestMoreBudget.fx.txt: create controls with these exact
+names, then paste each formula into that property's Advanced formula bar.
+
+**Scope note, stated here because it matters for what you're about to
+build**: this screen's LIST still shows every Pending request
+platform-wide to anyone holding the Quota.Approve role — the gallery
+itself is NOT filtered to "requests for my department." The backend now
+IS enforced, though: attempting to Approve/Deny a team-scoped request
+outside your own (verified) department gets rejected server-side with a
+403 (`approver_not_authorized_for_scope` — see
+guides/quota-override-approval.md's approver-resolution section), so a
+user can no longer actually decide a request they're not authorized for
+— they just still see it listed and get an error on the attempt, rather
+than the request never appearing. Filtering the gallery itself to only
+department-relevant requests (a real UX improvement, not a security one
+now that the backend enforces this) is a separate, unbuilt nice-to-have
+— add a `Filter(colPendingRequests, department = varMyDepartment)` once
+the app can resolve the signed-in user's own department (e.g. from
+Office365Users.MyProfile or a similar identity call), not attempted
+here. Individual (`user`-scoped) requests are unaffected by any of
+this — still open to any Quota.Approve holder, backend included; see
+guides/quota-override-approval.md for why.
+
+================================================================================
+Screen: scrApproveDeny
+================================================================================
+
+OnVisible:
+------------------------------------------------------------------------------
+Set(varDecisionError, Blank());
+ClearCollect(colPendingRequests, QuotaConnector.ListPendingQuotaRequests())
+
+================================================================================
+Control: btnRefresh (Button, top of screen)
+================================================================================
+
+Text: "Refresh"
+
+OnSelect:
+------------------------------------------------------------------------------
+Set(varDecisionError, Blank());
+ClearCollect(colPendingRequests, QuotaConnector.ListPendingQuotaRequests())
+
+================================================================================
+Control: lblDecisionError (Label)
+================================================================================
+
+Text: varDecisionError
+Visible: !IsBlank(varDecisionError)
+Color: Color.Red
+
+================================================================================
+Control: txtDecisionNote (Text input, Mode = MultiLine)
+================================================================================
+
+HintText: "Optional note — applies to whichever Approve/Deny you click next"
+
+// A single shared note field, not one per gallery row, is a deliberate
+// simplification for this first-cut kit — fine for a small team, worth
+// upgrading to a per-row note (e.g. a popup, or a note field stored in
+// colPendingRequests per-row via UpdateIf) if this sees real use with
+// more than a couple of pending requests at a time.
+
+================================================================================
+Control: galPending (Gallery, vertical, Items below)
+================================================================================
+
+Items: colPendingRequests
+
+------------------------------------------------------------------------------
+Inside the gallery template (ThisItem refers to one pending request —
+fields per quota-api.openapi.json's QuotaOverrideRequest schema):
+------------------------------------------------------------------------------
+
+Control: lblScope (Label)
+Text: ThisItem.scopeType & ": " & ThisItem.scopeId & "  (contract " & ThisItem.subscriptionId & ")"
+
+Control: lblRequestedBy (Label)
+Text: "Requested by " & ThisItem.requestedBy & " on " & Text(DateTimeValue(ThisItem.createdAt), "yyyy-mm-dd hh:mm")
+
+Control: lblQuotaChange (Label)
+Text: Text(ThisItem.currentQuota) & " → " & Text(ThisItem.requestedQuota) & " tokens/month"
+
+Control: lblReason (Label)
+Text: ThisItem.reason
+
+Control: lblEscalation (Label)
+Text: "⚠ Large increase — recommend a second-level review"
+Visible: ThisItem.requiresEscalation
+Color: Color.OrangeRed
+
+------------------------------------------------------------------------------
+Control: btnApprove (Button, inside gallery template)
+------------------------------------------------------------------------------
+
+Text: "Approve"
+
+OnSelect:
+------------------------------------------------------------------------------
+Set(varDecisionError, Blank());
+IfError(
+    QuotaConnector.DecideQuotaRequest(
+        {
+            requestId: ThisItem.id,
+            subscriptionId: ThisItem.subscriptionId,
+            decision: "Approved",
+            note: txtDecisionNote.Text
+        }
+    );
+    Notify("Approved " & ThisItem.id, NotificationType.Success);
+    Reset(txtDecisionNote);
+    ClearCollect(colPendingRequests, QuotaConnector.ListPendingQuotaRequests()),
+    Set(varDecisionError, FirstError.Message);
+    Notify("Couldn't approve: " & FirstError.Message, NotificationType.Error)
+)
+
+------------------------------------------------------------------------------
+Control: btnDeny (Button, inside gallery template)
+------------------------------------------------------------------------------
+
+Text: "Deny"
+
+OnSelect:
+------------------------------------------------------------------------------
+Set(varDecisionError, Blank());
+IfError(
+    QuotaConnector.DecideQuotaRequest(
+        {
+            requestId: ThisItem.id,
+            subscriptionId: ThisItem.subscriptionId,
+            decision: "Denied",
+            note: txtDecisionNote.Text
+        }
+    );
+    Notify("Denied " & ThisItem.id, NotificationType.Success);
+    Reset(txtDecisionNote);
+    ClearCollect(colPendingRequests, QuotaConnector.ListPendingQuotaRequests()),
+    Set(varDecisionError, FirstError.Message);
+    Notify("Couldn't deny: " & FirstError.Message, NotificationType.Error)
+)
+
+================================================================================
+Notes
+================================================================================
+
+- A 401 here (Couldn't approve/deny: ...) most likely means the signed-in
+  user doesn't have the Quota.Approve role assigned in Entra ID yet —
+  check that first before assuming a bug.
+- A 403 (`approver_not_authorized_for_scope`) means the signed-in user
+  IS a Quota.Approve holder but this specific request is team-scoped to
+  a department that doesn't match their own — expected behavior, not a
+  bug, per the "Scope note" above. Individual (user-scoped) requests
+  never return this.
+- A 409 means someone else already decided that request since the
+  gallery was last refreshed — click Refresh and it'll drop off the list.
+- Not exercised in Power Apps Studio in this session — see
+  canvas-app/README.md's honesty note.

@@ -1,0 +1,212 @@
+// Paste these one at a time (Home -> New Measure) into the
+// 'llm-usage-container' table, unless noted otherwise. Grouped into a
+// "Cost Measures" display folder is recommended (right panel -> Home Folder
+// field) to keep the field list tidy once you have 20+ of these.
+
+// ============================================================
+// CORE
+// ============================================================
+
+Total Cost = SUM('llm-usage-container'[cost.totalCost])
+
+Total Tokens = SUM('llm-usage-container'[totalTokens])
+
+Total Requests = COUNTROWS('llm-usage-container')
+
+Avg Cost per Request = DIVIDE([Total Cost], [Total Requests])
+
+Cost per 1K Tokens = DIVIDE([Total Cost] * 1000, [Total Tokens])
+
+Distinct Users = DISTINCTCOUNT('llm-usage-container'[customDimension2])
+// See 02-rls-roles.dax's Employee role comment and
+// guides/power-bi-dashboard.md's "Individual-user page" for how this
+// gets populated (a UPN-shaped JWT claim, defaulted globally in
+// frag-set-llm-usage.xml; "NA" for API-key-only traffic with no
+// validated JWT). If you haven't applied that fragment change, this
+// counts distinct "NA"/whatever-was-explicitly-set values instead of
+// real users — swap back to [appId] (a rougher per-subscription proxy,
+// not per-user) until you have.
+
+Distinct Cost Centers = DISTINCTCOUNT('llm-usage-container'[customDimension1])
+
+Distinct Products = DISTINCTCOUNT('llm-usage-container'[productName])
+
+// ---- Per-token-type cost breakdown (from the `cost` object pricing-service
+// bakes onto each token-priced record) — powers the "Cost by type" visual
+// on the Org and Cost Center pages. All $0 / not applicable for
+// percentage/PTU-priced records, same as the fields they sum.
+
+Input Cost = SUM('llm-usage-container'[cost.inputCost])
+
+Output Cost = SUM('llm-usage-container'[cost.outputCost])
+
+Cached Cost = SUM('llm-usage-container'[cost.cachedCost])
+
+Audio Cost = SUM('llm-usage-container'[cost.audioCost])
+
+Reasoning Cost = SUM('llm-usage-container'[cost.reasoningCost])
+// Note: these five sum to [Total Cost] for token-priced records (there's
+// no arithmetic beyond the sum, unlike the row-by-row lookups PTU
+// allocation below needs) — cheap to put on a stacked bar chart even at
+// large data volumes.
+
+// ============================================================
+// FORECASTING (PRD FR-021: month/quarter/year-end forecast)
+// Pure scalar date math — deliberately avoids requiring a marked Date
+// table, since STARTOFMONTH/EOMONTH-style time-intelligence functions can
+// behave unexpectedly without one and this model may not have one.
+// ============================================================
+
+Days Elapsed This Month =
+DATEDIFF(
+    EOMONTH(MAX('llm-usage-container'[timestamp]), -1) + 1,
+    MAX('llm-usage-container'[timestamp]),
+    DAY
+) + 1
+
+Days In Month = DAY(EOMONTH(MAX('llm-usage-container'[timestamp]), 0))
+
+Forecast Month-End Cost =
+DIVIDE([Total Cost], [Days Elapsed This Month]) * [Days In Month]
+
+_Quarter Start Date =
+DATE(
+    YEAR(MAX('llm-usage-container'[timestamp])),
+    (QUOTIENT(MONTH(MAX('llm-usage-container'[timestamp])) - 1, 3) * 3) + 1,
+    1
+)
+// Hide this one (right-click in Fields pane -> Hide) — it's a helper for
+// the two measures below, not something to put on a visual directly.
+
+Days Elapsed This Quarter =
+DATEDIFF([_Quarter Start Date], MAX('llm-usage-container'[timestamp]), DAY) + 1
+
+Days In Quarter =
+DATEDIFF([_Quarter Start Date], EOMONTH([_Quarter Start Date], 2), DAY) + 1
+
+Forecast Quarter-End Cost =
+DIVIDE([Total Cost], [Days Elapsed This Quarter]) * [Days In Quarter]
+
+Days Elapsed This Year =
+DATEDIFF(
+    DATE(YEAR(MAX('llm-usage-container'[timestamp])), 1, 1),
+    MAX('llm-usage-container'[timestamp]),
+    DAY
+) + 1
+
+Days In Year =
+DATEDIFF(
+    DATE(YEAR(MAX('llm-usage-container'[timestamp])), 1, 1),
+    DATE(YEAR(MAX('llm-usage-container'[timestamp])), 12, 31),
+    DAY
+) + 1
+
+Forecast Year-End Cost =
+DIVIDE([Total Cost], [Days Elapsed This Year]) * [Days In Year]
+
+// ============================================================
+// BUDGET (requires the Budgets table from 03-supporting-tables.m —
+// no formal model relationship needed, TREATAS does the join so a
+// costCenter-only table with multiple months per cost center doesn't
+// create a many-to-many relationship warning)
+// ============================================================
+
+Current Month Budget =
+CALCULATE(
+    SUM(Budgets[monthlyBudget]),
+    TREATAS(VALUES('llm-usage-container'[customDimension1]), Budgets[costCenter]),
+    Budgets[month] = EOMONTH(MAX('llm-usage-container'[timestamp]), -1) + 1
+)
+
+Budget Consumed % = DIVIDE([Total Cost], [Current Month Budget])
+
+Budget Remaining = [Current Month Budget] - [Total Cost]
+
+Budget Risk Status =
+IF(
+    ISBLANK([Current Month Budget]), "No Budget Set",
+    IF([Forecast Month-End Cost] > [Current Month Budget], "At Risk", "On Track")
+)
+
+// ============================================================
+// PTU / FIXED-CAPACITY COST (CalculationMethod = "percentage" in
+// model-pricing — e.g. gpt-5.1-PTU, gpt-5.2-PTU in the seed data)
+//
+// [Total Cost] above is SUM(cost.totalCost), which pricing-service leaves
+// NULL for these models on purpose (see guides/cost-attribution-guide.md
+// — a single ingested request can't know its share of a monthly fixed
+// cost in isolation). This section reimplements the accelerator's own
+// existing PTU method (guides/power-bi-dashboard.md, "Handling PTU and
+// other fixed-cost services": BaseCost distributed proportionally by
+// whichever token type has its unit cost set to 1) as measures, so PTU
+// spend shows up in these new pages instead of silently reading as $0.
+//
+// REQUIRES the `ptuWeightTokens` and `billingMonth` columns from
+// 06-ptu-allocation-columns.m — add those first.
+// ============================================================
+
+PTU Base Cost (Selected Deployment) =
+CALCULATE(
+    MAX('model-pricing'[BaseCost]),
+    TREATAS(VALUES('llm-usage-container'[deploymentName]), 'model-pricing'[deploymentName]),
+    'model-pricing'[CalculationMethod] = "percentage"
+)
+
+PTU Deployment Monthly Weight Total =
+// Keeps deploymentName + billingMonth (needed for the "this deployment,
+// this month" grouping the measure name promises) AND [timestamp] —
+// [timestamp] is included defensively: if a report page scopes "this
+// month" via a date slicer bound to [timestamp] rather than an explicit
+// filter on the [billingMonth] column, an ALLEXCEPT that only names
+// billingMonth would silently strip that filter too (both are ordinary
+// columns on the same table — no relationship makes one imply the
+// other), reverting this denominator to all-time weight for the
+// deployment instead of the intended month and diluting the proportional
+// PTU allocation for every month after the first. Keeping [timestamp]
+// too means whichever column a page actually filters by, this measure
+// stays correctly scoped.
+CALCULATE(
+    SUM('llm-usage-container'[ptuWeightTokens]),
+    ALLEXCEPT(
+        'llm-usage-container',
+        'llm-usage-container'[deploymentName],
+        'llm-usage-container'[billingMonth],
+        'llm-usage-container'[timestamp]
+    )
+)
+
+PTU Allocated Cost =
+SUMX(
+    VALUES('llm-usage-container'[deploymentName]),
+    VAR CurrentDeployment = 'llm-usage-container'[deploymentName]
+    VAR Base =
+        CALCULATE(
+            MAX('model-pricing'[BaseCost]),
+            TREATAS({CurrentDeployment}, 'model-pricing'[deploymentName]),
+            'model-pricing'[CalculationMethod] = "percentage"
+        )
+    VAR MyWeight = CALCULATE(SUM('llm-usage-container'[ptuWeightTokens]))
+    VAR TotalWeight = [PTU Deployment Monthly Weight Total]
+    RETURN
+        IF(ISBLANK(Base), 0, DIVIDE(MyWeight, TotalWeight, 0) * Base)
+)
+// Iterates only the distinct deployments in the current filter context
+// (a handful, not a row-by-row fact-table scan) — safe at large data
+// volumes, unlike a naive SUMX over the whole usage table would be.
+
+Total Cost (incl. PTU) = [Total Cost] + [PTU Allocated Cost]
+// Use THIS on the Org page's top-line KPI card, not [Total Cost] alone —
+// see the updated 04-report-build-guide.md.
+
+// ============================================================
+// COST AVOIDANCE (PRD FR-022: actual cost vs. all-requests-on-premium-model)
+// Requires the optional PremiumEquivalentCost column from
+// 05-cost-avoidance-column.m — skip this section if you don't add that
+// column, the other three pages don't depend on it.
+// ============================================================
+
+Cost If All Premium = SUM('llm-usage-container'[PremiumEquivalentCost])
+
+Cost Avoidance $ = [Cost If All Premium] - [Total Cost]
+
+Cost Avoidance % = DIVIDE([Cost Avoidance $], [Cost If All Premium])

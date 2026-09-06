@@ -1,0 +1,30 @@
+{
+  "properties": {
+    "connectionParameters": {
+      "token": {
+        "type": "oauthSetting",
+        "oAuthSettings": {
+          "identityProvider": "aad",
+          "clientId": "REPLACE-WITH-GATEWAY-ENTRA-APP-CLIENT-ID",
+          "scopes": [
+            "api://REPLACE-WITH-GATEWAY-ENTRA-APP-CLIENT-ID/access_as_user"
+          ],
+          "redirectMode": "Global",
+          "properties": {
+            "IsFirstParty": "False",
+            "AzureActiveDirectoryResourceId": "api://REPLACE-WITH-GATEWAY-ENTRA-APP-CLIENT-ID"
+          },
+          "customParameters": {
+            "loginUri": { "value": "https://login.microsoftonline.com" },
+            "tenantId": { "value": "REPLACE-WITH-YOUR-TENANT-ID" },
+            "resourceUri": { "value": "api://REPLACE-WITH-GATEWAY-ENTRA-APP-CLIENT-ID" },
+            "enableOnbehalfOfLogin": { "value": "false" }
+          }
+        }
+      }
+    },
+    "iconBrandColor": "#0078D4",
+    "capabilities": [],
+    "policyTemplateInstances": []
+  }
+}

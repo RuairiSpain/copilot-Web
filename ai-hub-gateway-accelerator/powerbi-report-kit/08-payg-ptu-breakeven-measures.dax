@@ -1,0 +1,75 @@
+// PAYG vs. PTU Economics report — the monthly-token-rate breakeven
+// comparison. Requires 08-payg-ptu-breakeven-column.m (paygEquivalentCost)
+// AND the `billingMonth` column from 06-ptu-allocation-columns.m (add
+// that one too if you haven't already, even if you don't need the rest
+// of the PTU-allocation section for this report specifically).
+
+// ============================================================
+// PER-DEPLOYMENT ACTUALS
+// ============================================================
+
+PAYG Equivalent Cost = SUM('llm-usage-container'[paygEquivalentCost])
+// What this deployment's actual token volume would have cost entirely on
+// PAYG — meaningful for a PTU deployment as "what we'd pay without the
+// reservation"; for an actual-PAYG deployment this is just its real cost
+// again (a built-in sanity check: the two should match closely).
+
+Monthly Output Tokens = SUM('llm-usage-container'[responseTokens])
+// The volume axis for the breakeven chart — output tokens specifically,
+// matching the same weighting convention the accelerator's own PTU
+// BaseCost distribution already uses (see 06-ptu-allocation-columns.m /
+// guides/power-bi-dashboard.md "Handling PTU and other fixed-cost
+// services"). A true breakeven considering the full input/output/cached
+// mix would need a blended-rate calculation — this is a deliberate
+// simplification consistent with how PTU cost is already allocated
+// elsewhere in this kit, not an oversight.
+
+// ============================================================
+// BREAKEVEN (uses [PTU Base Cost (Selected Deployment)] from
+// 01-measures.dax's PTU section)
+// ============================================================
+
+PTU Base Model Name =
+VAR CurrentDeployment = SELECTEDVALUE('llm-usage-container'[deploymentName])
+RETURN
+IF(
+    RIGHT(CurrentDeployment, 4) = "-PTU",
+    LEFT(CurrentDeployment, LEN(CurrentDeployment) - 4),
+    CurrentDeployment
+)
+
+PAYG Rate — Output Tokens (Base Model) =
+CALCULATE(
+    MAX('model-pricing'[CostPerOutputUnit]),
+    TREATAS({[PTU Base Model Name]}, 'model-pricing'[deploymentName]),
+    'model-pricing'[CalculationMethod] = "tokens"
+)
+
+PAYG Rate Unit (Base Model) =
+CALCULATE(
+    MAX('model-pricing'[CostUnit]),
+    TREATAS({[PTU Base Model Name]}, 'model-pricing'[deploymentName]),
+    'model-pricing'[CalculationMethod] = "tokens"
+)
+
+Breakeven Output Tokens (Monthly) =
+VAR RatePerUnit = [PAYG Rate — Output Tokens (Base Model)]
+VAR Unit = [PAYG Rate Unit (Base Model)]
+VAR Base = [PTU Base Cost (Selected Deployment)]
+VAR RatePerToken = DIVIDE(RatePerUnit, Unit)
+RETURN
+IF(ISBLANK(RatePerToken) || RatePerToken = 0, BLANK(), DIVIDE(Base, RatePerToken))
+// The monthly output-token volume at which PAYG cost would equal this
+// deployment's fixed PTU BaseCost. Above this line, PTU is the better
+// deal; below it, PAYG would have been cheaper.
+
+// ============================================================
+// SAVINGS (positive = PTU is paying off; negative = reservation is
+// currently oversized for actual demand)
+// ============================================================
+
+PTU vs PAYG Savings $ =
+[PAYG Equivalent Cost] - [PTU Base Cost (Selected Deployment)]
+
+PTU vs PAYG Savings % =
+DIVIDE([PTU vs PAYG Savings $], [PAYG Equivalent Cost])

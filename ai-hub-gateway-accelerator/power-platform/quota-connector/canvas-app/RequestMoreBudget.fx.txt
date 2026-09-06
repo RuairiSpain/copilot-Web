@@ -1,0 +1,131 @@
+Power Fx source for the "Request More Budget" screen — see
+canvas-app/README.md for how to turn this into a real screen in Power
+Apps Studio. Control names below are what every formula refers to;
+create controls with these exact names first, then paste each property's
+formula into the Advanced formula bar (the fx box) for that property.
+
+================================================================================
+Screen: scrRequestBudget
+================================================================================
+
+OnVisible:
+------------------------------------------------------------------------------
+// varPBIContext holds whatever field values Power BI's Power Apps visual
+// passed in from the report page's current selection/filter — see
+// README.md's "Embedding in Power BI" section for how those fields get
+// there. Falls back to sensible defaults so the screen still opens
+// (blank) when tested standalone in Studio, not just when embedded.
+Set(varPBIContext, First(PowerBIIntegration.Data));
+Set(varScopeType, Coalesce(varPBIContext.scopeType, "user"));
+Set(varScopeId, Coalesce(varPBIContext.scopeId, User().Email));
+Set(varSubscriptionId, Coalesce(varPBIContext.subscriptionId, ""));
+Set(varCurrentQuota, Coalesce(Value(varPBIContext.currentQuota), 0));
+Set(varSubmitError, Blank());
+Set(varSubmitting, false);
+Reset(txtRequestedQuota);
+Reset(txtReason);
+Reset(txtDurationDays)
+
+================================================================================
+Control: lblContextSummary (Label)
+================================================================================
+
+Text:
+------------------------------------------------------------------------------
+"Requesting for: " & varScopeType & " " & varScopeId &
+Char(10) & "Current quota: " & Text(varCurrentQuota) & " tokens/month"
+
+================================================================================
+Control: txtRequestedQuota (Text input, Format = Number)
+================================================================================
+
+HintText: "New monthly quota (must be more than current)"
+
+================================================================================
+Control: txtReason (Text input, Mode = MultiLine)
+================================================================================
+
+HintText: "Why do you need more tokens?"
+
+================================================================================
+Control: txtDurationDays (Text input, Format = Number)
+================================================================================
+
+HintText: "Days (optional — leave blank for 30)"
+
+================================================================================
+Control: lblSubmitError (Label)
+================================================================================
+
+Text: varSubmitError
+Visible: !IsBlank(varSubmitError)
+Color: Color.Red
+
+================================================================================
+Control: btnSubmit (Button)
+================================================================================
+
+Text: If(varSubmitting, "Submitting…", "Submit request")
+
+DisplayMode:
+------------------------------------------------------------------------------
+If(
+    varSubmitting
+    || IsBlank(txtRequestedQuota.Text)
+    || !IsNumeric(txtRequestedQuota.Text)
+    || Value(txtRequestedQuota.Text) <= varCurrentQuota
+    || IsBlank(txtReason.Text),
+    DisplayMode.Disabled,
+    DisplayMode.Edit
+)
+
+OnSelect:
+------------------------------------------------------------------------------
+Set(varSubmitError, Blank());
+Set(varSubmitting, true);
+IfError(
+    Set(
+        varSubmitResult,
+        QuotaConnector.SubmitQuotaRequest(
+            {
+                scopeType: varScopeType,
+                scopeId: varScopeId,
+                subscriptionId: varSubscriptionId,
+                currentQuota: varCurrentQuota,
+                requestedQuota: Value(txtRequestedQuota.Text),
+                reason: txtReason.Text,
+                durationDays: If(
+                    IsBlank(txtDurationDays.Text),
+                    Blank(),
+                    Value(txtDurationDays.Text)
+                )
+            }
+        )
+    );
+    Notify(
+        "Request submitted (id " & varSubmitResult.id & "). You'll be notified once it's decided.",
+        NotificationType.Success
+    );
+    Reset(txtRequestedQuota);
+    Reset(txtReason);
+    Reset(txtDurationDays),
+    // The connector surfaces the gateway's own error body (400/401/409 —
+    // see quota-api.openapi.json) as FirstError.Message when the call
+    // fails cleanly; a genuine network/timeout failure lands here too.
+    Set(varSubmitError, FirstError.Message);
+    Notify("Couldn't submit: " & FirstError.Message, NotificationType.Error)
+);
+Set(varSubmitting, false)
+
+================================================================================
+Notes
+================================================================================
+
+- The "one pending request per scope" guardrail (quota-service's own
+  guides/quota-override-approval.md §7) means a second submission for the
+  same scopeType+scopeId+subscriptionId while one is already Pending
+  returns 409 — the OnSelect above surfaces that as a normal error
+  message via lblSubmitError, it isn't a bug if you see it while testing
+  with the same scope twice in a row.
+- Not exercised in Power Apps Studio in this session — see
+  canvas-app/README.md's honesty note.

@@ -1,0 +1,56 @@
+// Adoption report — named explicitly in the Vision doc as both a required
+// analytics category and an Executive success metric ("adoption rate"),
+// not built by anything else in this kit.
+//
+// One item here is a CALCULATED TABLE, not a measure — added via
+// Modeling -> New table (paste the DAX table expression, not New Measure).
+// Everything else is a normal measure on 'llm-usage-container'.
+
+// ============================================================
+// ACTIVE USERS / APPS (trend — put on a line chart, X = timestamp day)
+// ============================================================
+
+Active Apps = DISTINCTCOUNT('llm-usage-container'[appId])
+// Swap for a distinct-endUserId measure if you've added per-user identity
+// enrichment (see guides/power-bi-dashboard.md, "Individual-user page").
+
+// ============================================================
+// NEW-USER TREND (calculated table — Modeling -> New table)
+// ============================================================
+
+FirstSeenByApp =
+SUMMARIZE(
+    'llm-usage-container',
+    'llm-usage-container'[appId],
+    "FirstSeenDate", MIN('llm-usage-container'[timestamp])
+)
+// One row per appId, its earliest-seen timestamp. Small table (one row
+// per app, not per request) — cheap to keep even at large usage volumes.
+
+// -- Measures against the table above --
+
+New Apps This Month =
+VAR CurrentMonthStart = EOMONTH(MAX('llm-usage-container'[timestamp]), -1) + 1
+RETURN
+CALCULATE(
+    COUNTROWS(FirstSeenByApp),
+    FirstSeenByApp[FirstSeenDate] >= CurrentMonthStart
+)
+
+Total Known Apps = COUNTROWS(FirstSeenByApp)
+
+// ============================================================
+// DEPARTMENT / COST-CENTER COVERAGE
+// Numerator (active this period) is free from usage data; denominator
+// (how many cost centers exist at all) needs the AuthorizedCostCenters
+// table from 03-supporting-tables.m as a proxy for "known" cost centers —
+// swap for a real HR/org-chart source if you have one, this is only as
+// complete as that table's coverage.
+// ============================================================
+
+Active Cost Centers This Period = DISTINCTCOUNT('llm-usage-container'[customDimension1])
+
+Total Known Cost Centers = DISTINCTCOUNT(AuthorizedCostCenters[costCenter])
+
+Cost Center Coverage % =
+DIVIDE([Active Cost Centers This Period], [Total Known Cost Centers])

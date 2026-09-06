@@ -1,0 +1,106 @@
+// Modified z-score (median + Median Absolute Deviation) — replaces the
+// standard z-score in files 13 and 14, which used mean/STDEV.P and are
+// therefore sensitive to exactly the outliers they're trying to detect,
+// and assume roughly normal data that token counts/cost typically aren't
+// (right-skewed, long-tailed).
+//
+// Method: Iglewicz, B. and Hoaglin, D.C. (1993), "How to Detect and
+// Handle Outliers", ASQC Quality Press — the standard reference for this
+// technique. Formula: ModifiedZ = 0.6745 * (x - median) / MAD. Threshold
+// ±3.5 (not ±2 — this is a different, more conservative scale than a
+// standard z-score, don't mix the two thresholds).
+//
+// These measures are ADDITIVE — files 13/14's original z-score measures
+// are left in place, not deleted. Point the visuals in
+// 04-report-build-guide.md at the "Modified" measures below instead of
+// the originals; keep both on hand if you want to compare.
+
+// ============================================================
+// USER VS. TEAM (mirrors file 13's structure)
+// ============================================================
+
+Team Median of User Averages =
+MEDIANX(
+    CALCULATETABLE(
+        VALUES('llm-usage-container'[appId]),
+        ALLEXCEPT('llm-usage-container', 'llm-usage-container'[customDimension1])
+    ),
+    CALCULATE(AVERAGE('llm-usage-container'[promptTokens]))
+)
+
+Team MAD of User Averages =
+VAR TeamMedian = [Team Median of User Averages]
+RETURN
+MEDIANX(
+    CALCULATETABLE(
+        VALUES('llm-usage-container'[appId]),
+        ALLEXCEPT('llm-usage-container', 'llm-usage-container'[customDimension1])
+    ),
+    ABS(CALCULATE(AVERAGE('llm-usage-container'[promptTokens])) - TeamMedian)
+)
+
+User Prompt Length Modified Z-Score =
+DIVIDE(
+    0.6745 * ([User Avg Input Tokens] - [Team Median of User Averages]),
+    [Team MAD of User Averages]
+)
+// [User Avg Input Tokens] is from 13-user-token-length-outliers.dax —
+// unchanged, only the comparison baseline changes here.
+
+Is Outside Typical Prompt-Length Band (Modified) =
+// CORRECTED: when the peer group has zero variance (MAD = 0 — common
+// with a small/uniform peer group), DIVIDE([...], 0) correctly returns
+// BLANK() rather than erroring, but ABS(BLANK()) > 3.5 evaluates FALSE —
+// silently reporting "Typical" for exactly the case a modified z-score
+// exists to catch (a member whose value differs from an otherwise
+// identical peer group). Handled explicitly below instead of falling
+// through the blank-coercion.
+VAR MAD = [Team MAD of User Averages]
+VAR Diff = [User Avg Input Tokens] - [Team Median of User Averages]
+RETURN
+IF(
+    NOT [Has Sufficient Data for Comparison], "Insufficient data",
+    IF(
+        MAD = 0,
+        IF(Diff <> 0, "Outside typical range (zero-variance peer group)", "Typical"),
+        IF(ABS([User Prompt Length Modified Z-Score]) > 3.5, "Outside typical range", "Typical")
+    )
+)
+// [Has Sufficient Data for Comparison] is from file 13 — same guard,
+// reused as-is.
+
+// ============================================================
+// COST CENTER VS. ORG (mirrors file 14's structure)
+// ============================================================
+
+Org Median of Cost Center Daily Cost =
+MEDIANX(VALUES(CostCenterDailyCost[customDimension1]), [Cost Center Avg Daily Cost (Windowed)])
+
+Org MAD of Cost Center Daily Cost =
+VAR OrgMedian = [Org Median of Cost Center Daily Cost]
+RETURN
+MEDIANX(
+    VALUES(CostCenterDailyCost[customDimension1]),
+    ABS([Cost Center Avg Daily Cost (Windowed)] - OrgMedian)
+)
+
+Cost Center Cost Modified Z-Score =
+DIVIDE(
+    0.6745 * ([Cost Center Avg Daily Cost (Windowed)] - [Org Median of Cost Center Daily Cost]),
+    [Org MAD of Cost Center Daily Cost]
+)
+
+Is Cost Center Outside Typical Band (Modified) =
+// Same MAD = 0 correction as the user-level measure above — see its
+// comment for the full reasoning.
+VAR MAD = [Org MAD of Cost Center Daily Cost]
+VAR Diff = [Cost Center Avg Daily Cost (Windowed)] - [Org Median of Cost Center Daily Cost]
+RETURN
+IF(
+    NOT [Has Sufficient Data for Cost Center Comparison], "Insufficient data",
+    IF(
+        MAD = 0,
+        IF(Diff <> 0, "Outside typical range (zero-variance peer group)", "Typical"),
+        IF(ABS([Cost Center Cost Modified Z-Score]) > 3.5, "Outside typical range", "Typical")
+    )
+)

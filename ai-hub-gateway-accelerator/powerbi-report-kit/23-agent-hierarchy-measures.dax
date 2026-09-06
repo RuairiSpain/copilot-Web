@@ -1,0 +1,82 @@
+// Agent hierarchy attribution — roll-up (chargeback) and drill-down
+// (debugging) measures on the agentRootId/agentCallerType/agentDepth/
+// agentTrustTier fields now on every llm-usage-container record (see
+// guides/agent-hierarchy-attribution.md — sections 1/2/5 are built,
+// this file is the Power BI half of that). No new columns needed —
+// these fields arrive from the ingestion pipeline already.
+//
+// TWO MECHANISMS, TWO PURPOSES — do not conflate them in a visual:
+// - agentTrustTier = "Verified": the caller performed a real OBO token
+//   exchange (guides/agent-hierarchy-attribution.md section 4) — the
+//   identity is cryptographically grounded, same as any direct user call.
+// - agentTrustTier = "SelfAsserted": the caller just set a header — a
+//   spoofable, unverified claim. Never sum these into the same total as
+//   Verified rows without a visual distinguishing them (color, a
+//   separate card, a slicer) — a Budget Holder or auditor must be able
+//   to tell a cryptographically-grounded number from a trust-on-faith one.
+// - agentTrustTier = "None": ordinary, non-hierarchical traffic — the
+//   vast majority of rows. Not part of any agent run.
+
+// ============================================================
+// ROLL-UP (chargeback — "how much did this agent run cost the business")
+// ============================================================
+
+Agent Run Cost = CALCULATE([Total Cost (incl. PTU)], 'llm-usage-container'[agentRootId] <> "")
+// Use with agentRootId on rows (a table/matrix visual) for a per-run
+// chargeback breakdown — SUMX-equivalent via CALCULATE's implicit
+// row-context filter, cheap since it's grouped by the same field the
+// visual already slices by.
+
+Agent Run Request Count = CALCULATE([Total Requests], 'llm-usage-container'[agentRootId] <> "")
+
+Hierarchical Traffic % =
+DIVIDE(
+    CALCULATE([Total Requests], 'llm-usage-container'[agentTrustTier] <> "None"),
+    [Total Requests]
+)
+// What share of all traffic is part of SOME agent/sub-agent/MCP-tool
+// hierarchy, verified or not — a basic adoption signal for whether
+// agentic workflows are actually using the propagation headers at all.
+
+Verified Agent Traffic % =
+DIVIDE(
+    CALCULATE([Total Requests], 'llm-usage-container'[agentTrustTier] = "Verified"),
+    CALCULATE([Total Requests], 'llm-usage-container'[agentTrustTier] <> "None")
+)
+// Of the hierarchical traffic that exists, what fraction went through a
+// real OBO exchange vs. a self-asserted header alone — the trust-quality
+// signal for whoever's deciding how much to rely on this data.
+
+// ============================================================
+// DRILL-DOWN (debugging — "which specific sub-agent/tool was expensive")
+// ============================================================
+
+Sub-Agent Cost Within Run =
+CALCULATE(
+    [Total Cost (incl. PTU)],
+    'llm-usage-container'[agentCallerType] <> "root",
+    'llm-usage-container'[agentCallerType] <> ""
+)
+// Use on a table with agentRootId AND appId/deploymentName on rows —
+// answers "within this run, which specific sub-agent/tool/model call was
+// the expensive one" — the same underlying data as the roll-up measure
+// above, a different GROUP BY, per
+// guides/agent-hierarchy-attribution.md's own framing ("the roll-up for
+// chargeback and the drill-down for debugging are the same data, two
+// different GROUP BY clauses, not two different pipelines").
+
+Max Agent Depth = CALCULATE(MAX('llm-usage-container'[agentDepth]), 'llm-usage-container'[agentRootId] <> "")
+// agentDepth arrives as text (see the ingestion workflow's schema) —
+// this MAX is lexicographic unless you add a calculated INT column if
+// you need true numeric max depth across 2-digit+ values; fine as-is
+// for the realistic single-digit depths this guards against.
+
+Distinct Agent Runs =
+CALCULATE(
+    DISTINCTCOUNT('llm-usage-container'[agentRootId]),
+    'llm-usage-container'[agentRootId] <> ""
+)
+// Explicitly excludes the "" (non-hierarchical) value — a bare
+// DISTINCTCOUNT would count "" as one distinct "run" alongside every
+// real one, silently off-by-one on any slice that includes ordinary
+// traffic.

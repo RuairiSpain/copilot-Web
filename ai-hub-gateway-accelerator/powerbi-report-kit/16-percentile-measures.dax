@@ -1,0 +1,57 @@
+// Percentile measures (P50/P90/P95/P99) — standard practice in every LLM
+// observability tool researched (Helicone ships latency percentiles and
+// per-user tracking by default), and a better summary than a mean for
+// right-skewed data like cost-per-request and token counts, where a
+// handful of large requests pull the mean upward. ADDITIVE — put these
+// alongside the existing average-based measures, not instead of them;
+// mean and P50 disagreeing by a lot is itself a useful signal of skew.
+//
+// No new columns needed. This repo's usage schema has no latency field
+// (see src/usage-ingestion-logicapp/llm-usage-ingestion/workflow.json —
+// promptTokens/responseTokens/totalTokens/cost, no request duration) —
+// only cost and token-count percentiles are built here; add latency
+// percentiles later if/when a duration field gets added to the pipeline.
+//
+// PERFORMANCE NOTE: PERCENTILEX.INC sorts the full filtered table — cheap
+// on a single model/day slice, potentially slow unfiltered at the
+// "billions of tokens" scale this platform targets. Use these on
+// filtered/drillthrough views (Model Detail, a specific date range), not
+// as an unfiltered whole-history KPI tile on a high-traffic page.
+
+// ============================================================
+// COST PER REQUEST
+// ============================================================
+
+P50 Cost Per Request = PERCENTILEX.INC('llm-usage-container', 'llm-usage-container'[cost.totalCost], 0.5)
+
+P90 Cost Per Request = PERCENTILEX.INC('llm-usage-container', 'llm-usage-container'[cost.totalCost], 0.9)
+
+P95 Cost Per Request = PERCENTILEX.INC('llm-usage-container', 'llm-usage-container'[cost.totalCost], 0.95)
+
+P99 Cost Per Request = PERCENTILEX.INC('llm-usage-container', 'llm-usage-container'[cost.totalCost], 0.99)
+
+Cost Tail Ratio (P95/P50) = DIVIDE([P95 Cost Per Request], [P50 Cost Per Request])
+// A single skewness summary: close to 1 means the cost distribution is
+// tight around the median; a high ratio means a handful of expensive
+// requests dominate — worth knowing before trusting [Avg Cost per
+// Request] as "typical."
+
+// ============================================================
+// PROMPT (INPUT) TOKENS
+// ============================================================
+
+P50 Prompt Tokens = PERCENTILEX.INC('llm-usage-container', 'llm-usage-container'[promptTokens], 0.5)
+
+P95 Prompt Tokens = PERCENTILEX.INC('llm-usage-container', 'llm-usage-container'[promptTokens], 0.95)
+
+P99 Prompt Tokens = PERCENTILEX.INC('llm-usage-container', 'llm-usage-container'[promptTokens], 0.99)
+
+// ============================================================
+// TOTAL TOKENS
+// ============================================================
+
+P50 Total Tokens = PERCENTILEX.INC('llm-usage-container', 'llm-usage-container'[totalTokens], 0.5)
+
+P95 Total Tokens = PERCENTILEX.INC('llm-usage-container', 'llm-usage-container'[totalTokens], 0.95)
+
+P99 Total Tokens = PERCENTILEX.INC('llm-usage-container', 'llm-usage-container'[totalTokens], 0.99)

@@ -1,0 +1,81 @@
+// Traffic heatmap + moving averages — foundation for the peak/off-peak
+// recommendation report in 11-peak-off-peak-recommendation.dax, and
+// useful on their own on the Org page's trend charts.
+//
+// First four items are CALCULATED COLUMNS (Modeling -> New column, not
+// New Measure) — a heatmap's row/column axes need to be columns, DAX
+// measures can't act as matrix axis categories.
+
+// ============================================================
+// CALCULATED COLUMNS
+// ============================================================
+
+Date Only = INT('llm-usage-container'[timestamp])
+// Strips time-of-day, keeping just the date serial. Used everywhere below
+// for "per calendar day" aggregation without assuming a marked Date table
+// exists (consistent with every other date measure in this kit). Format
+// as Date (Column tools -> Formatting -> Data type: Date) for readable
+// display if you put it on a visual directly.
+
+Hour Of Day = HOUR('llm-usage-container'[timestamp])
+// 0-23, sorts correctly as-is — no separate sort-by column needed.
+
+Day Of Week Number = WEEKDAY('llm-usage-container'[timestamp], 2)
+// 1 = Monday ... 7 = Sunday (business-week convention, not Power BI's
+// default Sunday-start).
+
+Day Of Week =
+SWITCH(
+    'llm-usage-container'[Day Of Week Number],
+    1, "Monday", 2, "Tuesday", 3, "Wednesday", 4, "Thursday",
+    5, "Friday", 6, "Saturday", 7, "Sunday"
+)
+// After adding this column: Column tools -> Sort by column -> Day Of Week
+// Number. Without this, the heatmap's day axis sorts alphabetically
+// (Friday, Monday, Saturday, ...) instead of calendar order.
+
+// ============================================================
+// MOVING AVERAGES (measures — put on the existing Org-page trend line
+// charts as a second line alongside the daily total, or as their own
+// visual)
+// ============================================================
+
+7-Day Moving Avg Cost =
+VAR CurrentDate = INT(MAX('llm-usage-container'[timestamp]))
+VAR WindowStart = CurrentDate - 6
+RETURN
+DIVIDE(
+    CALCULATE(
+        [Total Cost (incl. PTU)],
+        FILTER(
+            ALL('llm-usage-container'[timestamp]),
+            INT('llm-usage-container'[timestamp]) >= WindowStart
+                && INT('llm-usage-container'[timestamp]) <= CurrentDate
+        )
+    ),
+    7
+)
+// Removes any date-slicer filter on [timestamp] (ALL(...timestamp])) so
+// this always looks at the real trailing 7 calendar days relative to
+// whatever single day is in the current row context (e.g. one point on a
+// daily line chart) — but keeps any other active filter (cost center,
+// product, etc.), same CALCULATE-context pattern used throughout this
+// kit. A day with zero usage contributes $0 to the sum, which is what you
+// want (dividing by a fixed 7 gives a true daily average across the
+// window, not just an average of days that happened to have traffic).
+
+7-Day Moving Avg Tokens =
+VAR CurrentDate = INT(MAX('llm-usage-container'[timestamp]))
+VAR WindowStart = CurrentDate - 6
+RETURN
+DIVIDE(
+    CALCULATE(
+        [Total Tokens],
+        FILTER(
+            ALL('llm-usage-container'[timestamp]),
+            INT('llm-usage-container'[timestamp]) >= WindowStart
+                && INT('llm-usage-container'[timestamp]) <= CurrentDate
+        )
+    ),
+    7
+)

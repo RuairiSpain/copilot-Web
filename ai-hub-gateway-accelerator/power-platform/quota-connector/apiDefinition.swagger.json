@@ -1,0 +1,160 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "Quota Override",
+    "description": "Submit and decide quota-override requests through the AI Hub Gateway's Quota Override API (bicep/infra/modules/quota-service/). See guides/quota-override-approval.md.",
+    "version": "1.0.0"
+  },
+  "host": "REPLACE-WITH-YOUR-APIM-GATEWAY.azure-api.net",
+  "basePath": "/quota",
+  "schemes": ["https"],
+  "consumes": ["application/json"],
+  "produces": ["application/json"],
+  "paths": {
+    "/submit": {
+      "post": {
+        "summary": "Submit a quota override request",
+        "description": "Requests more token quota for the caller's own user or team scope. The caller's identity is taken from their signed-in Entra ID token by the gateway — not from anything in this request body.",
+        "operationId": "SubmitQuotaRequest",
+        "x-ms-visibility": "important",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": { "$ref": "#/definitions/SubmitQuotaRequestBody" }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Request created.",
+            "schema": { "$ref": "#/definitions/QuotaOverrideRequest" }
+          },
+          "400": { "description": "Malformed request." },
+          "401": { "description": "Not signed in, or token invalid." },
+          "409": { "description": "A pending request already exists for this scope." }
+        }
+      }
+    },
+    "/pending": {
+      "get": {
+        "summary": "List pending quota override requests",
+        "description": "Requires the Quota.Approve role. Returns every pending request platform-wide — not filtered to the caller's own department yet (see guides/quota-override-approval.md for why).",
+        "operationId": "ListPendingQuotaRequests",
+        "x-ms-visibility": "important",
+        "responses": {
+          "200": {
+            "description": "Pending requests, escalation-flagged ones first.",
+            "schema": {
+              "type": "array",
+              "items": { "$ref": "#/definitions/QuotaOverrideRequest" }
+            }
+          },
+          "401": { "description": "Not signed in, token invalid, or caller lacks the Quota.Approve role." }
+        }
+      }
+    },
+    "/decide": {
+      "post": {
+        "summary": "Approve or deny a quota override request",
+        "description": "Requires the Quota.Approve role in Entra ID. The approver's identity is taken from the signed-in user's token, not from this request body.",
+        "operationId": "DecideQuotaRequest",
+        "x-ms-visibility": "important",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": { "$ref": "#/definitions/DecideQuotaRequestBody" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Decision recorded.",
+            "schema": { "type": "object" }
+          },
+          "400": { "description": "Malformed request." },
+          "401": { "description": "Not signed in, token invalid, or caller lacks the Quota.Approve role." },
+          "404": { "description": "No such request." },
+          "409": { "description": "Request was already decided." }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "SubmitQuotaRequestBody": {
+      "type": "object",
+      "required": ["scopeType", "scopeId", "subscriptionId", "currentQuota", "requestedQuota", "reason"],
+      "properties": {
+        "scopeType": {
+          "type": "string",
+          "enum": ["user", "team"],
+          "description": "Whether this request is for the caller individually or their whole team/department."
+        },
+        "scopeId": {
+          "type": "string",
+          "description": "The caller's own oid (scopeType=user) or department name (scopeType=team) — same value the gateway already resolved for them elsewhere in the report."
+        },
+        "subscriptionId": {
+          "type": "string",
+          "description": "The access-contract subscription this quota belongs to — shown on the report page this button sits on."
+        },
+        "currentQuota": { "type": "integer", "description": "The scope's current monthly token quota." },
+        "requestedQuota": { "type": "integer", "description": "The new quota being requested. Must be greater than currentQuota." },
+        "reason": { "type": "string", "description": "Why more quota is needed." },
+        "durationDays": {
+          "type": "integer",
+          "x-nullable": true,
+          "description": "How many days the increase should last if approved. Leave blank for the default (30 days)."
+        }
+      }
+    },
+    "DecideQuotaRequestBody": {
+      "type": "object",
+      "required": ["requestId", "subscriptionId", "decision"],
+      "properties": {
+        "requestId": { "type": "string", "description": "The request's id, from the pending-requests list." },
+        "subscriptionId": { "type": "string" },
+        "decision": { "type": "string", "enum": ["Approved", "Denied"] },
+        "note": { "type": "string", "description": "Optional note explaining the decision." },
+        "tpmTier": {
+          "type": "string",
+          "enum": ["standard", "elevated"],
+          "description": "Only meaningful on approval — leave blank for standard."
+        }
+      }
+    },
+    "QuotaOverrideRequest": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "scopeType": { "type": "string" },
+        "scopeId": { "type": "string" },
+        "subscriptionId": { "type": "string" },
+        "requestedBy": { "type": "string" },
+        "currentQuota": { "type": "integer" },
+        "requestedQuota": { "type": "integer" },
+        "reason": { "type": "string" },
+        "status": { "type": "string" },
+        "requiresEscalation": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      }
+    }
+  },
+  "securityDefinitions": {
+    "oauth2-aad": {
+      "type": "oauth2",
+      "flow": "accessCode",
+      "authorizationUrl": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+      "tokenUrl": "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+      "scopes": {
+        "user_impersonation": "Access AI Hub Gateway API as the signed-in user"
+      }
+    }
+  },
+  "security": [
+    {
+      "oauth2-aad": ["user_impersonation"]
+    }
+  ]
+}

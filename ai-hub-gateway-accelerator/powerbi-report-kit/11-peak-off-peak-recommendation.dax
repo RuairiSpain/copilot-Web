@@ -1,0 +1,83 @@
+// Peak/off-peak PTU-vs-PAYG recommendation report. Read-only reporting —
+// see guides/advanced-ptu-routing.md in the accelerator fork for why this
+// stops at a recommendation a human acts on, rather than automated
+// routing.
+//
+// REQUIRES, in this order: 10-heatmap-moving-average.dax (Hour Of Day,
+// Date Only columns), 06-ptu-allocation-columns.m (ptuWeightTokens,
+// billingMonth), 08-payg-ptu-breakeven-column.m (paygEquivalentCost),
+// 01-measures.dax's PTU section ([PTU Allocated Cost] etc).
+
+// ============================================================
+// PEAK-HOUR CLASSIFICATION (calculated column — depends on Hour Of Day
+// from 10-heatmap-moving-average.dax)
+// ============================================================
+
+Is Peak Hour =
+VAR ThisHourAvgTokens =
+    CALCULATE(
+        DIVIDE(SUM('llm-usage-container'[totalTokens]), DISTINCTCOUNT('llm-usage-container'[Date Only])),
+        ALLEXCEPT('llm-usage-container', 'llm-usage-container'[Hour Of Day])
+    )
+VAR OverallAvgTokensPerHour =
+    CALCULATE(
+        DIVIDE(SUM('llm-usage-container'[totalTokens]), DISTINCTCOUNT('llm-usage-container'[Date Only]) * 24)
+    )
+RETURN
+IF(DIVIDE(ThisHourAvgTokens, OverallAvgTokensPerHour) > 1.2, "Peak", "Off-Peak")
+// A hour is "Peak" if its average token volume runs >20% above the
+// all-hours average — a simple, explainable, adjustable rule (change the
+// 1.2 threshold) rather than a fixed top-N-hours cutoff. Computed as a
+// calculated column so it can be used directly as a CALCULATE filter
+// below; only 24 distinct Hour Of Day values exist, so the ALLEXCEPT
+// recomputation this involves is cheap regardless of table size.
+
+// ============================================================
+// PEAK VS. OFF-PEAK ECONOMICS, PER PTU DEPLOYMENT
+// ============================================================
+
+Off-Peak Weight Share =
+DIVIDE(
+    CALCULATE(SUM('llm-usage-container'[ptuWeightTokens]), 'llm-usage-container'[Is Peak Hour] = "Off-Peak"),
+    SUM('llm-usage-container'[ptuWeightTokens])
+)
+// What fraction of this deployment's PTU-weighted usage happens during
+// off-peak hours — the headroom that's sitting there unused relative to
+// what the deployment was sized for at peak.
+
+Off-Peak Allocated PTU Cost = [PTU Allocated Cost] * [Off-Peak Weight Share]
+// This deployment's fixed monthly cost, apportioned to off-peak hours by
+// their share of usage (not their share of the fixed cost — the fixed
+// cost doesn't shrink off-peak, that's exactly the point being measured).
+
+Off-Peak PAYG Equivalent Cost =
+CALCULATE([PAYG Equivalent Cost], 'llm-usage-container'[Is Peak Hour] = "Off-Peak")
+// What the off-peak-hour requests alone would have cost on PAYG.
+
+Estimated Off-Peak Overpay =
+[Off-Peak Allocated PTU Cost] - [Off-Peak PAYG Equivalent Cost]
+// Positive = during off-peak hours, this deployment's share of the fixed
+// PTU cost exceeds what those same requests would have cost on PAYG —
+// the quantified case for "PTU at peak, PAYG off-peak."
+//
+// IMPORTANT CAVEAT, read before presenting this number: this is a
+// THEORETICAL upper bound, not money you can recover today. Most PTU
+// reservations are a fixed monthly commitment that can't be shed
+// hour-by-hour — this measures the opportunity a dynamic-routing
+// capability (guides/advanced-ptu-routing.md — explicitly NOT built) would
+// unlock, not a saving available by changing a Power BI filter. Label it
+// as such on the visual (e.g. "Estimated off-peak overpay (if capacity
+// could flex hourly)"), don't present it as a number the business can
+// bank without that feature existing first.
+
+Peak-Hour Utilization =
+DIVIDE(
+    CALCULATE(SUM('llm-usage-container'[ptuWeightTokens]), 'llm-usage-container'[Is Peak Hour] = "Peak"),
+    [PTU Deployment Monthly Weight Total]
+)
+// The flip side of Off-Peak Weight Share — how much of this deployment's
+// total monthly weighted usage is concentrated in peak hours. High peak
+// concentration + high Estimated Off-Peak Overpay together are the
+// strongest case for pursuing the dynamic-routing feature; low overpay
+// means the reservation is already well-utilized around the clock and
+// there's little to gain from complicating routing.

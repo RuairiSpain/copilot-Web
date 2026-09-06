@@ -1,0 +1,26 @@
+{
+  "name": "quota-service",
+  "version": "1.0.0",
+  "description": "Quota override/approval backend for the AI Hub Gateway accelerator: per-user/team dynamic sub-quota lookup, self-service request submission, approval decisions, and expiry sweep.",
+  "main": "dist/src/index.js",
+  "scripts": {
+    "build": "tsc -p .",
+    "watch": "tsc -w -p .",
+    "prestart": "npm run build",
+    "start": "func start",
+    "pretest": "npm run build",
+    "test": "node --test dist/tests/*.js"
+  },
+  "dependencies": {
+    "@azure/cosmos": "^4.1.1",
+    "@azure/functions": "^4.5.1",
+    "@azure/identity": "^4.4.1",
+    "jose": "^5.9.6",
+    "nodemailer": "^9.0.6"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.9",
+    "@types/nodemailer": "^6.4.17",
+    "typescript": "^5.5.4"
+  }
+}

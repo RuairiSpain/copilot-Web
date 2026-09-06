@@ -1,0 +1,136 @@
+<fragment>
+    <!--
+        Fragment: Resolve Quota Scope
+        Purpose: Determines whether this request belongs to an individual
+                 user or a team/department for the purposes of the dynamic
+                 tier-2 quota (guides/quota-override-approval.md §2) —
+                 the contract's own tier-1 llm-token-limit, keyed on
+                 context.Subscription.Id, is untouched and unaffected by
+                 this fragment.
+
+        Precedence (most specific wins), per the design doc §2, extended
+        with a fallback tier for contracts with no JWT requirement:
+          1. An individual-user override exists for this request's
+             VALIDATED oid (trust tier "Verified").
+          2. Else a team/department override exists for this request's
+             VALIDATED department claim (trust tier "Verified").
+          3. Else, when no validated JWT is present at all, fall back to
+             a self-asserted client header (x-quota-user-id below —
+             change the literal header name here if you want a
+             different one) as a "user" scope (trust tier
+             "SelfAsserted").
+          4. Else no scope at all — tier 2 becomes a no-op (see
+             frag-load-quota-allowance.xml, which sets
+             quotaEffectiveQuota equal to the contract's own baseline
+             when quotaScopeType is "none"; trust tier "None").
+
+        WHY A FALLBACK TIER EXISTS, AND ITS REAL LIMITS: "per-user quotas
+        for all traffic" runs into a hard constraint — the gateway can
+        only cryptographically know WHO a caller is from a validated
+        Entra ID JWT. A contract with no JWT requirement (API-key-only)
+        has no such signal. Tier 3 above lets those contracts still get
+        SOME per-caller quota partitioning rather than none, but
+        `x-quota-user-id` is a PLAIN, SELF-ASSERTED HTTP HEADER — any
+        caller can claim to be anyone by setting it to a different
+        value. This makes tier-2 quota, in SelfAsserted mode, a
+        fairness/noisy-neighbor control (stops one caller starving
+        others sharing a subscription's tier-1 budget) — NOT a real
+        per-person budget guarantee. Never present a SelfAsserted
+        decrement as equivalent to a Verified one in any report or
+        dashboard; quotaTrustTier exists specifically so a downstream
+        consumer (quota-service, Power BI) can always tell the two
+        apart. For a real per-person guarantee, the contract needs
+        jwtRequired="true" — there is no way around this with an API
+        key alone.
+
+        REQUIRES jwtRequired="true" on this product for the Verified
+        tiers (same prerequisite the department-claim example in
+        citadel-access-contracts-policy.md already documents). A product
+        with no JWT requirement now gets the SelfAsserted fallback
+        instead of "none" — a behavior change from this fragment's
+        original version, worth reviewing before deploying if you were
+        relying on tier 2 being a strict no-op for API-key-only
+        contracts.
+
+        Output Variables:
+        - quotaScopeType: String - "user" | "team" | "none"
+        - quotaScopeId: String - the oid, department claim, or self-asserted header value, or "" if none
+        - quotaScopeCacheKey: String - the cache key frag-load-quota-allowance.xml uses
+        - quotaTrustTier: String - "Verified" | "SelfAsserted" | "None" — see above
+
+        HONESTY NOTE (see guides/quota-override-approval.md, "What's still
+        unresolved"): this fragment has not been exercised against a live
+        APIM instance. The Jwt-object claim access below follows the
+        exact pattern already used by frag-security-handler.xml/
+        default-multi-product-policy.xml for the "azp"/"department"
+        claims (context.Variables["validated-jwt"] as a Jwt, then
+        .Claims.GetValueOrDefault(...)) — verify this compiles and
+        resolves the claims you actually expect before relying on it.
+    -->
+
+    <set-variable name="quotaScopeType" value="none" />
+    <set-variable name="quotaScopeId" value="" />
+    <set-variable name="quotaTrustTier" value="None" />
+
+    <choose>
+        <when condition="@(context.Variables.ContainsKey("validated-jwt"))">
+            <set-variable name="quotaResolvedOid" value="@{
+                var jwt = (Jwt)context.Variables["validated-jwt"];
+                return jwt.Claims.GetValueOrDefault("oid", "");
+            }" />
+            <set-variable name="quotaResolvedDepartment" value="@{
+                var jwt = (Jwt)context.Variables["validated-jwt"];
+                return jwt.Claims.GetValueOrDefault("department", "");
+            }" />
+        </when>
+        <otherwise>
+            <set-variable name="quotaResolvedOid" value="" />
+            <set-variable name="quotaResolvedDepartment" value="" />
+        </otherwise>
+    </choose>
+
+    <!-- Individual scope takes precedence over team scope whenever an
+         oid is present — resolution of WHICH scope actually has an
+         override happens in frag-load-quota-allowance.xml (this
+         fragment only decides what to look up, not whether an override
+         exists for it). Both of these are the Verified trust tier —
+         the identity came from a signature-validated JWT. -->
+    <choose>
+        <when condition="@(!string.IsNullOrEmpty((string)context.Variables["quotaResolvedOid"]))">
+            <set-variable name="quotaScopeType" value="user" />
+            <set-variable name="quotaScopeId" value="@((string)context.Variables["quotaResolvedOid"])" />
+            <set-variable name="quotaTrustTier" value="Verified" />
+        </when>
+        <when condition="@(!string.IsNullOrEmpty((string)context.Variables["quotaResolvedDepartment"]))">
+            <set-variable name="quotaScopeType" value="team" />
+            <set-variable name="quotaScopeId" value="@((string)context.Variables["quotaResolvedDepartment"])" />
+            <set-variable name="quotaTrustTier" value="Verified" />
+        </when>
+        <!-- Fallback tier — only reached when there was no validated JWT
+             at all (quotaResolvedOid/quotaResolvedDepartment are both
+             empty precisely because the earlier <choose> block above
+             found no "validated-jwt" variable). A contract WITH a valid
+             JWT that simply has no oid/department claims falls through
+             to "none" below, not into this SelfAsserted fallback — the
+             fallback is specifically for "no JWT to check at all," not
+             "a JWT that happened not to answer." -->
+        <when condition="@(!context.Variables.ContainsKey("validated-jwt") &amp;&amp; !string.IsNullOrEmpty(context.Request.Headers.GetValueOrDefault("x-quota-user-id", "")))">
+            <set-variable name="quotaScopeType" value="user" />
+            <set-variable name="quotaScopeId" value="@(context.Request.Headers.GetValueOrDefault("x-quota-user-id", ""))" />
+            <set-variable name="quotaTrustTier" value="SelfAsserted" />
+        </when>
+    </choose>
+
+    <set-variable name="quotaScopeCacheKey" value="@{
+        var scopeType = (string)context.Variables["quotaScopeType"];
+        var scopeId = (string)context.Variables["quotaScopeId"];
+        var trustTier = (string)context.Variables["quotaTrustTier"];
+        if (scopeType == "none") { return context.Subscription.Id + "-quota-none"; }
+        // Trust tier is part of the cache key, not just a logged label —
+        // this keeps a SelfAsserted "alice" and a Verified "alice" (a
+        // real oid can never collide with a self-asserted string in
+        // practice, but this makes that guarantee explicit rather than
+        // incidental) from ever sharing one quota bucket.
+        return context.Subscription.Id + "-quota-" + scopeType + "-" + trustTier + "-" + scopeId;
+    }" />
+</fragment>

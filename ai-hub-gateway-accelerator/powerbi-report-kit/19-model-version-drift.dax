@@ -1,0 +1,64 @@
+// Model version/deployment drift detection — unlike file 18, this needs
+// NO new data source. `deploymentName` is already on every
+// llm-usage-container record; this just asks a question of data already
+// there: "did the set of deployments serving this app change?"
+//
+// Two calculated tables + measures.
+
+// ============================================================
+// CALCULATED TABLES
+// ============================================================
+
+DailyDeploymentMix =
+SUMMARIZE(
+    'llm-usage-container',
+    'llm-usage-container'[appId],
+    'llm-usage-container'[deploymentName],
+    'llm-usage-container'[Date Only]
+)
+// One row per (app, deployment, day) actually seen — the raw material
+// for both the drift-detection measures below and a "deployment mix over
+// time" stacked-area chart (Axis: Date Only, Legend: deploymentName,
+// Value: request count) that lets a developer SEE when their app's
+// model mix shifted, not just get a single flag.
+
+FirstSeenByAppDeployment =
+SUMMARIZE(
+    'llm-usage-container',
+    'llm-usage-container'[appId],
+    'llm-usage-container'[deploymentName],
+    "FirstSeenDate", MIN('llm-usage-container'[Date Only])
+)
+// One row per (app, deployment) pair, ever — small table even at large
+// usage volumes (bounded by app count × deployment count, not request
+// count).
+
+// ============================================================
+// MEASURES
+// ============================================================
+
+New Model Deployments This Week =
+VAR WeekStart = MAX('llm-usage-container'[Date Only]) - 6
+RETURN
+CALCULATE(COUNTROWS(FirstSeenByAppDeployment), FirstSeenByAppDeployment[FirstSeenDate] >= WeekStart)
+// "New" here means "this exact (app, deployment) pairing has never been
+// seen before as of this week" — catches both a brand-new app AND an
+// existing app suddenly using a different deployment name it never used
+// previously (a routing-pack update, a manual backend swap, or someone
+// pointing the app at a new model version) equally. If you only care
+// about the second case, filter the detail table below to apps that
+// already had activity before their new deployment's FirstSeenDate.
+
+Days Since This App-Deployment Pairing First Seen =
+VAR ThisApp = SELECTEDVALUE('llm-usage-container'[appId])
+VAR ThisDeployment = SELECTEDVALUE('llm-usage-container'[deploymentName])
+RETURN
+CALCULATE(
+    DATEDIFF(MAX(FirstSeenByAppDeployment[FirstSeenDate]), TODAY(), DAY),
+    FirstSeenByAppDeployment[appId] = ThisApp,
+    FirstSeenByAppDeployment[deploymentName] = ThisDeployment
+)
+// Put this on a detail table (Rows: appId, deploymentName) sorted
+// ascending — the rows with the smallest number are the newest pairings,
+// i.e. what a developer should look at first when checking "did anything
+// change under me recently."

@@ -1,0 +1,48 @@
+// Measures over the GatewayPerformanceLog query from
+// 18-failures-latency-source.md. Requires that data source added first.
+
+// ============================================================
+// FAILURES
+// ============================================================
+
+Request Count (Gateway) = COUNTROWS(GatewayPerformanceLog)
+
+Failed Request Count =
+CALCULATE(COUNTROWS(GatewayPerformanceLog), GatewayPerformanceLog[IsRequestSuccess] = FALSE)
+
+Failure Rate = DIVIDE([Failed Request Count], [Request Count (Gateway)])
+
+// ============================================================
+// LATENCY
+// ============================================================
+
+P50 Total Time (ms) = PERCENTILEX.INC(GatewayPerformanceLog, GatewayPerformanceLog[TotalTime], 0.5)
+
+P95 Total Time (ms) = PERCENTILEX.INC(GatewayPerformanceLog, GatewayPerformanceLog[TotalTime], 0.95)
+
+P99 Total Time (ms) = PERCENTILEX.INC(GatewayPerformanceLog, GatewayPerformanceLog[TotalTime], 0.99)
+
+Avg Backend Time (ms) = AVERAGE(GatewayPerformanceLog[BackendTime])
+
+Avg Gateway Overhead (ms) = AVERAGE(GatewayPerformanceLog[GatewayOverheadTime])
+// Isolates gateway/policy processing time from actual model/backend
+// time — a developer chasing "why is my agent slow" needs to know which
+// of these two it actually is before looking anywhere else. If this
+// number is consistently small relative to Avg Backend Time, the model
+// itself is the bottleneck, not the platform.
+
+Backend Time Share =
+DIVIDE([Avg Backend Time (ms)], [Avg Backend Time (ms)] + [Avg Gateway Overhead (ms)])
+
+// ============================================================
+// BY-DEPLOYMENT BREAKDOWN (table visual, DeploymentName on rows)
+// ============================================================
+
+Failure Rate (Current Row Context) =
+DIVIDE(
+    CALCULATE(COUNTROWS(GatewayPerformanceLog), GatewayPerformanceLog[IsRequestSuccess] = FALSE),
+    CALCULATE(COUNTROWS(GatewayPerformanceLog))
+)
+
+P95 Total Time — Current Row Context (ms) =
+CALCULATE(PERCENTILEX.INC(GatewayPerformanceLog, GatewayPerformanceLog[TotalTime], 0.95))
