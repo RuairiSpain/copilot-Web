@@ -38,6 +38,17 @@ class ConfigError(RuntimeError):
     """Raised when required configuration is missing, with a fix in the text."""
 
 
+def odata(name: str) -> str:
+    """Quote a resource name for a search data-plane path.
+
+    The data plane is OData-shaped: every addressable resource is
+    `/collection('name')`, not `/collection/name` — see the paths in
+    search.json for 2026-08-01-preview. A single quote inside a name is
+    escaped by doubling it, per OData literal rules.
+    """
+    return "('" + name.replace("'", "''") + "')"
+
+
 @dataclass(frozen=True)
 class Settings:
     search_endpoint: str
@@ -55,8 +66,13 @@ class Settings:
     hr_index: str
 
     @property
+    def kb_path(self) -> str:
+        """Path of the knowledge base, OData-quoted."""
+        return f"/knowledgebases{odata(self.knowledge_base)}"
+
+    @property
     def kb_url(self) -> str:
-        return f"{self.search_endpoint}/knowledgebases/{self.knowledge_base}"
+        return f"{self.search_endpoint}{self.kb_path}"
 
 
 def _require(name: str) -> str:

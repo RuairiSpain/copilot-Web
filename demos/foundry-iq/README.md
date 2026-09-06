@@ -112,12 +112,26 @@ Six steps, each printing the REST payload it sends:
 6. `PUT /knowledgebases/es-employment-kb` over both
 
 **How metadata filters get applied before the vector search.** The `queryHints`
-on the search-index knowledge source tell the query planner which fields are
-worth filtering on and what the values mean. Ask "show me dismissal letter
-templates" and the planner emits a subquery with `$filter` on `doc_type`/`tags`
-*plus* a vector query — narrowing the candidate set first, then ranking within
-it. You can see the filter it chose in the trace (command 4); it shows up as
-`searchIndexArguments.filter`.
+on the search-index knowledge source tell the planner which fields are worth
+filtering on *and what values they take* — `fieldValues` is required, because a
+field name alone doesn't tell the planner that "dismissal letters" maps to
+`doc_type eq 'letter'`:
+
+```json
+"queryHints": {
+  "filters": [
+    { "field": "doc_type",
+      "fieldValues": ["contract", "policy", "procedure", "letter", "form", "guidance"],
+      "filterInstructions": "Filter on the kind of document the user is asking for." }
+  ]
+}
+```
+
+Ask "show me dismissal letter templates" and the planner emits a subquery with a
+`$filter` *plus* a vector query — narrowing the candidate set first, then
+ranking within it. The trace shows both halves: `searchIndexArguments.filter`
+for the filter that ran, and **`queryHintProcessing.generatedFilter`** for the
+one the planner derived from these hints specifically.
 
 ### 3. Query it
 
@@ -132,7 +146,7 @@ python scripts/3_search.py "dismissal letter wording" \
 python scripts/3_search.py "..." --effort minimal
 
 # raw grounding documents instead of a synthesised answer
-python scripts/3_search.py "..." --output-mode extractedData
+python scripts/3_search.py "..." --output-mode extractiveData
 
 # two turns, so you can see context reuse
 python scripts/3_search.py "What is the working time limit?" --follow-up "And the exceptions?"
@@ -156,15 +170,22 @@ Output looks like:
 ```
 pipeline
   ▸ plan       420 ms  in=1,204 out=88  gpt-5.4-mini
-  ▸ search     310 ms  eu-directives-ks  docs=6
+  ▸ search     310 ms  eu-directives-ks [azureBlob]  docs=6
       search: "written statement of employment particulars"
-  ▸ search     290 ms  hr-templates-ks   docs=4
+  ▸ search     290 ms  hr-templates-ks [searchIndex]  docs=4
       search: "written statement template"
       filter: language eq 'en' and doc_type eq 'contract'
+      queryType: semantic
       semantic: hr-semantic
+      hint filter: doc_type eq 'contract'
   ▸ synth      980 ms  in=8,102 out=412  gpt-5.4-mini
   3 subqueries | 10 documents | 9,306 in / 500 out tokens | 2,041 ms wall
 ```
+
+Both knowledge-source kinds render as sources: `KnowledgeBaseActivityRecordType`
+has one member per source kind (`searchIndex`, `azureBlob`, `web`, `file`, …),
+each with its own `<kind>Arguments` object, so a blob source is not an
+unrecognised record.
 
 **One thing to be straight about.** The `activity` array arrives *with* the
 response — agentic retrieval is a single HTTP call and there is no event stream
@@ -186,7 +207,9 @@ server-side view that *is* independent of the response is
   planner is actually buying you.
 - **API version.** Agentic retrieval is GA on `2026-04-01`, but answer
   synthesis, the preview knowledge-source kinds and the token counters in
-  `activity` need `2026-08-01-preview`, which is what the scripts pin.
+  `activity` need `2026-08-01-preview`, which is what the scripts pin. Every
+  payload in this folder was checked against that version's `search.json` in
+  `Azure/azure-rest-api-specs`.
 - **Entra-only auth.** No keys anywhere. `provision_infra.sh` sets
   `--disable-local-auth true` on the search service, which is what actually
   turns keys off — `--auth-options aadOrApiKey` *permits* them and is mutually
@@ -196,8 +219,19 @@ server-side view that *is* independent of the response is
   only on `update` (see `search/custom.py::update_search_service` in azure-cli),
   so the script creates the service and then assigns the identity in a second
   call. Passing it to `create` fails with "unrecognized arguments".
-- **`queryHints` shape.** Documented as filter and boost guidance for query
-  planning; the exact field names in `scripts/2_provision.py` are the piece of
-  this demo I was least able to verify against a live service. If a `PUT` on the
-  search-index knowledge source rejects it, drop `queryHints` — everything else
-  works without it, you just lose planner-chosen metadata filters.
+- **The data plane is OData-addressed.** Every resource path is
+  `/collection('name')`, not `/collection/name` — `/knowledgebases('kb')`,
+  `/knowledgesources('ks')`, `/indexes('idx')`, and document upload at
+  `/indexes('idx')/docs/search.index`. `_common.odata()` does the quoting,
+  including doubling a quote inside a name.
+- **Enum values that don't read the way you'd guess.** `outputMode` is
+  `extractiveData` (not `extractedData`) or `answerSynthesis`. Every entry in
+  `knowledgeSourceParams` needs a `kind` discriminator (`searchIndex`,
+  `azureBlob`, …) alongside `knowledgeSourceName`, and `filterAddOn` exists only
+  on the `searchIndex` variant — `3_search.py` fills the kind in automatically
+  and `--source-kind NAME=KIND` overrides it.
+- **There is no streaming retrieve in this api-version.** The spec defines
+  `KnowledgeBaseRetrievalStreamEvents` and friends, but the definition is
+  empty and `retrieve`'s `Accept` header accepts only
+  `application/json;odata.metadata=minimal`. So the activity array really does
+  arrive with the response, and `--watch` remains the honest "live" view.

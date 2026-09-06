@@ -8,7 +8,7 @@ Flags exist for every dial worth demonstrating:
     --effort minimal|low|medium|auto   how hard the planner works
     --source hr-templates-ks           restrict to one knowledge source
     --filter "doc_type eq 'contract'"  an OData filter added to a source
-    --output-mode extractedData        raw grounding documents, no synthesis
+    --output-mode extractiveData       raw grounding documents, no synthesis
     --follow-up "..."                  a second turn, so you can see the
                                        planner reuse conversation context
 
@@ -36,6 +36,7 @@ def build_request(
     *,
     effort: str,
     sources: list[str],
+    source_kinds: dict[str, str],
     source_filter: str | None,
     output_mode: str,
     max_documents: int,
@@ -54,8 +55,12 @@ def build_request(
     if sources:
         params: list[dict[str, Any]] = []
         for name in sources:
-            entry: dict[str, Any] = {"knowledgeSourceName": name}
-            if source_filter:
+            # `kind` is the required discriminator on KnowledgeSourceParams;
+            # without it the request is rejected. filterAddOn only exists on
+            # the searchIndex variant.
+            kind = source_kinds.get(name, "searchIndex")
+            entry: dict[str, Any] = {"knowledgeSourceName": name, "kind": kind}
+            if source_filter and kind == "searchIndex":
                 # filterAddOn is ANDed with the source's own baseFilter, so a
                 # demo filter narrows rather than replaces the standing one.
                 entry["filterAddOn"] = source_filter
@@ -94,8 +99,11 @@ def main() -> int:
     parser.add_argument("--follow-up", help="a second turn issued after the first answer")
     parser.add_argument("--effort", default="auto", choices=["minimal", "low", "medium", "auto"])
     parser.add_argument("--source", action="append", default=[], help="restrict to a knowledge source (repeatable)")
+    parser.add_argument("--source-kind", action="append", default=[],
+                        help="NAME=KIND for a --source whose kind is not searchIndex (e.g. eu-directives-ks=azureBlob)")
     parser.add_argument("--filter", dest="source_filter", help="OData filter added to the selected sources")
-    parser.add_argument("--output-mode", default="answerSynthesis", choices=["answerSynthesis", "extractedData"])
+    # KnowledgeRetrievalOutputMode: extractiveData | answerSynthesis.
+    parser.add_argument("--output-mode", default="answerSynthesis", choices=["answerSynthesis", "extractiveData"])
     parser.add_argument("--max-documents", type=int, default=8)
     parser.add_argument("--max-references", type=int, default=8)
     parser.add_argument("--json", action="store_true", help="print the raw response and nothing else")
@@ -109,11 +117,18 @@ def main() -> int:
         return 1
 
     client = SearchClient(settings.search_endpoint)
+    # Default the blob source to its real kind so the common case needs no flag.
+    source_kinds = {settings.blob_source: "azureBlob", settings.index_source: "searchIndex"}
+    for pair in args.source_kind:
+        name, _, kind = pair.partition("=")
+        source_kinds[name] = kind or "searchIndex"
+
     turns = [("user", args.query)]
     request = build_request(
         turns,
         effort=args.effort,
         sources=args.source,
+        source_kinds=source_kinds,
         source_filter=args.source_filter,
         output_mode=args.output_mode,
         max_documents=args.max_documents,
@@ -128,7 +143,7 @@ def main() -> int:
             print(f"\033[1mfilter\033[0m {args.source_filter}")
 
     started = time.time()
-    response = client.post(f"/knowledgebases/{settings.knowledge_base}/retrieve", request, timeout=180)
+    response = client.post(f"{settings.kb_path}/retrieve", request, timeout=180)
     wall_ms = int((time.time() - started) * 1000)
 
     args.trace_file.parent.mkdir(parents=True, exist_ok=True)
@@ -157,13 +172,14 @@ def main() -> int:
             turns,
             effort=args.effort,
             sources=args.source,
+            source_kinds=source_kinds,
             source_filter=args.source_filter,
             output_mode=args.output_mode,
             max_documents=args.max_documents,
         )
         print(f"\033[1mfollow-up\033[0m {args.follow_up}")
         started = time.time()
-        response = client.post(f"/knowledgebases/{settings.knowledge_base}/retrieve", request, timeout=180)
+        response = client.post(f"{settings.kb_path}/retrieve", request, timeout=180)
         wall_ms = int((time.time() - started) * 1000)
         print(f"\n\033[1manswer\033[0m\n{extract_answer(response)}")
         render_activity(response.get("activity") or [], wall_ms=wall_ms)

@@ -143,7 +143,8 @@ def maybe_add_knowledge_base(tools: list[dict[str, Any]], notes: list[str]) -> N
         token = DefaultAzureCredential().get_token("https://search.azure.com/.default").token
         api_version = os.environ.get("SEARCH_API_VERSION", "2026-08-01-preview")
         response = requests.get(
-            f"{search_endpoint}/knowledgebases/{kb_name}?api-version={api_version}",
+            # Data-plane resources are OData-addressed: /knowledgebases('name').
+            f"{search_endpoint}/knowledgebases('{kb_name}')?api-version={api_version}",
             headers={"Authorization": f"Bearer {token}"},
             timeout=30,
         )
@@ -156,7 +157,7 @@ def maybe_add_knowledge_base(tools: list[dict[str, Any]], notes: list[str]) -> N
     if not response.ok:
         notes.append(f"  skip knowledge_base              — HTTP {response.status_code} checking for '{kb_name}'")
         return
-    mcp_url = f"{search_endpoint}/knowledgebases/{kb_name}/mcp?api-version={api_version}"
+    mcp_url = f"{search_endpoint}/knowledgebases('{kb_name}')/mcp?api-version={api_version}"
     tools.append(knowledge_base_tool(kb_name, mcp_url))
     notes.append(f"  add  knowledge_base              — Foundry IQ '{kb_name}' as an MCP tool")
 

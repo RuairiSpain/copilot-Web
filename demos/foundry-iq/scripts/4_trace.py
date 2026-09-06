@@ -124,9 +124,7 @@ def live(query: str, effort: str) -> int:
 
     def call() -> None:
         try:
-            result["response"] = client.post(
-                f"/knowledgebases/{settings.knowledge_base}/retrieve", request, timeout=180
-            )
+            result["response"] = client.post(f"{settings.kb_path}/retrieve", request, timeout=180)
         except Exception as err:  # surfaced after the ticker stops
             result["error"] = err
 

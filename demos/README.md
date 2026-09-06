@@ -59,9 +59,17 @@ CLI's own example; `--custom-domain` and `--assign-identity` are real.
 **Verified against Azure OpenAI docs**: the v1 path `{endpoint}/openai/v1/…`
 with the deployment name in the body's `model` field.
 
+**Verified against the search REST spec** (`Azure/azure-rest-api-specs`,
+`search/data-plane/Search/preview/2026-08-01-preview/search.json`): every
+Foundry IQ payload, path and enum. This caught the biggest defect in the set —
+the data plane is OData-addressed (`/knowledgebases('name')`), so every call in
+the folder was hitting a path that does not exist — plus a wrong output-mode
+enum, a missing required `kind` discriminator, and a `queryHints` shape that had
+the wrong key names and omitted the required `fieldValues`.
+
 **Still unverified.** Nothing here has been run against a live subscription —
 this environment has none, and its `cryptography` build is broken so the Azure
-SDKs can't even be imported. Specifically outstanding: the Foundry IQ REST
-payloads (`queryHints` above all), Foundry project creation via ARM, and every
-`azd ai` command line, since neither `az` nor `azd` is installed here. Each is
-flagged in the README where it lives.
+SDKs can't even be imported. What remains outstanding is now narrow: Foundry
+project creation via ARM, and every `azd ai` command line, since neither `az`
+nor `azd` is installed here. Both are flagged in
+[`cli/README.md`](cli/README.md).

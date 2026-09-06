@@ -28,7 +28,7 @@ from typing import Any, Iterable
 
 from azure.identity import DefaultAzureCredential
 
-from _common import API_VERSION, CORPUS_DIR, ConfigError, SearchClient, Settings, dump, embed, fail, load_settings
+from _common import API_VERSION, CORPUS_DIR, ConfigError, SearchClient, Settings, dump, embed, fail, load_settings, odata
 from index_schema import FILTERABLE_METADATA, SEMANTIC_CONFIG, build_index
 
 CHUNK_CHARS = 2000
@@ -142,8 +142,9 @@ def create_index(client: SearchClient, settings: Settings, dimensions: int) -> N
         embedding_model=settings.aoai_embedding_model,
         dimensions=dimensions,
     )
-    dump(f"PUT /indexes/{settings.hr_index}", schema)
-    client.put(f"/indexes/{settings.hr_index}", schema)
+    path = f"/indexes{odata(settings.hr_index)}"
+    dump(f"PUT {path}", schema)
+    client.put(path, schema)
     print(f"  index '{settings.hr_index}' created ({len(schema['fields'])} fields, "
           f"{len(FILTERABLE_METADATA)} filterable metadata fields)")
 
@@ -192,7 +193,12 @@ def upload_hr_documents(client: SearchClient, settings: Settings, credential: De
 
     # The index API caps a batch at 1000 documents; stay well under it.
     for start in range(0, len(documents), 500):
-        client.post(f"/indexes/{settings.hr_index}/docs/index", {"value": documents[start : start + 500]})
+        # The documented action is `docs/search.index`; the OData form is what
+        # the spec defines for this api-version.
+        client.post(
+            f"/indexes{odata(settings.hr_index)}/docs/search.index",
+            {"value": documents[start : start + 500]},
+        )
     print(f"  uploaded {len(documents)} chunks from {len(records)} source documents")
     return len(documents)
 
@@ -263,8 +269,9 @@ def create_blob_knowledge_source(client: SearchClient, settings: Settings) -> No
             },
         },
     }
-    dump(f"PUT /knowledgesources/{settings.blob_source}", payload)
-    client.put(f"/knowledgesources/{settings.blob_source}", payload)
+    path = f"/knowledgesources{odata(settings.blob_source)}"
+    dump(f"PUT {path}", payload)
+    client.put(path, payload)
     print(f"  blob knowledge source created — IQ is generating "
           f"{settings.blob_source}-{{datasource,skillset,index,indexer}}")
 
@@ -295,19 +302,43 @@ def create_index_knowledge_source(client: SearchClient, settings: Settings) -> N
             ],
             # Persistent narrowing applied to every query against this source.
             "baseFilter": "language eq 'en'",
+            # SearchIndexKnowledgeSourceQueryHints: `filters` (not filterHints),
+            # each a SearchIndexKnowledgeSourceFilterHint of
+            # {field, fieldValues, filterInstructions}. `fieldValues` is
+            # required — the planner needs the vocabulary, not just the field
+            # name, to turn "dismissal letters" into an equality filter.
             "queryHints": {
-                "filterHints": [
-                    {"fieldName": "doc_type", "description": "contract, policy, procedure, letter, form or guidance"},
-                    {"fieldName": "tags", "description": "subject tags: working-time, dismissal, leave, pay, equality, health-safety, data-protection"},
-                    {"fieldName": "jurisdiction", "description": "EU or UK"},
-                    {"fieldName": "file_format", "description": "pdf, docx, pptx, markdown, txt"},
+                "filters": [
+                    {
+                        "field": "doc_type",
+                        "fieldValues": ["contract", "policy", "procedure", "letter", "form", "guidance"],
+                        "filterInstructions": "Filter on the kind of document the user is asking for.",
+                    },
+                    {
+                        "field": "tags",
+                        "fieldValues": [
+                            "working-time", "dismissal", "leave", "pay",
+                            "equality", "health-safety", "data-protection",
+                        ],
+                        "filterInstructions": "Filter on subject matter when the question names one.",
+                    },
+                    {
+                        "field": "jurisdiction",
+                        "fieldValues": ["EU", "UK"],
+                        "filterInstructions": "Filter when the question is specific to a jurisdiction.",
+                    },
+                    {
+                        "field": "file_format",
+                        "fieldValues": ["pdf", "docx", "pptx", "markdown", "txt"],
+                        "filterInstructions": "Filter only when the user asks for a particular file format.",
+                    },
                 ],
-                "boostHints": [{"fieldName": "title"}],
             },
         },
     }
-    dump(f"PUT /knowledgesources/{settings.index_source}", payload)
-    client.put(f"/knowledgesources/{settings.index_source}", payload)
+    path = f"/knowledgesources{odata(settings.index_source)}"
+    dump(f"PUT {path}", payload)
+    client.put(path, payload)
     print(f"  search index knowledge source created over '{settings.hr_index}'")
 
 
@@ -343,8 +374,8 @@ def create_knowledge_base(client: SearchClient, settings: Settings, effort: str)
         "retrievalReasoningEffort": {"kind": effort},
         "retrieveDefaults": {"maxRuntimeInSeconds": 45, "maxOutputDocuments": 8, "maxOutputSizeInTokens": 12000},
     }
-    dump(f"PUT /knowledgebases/{settings.knowledge_base}", payload)
-    client.put(f"/knowledgebases/{settings.knowledge_base}", payload)
+    dump(f"PUT {settings.kb_path}", payload)
+    client.put(settings.kb_path, payload)
     print(f"  knowledge base '{settings.knowledge_base}' created over 2 sources")
 
 

@@ -94,6 +94,7 @@ class TestCorpusProcessing(unittest.TestCase):
             )
             self.provision = importlib.util.module_from_spec(spec)
             assert spec.loader is not None
+            sys.modules["provision_mod"] = self.provision
             spec.loader.exec_module(self.provision)
 
     def test_chunks_overlap_and_cover_the_text(self) -> None:
@@ -270,6 +271,96 @@ class TestToolboxSpec(unittest.TestCase):
         self.assertEqual(tool["type"], "mcp")
         self.assertIn(tool["type"], toolbox_spec.TOOLBOX_TOOL_TYPES)
         self.assertIn("knowledge_base_retrieve", tool["server_description"])
+
+
+class TestRestContract(unittest.TestCase):
+    """Pins the request shapes to the 2026-08-01-preview search spec.
+
+    Each assertion here corresponds to a defect found by reading search.json:
+    the data plane is OData-addressed, the output-mode enum is `extractiveData`
+    (not `extractedData`), `KnowledgeSourceParams` has a required `kind`
+    discriminator, and `SearchIndexKnowledgeSourceQueryHints` uses
+    filters/field/fieldValues rather than filterHints/fieldName/description.
+    """
+
+    def setUp(self) -> None:
+        import importlib.util
+
+        def load(name: str, path: str):
+            if name in sys.modules:
+                return sys.modules[name]
+            spec = importlib.util.spec_from_file_location(name, REPO / "demos" / "foundry-iq" / "scripts" / path)
+            module = importlib.util.module_from_spec(spec)
+            assert spec.loader is not None
+            # Register before exec: @dataclass resolves sys.modules[cls.__module__],
+            # which is None for a module that was never registered.
+            sys.modules[name] = module
+            spec.loader.exec_module(module)
+            return module
+
+        self.common = load("iq_common", "_common.py")
+        self.search = load("iq_search", "3_search.py")
+
+    def test_odata_quoting_matches_the_spec_path_shape(self) -> None:
+        # Paths are /collection('name'), not /collection/name.
+        self.assertEqual(self.common.odata("es-employment-kb"), "('es-employment-kb')")
+        # A quote in a name is escaped by doubling, per OData literal rules.
+        self.assertEqual(self.common.odata("o'brien"), "('o''brien')")
+
+    def test_output_mode_uses_the_spec_enum_value(self) -> None:
+        request = self.search.build_request(
+            [("user", "q")], effort="auto", sources=[], source_kinds={},
+            source_filter=None, output_mode="extractiveData", max_documents=8,
+        )
+        self.assertEqual(request["outputMode"], "extractiveData")
+
+    def test_knowledge_source_params_carry_the_required_kind_discriminator(self) -> None:
+        request = self.search.build_request(
+            [("user", "q")], effort="low",
+            sources=["hr-templates-ks", "eu-directives-ks"],
+            source_kinds={"eu-directives-ks": "azureBlob", "hr-templates-ks": "searchIndex"},
+            source_filter="doc_type eq 'letter'", output_mode="answerSynthesis", max_documents=4,
+        )
+        params = {p["knowledgeSourceName"]: p for p in request["knowledgeSourceParams"]}
+        self.assertEqual(params["eu-directives-ks"]["kind"], "azureBlob")
+        self.assertEqual(params["hr-templates-ks"]["kind"], "searchIndex")
+        # filterAddOn exists only on the searchIndex variant.
+        self.assertIn("filterAddOn", params["hr-templates-ks"])
+        self.assertNotIn("filterAddOn", params["eu-directives-ks"])
+
+    def test_include_activity_is_requested_or_the_trace_is_empty(self) -> None:
+        request = self.search.build_request(
+            [("user", "q")], effort="auto", sources=[], source_kinds={},
+            source_filter=None, output_mode="answerSynthesis", max_documents=8,
+        )
+        self.assertIs(request["includeActivity"], True)
+
+
+class TestTraceViewSpecShapes(unittest.TestCase):
+    def test_blob_source_activity_is_rendered_as_a_source_not_an_unknown(self) -> None:
+        record = {
+            "type": "azureBlob", "id": 1, "elapsedMs": 120,
+            "knowledgeSourceName": "eu-directives-ks", "count": 6,
+            "azureBlobArguments": {"search": "working time limit"},
+        }
+        rendered = "\n".join(trace_view.format_record(record))
+        self.assertIn("eu-directives-ks", rendered)
+        self.assertIn("working time limit", rendered)
+        self.assertEqual(trace_view.totals([record])["subqueries"], 1)
+
+    def test_generated_filter_from_query_hints_is_surfaced(self) -> None:
+        # The whole point of queryHints: show what the planner derived.
+        record = {
+            "type": "searchIndex", "id": 2, "elapsedMs": 90,
+            "knowledgeSourceName": "hr-templates-ks", "count": 3,
+            "searchIndexArguments": {"search": "dismissal letter", "queryType": "semantic"},
+            "queryHintProcessing": {"generatedFilter": "doc_type eq 'letter'", "generatedBoost": "title"},
+        }
+        rendered = "\n".join(trace_view.format_record(record))
+        self.assertIn("hint filter", rendered)
+        self.assertIn("doc_type eq 'letter'", rendered)
+        self.assertIn("hint boost", rendered)
+        self.assertIn("semantic", rendered)
 
 
 class TestInventory(unittest.TestCase):
