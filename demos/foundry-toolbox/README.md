@@ -27,6 +27,18 @@ With it, the endpoint advertises **two** meta-tools instead of the catalogue:
 `create_toolbox.py` puts it in by default and warns if you exclude it.
 `call_toolbox.py` shows the two-step routing happening live.
 
+## SDK version
+
+Everything here targets **azure-ai-projects 2.x** (verified against 2.6.0), which
+is where `project.toolboxes`, the `ToolboxToolType` discriminators and the
+`allow_preview` flag live. `requirements.txt` pins `>=2.6.0,<3`.
+
+One caveat on the published SDK snippets: the docs show
+`update(toolbox_name=…)`, `delete_toolbox_version(…)` and
+`list_toolbox_versions(…)`. In 2.6.0 the real methods are `update(name, *,
+default_version)`, `delete_version(name, version)` and `list_versions(name)`.
+Check `dir(project.toolboxes)` rather than the prose.
+
 ## Create the toolbox
 
 ```bash
@@ -45,30 +57,79 @@ python scripts/create_toolbox.py --toolbox hr-tools --via rest
 All three paths send the same declaration from `scripts/toolbox_spec.py`, so
 you can show the SDK call and then show the YAML a platform team would check in.
 
-**Tool types included.** `toolbox_search`, `web_search`, `code_interpreter`,
-`file_search`, `azure_ai_search`, `mcp`, `openapi`, `agent_to_agent`,
-`browser_automation`, `fabric_iq`, `work_iq`, `skills`.
+**Tool types included**, with the exact `ToolboxToolType` discriminators from
+azure-ai-projects 2.6.0:
+
+`toolbox_search` · `web_search` · `code_interpreter` · `file_search` · `shell` ·
+`azure_ai_search` · `mcp` · `openapi` · `a2a` · `browser_automation_preview` ·
+`fabric_iq_preview` · `work_iq_preview` · `web_iq_preview` · `reminder_preview`
+
+### Four names that read naturally and are wrong
+
+These were verified against the SDK enum rather than doc prose, and four of the
+obvious spellings are invalid:
+
+| Reads right | Actually is |
+| --- | --- |
+| `agent_to_agent` | **`a2a`** (also `a2a_preview`) |
+| `browser_automation` | **`browser_automation_preview`** |
+| `fabric_iq` | **`fabric_iq_preview`** |
+| `work_iq` | **`work_iq_preview`** |
+
+And `skills` is **not a tool type at all** — it's a separate `create_version`
+parameter, so pass it with `--skill NAME`.
+
+`create_toolbox.py` validates every emitted `type` against the enum before
+sending anything, so an invented name fails locally instead of as a service
+400. Any `*_preview` type additionally requires
+`AIProjectClient(..., allow_preview=True)`, which the script sets automatically
+when the selection contains one.
+
+### Two shapes that are nested, not flat
+
+```yaml
+- type: azure_ai_search          # NOT flat index_name/top_k
+  azure_ai_search:
+    indexes:
+      - project_connection_id: my-conn
+        index_name: hr-templates-index
+        query_type: vector_semantic_hybrid   # simple | semantic | vector |
+        top_k: 5                             # vector_simple_hybrid | vector_semantic_hybrid
+
+- type: openapi                  # `spec` is the document inline; there is no spec_url
+  openapi:
+    name: demo_openapi
+    spec: { ... }
+    auth: { type: anonymous }
+```
+
+`MCPToolboxTool` is also smaller than it looks: it has **no `require_approval`
+and no `allowed_tools`**. Both belong to the agent-level `MCPTool`, so pinning
+the callable surface of an MCP server happens on the agent that consumes the
+toolbox, not in the toolbox. `server_description` is what steers `tool_search`
+toward an entry.
 
 Most need a connection or a target first. Rather than failing the whole run,
 tools whose prerequisites are missing are **skipped with the reason printed**:
 
 ```
-  add  toolbox_search       — Intent-based tool routing. NOT enabled by default…
-  add  web_search           — Grounded web results.
-  add  azure_ai_search      — Direct index search — you own the index and the query type.
-  skip mcp                  — needs MCP_SERVER_URL
-  skip agent_to_agent       — needs A2A_AGENT_ID
+  add  toolbox_search               — Intent-based tool routing. NOT enabled by default…
+  add  web_search                   — Grounded web results.
+  add  azure_ai_search              — Direct index search — you own the index and the query type.
+  skip mcp                          — needs MCP_SERVER_URL
+  skip a2a                          — needs A2A_BASE_URL
+  skip fabric_iq_preview            — needs FABRIC_CONNECTION_NAME
 ```
 
-Set the variables for the ones you want (`MCP_SERVER_URL`, `OPENAPI_SPEC_URL`,
-`A2A_AGENT_ID`, `FABRIC_CONNECTION_NAME`, …) and re-run, or pass `--require-all`
+Set the variables for the ones you want (`MCP_SERVER_URL`, `OPENAPI_SPEC_FILE`,
+`A2A_BASE_URL`, `FABRIC_CONNECTION_NAME`, …) and re-run, or pass `--require-all`
 to make a missing prerequisite fatal.
 
 **The Foundry IQ knowledge base is added if it exists.** If `SEARCH_ENDPOINT`
 and `KNOWLEDGE_BASE` point at a knowledge base that's really there, it goes in
-as an `mcp` tool with `allowed_tools` pinned to `knowledge_base_retrieve` — a
-knowledge base isn't one of the toolbox's own tool types, but it *is* an MCP
-endpoint, and `mcp` is. If it's absent, it's skipped and nothing else changes.
+as an `mcp` tool — a knowledge base isn't one of the toolbox's own tool types,
+but it *is* an MCP endpoint, and `mcp` is. If it's absent, it's skipped and
+nothing else changes.
 
 ## Watch it route
 
@@ -80,7 +141,7 @@ python scripts/call_toolbox.py --toolbox hr-tools \
 
 Three JSON-RPC calls, each printed:
 
-1. `tools/list` — with tool search on, two tools instead of twelve
+1. `tools/list` — with tool search on, two meta-tools instead of the whole catalogue
 2. `tools/call tool_search` — the ranked candidates, i.e. the routing decision
 3. `tools/call call_tool` — invoking the winner
 

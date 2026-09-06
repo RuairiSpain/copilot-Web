@@ -66,7 +66,8 @@ az cognitiveservices account create \
   -n foundry-demo -g rg-foundry-demo -l swedencentral \
   --kind AIServices --sku S0 \
   --custom-domain foundry-demo \
-  --assign-identity
+  --assign-identity \
+  --yes                       # accepts the RAI terms; without it this prompts
 
 az cognitiveservices account show -n foundry-demo -g rg-foundry-demo \
   --query "{endpoint:properties.endpoint, id:id, mi:identity.principalId}" -o json
@@ -131,12 +132,22 @@ for your model means pick another region, not that the model is gone.
 **Azure AI Search** (knowledge bases, indexes, agentic retrieval):
 
 ```bash
+# create takes no --identity-type; that argument exists only on `update`.
 az search service create -n foundry-demo-search -g rg-foundry-demo \
-  -l swedencentral --sku standard --identity-type SystemAssigned
+  -l swedencentral --sku standard
+
+# assign the managed identity, and turn keys off for real. --disable-local-auth
+# is what makes the service Entra-only; --auth-options aadOrApiKey permits keys
+# as well, and the two are mutually exclusive.
+az search service update -n foundry-demo-search -g rg-foundry-demo \
+  --identity-type SystemAssigned --disable-local-auth true
 
 az search service show -n foundry-demo-search -g rg-foundry-demo \
   --query "{endpoint:join('',['https://',name,'.search.windows.net']), mi:identity.principalId}" -o json
 ```
+
+`--sku` accepts `free basic standard standard2 standard3 storage_optimized_l1
+storage_optimized_l2 serverless` (case-insensitive).
 
 **Storage** (blob knowledge sources):
 
@@ -263,14 +274,38 @@ curl -s -H "Authorization: Bearer $TOKEN" \
   "https://foundry-demo-search.search.windows.net/knowledgebases?api-version=2026-08-01-preview" | jq .
 ```
 
-## What to verify before relying on this
+## Endpoint shapes differ by account kind
 
-Two things here I could not check against a live subscription:
+Worth knowing before you copy values between this file and the demos:
+
+| `--kind` | `properties.endpoint` |
+| --- | --- |
+| `AIServices` (this file) | `https://<custom-domain>.cognitiveservices.azure.com/` |
+| `OpenAI` (`foundry-iq/scripts/provision_infra.sh`) | `https://<custom-domain>.openai.azure.com/` |
+
+Both serve the Azure OpenAI **v1** surface at `{endpoint}/openai/v1/…` with the
+deployment name in the request body's `model` field, which is what
+`foundry-iq/scripts/_common.py` calls. The hostname differs, so don't assume an
+`AOAI_ENDPOINT` copied from one is interchangeable with the other.
+
+## What was verified, and what wasn't
+
+Checked against the azure-cli source (`command_modules/{search,cognitiveservices}`)
+rather than from memory:
+
+- `az cognitiveservices account deployment create` flags match the CLI's own
+  documented example exactly.
+- `--custom-domain` and `--assign-identity` are real arguments on
+  `cognitiveservices account create`.
+- `az search service create` has **no** `--identity-type`; `update` does.
+- `--auth-options` / `--aad-auth-failure-mode` are real on both create and
+  update, and `aadOrApiKey` *requires* an `--aad-auth-failure-mode`.
+
+Still unverified against a live subscription:
 
 - **Project creation** (§2). The `az resource create` path is the generic ARM
   route and the api-version is a placeholder — run the `az provider show` query
   first and use what it returns.
-- **`azd ai` sub-command flags** beyond the ones shown in the toolbox docs.
-  `azd ai <group> --help` is authoritative over this file.
-
-Everything else is either standard `az` or taken from the Foundry docs.
+- **`azd ai` sub-command flags.** Neither `az` nor `azd` is installed in the
+  environment this was written in, so the `azd ai` lines come from the Foundry
+  docs. `azd ai <group> --help` is authoritative over this file.

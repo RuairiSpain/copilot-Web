@@ -11,6 +11,7 @@ degradation and Markdown rendering.
 
 from __future__ import annotations
 
+import os
 import sys
 import types
 import unittest
@@ -36,6 +37,7 @@ if "azure.identity" not in sys.modules:
     sys.modules["azure.identity"] = identity
 
 import inventory  # noqa: E402
+import toolbox_spec  # noqa: E402
 import trace_view  # noqa: E402
 from index_schema import FILTERABLE_METADATA, SEMANTIC_CONFIG, VECTOR_PROFILE, build_index  # noqa: E402
 
@@ -166,6 +168,68 @@ class TestTraceView(unittest.TestCase):
 
 
 class TestToolboxSpec(unittest.TestCase):
+    """Guards the tool declarations against the real SDK contract.
+
+    Every check here exists because the natural-reading name was wrong:
+    `agent_to_agent`, `browser_automation`, `fabric_iq`, `work_iq` and a
+    `skills` tool type were all plausible and all invalid. These assertions are
+    what stops that class of mistake coming back.
+    """
+
+    def setUp(self) -> None:
+        os.environ.setdefault("AI_SEARCH_CONNECTION_ID", "conn-test")
+        os.environ.setdefault("AI_SEARCH_INDEX", "idx-test")
+
+    def test_every_catalogue_type_is_a_real_ToolboxToolType(self) -> None:
+        for entry in toolbox_spec.CATALOGUE:
+            with self.subTest(tool=entry["id"]):
+                self.assertIn(entry["payload"]["type"], toolbox_spec.TOOLBOX_TOOL_TYPES)
+
+    def test_the_names_that_read_naturally_are_the_wrong_ones(self) -> None:
+        for invented in ("agent_to_agent", "browser_automation", "fabric_iq", "work_iq", "skills"):
+            with self.subTest(invented=invented):
+                self.assertNotIn(invented, toolbox_spec.TOOLBOX_TOOL_TYPES)
+        for real in ("a2a", "browser_automation_preview", "fabric_iq_preview", "work_iq_preview"):
+            with self.subTest(real=real):
+                self.assertIn(real, toolbox_spec.TOOLBOX_TOOL_TYPES)
+
+    def test_skills_is_a_create_version_parameter_not_a_tool(self) -> None:
+        self.assertNotIn("skills", {e["payload"]["type"] for e in toolbox_spec.CATALOGUE})
+        body = create_toolbox.body_for("d", [{"type": "web_search"}], ["my-skill"])
+        self.assertEqual(body["skills"], ["my-skill"])
+        # Absent rather than empty when no skills are requested.
+        self.assertNotIn("skills", create_toolbox.body_for("d", [{"type": "web_search"}], []))
+
+    def test_mcp_toolbox_tools_carry_no_agent_level_fields(self) -> None:
+        # require_approval and allowed_tools exist on MCPTool, not MCPToolboxTool.
+        mcp = next(e["payload"] for e in toolbox_spec.CATALOGUE if e["id"] == "mcp")
+        kb = toolbox_spec.knowledge_base_tool("kb", "https://s/kb/mcp")
+        for payload in (mcp, kb):
+            self.assertNotIn("require_approval", payload)
+            self.assertNotIn("allowed_tools", payload)
+
+    def test_azure_ai_search_payload_is_nested_under_its_own_key(self) -> None:
+        tools, _ = create_toolbox.select_tools(only=["azure_ai_search"], skip=[], require_all=False)
+        self.assertEqual(len(tools), 1)
+        index = tools[0]["azure_ai_search"]["indexes"][0]
+        self.assertEqual(index["index_name"], "idx-test")
+        self.assertEqual(index["query_type"], "vector_semantic_hybrid")
+        # A flat index_name would be silently ignored by the service.
+        self.assertNotIn("index_name", tools[0])
+
+    def test_validate_rejects_an_invented_type(self) -> None:
+        with self.assertRaises(SystemExit):
+            create_toolbox.validate([{"type": "agent_to_agent"}])
+        create_toolbox.validate([{"type": "a2a"}])  # must not raise
+
+    def test_preview_tools_are_detected_so_allow_preview_gets_set(self) -> None:
+        self.assertTrue(create_toolbox.uses_preview([{"type": "fabric_iq_preview"}]))
+        self.assertFalse(create_toolbox.uses_preview([{"type": "web_search"}]))
+
+    def test_connection_ids_are_found_at_any_depth(self) -> None:
+        tools, _ = create_toolbox.select_tools(only=["azure_ai_search"], skip=[], require_all=False)
+        self.assertEqual(create_toolbox.connection_ids(tools), ["conn-test"])
+
     def test_tool_search_is_included_and_flagged(self) -> None:
         tools, _ = create_toolbox.select_tools(only=[], skip=[], require_all=False)
         self.assertIn("toolbox_search", [t["type"] for t in tools])
@@ -179,25 +243,33 @@ class TestToolboxSpec(unittest.TestCase):
         with self.assertRaises(SystemExit):
             create_toolbox.select_tools(only=["mcp"], skip=[], require_all=True)
 
-    def test_unresolved_placeholders_are_pruned_not_sent_empty(self) -> None:
-        resolved = create_toolbox.prune_empty(create_toolbox.resolve({"a": "${NOT_SET_ANYWHERE}", "b": "kept"}))
-        self.assertEqual(resolved, {"b": "kept"})
+    def test_unresolved_placeholders_are_pruned_recursively(self) -> None:
+        pruned = create_toolbox.prune_empty(
+            create_toolbox.resolve({"a": "${NOT_SET_ANYWHERE}", "b": "kept", "n": {"c": "${ALSO_NOT_SET}", "d": 1}})
+        )
+        self.assertEqual(pruned, {"b": "kept", "n": {"d": 1}})
 
     def test_yaml_round_trips_through_a_real_parser(self) -> None:
         try:
             import yaml  # type: ignore[import-not-found]
         except ImportError:
             self.skipTest("PyYAML not installed")
-        tools, _ = create_toolbox.select_tools(only=["toolbox_search", "web_search"], skip=[], require_all=False)
-        parsed = yaml.safe_load(create_toolbox.to_yaml("A toolbox: with a colon", tools, ["conn-1"]))
+        tools, _ = create_toolbox.select_tools(
+            only=["toolbox_search", "web_search", "azure_ai_search"], skip=[], require_all=False
+        )
+        parsed = yaml.safe_load(create_toolbox.to_yaml("A toolbox: with a colon", tools, ["conn-test"], ["sk"]))
         self.assertEqual(parsed["description"], "A toolbox: with a colon")
-        self.assertEqual(parsed["connections"], [{"name": "conn-1"}])
-        self.assertEqual([t["type"] for t in parsed["tools"]], ["toolbox_search", "web_search"])
+        self.assertEqual(parsed["connections"], [{"name": "conn-test"}])
+        self.assertEqual(parsed["skills"], ["sk"])
+        self.assertEqual([t["type"] for t in parsed["tools"]], ["toolbox_search", "web_search", "azure_ai_search"])
+        # The nested block must survive the hand-rolled emitter intact.
+        self.assertEqual(parsed["tools"][2]["azure_ai_search"]["indexes"][0]["top_k"], 5)
 
-    def test_knowledge_base_tool_pins_the_allowed_tool(self) -> None:
-        tool = create_toolbox.knowledge_base_tool("es-employment-kb", "https://s.search.windows.net/kb/mcp")
+    def test_knowledge_base_tool_is_a_valid_mcp_entry(self) -> None:
+        tool = toolbox_spec.knowledge_base_tool("es-employment-kb", "https://s.search.windows.net/kb/mcp")
         self.assertEqual(tool["type"], "mcp")
-        self.assertEqual(tool["allowed_tools"], ["knowledge_base_retrieve"])
+        self.assertIn(tool["type"], toolbox_spec.TOOLBOX_TOOL_TYPES)
+        self.assertIn("knowledge_base_retrieve", tool["server_description"])
 
 
 class TestInventory(unittest.TestCase):

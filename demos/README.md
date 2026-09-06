@@ -36,17 +36,32 @@ YAML emitter (round-tripped through PyYAML), tool selection, and the inventory's
 Markdown rendering. `azure.identity` is stubbed at import, so the tests never
 authenticate and never reach Azure.
 
-## Honesty about what's verified
+## What's verified, and how
 
-The scripts were written against the current Foundry and Azure AI Search
-documentation, and the payload shapes come from those docs rather than from
-memory. **They have not been run against a live Azure subscription** — this
-environment has none, and its Python can't even load `azure-identity`. What
-*was* verified here: every module compiles, the pure-logic paths are unit
-tested, and the YAML emitter round-trips through a real parser.
+A review pass checked the SDK and CLI surfaces against their **source**, not
+against documentation prose — and doc prose turned out to be wrong in several
+places.
 
-The two places most likely to need adjustment on first contact are called out
-where they live: `queryHints` on the search-index knowledge source
-([`foundry-iq/README.md`](foundry-iq/README.md)), and project creation plus
-`azd ai` flags ([`cli/README.md`](cli/README.md)). Both sections say what to
-check and what to do if the shape has moved.
+**Verified against `azure-ai-projects` 2.6.0** (wheel downloaded and
+introspected): the `project.toolboxes` operations group and its real method
+names, every `ToolboxToolType` discriminator, the field set of each
+`*ToolboxTool` model, the `allow_preview` client flag, and
+`AzureAISearchQueryType`. This caught four invalid tool-type names, an invented
+one, two payloads that are nested rather than flat, and two fields that don't
+exist on the toolbox variant of the MCP tool. `demos/tests` now asserts all of
+it so the mistake can't come back.
+
+**Verified against the azure-cli source** (`command_modules/{search,cognitiveservices}`):
+`az search service create` takes no `--identity-type`; `--disable-local-auth` is
+what makes a search service Entra-only; the deployment-create flags match the
+CLI's own example; `--custom-domain` and `--assign-identity` are real.
+
+**Verified against Azure OpenAI docs**: the v1 path `{endpoint}/openai/v1/…`
+with the deployment name in the body's `model` field.
+
+**Still unverified.** Nothing here has been run against a live subscription —
+this environment has none, and its `cryptography` build is broken so the Azure
+SDKs can't even be imported. Specifically outstanding: the Foundry IQ REST
+payloads (`queryHints` above all), Foundry project creation via ARM, and every
+`azd ai` command line, since neither `az` nor `azd` is installed here. Each is
+flagged in the README where it lives.

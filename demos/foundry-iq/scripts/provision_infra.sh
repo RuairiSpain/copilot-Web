@@ -63,17 +63,24 @@ STORAGE_ID=$(az storage account show -n "$STORAGE" -g "$RESOURCE_GROUP" --query 
 az storage container create --name "$CONTAINER" --account-name "$STORAGE" --auth-mode login -o none
 
 echo "==> search service $SEARCH ($SEARCH_SKU)"
+# `az search service create` has no --identity-type; identity_type exists only
+# on `update` (see azure-cli search/custom.py::update_search_service), so the
+# managed identity is assigned in a second call.
 az search service create -n "$SEARCH" -g "$RESOURCE_GROUP" -l "$LOCATION" \
-  --sku "$SEARCH_SKU" --identity-type SystemAssigned -o none
-# Entra-only: disable API keys so the demo can't silently fall back to them.
+  --sku "$SEARCH_SKU" -o none
+# --disable-local-auth true is what actually makes this Entra-only. The
+# alternative, --auth-options aadOrApiKey, *permits* API keys as well and is
+# mutually exclusive with --disable-local-auth.
 az search service update -n "$SEARCH" -g "$RESOURCE_GROUP" \
-  --auth-options aadOrApiKey --aad-auth-failure-mode http401WithBearerChallenge -o none || true
+  --identity-type SystemAssigned --disable-local-auth true -o none
 SEARCH_ID=$(az search service show -n "$SEARCH" -g "$RESOURCE_GROUP" --query id -o tsv)
 SEARCH_MI=$(az search service show -n "$SEARCH" -g "$RESOURCE_GROUP" --query identity.principalId -o tsv)
 
 echo "==> azure openai $AOAI"
+# --yes accepts the responsible-AI terms; without it the command prompts and
+# an unattended run hangs.
 az cognitiveservices account create -n "$AOAI" -g "$RESOURCE_GROUP" -l "$LOCATION" \
-  --kind OpenAI --sku S0 --custom-domain "$AOAI" --assign-identity -o none
+  --kind OpenAI --sku S0 --custom-domain "$AOAI" --assign-identity --yes -o none
 AOAI_ENDPOINT=$(az cognitiveservices account show -n "$AOAI" -g "$RESOURCE_GROUP" --query properties.endpoint -o tsv)
 AOAI_ID=$(az cognitiveservices account show -n "$AOAI" -g "$RESOURCE_GROUP" --query id -o tsv)
 

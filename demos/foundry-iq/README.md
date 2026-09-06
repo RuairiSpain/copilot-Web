@@ -187,9 +187,15 @@ server-side view that *is* independent of the response is
 - **API version.** Agentic retrieval is GA on `2026-04-01`, but answer
   synthesis, the preview knowledge-source kinds and the token counters in
   `activity` need `2026-08-01-preview`, which is what the scripts pin.
-- **Entra-only auth.** No keys anywhere; `provision_infra.sh` assigns the roles,
-  including the search service's own managed identity for blob read and for the
-  query-time vectorizer.
+- **Entra-only auth.** No keys anywhere. `provision_infra.sh` sets
+  `--disable-local-auth true` on the search service, which is what actually
+  turns keys off — `--auth-options aadOrApiKey` *permits* them and is mutually
+  exclusive with it. It also assigns the roles, including the search service's
+  own managed identity for blob read and for the query-time vectorizer.
+- **`az search service create` has no `--identity-type`.** That argument exists
+  only on `update` (see `search/custom.py::update_search_service` in azure-cli),
+  so the script creates the service and then assigns the identity in a second
+  call. Passing it to `create` fails with "unrecognized arguments".
 - **`queryHints` shape.** Documented as filter and boost guidance for query
   planning; the exact field names in `scripts/2_provision.py` are the piece of
   this demo I was least able to verify against a live service. If a `PUT` on the
