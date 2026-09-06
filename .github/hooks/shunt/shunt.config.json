@@ -1,0 +1,16 @@
+{
+  "minLines": 800,
+  "modes": ["autopilot", "automation"],
+  "maxBytes": 400000,
+  "timeoutMs": 120000,
+  "exclude": [
+    "src/auth.ts",
+    "src/lib/crypto.ts",
+    "src/server/env.ts",
+    "src/server/permission-modes.ts",
+    "**/.env*",
+    "**/*.pem",
+    "**/*.key",
+    "infra/**/*.parameters.json"
+  ]
+}
