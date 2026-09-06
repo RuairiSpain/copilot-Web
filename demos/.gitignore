@@ -1,0 +1,8 @@
+# Fetched corpora and query traces are outputs, not sources.
+foundry-iq/corpus/
+foundry-iq/.trace/
+foundry-toolbox/toolbox.yaml
+foundry-toolbox/inventory.md
+**/__pycache__/
+*.pyc
+.env

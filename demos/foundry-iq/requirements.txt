@@ -1,0 +1,17 @@
+# Core: every script needs these.
+azure-identity>=1.25,<2
+requests>=2.32,<3
+
+# Step 3 of provisioning uploads the directives to blob storage.
+azure-storage-blob>=12.30,<13
+
+# Text extraction for the HR index. Without these, binary formats are skipped
+# with a message rather than silently dropped.
+pypdf>=5.1
+python-docx>=1.1
+python-pptx>=1.0
+
+# Note: azure-search-documents is deliberately NOT required. Foundry IQ's
+# knowledge base, knowledge source and retrieve surfaces are called over REST
+# with an Entra token, so the demo shows the real payloads rather than an SDK
+# abstraction over them.

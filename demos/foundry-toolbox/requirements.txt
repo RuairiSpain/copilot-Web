@@ -1,0 +1,15 @@
+azure-identity>=1.25,<2
+requests>=2.32,<3
+
+# Only needed for `create_toolbox.py --via sdk`. The --via yaml and --via rest
+# paths have no SDK dependency.
+#
+# Pinned to 2.x deliberately. The toolbox surface used here — the
+# `project.toolboxes` operations group, the `ToolboxToolType` discriminators,
+# and the `allow_preview` client flag — is the 2.x shape. Verified against
+# 2.6.0; 1.x does not have it.
+azure-ai-projects>=2.6.0,<3
+
+# Used by the tests to round-trip the emitted YAML through a real parser, and
+# by create_toolbox.py when OPENAPI_SPEC_FILE is YAML rather than JSON.
+PyYAML>=6.0,<7
