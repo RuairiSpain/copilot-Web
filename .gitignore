@@ -16,3 +16,10 @@ infra/**/*.local.json
 /playwright-report
 /test-results
 /blob-report
+
+# jev-byom (Python service)
+__pycache__/
+*.pyc
+.pytest_cache/
+/jev-byom/.venv
+/jev-byom/.calibration

@@ -1,0 +1,11 @@
+[tool.pytest.ini_options]
+# `jev-byom/` itself is the import root: `app.*` and `config.*` resolve the same
+# way they do in the container, where /app holds both packages.
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+filterwarnings = ["error::DeprecationWarning:app.*", "error::DeprecationWarning:config.*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
