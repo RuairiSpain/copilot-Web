@@ -40,6 +40,8 @@ jobs:
         if: matrix.torch == 'with-torch'
         run: pip install --index-url https://download.pytorch.org/whl/cpu torch==2.14.0
 
+      - run: ruff check .
+
       - run: pytest -q
 
   image:

@@ -3,3 +3,4 @@
 
 pytest==9.1.1
 httpx==0.28.1   # required by fastapi.testclient
+ruff==0.16.8   # lint config lives in pyproject.toml

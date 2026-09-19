@@ -10,12 +10,16 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import numpy as np
 import pytest
 
-from app.calibration import IsotonicCalibrator, NumericCalibrator, TemperatureScaler, fit_numeric_bins
+from app.calibration import (
+    IsotonicCalibrator,
+    TemperatureScaler,
+    fit_numeric_bins,
+)
 from app.calibration_registry import (
     CalibrationMismatchError,
     CalibrationRegistry,

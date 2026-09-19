@@ -254,7 +254,7 @@ class Settings(BaseSettings):
     service_name: str = Field(default="jev-byom", description="Name used in logs.")
 
     @model_validator(mode="after")
-    def _check_consistency(self) -> "Settings":
+    def _check_consistency(self) -> Settings:
         if self.temperature_min >= self.temperature_max:
             raise ValueError("JEV_TEMPERATURE_MIN must be below JEV_TEMPERATURE_MAX")
         if not (self.temperature_min <= self.temperature_init <= self.temperature_max):

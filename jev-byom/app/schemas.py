@@ -82,7 +82,7 @@ class PosthocTrainRequest(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _check_type_specific(self) -> "PosthocTrainRequest":
+    def _check_type_specific(self) -> PosthocTrainRequest:
         if self.decision_type != "enum" and self.class_names:
             raise ValueError("class_names is only meaningful for enum scenarios")
         if self.class_names is not None:

@@ -9,3 +9,11 @@ filterwarnings = ["error::DeprecationWarning:app.*", "error::DeprecationWarning:
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+
+[tool.ruff.lint]
+# Pyflakes, pycodestyle, import order, pyupgrade, bugbear. The style rules that
+# would only churn the diff are left out deliberately.
+select = ["E", "F", "I", "UP", "B"]
+# `timezone.utc` reads the same on 3.10, which is one fewer reason a copy of
+# this service fails to start somewhere.
+ignore = ["UP017", "E501"]

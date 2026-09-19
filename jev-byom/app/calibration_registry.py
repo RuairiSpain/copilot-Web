@@ -26,10 +26,11 @@ import threading
 import time
 import uuid
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from app.calibration import IsotonicCalibrator, NumericCalibrator, TemperatureScaler
 from config.settings import Settings, get_settings

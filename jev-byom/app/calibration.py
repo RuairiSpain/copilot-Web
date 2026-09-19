@@ -23,28 +23,29 @@ from blob storage can never execute code.
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import Any
 
 import numpy as np
 
 __all__ = [
-    "TemperatureScaler",
     "IsotonicCalibrator",
     "NumericCalibrator",
-    "softmax",
+    "TemperatureScaler",
+    "accuracy",
+    "apply_isotonic",
+    "brier_score",
+    "coverage",
+    "expected_calibration_error",
     "expected_index_score",
-    "fit_temperature",
-    "fit_temperature_numeric",
     "fit_isotonic",
     "fit_numeric_bins",
-    "apply_isotonic",
-    "negative_log_likelihood",
-    "brier_score",
-    "expected_calibration_error",
-    "accuracy",
+    "fit_temperature",
+    "fit_temperature_numeric",
     "mean_absolute_error",
-    "coverage",
+    "negative_log_likelihood",
+    "softmax",
 ]
 
 _EPS = 1e-12
@@ -101,7 +102,7 @@ class TemperatureScaler:
         return {"temperature": float(self.temperature)}
 
     @classmethod
-    def from_dict(cls, payload: dict[str, Any]) -> "TemperatureScaler":
+    def from_dict(cls, payload: dict[str, Any]) -> TemperatureScaler:
         return cls(temperature=float(payload["temperature"]))
 
 
@@ -133,7 +134,7 @@ def _lbfgs_minimise(
     )
     optimiser = torch.optim.LBFGS([param], lr=lr, max_iter=max_iter)
 
-    def closure() -> "torch.Tensor":
+    def closure() -> torch.Tensor:
         optimiser.zero_grad()
         temperature = torch.exp(param.clamp(log_lower, log_upper))
         loss = loss_fn(temperature)
@@ -285,7 +286,7 @@ class IsotonicCalibrator:
             raise ValueError("isotonic breakpoints must come in pairs")
         if not self.x:
             raise ValueError("isotonic calibrator needs at least one breakpoint")
-        if any(b < a for a, b in zip(self.x, self.x[1:])):
+        if any(b < a for a, b in zip(self.x, self.x[1:], strict=False)):
             raise ValueError("isotonic x breakpoints must be non-decreasing")
 
     def predict(self, probs: np.ndarray) -> np.ndarray:
@@ -300,7 +301,7 @@ class IsotonicCalibrator:
         return {"x": [float(v) for v in self.x], "y": [float(v) for v in self.y]}
 
     @classmethod
-    def from_dict(cls, payload: dict[str, Any]) -> "IsotonicCalibrator":
+    def from_dict(cls, payload: dict[str, Any]) -> IsotonicCalibrator:
         return cls(x=tuple(float(v) for v in payload["x"]), y=tuple(float(v) for v in payload["y"]))
 
 
@@ -431,7 +432,7 @@ class NumericCalibrator:
         }
 
     @classmethod
-    def from_dict(cls, payload: dict[str, Any]) -> "NumericCalibrator":
+    def from_dict(cls, payload: dict[str, Any]) -> NumericCalibrator:
         return cls(
             edges=tuple(float(v) for v in payload["edges"]),
             centers=tuple(float(v) for v in payload["centers"]),
@@ -590,7 +591,7 @@ def expected_calibration_error(
 
     edges = np.linspace(0.0, 1.0, num_bins + 1)
     total = 0.0
-    for lower, upper in zip(edges[:-1], edges[1:]):
+    for lower, upper in zip(edges[:-1], edges[1:], strict=False):
         mask = (confidences > lower) & (confidences <= upper)
         if lower == 0.0:
             mask |= confidences == 0.0

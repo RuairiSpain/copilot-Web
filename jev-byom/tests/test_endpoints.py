@@ -9,7 +9,8 @@ which is what makes the assertions repeatable.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Iterator
+from collections.abc import Iterator
+from typing import Any
 
 import numpy as np
 import pytest
@@ -51,7 +52,7 @@ def classification_payload(
     targets = _model_argmax(payloads, num_classes)
     rng = np.random.default_rng(seed)
     rows = []
-    for payload, target in zip(payloads, targets):
+    for payload, target in zip(payloads, targets, strict=True):
         index = int(target)
         if rng.random() < noise:
             index = int(rng.integers(0, num_classes))
@@ -77,7 +78,7 @@ def numeric_payload(*, seed: int = 0, prefix: str = "quote") -> list[dict[str, A
     # the case binned calibration is not needed for.
     values = 100.0 + 50.0 * score**3 + rng.normal(0.0, 2.0, size=score.shape)
     return [
-        {"input": payload, "label": float(value)} for payload, value in zip(payloads, values)
+        {"input": payload, "label": float(value)} for payload, value in zip(payloads, values, strict=True)
     ]
 
 
@@ -321,7 +322,7 @@ def threshold_payload(positive_quantile: float, *, prefix: str = "case") -> list
     cutoff = float(np.quantile(scores, positive_quantile))
     return [
         {"input": payload, "label": bool(score >= cutoff)}
-        for payload, score in zip(payloads, scores)
+        for payload, score in zip(payloads, scores, strict=True)
     ]
 
 
