@@ -297,3 +297,115 @@ def test_local_store_lists_only_matching_keys(tmp_path: Path):
     local.write_json("calibration/a/boolean/latest.json", {"version": "v"})
     local.write_json("other/thing.json", {})
     assert list(local.list_keys("calibration/")) == ["calibration/a/boolean/latest.json"]
+
+
+# ----------------------------------------------------------------------------
+# Blob store: the call shape, against a stub container client
+# ----------------------------------------------------------------------------
+class StubContainerClient:
+    """Records what the store asks of a ContainerClient."""
+
+    url = "https://example.blob.core.windows.net/jev-calibration"
+
+    def __init__(self) -> None:
+        self.uploads: list[dict[str, Any]] = []
+        self.blobs: dict[str, bytes] = {}
+
+    def create_container(self) -> None:
+        from azure.core.exceptions import ResourceExistsError
+
+        raise ResourceExistsError("already there")
+
+    def upload_blob(self, **kwargs: Any) -> None:
+        self.uploads.append(kwargs)
+        self.blobs[kwargs["name"]] = kwargs["data"]
+
+    def download_blob(self, key: str, encoding: str | None = None):
+        from azure.core.exceptions import ResourceNotFoundError
+
+        if key not in self.blobs:
+            raise ResourceNotFoundError(key)
+        payload = self.blobs[key]
+
+        class _Downloader:
+            def readall(self_inner):
+                return payload.decode(encoding) if encoding else payload
+
+        return _Downloader()
+
+    def list_blobs(self, name_starts_with: str = ""):
+        from types import SimpleNamespace
+
+        for name in sorted(self.blobs):
+            if name.startswith(name_starts_with):
+                yield SimpleNamespace(name=name)
+
+
+@pytest.fixture
+def blob_store(settings: Settings):
+    from app.calibration_registry import BlobObjectStore
+
+    stub = StubContainerClient()
+    store = BlobObjectStore(container_name="jev-calibration", container_client=stub)
+    return store, stub
+
+
+def test_blob_upload_sets_the_stored_content_type(blob_store):
+    """A bare `content_type=` kwarg would leave the blob application/octet-stream.
+
+    azure-storage-blob reads the blob's own Content-Type from
+    `content_settings`; anything else is swallowed as a request option, so this
+    pins the kwarg rather than trusting it.
+    """
+    from azure.storage.blob import ContentSettings
+
+    store, stub = blob_store
+    store.write_json("calibration/a/boolean/latest.json", {"version": "v1"})
+
+    assert len(stub.uploads) == 1
+    upload = stub.uploads[0]
+    assert upload["overwrite"] is True
+    assert "content_type" not in upload
+    assert isinstance(upload["content_settings"], ContentSettings)
+    assert upload["content_settings"].content_type == "application/json"
+
+
+def test_blob_store_round_trips_json(blob_store):
+    store, _ = blob_store
+    store.write_json("calibration/a/boolean/latest.json", {"version": "v1"})
+    assert store.read_json("calibration/a/boolean/latest.json") == {"version": "v1"}
+    assert store.read_json("calibration/missing.json") is None
+    assert list(store.list_keys("calibration/")) == ["calibration/a/boolean/latest.json"]
+    assert store.description.startswith("blob:")
+
+
+def test_blob_store_tolerates_an_existing_container(settings: Settings):
+    """create_container raising ResourceExistsError is the normal restart path."""
+    from app.calibration_registry import BlobObjectStore
+
+    BlobObjectStore(
+        container_name="jev-calibration",
+        container_client=StubContainerClient(),
+        create_container=True,
+    )
+
+
+def test_blob_store_needs_somewhere_to_connect(settings: Settings):
+    from app.calibration_registry import BlobObjectStore
+
+    with pytest.raises(RegistryError):
+        BlobObjectStore(container_name="jev-calibration")
+
+
+def test_a_registry_on_the_blob_store_behaves_the_same(blob_store, settings: Settings):
+    """The version pointer and bundle round-trip do not depend on the store."""
+    store, _ = blob_store
+    registry = CalibrationRegistry(store, settings)
+    version = _save_classification(registry, "loan", "boolean", temperature=2.25)
+
+    registry.clear_cache()
+    bundle = registry.load_calibration("loan", "boolean")
+    assert bundle is not None
+    assert bundle.version == version
+    assert bundle.temperature.temperature == pytest.approx(2.25)
+    assert [row["scenario"] for row in registry.list_scenarios()] == ["loan"]

@@ -340,7 +340,7 @@ request/response, and `/openapi.json` for discovery).
 
 ```bash
 pip install -r requirements-dev.txt
-pytest                      # 107 tests, no network, no Azure, no weights
+pytest                      # 112 tests, no network, no Azure, no weights
 pytest tests/test_calibration.py -v
 
 # Optional: exercise the real transformers backend against a tiny checkpoint.
@@ -358,7 +358,9 @@ real FastAPI wiring without downloading anything. What it covers:
   metric against a hand-computed value.
 - **Registry** — version pointers, rollback, dangling pointers, cache hits,
   scoped invalidation, TTL and size bounds, class-count mismatches, path
-  traversal.
+  traversal, and the blob store's call shape against a stub container client
+  (including the `content_settings` that decides a stored artifact's
+  Content-Type).
 - **Endpoints** — all three decision types trained and queried end to end,
   scenario switching, retraining, survival across a restart, auth, and every
   error path.

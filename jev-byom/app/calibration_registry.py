@@ -125,24 +125,37 @@ class BlobObjectStore(ObjectStore):
         connection_string: str | None = None,
         account_url: str | None = None,
         create_container: bool = True,
+        container_client: Any | None = None,
     ) -> None:
+        """Build a store from a connection string, an account URL, or a client.
+
+        ``container_client`` lets a caller that already holds a configured
+        ``ContainerClient`` — a SAS-scoped one, or a stub in a test — pass it
+        straight in instead of having one constructed here.
+        """
         from azure.core.exceptions import ResourceExistsError
-        from azure.storage.blob import BlobServiceClient
 
-        if connection_string:
-            service = BlobServiceClient.from_connection_string(connection_string)
-        elif account_url:
-            from azure.identity import DefaultAzureCredential
+        if container_client is not None:
+            service_url = account_url or getattr(container_client, "url", "")
+        elif connection_string or account_url:
+            from azure.storage.blob import BlobServiceClient
 
-            service = BlobServiceClient(
-                account_url=account_url, credential=DefaultAzureCredential()
-            )
+            if connection_string:
+                service = BlobServiceClient.from_connection_string(connection_string)
+            else:
+                from azure.identity import DefaultAzureCredential
+
+                service = BlobServiceClient(
+                    account_url=account_url, credential=DefaultAzureCredential()
+                )
+            container_client = service.get_container_client(container_name)
+            service_url = account_url or service.url
         else:
             raise RegistryError("BlobObjectStore needs a connection string or an account URL")
 
-        self._container = service.get_container_client(container_name)
+        self._container = container_client
         self._container_name = container_name
-        self._account_url = account_url or service.url
+        self._account_url = service_url
         if create_container:
             try:
                 self._container.create_container()
@@ -160,12 +173,18 @@ class BlobObjectStore(ObjectStore):
             return None
 
     def write_json(self, key: str, payload: dict[str, Any]) -> None:
+        from azure.storage.blob import ContentSettings
+
         body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+        # The blob's stored Content-Type comes from content_settings. A bare
+        # `content_type=` kwarg is swallowed as a request option: it sets the
+        # header on the PUT and leaves the blob itself application/octet-stream,
+        # which is what the portal preview and any external reader would see.
         self._container.upload_blob(
             name=key,
             data=body,
             overwrite=True,
-            content_type="application/json",
+            content_settings=ContentSettings(content_type="application/json"),
         )
 
     def list_keys(self, prefix: str) -> Iterable[str]:
