@@ -113,6 +113,38 @@ def test_boolean_train_reports_what_it_fitted(trained_boolean: dict[str, Any]):
     assert body["duration_ms"] >= 0
 
 
+def test_isotonic_min_samples_is_checked_per_class_not_per_dataset(
+    client: TestClient, model, registry
+):
+    """JEV_ISOTONIC_MIN_SAMPLES (default 8) documents a per-class floor: a rare
+    class with fewer positives than that must keep its temperature-scaled
+    probability even when the overall training set is large."""
+    payloads = _inputs(count=200, prefix="rare")
+    rows = [{"input": payload, "label": False} for payload in payloads]
+    for index in range(3):  # 3 positives, below the default floor of 8
+        rows[index]["label"] = True
+    response = client.post(
+        "/posthoc_train",
+        json={"decision_type": "boolean", "scenario": "rare-class", "training_data": rows},
+    )
+    assert response.status_code == 200, response.text
+
+    bundle = registry.load_calibration("rare-class", "boolean")
+    assert bundle is not None and bundle.isotonic is not None
+    assert bundle.isotonic[1] is None, "the 3-positive class must not get an isotonic fit"
+    # The majority class is the same fit mirrored -- 197 positives against 3
+    # negatives is just as thin a curve -- so it falls back too.
+    assert bundle.isotonic[0] is None, "the 3-negative class must not get one either"
+
+    # The scenario still decides, on the temperature-scaled probabilities.
+    body = client.post(
+        "/decision",
+        json={"decision_type": "boolean", "scenario": "rare-class", "data": {"text": "rare 1"}},
+    ).json()
+    assert 0.0 <= body["probability"] <= 1.0
+    assert body["calibrated"] is True
+
+
 def test_boolean_decision_is_typed_and_bounded(client: TestClient, trained_boolean):
     response = client.post(
         "/decision",
@@ -592,3 +624,31 @@ def test_openapi_document_is_served(client: TestClient):
     schema = client.get("/openapi.json").json()
     assert "/decision" in schema["paths"]
     assert "/posthoc_train" in schema["paths"]
+
+
+def test_a_temperature_that_lands_on_its_bound_is_reported(client: TestClient, model):
+    """Labels unrelated to the model drive the fit into the clamp.
+
+    Nothing about that raises, and the calibration is still served — but the
+    response has to say so, because a temperature sitting on its bound is the
+    signature of a training set the base model cannot see anything in.
+    """
+    rows = [
+        {"input": {"text": f"noise {index}"}, "label": bool(index % 2)} for index in range(120)
+    ]
+    body = client.post(
+        "/posthoc_train",
+        json={"decision_type": "boolean", "scenario": "no-signal", "training_data": rows},
+    ).json()
+
+    assert body["temperature_clamped"] is True
+    # Not exactly the bound: LBFGS stops when its iteration budget runs out,
+    # not when it reaches the clamp, so a fit that wants to go further lands
+    # just short. Asserting equality here would be asserting the bug the
+    # detector was written to avoid.
+    assert 19.0 <= body["temperature"] <= 20.0  # JEV_TEMPERATURE_MAX is 20
+
+
+def test_a_healthy_fit_is_not_flagged_as_clamped(client: TestClient, trained_boolean):
+    assert trained_boolean["temperature_clamped"] is False
+    assert 0.05 < trained_boolean["temperature"] < 20.0

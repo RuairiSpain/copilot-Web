@@ -9,6 +9,7 @@ HTTP client and reused from a script or a batch job.
 from __future__ import annotations
 
 import logging
+import math
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -186,6 +187,35 @@ def random_split(total: int, validation_split: float, seed: int) -> tuple[np.nda
     return indices[take:], indices[:take]
 
 
+#: How close to a bound counts as "ran into it", as a fraction of the bound
+#: range measured in log space. LBFGS stops when its iteration budget runs out,
+#: not when it reaches the clamp, so a fit that wants to go past the bound
+#: typically lands just short of it — testing for equality would miss exactly
+#: the case this diagnostic exists for. Measured on this service's own data,
+#: a signal-free fit sits ~0.25% from the bound and a healthy one ~40%, so the
+#: two are not close to each other.
+_BOUND_MARGIN = 0.01
+
+
+def temperature_is_clamped(temperature: float, settings: Settings) -> bool:
+    """True when the fit ran into the edge of its allowed temperature range.
+
+    The bounds exist to keep a pathological fit from producing a degenerate
+    distribution, so reaching one is not an error — but it means the optimiser
+    wanted to keep going, which is what an uninformative training set looks
+    like from in here. Worth surfacing rather than burying.
+
+    Distance is measured in log space because temperature is a scale
+    parameter: 0.05 is as far from 0.1 as 10 is from 20.
+    """
+    lower, upper = math.log(settings.temperature_min), math.log(settings.temperature_max)
+    fitted = math.log(max(temperature, 1e-12))
+    span = upper - lower
+    if span <= 0:  # pragma: no cover - settings validation rules this out
+        return True
+    return min(abs(fitted - lower), abs(fitted - upper)) / span <= _BOUND_MARGIN
+
+
 @dataclass
 class _Scored:
     """Logits for every training sample, plus the labels they go with."""
@@ -289,15 +319,20 @@ def _train_classification(
         lr=settings.temperature_lr,
     )
     scaler = cal.TemperatureScaler(temperature)
+    clamped = temperature_is_clamped(temperature, settings)
 
     scaled_train = scaler.probabilities(train_logits)
     calibrators: list[cal.IsotonicCalibrator | None] = []
     for class_index in range(num_classes):
         targets = (train_labels == class_index).astype(np.float64)
         positives = int(targets.sum())
-        if len(targets) < settings.isotonic_min_samples or positives == 0 or positives == len(targets):
+        negatives = len(targets) - positives
+        if min(positives, negatives) < settings.isotonic_min_samples:
             # Too little signal for a monotone fit; the temperature-scaled
-            # probability is the safer answer for this class.
+            # probability is the safer answer for this class. Both sides count:
+            # a one-vs-rest curve fitted from 200 rows of which 3 are positive
+            # is the two-point step function this guard exists to prevent, and
+            # so is its mirror image.
             calibrators.append(None)
             continue
         calibrators.append(cal.fit_isotonic(scaled_train[:, class_index], targets))
@@ -331,6 +366,7 @@ def _train_classification(
             "num_train_samples": int(train_idx.size),
             "num_validation_samples": int(validation_idx.size),
             "temperature": float(temperature),
+            "temperature_clamped": clamped,
             "isotonic_classes": [i for i, c in enumerate(calibrators) if c is not None],
             "metrics_before": metrics_before.model_dump(),
             "metrics_after": metrics_after.model_dump(),
@@ -346,6 +382,7 @@ def _train_classification(
             "decision_type": request.decision_type,
             "calibration_version": version,
             "temperature": float(temperature),
+            "temperature_clamped": clamped,
             "num_samples": len(request.training_data),
         },
     )
@@ -359,6 +396,7 @@ def _train_classification(
         num_train_samples=int(train_idx.size),
         num_validation_samples=int(validation_idx.size),
         temperature=float(temperature),
+        temperature_clamped=clamped,
         calibration_version=version,
         artifacts=[key.rsplit("/", 1)[-1] for key in artifacts],
         metrics_before=metrics_before,
@@ -395,6 +433,7 @@ def _train_numeric(
         lr=settings.temperature_lr,
     )
     scaler = cal.TemperatureScaler(temperature)
+    clamped = temperature_is_clamped(temperature, settings)
     train_scores = cal.expected_index_score(scaler.probabilities(logits[train_idx]))
 
     calibrator = cal.fit_numeric_bins(
@@ -456,6 +495,7 @@ def _train_numeric(
             "num_train_samples": int(train_idx.size),
             "num_validation_samples": int(validation_idx.size),
             "temperature": float(temperature),
+            "temperature_clamped": clamped,
             "num_bins": len(calibrator.centers),
             "tolerance": calibrator.tolerance,
             "label_range": [calibrator.label_min, calibrator.label_max],
@@ -473,6 +513,7 @@ def _train_numeric(
             "decision_type": request.decision_type,
             "calibration_version": version,
             "temperature": float(temperature),
+            "temperature_clamped": clamped,
             "num_samples": len(request.training_data),
         },
     )
@@ -486,6 +527,7 @@ def _train_numeric(
         num_train_samples=int(train_idx.size),
         num_validation_samples=int(validation_idx.size),
         temperature=float(temperature),
+        temperature_clamped=clamped,
         calibration_version=version,
         artifacts=[key.rsplit("/", 1)[-1] for key in artifacts],
         metrics_before=metrics_before,

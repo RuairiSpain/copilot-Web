@@ -128,6 +128,16 @@ class PosthocTrainResponse(BaseModel):
     num_train_samples: int
     num_validation_samples: int
     temperature: float
+    temperature_clamped: bool = Field(
+        default=False,
+        description=(
+            "True when the fit landed on JEV_TEMPERATURE_MIN/_MAX rather than "
+            "an interior optimum. That usually means the labels carry little "
+            "signal the base model can see: the optimiser kept flattening (or "
+            "sharpening) the distribution until it ran out of room. Treat the "
+            "calibration as suspect and look at the metrics."
+        ),
+    )
     calibration_version: str
     artifacts: list[str]
     metrics_before: FitMetrics | None = None

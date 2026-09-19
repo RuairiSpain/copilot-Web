@@ -506,9 +506,10 @@ def fit_numeric_bins(
         pending.append(index)
         mask = np.isin(assignments, pending)
         count = int(np.count_nonzero(mask))
-        is_last = index == edges.size - 2
-        if count < min_samples_per_bin and not is_last:
-            # Too thin: fold it into the next bin by keeping it pending.
+        if count < min_samples_per_bin:
+            # Too thin: fold it into the next bin by keeping it pending. A
+            # thin tail that never reaches the threshold falls through to the
+            # leftover merge below instead of being published under-sized.
             continue
         if count == 0:
             pending = []

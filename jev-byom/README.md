@@ -103,6 +103,7 @@ The response says what was fitted and how well:
   "num_train_samples": 320,
   "num_validation_samples": 80,
   "temperature": 1.87,
+  "temperature_clamped": false,
   "calibration_version": "20260919T143012Z-1a2b3c4d",
   "artifacts": ["isotonic.json", "temperature.json"],
   "metrics_before": {"split": "validation", "expected_calibration_error": 0.21, "...": null},
@@ -114,6 +115,14 @@ The response says what was fitted and how well:
 Compare `metrics_before` with `metrics_after`: that difference is what the
 calibration bought you. If ECE barely moves, the base model was already
 calibrated for this scenario — or there is not enough data to tell.
+
+`temperature_clamped` is the other thing to read. It means the fit ran to the
+edge of `[JEV_TEMPERATURE_MIN, JEV_TEMPERATURE_MAX]` instead of settling
+somewhere inside it, which is what a training set the base model cannot see
+anything in looks like from in here: the optimiser kept flattening the
+distribution until it ran out of room. The calibration is still stored and
+still served — but treat it as suspect, and check whether the labels really do
+relate to what the model reads.
 
 ### `POST /decision`
 
@@ -160,13 +169,30 @@ never changes which class wins.
 
 **Isotonic regression** (boolean and enum) then maps each class's probability
 onto the frequency actually observed, one-vs-rest, and the row is renormalised.
-It is fitted as a *monotone increasing* map, which is the honest constraint:
-post-hoc calibration can correct how confident the model is, but it cannot
-re-rank inputs. Train a scenario on labels that contradict the base model and
-the probabilities collapse toward the base rate rather than flipping — the
-engine tells you the scenario is unlearnable instead of pretending otherwise.
-A class with too few examples (`JEV_ISOTONIC_MIN_SAMPLES`) keeps its
-temperature-scaled probability rather than a two-point step function.
+Each map is fitted as a *monotone increasing* function, so within one class the
+ordering of inputs is preserved: if the model scored A above B for that class,
+calibration keeps A above B.
+
+Across classes it is a different story, and worth being precise about, because
+it is the part that surprises people. The per-class curves differ, and the row
+is renormalised afterwards, so **the argmax can move**: a class that
+systematically overclaims gets pulled down past a class that underclaims, and
+the returned `value` changes. That is deliberate — correcting a class that is
+wrong about itself is what per-class calibration is for, and it is how the
+engine handles class imbalance — but it does mean a calibrated decision is not
+always the base model's raw top class.
+
+What calibration cannot do is invent a signal that is not there. Train a
+scenario on labels that contradict the base model and the probabilities
+collapse toward the base rate rather than flipping: with nothing to rank on,
+every monotone map that fits is close to constant. The engine tells you the
+scenario is unlearnable instead of pretending otherwise.
+
+A class with too few examples on *either* side (`JEV_ISOTONIC_MIN_SAMPLES`
+positives and negatives both required) keeps its temperature-scaled probability
+rather than a two-point step function: a curve fitted from 200 rows of which 3
+are positive is exactly the shape the guard exists to prevent, and so is its
+mirror image.
 
 **Numeric calibration** collapses the distribution to a scalar score
 (`Σ p_c · c / (C-1)`, the normalised expected class index), bins the training
@@ -241,7 +267,7 @@ that cannot work fails at startup rather than at the first request.
 | --- | --- | --- |
 | `JEV_TEMPERATURE_INIT` / `_MIN` / `_MAX` | `1.0` / `0.05` / `20.0` | starting point and clamps for `T` |
 | `JEV_TEMPERATURE_MAX_ITER` / `_LR` | `100` / `0.05` | LBFGS budget and step size |
-| `JEV_ISOTONIC_MIN_SAMPLES` | `8` | below this a class keeps the temperature-scaled probability |
+| `JEV_ISOTONIC_MIN_SAMPLES` | `8` | a class with fewer positives *or* fewer negatives than this keeps the temperature-scaled probability |
 | `JEV_ISOTONIC_OUT_OF_BOUNDS` | `clip` | how inputs outside the fitted range are handled |
 | `JEV_NUMERIC_BINS` | `10` | quantile bins |
 | `JEV_NUMERIC_MIN_SAMPLES_PER_BIN` | `3` | thinner bins are merged |
@@ -340,7 +366,7 @@ request/response, and `/openapi.json` for discovery).
 
 ```bash
 pip install -r requirements-dev.txt
-pytest                      # 112 tests, no network, no Azure, no weights
+pytest                      # 119 tests, no network, no Azure, no weights
 pytest tests/test_calibration.py -v
 
 # Optional: exercise the real transformers backend against a tiny checkpoint.
@@ -367,9 +393,11 @@ real FastAPI wiring without downloading anything. What it covers:
 
 ## Known limitations
 
-- **Calibration cannot re-rank.** It corrects confidence, not ordering. A
-  scenario the base model gets backwards needs a different model or a fine-tune,
-  and the calibrated probabilities will sit near the base rate to say so.
+- **Calibration cannot manufacture a signal.** A scenario the base model gets
+  backwards needs a different model or a fine-tune; the calibrated
+  probabilities will sit near the base rate to say so. It *can* move the argmax
+  between classes (see above), so a calibrated decision is not always the raw
+  model's top class.
 - **Numeric decisions are bin-resolution.** The value is interpolated between
   bin means, so it cannot be more precise than the training labels support.
   More data lets you raise `JEV_NUMERIC_BINS`.

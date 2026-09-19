@@ -225,6 +225,35 @@ def test_apply_isotonic_falls_back_to_uniform_when_a_row_collapses():
     assert out[0] == pytest.approx([0.5, 0.5])
 
 
+def test_apply_isotonic_can_move_the_argmax_between_classes():
+    """Per-class curves that disagree re-rank the classes, and that is intended.
+
+    Each map is monotone, so the ordering of inputs *within* a class is fixed.
+    Across classes it is not: a class that systematically overclaims is pulled
+    below one that underclaims, and the decision changes. The README documents
+    this; the test exists so the behaviour cannot drift without someone saying
+    so on purpose.
+    """
+    overclaims = cal.IsotonicCalibrator(x=(0.0, 0.6, 1.0), y=(0.0, 0.1, 1.0))
+    underclaims = cal.IsotonicCalibrator(x=(0.0, 0.4, 1.0), y=(0.0, 0.9, 1.0))
+
+    raw = np.array([[0.6, 0.4]])
+    calibrated = cal.apply_isotonic(raw, [overclaims, underclaims])
+
+    assert raw.argmax(axis=1)[0] == 0
+    assert calibrated.argmax(axis=1)[0] == 1
+    assert calibrated.sum() == pytest.approx(1.0)
+
+
+def test_apply_isotonic_preserves_the_ordering_of_inputs_within_a_class():
+    """The monotone guarantee that does hold: one class, many inputs, same order."""
+    rng = np.random.default_rng(24)
+    probs = np.sort(rng.random(50))
+    calibrator = cal.fit_isotonic(probs, (rng.random(50) < probs).astype(float))
+    mapped = calibrator.predict(probs)
+    assert np.all(np.diff(mapped) >= -1e-12)
+
+
 def test_apply_isotonic_requires_one_calibrator_per_class():
     with pytest.raises(ValueError):
         cal.apply_isotonic(np.array([[0.5, 0.5]]), [None])
@@ -280,6 +309,21 @@ def test_numeric_bins_respect_min_samples_per_bin():
     )
     assert len(calibrator.centers) <= 4
     assert min(calibrator.counts) >= 10
+
+
+def test_numeric_bins_merge_a_thin_trailing_bin_instead_of_publishing_it():
+    """Tied scores can leave the last quantile bin under min_samples_per_bin;
+    it must be folded into the previous bin rather than kept as its own."""
+    rng = np.random.default_rng(23)
+    n = 39
+    unique_vals = np.sort(rng.random(6))
+    scores = rng.choice(unique_vals, size=n)
+    labels = rng.normal(size=n)
+    calibrator = cal.fit_numeric_bins(
+        scores, labels, num_bins=12, min_samples_per_bin=5, tolerance=0.1
+    )
+    assert sum(calibrator.counts) == n
+    assert min(calibrator.counts) >= 5
 
 
 def test_numeric_tolerance_is_relative_by_default_and_absolute_on_request():
@@ -367,3 +411,28 @@ def test_mean_absolute_error_and_coverage():
     labels = np.array([1.5, 2.0, 5.0])
     assert cal.mean_absolute_error(values, labels) == pytest.approx((0.5 + 0.0 + 2.0) / 3)
     assert cal.coverage(values, labels, tolerance=0.5) == pytest.approx(2 / 3)
+
+
+# ----------------------------------------------------------------------------
+# Bound detection
+# ----------------------------------------------------------------------------
+def test_temperature_bound_detection_is_scale_free():
+    """Distance to a bound is measured in log space, so it does not favour one end.
+
+    Temperature is a scale parameter: 0.05 is as far below 0.1 as 20 is above
+    10. A linear test would call almost everything 'near the lower bound'.
+    """
+    from app.engine import temperature_is_clamped
+    from config.settings import Settings
+
+    settings = Settings(local_registry_dir="/tmp", temperature_min=0.05, temperature_max=20.0)
+
+    assert temperature_is_clamped(20.0, settings)
+    assert temperature_is_clamped(19.7, settings)  # where LBFGS actually stops
+    assert temperature_is_clamped(0.05, settings)
+    assert temperature_is_clamped(0.0505, settings)
+
+    assert not temperature_is_clamped(1.0, settings)
+    assert not temperature_is_clamped(0.5, settings)
+    assert not temperature_is_clamped(15.0, settings)
+    assert not temperature_is_clamped(0.1, settings)
