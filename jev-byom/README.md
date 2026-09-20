@@ -366,7 +366,7 @@ request/response, and `/openapi.json` for discovery).
 
 ```bash
 pip install -r requirements-dev.txt
-pytest                      # 119 tests, no network, no Azure, no weights
+pytest                      # 125 tests, no network, no Azure, no weights
 pytest tests/test_calibration.py -v
 
 # Optional: exercise the real transformers backend against a tiny checkpoint.
@@ -390,6 +390,48 @@ real FastAPI wiring without downloading anything. What it covers:
 - **Endpoints** — all three decision types trained and queried end to end,
   scenario switching, retraining, survival across a restart, auth, and every
   error path.
+
+## Worked example: routing to an LLM
+
+`scripts/xroutebench_to_calibration.py` turns
+[xRouteBench](https://huggingface.co/datasets/ulab-ai/xRouteBench) — one row per
+(query, candidate model) with a score, token counts and a latency — into an
+enum scenario whose classes are model names:
+
+```bash
+python scripts/xroutebench_to_calibration.py --out-dir ./router-data --drop-unsolvable
+curl -X POST localhost:8000/posthoc_train -H 'content-type: application/json' \
+  --data-binary @router-data/posthoc_train.json
+```
+
+The judgement is in the label, not the plumbing. With 18 candidates and a 0/1
+score the mean query is a tie of about 12 models, so "best" has to mean
+something: the converter takes the *cheapest* model among those that scored
+best (`--tie-break latency|tokens|none`), which turns the question from "who is
+smartest" into "who is sufficient".
+
+**What this demonstrates, and what it does not.** Run against a stock
+`distilbert-base-uncased` with a fresh 18-way head, the calibration layer does
+its job and the router still cannot route: on 100 held-out queries it chose a
+model that answered correctly 64.1% of the time, which is exactly what naming
+the single most common model every time achieves, against an oracle of 99.2%.
+Calibration recovered the class prior — accuracy rose from 4.6% (chance is
+5.6%) to 15.3% as the isotonic fits pulled mass onto the common labels — and
+nothing more, because there was no signal in a random head to sharpen.
+
+What it did get right is the honesty: mean reported probability 0.166 against
+an observed 0.150 hit rate, and no decision ever claimed more than 0.197
+confidence. An uncalibrated head will happily report 0.95 for the same guess.
+That is the difference between a router you can put a threshold on and one you
+cannot.
+
+Note that `temperature_clamped` does **not** flag this case: with 18 classes a
+random head is already near-uniform, so the fitted temperature (0.95) is a
+perfectly reasonable interior value. The tells are elsewhere — accuracy sitting
+on the majority share, and a probability ceiling that never rises.
+
+To get a router that actually routes, fine-tune the encoder on this data first
+and then calibrate the frozen result — this service is post-hoc only by design.
 
 ## Known limitations
 
