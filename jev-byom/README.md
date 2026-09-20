@@ -469,28 +469,53 @@ something: the converter takes the *cheapest* model among those that scored
 best (`--tie-break latency|tokens|none`), which turns the question from "who is
 smartest" into "who is sufficient".
 
-**What this demonstrates, and what it does not.** Run against a stock
-`distilbert-base-uncased` with a fresh 18-way head, the calibration layer does
-its job and the router still cannot route: on 100 held-out queries it chose a
-model that answered correctly 64.1% of the time, which is exactly what naming
-the single most common model every time achieves, against an oracle of 99.2%.
-Calibration recovered the class prior — accuracy rose from 4.6% (chance is
-5.6%) to 15.3% as the isotonic fits pulled mass onto the common labels — and
-nothing more, because there was no signal in a random head to sharpen.
+### What it measures
 
-What it did get right is the honesty: mean reported probability 0.166 against
-an observed 0.150 hit rate, and no decision ever claimed more than 0.197
-confidence. An uncalibrated head will happily report 0.95 for the same guess.
-That is the difference between a router you can put a threshold on and one you
-cannot.
+Three runs over the same 4,277 training queries and the same 100 held-out
+decisions, changing one thing at a time. "Routed correct" is whether the model
+the router picked actually answered that query; always naming the single most
+common model scores 64.1%, and an oracle that picks a correct model whenever
+one exists scores 99.2%.
 
-Note that `temperature_clamped` does **not** flag this case: with 18 classes a
-random head is already near-uniform, so the fitted temperature (0.95) is a
-perfectly reasonable interior value. The tells are elsewhere — accuracy sitting
-on the majority share, and a probability ceiling that never rises.
+| Base model's head | Exact label | Routed correct | Reported vs actual | Temperature | Models used |
+| --- | --- | --- | --- | --- | --- |
+| Random (stock checkpoint) | 15.0% | 64.1% | 0.166 vs 0.150 | 0.95 | 3 of 18 |
+| Linear probe, calibrated on its own training rows | 24.0% | 67.1% | 0.432 vs 0.240 | 0.69 | 12 of 18 |
+| **Linear probe, calibrated on held-out rows** | **30.0%** | **69.1%** | **0.260 vs 0.300** | **1.32** | 5 of 18 |
 
-To get a router that actually routes, fine-tune the encoder on this data first
-and then calibrate the frozen result — this service is post-hoc only by design.
+**A random head cannot route, and calibration cannot fix that.** Row one scores
+exactly the always-pick-the-most-common baseline, because post-hoc calibration
+post-processes the model's output and cannot add information the output never
+carried. What it *did* add is the class prior, lifting accuracy from 4.6%
+(chance is 5.6%) to 15.3% — and honest probabilities: 0.166 claimed against
+0.150 observed, never exceeding 0.197. That is worth something on its own. A
+threshold at 0.4 escalates all 100 to a real model, correctly.
+
+**A linear probe is enough to beat the baseline.** One 768×18 matrix on the
+frozen encoder, minutes of CPU, and exact-label accuracy doubles while the
+routed choice beats always-picking-the-strongest by 5 points. Not a fine-tune.
+
+**Calibrating on the head's own training rows is the trap.** Row two shares
+rows between the probe fit and `/posthoc_train`, so the calibrator measured the
+head's *memorised* 41% accuracy and reported it: 0.432 claimed against 0.240
+observed, over-confident by 19 points, with a fitted temperature of 0.69 that
+sharpened a distribution already too sharp. Row three splits them 70/30 and the
+same machinery lands within 4 points, temperature 1.32, correctly softening.
+Same code, same data, different split. `scripts/train_probe_head.py` does the
+split for you and writes out the calibration half.
+
+```bash
+python scripts/train_probe_head.py --train-body router-data/posthoc_train.json \
+  --out ./probe-head --calibration-out router-data/calib.json
+JEV_MODEL_NAME=./probe-head JEV_MODEL_NUM_LABELS=18 uvicorn app.server:app
+curl -X POST localhost:8000/posthoc_train --data-binary @router-data/calib.json \
+  -H 'content-type: application/json'
+```
+
+Routing quality is still modest — 69.1% against a 99.2% oracle — because a
+probe on a 66M-parameter encoder is the floor of what is possible, not the
+ceiling. The point is that the floor is above the baseline, and the engine
+reports where it stands honestly enough to act on.
 
 ## Known limitations
 
