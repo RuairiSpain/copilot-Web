@@ -1,0 +1,12 @@
+# The subset the test suite needs. The suite runs against the `hash` backend, so
+# torch and transformers are optional here: calibration falls back to a bounded
+# golden-section search when torch is absent, and CI exercises both paths.
+fastapi==0.141.1
+pydantic==2.13.5
+pydantic-settings==2.15.0
+numpy==2.4.6
+scikit-learn==1.9.1
+azure-storage-blob==12.30.2   # the blob-store tests assert against the real ContentSettings
+pytest==9.1.1
+httpx==0.28.1
+ruff==0.16.8

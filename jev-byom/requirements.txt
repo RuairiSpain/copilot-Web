@@ -1,0 +1,17 @@
+# Runtime dependencies, pinned exactly. Latest versions as of 2026-09-19;
+# bump them deliberately, with the tests green, rather than floating.
+#
+# torch is CPU-only in the image: the Dockerfile installs it from
+# https://download.pytorch.org/whl/cpu first, so this pin resolves against the
+# already-installed wheel instead of pulling ~2 GB of CUDA libraries.
+
+fastapi==0.141.1
+uvicorn[standard]==0.53.0
+pydantic==2.13.5
+pydantic-settings==2.15.0
+numpy==2.4.6
+scikit-learn==1.9.1
+torch==2.14.0
+transformers==5.17.0
+azure-storage-blob==12.30.2
+azure-identity==1.25.3
