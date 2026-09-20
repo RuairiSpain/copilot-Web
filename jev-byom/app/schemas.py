@@ -80,6 +80,23 @@ class PosthocTrainRequest(BaseModel):
     notes: str | None = Field(
         default=None, max_length=1024, description="Free text stored with the artifact."
     )
+    description: str | None = Field(
+        default=None,
+        max_length=2048,
+        description=(
+            "What this calibration is for, shown to clients browsing GET "
+            "/scenarios. Omit it and one is generated from the training data."
+        ),
+    )
+    on_conflict: Literal["new_version", "new_scenario", "reject"] | None = Field(
+        default=None,
+        description=(
+            "What to do when the scenario already exists. Defaults to "
+            "JEV_DEFAULT_ON_CONFLICT. 'new_version' supersedes it but keeps the "
+            "old version pinnable; 'new_scenario' leaves it alone and trains "
+            "the next free name; 'reject' returns 409."
+        ),
+    )
 
     @model_validator(mode="after")
     def _check_type_specific(self) -> PosthocTrainRequest:
@@ -120,7 +137,11 @@ class PosthocTrainResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     status: Literal["ok"] = "ok"
-    scenario: str
+    scenario: str = Field(description="The scenario actually written, which on_conflict may rename.")
+    requested_scenario: str | None = Field(
+        default=None, description="Set when on_conflict renamed the scenario."
+    )
+    description: str | None = None
     decision_type: DecisionType
     num_classes: int | None = None
     class_names: list[str] | None = None
@@ -168,6 +189,16 @@ class DecisionRequest(BaseModel):
         default=False,
         description="Enum only: also return the full calibrated distribution.",
     )
+    calibration_version: str | None = Field(
+        default=None,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+        description=(
+            "Pin a specific stored version instead of the current one. Use it "
+            "to compare a new fit against the one it replaced, or to hold a "
+            "caller on a known-good calibration."
+        ),
+    )
 
     def model_input(self) -> dict[str, Any]:
         """Return the dict the base model should score."""
@@ -207,6 +238,8 @@ class ScenarioInfo(BaseModel):
     scenario: str
     decision_type: DecisionType
     calibration_version: str
+    description: str | None = None
+    num_versions: int | None = None
     num_classes: int | None = None
     class_names: list[str] | None = None
     num_samples: int | None = None
@@ -217,6 +250,27 @@ class ScenarioListResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     scenarios: list[ScenarioInfo]
+
+
+class VersionInfo(BaseModel):
+    """One stored version of a calibration."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    version: str
+    created_at: str | None = None
+    is_current: bool = False
+    num_samples: int | None = None
+    description: str | None = None
+
+
+class VersionListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scenario: str
+    decision_type: DecisionType
+    current_version: str | None = None
+    versions: list[VersionInfo]
 
 
 class HealthResponse(BaseModel):

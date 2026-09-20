@@ -366,7 +366,7 @@ request/response, and `/openapi.json` for discovery).
 
 ```bash
 pip install -r requirements-dev.txt
-pytest                      # 119 tests, no network, no Azure, no weights
+pytest                      # 146 tests, no network, no Azure, no weights
 pytest tests/test_calibration.py -v
 
 # Optional: exercise the real transformers backend against a tiny checkpoint.
@@ -390,6 +390,132 @@ real FastAPI wiring without downloading anything. What it covers:
 - **Endpoints** — all three decision types trained and queried end to end,
   scenario switching, retraining, survival across a restart, auth, and every
   error path.
+
+## Using it from an agent (MCP)
+
+`mcp_server/` exposes the engine as an MCP server, so an agent can discover and
+use a decision instead of reasoning one out:
+
+```bash
+JEV_ENGINE_URL=http://localhost:8000 python -m mcp_server.server        # stdio
+JEV_MCP_TRANSPORT=streamable-http python -m mcp_server.server           # http
+```
+
+| Tool | What it does |
+| --- | --- |
+| `list_calibrations` | every decision the engine can make, each with a description |
+| `describe_calibration` | one in detail, with its version history |
+| `train_calibration` | teach it a new one from labelled examples |
+| `decide` | one typed decision with a calibrated probability |
+
+The process holds no model and no state — it is a translation layer over the
+HTTP API, so several clients can share one calibration store.
+
+It is deliberately stricter than the HTTP API in one place. `POST /decision`
+may fall back to the raw model for an untrained scenario (`JEV_REQUIRE_
+CALIBRATION=false`); the `decide` tool refuses instead. A human reading
+`calibrated: false` will notice, an agent that asked for a calibration by name
+will not.
+
+### Descriptions
+
+Every calibration carries a description, because a client listing them by name
+alone cannot choose between `loan-approval` and `loan-fraud`. Supply one with
+`description` on `/posthoc_train`, or let the engine write it from the training
+data:
+
+> Chooses one of 2 options (routine, urgent), trained on 60 labelled examples.
+> The most common answer is 'urgent' at 67% of the training data, so anything
+> at or below that share is no better than guessing it. On the validation
+> split: accuracy 67%, calibration error 0.053. Example input: "ticket 0: how
+> do I reset my password"
+
+That is computed, not generated — no network, and it cannot invent a capability
+the scenario does not have. Set `JEV_DESCRIBE_LLM_URL` (any OpenAI-shaped
+chat-completions endpoint, including Azure OpenAI / Foundry's v1 surface) to
+have an LLM rephrase those facts; it is asked to add nothing, and any failure
+keeps the computed text.
+
+### When the name is taken
+
+`JEV_DEFAULT_ON_CONFLICT`, or `on_conflict` per request:
+
+| Policy | Behaviour |
+| --- | --- |
+| `new_version` (default) | Supersedes the scenario. The previous version stays stored and can be pinned with `calibration_version`. |
+| `new_scenario` | Leaves the existing calibration untouched and trains `<name>-2`, `-3`, … The response says what it was renamed to. |
+| `reject` | 409, so nothing changes by accident. |
+
+`GET /scenarios/<scenario>/<type>/versions` lists what is stored, and any of
+those versions can be pinned on a decision — useful for holding a caller on a
+known-good fit while a new one is evaluated.
+
+## Worked example: routing to an LLM
+
+`scripts/xroutebench_to_calibration.py` turns
+[xRouteBench](https://huggingface.co/datasets/ulab-ai/xRouteBench) — one row per
+(query, candidate model) with a score, token counts and a latency — into an
+enum scenario whose classes are model names:
+
+```bash
+python scripts/xroutebench_to_calibration.py --out-dir ./router-data --drop-unsolvable
+curl -X POST localhost:8000/posthoc_train -H 'content-type: application/json' \
+  --data-binary @router-data/posthoc_train.json
+```
+
+The judgement is in the label, not the plumbing. With 18 candidates and a 0/1
+score the mean query is a tie of about 12 models, so "best" has to mean
+something: the converter takes the *cheapest* model among those that scored
+best (`--tie-break latency|tokens|none`), which turns the question from "who is
+smartest" into "who is sufficient".
+
+### What it measures
+
+Three runs over the same 4,277 training queries and the same 100 held-out
+decisions, changing one thing at a time. "Routed correct" is whether the model
+the router picked actually answered that query; always naming the single most
+common model scores 64.1%, and an oracle that picks a correct model whenever
+one exists scores 99.2%.
+
+| Base model's head | Exact label | Routed correct | Reported vs actual | Temperature | Models used |
+| --- | --- | --- | --- | --- | --- |
+| Random (stock checkpoint) | 15.0% | 64.1% | 0.166 vs 0.150 | 0.95 | 3 of 18 |
+| Linear probe, calibrated on its own training rows | 24.0% | 67.1% | 0.432 vs 0.240 | 0.69 | 12 of 18 |
+| **Linear probe, calibrated on held-out rows** | **30.0%** | **69.1%** | **0.260 vs 0.300** | **1.32** | 5 of 18 |
+
+**A random head cannot route, and calibration cannot fix that.** Row one scores
+exactly the always-pick-the-most-common baseline, because post-hoc calibration
+post-processes the model's output and cannot add information the output never
+carried. What it *did* add is the class prior, lifting accuracy from 4.6%
+(chance is 5.6%) to 15.3% — and honest probabilities: 0.166 claimed against
+0.150 observed, never exceeding 0.197. That is worth something on its own. A
+threshold at 0.4 escalates all 100 to a real model, correctly.
+
+**A linear probe is enough to beat the baseline.** One 768×18 matrix on the
+frozen encoder, minutes of CPU, and exact-label accuracy doubles while the
+routed choice beats always-picking-the-strongest by 5 points. Not a fine-tune.
+
+**Calibrating on the head's own training rows is the trap.** Row two shares
+rows between the probe fit and `/posthoc_train`, so the calibrator measured the
+head's *memorised* 41% accuracy and reported it: 0.432 claimed against 0.240
+observed, over-confident by 19 points, with a fitted temperature of 0.69 that
+sharpened a distribution already too sharp. Row three splits them 70/30 and the
+same machinery lands within 4 points, temperature 1.32, correctly softening.
+Same code, same data, different split. `scripts/train_probe_head.py` does the
+split for you and writes out the calibration half.
+
+```bash
+python scripts/train_probe_head.py --train-body router-data/posthoc_train.json \
+  --out ./probe-head --calibration-out router-data/calib.json
+JEV_MODEL_NAME=./probe-head JEV_MODEL_NUM_LABELS=18 uvicorn app.server:app
+curl -X POST localhost:8000/posthoc_train --data-binary @router-data/calib.json \
+  -H 'content-type: application/json'
+```
+
+Routing quality is still modest — 69.1% against a 99.2% oracle — because a
+probe on a 66M-parameter encoder is the floor of what is possible, not the
+ceiling. The point is that the floor is above the baseline, and the engine
+reports where it stands honestly enough to act on.
 
 ## Known limitations
 
