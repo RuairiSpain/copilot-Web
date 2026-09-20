@@ -224,6 +224,7 @@ class CalibrationBundle:
     isotonic: tuple[IsotonicCalibrator | None, ...] | None = None
     numeric: NumericCalibrator | None = None
     created_at: str | None = None
+    description: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def label_for(self, index: int) -> str:
@@ -248,7 +249,7 @@ class CalibrationRegistry:
         self._store = store
         self._settings = settings or get_settings()
         self._lock = threading.RLock()
-        self._cache: dict[tuple[str, str], tuple[float, CalibrationBundle | None]] = {}
+        self._cache: dict[tuple[str, str, str], tuple[float, CalibrationBundle | None]] = {}
 
     # -- key helpers -----------------------------------------------------
     def _scenario_prefix(self, scenario: str, decision_type: str) -> str:
@@ -316,6 +317,7 @@ class CalibrationRegistry:
         artifacts: list[str],
         num_classes: int | None = None,
         class_names: list[str] | None = None,
+        description: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> str:
         """Write the manifest, then flip ``latest.json`` to this version.
@@ -330,6 +332,7 @@ class CalibrationRegistry:
             "created_at": datetime.now(timezone.utc).isoformat(),
             "num_classes": num_classes,
             "class_names": list(class_names) if class_names else None,
+            "description": description,
             "artifacts": sorted(key.rsplit("/", 1)[-1] for key in artifacts),
             "metadata": metadata or {},
         }
@@ -347,6 +350,7 @@ class CalibrationRegistry:
         scenario: str,
         decision_type: str,
         num_classes: int | None = None,
+        version: str | None = None,
     ) -> CalibrationBundle | None:
         """Return the latest calibration for a scenario, or None if untrained.
 
@@ -354,7 +358,7 @@ class CalibrationRegistry:
         mismatch means the base model changed since the fit, which would produce
         silently wrong probabilities, so it raises rather than guessing.
         """
-        cache_key = (scenario, decision_type)
+        cache_key = (scenario, decision_type, version or "")
         ttl = self._settings.registry_cache_ttl_seconds
         now = time.monotonic()
 
@@ -366,7 +370,7 @@ class CalibrationRegistry:
                     self._check_classes(bundle, num_classes)
                     return bundle
 
-        bundle = self._load_uncached(scenario, decision_type)
+        bundle = self._load_uncached(scenario, decision_type, version)
 
         if ttl > 0:
             with self._lock:
@@ -391,12 +395,21 @@ class CalibrationRegistry:
                 "retrain the scenario via POST /posthoc_train"
             )
 
-    def _load_uncached(self, scenario: str, decision_type: str) -> CalibrationBundle | None:
+    def _load_uncached(
+        self, scenario: str, decision_type: str, version: str | None = None
+    ) -> CalibrationBundle | None:
         prefix = self._scenario_prefix(scenario, decision_type)
-        pointer = self._store.read_json(f"{prefix}/{LATEST_BLOB}")
-        if not pointer or not pointer.get("version"):
-            return None
-        version = str(pointer["version"])
+        if version is None:
+            pointer = self._store.read_json(f"{prefix}/{LATEST_BLOB}")
+            if not pointer or not pointer.get("version"):
+                return None
+            version = str(pointer["version"])
+        elif self._store.read_json(f"{prefix}/versions/{version}/{MANIFEST_BLOB}") is None:
+            # An explicit pin at a version that was never written is a caller
+            # error worth naming, not a silent fall back to the current one.
+            raise RegistryError(
+                f"calibration {scenario}/{decision_type} has no version {version!r}"
+            )
         version_prefix = f"{prefix}/versions/{version}"
 
         manifest = self._store.read_json(f"{version_prefix}/{MANIFEST_BLOB}") or {}
@@ -434,6 +447,7 @@ class CalibrationRegistry:
             isotonic=isotonic,
             numeric=numeric,
             created_at=manifest.get("created_at"),
+            description=manifest.get("description"),
             metadata=manifest.get("metadata") or {},
         )
 
@@ -464,6 +478,8 @@ class CalibrationRegistry:
                     "scenario": scenario,
                     "decision_type": decision_type,
                     "calibration_version": version,
+                    "description": manifest.get("description"),
+                    "num_versions": len(self.list_versions(scenario, decision_type)),
                     "num_classes": manifest.get("num_classes"),
                     "class_names": manifest.get("class_names"),
                     "num_samples": metadata.get("num_samples"),
@@ -472,6 +488,60 @@ class CalibrationRegistry:
             )
         rows.sort(key=lambda row: (row["scenario"], row["decision_type"]))
         return rows
+
+    def list_versions(self, scenario: str, decision_type: str) -> list[dict[str, Any]]:
+        """Every stored version of one calibration, newest first.
+
+        Version ids start with a UTC timestamp, so sorting them by name sorts
+        them by time without reading a manifest per version.
+        """
+        prefix = f"{self._scenario_prefix(scenario, decision_type)}/versions/"
+        pointer = self._store.read_json(
+            f"{self._scenario_prefix(scenario, decision_type)}/{LATEST_BLOB}"
+        ) or {}
+        current = pointer.get("version")
+
+        rows: list[dict[str, Any]] = []
+        for key in self._store.list_keys(prefix):
+            if not key.endswith(f"/{MANIFEST_BLOB}"):
+                continue
+            version = key[len(prefix) :].split("/")[0]
+            manifest = self._store.read_json(key) or {}
+            metadata = manifest.get("metadata") or {}
+            rows.append(
+                {
+                    "version": version,
+                    "created_at": manifest.get("created_at"),
+                    "is_current": version == current,
+                    "num_samples": metadata.get("num_samples"),
+                    "description": manifest.get("description"),
+                }
+            )
+        rows.sort(key=lambda row: row["version"], reverse=True)
+        return rows
+
+    def exists(self, scenario: str, decision_type: str) -> bool:
+        """True when this (scenario, decision_type) already has a calibration."""
+        pointer = self._store.read_json(
+            f"{self._scenario_prefix(scenario, decision_type)}/{LATEST_BLOB}"
+        )
+        return bool(pointer and pointer.get("version"))
+
+    def next_free_scenario(self, scenario: str, decision_type: str, limit: int = 1000) -> str:
+        """``name`` if free, else ``name-2``, ``name-3``, ... up to ``limit``.
+
+        Used by on_conflict="new_scenario", where the point is to leave the
+        existing calibration entirely untouched rather than supersede it.
+        """
+        if not self.exists(scenario, decision_type):
+            return scenario
+        for suffix in range(2, limit + 1):
+            candidate = f"{scenario}-{suffix}"
+            if not self.exists(candidate, decision_type):
+                return candidate
+        raise RegistryError(
+            f"{scenario!r} already has {limit} numbered siblings; pick another name"
+        )
 
     # -- cache -----------------------------------------------------------
     def clear_cache(self, scenario: str | None = None, decision_type: str | None = None) -> int:
@@ -489,7 +559,7 @@ class CalibrationRegistry:
                 key
                 for key in self._cache
                 if key[0] == scenario and (decision_type is None or key[1] == decision_type)
-            ]
+            ]  # every pinned version of the scenario, not just the current one
             for key in keys:
                 self._cache.pop(key, None)
             return len(keys)

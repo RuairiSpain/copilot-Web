@@ -366,7 +366,7 @@ request/response, and `/openapi.json` for discovery).
 
 ```bash
 pip install -r requirements-dev.txt
-pytest                      # 125 tests, no network, no Azure, no weights
+pytest                      # 146 tests, no network, no Azure, no weights
 pytest tests/test_calibration.py -v
 
 # Optional: exercise the real transformers backend against a tiny checkpoint.
@@ -390,6 +390,65 @@ real FastAPI wiring without downloading anything. What it covers:
 - **Endpoints** — all three decision types trained and queried end to end,
   scenario switching, retraining, survival across a restart, auth, and every
   error path.
+
+## Using it from an agent (MCP)
+
+`mcp_server/` exposes the engine as an MCP server, so an agent can discover and
+use a decision instead of reasoning one out:
+
+```bash
+JEV_ENGINE_URL=http://localhost:8000 python -m mcp_server.server        # stdio
+JEV_MCP_TRANSPORT=streamable-http python -m mcp_server.server           # http
+```
+
+| Tool | What it does |
+| --- | --- |
+| `list_calibrations` | every decision the engine can make, each with a description |
+| `describe_calibration` | one in detail, with its version history |
+| `train_calibration` | teach it a new one from labelled examples |
+| `decide` | one typed decision with a calibrated probability |
+
+The process holds no model and no state — it is a translation layer over the
+HTTP API, so several clients can share one calibration store.
+
+It is deliberately stricter than the HTTP API in one place. `POST /decision`
+may fall back to the raw model for an untrained scenario (`JEV_REQUIRE_
+CALIBRATION=false`); the `decide` tool refuses instead. A human reading
+`calibrated: false` will notice, an agent that asked for a calibration by name
+will not.
+
+### Descriptions
+
+Every calibration carries a description, because a client listing them by name
+alone cannot choose between `loan-approval` and `loan-fraud`. Supply one with
+`description` on `/posthoc_train`, or let the engine write it from the training
+data:
+
+> Chooses one of 2 options (routine, urgent), trained on 60 labelled examples.
+> The most common answer is 'urgent' at 67% of the training data, so anything
+> at or below that share is no better than guessing it. On the validation
+> split: accuracy 67%, calibration error 0.053. Example input: "ticket 0: how
+> do I reset my password"
+
+That is computed, not generated — no network, and it cannot invent a capability
+the scenario does not have. Set `JEV_DESCRIBE_LLM_URL` (any OpenAI-shaped
+chat-completions endpoint, including Azure OpenAI / Foundry's v1 surface) to
+have an LLM rephrase those facts; it is asked to add nothing, and any failure
+keeps the computed text.
+
+### When the name is taken
+
+`JEV_DEFAULT_ON_CONFLICT`, or `on_conflict` per request:
+
+| Policy | Behaviour |
+| --- | --- |
+| `new_version` (default) | Supersedes the scenario. The previous version stays stored and can be pinned with `calibration_version`. |
+| `new_scenario` | Leaves the existing calibration untouched and trains `<name>-2`, `-3`, … The response says what it was renamed to. |
+| `reject` | 409, so nothing changes by accident. |
+
+`GET /scenarios/<scenario>/<type>/versions` lists what is stored, and any of
+those versions can be pinned on a decision — useful for holding a caller on a
+known-good fit while a new one is evaluated.
 
 ## Worked example: routing to an LLM
 
