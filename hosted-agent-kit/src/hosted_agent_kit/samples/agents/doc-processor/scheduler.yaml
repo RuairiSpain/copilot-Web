@@ -1,0 +1,16 @@
+# Scheduler configuration for the doc-processor hosted agent (Invocations protocol).
+# An Invocations agent defines its own request and response formats, so the pool relays bodies
+# unchanged. The agent decides whether to stream. Large uploads are fine up to
+# POOL_MAX_RESPONSE_BYTES for responses.
+agentPool:
+  agents:
+    doc-processor:
+      mode: stateless
+      protocol: invocations
+      scheduler: oldest_idle
+      max_sessions: 6
+      queue:
+        enabled: false      # a busy pool answers 429 with Retry-After immediately
+      circuit_breaker:
+        failure_threshold: 3
+        open_seconds: 20

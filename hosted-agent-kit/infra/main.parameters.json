@@ -1,0 +1,15 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environmentName": { "value": "${AZURE_ENV_NAME}" },
+    "location": { "value": "${AZURE_LOCATION}" },
+    "foundryResourceGroupName": { "value": "${FOUNDRY_RESOURCE_GROUP}" },
+    "foundryAccountName": { "value": "${FOUNDRY_ACCOUNT_NAME}" },
+    "foundryProjectName": { "value": "${FOUNDRY_PROJECT_NAME}" },
+    "entraAudience": { "value": "${POOL_ENTRA_AUDIENCE}" },
+    "sessionIdKey": { "value": "${POOL_SESSION_ID_KEY}" },
+    "foundryIsolationKey": { "value": "${POOL_FOUNDRY_ISOLATION_KEY}" },
+    "image": { "value": "${SERVICE_API_IMAGE_NAME}" }
+  }
+}

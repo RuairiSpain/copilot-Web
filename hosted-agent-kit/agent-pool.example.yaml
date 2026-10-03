@@ -1,0 +1,80 @@
+# Example agent pool configuration.
+# Select this file with AGENT_POOL_CONFIG=./agent-pool.example.yaml.
+# The same `agentPool` section may instead live inside azure.yaml.
+# Never put secrets in this file: credentials come from Managed Identity.
+agentPool:
+  defaults:
+    mode: stateless
+    scheduler: first_available
+    min_warm_sessions: 0
+    max_sessions: 10
+    queue:
+      enabled: true
+      max_depth: 500
+      max_wait_seconds: 120
+    sync_interval_seconds: 60
+    create_retries: 3
+    telemetry:
+      enabled: true
+
+  agents:
+    # One sandbox per (user, agent). The same user always returns to the same session.
+    coding-agent:
+      mode: stateful
+      affinity: user
+      # Sessions this service did not create are ignored after a restart, so no user can inherit
+      # another user's files. Set to true only if the agent's sessions hold no user data.
+      adopt_unbound_sessions: false
+      # Warm sessions cannot be used together with POOL_SESSION_ID_KEY (restart recovery).
+      # Remove this line if you set that key.
+      min_warm_sessions: 1
+      max_sessions: 20
+      scheduler: first_available
+      queue:
+        max_depth: 100
+        max_wait_seconds: 60
+
+    # Any request may use any free session. No per-user mapping is kept.
+    research-agent:
+      mode: stateless
+      scheduler: round_robin
+      min_warm_sessions: 2
+      max_sessions: 10
+
+    # An agent that uses the Invocations protocol. Its request and response formats are its own.
+    # The circuit breaker opens after 3 Foundry failures in a row and tests recovery after 20 seconds.
+    pipeline-agent:
+      mode: stateless
+      protocol: invocations
+      max_sessions: 6
+      circuit_breaker:
+        failure_threshold: 3
+        open_seconds: 20
+
+    # Pin new sessions to one agent version and retire idle sessions on any other version at each sync.
+    # `unbound` keeps user sessions. `idle` also ends them, which loses their conversation state.
+    pinned-agent:
+      mode: stateless
+      agent_version: "7"
+      version_drain: unbound
+
+    # Choose sessions by weighted scores instead of one strategy, and skip sessions about to expire.
+    scored-agent:
+      mode: stateless
+      max_sessions: 8
+      scheduler_profile:
+        filters: [NotExpiring]
+        scores:
+          OldestIdle: 20
+          ExpiryRisk: 10
+
+    # Stateless, queueing disabled: a busy pool answers 429 immediately.
+    # Telemetry for this agent is switched off.
+    batch-agent:
+      mode: stateless
+      scheduler: oldest_idle
+      max_sessions: 4
+      queue:
+        enabled: false
+      telemetry:
+        enabled: false

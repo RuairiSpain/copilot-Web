@@ -1,0 +1,47 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+name: hosted-agent-kit
+metadata:
+  template: hosted-agent-kit@0.1.0
+
+infra:
+  provider: bicep
+  path: infra
+  module: main
+
+services:
+  api:
+    project: .
+    language: python
+    host: containerapp
+    docker:
+      path: ./Dockerfile
+      remoteBuild: true
+
+# Agent pool configuration. A standalone file selected by AGENT_POOL_CONFIG overrides this section.
+agentPool:
+  defaults:
+    mode: stateless
+    scheduler: first_available
+    max_sessions: 10
+    queue:
+      enabled: true
+      max_depth: 500
+      max_wait_seconds: 120
+    sync_interval_seconds: 60
+    create_retries: 3
+    telemetry:
+      enabled: true
+  agents:
+    coding-agent:
+      mode: stateful
+      affinity: user
+      min_warm_sessions: 1
+      max_sessions: 20
+      queue:
+        max_depth: 100
+        max_wait_seconds: 60
+    research-agent:
+      mode: stateless
+      scheduler: round_robin
+      min_warm_sessions: 2
+      max_sessions: 10

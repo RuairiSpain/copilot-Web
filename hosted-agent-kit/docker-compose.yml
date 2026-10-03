@@ -1,0 +1,26 @@
+# Local run. Copy .env.example to .env and set FOUNDRY_PROJECT_ENDPOINT first.
+# Credentials: set AZURE_TENANT_ID, AZURE_CLIENT_ID and AZURE_CLIENT_SECRET in .env for a service
+# principal, or mount a signed-in Azure CLI profile (see the commented volume below).
+services:
+  agent-pool:
+    build: .
+    image: hosted-agent-kit:local
+    env_file: .env
+    environment:
+      AGENT_POOL_CONFIG: /app/config/agent-pool.yaml
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./agent-pool.example.yaml:/app/config/agent-pool.yaml:ro
+      # - ${HOME}/.azure:/home/pool/.azure:ro   # Azure CLI login for local development only
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    # Pool state is in memory. Never scale this service beyond one container.
+    deploy:
+      replicas: 1

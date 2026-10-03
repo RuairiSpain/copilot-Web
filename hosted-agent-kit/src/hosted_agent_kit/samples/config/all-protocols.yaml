@@ -1,0 +1,14 @@
+# Agents of both protocols behind one gateway.
+#   responses    : the platform's chat protocol; the pool sends and returns JSON, and can stream
+#   invocations  : the agent defines its own request and response; any content type, any status
+agentPool:
+  agents:
+    support-bot:
+      mode: stateless
+      protocol: responses
+    memory-bot:
+      mode: stateful
+      protocol: responses
+    doc-processor:
+      mode: stateless
+      protocol: invocations

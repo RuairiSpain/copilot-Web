@@ -1,0 +1,24 @@
+# The scheduler configuration can live inside your application's azure.yaml. `agentPool` and
+# `hack` are top-level keys that azd ignores; `Hack.from_yaml("azure.yaml")` reads them.
+# This file is an azure.yaml for the FastAPI application that calls the agents.
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+name: support-portal
+
+services:
+  api:                       # your FastAPI application, which imports hosted_agent_kit
+    project: .
+    language: python
+    host: containerapp
+    docker:
+      remoteBuild: true
+
+hack:
+  default_timeout_seconds: 90
+
+agentPool:
+  defaults:
+    max_sessions: 10
+  agents:
+    support-bot:
+      mode: stateless
+      min_warm_sessions: 1

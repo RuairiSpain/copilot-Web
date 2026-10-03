@@ -1,0 +1,197 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * 1" # weekly: dependency audit and mutation check
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_VERSION: "0.11.7"
+  PYTHON_VERSION: "3.13" # used by the jobs that are not part of the version matrix
+
+jobs:
+  quality:
+    name: Lint, types, security and tests (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv python install ${{ matrix.python }}
+      - name: Lock file is current
+        run: uv lock --check
+      - run: uv sync --frozen --python ${{ matrix.python }} --all-extras
+      - name: Format
+        run: uv run ruff format --check src tests scripts clients
+      - name: Lint
+        run: uv run ruff check src tests scripts clients
+      - name: Types (strict)
+        run: uv run mypy
+      - name: Static security analysis
+        run: uv run bandit -c pyproject.toml -r src clients -q
+      - name: Dependency vulnerability audit
+        run: |
+          uv export --frozen --no-dev --no-emit-project --format requirements-txt -o requirements.audit.txt
+          uv run pip-audit -r requirements.audit.txt --disable-pip --no-deps
+      - name: SDK and runtime versions
+        run: uv run python scripts/verify_versions.py
+      - name: Tests with coverage gate (90 percent statement and branch)
+        run: >
+          uv run pytest tests
+          --cov --cov-branch
+          --cov-report=term-missing
+          --cov-report=xml:coverage.xml
+          --cov-report=html:htmlcov
+          --junitxml=junit.xml
+      - name: Publish coverage and test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports-${{ matrix.python }}
+          path: |
+            coverage.xml
+            htmlcov/
+            junit.xml
+          if-no-files-found: warn
+
+  package:
+    name: Build, check and install the distribution
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
+      - run: uv python install ${{ env.PYTHON_VERSION }}
+      - run: uv sync --frozen
+      - run: uv build
+      - run: uv run twine check --strict dist/*
+      - name: Install the wheel in a clean environment and run the smoke test
+        run: uv run python scripts/check_distribution.py dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  typescript-client:
+    name: TypeScript client build and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: clients/typescript
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: clients/typescript/package-lock.json
+      - run: npm ci
+      - run: npm test
+
+  infrastructure:
+    name: Bicep build and lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: az bicep build --file infra/main.bicep --stdout > /dev/null
+      - run: az bicep lint --file infra/main.bicep
+
+  container:
+    name: Image build, SBOM and vulnerability scan
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          push: false
+          tags: hosted-agent-kit:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke test the container
+        run: |
+          docker run -d --name pool -p 8080:8080 \
+            -e POOL_AUTH_MODE=development \
+            -e FOUNDRY_PROJECT_ENDPOINT=https://example.invalid/api/projects/p \
+            hosted-agent-kit:ci
+          for i in $(seq 1 30); do
+            status=$(docker inspect --format '{{.State.Health.Status}}' pool)
+            [ "$status" = "healthy" ] && break
+            sleep 2
+          done
+          echo "health status: $status"
+          [ "$status" = "healthy" ]
+          curl --fail --silent http://localhost:8080/health/live
+          docker exec pool id -u | grep -qx 10001
+          docker logs pool
+          docker rm -f pool
+      - name: Software bill of materials
+        uses: anchore/sbom-action@v0
+        with:
+          image: hosted-agent-kit:ci
+          format: cyclonedx-json
+          output-file: sbom.cdx.json
+          upload-artifact: false
+      - name: Vulnerability scan (fails on fixable high or critical findings)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: hosted-agent-kit:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+      - name: Publish SBOM
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.cdx.json
+          if-no-files-found: warn
+
+  mutation:
+    name: Mutation check
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv python install ${{ env.PYTHON_VERSION }}
+      - run: uv sync --frozen
+      - run: uv run python scripts/mutation_check.py --workers 4 --report mutation-report.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mutation-report
+          path: mutation-report.json

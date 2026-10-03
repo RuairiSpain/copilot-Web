@@ -1,0 +1,168 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hosted-agent-kit"
+dynamic = ["version"]
+description = "Session-pool scheduler for Microsoft Foundry hosted agents, embedded in your FastAPI app."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Hosted Agent Kit contributors" }]
+keywords = ["azure", "foundry", "ai-agents", "hosted-agents", "scheduler", "fastapi", "sdk"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: FastAPI",
+    "Framework :: AsyncIO",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+# The core install is what the SDK needs to run the scheduler and call Foundry. The web
+# framework is an extra, so a worker or a test environment does not install it.
+dependencies = [
+    "aiohttp>=3.14.3",
+    "anyio>=4.0",
+    "azure-ai-projects~=2.7.0",
+    "azure-identity>=1.17",
+    "openai>=1.0",
+    "opentelemetry-api>=1.25",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+# `from hosted_agent_kit.integrations.fastapi import ...` and the samples.
+fastapi = ["fastapi>=0.115"]
+# The standalone HTTP service (`hack serve`): FastAPI plus token validation and a server.
+service = [
+    "fastapi>=0.115",
+    "httpx>=0.27",
+    "pyjwt[crypto]>=2.8",
+    "uvicorn[standard]>=0.30",
+]
+# Export metrics to Azure Monitor / Application Insights.
+azure-monitor = ["azure-monitor-opentelemetry>=1.6", "opentelemetry-sdk>=1.25"]
+all = [
+    "fastapi>=0.115",
+    "httpx>=0.27",
+    "pyjwt[crypto]>=2.8",
+    "uvicorn[standard]>=0.30",
+    "azure-monitor-opentelemetry>=1.6",
+    "opentelemetry-sdk>=1.25",
+]
+
+[project.scripts]
+hack = "hosted_agent_kit.cli:main"
+hack-service = "hosted_agent_kit.service.main:run"
+
+[tool.hatch.version]
+path = "src/hosted_agent_kit/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hosted_agent_kit"]
+exclude = ["**/__pycache__", "**/*.pyc"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "/docs",
+    "/scripts",
+    "/clients",
+    "/README.md",
+    "/CHANGELOG.md",
+    "/LICENSE",
+    "/SECURITY.md",
+    "/pyproject.toml",
+]
+exclude = ["**/__pycache__", "**/*.pyc", "/clients/typescript/node_modules", "/clients/typescript/dist"]
+
+[dependency-groups]
+dev = [
+    "build",
+    "fastapi>=0.115",
+    "httpx>=0.27",
+    "pyjwt[crypto]>=2.8",
+    "twine",
+    "uvicorn[standard]>=0.30",
+    "azure-monitor-opentelemetry>=1.6",
+    "opentelemetry-sdk>=1.25",
+    "asgi-lifespan",
+    "bandit",
+    "cryptography",
+    "httpx2>=2.13.1",
+    "hypothesis",
+    "mypy",
+    "pip-audit",
+    "pytest",
+    "pytest-asyncio",
+    "pytest-cov",
+    "ruff",
+    "types-pyyaml",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+pythonpath = ["clients/python"]
+addopts = "-q"
+filterwarnings = ["error::pytest.PytestUnraisableExceptionWarning"]
+markers = ["load: long running load tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["hosted_agent_kit"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+exclude_also = ["if TYPE_CHECKING:", "@overload", "\\.\\.\\.$"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests", "clients/python"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "S", "ASYNC", "C4", "SIM", "RUF", "PT"]
+ignore = ["S101"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "B", "RUF012", "PT018"]
+"scripts/**" = ["S"]
+"clients/**" = ["A002"]
+
+[tool.mypy]
+exclude = ["samples/agents/"]  # each sample agent is its own program and defines `app`
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+mypy_path = "src:clients/python"
+files = ["src", "tests", "scripts", "clients/python"]
+
+[[tool.mypy.overrides]]
+module = ["azure.*", "hypothesis.*", "asgi_lifespan.*"]
+ignore_missing_imports = true
+
+# Tests replace methods on fakes on purpose to script failures and timing.
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disable_error_code = ["method-assign", "assignment"]
+warn_unused_ignores = false
+
+[tool.bandit]
+exclude_dirs = ["tests"]
+
+# The sample that teaches testing contains test assertions.
+[tool.bandit.assert_used]
+skips = ["*/testing_your_app.py"]

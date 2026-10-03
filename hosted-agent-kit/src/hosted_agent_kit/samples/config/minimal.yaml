@@ -1,0 +1,7 @@
+# The smallest valid scheduler configuration: one stateless agent, every other value defaulted.
+# Defaults: max_sessions 10, queueing on (500 deep, 120 s), first_available scheduling,
+# a circuit breaker that opens after 5 failures, a resync with Foundry every 60 s.
+agentPool:
+  agents:
+    support-bot:
+      mode: stateless

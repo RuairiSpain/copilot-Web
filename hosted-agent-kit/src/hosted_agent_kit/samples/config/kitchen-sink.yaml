@@ -1,0 +1,60 @@
+# Every key the scheduler configuration accepts, with its default noted where it has one.
+# Unknown keys are errors (a typo never silently does nothing), duplicate keys are errors,
+# and an agent's name must match ^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$ and equal its Foundry agent name.
+agentPool:
+  # Applied to every agent. An agent's own value wins; nested sections merge key by key.
+  defaults:
+    mode: stateless                 # stateless | stateful (required for each agent, here or below)
+    scheduler: first_available      # first_available | round_robin | oldest_idle | newest_idle
+    min_warm_sessions: 0            # >= 0, and <= max_sessions
+    max_sessions: 10                # >= 1: the most sessions Foundry will hold for this agent
+    sync_interval_seconds: 60       # >= 10: how often to compare Foundry with the pool's view
+    create_retries: 3               # 0 to 10
+    queue:
+      enabled: true
+      max_depth: 500                # > 0 when enabled
+      max_wait_seconds: 120
+    telemetry:
+      enabled: true
+    circuit_breaker:
+      enabled: true
+      failure_threshold: 5          # 1 to 1000
+      open_seconds: 30
+      half_open_max_calls: 1        # 1 to 100
+
+  agents:
+    # Every key on one agent.
+    kitchen-sink-agent:
+      mode: stateful
+      affinity: user                # user for stateful, none for stateless (implied by mode)
+      protocol: responses           # responses | invocations
+      scheduler: round_robin        # ignored when scheduler_profile.scores is set
+      min_warm_sessions: 1
+      max_sessions: 25
+      adopt_unbound_sessions: false # stateful default false; stateless default true
+      sync_interval_seconds: 45
+      create_retries: 4
+      agent_version: "12"           # pin new sessions to this version (unset: latest)
+      version_drain: unbound        # never | unbound | idle
+      queue:
+        enabled: true
+        max_depth: 250
+        max_wait_seconds: 45
+      telemetry:
+        enabled: true
+      circuit_breaker:
+        enabled: true
+        failure_threshold: 4
+        open_seconds: 25
+        half_open_max_calls: 2
+      scheduler_profile:
+        filters: [NotExpiring]
+        scores:
+          AffinityPreference: 100
+          VersionPreferred: 50
+          ExpiryRisk: 10
+
+    # An Invocations agent with the least configuration.
+    kitchen-sink-invocations:
+      mode: stateless
+      protocol: invocations

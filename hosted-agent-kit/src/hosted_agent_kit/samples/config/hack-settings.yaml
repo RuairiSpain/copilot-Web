@@ -1,0 +1,27 @@
+# The optional top-level `hack:` section holds runtime settings. Names are the POOL_* environment
+# variables without the prefix. Environment variables win over this file.
+# Secrets (session_id_key, foundry_isolation_key, applicationinsights_connection_string) are
+# refused here: set POOL_SESSION_ID_KEY and the others in the environment.
+hack:
+  default_timeout_seconds: 90       # one upstream call, when the caller does not say
+  max_timeout_seconds: 300          # the longest a caller may ask for
+  max_stream_seconds: 300           # the longest a stream may stay open
+  max_request_seconds: 330          # ceiling on queue wait + creation + all attempts (unset: none)
+  max_response_bytes: 8388608       # largest non-streaming Invocations response
+  reservation_ttl_seconds: 900      # a reserved but unused slot is released after this
+  shutdown_grace_seconds: 20        # wait this long for running calls on shutdown
+  retry_after_seconds: 5            # Retry-After for capacity errors
+  startup_sync_timeout_seconds: 20  # wait this long for the first sync at start
+  upstream_throttle_retries: 3      # retry a 429 from Foundry with backoff
+  delete_retries: 3
+  create_ready_timeout_seconds: 90  # wait this long for a new session to become active
+  backoff_base_seconds: 0.5
+  backoff_max_seconds: 20
+  idempotency_ttl_seconds: 300      # 0 turns Idempotency-Key handling off
+  idempotency_max_entries: 2000
+  idempotency_max_body_bytes: 524288
+
+agentPool:
+  agents:
+    support-bot:
+      mode: stateless
