@@ -144,3 +144,69 @@ async def test_scopes_do_not_share_state(client: Any) -> None:
     two = RedisLedger(client, scope="sub1/b", ttl_seconds=5)
     await one.heartbeat("kit-1", 9, [])
     assert (await two.snapshot(1, None)).kits == {}
+
+
+# --------------------------------------------------------------- Entra credentials
+
+
+def _token(claims: dict[str, str]) -> str:
+    import base64
+    import json
+
+    def part(value: dict[str, str]) -> str:
+        return base64.urlsafe_b64encode(json.dumps(value).encode()).decode().rstrip("=")
+
+    return f"{part({'alg': 'none'})}.{part(claims)}.sig"
+
+
+class _Credential:
+    def __init__(self, lifetime: float, now: list[float]) -> None:
+        self.calls = 0
+        self._lifetime = lifetime
+        self._now = now
+
+    def get_token(self, scope: str) -> Any:
+        from types import SimpleNamespace
+
+        assert scope == "https://redis.azure.com/.default"
+        self.calls += 1
+        return SimpleNamespace(
+            token=_token({"oid": f"object-{self.calls}"}),
+            expires_on=self._now[0] + self._lifetime,
+        )
+
+
+async def test_the_entra_provider_uses_the_object_id_and_refreshes_before_expiry() -> None:
+    from hosted_agent_kit.adapters.redis_support import EntraCredentialProvider
+
+    now = [1000.0]
+    credential = _Credential(3600, now)
+    provider = EntraCredentialProvider(credential, clock=lambda: now[0])
+    user, password = provider.get_credentials()
+    assert user == "object-1" and password.count(".") == 2
+    now[0] += 3000  # still more than five minutes left
+    assert provider.get_credentials() == (user, password) and credential.calls == 1
+    now[0] += 400  # inside the refresh margin
+    assert (await provider.get_credentials_async())[0] == "object-2" and credential.calls == 2
+
+
+def test_a_token_without_an_object_id_is_refused() -> None:
+    from hosted_agent_kit.adapters.redis_support import EntraCredentialProvider
+
+    class NoOid:
+        def get_token(self, scope: str) -> Any:
+            from types import SimpleNamespace
+
+            return SimpleNamespace(token=_token({"sub": "x"}), expires_on=10**10)
+
+    with pytest.raises(ValueError, match="oid"):
+        EntraCredentialProvider(NoOid()).get_credentials()
+
+
+def test_the_real_provider_is_a_redis_credential_provider() -> None:
+    from redis.credentials import CredentialProvider
+
+    from hosted_agent_kit.adapters import redis_support
+
+    provider = redis_support._entra_provider()
+    assert isinstance(provider, CredentialProvider)

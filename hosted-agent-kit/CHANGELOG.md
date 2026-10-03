@@ -29,6 +29,9 @@ All notable changes are recorded here. The format follows
 - Borrowed permits that lapse in the ledger are dropped by the kit.
 - `ownership.entra_auth` and `ownership.timeout_seconds`; a standby kit starts without the store.
 - `ownership.renew_seconds` must now be at most a third of `ownership.ttl_seconds`.
+- Redis Entra authentication no longer uses `redis-entraid`, which pins PyJWT 2.13 (13 advisories,
+  failing the dependency audit). The kit now gets tokens from `azure-identity` itself, and the
+  lock file is back on PyJWT 2.15.1. It is untested against a live Azure Managed Redis.
 
 ### Changed
 - Identifier hashing in logs is keyed (HMAC).
