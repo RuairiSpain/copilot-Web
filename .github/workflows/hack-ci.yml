@@ -60,12 +60,14 @@ jobs:
         run: uv run python scripts/verify_versions.py
       - name: Tests with coverage gate (90 percent statement and branch)
         run: >
-          uv run pytest tests
+          uv run pytest tests --ignore=tests/load
           --cov --cov-branch
           --cov-report=term-missing
           --cov-report=xml:coverage.xml
           --cov-report=html:htmlcov
           --junitxml=junit.xml
+      - name: Soak test (2,000 streams; timed, so it runs without coverage tracing)
+        run: uv run pytest tests/load -q
       - name: Publish coverage and test reports
         if: always()
         uses: actions/upload-artifact@v4

@@ -33,7 +33,7 @@ kit = Hack.from_dict(
             },
         },
     },
-    settings=KitSettings(user_isolation_secret="demo-secret-not-for-production-use")  # noqa: S106
+    settings=KitSettings(user_isolation_secret="demo-secret-not-for-production-use")  # noqa: S106  # nosec B106 - demo value
     if demo_mode()
     else None,
     adapter=DemoFoundry() if demo_mode() else None,

@@ -239,7 +239,7 @@ class Hack:
         A kit that cannot authenticate would otherwise start, look healthy and fail every call.
         Network trouble is not treated this way: the kit starts and keeps trying.
         """
-        assert self._runtime is not None
+        assert self._runtime is not None  # nosec B101 - narrowing for the type checker
         rejected = [
             name
             for name in self._runtime.config.names
@@ -260,7 +260,7 @@ class Hack:
 
     async def _wait_for_initial_sync(self) -> None:
         """Wait until Foundry's existing sessions are known, so a first call can reuse them."""
-        assert self._runtime is not None
+        assert self._runtime is not None  # nosec B101
         reconciler = self._runtime.reconciler
         deadline = time.monotonic() + self.settings.startup_sync_timeout_seconds
         while not reconciler.initial_sync_done:
