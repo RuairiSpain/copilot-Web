@@ -21,6 +21,15 @@ All notable changes are recorded here. The format follows
 - `scripts/live_canary.py` and a scheduled canary workflow; a 2,000-session soak test.
 - Samples and YAML for the above; docs `quota.md`, ADRs 0011 and 0012.
 
+### Fixed (found in review)
+- The kit's CI, canary and publish workflows are now in the repository's `.github/workflows/`
+  (as `hack-*.yml`); GitHub did not run them from the subfolder.
+- Self-fencing now happens before the lease can expire, and leases are renewed during start-up.
+- The quota count can no longer be partial while it is rebuilt.
+- Borrowed permits that lapse in the ledger are dropped by the kit.
+- `ownership.entra_auth` and `ownership.timeout_seconds`; a standby kit starts without the store.
+- `ownership.renew_seconds` must now be at most a third of `ownership.ttl_seconds`.
+
 ### Changed
 - Identifier hashing in logs is keyed (HMAC).
 - `reporting_router` and `admin_router` refuse to build without `dependencies=` or

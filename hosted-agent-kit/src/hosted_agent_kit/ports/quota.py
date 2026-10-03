@@ -41,8 +41,12 @@ class QuotaLedger(Protocol):
 
     async def release_spare(self, kit_id: str, token: str) -> None: ...
 
-    async def heartbeat(self, kit_id: str, active: int, tokens: Sequence[str]) -> None:
-        """Publish this kit's active-session count and extend its permits."""
+    async def heartbeat(self, kit_id: str, active: int, tokens: Sequence[str]) -> list[str]:
+        """Publish this kit's active-session count and extend its permits.
+
+        Returns the tokens that could not be extended because the permit had already expired (or
+        was never granted). The kit must stop counting those as its own.
+        """
         ...
 
     async def forget(self, kit_id: str) -> None:

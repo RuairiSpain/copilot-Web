@@ -32,7 +32,9 @@ hack:
   ownership:                        # the URL is a secret: set POOL_OWNERSHIP__URL
     backend: memory                 # none | memory | redis
     ttl_seconds: 30
-    renew_seconds: 10               # under half of ttl_seconds
+    renew_seconds: 10               # at most a third of ttl_seconds
+    entra_auth: false               # true: sign in to Azure Managed Redis with the kit's identity
+    timeout_seconds: 2              # per-call limit for the lease store, under renew_seconds
     quiet_seconds: 30               # wait after a takeover before admitting calls
     standby: true                   # wait for the owner to fail instead of refusing to start
   quota:                            # the ledger URL is a secret: POOL_QUOTA__LEDGER__URL

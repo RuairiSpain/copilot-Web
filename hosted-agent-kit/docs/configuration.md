@@ -47,7 +47,8 @@ message that names the setting.
 | `POOL_OWNS` | all agents | Comma separated agents this kit schedules. |
 | `POOL_SHARD__INDEX` / `POOL_SHARD__COUNT` | none | This kit serves shard INDEX of COUNT of each owned agent. |
 | `POOL_OWNERSHIP__BACKEND` / `POOL_OWNERSHIP__URL` | `none` | `none`, `memory` or `redis`. The URL (a secret) is environment only. See [quota and ownership](quota.md#ownership). |
-| `POOL_OWNERSHIP__TTL_SECONDS` / `RENEW_SECONDS` / `QUIET_SECONDS` / `STANDBY` | 30 / 10 / 30 / false | Lease time, renewal period (under half the lease), wait after a takeover, and whether a kit waits as standby. |
+| `POOL_OWNERSHIP__TTL_SECONDS` / `RENEW_SECONDS` / `QUIET_SECONDS` / `STANDBY` | 30 / 10 / 30 / false | Lease time, renewal period (at most a third of the lease), wait after a takeover, and whether a kit waits as standby. |
+| `POOL_OWNERSHIP__ENTRA_AUTH` / `TIMEOUT_SECONDS` | false / 2 | Authenticate to Azure Managed Redis with the kit's identity; per-call limit for the lease store (under the renewal period). |
 | `POOL_QUOTA__BUDGET` | none | Most compute-holding sessions this kit may use. Nothing is enforced without it. |
 | `POOL_QUOTA__MIN_LIMIT`, `DECREASE_FACTOR`, `INCREASE_STEP`, `PROBE_SECONDS`, `COOLDOWN_SECONDS` | 1, 0.7, 1, 60, 30 | Adaptive limit. See [quota](quota.md#adaptive-limit). |
 | `POOL_QUOTA__SUBSCRIPTION_ID`, `REGION`, `REGION_LIMIT`, `SPARE` | none, none, none, 0 | Regional limit and the spare pool (spare needs the ledger). |

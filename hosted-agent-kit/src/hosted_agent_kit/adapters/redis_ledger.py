@@ -25,11 +25,17 @@ _HEARTBEAT = (
 local expires = now + tonumber(ARGV[3])
 redis.call('ZADD', KEYS[2], expires, ARGV[1])
 redis.call('HSET', KEYS[3], ARGV[1], ARGV[2])
+local lost = {}
 for i = 4, #ARGV do
   local member = ARGV[1] .. '|' .. ARGV[i]
-  if redis.call('ZSCORE', KEYS[1], member) then redis.call('ZADD', KEYS[1], expires, member) end
+  local score = redis.call('ZSCORE', KEYS[1], member)
+  if score and tonumber(score) > now then
+    redis.call('ZADD', KEYS[1], expires, member)
+  else
+    lost[#lost + 1] = ARGV[i]
+  end
 end
-return 1
+return lost
 """
 )
 
@@ -89,8 +95,9 @@ class RedisLedger:
     async def release_spare(self, kit_id: str, token: str) -> None:
         await self._redis.zrem(self._keys[0], f"{kit_id}|{token}")
 
-    async def heartbeat(self, kit_id: str, active: int, tokens: Sequence[str]) -> None:
-        await self._heartbeat(keys=self._keys, args=[kit_id, active, self._ttl_ms, *tokens])
+    async def heartbeat(self, kit_id: str, active: int, tokens: Sequence[str]) -> list[str]:
+        lost = await self._heartbeat(keys=self._keys, args=[kit_id, active, self._ttl_ms, *tokens])
+        return [str(t) for t in lost]
 
     async def forget(self, kit_id: str) -> None:
         await self._forget(keys=self._keys, args=[kit_id])

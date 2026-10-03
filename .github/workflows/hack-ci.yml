@@ -1,9 +1,11 @@
-name: ci
+name: hack-ci
 
 on:
   push:
     branches: [main]
+    paths: ["hosted-agent-kit/**", ".github/workflows/hack-ci.yml"]
   pull_request:
+    paths: ["hosted-agent-kit/**", ".github/workflows/hack-ci.yml"]
   workflow_dispatch:
   schedule:
     - cron: "17 3 * * 1" # weekly: dependency audit and mutation check
@@ -11,8 +13,12 @@ on:
 permissions:
   contents: read
 
+defaults:
+  run:
+    working-directory: hosted-agent-kit
+
 concurrency:
-  group: ci-${{ github.ref }}
+  group: hack-ci-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -66,9 +72,9 @@ jobs:
         with:
           name: test-reports-${{ matrix.python }}
           path: |
-            coverage.xml
-            htmlcov/
-            junit.xml
+            hosted-agent-kit/coverage.xml
+            hosted-agent-kit/htmlcov/
+            hosted-agent-kit/junit.xml
           if-no-files-found: warn
 
   package:
@@ -90,7 +96,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: dist
-          path: dist/
+          path: hosted-agent-kit/dist/
           if-no-files-found: error
 
   typescript-client:
@@ -99,14 +105,14 @@ jobs:
     timeout-minutes: 10
     defaults:
       run:
-        working-directory: clients/typescript
+        working-directory: hosted-agent-kit/clients/typescript
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: clients/typescript/package-lock.json
+          cache-dependency-path: hosted-agent-kit/clients/typescript/package-lock.json
       - run: npm ci
       - run: npm test
 
@@ -130,7 +136,7 @@ jobs:
       - name: Build image
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: hosted-agent-kit
           load: true
           push: false
           tags: hosted-agent-kit:ci
@@ -158,7 +164,7 @@ jobs:
         with:
           image: hosted-agent-kit:ci
           format: cyclonedx-json
-          output-file: sbom.cdx.json
+          output-file: hosted-agent-kit/sbom.cdx.json
           upload-artifact: false
       - name: Vulnerability scan (fails on fixable high or critical findings)
         uses: aquasecurity/trivy-action@0.28.0
@@ -173,7 +179,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: sbom
-          path: sbom.cdx.json
+          path: hosted-agent-kit/sbom.cdx.json
           if-no-files-found: warn
 
   mutation:
@@ -194,4 +200,4 @@ jobs:
         if: always()
         with:
           name: mutation-report
-          path: mutation-report.json
+          path: hosted-agent-kit/mutation-report.json

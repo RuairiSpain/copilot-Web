@@ -71,6 +71,7 @@ class OwnershipManager:
         self._on_deactivate = on_deactivate
         self._sleep = sleep
         self._held: list[_Held] = []
+        self._activation_lost = False
         self._role = Role.STOPPED
         self._last_confirmed = 0.0
         self._task: asyncio.Task[None] | None = None
@@ -88,10 +89,22 @@ class OwnershipManager:
     # ----------------------------------------------------------------- lifecycle
 
     async def start(self) -> None:
-        """Try to become active now. Without ``standby``, a conflict is an error."""
-        await self._store.start()
+        """Try to become active now. Without ``standby``, a conflict is an error.
+
+        A standby kit that cannot reach the store yet starts anyway and keeps trying.
+        """
         self._role = Role.STANDBY
-        conflict = await self._try_activate()
+        try:
+            await self._store.start()
+        except Exception as exc:
+            if not self._s.standby:
+                self._role = Role.STOPPED
+                raise OwnershipConflictError(
+                    f"the ownership store is unavailable ({type(exc).__name__})"
+                ) from exc
+            conflict: str | None = f"the ownership store is unavailable ({type(exc).__name__})"
+        else:
+            conflict = await self._try_activate()
         if self._role is not Role.ACTIVE and conflict is not None and not self._s.standby:
             self._role = Role.STOPPED
             raise OwnershipConflictError(conflict)
@@ -133,13 +146,18 @@ class OwnershipManager:
             await self._try_activate()
 
     async def _renew_or_fence(self) -> None:
+        started = self._clock.monotonic()
         outcome = await self._renew_all()
-        now = self._clock.monotonic()
         if outcome == "ok":
-            self._last_confirmed = now
+            # The store set the lease expiry while the call ran, so count from when it began.
+            self._last_confirmed = started
             return
-        silent_for = now - self._last_confirmed
-        if outcome == "lost" or silent_for > self._s.ttl_seconds * FENCE_FRACTION:
+        silent_for = self._clock.monotonic() - self._last_confirmed
+        # Another try comes one renew period later. Fence now if that would be too late.
+        if (
+            outcome == "lost"
+            or silent_for + self._s.renew_seconds > self._s.ttl_seconds * FENCE_FRACTION
+        ):
             await self._fence(outcome)
 
     async def _fence(self, reason: str) -> None:
@@ -180,16 +198,49 @@ class OwnershipManager:
         if previous and self._s.quiet_seconds > 0 and not await self._quiet_wait():
             await self._release_all()
             return "ownership was lost during the quiet period"
-        try:
-            await self._on_activate()
-        except BaseException:
+        if not await self._activate_while_renewing():
             await self._release_all()
-            raise
+            return "ownership was lost while the kit was starting"
         self._role = Role.ACTIVE
         if previous:
             self.takeovers += 1
             log_event(logger, "ownership_takeover", instance_id=self._instance, previous=previous)
         return None
+
+    async def _activate_while_renewing(self) -> bool:
+        """Run ``on_activate`` and keep the leases alive meanwhile: building the runtime and the
+        first sync can take as long as a lease. False when a lease was lost during it."""
+        keeper = asyncio.create_task(self._renew_during_activation()) if self._run_loop else None
+        try:
+            await self._on_activate()
+        except BaseException:
+            await self._release_all()
+            raise
+        finally:
+            if keeper is not None:
+                keeper.cancel()
+                await asyncio.gather(keeper, return_exceptions=True)
+        if self._activation_lost:
+            self._activation_lost = False
+            await self._on_deactivate()
+            return False
+        return True
+
+    async def _renew_during_activation(self) -> None:
+        while True:
+            await self._sleep(self._s.renew_seconds)
+            started = self._clock.monotonic()
+            outcome = await self._renew_all()
+            if outcome == "ok":
+                self._last_confirmed = started
+                continue
+            silent_for = self._clock.monotonic() - self._last_confirmed
+            if (
+                outcome == "lost"
+                or silent_for + self._s.renew_seconds > self._s.ttl_seconds * FENCE_FRACTION
+            ):
+                self._activation_lost = True
+                return
 
     async def _quiet_wait(self) -> bool:
         """Wait for the previous owner's in-flight calls to finish, renewing the leases."""

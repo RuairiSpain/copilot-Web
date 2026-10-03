@@ -1,4 +1,4 @@
-name: canary
+name: hack-canary
 
 # A nightly check against a sandbox Foundry project. It needs a stateless Responses hosted agent
 # named in CANARY_AGENT and an identity with access to the project. It is skipped until the
@@ -17,6 +17,10 @@ on:
 permissions:
   contents: read
   id-token: write
+
+defaults:
+  run:
+    working-directory: hosted-agent-kit
 
 jobs:
   canary:
@@ -46,5 +50,5 @@ jobs:
         if: always()
         with:
           name: canary
-          path: canary.json
+          path: hosted-agent-kit/canary.json
           if-no-files-found: ignore

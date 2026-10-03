@@ -24,7 +24,10 @@ been active within `idle_timeout_seconds` plus a 30 second margin. A session the
    Refusals within `cooldown_seconds` of a decrease are ignored.
 4. **Shared ledger (optional).** With `quota.ledger` (Redis), kits publish their counts. A kit may
    borrow permits from the spare pool (`quota.spare`) and reporting shows the regional total.
-   If Redis is down the kit keeps working on layers 2 and 3.
+   A permit that lapses in Redis (no heartbeat within `ledger.ttl_seconds`) is dropped by the kit
+   at its next heartbeat, or locally when Redis stays unreachable for that long.
+   If Redis is down the kit keeps working on layers 2 and 3. A 429 caused by another tool that
+   shares the quota also lowers this kit's limit.
 
 At an active limit the kit stops the least recently used idle session to make room. If none is idle
 the call waits in the queue.
@@ -38,8 +41,12 @@ lists its agents. `hack plan` reports overlaps, shard gaps and duplicate kit ids
   Session ids carry the prefix `pool-s{index}-`. A call for another shard's user raises
   `WrongShardError` (421).
 - **Leases.** With `ownership.backend: redis` a kit holds one lease per agent (and shard), renewed
-  every `renew_seconds`. A kit that cannot renew for two thirds of the lease time stops serving
-  (self-fencing). The lease holds an epoch, so a late holder cannot act.
+  every `renew_seconds` (at most a third of `ttl_seconds`). A kit stops serving (self-fencing) when
+  its next renewal attempt would fall after two thirds of the lease time, so it fences before
+  another kit can take the lease. The epoch only protects renewals: Foundry calls carry no fencing
+  token, so calls already in flight finish during the shutdown grace.
+  Leases are renewed while a kit starts up, and a standby kit starts even if the store is
+  unreachable and keeps trying. The Redis scripts need Redis 5 or later and a primary node.
 - **Standby.** With `ownership.standby: true` a second kit waits and takes over after the lease
   expires, then waits `quiet_seconds` before it admits calls.
 - **No Raft.** State is rebuilt from Foundry on takeover, so no consensus cluster is needed.

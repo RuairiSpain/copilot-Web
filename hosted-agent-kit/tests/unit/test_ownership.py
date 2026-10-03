@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import pytest
@@ -236,10 +237,114 @@ async def test_a_failed_activation_gives_the_leases_back(
 def test_ownership_settings_are_checked() -> None:
     from hosted_agent_kit.config.models import ConfigError
 
-    with pytest.raises(ConfigError, match="half"):
-        OwnershipSettings(backend="memory", ttl_seconds=10, renew_seconds=6)
+    with pytest.raises(ConfigError, match="third"):
+        OwnershipSettings(backend="memory", ttl_seconds=30, renew_seconds=11)
+    with pytest.raises(ConfigError, match="timeout_seconds"):
+        OwnershipSettings(backend="memory", ttl_seconds=30, renew_seconds=10, timeout_seconds=10)
     with pytest.raises(ConfigError, match="url"):
         OwnershipSettings(backend="redis")
+
+
+# ------------------------------------------------------------ review regressions
+
+
+class Flaky(MemoryOwnershipStore):
+    """A store whose renewals (and optionally start) fail on demand."""
+
+    def __init__(self, clock: FakeClock) -> None:
+        super().__init__(clock)
+        self.renew_down = False
+        self.start_down = False
+
+    async def start(self) -> None:
+        if self.start_down:
+            raise ConnectionError("down")
+
+    async def renew(self, key: str, holder: str, epoch: int, ttl_seconds: float) -> bool:
+        if self.renew_down:
+            raise ConnectionError("down")
+        return await super().renew(key, holder, epoch, ttl_seconds)
+
+
+async def test_a_kit_fences_before_its_lease_can_expire() -> None:
+    clock = FakeClock()
+    store = Flaky(clock)
+    rig = Rig(store, clock, "a", quiet_seconds=0)
+    await rig.manager.start()
+    store.renew_down = True
+    clock.advance(10)
+    await rig.manager.tick()
+    assert role_of(rig) is Role.ACTIVE  # one missed renewal is tolerated
+    clock.advance(10)
+    await rig.manager.tick()
+    # Twenty seconds in, the lease (30 s) still stands, so no other kit could be active yet.
+    assert await store.holder("p/a/0") == "a"
+    assert role_of(rig) is Role.STANDBY and rig.deactivated == 1
+
+
+async def test_a_standby_kit_starts_while_the_store_is_unreachable_and_activates_later() -> None:
+    clock = FakeClock()
+    store = Flaky(clock)
+    store.start_down = True
+    rig = Rig(store, clock, "a", standby=True)
+    await rig.manager.start()
+    assert role_of(rig) is Role.STANDBY
+    store.start_down = False
+    await rig.manager.tick()
+    assert role_of(rig) is Role.ACTIVE
+    strict = Rig(store, clock, "b")
+    store.start_down = True
+    with pytest.raises(OwnershipConflictError, match="unavailable"):
+        await strict.manager.start()
+
+
+async def _active_during_slow_start(steal: bool) -> tuple[Rig, Flaky]:
+    clock = FakeClock()
+    store = Flaky(clock)
+    rig = Rig(store, clock, "a", quiet_seconds=0)
+
+    async def sleep(seconds: float) -> None:
+        clock.advance(seconds)
+        await asyncio.sleep(0)
+
+    async def on_activate() -> None:
+        await asyncio.sleep(0)  # let the renewal task start
+        if steal:
+            clock.advance(31)  # nobody renewed in time, so another kit can take the lease
+            await store.claim("p/a/0", "b", TTL)
+        for _ in range(12):
+            clock.advance(5)
+            await asyncio.sleep(0)
+
+    rig.manager = OwnershipManager(
+        store,
+        settings(quiet_seconds=0, standby=steal),
+        instance_id="a",
+        keys=["p/a/0"],
+        clock=clock,
+        on_activate=on_activate,
+        on_deactivate=rig.manager._on_deactivate,
+        sleep=sleep,
+    )
+    await rig.manager.start()
+    return rig, store
+
+
+async def test_leases_are_renewed_while_the_kit_is_starting() -> None:
+    rig, store = await _active_during_slow_start(steal=False)
+    try:
+        assert role_of(rig) is Role.ACTIVE and await store.holder("p/a/0") == "a"
+    finally:
+        await rig.manager.stop()
+
+
+async def test_a_lease_lost_while_starting_leaves_the_kit_inactive() -> None:
+    rig, _store = await _active_during_slow_start(steal=True)
+    try:
+        assert role_of(rig) is not Role.ACTIVE and rig.deactivated == 1
+        assert rig.manager.epochs == {}  # it holds nothing after losing the lease
+    finally:
+        await rig.manager.stop()
 
 
 # ---------------------------------------------------------------- the kit itself

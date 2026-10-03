@@ -131,7 +131,12 @@ def build_ownership_store(
         from hosted_agent_kit.adapters.redis_ownership import RedisOwnershipStore
         from hosted_agent_kit.adapters.redis_support import connect
 
-        redis = connect(section.url, entra_auth=False, timeout_seconds=2.0, client=client)
+        redis = connect(
+            section.url,
+            entra_auth=section.entra_auth,
+            timeout_seconds=section.timeout_seconds,
+            client=client,
+        )
         return RedisOwnershipStore(redis)
     raise ConfigError("ownership.backend is none: there is no lease store to build")
 

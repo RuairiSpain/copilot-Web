@@ -108,6 +108,14 @@ async def test_permits_expire_without_a_heartbeat_and_survive_with_one(client: A
     assert not await pool.acquire_spare("kit-3", "t3", 1)  # kit-1's still holds the only one
 
 
+async def test_a_heartbeat_names_the_permits_that_could_not_be_extended(client: Any) -> None:
+    pool = ledger(client, ttl=0.3)
+    assert await pool.acquire_spare("kit-1", "t1", 2)
+    assert await pool.heartbeat("kit-1", 1, ["t1"]) == []
+    await asyncio.sleep(0.4)
+    assert await pool.heartbeat("kit-1", 1, ["t1", "never-granted"]) == ["t1", "never-granted"]
+
+
 async def test_the_snapshot_sums_live_kits_and_drops_dead_ones(client: Any) -> None:
     pool = ledger(client, ttl=0.3)
     await pool.heartbeat("kit-1", 30, [])

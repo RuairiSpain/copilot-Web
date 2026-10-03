@@ -1,10 +1,10 @@
-name: publish
+name: hack-publish
 
 # Publishes to PyPI with trusted publishing (OpenID Connect): no API token is stored anywhere.
 # One-time setup on pypi.org: Account -> Publishing -> add a pending publisher with
 #   project name  hosted-agent-kit
 #   owner/repo    <your GitHub owner>/<this repository>
-#   workflow      publish.yml
+#   workflow      hack-publish.yml
 #   environment   pypi
 # Do the same on test.pypi.org with the environment `testpypi` to rehearse a release.
 #
@@ -24,6 +24,10 @@ on:
 
 permissions:
   contents: read
+
+defaults:
+  run:
+    working-directory: hosted-agent-kit
 
 env:
   UV_VERSION: "0.11.7"
@@ -52,7 +56,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: dist
-          path: dist/
+          path: hosted-agent-kit/dist/
           if-no-files-found: error
 
   publish-testpypi:
@@ -67,7 +71,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: dist
-          path: dist/
+          path: hosted-agent-kit/dist/
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
@@ -84,5 +88,5 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: dist
-          path: dist/
+          path: hosted-agent-kit/dist/
       - uses: pypa/gh-action-pypi-publish@release/v1

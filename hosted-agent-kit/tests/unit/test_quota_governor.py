@@ -332,3 +332,38 @@ async def test_reporting_works_without_a_ledger_and_survives_one_that_is_down() 
         view = await kit.reporting.quota()
         assert view.regional is None and view.kit_id.startswith("kit-")
         assert kit.reporting.health()["kit_id"] == view.kit_id
+
+
+async def test_a_permit_that_lapsed_in_the_ledger_is_no_longer_counted_by_the_kit() -> None:
+    clock = FakeClock()
+    ledger = MemoryLedger(clock, ttl_seconds=30)
+    g = governor(
+        clock, ledger, budget=2, spare=3, region="r", region_limit=10, ledger={"backend": "memory"}
+    )
+    assert await g.try_borrow() and g.limit() == 3
+    clock.advance(31)  # no heartbeat for longer than the permit lives
+    await g.heartbeat(0)
+    assert g.borrowed == 0 and g.limit() == 2
+    assert await ledger.snapshot(3, 10) is not None
+
+
+async def test_permits_expire_locally_when_the_ledger_stays_unreachable() -> None:
+    clock = FakeClock()
+    ledger = MemoryLedger(clock, ttl_seconds=30)
+    g = governor(
+        clock,
+        ledger,
+        budget=2,
+        spare=3,
+        region="r",
+        region_limit=10,
+        ledger={"backend": "memory", "ttl_seconds": 30},
+    )
+    assert await g.try_borrow()
+    ledger.available = False
+    clock.advance(20)
+    await g.heartbeat(0)
+    assert g.borrowed == 1  # not yet: it may still be valid
+    clock.advance(11)
+    await g.heartbeat(0)
+    assert g.borrowed == 0  # past its time to live without an extension

@@ -263,9 +263,32 @@ class KitGovernor:
         if self._ledger is None:
             return
         try:
-            await self._ledger.heartbeat(self._kit_id, counted, self.tokens)
+            lost = await self._ledger.heartbeat(self._kit_id, counted, self.tokens)
         except Exception as exc:
             self._ledger_error("heartbeat", exc)
+            self._expire_stale_permits()
+            return
+        for token in lost:  # the permit lapsed: another kit may hold it now
+            self._permits.pop(token, None)
+        now = self._clock.monotonic()
+        for token in self._permits:  # the value is when the permit was last known to be alive
+            self._permits[token] = now
+        if lost:
+            log_event(
+                logger,
+                "quota_permits_lost",
+                level=logging.WARNING,
+                kit_id=self._kit_id,
+                permits=len(lost),
+            )
+
+    def _expire_stale_permits(self) -> None:
+        """With the ledger unreachable, a permit not extended within its time to live is gone."""
+        ttl = self._s.ledger.ttl_seconds if self._s.ledger is not None else 30
+        now = self._clock.monotonic()
+        for token, granted in list(self._permits.items()):
+            if now - granted > ttl:
+                del self._permits[token]
 
     async def close(self) -> None:
         if self._ledger is None:
@@ -312,6 +335,7 @@ class QuotaGate:
         )
         self.lock = asyncio.Lock()
         self._index = CountedIndex()
+        self._building: CountedIndex | None = None
         registry.subscribe(self._on_change)
         self.evictions = 0
         self.last_counted = 0
@@ -328,26 +352,41 @@ class QuotaGate:
         key = event.key
         cfg = self._config.get(key.agent_name)
         if event.type is ChangeType.DELETED or cfg is None:
-            self._index.set(key.agent_name, key.session_id, None)
-            return
-        until = counted_until(
-            event.record, cfg, idle_status_deprovisions=self._settings.idle_status_deprovisions
-        )
+            until = None
+        else:
+            until = counted_until(
+                event.record,
+                cfg,
+                idle_status_deprovisions=self._settings.idle_status_deprovisions,
+            )
         self._index.set(key.agent_name, key.session_id, until)
+        if self._building is not None:  # a rebuild is under way: it must not miss this change
+            self._building.set(key.agent_name, key.session_id, until)
 
     async def rebuild(self) -> None:
         """Recompute every session's window from the registry: after a configuration reload, and
-        now and then to correct any drift."""
-        self._index.clear()
-        for name in self._config.names:
-            cfg = self._config.get(name)
-            if cfg is None:
-                continue
-            for record in await self._registry.view(name):
-                until = counted_until(
-                    record, cfg, idle_status_deprovisions=self._settings.idle_status_deprovisions
-                )
-                self._index.set(name, record.session_id, until)
+        now and then to correct any drift.
+
+        The new index is built on the side and swapped in whole, so a call that checks the count
+        while the rebuild awaits the registry never sees a partial one.
+        """
+        fresh = CountedIndex()
+        self._building = fresh
+        try:
+            for name in self._config.names:
+                cfg = self._config.get(name)
+                if cfg is None:
+                    continue
+                for record in await self._registry.view(name):
+                    until = counted_until(
+                        record,
+                        cfg,
+                        idle_status_deprovisions=self._settings.idle_status_deprovisions,
+                    )
+                    fresh.set(name, record.session_id, until)
+            self._index = fresh
+        finally:
+            self._building = None
 
     async def agent_counted(self, cfg: AgentConfig, now: datetime) -> int:
         """Counted sessions plus the slots reserved for sessions being created."""
@@ -488,7 +527,6 @@ class QuotaGate:
         now = self._clock.now()
         await self.rebuild()  # correct any drift in the incremental count
         counted = await self.kit_counted(now)
-        self._last_counted = counted
         self.governor.tick()
         await self.governor.rebalance(counted)
         await self.governor.heartbeat(counted)

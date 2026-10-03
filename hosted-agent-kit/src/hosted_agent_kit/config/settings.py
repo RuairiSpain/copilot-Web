@@ -107,7 +107,9 @@ class OwnershipSettings(_Section):
     backend: Literal["none", "memory", "redis"] = "none"
     url: SecretStr | None = None
     ttl_seconds: float = Field(default=30, gt=0)
-    renew_seconds: float = Field(default=10, gt=0)
+    renew_seconds: float = Field(
+        default=10, gt=0, description="At most a third of ttl_seconds, so a kit can fence in time."
+    )
     quiet_seconds: float = Field(
         default=30, ge=0, description="After taking over, wait this long before admitting calls."
     )
@@ -115,11 +117,21 @@ class OwnershipSettings(_Section):
         default=False,
         description="If another kit owns the agent, wait as a standby; else refuse to start.",
     )
+    entra_auth: bool = Field(
+        default=False, description="Authenticate to Azure Managed Redis with the kit's identity."
+    )
+    timeout_seconds: float = Field(
+        default=2.0, gt=0, description="Per-call limit for the lease store; slower counts as down."
+    )
 
     @model_validator(mode="after")
     def _check(self) -> Self:
-        if self.renew_seconds * 2 >= self.ttl_seconds:
-            raise ConfigError("ownership.renew_seconds must be under half of ownership.ttl_seconds")
+        if self.renew_seconds * 3 > self.ttl_seconds:
+            raise ConfigError(
+                "ownership.renew_seconds must be at most a third of ownership.ttl_seconds"
+            )
+        if self.timeout_seconds >= self.renew_seconds:
+            raise ConfigError("ownership.timeout_seconds must be under ownership.renew_seconds")
         if self.backend == "redis" and self.url is None:
             raise ConfigError("ownership.backend redis needs ownership.url")
         return self

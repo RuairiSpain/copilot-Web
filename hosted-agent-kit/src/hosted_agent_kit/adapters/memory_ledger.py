@@ -43,15 +43,19 @@ class MemoryLedger:
         self._check()
         self._permits.pop(f"{kit_id}|{token}", None)
 
-    async def heartbeat(self, kit_id: str, active: int, tokens: Sequence[str]) -> None:
+    async def heartbeat(self, kit_id: str, active: int, tokens: Sequence[str]) -> list[str]:
         self._check()
         self._purge()
         expires = self._clock.monotonic() + self._ttl
         self._kits[kit_id] = (active, expires)
+        lost: list[str] = []
         for token in tokens:
             key = f"{kit_id}|{token}"
             if key in self._permits:
                 self._permits[key] = expires
+            else:
+                lost.append(token)
+        return lost
 
     async def forget(self, kit_id: str) -> None:
         self._check()

@@ -126,3 +126,40 @@ async def test_three_kits_share_a_redis_ledger_and_borrow_the_spare_pool() -> No
         for k in kits:
             await k.stop()
         await redis.aclose()
+
+
+async def test_the_count_is_never_partial_while_the_index_is_rebuilt() -> None:
+    agents: dict[str, dict[str, Any]] = {f"agent-{i}": {} for i in range(3)}
+    h = make_harness(agents, DEFAULTS, quota={"budget": 20}, evict_idle_for_quota=False)
+    h.fake.invoke_gate = asyncio.Event()
+    calls = [
+        asyncio.create_task(h.pool.execute(make_request(f"agent-{i % 3}", f"u{i}")))
+        for i in range(6)
+    ]
+    await settle()
+    gate = h.pool.quota
+    expected = await gate.kit_counted(h.clock.now())
+    assert expected == 6
+
+    real_view = h.registry.view
+
+    async def slow_view(agent: str) -> Any:
+        await asyncio.sleep(0)  # let other tasks run between agents
+        return await real_view(agent)
+
+    h.registry.view = slow_view  # type: ignore[method-assign]
+    seen: list[int] = []
+
+    async def watch() -> None:
+        while True:
+            seen.append(await gate.kit_counted(h.clock.now()))
+            await asyncio.sleep(0)
+
+    watcher = asyncio.create_task(watch())
+    for _ in range(5):
+        await gate.rebuild()
+    watcher.cancel()
+    h.registry.view = real_view  # type: ignore[method-assign]
+    assert seen and min(seen) == expected
+    h.fake.invoke_gate.set()
+    await asyncio.gather(*calls)
