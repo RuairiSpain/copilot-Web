@@ -169,7 +169,7 @@ jobs:
           output-file: hosted-agent-kit/sbom.cdx.json
           upload-artifact: false
       - name: Vulnerability scan (fails on fixable high or critical findings)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.28.0
         with:
           image-ref: hosted-agent-kit:ci
           severity: HIGH,CRITICAL
