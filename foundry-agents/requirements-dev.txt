@@ -1,0 +1,5 @@
+# Only for the repo-level contract tests in tests/. Each agent manages its own
+# dependencies with uv (see agents/*/pyproject.toml).
+pytest>=9.0
+pyyaml>=6.0
+jsonschema>=4.23

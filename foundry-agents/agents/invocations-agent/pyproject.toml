@@ -1,0 +1,30 @@
+[project]
+name = "invocations-agent"
+version = "0.1.0"
+description = "Foundry hosted agent (Invocations protocol, typed JSON API) using AI Search and the code interpreter via a toolbox."
+requires-python = ">=3.13"
+dependencies = [
+    "agent-framework-foundry",
+    "agent-framework-foundry-hosting>=1.0.0b261002",
+    "azure-identity>=1.26.0",
+    "python-dotenv>=1.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0",
+    "pytest-asyncio>=1.0",
+    "ruff>=0.15",
+    "mypy>=1.18",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+exclude = ["^tests/"]
+ignore_missing_imports = true
