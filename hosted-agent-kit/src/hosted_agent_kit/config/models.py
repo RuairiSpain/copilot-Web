@@ -12,6 +12,7 @@ from hosted_agent_kit.domain.enums import (
     AgentMode,
     AgentProtocol,
     SchedulerStrategy,
+    UserIsolation,
     VersionDrain,
 )
 
@@ -75,6 +76,9 @@ class PartialAgentSettings(_Strict):
     agent_version: str | None = Field(default=None, min_length=1, max_length=64)
     version_drain: VersionDrain | None = None
     scheduler_profile: SchedulerProfileConfig | None = None
+    max_active_sessions: int | None = Field(default=None, ge=1)
+    idle_timeout_seconds: int | None = Field(default=None, ge=60, le=14400)
+    user_isolation: UserIsolation | None = None
 
 
 class QueueConfig(_Strict):
@@ -119,6 +123,14 @@ class AgentConfig(_Strict):
     version_drain: VersionDrain = VersionDrain.NEVER
     # Filters to add to the core ones, and score weights that replace the strategy score.
     scheduler_profile: SchedulerProfileConfig = Field(default_factory=SchedulerProfileConfig)
+    # Sessions that may hold compute at once (creating, running, or inside the idle window).
+    # Unset: ``max_sessions``. ``max_sessions`` is the most sessions that exist, idle ones included.
+    max_active_sessions: int | None = Field(default=None, ge=1)
+    # How long after its last use Foundry keeps a session's compute. The session counts toward the
+    # quota until then. Set it to the idle timeout the agent is deployed with.
+    idle_timeout_seconds: int = Field(default=900, ge=60, le=14400)
+    # Send a per-user isolation key (and, for ``delegated``, the acting user) on each invocation.
+    user_isolation: UserIsolation = UserIsolation.OFF
 
     @model_validator(mode="after")
     def _check_consistency(self) -> Self:
@@ -129,6 +141,8 @@ class AgentConfig(_Strict):
             )
         if self.min_warm_sessions > self.max_sessions:
             raise ValueError("min_warm_sessions cannot exceed max_sessions")
+        if self.max_active_sessions is not None and self.max_active_sessions > self.max_sessions:
+            raise ValueError("max_active_sessions cannot exceed max_sessions")
         if self.queue.enabled and self.queue.max_depth == 0:
             raise ValueError("queue.enabled requires queue.max_depth greater than zero")
         return self
@@ -136,6 +150,13 @@ class AgentConfig(_Strict):
     @property
     def stateful(self) -> bool:
         return self.mode is AgentMode.STATEFUL
+
+    @property
+    def active_limit(self) -> int:
+        """The most sessions of this agent that may hold compute at once."""
+        if self.max_active_sessions is None:
+            return self.max_sessions
+        return min(self.max_active_sessions, self.max_sessions)
 
 
 class AgentPoolConfig(BaseModel):

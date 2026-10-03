@@ -35,6 +35,13 @@ class AgentAdminView(BaseModel):
     agent_name: str
     mode: str
     max_sessions: int
+    max_active_sessions: int = Field(
+        default=0, description="Most sessions that may hold compute at once."
+    )
+    sessions_counted: int = Field(
+        default=0,
+        description="Sessions assumed to hold compute: leased, starting, or in the idle window.",
+    )
     sessions_total: int
     sessions_available: int
     sessions_leased: int

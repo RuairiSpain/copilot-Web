@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import logging
+import secrets
 from contextvars import ContextVar
 from datetime import UTC, datetime
 from typing import Any
@@ -27,9 +29,24 @@ _REDACTED_KEYS = frozenset(
 _RESERVED = {"event", "timestamp", "level", "logger", "correlation_id", "request_id"}
 
 
+# A keyed hash: an unkeyed one can be reversed by trying likely values (emails, numbers). Without a
+# configured secret the key is random per process, so tokens do not match across restarts.
+_hash_key: bytes = secrets.token_bytes(32)
+_HASH_LABEL = b"hosted-agent-kit/identifier-hash/v1\x00"
+HASH_CHARS = 16
+
+
+def configure_identifier_hashing(secret: bytes | None) -> None:
+    """Use ``secret`` to key identifier tokens, so they are stable across restarts and replicas."""
+    global _hash_key
+    if secret is None:
+        return
+    _hash_key = hmac.new(secret, _HASH_LABEL, hashlib.sha256).digest()
+
+
 def hash_identifier(value: str) -> str:
     """Return a short, stable, non-reversible token for session or user identifiers."""
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:12]
+    return hmac.new(_hash_key, value.encode("utf-8"), hashlib.sha256).hexdigest()[:HASH_CHARS]
 
 
 class JsonFormatter(logging.Formatter):

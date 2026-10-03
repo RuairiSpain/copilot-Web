@@ -89,6 +89,15 @@ class InMemoryMetrics:
     def session_restored(self, agent: str) -> None:
         self._inc("pool_sessions_restored_total", agent)
 
+    def quota_refused(self, agent: str, scope: str) -> None:
+        self._inc("pool_quota_refused_total", agent, scope=scope)
+
+    def session_evicted(self, agent: str) -> None:
+        self._inc("pool_sessions_evicted_total", agent)
+
+    def sessions_counted(self, agent: str, count: int) -> None:
+        self._gauges[("pool_sessions_counted", agent, ())] = float(count)
+
     def snapshot(self) -> dict[str, Any]:
         """JSON operational snapshot grouped by agent name."""
         agents: dict[str, dict[str, Any]] = {}
@@ -182,3 +191,12 @@ class GatedMetrics:
 
     def session_restored(self, agent: str) -> None:
         self._emit(agent, lambda s: s.session_restored(agent))
+
+    def quota_refused(self, agent: str, scope: str) -> None:
+        self._emit(agent, lambda s: s.quota_refused(agent, scope))
+
+    def session_evicted(self, agent: str) -> None:
+        self._emit(agent, lambda s: s.session_evicted(agent))
+
+    def sessions_counted(self, agent: str, count: int) -> None:
+        self._emit(agent, lambda s: s.sessions_counted(agent, count))

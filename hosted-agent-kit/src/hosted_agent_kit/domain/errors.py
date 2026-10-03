@@ -88,6 +88,26 @@ class QueueFullError(AppError):
     retry_safe = True
 
 
+class RegionalCapacityError(AppError):
+    """The subscription's regional session quota is full. Retrying later can succeed."""
+
+    status = 429
+    code = "REGIONAL_SESSION_QUOTA_EXCEEDED"
+    title = "The regional session quota is full"
+    phase = "invoke"
+    retry_safe = True
+
+
+class SessionQuotaError(AppError):
+    """The session quota is full. Retrying does not help until sessions are stopped or deleted."""
+
+    status = 429
+    code = "SESSION_QUOTA_EXCEEDED"
+    title = "The session quota is full"
+    phase = "invoke"
+    retry_safe = True
+
+
 class UpstreamThrottledError(AppError):
     status = 429
     code = "UPSTREAM_THROTTLED"
@@ -259,6 +279,23 @@ class FoundrySessionFailed(FoundryError):
 class FoundryThrottled(FoundryError):
     def __init__(self, retry_after_seconds: float | None = None) -> None:
         super().__init__("throttled")
+        self.retry_after_seconds = retry_after_seconds
+
+
+QUOTA_REGIONAL = "regional"
+QUOTA_SESSION = "session"
+
+
+class FoundryQuotaExceeded(FoundryError):
+    """HTTP 429 that names a session quota (not request throttling).
+
+    ``scope`` is ``regional`` (``regional_session_quota_exceeded``: retry with backoff, or use
+    another region) or ``session`` (``session_quota_exceeded``: stop or delete sessions first).
+    """
+
+    def __init__(self, scope: str, retry_after_seconds: float | None = None) -> None:
+        super().__init__(f"{scope} session quota exceeded")
+        self.scope = scope
         self.retry_after_seconds = retry_after_seconds
 
 

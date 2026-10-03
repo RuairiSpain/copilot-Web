@@ -13,6 +13,7 @@ from hosted_agent_kit.ports.affinity import AffinityStore
 from hosted_agent_kit.ports.metrics import MetricsRecorder
 from hosted_agent_kit.ports.queue import CreateGrant, Grant, SessionGrant
 from hosted_agent_kit.ports.registry import SessionRegistry
+from hosted_agent_kit.services.quota import QuotaGate
 from hosted_agent_kit.services.scheduler import order_key
 
 
@@ -114,7 +115,11 @@ class SchedulerFramework:
         affinity: AffinityStore,
         metrics: MetricsRecorder,
         profiles: dict[str, Profile],
+        gate: QuotaGate | None = None,
+        evict_for_quota: bool = True,
     ) -> None:
+        self._gate = gate
+        self._evict_for_quota = evict_for_quota
         self._registry = registry
         self._affinity = affinity
         self._metrics = metrics
@@ -126,7 +131,7 @@ class SchedulerFramework:
     def profile(self, agent_name: str) -> Profile:
         return self._profiles[agent_name]
 
-    async def schedule(self, request: SchedulingRequest) -> Decision:
+    async def schedule(self, request: SchedulingRequest, *, _evicted: bool = False) -> Decision:
         """Decide what the request can have: a leased session, a slot to create one, or a wait."""
         cfg = request.agent
         profile = self._profiles[cfg.name]
@@ -159,11 +164,27 @@ class SchedulerFramework:
             ),
         )
 
-        # Reserve, then Bind
+        # Reserve, then Bind. A session that already holds compute comes first: using it takes no
+        # new quota. One that Foundry has deprovisioned needs room to resume.
+        gate = self._gate
+        if gate is not None:
+            warm = [r for r in ranked if gate.counted(r, cfg, request.now)]
+            ranked = warm + [r for r in ranked if r not in warm]
+        no_room = False
         for session in ranked:
-            leased = await self._registry.try_lease(
-                cfg.name, session.session_id, request.request_id, request.now
-            )
+            resuming = gate is not None and not gate.counted(session, cfg, request.now)
+            if resuming and gate is not None:
+                async with gate.lock:
+                    if not await gate.has_room(cfg, request.now):
+                        no_room = True
+                        continue
+                    leased = await self._registry.try_lease(
+                        cfg.name, session.session_id, request.request_id, request.now
+                    )
+            else:
+                leased = await self._registry.try_lease(
+                    cfg.name, session.session_id, request.request_id, request.now
+                )
             if leased is None:
                 if state.target is not None:
                     return Wait(pinned=True)
@@ -175,13 +196,29 @@ class SchedulerFramework:
             await self._bind(request, session, state)
             return SessionGrant(session.session_id)
 
-        # Nothing to lease: reserve capacity to create a session, or Permit a wait.
-        token = _new_token()
-        if await self._registry.reserve_slot(cfg.name, token, cfg.max_sessions):
-            if request.affinity_key is not None:
-                await self._affinity.reserve(request.affinity_key, request.request_id)
-            return CreateGrant(token=token, affinity_key=request.affinity_key)
-        return Wait(pinned=False)
+        # Nothing to lease. A user's own session that cannot resume for lack of room must wait
+        # for room: the user is never moved to another session.
+        blocked = no_room
+        if state.target is None:
+            token = _new_token()
+            refusal: str | None
+            if gate is not None:
+                refusal = await gate.reserve_create(cfg, token, request.now)
+            elif await self._registry.reserve_slot(cfg.name, token, cfg.max_sessions):
+                refusal = None
+            else:
+                refusal = "persisted"
+            if refusal is None:
+                if request.affinity_key is not None:
+                    await self._affinity.reserve(request.affinity_key, request.request_id)
+                return CreateGrant(token=token, affinity_key=request.affinity_key)
+            blocked = blocked or refusal == "active"
+        # No room under the active limits: stop the least recently used idle session (its state
+        # is kept) and decide again. Waiting for the idle window to pass is the fallback.
+        can_evict = gate is not None and self._evict_for_quota and not _evicted
+        if blocked and gate is not None and can_evict and await gate.evict_one(cfg, request.now):
+            return await self.schedule(request, _evicted=True)
+        return Wait(pinned=state.target is not None)
 
     async def _bind(
         self, request: SchedulingRequest, session: SessionRecord, state: CycleState

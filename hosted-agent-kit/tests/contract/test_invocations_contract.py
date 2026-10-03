@@ -267,3 +267,45 @@ async def test_a_response_larger_than_the_limit_is_refused() -> None:
         assert response.raw == b"y" * 20
     finally:
         await adapter.close()
+
+
+# ------------------------------------------------------- per-user isolation headers
+
+IDENTITY = "x-ms-user-identity"
+
+
+async def test_per_user_headers_replace_the_constant_key_on_invocations_only() -> None:
+    backend = Backend()
+    adapter = build_adapter(backend, isolation_key="pool-key")
+    await adapter.start()
+    try:
+        backend.route("POST", ROUTE, 200, {"ok": True})
+        backend.route(
+            "POST",
+            "/protocols/openai/responses",
+            200,
+            {"id": "r", "object": "response", "status": "completed", "output": []},
+        )
+        base = context().model_copy(update={"isolation_key": "user-key", "acting_user": "alice"})
+        await adapter.invoke(base)
+        await adapter.invoke(base.model_copy(update={"protocol": AgentProtocol.RESPONSES}))
+        await adapter.invoke(context().model_copy(update={"isolation_key": "user-key"}))
+    finally:
+        await adapter.close()
+    first, second, third = ({k.lower(): v for k, v in r.headers.items()} for r in backend.requests)
+    for headers in (first, second):
+        assert headers[HEADER] == "user-key" and headers[IDENTITY] == "alice"
+    assert third[HEADER] == "user-key" and IDENTITY not in third  # key only, no acting user
+
+
+async def test_without_per_user_values_the_constant_key_is_unchanged() -> None:
+    backend = Backend()
+    adapter = build_adapter(backend, isolation_key="pool-key")
+    await adapter.start()
+    try:
+        backend.route("POST", ROUTE, 200, {"ok": True})
+        await adapter.invoke(context())
+    finally:
+        await adapter.close()
+    headers = {k.lower(): v for k, v in backend.requests[0].headers.items()}
+    assert headers[HEADER] == "pool-key" and IDENTITY not in headers

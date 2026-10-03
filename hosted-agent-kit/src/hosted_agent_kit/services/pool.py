@@ -32,11 +32,14 @@ from hosted_agent_kit.controllers.plane import ControlPlane
 from hosted_agent_kit.controllers.session import SessionController
 from hosted_agent_kit.domain.enums import (
     LocalSessionState,
+    UserIsolation,
 )
 from hosted_agent_kit.domain.errors import (
+    QUOTA_REGIONAL,
     AgentNotConfiguredError,
     AppError,
     FoundryError,
+    FoundryQuotaExceeded,
     FoundrySessionFailed,
     FoundrySessionNotFound,
     FoundryThrottled,
@@ -74,6 +77,8 @@ from hosted_agent_kit.ports.registry import SessionRegistry
 from hosted_agent_kit.services.clock import Clock
 from hosted_agent_kit.services.errors_map import to_app_error
 from hosted_agent_kit.services.events import EventType
+from hosted_agent_kit.services.isolation import UserIsolationKeys
+from hosted_agent_kit.services.quota import QuotaGate
 from hosted_agent_kit.services.remote import RemoteSessions
 from hosted_agent_kit.services.scheduler import Scheduler
 from hosted_agent_kit.services.scheduling import (
@@ -164,7 +169,10 @@ class PoolService:
         session_ids: SessionIdDeriver | None = None,
         plane: ControlPlane | None = None,
         plugins: PluginRegistry | None = None,
+        quota: QuotaGate | None = None,
+        isolation: UserIsolationKeys | None = None,
     ) -> None:
+        self._isolation = isolation
         self._session_ids = session_ids
         self._holder = config if isinstance(config, ConfigHolder) else _holder_for(config)
         self._config: ConfigSource = self._holder
@@ -174,15 +182,26 @@ class PoolService:
         self._queue = queue
         self._metrics = metrics
         self._admitting = True
+        self._ticker: asyncio.Task[None] | None = None
         self._inflight = 0
         self._idle = asyncio.Event()
         self._idle.set()
         self._plugins = plugins or default_plugins(scheduler)
+        self._gate = quota or QuotaGate(
+            registry=registry,
+            config=self._holder,
+            clock=clock,
+            settings=settings,
+            adapter=adapter,
+            metrics=metrics,
+        )
         self._framework = SchedulerFramework(
             registry=registry,
             affinity=affinity,
             metrics=metrics,
             profiles=self._build_profiles(),
+            gate=self._gate,
+            evict_for_quota=settings.evict_idle_for_quota,
         )
         self._clock = clock
         self._settings = settings
@@ -195,6 +214,7 @@ class PoolService:
             metrics=metrics,
             session_ids=session_ids,
             rng=rng,
+            on_quota_exceeded=self._gate.on_refused,
         )
         self._plane = plane or ControlPlane(registry=registry, clock=clock, holder=self._holder)
         self._plane.manager.register(
@@ -240,6 +260,10 @@ class PoolService:
         return self._affinity
 
     @property
+    def quota(self) -> QuotaGate:
+        return self._gate
+
+    @property
     def settings(self) -> KitSettings:
         return self._settings
 
@@ -250,6 +274,36 @@ class PoolService:
     @property
     def remote(self) -> RemoteSessions:
         return self._remote
+
+    async def start(self) -> None:
+        """Start the quota housekeeping loop."""
+        if self._ticker is None:
+            self._ticker = asyncio.create_task(self._tick_loop(), name="pool:quota-ticker")
+
+    async def stop(self) -> None:
+        ticker, self._ticker = self._ticker, None
+        if ticker is not None:
+            ticker.cancel()
+            await asyncio.gather(ticker, return_exceptions=True)
+        await self._gate.governor.close()
+
+    async def _tick_loop(self) -> None:
+        while True:
+            await asyncio.sleep(self._settings.quota_tick_seconds)
+            try:
+                await self._gate.tick()
+                await self.dispatch_waiting()
+            except Exception as exc:  # housekeeping must never end the loop
+                log_event(
+                    logger, "quota_tick_error", level=logging.ERROR, error_type=type(exc).__name__
+                )
+
+    async def dispatch_waiting(self) -> None:
+        """Offer free capacity to queued callers. Needed when capacity frees as time passes."""
+        for name in self.agent_names:
+            if await self._queue.depth(name) > 0:
+                async with self._locks[name]:
+                    await self._dispatch_locked(self.agent_config(name))
 
     def agent_lock(self, agent_name: str) -> asyncio.Lock:
         return self._locks[agent_name]
@@ -368,10 +422,14 @@ class PoolService:
         cfg = self.agent_config(agent_name)
         records = await self._registry.list(agent_name)
         states = [r.local_state for r in records]
+        now = self._clock.now()
+        counted = sum(1 for r in records if self._gate.counted(r, cfg, now))
         return AgentSnapshot(
             agent_name=agent_name,
             mode=cfg.mode.value,
             max_sessions=cfg.max_sessions,
+            max_active_sessions=cfg.active_limit,
+            sessions_counted=counted,
             sessions_total=len(records),
             sessions_available=states.count(LocalSessionState.AVAILABLE),
             sessions_leased=states.count(LocalSessionState.LEASED),
@@ -431,7 +489,7 @@ class PoolService:
         cfg = self.agent_config(agent_name)
         token = _new_token()
         async with self._locks[agent_name]:
-            if not await self._registry.reserve_slot(agent_name, token, cfg.max_sessions):
+            if await self._gate.reserve_create(cfg, token, self._clock.now()) is not None:
                 return False
         try:
             await self._remote.create_ready_session(cfg, None, _WarmHooks(self, cfg, token))
@@ -651,11 +709,23 @@ class PoolService:
                 correlation_id=req.correlation_id,
                 stream=req.stream,
                 protocol=cfg.protocol,
+                **self._user_headers(cfg, req),
             )
             try:
                 return await self._adapter.invoke(context)
             except FoundryThrottled as exc:
                 if throttled >= self._settings.upstream_throttle_retries:
+                    raise self._to_app_error(exc, invoking=True) from exc
+                throttled += 1
+                if not await self._remote.sleep_backoff(throttled, exc.retry_after_seconds):
+                    raise self._to_app_error(exc, invoking=True) from exc
+            except FoundryQuotaExceeded as exc:
+                # Resuming an idle session needs quota. Nothing ran, so a regional retry is safe.
+                self._remote.note_quota(cfg.name, exc)
+                if (
+                    exc.scope != QUOTA_REGIONAL
+                    or throttled >= self._settings.upstream_throttle_retries
+                ):
                     raise self._to_app_error(exc, invoking=True) from exc
                 throttled += 1
                 if not await self._remote.sleep_backoff(throttled, exc.retry_after_seconds):
@@ -859,7 +929,20 @@ class PoolService:
             key = (record.platform_status.value, record.local_state.value)
             counts[key] = counts.get(key, 0) + 1
         self._metrics.sessions(cfg.name, counts)
+        now = self._clock.now()
+        self._metrics.sessions_counted(
+            cfg.name, sum(1 for r in records if self._gate.counted(r, cfg, now))
+        )
         self._metrics.queue_depth(cfg.name, await self._queue.depth(cfg.name))
+
+    def _user_headers(self, cfg: AgentConfig, req: PoolRequest) -> dict[str, str]:
+        """Per-user key (and acting user) for the agent's ``user_isolation`` mode."""
+        if cfg.user_isolation is UserIsolation.OFF or self._isolation is None:
+            return {}
+        headers = {"isolation_key": self._isolation.key_for(req.user_id)}
+        if cfg.user_isolation is UserIsolation.DELEGATED:
+            headers["acting_user"] = req.user_id
+        return headers
 
     def _to_app_error(self, exc: FoundryError, *, invoking: bool) -> AppError:
         return to_app_error(self._settings, exc, invoking=invoking)

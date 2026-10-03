@@ -37,6 +37,8 @@ class SessionRecord(BaseModel):
     lease_request_id: str | None = None
     lease_acquired_at: datetime | None = None
     last_released_at: datetime | None = None
+    # Set when this kit stopped the session to free quota. It holds no compute until used again.
+    compute_released_at: datetime | None = None
     # Resource metadata, maintained by the store.
     generation: int = 1  # changes when the desired state (affinity binding, deletion) changes
     resource_version: int = 0  # changes on every stored update
@@ -85,6 +87,9 @@ class InvokeContext(BaseModel):
     correlation_id: str
     stream: bool = False
     protocol: AgentProtocol = AgentProtocol.RESPONSES
+    # Per-user information for Foundry (see ``UserIsolation``). None when the agent sends none.
+    isolation_key: str | None = None
+    acting_user: str | None = None
 
 
 class AffinityEntry(BaseModel, frozen=True):
@@ -98,6 +103,8 @@ class AgentSnapshot(BaseModel):
     agent_name: str
     mode: str
     max_sessions: int
+    max_active_sessions: int = 0
+    sessions_counted: int = 0
     sessions_total: int
     sessions_available: int
     sessions_leased: int

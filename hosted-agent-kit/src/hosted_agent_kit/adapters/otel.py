@@ -35,6 +35,9 @@ class OtelMetrics:
         self._circuit_state = meter.create_gauge("pool_circuit_state")
         self._circuit_transitions = meter.create_counter("pool_circuit_transitions_total")
         self._restored = meter.create_counter("pool_sessions_restored_total")
+        self._quota_refused = meter.create_counter("pool_quota_refused_total")
+        self._evicted = meter.create_counter("pool_sessions_evicted_total")
+        self._counted = meter.create_gauge("pool_sessions_counted")
 
     def request_completed(self, agent: str, outcome: str, duration_seconds: float) -> None:
         attributes = {"agent": agent, "outcome": outcome}
@@ -77,6 +80,15 @@ class OtelMetrics:
 
     def session_restored(self, agent: str) -> None:
         self._restored.add(1, {"agent": agent})
+
+    def quota_refused(self, agent: str, scope: str) -> None:
+        self._quota_refused.add(1, {"agent": agent, "scope": scope})
+
+    def session_evicted(self, agent: str) -> None:
+        self._evicted.add(1, {"agent": agent})
+
+    def sessions_counted(self, agent: str, count: int) -> None:
+        self._counted.set(count, {"agent": agent})
 
 
 def configure_azure_monitor(connection_string: str | None) -> bool:

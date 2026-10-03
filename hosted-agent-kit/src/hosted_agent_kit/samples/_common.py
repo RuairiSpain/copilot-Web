@@ -40,12 +40,22 @@ class Unauthenticated(HackError):
     retry_safe = True
 
 
+def insecure_auth_allowed() -> bool:
+    """Header sign-in is for trying the samples: demo mode, or an explicit opt-in."""
+    return demo_mode() or os.environ.get("HACK_SAMPLE_INSECURE_AUTH") == "1"
+
+
 def current_user(x_user_id: Annotated[str | None, Header()] = None) -> str:
     """The signed-in user. A real application reads this from its own authentication.
 
-    The samples trust an ``X-User-Id`` header so they can be tried with curl. Never do that in
-    production: take the id from a validated token (for example the Entra ``oid`` claim).
+    The samples trust an ``X-User-Id`` header so they can be tried with curl, and only in demo
+    mode (or with HACK_SAMPLE_INSECURE_AUTH=1). Never do that in production: take the id from a
+    validated token. ``hosted_agent_kit.integrations.entra.EntraAuth`` does that for Entra.
     """
+    if not insecure_auth_allowed():
+        raise Unauthenticated(
+            "Header sign-in is off outside demo mode. See miscellaneous/entra_sign_in.py."
+        )
     if not x_user_id:
         raise Unauthenticated()
     return x_user_id
@@ -65,11 +75,13 @@ class AdminKeyRequired(HackError):
 def require_admin_key(x_admin_key: Annotated[str | None, Header()] = None) -> None:
     """Guard for administrative endpoints.
 
-    The samples compare a header with ``HACK_SAMPLE_ADMIN_KEY`` (default ``dev-admin-key``).
+    The samples compare a header with ``HACK_SAMPLE_ADMIN_KEY`` (``dev-admin-key`` in demo mode
+    only; outside it the variable must be set).
     Replace it with your real authorisation, for example a role check on a validated token.
     """
-    expected = os.environ.get("HACK_SAMPLE_ADMIN_KEY", "dev-admin-key")
-    if not x_admin_key or not hmac.compare_digest(x_admin_key, expected):
+    default = "dev-admin-key" if demo_mode() else None
+    expected = os.environ.get("HACK_SAMPLE_ADMIN_KEY", default)
+    if not expected or not x_admin_key or not hmac.compare_digest(x_admin_key, expected):
         raise AdminKeyRequired()
 
 

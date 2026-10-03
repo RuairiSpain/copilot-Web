@@ -17,12 +17,14 @@ from hosted_agent_kit.adapters.memory_registry import MemorySessionRegistry
 from hosted_agent_kit.config.holder import ConfigHolder
 from hosted_agent_kit.config.models import AgentPoolConfig, ConfigError
 from hosted_agent_kit.config.settings import KitSettings
-from hosted_agent_kit.logging_config import log_event
+from hosted_agent_kit.domain.enums import UserIsolation
+from hosted_agent_kit.logging_config import configure_identifier_hashing, log_event
 from hosted_agent_kit.ports.foundry import FoundryAdapter
 from hosted_agent_kit.ports.metrics import MetricsRecorder
 from hosted_agent_kit.services.circuit_breaker import CircuitBreakers
 from hosted_agent_kit.services.clock import Clock, SystemClock
 from hosted_agent_kit.services.config_reload import ConfigReloader
+from hosted_agent_kit.services.isolation import UserIsolationKeys
 from hosted_agent_kit.services.metrics import GatedMetrics, InMemoryMetrics
 from hosted_agent_kit.services.pool import PoolService
 from hosted_agent_kit.services.reconciler import Reconciler
@@ -58,8 +60,23 @@ def session_deriver(settings: KitSettings, config: AgentPoolConfig) -> SessionId
     return SessionIdDeriver(key.get_secret_value().encode())
 
 
+def isolation_keys(settings: KitSettings, config: AgentPoolConfig) -> UserIsolationKeys | None:
+    """Per-user key derivation, or None when no agent sends per-user headers."""
+    needed = [n for n, a in config.agents.items() if a.user_isolation is not UserIsolation.OFF]
+    secret = settings.user_isolation_secret or settings.session_id_key
+    if secret is None:
+        if needed:
+            raise ConfigError(
+                "agents that set user_isolation need POOL_USER_ISOLATION_SECRET (or "
+                f"POOL_SESSION_ID_KEY): {', '.join(needed)}"
+            )
+        return None
+    return UserIsolationKeys(secret.get_secret_value().encode())
+
+
 def check_consistent(settings: KitSettings, config: AgentPoolConfig) -> None:
     session_deriver(settings, config)  # raises ConfigError for an inconsistent combination
+    isolation_keys(settings, config)
 
 
 @dataclass(kw_only=True)
@@ -82,6 +99,7 @@ class Runtime:
         self.started = True
         await self.raw_adapter.start()
         await self.reconciler.start()
+        await self.pool.start()
         self.ready = True
 
     async def stop(self) -> None:
@@ -100,6 +118,7 @@ class Runtime:
                     in_flight=self.pool.in_flight,
                 )
             await self.reconciler.stop()
+            await self.pool.stop()
         await self.raw_adapter.close()
         self.started = False
 
@@ -115,6 +134,8 @@ def build_runtime(
     from hosted_agent_kit.adapters.otel import OtelMetrics  # optional dependency, imported late
 
     clock = clock or SystemClock()
+    secret = settings.session_id_key or settings.user_isolation_secret
+    configure_identifier_hashing(secret.get_secret_value().encode() if secret else None)
     config = ConfigHolder(pool_config)
     store = InMemoryMetrics()
     sinks: list[MetricsRecorder] = [store]
@@ -136,6 +157,7 @@ def build_runtime(
         settings=settings,
         session_ids=deriver,
         plugins=scheduler_plugins,
+        isolation=isolation_keys(settings, pool_config),
     )
     reconciler = Reconciler(
         config=config,

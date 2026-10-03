@@ -4,8 +4,8 @@ Run:   uvicorn hosted_agent_kit.samples.reporting.pool_status:app --reload
 Try:   curl -s localhost:8000/status | jq        curl -s localhost:8000/reporting/agents | jq
 
 ``reporting_router`` adds ready-made read-only endpoints. ``kit.reporting`` is the same data for
-your own endpoints. Reporting never changes anything. The samples leave it open; in your
-application protect it: ``include_router(..., dependencies=[Depends(your_auth)])``.
+your own endpoints. Reporting never changes anything, but it shows pool internals, so the router
+refuses to build unless you pass ``dependencies=`` or ``allow_unauthenticated=True``.
 """
 
 from __future__ import annotations
@@ -18,7 +18,9 @@ from hosted_agent_kit.samples._common import load_kit
 kit = load_kit("config/stateful-and-stateless.yaml")
 app = FastAPI(title="Reporting sample: pool status")
 install(app, kit)
-app.include_router(reporting_router(), prefix="/reporting")
+# This demo leaves the router open. In your application pass dependencies=[Depends(...)] that check
+# the caller; without it (or allow_unauthenticated=True) the router refuses to build.
+app.include_router(reporting_router(allow_unauthenticated=True), prefix="/reporting")
 
 
 @app.get("/status")

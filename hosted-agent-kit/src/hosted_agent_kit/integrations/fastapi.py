@@ -14,7 +14,7 @@ Typical use::
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager
 from typing import Annotated, Any
 
@@ -137,12 +137,30 @@ AgentName = Annotated[str, Path(pattern=AGENT_NAME_PATTERN.pattern, max_length=1
 SessionId = Annotated[str, Path(pattern=r"^[A-Za-z0-9._:-]{1,256}$")]
 
 
-def reporting_router(*, reveal_identities: bool = False) -> APIRouter:
-    """Read-only endpoints. Protect them yourself: ``include_router(..., dependencies=[...])``.
+def _guarded_router(
+    tags: Sequence[str], dependencies: Sequence[Any] | None, allow_unauthenticated: bool, what: str
+) -> APIRouter:
+    if not dependencies and not allow_unauthenticated:
+        raise ValueError(
+            f"{what} exposes pool internals. Pass dependencies=[Depends(...)] that check the "
+            "caller, or allow_unauthenticated=True if something else in front of it does."
+        )
+    return APIRouter(tags=list(tags), dependencies=list(dependencies or []))
+
+
+def reporting_router(
+    *,
+    dependencies: Sequence[Any] | None = None,
+    allow_unauthenticated: bool = False,
+    reveal_identities: bool = False,
+) -> APIRouter:
+    """Read-only endpoints. ``dependencies`` must check the caller, or say there is no check.
 
     User ids and conversation keys are hashed unless ``reveal_identities`` is True.
     """
-    router = APIRouter(tags=["hack-reporting"])
+    router = _guarded_router(
+        ["hack-reporting"], dependencies, allow_unauthenticated, "reporting_router()"
+    )
 
     @router.get("/agents", response_model=list[AgentAdminView])
     async def agents(rep: ReportingDep) -> list[AgentAdminView]:
@@ -182,9 +200,11 @@ def reporting_router(*, reveal_identities: bool = False) -> APIRouter:
     return router
 
 
-def admin_router() -> APIRouter:
-    """Endpoints that change things. Always protect them: ``dependencies=[Depends(...)]``."""
-    router = APIRouter(tags=["hack-admin"])
+def admin_router(
+    *, dependencies: Sequence[Any] | None = None, allow_unauthenticated: bool = False
+) -> APIRouter:
+    """Endpoints that change the pool. ``dependencies`` must check that the caller is an admin."""
+    router = _guarded_router(["hack-admin"], dependencies, allow_unauthenticated, "admin_router()")
 
     @router.delete(
         "/agents/{agent_name}/sessions/{session_id}",
