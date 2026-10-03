@@ -42,6 +42,20 @@ message that names the setting.
 | `POOL_METRICS_ENDPOINT_ENABLED` | false | Serve Prometheus text at `/metrics`. |
 | `POOL_DIAGNOSTIC_SESSION_ID_HEADER` | false | Return `X-Pool-Session-Id` to the diagnostics role. |
 | `POOL_LOG_LEVEL` | `INFO` | Log level. |
+| `POOL_USER_ISOLATION_SECRET` | none | Secret (at least 32 characters) that derives each user's `x-ms-user-isolation-key`. Needed when an agent sets `user_isolation`. Falls back to `POOL_SESSION_ID_KEY`. |
+| `POOL_KIT_ID` | none | Name of this kit. Needed when several kits share a project, and for ownership and the regional ledger. |
+| `POOL_OWNS` | all agents | Comma separated agents this kit schedules. |
+| `POOL_SHARD__INDEX` / `POOL_SHARD__COUNT` | none | This kit serves shard INDEX of COUNT of each owned agent. |
+| `POOL_OWNERSHIP__BACKEND` / `POOL_OWNERSHIP__URL` | `none` | `none`, `memory` or `redis`. The URL (a secret) is environment only. See [quota and ownership](quota.md#ownership). |
+| `POOL_OWNERSHIP__TTL_SECONDS` / `RENEW_SECONDS` / `QUIET_SECONDS` / `STANDBY` | 30 / 10 / 30 / false | Lease time, renewal period (under half the lease), wait after a takeover, and whether a kit waits as standby. |
+| `POOL_QUOTA__BUDGET` | none | Most compute-holding sessions this kit may use. Nothing is enforced without it. |
+| `POOL_QUOTA__MIN_LIMIT`, `DECREASE_FACTOR`, `INCREASE_STEP`, `PROBE_SECONDS`, `COOLDOWN_SECONDS` | 1, 0.7, 1, 60, 30 | Adaptive limit. See [quota](quota.md#adaptive-limit). |
+| `POOL_QUOTA__SUBSCRIPTION_ID`, `REGION`, `REGION_LIMIT`, `SPARE` | none, none, none, 0 | Regional limit and the spare pool (spare needs the ledger). |
+| `POOL_QUOTA__LEDGER__BACKEND` / `URL` / `ENTRA_AUTH` / `TTL_SECONDS` / `TIMEOUT_SECONDS` | `redis` / none / false / 30 / 0.25 | Optional shared Redis ledger. The URL is environment only. |
+| `POOL_IDLE_STATUS_DEPROVISIONS` | false | Count a session Foundry reports idle as not holding compute. |
+| `POOL_EVICT_IDLE_FOR_QUOTA` | true | Stop the least recently used idle session when an active limit is reached. |
+| `POOL_QUOTA_TICK_SECONDS` | 5 | How often quota is re-checked and waiting callers are served. |
+| `POOL_MAX_REQUEST_BYTES` | none | SDK only: largest request body `Hack` accepts. |
 | `POOL_HOST` / `POOL_PORT` | `127.0.0.1` / 8080 | Bind address. The container image sets `0.0.0.0`. |
 
 `POOL_DEFAULT_TIMEOUT_SECONDS` must not exceed `POOL_MAX_TIMEOUT_SECONDS`.
@@ -100,6 +114,11 @@ across files. See [`agent-pool.example.yaml`](../agent-pool.example.yaml).
 | `version_drain` | `never` | `never`, `unbound` or `idle`. Which idle sessions on a version other than the target the sync retires. See [operations](operations.md#rolling-out-a-new-agent-version). |
 | `scheduler_profile.filters` | none | Filters added to the core ones (`Ready`, `AffinityCompatible`, `RestoreHeld`): `VersionCompatible`, `NotExpiring`, or one an application registered. |
 | `scheduler_profile.scores` | the `scheduler` strategy, weight 1 | Score plugin names with weights (1 to 1000) that replace the strategy: `FirstAvailable`, `RoundRobin`, `OldestIdle`, `NewestIdle`, `AffinityPreference`, `VersionPreferred`, `ExpiryRisk`. An unknown name stops start-up. |
+| `max_active_sessions` | unset (`max_sessions`) | At most `max_sessions`. Sessions that may hold compute at once. Idle ones above it are stopped, not deleted. |
+| `idle_timeout_seconds` | 900 | 60 to 14400. The idle timeout of the agent in Foundry, used to count sessions. |
+| `user_isolation` | `off` | `off`, `key` or `delegated`. Per-user headers sent to Foundry. |
+| `queue.per_user_depth` | unset | Most queue places one user may hold. |
+| `queue.fairness` | `fifo` | `fifo` or `round_robin` (users take turns). |
 | `adopt_unbound_sessions` | `true` for stateless, `false` for stateful | Whether the reconciler registers Foundry sessions this process did not create. Keep it `false` for stateful agents, because a session may hold another user's files. |
 
 Merge rules: `defaults` merge into each agent, nested maps merge key by key, and a key set to

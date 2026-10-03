@@ -88,15 +88,16 @@ result.json()
 
 # Streaming: relay server-sent events to your caller
 result = await kit.responses("support-bot", user_id=user, input={"input": "Hello"}, stream=True)
-return sse_response(result)            # from hosted_agent_kit.integrations.fastapi
+return sse_response(result)  # from hosted_agent_kit.integrations.fastapi
 
 # Several conversations per user with a stateful agent
 await kit.ask("memory-bot", "remember I like trains", user_id=user, conversation_key="trip")
 
 # Invocations agent: any body, any content type
-result = await kit.invocations("doc-processor", user_id=user, body=pdf_bytes,
-                               content_type="application/pdf")
-return response_for(result)            # the agent's own status code, type and body
+result = await kit.invocations(
+    "doc-processor", user_id=user, body=pdf_bytes, content_type="application/pdf"
+)
+return response_for(result)  # the agent's own status code, type and body
 
 # Retried requests run once
 await kit.ask("support-bot", "Summarise order 42", user_id=user, idempotency_key="order-42")
@@ -108,15 +109,17 @@ carry `status`, `code`, `phase`, `retry_safe` and `retry_after_seconds`.
 ## Reporting and administration
 
 ```python
-await kit.reporting.agents()                      # capacity, queue depth, circuit state, conditions
-await kit.reporting.sessions("memory-bot")        # users and conversations are hashed by default
-kit.reporting.events("support-bot", limit=20)     # what the controllers did and why
-kit.reporting.metrics(); kit.reporting.prometheus(); kit.reporting.health()
+await kit.reporting.agents()  # capacity, queue depth, circuit state, conditions
+await kit.reporting.sessions("memory-bot")  # users and conversations are hashed by default
+kit.reporting.events("support-bot", limit=20)  # what the controllers did and why
+kit.reporting.metrics()
+kit.reporting.prometheus()
+kit.reporting.health()
 
-await kit.admin.provision_warm("support-bot")     # add a ready session
-await kit.admin.sync("support-bot")               # compare with Foundry now
+await kit.admin.provision_warm("support-bot")  # add a ready session
+await kit.admin.sync("support-bot")  # compare with Foundry now
 await kit.admin.delete_session("memory-bot", session_id)
-kit.admin.reload_config()                         # re-read scheduler.yaml
+kit.admin.reload_config()  # re-read scheduler.yaml
 ```
 
 `reporting_router()` and `admin_router()` expose the same calls as FastAPI routers. Protect them
@@ -170,7 +173,7 @@ from hosted_agent_kit.testing import FakeFoundry, UpstreamResponse
 
 foundry = FakeFoundry()
 foundry.invoke_handler = lambda ctx: UpstreamResponse(body={"output_text": "42"})
-kit = Hack.from_yaml("scheduler.yaml", adapter=foundry)   # then use FastAPI's TestClient
+kit = Hack.from_yaml("scheduler.yaml", adapter=foundry)  # then use FastAPI's TestClient
 ```
 
 `FakeFoundry` records calls and can be scripted to fail or stall. `DemoFoundry` answers like a small

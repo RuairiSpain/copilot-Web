@@ -17,8 +17,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+import time
 import uuid
-from collections.abc import AsyncGenerator, AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -32,6 +33,7 @@ from hosted_agent_kit.controllers.plane import ControlPlane
 from hosted_agent_kit.controllers.session import SessionController
 from hosted_agent_kit.domain.enums import (
     LocalSessionState,
+    QueueFairness,
     UserIsolation,
 )
 from hosted_agent_kit.domain.errors import (
@@ -91,6 +93,7 @@ from hosted_agent_kit.services.scheduling.framework import Decision, Profile, Wa
 from hosted_agent_kit.services.scheduling.profiles import build_profiles
 from hosted_agent_kit.services.session_ids import SessionIdDeriver
 from hosted_agent_kit.services.store import mutate_session
+from hosted_agent_kit.tracing import span
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +138,36 @@ class PoolResult:
         """Release a streaming lease even if the response never finished. Idempotent."""
         if self.stream is not None:
             await self.stream.aclose()
+
+
+MAX_TRACKED_USERS = 10_000
+GAUGE_FULL_REFRESH_LIMIT = 200
+GAUGE_MIN_INTERVAL_SECONDS = 0.25
+
+
+def take_turns(
+    tickets: list[QueueTicket], last_served: Mapping[str | None, int] | None = None
+) -> list[QueueTicket]:
+    """Interleave waiting tickets one user at a time, each user's own order kept.
+
+    The user served least recently goes first (a user never served goes before all others), then
+    the one whose oldest ticket has waited longest. A user with ten tickets takes one turn per
+    round, so users with one ticket are not left behind the backlog.
+    """
+    served = last_served or {}
+    by_user: dict[str | None, list[QueueTicket]] = {}
+    for ticket in tickets:
+        by_user.setdefault(ticket.user_id, []).append(ticket)
+    first_seen = {user: index for index, user in enumerate(by_user)}
+    queues = [
+        by_user[user] for user in sorted(by_user, key=lambda u: (served.get(u, -1), first_seen[u]))
+    ]
+    ordered: list[QueueTicket] = []
+    while queues:
+        for queue in queues:
+            ordered.append(queue.pop(0))
+        queues = [q for q in queues if q]
+    return ordered
 
 
 @dataclass
@@ -183,6 +216,9 @@ class PoolService:
         self._metrics = metrics
         self._admitting = True
         self._ticker: asyncio.Task[None] | None = None
+        self._turns: dict[str, dict[str | None, int]] = {}
+        self._gauge_at: dict[str, float] = {}
+        self._turn_counter = 0
         self._inflight = 0
         self._idle = asyncio.Event()
         self._idle.set()
@@ -302,6 +338,15 @@ class PoolService:
                     logger, "quota_tick_error", level=logging.ERROR, error_type=type(exc).__name__
                 )
 
+    def _note_turn(self, agent_name: str, user_id: str | None) -> None:
+        """Remember that ``user_id`` was just served, for round-robin fairness (bounded)."""
+        turns = self._turns.setdefault(agent_name, {})
+        self._turn_counter += 1
+        turns.pop(user_id, None)
+        turns[user_id] = self._turn_counter
+        while len(turns) > MAX_TRACKED_USERS:
+            del turns[next(iter(turns))]
+
     async def dispatch_waiting(self) -> None:
         """Offer free capacity to queued callers. Needed when capacity frees as time passes."""
         for name in self.agent_names:
@@ -380,10 +425,17 @@ class PoolService:
         try:
             try:
                 async with asyncio.timeout(self._settings.max_request_seconds):
-                    grant, _ = await self._acquire_grant(cfg, req)
-                    lease = await self._materialise(cfg, req, grant)
+                    attributes = {"agent": cfg.name, "protocol": cfg.protocol.value}
+                    with span("hack.schedule", attributes):
+                        grant, _ = await self._acquire_grant(cfg, req)
+                    if isinstance(grant, CreateGrant):
+                        with span("hack.create_session", attributes):
+                            lease = await self._materialise(cfg, req, grant)
+                    else:
+                        lease = await self._materialise(cfg, req, grant)
                     run = _Run(cfg, req, lease)
-                    upstream = await self._invoke_with_recovery(run)
+                    with span("hack.invoke", attributes):
+                        upstream = await self._invoke_with_recovery(run)
             except TimeoutError as exc:
                 raise RequestTimeoutError() from exc
             if upstream.stream is not None:
@@ -424,10 +476,12 @@ class PoolService:
 
     async def snapshot(self, agent_name: str) -> AgentSnapshot:
         cfg = self.agent_config(agent_name)
-        records = await self._registry.list(agent_name)
+        records = await self._registry.view(agent_name)
         states = [r.local_state for r in records]
         now = self._clock.now()
-        counted = sum(1 for r in records if self._gate.counted(r, cfg, now))
+        counted = await self._gate.agent_counted(cfg, now) - await self._registry.reserved(
+            agent_name
+        )
         return AgentSnapshot(
             agent_name=agent_name,
             mode=cfg.mode.value,
@@ -531,7 +585,10 @@ class PoolService:
         )
 
     async def _dispatch_locked(self, cfg: AgentConfig) -> None:
-        for ticket in await self._queue.pending(cfg.name):
+        pending = await self._queue.pending(cfg.name)
+        if cfg.queue.fairness is QueueFairness.ROUND_ROBIN:
+            pending = take_turns(pending, self._turns.get(cfg.name))
+        for ticket in pending:
             if ticket.future.done():
                 continue  # the waiter is abandoning; it removes itself
             decision = await self._schedule(
@@ -541,6 +598,7 @@ class PoolService:
                 ticket.pinned = decision.pinned
                 continue
             await self._queue.remove(cfg.name, ticket.request_id)
+            self._note_turn(cfg.name, ticket.user_id)
             ticket.future.set_result(decision)
         await self._refresh_gauges(cfg)
 
@@ -561,6 +619,7 @@ class PoolService:
             if isinstance(decision, Wait):
                 result = await self._enqueue(cfg, req, decision)
             else:
+                self._note_turn(cfg.name, req.user_id)
                 result = decision
             await self._refresh_gauges(cfg)
         return result
@@ -580,6 +639,16 @@ class PoolService:
             pinned=wait.pinned,
             future=asyncio.get_running_loop().create_future(),
         )
+        per_user = cfg.queue.per_user_depth
+        if per_user is not None:
+            waiting = sum(
+                1 for t in await self._queue.pending(cfg.name) if t.user_id == req.user_id
+            )
+            if waiting >= per_user:
+                raise QueueFullError(
+                    f"This caller already has {waiting} requests waiting for this agent.",
+                    retry_after_seconds=retry_after,
+                )
         try:
             await self._queue.enqueue(ticket, cfg.queue.max_depth)
         except QueueFullError as exc:
@@ -927,7 +996,13 @@ class PoolService:
     # --------------------------------------------------------------- utilities
 
     async def _refresh_gauges(self, cfg: AgentConfig) -> None:
-        records = await self._registry.list(cfg.name)
+        records = await self._registry.view(cfg.name)
+        if len(records) > GAUGE_FULL_REFRESH_LIMIT:
+            # A big pool is rescanned at most a few times a second, not on every request.
+            wall = time.monotonic()
+            if wall - self._gauge_at.get(cfg.name, 0.0) < GAUGE_MIN_INTERVAL_SECONDS:
+                return
+            self._gauge_at[cfg.name] = wall
         counts: dict[tuple[str, str], int] = {}
         for record in records:
             key = (record.platform_status.value, record.local_state.value)
@@ -935,7 +1010,8 @@ class PoolService:
         self._metrics.sessions(cfg.name, counts)
         now = self._clock.now()
         self._metrics.sessions_counted(
-            cfg.name, sum(1 for r in records if self._gate.counted(r, cfg, now))
+            cfg.name,
+            await self._gate.agent_counted(cfg, now) - await self._registry.reserved(cfg.name),
         )
         self._metrics.queue_depth(cfg.name, await self._queue.depth(cfg.name))
 

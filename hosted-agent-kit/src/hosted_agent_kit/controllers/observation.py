@@ -22,7 +22,7 @@ from hosted_agent_kit.controllers.plane import ControlPlane
 from hosted_agent_kit.controllers.reports import ReconcileReport
 from hosted_agent_kit.controllers.runtime import ReconcileResult
 from hosted_agent_kit.domain.enums import FoundrySessionStatus, LocalSessionState
-from hosted_agent_kit.domain.errors import FoundryError, FoundrySessionNotFound
+from hosted_agent_kit.domain.errors import FoundryError, FoundryRejected, FoundrySessionNotFound
 from hosted_agent_kit.domain.models import FoundrySession, SessionRecord
 from hosted_agent_kit.domain.resources import (
     FINALIZER_PLATFORM_DELETION,
@@ -120,7 +120,8 @@ class ObservationController:
         except FoundryError as exc:
             complete = False
             report.outcome = "incomplete"
-            report.errors.append(type(exc).__name__)
+            rejected = isinstance(exc, FoundryRejected) and exc.status_code in (401, 403)
+            report.errors.append("AuthenticationFailed" if rejected else type(exc).__name__)
         observation.complete = complete
         if complete:
             observation.completed_at = self._clock.monotonic()

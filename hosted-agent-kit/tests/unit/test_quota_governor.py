@@ -16,7 +16,7 @@ from hosted_agent_kit.services.quota import KitGovernor
 from hosted_agent_kit.testing import DemoFoundry, FakeClock
 from tests.conftest import make_harness, make_request, settle
 
-TWO_AGENTS = {"a": {}, "b": {}}
+TWO_AGENTS: dict[str, dict[str, Any]] = {"a": {}, "b": {}}
 DEFAULTS = {
     "mode": "stateless",
     "max_sessions": 10,
@@ -154,7 +154,8 @@ async def test_a_quota_refusal_lowers_the_kits_limit() -> None:
     h.fake.create_errors = [FoundryQuotaExceeded(QUOTA_SESSION)]
     with pytest.raises(Exception, match="quota"):
         await h.pool.execute(make_request("a", "u1"))
-    assert h.pool.quota.governor.limit() < 10  # lowered from the budget
+    limit = h.pool.quota.governor.limit()
+    assert limit is not None and limit < 10  # lowered from the budget
     assert h.pool.quota.governor.refusals == 1
 
 

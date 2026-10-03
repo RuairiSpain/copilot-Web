@@ -11,6 +11,7 @@ from hosted_agent_kit.domain.enums import (
     AffinityMode,
     AgentMode,
     AgentProtocol,
+    QueueFairness,
     SchedulerStrategy,
     UserIsolation,
     VersionDrain,
@@ -31,6 +32,8 @@ class PartialQueue(_Strict):
     enabled: bool | None = None
     max_depth: int | None = Field(default=None, ge=0)
     max_wait_seconds: float | None = Field(default=None, gt=0)
+    per_user_depth: int | None = Field(default=None, ge=1)
+    fairness: QueueFairness | None = None
 
 
 class PartialTelemetry(_Strict):
@@ -85,6 +88,11 @@ class QueueConfig(_Strict):
     enabled: bool = True
     max_depth: int = Field(default=500, ge=0)
     max_wait_seconds: float = Field(default=120, gt=0)
+    # Most requests one user may have waiting at once. Unset: no limit per user.
+    per_user_depth: int | None = Field(default=None, ge=1)
+    # fifo: first come, first served. round_robin: take turns between users, so one user who
+    # queues many requests cannot make the others wait behind all of them.
+    fairness: QueueFairness = QueueFairness.FIFO
 
 
 class TelemetryConfig(_Strict):

@@ -30,6 +30,11 @@ class VersionDrain(StrEnum):
     IDLE = "idle"  # also retire idle user sessions. Their conversation state is lost.
 
 
+class QueueFairness(StrEnum):
+    FIFO = "fifo"
+    ROUND_ROBIN = "round_robin"
+
+
 class UserIsolation(StrEnum):
     """What per-user information is sent to Foundry on each invocation."""
 

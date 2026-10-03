@@ -1,0 +1,24 @@
+# Two kits in one project, each owning different agents, and one agent split in two shards.
+# This file is for kit "team-a": it owns support-bot (shard 0 of 2). A second kit runs the same
+# agent with shard.index 1. A standby copy of this kit waits until the owner's lease expires.
+# Set POOL_OWNERSHIP__URL (a redis:// URL) in the environment when the backend is redis.
+hack:
+  kit_id: team-a
+  owns: [support-bot]
+  shard:
+    index: 0
+    count: 2
+  ownership:
+    backend: memory          # use redis when more than one process takes part
+    ttl_seconds: 30
+    renew_seconds: 10
+    quiet_seconds: 30
+    standby: true
+
+agentPool:
+  agents:
+    support-bot:
+      mode: stateful
+      max_sessions: 50
+    research-bot:            # owned by another kit: this kit ignores it
+      mode: stateless

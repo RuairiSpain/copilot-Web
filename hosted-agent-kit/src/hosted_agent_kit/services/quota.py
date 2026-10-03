@@ -17,10 +17,11 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import heapq
 import logging
 import math
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from hosted_agent_kit.config.holder import ConfigSource
 from hosted_agent_kit.config.models import AgentConfig
@@ -32,7 +33,7 @@ from hosted_agent_kit.logging_config import hash_identifier, log_event
 from hosted_agent_kit.ports.foundry import FoundryAdapter
 from hosted_agent_kit.ports.metrics import MetricsRecorder
 from hosted_agent_kit.ports.quota import QuotaLedger
-from hosted_agent_kit.ports.registry import SessionRegistry
+from hosted_agent_kit.ports.registry import ChangeEvent, ChangeType, SessionRegistry
 from hosted_agent_kit.services.clock import Clock
 from hosted_agent_kit.services.store import mutate_session
 
@@ -59,21 +60,76 @@ def last_activity(record: SessionRecord) -> datetime:
     return max(c for c in candidates if c is not None)
 
 
+FOREVER = datetime.max.replace(tzinfo=UTC)
+
+
+def counted_until(
+    record: SessionRecord, cfg: AgentConfig, *, idle_status_deprovisions: bool
+) -> datetime | None:
+    """Until when the session is assumed to hold compute: ``FOREVER`` while it is leased or
+    starting, the end of its idle window otherwise, or None when it holds none."""
+    if record.lease_request_id is not None or record.platform_status in _PROVISIONING:
+        return FOREVER
+    if record.platform_status in _NOT_HOLDING:
+        return None
+    activity = last_activity(record)
+    if record.compute_released_at is not None and record.compute_released_at >= activity:
+        return None
+    if idle_status_deprovisions and record.platform_status is FoundrySessionStatus.IDLE:
+        return None
+    return activity + timedelta(seconds=cfg.idle_timeout_seconds + IDLE_MARGIN_SECONDS)
+
+
 def is_counted(
     record: SessionRecord, cfg: AgentConfig, now: datetime, *, idle_status_deprovisions: bool
 ) -> bool:
     """True when the session is assumed to hold compute, and so to count toward the quota."""
-    if record.lease_request_id is not None or record.platform_status in _PROVISIONING:
-        return True
-    if record.platform_status in _NOT_HOLDING:
-        return False
-    activity = last_activity(record)
-    if record.compute_released_at is not None and record.compute_released_at >= activity:
-        return False
-    if idle_status_deprovisions and record.platform_status is FoundrySessionStatus.IDLE:
-        return False
-    window = timedelta(seconds=cfg.idle_timeout_seconds + IDLE_MARGIN_SECONDS)
-    return now < activity + window
+    until = counted_until(record, cfg, idle_status_deprovisions=idle_status_deprovisions)
+    return until is not None and now < until
+
+
+class CountedIndex:
+    """How many sessions of each agent are counted, kept up to date from registry changes.
+
+    Counting by scanning every session on every request does not scale to thousands of sessions.
+    The index keeps one expiry per session and a heap of the idle windows that will end, so a count
+    is a few heap pops instead of a scan.
+    """
+
+    def __init__(self) -> None:
+        self._until: dict[tuple[str, str], datetime] = {}
+        self._finite: dict[str, int] = {}  # per agent: sessions with an idle window still open
+        self._forever: dict[str, int] = {}  # per agent: leased or starting sessions
+        self._heap: list[tuple[datetime, str, str]] = []
+
+    def set(self, agent: str, session_id: str, until: datetime | None) -> None:
+        key = (agent, session_id)
+        previous = self._until.pop(key, None)
+        if previous is not None:
+            self._bump(agent, previous, -1)
+        if until is not None:
+            self._until[key] = until
+            self._bump(agent, until, +1)
+            if until != FOREVER:
+                heapq.heappush(self._heap, (until, agent, session_id))
+
+    def _bump(self, agent: str, until: datetime, step: int) -> None:
+        table = self._forever if until == FOREVER else self._finite
+        table[agent] = table.get(agent, 0) + step
+
+    def count(self, agent: str, now: datetime) -> int:
+        while self._heap and self._heap[0][0] <= now:
+            until, name, session_id = heapq.heappop(self._heap)
+            if self._until.get((name, session_id)) == until:  # not replaced since
+                del self._until[(name, session_id)]
+                self._bump(name, until, -1)
+        return self._finite.get(agent, 0) + self._forever.get(agent, 0)
+
+    def clear(self) -> None:
+        self._until.clear()
+        self._finite.clear()
+        self._forever.clear()
+        self._heap.clear()
 
 
 class KitGovernor:
@@ -255,6 +311,8 @@ class QuotaGate:
             settings.quota, clock, kit_id=settings.kit_id or "kit"
         )
         self.lock = asyncio.Lock()
+        self._index = CountedIndex()
+        registry.subscribe(self._on_change)
         self.evictions = 0
         self.last_counted = 0
         self._metrics = metrics
@@ -266,10 +324,34 @@ class QuotaGate:
             record, cfg, now, idle_status_deprovisions=self._settings.idle_status_deprovisions
         )
 
+    def _on_change(self, event: ChangeEvent) -> None:
+        key = event.key
+        cfg = self._config.get(key.agent_name)
+        if event.type is ChangeType.DELETED or cfg is None:
+            self._index.set(key.agent_name, key.session_id, None)
+            return
+        until = counted_until(
+            event.record, cfg, idle_status_deprovisions=self._settings.idle_status_deprovisions
+        )
+        self._index.set(key.agent_name, key.session_id, until)
+
+    async def rebuild(self) -> None:
+        """Recompute every session's window from the registry: after a configuration reload, and
+        now and then to correct any drift."""
+        self._index.clear()
+        for name in self._config.names:
+            cfg = self._config.get(name)
+            if cfg is None:
+                continue
+            for record in await self._registry.view(name):
+                until = counted_until(
+                    record, cfg, idle_status_deprovisions=self._settings.idle_status_deprovisions
+                )
+                self._index.set(name, record.session_id, until)
+
     async def agent_counted(self, cfg: AgentConfig, now: datetime) -> int:
-        records = await self._registry.list(cfg.name)
-        held = sum(1 for r in records if self.counted(r, cfg, now))
-        return held + await self._registry.reserved(cfg.name)
+        """Counted sessions plus the slots reserved for sessions being created."""
+        return self._index.count(cfg.name, now) + await self._registry.reserved(cfg.name)
 
     async def kit_counted(self, now: datetime) -> int:
         total = 0
@@ -333,7 +415,7 @@ class QuotaGate:
             owner = self._config.get(name)
             if owner is None:
                 continue
-            for record in await self._registry.list(name):
+            for record in await self._registry.view(name):
                 if (
                     record.local_state is LocalSessionState.AVAILABLE
                     and record.lease_request_id is None
@@ -404,6 +486,7 @@ class QuotaGate:
     async def tick(self) -> int:
         """One housekeeping step: raise the limit, give back permits, publish the count."""
         now = self._clock.now()
+        await self.rebuild()  # correct any drift in the incremental count
         counted = await self.kit_counted(now)
         self._last_counted = counted
         self.governor.tick()

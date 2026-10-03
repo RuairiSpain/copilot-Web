@@ -144,7 +144,7 @@ class SchedulerFramework:
                 return Wait(pinned=result.pinned)
 
         # Filter
-        records = await self._registry.list(cfg.name)
+        records = await self._registry.view(cfg.name)  # read-only: no copy per request
         feasible = [r for r in records if all(f.filter(request, r, state) for f in profile.filters)]
         if state.target is not None:
             feasible = [r for r in feasible if r.session_id == state.target]
@@ -168,8 +168,11 @@ class SchedulerFramework:
         # new quota. One that Foundry has deprovisioned needs room to resume.
         gate = self._gate
         if gate is not None:
-            warm = [r for r in ranked if gate.counted(r, cfg, request.now)]
-            ranked = warm + [r for r in ranked if r not in warm]
+            warm: list[SessionRecord] = []
+            cold: list[SessionRecord] = []
+            for candidate in ranked:
+                (warm if gate.counted(candidate, cfg, request.now) else cold).append(candidate)
+            ranked = warm + cold
         no_room = False
         for session in ranked:
             resuming = gate is not None and not gate.counted(session, cfg, request.now)

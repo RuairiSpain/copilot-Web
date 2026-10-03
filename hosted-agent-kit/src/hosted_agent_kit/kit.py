@@ -8,7 +8,8 @@ import logging
 import os
 import time
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import AsyncIterator, Callable, Mapping
+from contextlib import asynccontextmanager
 from pathlib import Path
 from types import TracebackType
 from typing import Any
@@ -27,6 +28,7 @@ from hosted_agent_kit.domain.errors import (
     IdempotencyInProgressError,
     IdempotencyKeyReusedError,
     NotActiveError,
+    RequestTooLargeError,
     ValidationFailedError,
     WrongShardError,
 )
@@ -56,6 +58,7 @@ from hosted_agent_kit.services.ownership import OwnershipManager, Role, lease_ke
 from hosted_agent_kit.services.pool import PoolRequest
 from hosted_agent_kit.services.scheduling import PluginRegistry
 from hosted_agent_kit.services.sharding import shard_for
+from hosted_agent_kit.tracing import span
 from hosted_agent_kit.views import AgentInfo
 
 logger = logging.getLogger(__name__)
@@ -224,10 +227,31 @@ class Hack:
         try:
             await self._runtime.start()
             await self._wait_for_initial_sync()
+            self._refuse_rejected_credentials()
         except BaseException:
             await self._runtime.stop()
             self._runtime = None
             raise
+
+    def _refuse_rejected_credentials(self) -> None:
+        """Fail start when Foundry rejected the first listing with 401 or 403.
+
+        A kit that cannot authenticate would otherwise start, look healthy and fail every call.
+        Network trouble is not treated this way: the kit starts and keeps trying.
+        """
+        assert self._runtime is not None
+        rejected = [
+            name
+            for name in self._runtime.config.names
+            if (report := self._runtime.reconciler.last_reports.get(name)) is not None
+            and "AuthenticationFailed" in report.errors
+        ]
+        if rejected:
+            raise ConfigError(
+                "Foundry rejected the credentials (HTTP 401 or 403) while listing sessions for "
+                f"{', '.join(rejected)}. Check the identity, its role on the project, and "
+                "FOUNDRY_PROJECT_ENDPOINT."
+            )
 
     async def _deactivate(self) -> None:
         runtime, self._runtime = self._runtime, None
@@ -260,6 +284,19 @@ class Hack:
             await manager.stop()
         elif self._runtime is not None:
             await self._runtime.stop()
+
+    @asynccontextmanager
+    async def lifespan(self, app: object | None = None) -> AsyncIterator[None]:
+        """Start and stop the kit around your application. Pass it as FastAPI's ``lifespan``.
+
+        ``FastAPI(lifespan=kit.lifespan)`` is enough when you have no startup code of your own.
+        When you do, nest it: ``async with kit.lifespan(app): ...`` inside your own lifespan.
+        """
+        await self.start()
+        try:
+            yield
+        finally:
+            await self.stop()
 
     async def __aenter__(self) -> Hack:
         await self.start()
@@ -454,6 +491,13 @@ class Hack:
         raw_body: bytes | None = None,
         content_type: str | None = None,
     ) -> AgentResult:
+        limit = self.settings.max_request_bytes
+        if limit is not None:
+            size = len(raw_body) if raw_body is not None else len(_canonical(payload))
+            if size > limit:
+                raise RequestTooLargeError(
+                    f"The request body is {size} bytes; the limit is {limit}."
+                )
         if not is_valid_user_id(user_id):
             raise ValidationFailedError(
                 "user_id must be 1-128 characters of letters, digits, '.', '_', ':' or '-'."
@@ -520,7 +564,8 @@ class Hack:
             content_type=content_type,
         )
         try:
-            pool_result = await self.runtime.pool.execute(request)
+            with span("hack.call", {"agent": cfg.name, "protocol": cfg.protocol.value}):
+                pool_result = await self.runtime.pool.execute(request)
         except BaseException:
             if scope is not None and store is not None:
                 store.abandon(scope)

@@ -20,6 +20,32 @@ hack:
   idempotency_ttl_seconds: 300      # 0 turns Idempotency-Key handling off
   idempotency_max_entries: 2000
   idempotency_max_body_bytes: 524288
+  idle_status_deprovisions: false   # count a session Foundry reports idle as not holding compute
+  evict_idle_for_quota: true        # stop the least recently used idle session at an active limit
+  quota_tick_seconds: 5             # how often quota is re-checked and waiting callers are served
+  max_request_bytes: 1048576        # largest request body the SDK accepts (unset: no limit)
+  kit_id: team-a                    # name of this kit (set when several kits share a project)
+  owns: [support-bot]               # agents this kit schedules (unset: all configured agents)
+  shard:                            # this kit serves shard 0 of 2 of each owned agent
+    index: 0
+    count: 2
+  ownership:                        # the URL is a secret: set POOL_OWNERSHIP__URL
+    backend: memory                 # none | memory | redis
+    ttl_seconds: 30
+    renew_seconds: 10               # under half of ttl_seconds
+    quiet_seconds: 30               # wait after a takeover before admitting calls
+    standby: true                   # wait for the owner to fail instead of refusing to start
+  quota:                            # the ledger URL is a secret: POOL_QUOTA__LEDGER__URL
+    budget: 100                     # most compute-holding sessions for this kit
+    min_limit: 5
+    decrease_factor: 0.7
+    increase_step: 1
+    probe_seconds: 60
+    cooldown_seconds: 30
+    subscription_id: 00000000-0000-0000-0000-000000000000
+    region: swedencentral
+    region_limit: 1000
+    spare: 0                        # with a ledger: permits left for any kit to borrow
 
 agentPool:
   agents:

@@ -309,3 +309,27 @@ async def test_without_per_user_values_the_constant_key_is_unchanged() -> None:
         await adapter.close()
     headers = {k.lower(): v for k, v in backend.requests[0].headers.items()}
     assert headers[HEADER] == "pool-key" and IDENTITY not in headers
+
+
+async def test_the_trace_context_is_sent_with_an_invocation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from opentelemetry.sdk.trace import TracerProvider
+
+    from hosted_agent_kit import tracing
+
+    monkeypatch.setattr(tracing, "_tracer", TracerProvider().get_tracer("test"))
+    backend = Backend()
+    adapter = build_adapter(backend)
+    await adapter.start()
+    try:
+        backend.route("POST", ROUTE, 200, {"ok": True})
+        with tracing.span("caller"):
+            await adapter.invoke(context())
+        await adapter.invoke(context())  # outside any span: no header
+    finally:
+        await adapter.close()
+    inside = {k.lower(): v for k, v in backend.requests[0].headers.items()}
+    outside = {k.lower(): v for k, v in backend.requests[1].headers.items()}
+    assert inside["traceparent"].startswith("00-") and "baggage" not in inside
+    assert "traceparent" not in outside

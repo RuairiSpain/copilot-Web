@@ -17,6 +17,8 @@ Every file here is a complete, valid scheduler configuration (check with
 | `version-pinning.yaml` | Pinning an agent version and draining other versions |
 | `all-protocols.yaml` | Responses and Invocations agents together |
 | `telemetry.yaml` | Per-agent telemetry |
+| `quota-budget.yaml` | A kit budget, active-session limits and idle timeout |
+| `ownership-sharding.yaml` | `kit_id`, `owns`, a shard and standby ownership |
 | `hack-settings.yaml` | The optional `hack:` runtime settings section |
 | `azure-embedded.yaml` | The configuration inside an `azure.yaml` |
 | `kitchen-sink.yaml` | Every key, with ranges and defaults |

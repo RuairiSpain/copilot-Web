@@ -21,7 +21,7 @@ DEFAULTS = {
 
 
 async def test_many_concurrent_calls_across_agents_never_exceed_the_budget() -> None:
-    agents = {f"agent-{i}": {} for i in range(4)}
+    agents: dict[str, dict[str, Any]] = {f"agent-{i}": {} for i in range(4)}
     h = make_harness(agents, DEFAULTS, quota={"budget": 6}, evict_idle_for_quota=False)
     peak = 0
 

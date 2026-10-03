@@ -49,6 +49,7 @@ from hosted_agent_kit.domain.errors import (
 )
 from hosted_agent_kit.domain.models import AgentSummary, FoundrySession, InvokeContext
 from hosted_agent_kit.ports.foundry import UpstreamResponse
+from hosted_agent_kit.tracing import inject_trace_context
 
 logger = logging.getLogger(__name__)
 
@@ -254,6 +255,7 @@ class SdkFoundryAdapter:
             headers[ISOLATION_HEADER] = context.isolation_key
         if context.acting_user is not None:
             headers[IDENTITY_HEADER] = context.acting_user
+        inject_trace_context(headers)
         return headers
 
     def _openai_options(self, context: InvokeContext) -> dict[str, Any]:

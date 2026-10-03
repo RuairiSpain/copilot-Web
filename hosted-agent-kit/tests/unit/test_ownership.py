@@ -66,6 +66,10 @@ class Rig:
         )
 
 
+def role_of(rig: Rig) -> Role:
+    return rig.manager.role
+
+
 @pytest.fixture
 def world() -> tuple[MemoryOwnershipStore, FakeClock]:
     clock = FakeClock()
@@ -79,7 +83,7 @@ async def test_a_kit_claims_all_its_agents_and_becomes_active(
     rig = Rig(store, clock, "kit-1")
     await rig.manager.start()
     try:
-        assert rig.manager.role is Role.ACTIVE and rig.activated == 1
+        assert role_of(rig) is Role.ACTIVE and rig.activated == 1
         assert await store.holder("p/a/0") == "kit-1" == await store.holder("p/b/0")
         assert rig.sleeps == []  # a fresh lease has no previous owner to wait for
     finally:
@@ -97,7 +101,7 @@ async def test_a_second_kit_for_the_same_agent_is_refused_and_leaks_nothing(
         with pytest.raises(OwnershipConflictError, match=r"p/b/0 is owned by kit-1"):
             await second.manager.start()
         assert await store.holder("p/a/0") is None  # the claim it did get was given back
-        assert second.activated == 0 and second.manager.role is Role.STOPPED
+        assert second.activated == 0 and role_of(second) is Role.STOPPED
     finally:
         await first.manager.stop()
 
@@ -115,7 +119,7 @@ async def test_the_owner_keeps_its_leases_by_renewing(
             clock.advance(10)
             await owner.manager.tick()
             await rival.manager.tick()
-        assert owner.manager.role is Role.ACTIVE and rival.manager.role is Role.STANDBY
+        assert role_of(owner) is Role.ACTIVE and role_of(rival) is Role.STANDBY
         assert rival.activated == 0
     finally:
         await owner.manager.stop()
@@ -130,12 +134,12 @@ async def test_a_standby_takes_over_at_once_after_a_graceful_stop(
     standby = Rig(store, clock, "kit-2", standby=True)
     await owner.manager.start()
     await standby.manager.start()
-    assert standby.manager.role is Role.STANDBY
+    assert role_of(standby) is Role.STANDBY
     await owner.manager.stop()
-    assert owner.deactivated == 1 and owner.manager.role is Role.STOPPED
+    assert owner.deactivated == 1 and role_of(owner) is Role.STOPPED
     await standby.manager.tick()
     try:
-        assert standby.manager.role is Role.ACTIVE and standby.activated == 1
+        assert role_of(standby) is Role.ACTIVE and standby.activated == 1
         assert standby.sleeps == []  # released leases need no quiet period
     finally:
         await standby.manager.stop()
@@ -150,11 +154,11 @@ async def test_a_standby_takes_over_after_a_crash_but_waits_the_quiet_period(
     await owner.manager.start()  # ... and then it dies without releasing anything
     await standby.manager.start()
     await standby.manager.tick()
-    assert standby.manager.role is Role.STANDBY  # the lease has not expired yet
+    assert role_of(standby) is Role.STANDBY  # the lease has not expired yet
     clock.advance(TTL + 1)
     await standby.manager.tick()
     try:
-        assert standby.manager.role is Role.ACTIVE
+        assert role_of(standby) is Role.ACTIVE
         assert sum(standby.sleeps) == 20  # the quiet period, in renew-sized steps
         assert standby.manager.takeovers == 1
         assert standby.manager.epochs["p/a/0"] == 2
@@ -172,14 +176,14 @@ async def test_a_kit_that_cannot_confirm_its_leases_stops_serving_before_they_ex
     store.available = False  # the store becomes unreachable
     clock.advance(10)
     await rig.manager.tick()
-    assert rig.manager.role is Role.ACTIVE  # one missed renewal is tolerated
+    assert role_of(rig) is Role.ACTIVE  # one missed renewal is tolerated
     clock.advance(11)  # 21 s without confirmation is past two thirds of the 30 s lease
     await rig.manager.tick()
-    assert rig.manager.role is Role.STANDBY and rig.deactivated == 1 and rig.manager.fences == 1
+    assert role_of(rig) is Role.STANDBY and rig.deactivated == 1 and rig.manager.fences == 1
     store.available = True
     await rig.manager.tick()  # the store is back and the lease is still its own
     try:
-        assert rig.manager.role is Role.ACTIVE and rig.activated == 2
+        assert role_of(rig) is Role.ACTIVE and rig.activated == 2
     finally:
         await rig.manager.stop()
 
@@ -193,7 +197,7 @@ async def test_a_kit_whose_lease_was_taken_stops_serving_immediately(
     clock.advance(TTL + 5)  # the kit was paused (a long stall) and its leases expired
     await store.claim("p/a/0", "kit-2", TTL)  # another kit took one of them
     await rig.manager.tick()
-    assert rig.manager.role is Role.STANDBY and rig.deactivated == 1
+    assert role_of(rig) is Role.STANDBY and rig.deactivated == 1
 
 
 async def test_start_when_the_store_is_down_is_a_conflict_unless_standby(
@@ -205,11 +209,11 @@ async def test_start_when_the_store_is_down_is_a_conflict_unless_standby(
         await Rig(store, clock, "kit-1").manager.start()
     waiting = Rig(store, clock, "kit-2", standby=True)
     await waiting.manager.start()
-    assert waiting.manager.role is Role.STANDBY
+    assert role_of(waiting) is Role.STANDBY
     store.available = True
     await waiting.manager.tick()
     try:
-        assert waiting.manager.role is Role.ACTIVE
+        assert role_of(waiting) is Role.ACTIVE
     finally:
         await waiting.manager.stop()
 
