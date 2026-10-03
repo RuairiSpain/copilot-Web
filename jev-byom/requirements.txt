@@ -15,3 +15,6 @@ torch==2.14.0
 transformers==5.17.0
 azure-storage-blob==12.30.2
 azure-identity==1.25.3
+
+# Only needed to run mcp_server/. The HTTP service itself does not import it.
+mcp==2.2.0

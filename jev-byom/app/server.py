@@ -44,6 +44,8 @@ from app.schemas import (
     PosthocTrainResponse,
     ScenarioInfo,
     ScenarioListResponse,
+    VersionInfo,
+    VersionListResponse,
 )
 from config.settings import Settings, get_settings
 
@@ -231,6 +233,35 @@ def decision(
 @app.get("/scenarios", response_model=ScenarioListResponse, summary="List trained scenarios")
 def scenarios(registry: RegistryDep, _: AuthDep) -> ScenarioListResponse:
     return ScenarioListResponse(scenarios=[ScenarioInfo(**row) for row in registry.list_scenarios()])
+
+
+@app.get(
+    "/scenarios/{scenario}/{decision_type}/versions",
+    response_model=VersionListResponse,
+    responses={404: {"model": ErrorResponse}},
+    summary="List every stored version of one calibration",
+)
+def scenario_versions(
+    scenario: str,
+    decision_type: str,
+    registry: RegistryDep,
+    _: AuthDep,
+) -> VersionListResponse:
+    """Newest first. Any of these can be pinned with `calibration_version`."""
+    rows = registry.list_versions(scenario, decision_type)
+    if not rows:
+        raise EngineError(
+            f"no calibration found for {scenario!r} ({decision_type})",
+            status_code=404,
+            error="calibration_not_found",
+        )
+    current = next((row["version"] for row in rows if row["is_current"]), None)
+    return VersionListResponse(
+        scenario=scenario,
+        decision_type=decision_type,  # type: ignore[arg-type]
+        current_version=current,
+        versions=[VersionInfo(**row) for row in rows],
+    )
 
 
 @app.get("/health", response_model=HealthResponse, summary="Liveness and readiness")

@@ -7,6 +7,8 @@ pydantic-settings==2.15.0
 numpy==2.4.6
 scikit-learn==1.9.1
 azure-storage-blob==12.30.2   # the blob-store tests assert against the real ContentSettings
+mcp==2.2.0               # the MCP tool tests import the real server
+pandas==3.0.6            # the router-conversion tests exercise the real pivot
 pytest==9.1.1
 httpx==0.28.1
 ruff==0.16.8

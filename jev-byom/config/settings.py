@@ -229,6 +229,41 @@ class Settings(BaseSettings):
     )
 
     # ------------------------------------------------------------------
+    # Calibration descriptions
+    # ------------------------------------------------------------------
+    describe_llm_url: str | None = Field(
+        default=None,
+        description=(
+            "OpenAI-shaped chat-completions URL used to rewrite a generated "
+            "calibration description (e.g. "
+            "https://<resource>/openai/v1/chat/completions). Unset means "
+            "descriptions are computed from the training data alone, which "
+            "needs no network and cannot hallucinate."
+        ),
+    )
+    describe_llm_model: str = Field(
+        default="gpt-4o-mini", description="Model or deployment name for the rewrite."
+    )
+    describe_llm_token: str | None = Field(
+        default=None, description="Bearer token for the describe endpoint."
+    )
+    describe_llm_api_key: str | None = Field(
+        default=None, description="api-key header for the describe endpoint, if it wants one."
+    )
+    describe_llm_max_tokens: int = Field(default=200, ge=16)
+    describe_llm_timeout: float = Field(default=15.0, gt=0)
+    default_on_conflict: Literal["new_version", "new_scenario", "reject"] = Field(
+        default="new_version",
+        description=(
+            "What POST /posthoc_train does when the scenario already exists. "
+            "'new_version' adds a version and moves the pointer (the previous "
+            "version stays readable and can be pinned); 'new_scenario' keeps "
+            "the existing one untouched and trains <scenario>-2, -3, ...; "
+            "'reject' returns 409."
+        ),
+    )
+
+    # ------------------------------------------------------------------
     # Service
     # ------------------------------------------------------------------
     api_key: str | None = Field(

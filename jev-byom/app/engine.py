@@ -19,6 +19,7 @@ import numpy as np
 
 from app import calibration as cal
 from app.calibration_registry import CalibrationBundle, CalibrationRegistry, new_version
+from app.descriptions import build_description
 from app.model import BaseDecisionModel
 from app.schemas import (
     DecisionRequest,
@@ -197,6 +198,33 @@ def random_split(total: int, validation_split: float, seed: int) -> tuple[np.nda
 _BOUND_MARGIN = 0.01
 
 
+def resolve_scenario(
+    request: PosthocTrainRequest,
+    *,
+    registry: CalibrationRegistry,
+    settings: Settings,
+) -> tuple[str, str | None]:
+    """Apply the on_conflict policy. Returns (scenario_to_write, renamed_from).
+
+    The registry already versions every fit, so the default policy needs no
+    rename: the new version supersedes the old one and the old one stays
+    readable and pinnable. "new_scenario" is for the other intent — leave what
+    is serving traffic alone and put this fit somewhere new.
+    """
+    policy = request.on_conflict or settings.default_on_conflict
+    if policy == "new_version" or not registry.exists(request.scenario, request.decision_type):
+        return request.scenario, None
+    if policy == "reject":
+        raise EngineError(
+            f"scenario {request.scenario!r} already has a {request.decision_type} calibration; "
+            "retrain it with on_conflict='new_version', branch with 'new_scenario', "
+            "or choose another name",
+            status_code=409,
+            error="scenario_exists",
+        )
+    return registry.next_free_scenario(request.scenario, request.decision_type), request.scenario
+
+
 def temperature_is_clamped(temperature: float, settings: Settings) -> bool:
     """True when the fit ran into the edge of its allowed temperature range.
 
@@ -256,11 +284,14 @@ def train_scenario(
     validation_split = (
         request.validation_split if request.validation_split is not None else settings.validation_split
     )
+    scenario, renamed_from = resolve_scenario(request, registry=registry, settings=settings)
     raw_logits = model.logits([sample.input for sample in samples])
 
     if request.decision_type == "numeric":
         return _train_numeric(
             request,
+            scenario=scenario,
+            renamed_from=renamed_from,
             raw_logits=raw_logits,
             validation_split=validation_split,
             registry=registry,
@@ -269,6 +300,8 @@ def train_scenario(
         )
     return _train_classification(
         request,
+        scenario=scenario,
+        renamed_from=renamed_from,
         raw_logits=raw_logits,
         validation_split=validation_split,
         registry=registry,
@@ -280,6 +313,8 @@ def train_scenario(
 def _train_classification(
     request: PosthocTrainRequest,
     *,
+    scenario: str,
+    renamed_from: str | None,
     raw_logits: np.ndarray,
     validation_split: float,
     registry: CalibrationRegistry,
@@ -339,9 +374,9 @@ def _train_classification(
 
     version = new_version()
     artifacts = [
-        registry.save_temperature(request.scenario, request.decision_type, version, scaler),
+        registry.save_temperature(scenario, request.decision_type, version, scaler),
         registry.save_isotonic(
-            request.scenario, request.decision_type, version, calibrators, class_names
+            scenario, request.decision_type, version, calibrators, class_names
         ),
     ]
 
@@ -354,13 +389,23 @@ def _train_classification(
     metrics_before = _classification_metrics(before, eval_labels, split_name)
     metrics_after = _classification_metrics(after, eval_labels, split_name)
 
+    description = build_description(
+        request.training_data,
+        decision_type=request.decision_type,
+        class_names=class_names,
+        metrics=metrics_after,
+        settings=settings,
+        supplied=request.description,
+    )
+
     registry.commit_version(
-        request.scenario,
+        scenario,
         request.decision_type,
         version,
         artifacts=artifacts,
         num_classes=num_classes,
         class_names=class_names,
+        description=description,
         metadata={
             "num_samples": len(request.training_data),
             "num_train_samples": int(train_idx.size),
@@ -373,12 +418,12 @@ def _train_classification(
             "notes": request.notes,
         },
     )
-    registry.clear_cache(request.scenario, request.decision_type)
+    registry.clear_cache(scenario, request.decision_type)
 
     logger.info(
         "calibration fitted",
         extra={
-            "scenario": request.scenario,
+            "scenario": scenario,
             "decision_type": request.decision_type,
             "calibration_version": version,
             "temperature": float(temperature),
@@ -388,7 +433,9 @@ def _train_classification(
     )
 
     return PosthocTrainResponse(
-        scenario=request.scenario,
+        scenario=scenario,
+        requested_scenario=renamed_from,
+        description=description,
         decision_type=request.decision_type,
         num_classes=num_classes,
         class_names=class_names,
@@ -408,6 +455,8 @@ def _train_classification(
 def _train_numeric(
     request: PosthocTrainRequest,
     *,
+    scenario: str,
+    renamed_from: str | None,
     raw_logits: np.ndarray,
     validation_split: float,
     registry: CalibrationRegistry,
@@ -447,8 +496,8 @@ def _train_numeric(
 
     version = new_version()
     artifacts = [
-        registry.save_temperature(request.scenario, request.decision_type, version, scaler),
-        registry.save_numeric(request.scenario, request.decision_type, version, calibrator),
+        registry.save_temperature(scenario, request.decision_type, version, scaler),
+        registry.save_numeric(scenario, request.decision_type, version, calibrator),
     ]
 
     evaluation_idx = validation_idx if validation_idx.size else train_idx
@@ -483,13 +532,23 @@ def _train_numeric(
         else None,
     )
 
+    description = build_description(
+        request.training_data,
+        decision_type=request.decision_type,
+        class_names=None,
+        metrics=metrics_after,
+        settings=settings,
+        supplied=request.description,
+    )
+
     registry.commit_version(
-        request.scenario,
+        scenario,
         request.decision_type,
         version,
         artifacts=artifacts,
         num_classes=num_classes,
         class_names=None,
+        description=description,
         metadata={
             "num_samples": len(request.training_data),
             "num_train_samples": int(train_idx.size),
@@ -504,12 +563,12 @@ def _train_numeric(
             "notes": request.notes,
         },
     )
-    registry.clear_cache(request.scenario, request.decision_type)
+    registry.clear_cache(scenario, request.decision_type)
 
     logger.info(
         "calibration fitted",
         extra={
-            "scenario": request.scenario,
+            "scenario": scenario,
             "decision_type": request.decision_type,
             "calibration_version": version,
             "temperature": float(temperature),
@@ -519,7 +578,9 @@ def _train_numeric(
     )
 
     return PosthocTrainResponse(
-        scenario=request.scenario,
+        scenario=scenario,
+        requested_scenario=renamed_from,
+        description=description,
         decision_type=request.decision_type,
         num_classes=num_classes,
         class_names=None,
@@ -559,7 +620,9 @@ def decide(
 ) -> DecisionResponse:
     """Produce one typed, calibrated decision. Implements POST /decision."""
     started = time.perf_counter()
-    bundle = registry.load_calibration(request.scenario, request.decision_type)
+    bundle = registry.load_calibration(
+        request.scenario, request.decision_type, version=request.calibration_version
+    )
 
     if bundle is None:
         if settings.require_calibration or request.decision_type == "numeric":
