@@ -19,6 +19,18 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 FROM python:3.13-slim AS runtime
 RUN groupadd --system --gid 10001 pool \
  && useradd --system --uid 10001 --gid pool --no-create-home --shell /usr/sbin/nologin pool
+# Apply Debian security fixes released after the base image was built, and remove pip and
+# setuptools: the service runs from /opt/venv, and the copies of urllib3, msgpack and setuptools
+# that pip bundles carry advisories that Trivy reports.
+RUN set -eux; \
+    apt-get update; \
+    apt-get upgrade -y --no-install-recommends; \
+    rm -rf /var/lib/apt/lists/*; \
+    python -m pip uninstall -y pip setuptools wheel || true; \
+    rm -rf /usr/local/lib/python3.13/site-packages/pip* \
+           /usr/local/lib/python3.13/site-packages/setuptools* \
+           /usr/local/lib/python3.13/site-packages/pkg_resources \
+           /usr/local/lib/python3.13/site-packages/wheel*
 COPY --from=build --chown=pool:pool /opt/venv /opt/venv
 WORKDIR /app
 # The agent pool configuration is read from AGENT_POOL_CONFIG, or from azure.yaml in /app.
