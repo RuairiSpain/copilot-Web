@@ -1,0 +1,14 @@
+# The four classic strategies choose among free sessions. One agent each.
+agentPool:
+  defaults:
+    mode: stateless
+    max_sessions: 6
+  agents:
+    first-available-agent:
+      scheduler: first_available   # the first free session (the default); keeps others idle
+    round-robin-agent:
+      scheduler: round_robin       # rotates through free sessions to spread load
+    oldest-idle-agent:
+      scheduler: oldest_idle       # the session unused for longest; keeps sessions from expiring
+    newest-idle-agent:
+      scheduler: newest_idle       # the most recently used; keeps a small hot set, lets the rest age out

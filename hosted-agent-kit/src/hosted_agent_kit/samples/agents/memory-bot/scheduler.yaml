@@ -1,0 +1,15 @@
+# Scheduler configuration for the memory-bot hosted agent (Responses protocol, stateful).
+# Each user (and each conversation_key) gets its own sandbox, so the agent remembers what that
+# user said earlier. Sessions found after a restart are not handed to other users.
+agentPool:
+  agents:
+    memory-bot:
+      mode: stateful
+      affinity: user
+      protocol: responses
+      adopt_unbound_sessions: false
+      max_sessions: 20
+      queue:
+        enabled: true
+        max_depth: 50
+        max_wait_seconds: 60

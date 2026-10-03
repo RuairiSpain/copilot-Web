@@ -1,0 +1,24 @@
+# One stateless agent and one stateful agent, with `defaults` shared by both.
+# `defaults` apply to every agent; an agent's own keys override them key by key
+# (nested sections such as `queue` merge, so you can change one field of it).
+agentPool:
+  defaults:
+    max_sessions: 10
+    queue:
+      max_depth: 200
+      max_wait_seconds: 60
+
+  agents:
+    # Stateless: any free session can serve any request. No per-user mapping is kept.
+    support-bot:
+      mode: stateless
+      min_warm_sessions: 2
+
+    # Stateful: each user keeps one session (affinity: user is implied by mode: stateful).
+    # Pass conversation_key to give one user several independent sessions.
+    memory-bot:
+      mode: stateful
+      max_sessions: 20
+      # A session this process did not create is never handed to a user after a restart,
+      # so nobody can inherit another user's files. Set true only if sessions hold no user data.
+      adopt_unbound_sessions: false

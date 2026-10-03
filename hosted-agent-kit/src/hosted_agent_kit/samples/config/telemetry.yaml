@@ -1,0 +1,15 @@
+# Telemetry is per agent. When it is on, the pool records counters, gauges and histograms for
+# the agent (calls, queue waits, session creates, circuit state). Metrics never carry user ids
+# or message content. Exporting needs `hosted-agent-kit[azure-monitor]` and
+# APPLICATIONINSIGHTS_CONNECTION_STRING; without them metrics stay in memory for kit.reporting.
+agentPool:
+  defaults:
+    telemetry:
+      enabled: true
+  agents:
+    support-bot:
+      mode: stateless
+    internal-experiment:
+      mode: stateless
+      telemetry:
+        enabled: false

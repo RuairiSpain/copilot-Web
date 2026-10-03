@@ -1,0 +1,15 @@
+[project]
+name = "hosted-agent-kit-client"
+version = "0.1.0"
+description = "Async Python client for the HACK standalone service (hosted-agent-kit)."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = ["httpx>=0.27"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["hosted_agent_kit_client"]

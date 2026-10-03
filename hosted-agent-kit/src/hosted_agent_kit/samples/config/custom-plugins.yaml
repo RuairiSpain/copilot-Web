@@ -1,0 +1,13 @@
+# Uses two plugins that the application registers in Python, so this file validates with
+# `hack validate` but starts only in an app that registered YoungEnough and PreferOlder
+# (samples/miscellaneous/custom_scheduler_plugin.py).
+agentPool:
+  agents:
+    support-bot:
+      mode: stateless
+      max_sessions: 6
+      scheduler_profile:
+        filters: [YoungEnough, NotExpiring]
+        scores:
+          PreferOlder: 5
+          ExpiryRisk: 1

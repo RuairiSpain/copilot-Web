@@ -1,0 +1,17 @@
+# A scheduler profile replaces the single strategy with weighted scores, and adds filters.
+# Built-in filters (core filters always run): NotExpiring
+# Built-in scores: FirstAvailable, RoundRobin, OldestIdle, NewestIdle, AffinityPreference,
+#                  VersionPreferred, ExpiryRisk
+# Weights are 1 to 1000. The session with the highest weighted sum wins.
+# Add your own with PluginRegistry (see samples/miscellaneous/custom_scheduler_plugin.py).
+agentPool:
+  agents:
+    scored-agent:
+      mode: stateless
+      max_sessions: 8
+      scheduler_profile:
+        filters:
+          - NotExpiring          # skip sessions about to expire, so a request is not cut off
+        scores:
+          OldestIdle: 20
+          ExpiryRisk: 10         # prefer sessions with more time left

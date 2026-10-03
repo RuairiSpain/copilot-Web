@@ -1,0 +1,18 @@
+# Warm sessions are created before traffic needs them, so the first caller does not wait for
+# a session to start. The pool keeps `min_warm_sessions` ready sessions that no user owns.
+agentPool:
+  agents:
+    # Keep 3 ready, never more than 12 in total. Resync every 30 s replaces any that expired.
+    latency-sensitive-agent:
+      mode: stateless
+      min_warm_sessions: 3
+      max_sessions: 12
+      sync_interval_seconds: 30
+      create_retries: 5          # retry a failed session creation up to 5 times
+
+    # A stateful agent can keep warm sessions too: the first user to arrive takes one.
+    # Not available when POOL_SESSION_ID_KEY is set (each user's session id is then derived).
+    stateful-warm-agent:
+      mode: stateful
+      min_warm_sessions: 1
+      max_sessions: 10

@@ -1,0 +1,29 @@
+# What happens when every session is busy.
+agentPool:
+  agents:
+    # Wait for a session: up to 100 callers queue, each for at most 30 seconds. A full queue
+    # answers 429 (QUEUE_FULL), an expired wait 504 (QUEUE_WAIT_TIMEOUT); both can carry Retry-After.
+    interactive-agent:
+      mode: stateless
+      max_sessions: 4
+      queue:
+        enabled: true
+        max_depth: 100
+        max_wait_seconds: 30
+
+    # No queue: a busy pool answers 429 (POOL_CAPACITY_EXCEEDED) immediately. Use for batch
+    # callers that already retry on their own.
+    batch-agent:
+      mode: stateless
+      max_sessions: 4
+      queue:
+        enabled: false
+
+    # A deep, patient queue for work that can wait.
+    report-agent:
+      mode: stateless
+      max_sessions: 2
+      queue:
+        enabled: true
+        max_depth: 1000
+        max_wait_seconds: 600

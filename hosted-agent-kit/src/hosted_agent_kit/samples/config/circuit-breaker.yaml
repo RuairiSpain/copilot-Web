@@ -1,0 +1,28 @@
+# The circuit breaker stops calling an agent whose Foundry endpoint keeps failing, so callers get
+# a fast 503 (FOUNDRY_CIRCUIT_OPEN) instead of waiting for timeouts. Only "unavailable" and
+# "timeout" errors count as failures. Throttling and bad requests do not.
+agentPool:
+  agents:
+    # Opens after 3 failures in a row, stays open 20 s, then lets 1 trial call through.
+    # A successful trial closes the circuit; a failed one reopens it.
+    fragile-agent:
+      mode: stateless
+      circuit_breaker:
+        enabled: true
+        failure_threshold: 3
+        open_seconds: 20
+        half_open_max_calls: 1
+
+    # More tolerant, with 3 trial calls when it half-opens.
+    sturdy-agent:
+      mode: stateless
+      circuit_breaker:
+        failure_threshold: 20
+        open_seconds: 60
+        half_open_max_calls: 3
+
+    # Switched off.
+    no-breaker-agent:
+      mode: stateless
+      circuit_breaker:
+        enabled: false

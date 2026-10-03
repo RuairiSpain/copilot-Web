@@ -1,0 +1,18 @@
+# Scheduler configuration for the support-bot hosted agent (Responses protocol, stateless).
+# Any request can use any free session, so the pool keeps two warm sessions ready and queues
+# callers for up to 30 seconds when all eight sessions are busy.
+agentPool:
+  agents:
+    support-bot:
+      mode: stateless
+      protocol: responses
+      scheduler: round_robin
+      min_warm_sessions: 2
+      max_sessions: 8
+      queue:
+        enabled: true
+        max_depth: 100
+        max_wait_seconds: 30
+      circuit_breaker:
+        failure_threshold: 5
+        open_seconds: 30

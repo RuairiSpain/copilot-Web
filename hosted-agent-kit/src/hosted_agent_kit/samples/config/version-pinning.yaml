@@ -1,0 +1,17 @@
+# Pin new sessions to an agent version, and drain sessions on other versions.
+# Apply a change with `admin.reload_config()` (or POST /config/reload on the service).
+# version_drain:
+#   never    leave old sessions alone; they keep the version they started with
+#   unbound  retire idle pooled sessions no user owns (safe; users keep their state)
+#   idle     also retire idle user sessions (their conversation state is lost)
+agentPool:
+  agents:
+    support-bot:
+      mode: stateless
+      agent_version: "7"
+      version_drain: unbound
+
+    memory-bot:
+      mode: stateful
+      agent_version: "3"
+      version_drain: never       # do not break remembered conversations

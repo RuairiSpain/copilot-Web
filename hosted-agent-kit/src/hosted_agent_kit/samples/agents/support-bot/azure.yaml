@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+#
+# Deploys the support-bot hosted agent with the Azure Developer CLI (azd) and its AI agent
+# extension:  azd ai agent init   ->   azd up
+# The key names under `config` follow the Microsoft Foundry azure.yaml reference. Check them
+# against https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference for
+# the azd extension version you use, because the extension is still in preview.
+name: support-bot
+
+services:
+  ai-project:
+    host: azure.ai.project
+    config:
+      deployments:
+        - name: gpt-4o
+          model:
+            format: OpenAI
+            name: gpt-4o
+            version: "2024-11-20"
+          sku:
+            name: GlobalStandard
+            capacity: 10
+
+  support-bot:
+    project: .
+    host: azure.ai.agent
+    language: docker
+    docker:
+      remoteBuild: true        # build the image in Azure Container Registry
+    uses:
+      - ai-project
+    config:
+      kind: hosted
+      protocols:
+        - responses
+      container:
+        resources:
+          cpu: "0.5"
+          memory: 1Gi
+        scale:
+          minReplicas: 1
+          maxReplicas: 3
+      env:
+        - name: LOG_LEVEL
+          value: info
