@@ -20,7 +20,7 @@ from hosted_agent_kit.config.settings import KitSettings
 from hosted_agent_kit.kit import Hack
 from hosted_agent_kit.results import AgentResult
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "AgentConfig",

@@ -9,6 +9,24 @@ from types import TracebackType
 from typing import Any
 
 from hosted_agent_kit.services.pool import PoolResult
+from hosted_agent_kit.sse import SseEvent, parse_sse
+
+
+class StreamError(Exception):
+    """The agent or the pool failed after the stream had started. ``event`` has the details."""
+
+    def __init__(self, event: SseEvent) -> None:
+        try:
+            data = event.json()
+        except ValueError:
+            data = {}
+        detail = data.get("detail") if isinstance(data, dict) else None
+        super().__init__(detail or "the stream ended with an error event")
+        self.event = event
+        self.error_code: str | None = data.get("error_code") if isinstance(data, dict) else None
+        self.retry_after_seconds: int | None = (
+            data.get("retry_after_seconds") if isinstance(data, dict) else None
+        )
 
 
 @dataclass
@@ -63,6 +81,39 @@ class AgentResult:
 
     def text(self) -> str:
         return self.content.decode()
+
+    @property
+    def output_text(self) -> str:
+        """The text of a Responses answer: its ``output_text``, or its message texts joined."""
+        body = self.json()
+        if not isinstance(body, dict):
+            raise ValueError("this result is not a Responses object")
+        direct = body.get("output_text")
+        if isinstance(direct, str):
+            return direct
+        parts: list[str] = []
+        for item in body.get("output") or []:
+            for block in item.get("content") or [] if isinstance(item, dict) else []:
+                if isinstance(block, dict) and block.get("type") == "output_text":
+                    parts.append(str(block.get("text", "")))
+        return "".join(parts)
+
+    def events(self) -> AsyncIterator[SseEvent]:
+        """The stream as parsed server-sent events (``event``, ``data``, ``json()``)."""
+        return parse_sse(self.chunks())
+
+    async def text_deltas(self) -> AsyncIterator[str]:
+        """The text pieces of a streamed Responses answer, in order.
+
+        Stops at the end of the stream. A final ``error`` event raises ``StreamError``.
+        """
+        async for event in self.events():
+            if event.is_error:
+                raise StreamError(event)
+            if event.event.endswith("output_text.delta"):
+                delta = event.json().get("delta")
+                if isinstance(delta, str):
+                    yield delta
 
     def chunks(self) -> AsyncIterator[bytes]:
         """The streamed frames. Raises ``ValueError`` when the result is not a stream."""

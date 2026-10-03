@@ -18,10 +18,10 @@ package shows each call in a runnable FastAPI application (`hack samples copy ./
 ## Lifecycle
 
 ```python
-kit = Hack.from_yaml("scheduler.yaml")      # reads and validates; nothing is started yet
-await kit.start()                            # connects to Foundry, first sync, starts controllers
+kit = Hack.from_yaml("scheduler.yaml")  # reads and validates; nothing is started yet
+await kit.start()  # connects to Foundry, first sync, starts controllers
 ...
-await kit.stop()                             # refuses new calls, waits for running ones, closes
+await kit.stop()  # refuses new calls, waits for running ones, closes
 ```
 
 `async with kit:` does the same. `install(app, kit)` (FastAPI) starts the kit before your own
@@ -148,8 +148,10 @@ Register both in a `PluginRegistry` and name them in an agent's `scheduler_profi
 from hosted_agent_kit.plugins import default_plugins
 
 plugins = default_plugins()
-plugins.register_filter("YoungEnough", YoungEnough)     # has .name and .filter(request, session, state)
-plugins.register_score("PreferOlder", PreferOlder)      # has .name and .score(request, session, state)
+plugins.register_filter(
+    "YoungEnough", YoungEnough
+)  # has .name and .filter(request, session, state)
+plugins.register_score("PreferOlder", PreferOlder)  # has .name and .score(request, session, state)
 kit = Hack.from_yaml("scheduler.yaml", scheduler_plugins=plugins)
 ```
 

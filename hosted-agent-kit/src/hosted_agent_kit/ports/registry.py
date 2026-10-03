@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -47,6 +47,15 @@ class SessionRegistry(Protocol):
 
     async def list(self, agent_name: str) -> list[SessionRecord]:
         """Return the agent's sessions in stable registry order."""
+        ...
+
+    async def view(self, agent_name: str) -> Sequence[SessionRecord]:
+        """The agent's sessions in registry order, without copying them.
+
+        The records are the stored ones: read them, never change them, and do not keep them across
+        an ``await`` if the answer must stay exact. Use ``list`` for copies you may hold or edit.
+        Hot paths use this: copying every record on every request does not scale to thousands.
+        """
         ...
 
     async def count(self, agent_name: str) -> int: ...

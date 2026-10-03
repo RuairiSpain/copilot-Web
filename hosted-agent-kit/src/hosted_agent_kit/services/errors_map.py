@@ -6,11 +6,13 @@ import math
 
 from hosted_agent_kit.config.settings import KitSettings
 from hosted_agent_kit.domain.errors import (
+    QUOTA_REGIONAL,
     AppError,
     FoundryCircuitOpen,
     FoundryCircuitOpenError,
     FoundryConflict,
     FoundryError,
+    FoundryQuotaExceeded,
     FoundryRejected,
     FoundryResponseTooLarge,
     FoundrySessionFailed,
@@ -19,9 +21,11 @@ from hosted_agent_kit.domain.errors import (
     FoundryTimeout,
     FoundryTimeoutAppError,
     FoundryUnavailableError,
+    RegionalCapacityError,
     ResponseTooLargeError,
     SessionFailedError,
     SessionNotFoundUpstreamError,
+    SessionQuotaError,
     UpstreamError,
     UpstreamThrottledError,
     ValidationFailedError,
@@ -45,6 +49,19 @@ def _map(settings: KitSettings, exc: FoundryError, *, invoking: bool) -> AppErro
         return UpstreamThrottledError(
             "Foundry is throttling requests.",
             retry_after_seconds=math.ceil(hint) if hint is not None else retry_after,
+        )
+    if isinstance(exc, FoundryQuotaExceeded):
+        hint = exc.retry_after_seconds
+        seconds = math.ceil(hint) if hint is not None else retry_after
+        if exc.scope == QUOTA_REGIONAL:
+            return RegionalCapacityError(
+                "The regional session quota is full. Retry later or use another region.",
+                retry_after_seconds=seconds,
+            )
+        return SessionQuotaError(
+            "The session quota is full. Stop or delete sessions that are not needed, "
+            "or request a higher limit.",
+            retry_after_seconds=seconds,
         )
     if isinstance(exc, FoundryCircuitOpen):
         return FoundryCircuitOpenError(

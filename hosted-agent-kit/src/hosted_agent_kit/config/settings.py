@@ -10,7 +10,15 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Annotated, Literal, Self
 
-from pydantic import AliasChoices, Field, SecretStr, field_validator, model_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    SecretStr,
+    field_validator,
+    model_validator,
+)
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from hosted_agent_kit.config.models import ConfigError
@@ -18,10 +26,123 @@ from hosted_agent_kit.config.models import ConfigError
 MIN_SESSION_KEY_CHARS = 32
 
 
+class _Section(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class LedgerSettings(_Section):
+    """Optional shared store for the regional view (borrowing and visibility). See quota.md."""
+
+    backend: Literal["memory", "redis"] = "redis"
+    url: SecretStr | None = Field(
+        default=None, description="redis:// or rediss:// URL. Set it in the environment."
+    )
+    entra_auth: bool = Field(
+        default=False, description="Authenticate to Azure Managed Redis with the kit's identity."
+    )
+    ttl_seconds: float = Field(
+        default=30, gt=0, description="Entries expire this long after a heartbeat."
+    )
+    timeout_seconds: float = Field(
+        default=0.25, gt=0, description="Per-call limit; slower counts as down."
+    )
+
+
+class QuotaSettings(_Section):
+    """Active-session budget for one kit. Nothing is enforced unless a budget is set."""
+
+    budget: int | None = Field(
+        default=None,
+        ge=1,
+        description="Most compute-holding sessions this kit may use, all agents.",
+    )
+    min_limit: int = Field(default=1, ge=1, description="The adaptive limit never goes below this.")
+    decrease_factor: float = Field(default=0.7, gt=0, lt=1)
+    increase_step: int = Field(default=1, ge=1)
+    probe_seconds: float = Field(
+        default=60, gt=0, description="Raise the limit one step after this long without a refusal."
+    )
+    cooldown_seconds: float = Field(
+        default=30, ge=0, description="After a decrease, ignore further refusals for this long."
+    )
+    subscription_id: str | None = None
+    region: str | None = None
+    region_limit: int | None = Field(
+        default=None,
+        ge=1,
+        description="The subscription's regional limit, for reporting and borrowing.",
+    )
+    spare: int = Field(
+        default=0,
+        ge=0,
+        description="Sessions kept unallocated for any kit to borrow (needs the ledger).",
+    )
+    ledger: LedgerSettings | None = None
+
+    @model_validator(mode="after")
+    def _check(self) -> Self:
+        if self.ledger is not None and (self.region_limit is None or not self.region):
+            raise ConfigError("quota.ledger needs quota.region and quota.region_limit")
+        if self.spare and self.ledger is None:
+            raise ConfigError("quota.spare needs quota.ledger")
+        if self.budget is not None and self.min_limit > self.budget:
+            raise ConfigError("quota.min_limit cannot exceed quota.budget")
+        return self
+
+
+class ShardSettings(_Section):
+    index: int = Field(ge=0)
+    count: int = Field(ge=1)
+
+    @model_validator(mode="after")
+    def _check(self) -> Self:
+        if self.index >= self.count:
+            raise ConfigError("shard.index must be less than shard.count")
+        return self
+
+
+class OwnershipSettings(_Section):
+    """How a kit proves it is the only one scheduling an agent (or shard of an agent)."""
+
+    backend: Literal["none", "memory", "redis"] = "none"
+    url: SecretStr | None = None
+    ttl_seconds: float = Field(default=30, gt=0)
+    renew_seconds: float = Field(
+        default=10, gt=0, description="At most a third of ttl_seconds, so a kit can fence in time."
+    )
+    quiet_seconds: float = Field(
+        default=30, ge=0, description="After taking over, wait this long before admitting calls."
+    )
+    standby: bool = Field(
+        default=False,
+        description="If another kit owns the agent, wait as a standby; else refuse to start.",
+    )
+    entra_auth: bool = Field(
+        default=False, description="Authenticate to Azure Managed Redis with the kit's identity."
+    )
+    timeout_seconds: float = Field(
+        default=2.0, gt=0, description="Per-call limit for the lease store; slower counts as down."
+    )
+
+    @model_validator(mode="after")
+    def _check(self) -> Self:
+        if self.renew_seconds * 3 > self.ttl_seconds:
+            raise ConfigError(
+                "ownership.renew_seconds must be at most a third of ownership.ttl_seconds"
+            )
+        if self.timeout_seconds >= self.renew_seconds:
+            raise ConfigError("ownership.timeout_seconds must be under ownership.renew_seconds")
+        if self.backend == "redis" and self.url is None:
+            raise ConfigError("ownership.backend redis needs ownership.url")
+        return self
+
+
 class KitSettings(BaseSettings):
     """Runtime settings shared by the embedded kit and the standalone service."""
 
-    model_config = SettingsConfigDict(env_prefix="POOL_", extra="ignore", populate_by_name=True)
+    model_config = SettingsConfigDict(
+        env_prefix="POOL_", env_nested_delimiter="__", extra="ignore", populate_by_name=True
+    )
 
     # Locations and Foundry connection
     agent_pool_config: Path | None = Field(
@@ -46,6 +167,12 @@ class KitSettings(BaseSettings):
         default=None,
         description="Secret that derives each stateful user's session id. Setting it lets the "
         "pool find users' sessions again after a restart. Keep it stable.",
+    )
+
+    user_isolation_secret: SecretStr | None = Field(
+        default=None,
+        description="Secret that derives each user's x-ms-user-isolation-key. Needed when an "
+        "agent sets user_isolation. Defaults to session_id_key. Keep it stable.",
     )
 
     # Timeouts and limits
@@ -77,8 +204,40 @@ class KitSettings(BaseSettings):
     backoff_base_seconds: float = Field(default=0.5, gt=0)
     backoff_max_seconds: float = Field(default=30, gt=0)
 
+    # How the kit counts sessions against the quota (see quota.md).
+    idle_status_deprovisions: bool = Field(
+        default=False,
+        description="Treat a session that Foundry reports as idle as not holding compute.",
+    )
+    evict_idle_for_quota: bool = Field(
+        default=True,
+        description="Stop the least recently used idle session when an active limit is reached.",
+    )
+    quota_tick_seconds: float = Field(
+        default=5, gt=0, description="How often the kit re-checks quota and serves waiting callers."
+    )
+    quota: QuotaSettings = Field(default_factory=QuotaSettings)
+
+    # Which agents this kit schedules, and how it proves it is the only one doing so.
+    kit_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9._-]{1,64}$")
+    owns: Annotated[list[str] | None, NoDecode] = Field(
+        default=None, description="Agents this kit schedules. Unset: every configured agent."
+    )
+    shard: ShardSettings | None = None
+    ownership: OwnershipSettings = Field(default_factory=OwnershipSettings)
+
+    # Largest request body the SDK accepts (the standalone service has its own limit).
+    max_request_bytes: int | None = Field(default=None, ge=1)
+
     log_level: str = "INFO"
     service_name: str = "hosted-agent-kit"
+
+    @field_validator("owns", mode="before")
+    @classmethod
+    def _split_owns(cls, value: object) -> object:
+        if isinstance(value, str):
+            return [item.strip() for item in value.split(",") if item.strip()]
+        return value
 
     @model_validator(mode="after")
     def _check_session_key(self) -> Self:
@@ -86,6 +245,15 @@ class KitSettings(BaseSettings):
         if key is not None and len(key.get_secret_value()) < MIN_SESSION_KEY_CHARS:
             raise ConfigError(
                 f"POOL_SESSION_ID_KEY must be at least {MIN_SESSION_KEY_CHARS} characters"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _check_isolation_secret(self) -> Self:
+        secret = self.user_isolation_secret
+        if secret is not None and len(secret.get_secret_value()) < MIN_SESSION_KEY_CHARS:
+            raise ConfigError(
+                f"POOL_USER_ISOLATION_SECRET must be at least {MIN_SESSION_KEY_CHARS} characters"
             )
         return self
 

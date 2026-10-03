@@ -30,7 +30,10 @@ agentPool:
       protocol: responses           # responses | invocations
       scheduler: round_robin        # ignored when scheduler_profile.scores is set
       min_warm_sessions: 1
-      max_sessions: 25
+      max_sessions: 25              # sessions Foundry may hold (running or stopped)
+      max_active_sessions: 10       # <= max_sessions: sessions that may hold compute at once
+      idle_timeout_seconds: 900     # 60 to 14400: Foundry's idle timeout for this agent
+      user_isolation: key           # off | key | delegated (per-user headers to Foundry)
       adopt_unbound_sessions: false # stateful default false; stateless default true
       sync_interval_seconds: 45
       create_retries: 4
@@ -40,6 +43,8 @@ agentPool:
         enabled: true
         max_depth: 250
         max_wait_seconds: 45
+        per_user_depth: 5           # one user may hold at most this many queue places
+        fairness: round_robin       # fifo | round_robin (take turns between users)
       telemetry:
         enabled: true
       circuit_breaker:

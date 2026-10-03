@@ -38,6 +38,8 @@ Every error also says where the request failed and whether repeating it is safe:
 | `POOL_CAPACITY_EXCEEDED` | 429 | yes | All sessions are busy and the queue is disabled. | Retry after the delay. |
 | `QUEUE_FULL` | 429 | yes | The agent's queue is at `max_depth`. | Retry after the delay. |
 | `UPSTREAM_THROTTLED` | 429 | yes | Foundry kept throttling after the retries. | Retry after the delay. |
+| `REGIONAL_SESSION_QUOTA_EXCEEDED` | 429 | yes | Foundry answered `regional_session_quota_exceeded`: the subscription's concurrent session limit for the region is full. Retried with backoff (`create_retries`, `upstream_throttle_retries`) before it is returned. | Retry after the delay, or use another region. |
+| `SESSION_QUOTA_EXCEEDED` | 429 | yes | Foundry answered `session_quota_exceeded`. Not retried: it does not clear until sessions are stopped or deleted. | Free sessions, or request a higher quota. |
 | `QUEUE_WAIT_TIMEOUT` | 504 | yes | Waited `max_wait_seconds` in the queue. | Retry later, or raise the limit. |
 | `STICKY_SESSION_TIMEOUT` | 504 | yes | A stateful user's own session stayed busy for `max_wait_seconds`. | Retry. The user is never moved to another session. |
 | `FOUNDRY_TIMEOUT` | 504 | no | Foundry did not answer within the request timeout, or a stream sent nothing before `POOL_MAX_STREAM_SECONDS`. | Retry if the call is safe to repeat. |
@@ -100,3 +102,10 @@ stream starts, `POOL_MAX_STREAM_SECONDS` applies, including to a client that sto
 A `Retry-After` from Foundry (seconds or an HTTP date) is the least the service waits before it
 retries. When it is longer than `POOL_BACKOFF_MAX_SECONDS` the service does not retry early: the
 caller gets `UPSTREAM_THROTTLED` with Foundry's own delay.
+
+## Session quota errors
+
+Foundry limits concurrent hosted-agent sessions per subscription and region. A 429 that carries one
+of the two quota codes is mapped to its own error instead of `UPSTREAM_THROTTLED`, because the
+right response differs. These errors do not count as failures for the circuit breaker, and the
+quota governor (see `quota.md`) lowers the kit's own limit when it sees one.

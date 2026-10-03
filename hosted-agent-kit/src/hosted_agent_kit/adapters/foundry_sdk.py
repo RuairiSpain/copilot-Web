@@ -34,8 +34,11 @@ from azure.identity.aio import DefaultAzureCredential
 
 from hosted_agent_kit.domain.enums import AgentProtocol, FoundrySessionStatus
 from hosted_agent_kit.domain.errors import (
+    QUOTA_REGIONAL,
+    QUOTA_SESSION,
     FoundryConflict,
     FoundryError,
+    FoundryQuotaExceeded,
     FoundryRejected,
     FoundryResponseTooLarge,
     FoundrySessionFailed,
@@ -46,6 +49,7 @@ from hosted_agent_kit.domain.errors import (
 )
 from hosted_agent_kit.domain.models import AgentSummary, FoundrySession, InvokeContext
 from hosted_agent_kit.ports.foundry import UpstreamResponse
+from hosted_agent_kit.tracing import inject_trace_context
 
 logger = logging.getLogger(__name__)
 
@@ -53,10 +57,43 @@ SESSION_ID_FIELD = "agent_session_id"
 LIST_PAGE_SIZE = 100
 API_VERSION = "v1"
 ISOLATION_HEADER = "x-ms-user-isolation-key"
+IDENTITY_HEADER = "x-ms-user-identity"
 SSE_MEDIA_TYPE = "text/event-stream"
 
 
-def _from_status(status: int, retry_after: str | None = None) -> FoundryError:
+_QUOTA_CODES = {
+    "regional_session_quota_exceeded": QUOTA_REGIONAL,
+    "session_quota_exceeded": QUOTA_SESSION,
+}
+
+
+def _quota_scope(code: str | None) -> str | None:
+    return _QUOTA_CODES.get(code.lower()) if code else None
+
+
+def _error_code(exc: BaseException) -> str | None:
+    """The service's error code from an SDK exception, wherever the SDK put it."""
+    candidates: list[Any] = []
+    error = getattr(exc, "error", None)  # azure.core: the parsed ODataV4 error
+    candidates.append(getattr(error, "code", None))
+    candidates.append(getattr(exc, "code", None))  # openai: the error code
+    body = getattr(exc, "body", None)  # openai: the parsed body
+    if isinstance(body, dict):
+        inner = body.get("error")
+        candidates.append(inner.get("code") if isinstance(inner, dict) else body.get("code"))
+    for candidate in candidates:
+        if isinstance(candidate, str) and candidate:
+            return candidate
+    return None
+
+
+def _from_status(
+    status: int, retry_after: str | None = None, code: str | None = None
+) -> FoundryError:
+    if status == 429:
+        scope = _quota_scope(code)
+        if scope is not None:
+            return FoundryQuotaExceeded(scope, _parse_retry_after(retry_after))
     if status == 404:
         return FoundrySessionNotFound()
     if status == 409:
@@ -102,13 +139,15 @@ def translate_exception(exc: BaseException) -> FoundryError | None:
     if isinstance(exc, HttpResponseError):
         response: Any = exc.response
         headers = response.headers if response is not None else {}
-        return _from_status(exc.status_code or 500, headers.get("retry-after"))
+        return _from_status(exc.status_code or 500, headers.get("retry-after"), _error_code(exc))
     if isinstance(exc, ServiceRequestError | AzureError):
         return FoundryUnavailable(type(exc).__name__)
     if isinstance(exc, openai.APITimeoutError | TimeoutError):
         return FoundryTimeout()
     if isinstance(exc, openai.APIStatusError):
-        return _from_status(exc.status_code, exc.response.headers.get("retry-after"))
+        return _from_status(
+            exc.status_code, exc.response.headers.get("retry-after"), _error_code(exc)
+        )
     if isinstance(exc, openai.APIConnectionError):
         return FoundryUnavailable(type(exc).__name__)
     return None
@@ -209,8 +248,19 @@ class SdkFoundryAdapter:
     def _session_options(self) -> dict[str, Any]:
         return {"headers": dict(self._headers)} if self._headers else {}
 
-    def _openai_options(self) -> dict[str, Any]:
-        return {"extra_headers": dict(self._headers)} if self._headers else {}
+    def _call_headers(self, context: InvokeContext) -> dict[str, str]:
+        """Headers for one invocation: the constant key, replaced by a per-user key when set."""
+        headers = dict(self._headers)
+        if context.isolation_key is not None:
+            headers[ISOLATION_HEADER] = context.isolation_key
+        if context.acting_user is not None:
+            headers[IDENTITY_HEADER] = context.acting_user
+        inject_trace_context(headers)
+        return headers
+
+    def _openai_options(self, context: InvokeContext) -> dict[str, Any]:
+        headers = self._call_headers(context)
+        return {"extra_headers": headers} if headers else {}
 
     @property
     def _project(self) -> AIProjectClient:
@@ -307,11 +357,11 @@ class SdkFoundryAdapter:
                     stream=True,
                     extra_body=body,
                     timeout=context.timeout_seconds,
-                    **self._openai_options(),
+                    **self._openai_options(context),
                 )
                 return UpstreamResponse(stream=_sse_frames(stream), media_type="text/event-stream")
             response = await client.responses.create(
-                extra_body=body, timeout=context.timeout_seconds, **self._openai_options()
+                extra_body=body, timeout=context.timeout_seconds, **self._openai_options(context)
             )
         except Exception as exc:
             raise await self._classify_invoke_error(context, exc) from exc
@@ -321,7 +371,7 @@ class SdkFoundryAdapter:
 
     async def _invoke_invocations(self, context: InvokeContext) -> UpstreamResponse:
         """POST the payload to the Invocations endpoint. The session is a query parameter."""
-        headers = dict(self._headers)
+        headers = self._call_headers(context)
         body: dict[str, Any] = {"json": context.payload}
         if context.raw_body is not None:
             # Any content type: JSON of any shape, text, multipart or binary, sent as received.

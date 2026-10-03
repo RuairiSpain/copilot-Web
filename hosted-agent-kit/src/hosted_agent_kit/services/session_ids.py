@@ -14,12 +14,13 @@ import re
 
 PREFIX = "pool-"
 _DIGEST_CHARS = 40
-_PATTERN = re.compile(rf"^{PREFIX}[0-9a-f]{{{_DIGEST_CHARS}}}$")
+_PATTERN = re.compile(rf"^{PREFIX}(s\d+-)?[0-9a-f]{{{_DIGEST_CHARS}}}$")
 
 
 class SessionIdDeriver:
-    def __init__(self, key: bytes) -> None:
+    def __init__(self, key: bytes, *, shard: int | None = None) -> None:
         self._key = key
+        self._shard = shard  # a sharded kit puts its shard in every id it derives
 
     def for_user(self, agent_name: str, user_id: str, conversation_key: str | None = None) -> str:
         """A conversation key gives the same user another session. No key, same id as before."""
@@ -28,7 +29,8 @@ class SessionIdDeriver:
             parts.append(conversation_key)
         message = "\x00".join(parts).encode()
         digest = hmac.new(self._key, message, hashlib.sha256).hexdigest()
-        return PREFIX + digest[:_DIGEST_CHARS]
+        prefix = PREFIX if self._shard is None else f"{PREFIX}s{self._shard}-"
+        return prefix + digest[:_DIGEST_CHARS]
 
     @staticmethod
     def is_derived(session_id: str) -> bool:

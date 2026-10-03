@@ -30,6 +30,19 @@ class VersionDrain(StrEnum):
     IDLE = "idle"  # also retire idle user sessions. Their conversation state is lost.
 
 
+class QueueFairness(StrEnum):
+    FIFO = "fifo"
+    ROUND_ROBIN = "round_robin"
+
+
+class UserIsolation(StrEnum):
+    """What per-user information is sent to Foundry on each invocation."""
+
+    OFF = "off"  # nothing per user (one constant key, or none)
+    KEY = "key"  # x-ms-user-isolation-key derived from the user id
+    DELEGATED = "delegated"  # the key plus x-ms-user-identity: the acting user
+
+
 class AgentProtocol(StrEnum):
     """The protocol a hosted agent container exposes."""
 

@@ -1,15 +1,16 @@
-"""Command line: ``hack validate``, ``hack samples`` and ``hack serve``."""
+"""Command line: ``hack validate``, ``hack plan``, ``hack samples`` and ``hack serve``."""
 
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 import sys
 from collections.abc import Sequence
 from importlib import resources
 from pathlib import Path
 
-from hosted_agent_kit import __version__
+from hosted_agent_kit import __version__, planning
 from hosted_agent_kit.config.loader import build_config, build_settings_overrides, parse_yaml
 from hosted_agent_kit.config.models import ConfigError
 from hosted_agent_kit.config.settings import KitSettings
@@ -65,6 +66,15 @@ def _samples(action: str, destination: str | None, force: bool) -> int:
     return 0
 
 
+def _plan(files: Sequence[str], as_json: bool) -> int:
+    result = planning.plan([Path(name) for name in files])
+    if as_json:
+        print(json.dumps(planning.to_dict(result), indent=2))
+    else:
+        print(planning.render(result))
+    return 0 if result.ok else 1
+
+
 def _serve() -> int:
     try:
         from hosted_agent_kit.service.main import run
@@ -94,6 +104,12 @@ def build_parser() -> argparse.ArgumentParser:
     samples.add_argument("destination", nargs="?")
     samples.add_argument("--force", action="store_true", help="copy into a non-empty directory")
 
+    plan = sub.add_parser(
+        "plan", help="check several kits' files together: ownership overlaps and quota budgets"
+    )
+    plan.add_argument("files", nargs="+", help="one scheduler YAML file per kit")
+    plan.add_argument("--json", action="store_true", dest="as_json", help="print JSON")
+
     sub.add_parser("serve", help="run the standalone HTTP service (needs the service extra)")
     return parser
 
@@ -102,6 +118,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "validate":
         return _validate(args.files)
+    if args.command == "plan":
+        return _plan(args.files, args.as_json)
     if args.command == "samples":
         return _samples(args.action, args.destination, args.force)
     return _serve()

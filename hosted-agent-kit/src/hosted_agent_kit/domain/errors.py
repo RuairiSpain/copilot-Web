@@ -32,7 +32,24 @@ class AppError(Exception):
         super().__init__(self.detail)
 
 
-class AuthenticationRequiredError(AppError):
+class CapacityError(AppError):
+    """No session could be given right now. Retry after ``retry_after_seconds``, or use another
+    region or kit. The request did not reach the agent, so retrying is safe."""
+
+
+class UpstreamFailureError(AppError):
+    """Foundry or the agent failed or timed out. Whether a retry is safe is in ``retry_safe``."""
+
+
+class CallerError(AppError):
+    """The request cannot succeed as sent: fix it (credentials, agent name, format) first."""
+
+
+class NotServingError(AppError):
+    """This process is shutting down or is a standby. Retry shortly, or against another kit."""
+
+
+class AuthenticationRequiredError(CallerError):
     status = 401
     code = "AUTHENTICATION_REQUIRED"
     title = "Authentication required"
@@ -40,7 +57,7 @@ class AuthenticationRequiredError(AppError):
     retry_safe = True
 
 
-class InsufficientScopeError(AppError):
+class InsufficientScopeError(CallerError):
     status = 403
     code = "INSUFFICIENT_SCOPE"
     title = "Insufficient scope"
@@ -48,7 +65,7 @@ class InsufficientScopeError(AppError):
     retry_safe = True
 
 
-class AgentNotConfiguredError(AppError):
+class AgentNotConfiguredError(CallerError):
     status = 404
     code = "AGENT_NOT_CONFIGURED"
     title = "Agent is not configured"
@@ -56,7 +73,7 @@ class AgentNotConfiguredError(AppError):
     retry_safe = True
 
 
-class SessionNotFoundAdminError(AppError):
+class SessionNotFoundAdminError(CallerError):
     status = 404
     code = "SESSION_NOT_FOUND"
     title = "Session not found"
@@ -64,7 +81,7 @@ class SessionNotFoundAdminError(AppError):
     retry_safe = True
 
 
-class ValidationFailedError(AppError):
+class ValidationFailedError(CallerError):
     status = 422
     code = "VALIDATION_ERROR"
     title = "Validation failed"
@@ -72,7 +89,7 @@ class ValidationFailedError(AppError):
     retry_safe = True
 
 
-class PoolCapacityExceededError(AppError):
+class PoolCapacityExceededError(CapacityError):
     status = 429
     code = "POOL_CAPACITY_EXCEEDED"
     title = "Pool capacity exceeded"
@@ -80,7 +97,7 @@ class PoolCapacityExceededError(AppError):
     retry_safe = True
 
 
-class QueueFullError(AppError):
+class QueueFullError(CapacityError):
     status = 429
     code = "QUEUE_FULL"
     title = "Agent queue is full"
@@ -88,7 +105,27 @@ class QueueFullError(AppError):
     retry_safe = True
 
 
-class UpstreamThrottledError(AppError):
+class RegionalCapacityError(CapacityError):
+    """The subscription's regional session quota is full. Retrying later can succeed."""
+
+    status = 429
+    code = "REGIONAL_SESSION_QUOTA_EXCEEDED"
+    title = "The regional session quota is full"
+    phase = "invoke"
+    retry_safe = True
+
+
+class SessionQuotaError(CapacityError):
+    """The session quota is full. Retrying does not help until sessions are stopped or deleted."""
+
+    status = 429
+    code = "SESSION_QUOTA_EXCEEDED"
+    title = "The session quota is full"
+    phase = "invoke"
+    retry_safe = True
+
+
+class UpstreamThrottledError(CapacityError):
     status = 429
     code = "UPSTREAM_THROTTLED"
     title = "Upstream is throttling requests"
@@ -96,7 +133,7 @@ class UpstreamThrottledError(AppError):
     retry_safe = True
 
 
-class QueueWaitTimeoutError(AppError):
+class QueueWaitTimeoutError(CapacityError):
     status = 504
     code = "QUEUE_WAIT_TIMEOUT"
     title = "Timed out waiting in the queue"
@@ -104,7 +141,7 @@ class QueueWaitTimeoutError(AppError):
     retry_safe = True
 
 
-class StickySessionTimeoutError(AppError):
+class StickySessionTimeoutError(CapacityError):
     status = 504
     code = "STICKY_SESSION_TIMEOUT"
     title = "Timed out waiting for the affinity session"
@@ -112,7 +149,7 @@ class StickySessionTimeoutError(AppError):
     retry_safe = True
 
 
-class RequestTimeoutError(AppError):
+class RequestTimeoutError(UpstreamFailureError):
     status = 504
     code = "REQUEST_TIMEOUT"
     title = "The request ran out of time"
@@ -120,7 +157,7 @@ class RequestTimeoutError(AppError):
     retry_safe = False
 
 
-class StreamTimeoutError(AppError):
+class StreamTimeoutError(UpstreamFailureError):
     status = 504
     code = "STREAM_TIMEOUT"
     title = "Stream time limit reached"
@@ -128,7 +165,7 @@ class StreamTimeoutError(AppError):
     retry_safe = False
 
 
-class ResponseTooLargeError(AppError):
+class ResponseTooLargeError(UpstreamFailureError):
     status = 502
     code = "RESPONSE_TOO_LARGE"
     title = "The agent response is too large"
@@ -136,7 +173,7 @@ class ResponseTooLargeError(AppError):
     retry_safe = False
 
 
-class FoundryTimeoutAppError(AppError):
+class FoundryTimeoutAppError(UpstreamFailureError):
     status = 504
     code = "FOUNDRY_TIMEOUT"
     title = "Foundry did not respond in time"
@@ -144,7 +181,7 @@ class FoundryTimeoutAppError(AppError):
     retry_safe = False
 
 
-class SessionNotFoundUpstreamError(AppError):
+class SessionNotFoundUpstreamError(UpstreamFailureError):
     status = 502
     code = "SESSION_NOT_FOUND"
     title = "Session no longer exists"
@@ -152,7 +189,7 @@ class SessionNotFoundUpstreamError(AppError):
     retry_safe = True
 
 
-class SessionFailedError(AppError):
+class SessionFailedError(UpstreamFailureError):
     status = 502
     code = "SESSION_FAILED"
     title = "Session failed"
@@ -160,7 +197,7 @@ class SessionFailedError(AppError):
     retry_safe = False
 
 
-class UpstreamError(AppError):
+class UpstreamError(UpstreamFailureError):
     status = 502
     code = "UPSTREAM_ERROR"
     title = "Upstream request failed"
@@ -168,7 +205,7 @@ class UpstreamError(AppError):
     retry_safe = False
 
 
-class FoundryCircuitOpenError(AppError):
+class FoundryCircuitOpenError(UpstreamFailureError):
     status = 503
     code = "FOUNDRY_CIRCUIT_OPEN"
     title = "Foundry circuit is open"
@@ -176,7 +213,7 @@ class FoundryCircuitOpenError(AppError):
     retry_safe = True
 
 
-class FoundryUnavailableError(AppError):
+class FoundryUnavailableError(UpstreamFailureError):
     status = 503
     code = "FOUNDRY_UNAVAILABLE"
     title = "Foundry is unavailable"
@@ -184,7 +221,7 @@ class FoundryUnavailableError(AppError):
     retry_safe = False
 
 
-class IdempotencyKeyReusedError(AppError):
+class IdempotencyKeyReusedError(CallerError):
     status = 422
     code = "IDEMPOTENCY_KEY_REUSED"
     title = "Idempotency key reused with a different request"
@@ -192,7 +229,7 @@ class IdempotencyKeyReusedError(AppError):
     retry_safe = True
 
 
-class IdempotencyInProgressError(AppError):
+class IdempotencyInProgressError(CallerError):
     status = 409
     code = "IDEMPOTENCY_IN_PROGRESS"
     title = "A request with this idempotency key is still running"
@@ -200,7 +237,7 @@ class IdempotencyInProgressError(AppError):
     retry_safe = True
 
 
-class SubjectRequiredError(AppError):
+class SubjectRequiredError(CallerError):
     status = 403
     code = "END_USER_REQUIRED"
     title = "An end user identity is required"
@@ -208,7 +245,7 @@ class SubjectRequiredError(AppError):
     retry_safe = True
 
 
-class ConfigInvalidError(AppError):
+class ConfigInvalidError(CallerError):
     status = 422
     code = "CONFIG_INVALID"
     title = "The configuration was rejected"
@@ -216,7 +253,7 @@ class ConfigInvalidError(AppError):
     retry_safe = True
 
 
-class ReloadUnavailableError(AppError):
+class ReloadUnavailableError(CallerError):
     status = 409
     code = "RELOAD_UNAVAILABLE"
     title = "The configuration cannot be reloaded"
@@ -224,7 +261,48 @@ class ReloadUnavailableError(AppError):
     retry_safe = True
 
 
-class ServiceDrainingError(AppError):
+class RequestTooLargeError(CallerError):
+    status = 413
+    code = "REQUEST_TOO_LARGE"
+    title = "The request body is too large"
+    phase = "request"
+    retry_safe = True
+
+
+class WrongShardError(CallerError):
+    """This kit serves another shard of the agent. Send the call to the shard named in the error."""
+
+    status = 421
+    code = "WRONG_SHARD"
+    title = "This user is served by another shard"
+    phase = "request"
+    retry_safe = True
+
+    def __init__(self, detail: str | None = None, *, shard: int, count: int) -> None:
+        super().__init__(detail)
+        self.shard = shard
+        self.count = count
+
+    @property
+    def problem_extra(self) -> dict[str, int]:
+        return {"shard": self.shard, "shard_count": self.count}
+
+
+class NotActiveError(NotServingError):
+    """This kit is a standby or has lost ownership of its agents. Another kit is serving them."""
+
+    status = 503
+    code = "KIT_NOT_ACTIVE"
+    title = "This kit is not the active owner of its agents"
+    phase = "request"
+    retry_safe = True
+
+
+class OwnershipConflictError(Exception):
+    """Another live kit owns an agent this kit was asked to schedule."""
+
+
+class ServiceDrainingError(NotServingError):
     status = 503
     code = "SERVICE_SHUTTING_DOWN"
     title = "The service is shutting down"
@@ -232,7 +310,7 @@ class ServiceDrainingError(AppError):
     retry_safe = True
 
 
-class SyncInProgressError(AppError):
+class SyncInProgressError(CallerError):
     status = 409
     code = "SYNC_IN_PROGRESS"
     title = "Reconciliation already running"
@@ -259,6 +337,23 @@ class FoundrySessionFailed(FoundryError):
 class FoundryThrottled(FoundryError):
     def __init__(self, retry_after_seconds: float | None = None) -> None:
         super().__init__("throttled")
+        self.retry_after_seconds = retry_after_seconds
+
+
+QUOTA_REGIONAL = "regional"
+QUOTA_SESSION = "session"
+
+
+class FoundryQuotaExceeded(FoundryError):
+    """HTTP 429 that names a session quota (not request throttling).
+
+    ``scope`` is ``regional`` (``regional_session_quota_exceeded``: retry with backoff, or use
+    another region) or ``session`` (``session_quota_exceeded``: stop or delete sessions first).
+    """
+
+    def __init__(self, scope: str, retry_after_seconds: float | None = None) -> None:
+        super().__init__(f"{scope} session quota exceeded")
+        self.scope = scope
         self.retry_after_seconds = retry_after_seconds
 
 

@@ -51,7 +51,10 @@ service = [
 ]
 # Export metrics to Azure Monitor / Application Insights.
 azure-monitor = ["azure-monitor-opentelemetry>=1.6", "opentelemetry-sdk>=1.25"]
+# Shared quota ledger and ownership leases in Redis. Entra auth uses azure-identity (core).
+redis = ["redis>=5"]
 all = [
+    "redis>=5",
     "fastapi>=0.115",
     "httpx>=0.27",
     "pyjwt[crypto]>=2.8",
@@ -98,6 +101,7 @@ dev = [
     "opentelemetry-sdk>=1.25",
     "asgi-lifespan",
     "bandit",
+    "fakeredis[lua]",
     "cryptography",
     "httpx2>=2.13.1",
     "hypothesis",

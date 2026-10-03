@@ -18,6 +18,7 @@ from hosted_agent_kit.views import (
     DeleteAccepted,
     EventView,
     PoolResourceView,
+    QuotaView,
     ReloadResult,
     SessionAdminView,
     SyncReportView,
@@ -111,6 +112,12 @@ async def sync_agent(
     agent_name: AgentName, _: AdminPrincipal, container: ContainerDep
 ) -> SyncReportView:
     return await Administration(container.runtime).sync(agent_name)
+
+
+@router.get("/quota", response_model=QuotaView, responses=_ERRORS)
+async def quota(_: AdminPrincipal, container: ContainerDep) -> QuotaView:
+    """This instance's use of the session quota, and the regional view when a ledger is shared."""
+    return await _reporting(container).quota()
 
 
 @router.get("/metrics", responses=_ERRORS)

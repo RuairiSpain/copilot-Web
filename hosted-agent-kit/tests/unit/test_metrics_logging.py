@@ -247,7 +247,7 @@ def test_records_without_extra_fields_are_valid() -> None:
 
 def test_hash_identifier_is_stable_truncated_and_not_the_input() -> None:
     value = hash_identifier("session-123")
-    assert value == hash_identifier("session-123") and len(value) == 12
+    assert value == hash_identifier("session-123") and len(value) == 16
     assert "session-123" not in value and value != hash_identifier("session-124")
 
 

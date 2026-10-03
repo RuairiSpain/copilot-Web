@@ -1,0 +1,24 @@
+# Keep one kit inside a share of the subscription's regional session limit.
+# `hack plan` checks the budgets of all kits against region_limit before anything runs.
+hack:
+  kit_id: team-a
+  quota:
+    budget: 200            # compute-holding sessions this kit may use, all agents together
+    min_limit: 10          # the adaptive limit never goes below this
+    decrease_factor: 0.7   # a quota 429 multiplies the limit by this
+    probe_seconds: 60      # raise the limit by one step after this long without a refusal
+    cooldown_seconds: 30
+    subscription_id: 00000000-0000-0000-0000-000000000000
+    region: swedencentral
+    region_limit: 1000
+
+agentPool:
+  defaults:
+    mode: stateful
+    max_sessions: 100
+    max_active_sessions: 40     # at most 40 hold compute; idle ones are stopped, not deleted
+    idle_timeout_seconds: 600
+  agents:
+    support-bot: {}
+    triage-bot:
+      max_active_sessions: 20

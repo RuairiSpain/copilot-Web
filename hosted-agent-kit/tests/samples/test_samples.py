@@ -392,7 +392,8 @@ def test_scheduler_yaml_is_valid(path: Path) -> None:
 @pytest.mark.parametrize(
     "path", CONFIG_FILES + SCHEDULER_FILES, ids=lambda p: p.name + p.parent.name
 )
-async def test_scheduler_yaml_starts_a_kit(path: Path) -> None:
+async def test_scheduler_yaml_starts_a_kit(path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("POOL_USER_ISOLATION_SECRET", "x" * 32)
     from hosted_agent_kit.plugins import default_plugins
     from hosted_agent_kit.samples.miscellaneous import custom_scheduler_plugin as custom
 
@@ -548,3 +549,55 @@ def test_cli_validate_reports_unreadable_and_invalid_settings(
     )
     assert cli_main(["validate", str(bad)]) == 1
     assert "cannot exceed" in capsys.readouterr().err
+
+
+# ------------------------------------------------------------------ 0.2.0 samples
+
+
+def test_stream_events_sample_collects_text_and_event_names() -> None:
+    (reply,) = run(
+        "response.stream_events",
+        [("POST", "/chat", {"json": {"message": "hi"}, "headers": USER}, 200)],
+    )
+    body = json_of(reply)
+    assert body["complete"] is True and isinstance(body["events"], list)
+
+
+def test_quota_status_sample_reports_the_budget() -> None:
+    (reply,) = run("reporting.quota_status", [("GET", "/quota", {}, 200)])
+    body = json_of(reply)
+    assert body["kit_id"] == "team-a" and body["budget"] == 200 and body["counted"] >= 0
+
+
+def test_user_isolation_sample_answers_for_both_modes() -> None:
+    replies = run(
+        "miscellaneous.user_isolation",
+        [
+            (
+                "POST",
+                "/ask/support-bot",
+                {"json": {"message": "hi"}, "headers": USER},
+                200,
+            ),
+            (
+                "POST",
+                "/ask/records-bot",
+                {"json": {"message": "hi"}, "headers": USER},
+                200,
+            ),
+        ],
+    )
+    assert len(replies) == 2
+
+
+def test_sharded_gateway_sample_names_the_users_shard() -> None:
+    (reply,) = run("miscellaneous.sharded_gateway", [("GET", "/route", {"headers": USER}, 200)])
+    assert json_of(reply)["shard"] in (0, 1)
+
+
+def test_entra_sample_refuses_a_call_without_a_token() -> None:
+    (reply,) = run(
+        "miscellaneous.entra_sign_in",
+        [("POST", "/ask", {"params": {"message": "hi"}}, 401)],
+    )
+    assert json_of(reply)["error_code"] == "AUTHENTICATION_REQUIRED"

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 
 from hosted_agent_kit.config.holder import ConfigSource
 from hosted_agent_kit.controllers.gc import GarbageCollectionController
@@ -62,8 +63,10 @@ class Reconciler:
         self._metrics = metrics
         self._clock = clock
         self._mutexes = {name: asyncio.Lock() for name in config.names}
+        self._rng = random.Random()  # noqa: S311  # nosec B311 - jitter, not security
         self._stop = asyncio.Event()
         self._tasks: list[asyncio.Task[None]] = []
+        self.last_reports: dict[str, ReconcileReport] = {}  # the latest finished sync per agent
 
         self.plane = pool.plane
         self.manager = self.plane.manager
@@ -77,6 +80,7 @@ class Reconciler:
             clock=clock,
             cache=self.cache,
             session_ids=session_ids,
+            shard=pool.settings.shard,
         )
         self.pool_controller = PoolController(
             config=config,
@@ -165,7 +169,9 @@ class Reconciler:
                     error_type=type(exc).__name__,
                 )
             current = self._config.get(agent_name)
-            interval = current.sync_interval_seconds if current else 60
+            base = current.sync_interval_seconds if current else 60
+            # Spread the agents' syncs, so many agents (or kits) do not list at the same moment.
+            interval = base * self._rng.uniform(0.9, 1.1)
             try:
                 # Event-driven sleep: wakes immediately on shutdown, otherwise after the interval.
                 await asyncio.wait_for(self._stop.wait(), timeout=interval)
@@ -199,6 +205,7 @@ class Reconciler:
                 self.plane.end_sync(agent_name)
             report.duration_seconds = self._clock.monotonic() - started
             self._synced.add(agent_name)
+            self.last_reports[agent_name] = report
             self._metrics.reconcile(agent_name, report.outcome, report.duration_seconds)
             log_event(
                 logger,

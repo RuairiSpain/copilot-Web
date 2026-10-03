@@ -17,6 +17,7 @@ Copy the samples to edit them: `hack samples copy ./hack-samples` (set `HACK_SAM
 |---|---|---|
 | **response** | `basic_ask` | `kit.ask`, listing agents |
 | | `streaming` | Server-sent events, consuming a stream |
+| | `stream_events` | `events()`, `text_deltas()`, `StreamError` |
 | | `conversations` | A stateful agent, `conversation_key` |
 | | `idempotent_requests` | `idempotency_key` and replays |
 | | `request_options` | Full Responses bodies, timeouts |
@@ -26,6 +27,7 @@ Copy the samples to edit them: `hack samples copy ./hack-samples` (set `HACK_SAM
 | **reporting** | `pool_status` | `reporting_router`, status per agent |
 | | `events_and_metrics` | Events, metrics, Prometheus |
 | | `session_inspector` | Sessions, conditions, identity redaction |
+| | `quota_status` | Counted sessions, limit, regional view |
 | **administrative** | `admin_api` | `admin_router` behind a guard |
 | | `capacity_control` | Warm sessions, sync, reload |
 | | `session_cleanup` | Deleting sessions |
@@ -36,6 +38,9 @@ Copy the samples to edit them: `hack samples copy ./hack-samples` (set `HACK_SAM
 | | `configuration_in_code` | `from_dict`, `KitSettings` |
 | | `multi_agent_gateway` | Both protocols from one endpoint |
 | | `testing_your_app` | `FakeFoundry` and `TestClient` |
+| | `user_isolation` | `user_isolation: key` and `delegated` |
+| | `sharded_gateway` | `shard`, `kit.shard_for`, routing by user |
+| | `entra_sign_in` | `EntraAuth` for users and admin roles |
 
 Also here: `agents/` (three hosted agents, each with `agent.py`, `azure.yaml`, `Dockerfile`,
 `scheduler.yaml`) and `config/` (every scheduler YAML option).

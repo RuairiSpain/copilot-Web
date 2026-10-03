@@ -7,6 +7,7 @@ import json
 import sys
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import httpx
 import pytest
@@ -27,6 +28,7 @@ def load(name: str) -> ModuleType:
 
 verify = load("verify_versions")
 load_test = load("load_test")
+live_canary: Any = load("live_canary")
 
 
 def test_every_version_check_passes_against_the_installed_sdk() -> None:
@@ -172,3 +174,76 @@ def test_main_runs_end_to_end_and_signals_failure(
     failing = httpx.MockTransport(lambda r: httpx.Response(503, json={"error_code": "X"}))
     monkeypatch.setattr(load_test.httpx, "AsyncClient", lambda **kw: real(transport=failing, **kw))
     assert load_test.main(["--agent", "a", "--requests", "2", "--users", "0"]) == 1
+
+
+# ------------------------------------------------------------------ live canary
+
+
+async def test_the_canary_passes_against_the_fake_and_cleans_up() -> None:
+
+    kit = live_canary.fake_kit("canary-agent")
+    async with kit:
+        steps = await live_canary.run(kit, "canary-agent")
+        assert [s.name for s in steps] == [
+            "first call",
+            "session is tracked",
+            "stop then resume",
+            "sync",
+            "delete",
+        ]
+        assert all(s.ok for s in steps), [s for s in steps if not s.ok]
+        assert not [s for s in await kit.reporting.sessions("canary-agent") if s.leased]
+
+
+async def test_the_canary_reports_a_quota_error_when_the_platform_gives_one() -> None:
+
+    from hosted_agent_kit.domain.errors import QUOTA_SESSION, FoundryQuotaExceeded
+    from hosted_agent_kit.domain.models import FoundrySession
+    from hosted_agent_kit.testing import DemoFoundry
+
+    class LowQuota(DemoFoundry):
+        async def create_session(
+            self, agent_name: str, session_id: str | None = None, agent_version: str | None = None
+        ) -> FoundrySession:
+            if len(self.sessions) >= 3:
+                raise FoundryQuotaExceeded(QUOTA_SESSION)
+            return await super().create_session(agent_name, session_id, agent_version)
+
+    kit = live_canary.fake_kit("canary-agent")
+    kit._adapter = LowQuota()
+    async with kit:
+        steps = await live_canary.run(kit, "canary-agent", quota_probe=6)
+    probe = next(s for s in steps if "quota error" in s.name)
+    assert probe.ok and "SessionQuotaError" in probe.detail and "3 open" in probe.detail
+    assert steps[-1].name == "delete" and steps[-1].ok
+
+
+async def test_the_canary_flags_a_quota_that_is_too_high_for_the_probe() -> None:
+
+    kit = live_canary.fake_kit("canary-agent")
+    async with kit:
+        steps = await live_canary.run(kit, "canary-agent", quota_probe=3)
+    probe = next(s for s in steps if "quota error" in s.name)
+    assert not probe.ok and "quota is too high" in probe.detail
+
+
+async def test_the_canary_fails_loudly_when_a_step_breaks() -> None:
+
+    from hosted_agent_kit.domain.errors import FoundryUnavailable
+
+    kit = live_canary.fake_kit("canary-agent")
+    async with kit:
+        kit.runtime.adapter._inner.invoke_errors = [FoundryUnavailable()] * 10  # type: ignore[attr-defined]
+        steps = await live_canary.run(kit, "canary-agent")
+    assert (not steps[0].ok and "FoundryUnavailable" in steps[0].detail) or not steps[0].ok
+    assert steps[-1].name == "delete"  # cleanup still ran
+
+
+async def test_the_canary_main_prints_and_sets_the_exit_status(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+
+    assert await live_canary.main(["--fake"]) == 0
+    assert "PASS  first call" in capsys.readouterr().out
+    assert await live_canary.main(["--fake", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)[0]["ok"] is True

@@ -68,6 +68,7 @@ def _app_error(_: Request, exc: Exception) -> Response:
         headers=exc.headers,
         phase=exc.phase,
         retry_safe=exc.retry_safe,
+        extra=getattr(exc, "problem_extra", None),
     )
 
 

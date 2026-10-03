@@ -8,7 +8,8 @@ import logging
 import os
 import time
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import AsyncIterator, Callable, Mapping
+from contextlib import asynccontextmanager
 from pathlib import Path
 from types import TracebackType
 from typing import Any
@@ -26,14 +27,26 @@ from hosted_agent_kit.domain.enums import AgentProtocol
 from hosted_agent_kit.domain.errors import (
     IdempotencyInProgressError,
     IdempotencyKeyReusedError,
+    NotActiveError,
+    RequestTooLargeError,
     ValidationFailedError,
+    WrongShardError,
 )
 from hosted_agent_kit.domain.identity import is_valid_conversation_key, is_valid_user_id
 from hosted_agent_kit.logging_config import correlation_id_var, log_event
 from hosted_agent_kit.ports.foundry import FoundryAdapter
+from hosted_agent_kit.ports.ownership import OwnershipStore
+from hosted_agent_kit.ports.quota import QuotaLedger
 from hosted_agent_kit.reporting import Reporting
 from hosted_agent_kit.results import AgentResult
-from hosted_agent_kit.runtime import Runtime, build_adapter, build_runtime
+from hosted_agent_kit.runtime import (
+    Runtime,
+    build_adapter,
+    build_ownership_store,
+    build_runtime,
+    owned_config,
+    project_id,
+)
 from hosted_agent_kit.services.clock import Clock, SystemClock
 from hosted_agent_kit.services.idempotency import (
     IdempotencyStore,
@@ -41,8 +54,11 @@ from hosted_agent_kit.services.idempotency import (
     StoredResponse,
     fingerprint,
 )
+from hosted_agent_kit.services.ownership import OwnershipManager, Role, lease_key
 from hosted_agent_kit.services.pool import PoolRequest
 from hosted_agent_kit.services.scheduling import PluginRegistry
+from hosted_agent_kit.services.sharding import shard_for
+from hosted_agent_kit.tracing import span
 from hosted_agent_kit.views import AgentInfo
 
 logger = logging.getLogger(__name__)
@@ -77,8 +93,15 @@ class Hack:
         clock: Clock | None = None,
         scheduler_plugins: PluginRegistry | None = None,
         config_loader: Callable[[], AgentPoolConfig] | None = None,
+        ownership_store: OwnershipStore | None = None,
+        ledger: QuotaLedger | None = None,
     ) -> None:
         self.settings = settings or KitSettings()
+        self._ownership_store = ownership_store
+        self._ledger = ledger
+        kit_name = self.settings.kit_id or "kit"
+        self.instance_id = f"{kit_name}-{uuid.uuid4().hex[:8]}"
+        self._manager: OwnershipManager | None = None
         self._config = config
         self._clock = clock or SystemClock()
         self._adapter = adapter
@@ -98,6 +121,8 @@ class Hack:
         adapter: FoundryAdapter | None = None,
         clock: Clock | None = None,
         scheduler_plugins: PluginRegistry | None = None,
+        ownership_store: OwnershipStore | None = None,
+        ledger: QuotaLedger | None = None,
     ) -> Hack:
         """Load ``agentPool`` (and an optional ``hack`` section) from a YAML file.
 
@@ -114,6 +139,8 @@ class Hack:
             clock=clock,
             scheduler_plugins=scheduler_plugins,
             config_loader=lambda: load_document(file)[0],
+            ownership_store=ownership_store,
+            ledger=ledger,
         )
 
     @classmethod
@@ -125,6 +152,8 @@ class Hack:
         adapter: FoundryAdapter | None = None,
         clock: Clock | None = None,
         scheduler_plugins: PluginRegistry | None = None,
+        ownership_store: OwnershipStore | None = None,
+        ledger: QuotaLedger | None = None,
     ) -> Hack:
         """Build from an already parsed document: ``{"agentPool": {...}, "hack": {...}}``."""
         raw = dict(document)
@@ -134,6 +163,8 @@ class Hack:
             adapter=adapter,
             clock=clock,
             scheduler_plugins=scheduler_plugins,
+            ownership_store=ownership_store,
+            ledger=ledger,
         )
 
     @classmethod
@@ -144,9 +175,39 @@ class Hack:
     # ----------------------------------------------------------------- lifecycle
 
     async def start(self) -> None:
-        """Connect to Foundry, run the first sync and start the controllers."""
-        if self._runtime is not None and self._runtime.started:
+        """Connect to Foundry, run the first sync and start the controllers.
+
+        With ``ownership`` configured, the kit first claims its agents. If another kit owns them,
+        start fails with ``OwnershipConflictError``, or, with ``ownership.standby``, the kit waits
+        as a standby and takes over when the owner stops renewing.
+        """
+        if self._manager is not None or (self._runtime is not None and self._runtime.started):
             return
+        if self.settings.ownership.backend == "none":
+            await self._activate()
+            return
+        store = self._ownership_store or build_ownership_store(self.settings, self._clock)
+        shard = self.settings.shard.index if self.settings.shard is not None else None
+        pid = project_id(self.settings)
+        keys = [
+            lease_key(pid, name, shard) for name in owned_config(self.settings, self._config).names
+        ]
+        self._manager = OwnershipManager(
+            store,
+            self.settings.ownership,
+            instance_id=self.instance_id,
+            keys=keys,
+            clock=self._clock,
+            on_activate=self._activate,
+            on_deactivate=self._deactivate,
+        )
+        try:
+            await self._manager.start()
+        except BaseException:
+            self._manager = None
+            raise
+
+    async def _activate(self) -> None:
         adapter = self._adapter or build_adapter(self.settings)
         self._runtime = build_runtime(
             self.settings,
@@ -155,6 +216,7 @@ class Hack:
             self._clock,
             self._config_loader,
             self._plugins,
+            self._ledger,
         )
         self._idempotency = IdempotencyStore(
             self._clock,
@@ -165,14 +227,41 @@ class Hack:
         try:
             await self._runtime.start()
             await self._wait_for_initial_sync()
+            self._refuse_rejected_credentials()
         except BaseException:
             await self._runtime.stop()
             self._runtime = None
             raise
 
+    def _refuse_rejected_credentials(self) -> None:
+        """Fail start when Foundry rejected the first listing with 401 or 403.
+
+        A kit that cannot authenticate would otherwise start, look healthy and fail every call.
+        Network trouble is not treated this way: the kit starts and keeps trying.
+        """
+        assert self._runtime is not None  # nosec B101 - narrowing for the type checker
+        rejected = [
+            name
+            for name in self._runtime.config.names
+            if (report := self._runtime.reconciler.last_reports.get(name)) is not None
+            and "AuthenticationFailed" in report.errors
+        ]
+        if rejected:
+            raise ConfigError(
+                "Foundry rejected the credentials (HTTP 401 or 403) while listing sessions for "
+                f"{', '.join(rejected)}. Check the identity, its role on the project, and "
+                "FOUNDRY_PROJECT_ENDPOINT."
+            )
+
+    async def _deactivate(self) -> None:
+        runtime, self._runtime = self._runtime, None
+        if runtime is not None:
+            await runtime.stop()
+
     async def _wait_for_initial_sync(self) -> None:
         """Wait until Foundry's existing sessions are known, so a first call can reuse them."""
-        reconciler = self.runtime.reconciler
+        assert self._runtime is not None  # nosec B101
+        reconciler = self._runtime.reconciler
         deadline = time.monotonic() + self.settings.startup_sync_timeout_seconds
         while not reconciler.initial_sync_done:
             if time.monotonic() >= deadline:
@@ -186,9 +275,28 @@ class Hack:
             await asyncio.sleep(0.01)
 
     async def stop(self) -> None:
-        """Stop admitting calls, wait for running ones (``shutdown_grace_seconds``), then stop."""
-        if self._runtime is not None:
+        """Stop admitting calls, wait for running ones (``shutdown_grace_seconds``), then stop.
+
+        An owning kit also releases its leases, so a standby can take over without waiting.
+        """
+        manager, self._manager = self._manager, None
+        if manager is not None:
+            await manager.stop()
+        elif self._runtime is not None:
             await self._runtime.stop()
+
+    @asynccontextmanager
+    async def lifespan(self, app: object | None = None) -> AsyncIterator[None]:
+        """Start and stop the kit around your application. Pass it as FastAPI's ``lifespan``.
+
+        ``FastAPI(lifespan=kit.lifespan)`` is enough when you have no startup code of your own.
+        When you do, nest it: ``async with kit.lifespan(app): ...`` inside your own lifespan.
+        """
+        await self.start()
+        try:
+            yield
+        finally:
+            await self.stop()
 
     async def __aenter__(self) -> Hack:
         await self.start()
@@ -204,13 +312,36 @@ class Hack:
 
     @property
     def runtime(self) -> Runtime:
+        if self._manager is not None and self._manager.role is not Role.ACTIVE:
+            raise NotActiveError(
+                "This kit is not the active owner of its agents. Another kit is serving them.",
+                retry_after_seconds=self.settings.retry_after_seconds,
+            )
         if self._runtime is None:
             raise RuntimeError("Hack is not started: use `async with kit:` or `await kit.start()`")
         return self._runtime
 
     @property
+    def role(self) -> str:
+        """``active`` (serving), ``standby`` (waiting to take over) or ``stopped``."""
+        if self._manager is not None:
+            return self._manager.role.value
+        started = self._runtime is not None and self._runtime.started
+        return Role.ACTIVE.value if started else Role.STOPPED.value
+
+    @property
     def ready(self) -> bool:
-        return self._runtime is not None and self._runtime.ready
+        active = self._manager is None or self._manager.role is Role.ACTIVE
+        return active and self._runtime is not None and self._runtime.ready
+
+    @property
+    def ownership(self) -> OwnershipManager | None:
+        return self._manager
+
+    def shard_for(self, user_id: str) -> int | None:
+        """The shard that serves ``user_id`` (None when this kit is not sharded)."""
+        shard = self.settings.shard
+        return shard_for(user_id, shard.count) if shard is not None else None
 
     @property
     def config(self) -> AgentPoolConfig:
@@ -360,6 +491,13 @@ class Hack:
         raw_body: bytes | None = None,
         content_type: str | None = None,
     ) -> AgentResult:
+        limit = self.settings.max_request_bytes
+        if limit is not None:
+            size = len(raw_body) if raw_body is not None else len(_canonical(payload))
+            if size > limit:
+                raise RequestTooLargeError(
+                    f"The request body is {size} bytes; the limit is {limit}."
+                )
         if not is_valid_user_id(user_id):
             raise ValidationFailedError(
                 "user_id must be 1-128 characters of letters, digits, '.', '_', ':' or '-'."
@@ -370,6 +508,15 @@ class Hack:
             if not cfg.stateful:
                 raise ValidationFailedError("conversation_key only applies to stateful agents.")
         s = self.settings
+        if s.shard is not None and cfg.stateful:
+            owner = shard_for(user_id, s.shard.count)
+            if owner != s.shard.index:
+                raise WrongShardError(
+                    f"This user is served by shard {owner} of {s.shard.count}, "
+                    f"not {s.shard.index}.",
+                    shard=owner,
+                    count=s.shard.count,
+                )
         timeout = min(timeout_seconds or s.default_timeout_seconds, s.max_timeout_seconds)
         store = self._idempotency
         scope: str | None = None
@@ -417,7 +564,8 @@ class Hack:
             content_type=content_type,
         )
         try:
-            pool_result = await self.runtime.pool.execute(request)
+            with span("hack.call", {"agent": cfg.name, "protocol": cfg.protocol.value}):
+                pool_result = await self.runtime.pool.execute(request)
         except BaseException:
             if scope is not None and store is not None:
                 store.abandon(scope)

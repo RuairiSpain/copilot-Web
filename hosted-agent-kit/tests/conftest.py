@@ -15,6 +15,7 @@ from hosted_agent_kit.adapters.memory_registry import MemorySessionRegistry
 from hosted_agent_kit.config.loader import build_config
 from hosted_agent_kit.config.models import AgentPoolConfig
 from hosted_agent_kit.config.settings import Settings
+from hosted_agent_kit.runtime import isolation_keys
 from hosted_agent_kit.services.metrics import GatedMetrics, InMemoryMetrics
 from hosted_agent_kit.services.pool import PoolRequest, PoolService
 from hosted_agent_kit.services.reconciler import Reconciler
@@ -97,6 +98,7 @@ def make_harness(
         settings=settings,
         session_ids=session_ids,
         plugins=plugins,
+        isolation=isolation_keys(settings, config),
     )
     reconciler = Reconciler(
         config=config,

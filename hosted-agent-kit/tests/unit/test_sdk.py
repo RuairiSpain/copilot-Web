@@ -369,8 +369,8 @@ def test_the_dependency_needs_install() -> None:
 
 def test_routers_serve_reporting_and_admin_calls() -> None:
     app = build_app()
-    app.include_router(reporting_router(), prefix="/r")
-    app.include_router(admin_router(), prefix="/a")
+    app.include_router(reporting_router(allow_unauthenticated=True), prefix="/r")
+    app.include_router(admin_router(allow_unauthenticated=True), prefix="/a")
     with TestClient(app) as client:
         client.post("/ask", params={"message": "hi"})
         agents = client.get("/r/agents").json()
@@ -392,7 +392,7 @@ def test_routers_serve_reporting_and_admin_calls() -> None:
 def test_reporting_router_can_reveal_identities() -> None:
     app = FastAPI()
     install(app, make_kit())
-    app.include_router(reporting_router(reveal_identities=True))
+    app.include_router(reporting_router(allow_unauthenticated=True, reveal_identities=True))
 
     @app.post("/seed")
     async def seed(kit: KitDep) -> None:

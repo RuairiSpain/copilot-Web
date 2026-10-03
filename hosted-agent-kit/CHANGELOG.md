@@ -6,6 +6,42 @@ All notable changes are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-03
+
+### Added
+- Quota: `SessionQuotaError` and `RegionalCapacityError` for Foundry quota 429s; an active-session
+  limit (`max_active_sessions`) separate from `max_sessions`; stopping idle sessions to make room;
+  kit budget (`quota.budget`) with an adaptive limit; `hack plan`; `/v1/admin/quota`; metrics.
+- Optional Redis extra (`redis`): regional ledger and ownership leases, with Microsoft Entra auth.
+- Several kits per project: `kit_id`, `owns`, `shard`, active/passive standby, `WrongShardError`.
+- Per-user isolation headers (`user_isolation: off|key|delegated`).
+- SDK: `HackSync`, `kit.lifespan`, `result.output_text`, `events()`, `text_deltas()`, SSE parser,
+  OpenTelemetry spans and trace context, `EntraAuth`, error groups, `max_request_bytes`.
+- Queue fairness (`queue.per_user_depth`, `queue.fairness: round_robin`).
+- `scripts/live_canary.py` and a scheduled canary workflow; a 2,000-session soak test.
+- Samples and YAML for the above; docs `quota.md`, ADRs 0011 and 0012.
+
+### Fixed (found in review)
+- The kit's CI, canary and publish workflows are now in the repository's `.github/workflows/`
+  (as `hack-*.yml`); GitHub did not run them from the subfolder.
+- Self-fencing now happens before the lease can expire, and leases are renewed during start-up.
+- The quota count can no longer be partial while it is rebuilt.
+- Borrowed permits that lapse in the ledger are dropped by the kit.
+- `ownership.entra_auth` and `ownership.timeout_seconds`; a standby kit starts without the store.
+- `ownership.renew_seconds` must now be at most a third of `ownership.ttl_seconds`.
+- Redis Entra authentication no longer uses `redis-entraid`, which pins PyJWT 2.13 (13 advisories,
+  failing the dependency audit). The kit now gets tokens from `azure-identity` itself, and the
+  lock file is back on PyJWT 2.15.1. It is untested against a live Azure Managed Redis.
+
+### Changed
+- Identifier hashing in logs is keyed (HMAC).
+- `reporting_router` and `admin_router` refuse to build without `dependencies=` or
+  `allow_unauthenticated=True`.
+- Samples accept header sign-in only in demo mode or with `HACK_SAMPLE_INSECURE_AUTH=1`.
+- The registry gives read-only views and counts incrementally, so 2,000 sessions stay fast.
+- The reconciler jitters its interval by 10%.
+- A start-up that gets 401 or 403 from Foundry fails instead of retrying silently.
+
 ## [0.1.0] - 2026-10-03
 
 First release of the package as `hosted-agent-kit`, an SDK. Earlier work was developed as

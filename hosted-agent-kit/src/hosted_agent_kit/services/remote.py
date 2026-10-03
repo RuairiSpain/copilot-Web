@@ -9,14 +9,17 @@ from __future__ import annotations
 
 import logging
 import random
+from collections.abc import Callable
 from typing import Protocol
 
 from hosted_agent_kit.config.models import AgentConfig
 from hosted_agent_kit.config.settings import KitSettings
 from hosted_agent_kit.domain.enums import FoundrySessionStatus
 from hosted_agent_kit.domain.errors import (
+    QUOTA_REGIONAL,
     FoundryConflict,
     FoundryError,
+    FoundryQuotaExceeded,
     FoundrySessionFailed,
     FoundrySessionNotFound,
     FoundryThrottled,
@@ -30,6 +33,7 @@ from hosted_agent_kit.ports.metrics import MetricsRecorder
 from hosted_agent_kit.services.clock import Clock
 from hosted_agent_kit.services.errors_map import to_app_error
 from hosted_agent_kit.services.session_ids import SessionIdDeriver
+from hosted_agent_kit.services.sharding import fresh_session_id
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +49,9 @@ _STARTING = (FoundrySessionStatus.CREATING, FoundrySessionStatus.UPDATING)
 
 
 def retry_after_of(exc: Exception) -> float | None:
-    return exc.retry_after_seconds if isinstance(exc, FoundryThrottled) else None
+    if isinstance(exc, FoundryThrottled | FoundryQuotaExceeded):
+        return exc.retry_after_seconds
+    return None
 
 
 class CreationHooks(Protocol):
@@ -74,13 +80,20 @@ class RemoteSessions:
         metrics: MetricsRecorder,
         session_ids: SessionIdDeriver | None = None,
         rng: random.Random | None = None,
+        on_quota_exceeded: Callable[[str, str], None] | None = None,
     ) -> None:
+        self._on_quota_exceeded = on_quota_exceeded
         self._adapter = adapter
         self._settings = settings
         self._clock = clock
         self._metrics = metrics
         self._session_ids = session_ids
         self._rng = rng or random.Random()  # noqa: S311  # nosec B311 - jitter, not security
+
+    def note_quota(self, agent_name: str, exc: FoundryQuotaExceeded) -> None:
+        """Tell the quota governor that Foundry refused a session because a quota is full."""
+        if self._on_quota_exceeded is not None:
+            self._on_quota_exceeded(agent_name, exc.scope)
 
     # ------------------------------------------------------------------ backoff
 
@@ -111,6 +124,11 @@ class RemoteSessions:
             return None
         return self._session_ids.for_user(cfg.name, key.user_id, key.conversation_key)
 
+    def fresh_id(self) -> str | None:
+        """A caller-chosen id carrying the shard, for a kit that owns one shard of its agents."""
+        shard = self._settings.shard
+        return fresh_session_id(shard.index) if shard is not None else None
+
     async def lookup(self, cfg: AgentConfig, session_id: str) -> FoundrySession | None:
         try:
             return await self._adapter.get_session(cfg.name, session_id)
@@ -140,7 +158,7 @@ class RemoteSessions:
                 if session is None:
                     try:
                         session = await self._adapter.create_session(
-                            cfg.name, desired, cfg.agent_version
+                            cfg.name, desired or self.fresh_id(), cfg.agent_version
                         )
                     except FoundryConflict:
                         if desired is None:
@@ -148,7 +166,7 @@ class RemoteSessions:
                         log_event(logger, "session_id_conflict", agent_name=cfg.name)
                         desired = None
                         session = await self._adapter.create_session(
-                            cfg.name, None, cfg.agent_version
+                            cfg.name, self.fresh_id(), cfg.agent_version
                         )
                 # From here the session is recorded, so it cannot be forgotten.
                 await hooks.created(session, owned=not restored, restored=restored)
@@ -159,6 +177,14 @@ class RemoteSessions:
                 last = exc
                 if attempt < cfg.create_retries and not await self.sleep_backoff(
                     attempt + 1, retry_after_of(exc)
+                ):
+                    raise to_app_error(self._settings, exc, invoking=False) from exc
+            except FoundryQuotaExceeded as exc:
+                self.note_quota(cfg.name, exc)
+                last = exc
+                regional_retry = exc.scope == QUOTA_REGIONAL and attempt < cfg.create_retries
+                if not (
+                    regional_retry and await self.sleep_backoff(attempt + 1, retry_after_of(exc))
                 ):
                     raise to_app_error(self._settings, exc, invoking=False) from exc
             except FoundryError as exc:

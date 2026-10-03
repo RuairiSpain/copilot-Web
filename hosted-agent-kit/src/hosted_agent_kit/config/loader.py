@@ -22,8 +22,15 @@ ROOT_KEY = "agentPool"
 SETTINGS_KEY = "hack"
 # Secrets and the identity of the deployment come from the environment, never from a file.
 _ENV_ONLY_SETTINGS = frozenset(
-    {"session_id_key", "foundry_isolation_key", "applicationinsights_connection_string"}
+    {
+        "session_id_key",
+        "foundry_isolation_key",
+        "applicationinsights_connection_string",
+        "user_isolation_secret",
+    }
 )
+# Connection strings can carry a password, so they come from the environment too.
+_ENV_ONLY_NESTED = (("quota", "ledger", "url"), ("ownership", "url"))
 DEFAULT_AZURE_YAML = Path("azure.yaml")
 
 
@@ -159,6 +166,17 @@ def build_settings_overrides(raw: dict[str, Any], source: str = "configuration")
         raise ConfigError(
             f"{source}: unknown {SETTINGS_KEY} keys: {', '.join(sorted(map(str, unknown)))}"
         )
+    for path in _ENV_ONLY_NESTED:
+        node: Any = section
+        for part in path:
+            node = node.get(part) if isinstance(node, dict) else None
+        if node is not None:
+            dotted = ".".join(path)
+            env = "POOL_" + "__".join(part.upper() for part in path)
+            raise ConfigError(
+                f"{source}: {SETTINGS_KEY}.{dotted} is a connection string and can only be set "
+                f"in the environment ({env})"
+            )
     return dict(section)
 
 

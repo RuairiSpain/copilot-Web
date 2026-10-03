@@ -1,0 +1,54 @@
+name: hack-canary
+
+# A nightly check against a sandbox Foundry project. It needs a stateless Responses hosted agent
+# named in CANARY_AGENT and an identity with access to the project. It is skipped until the
+# repository variable CANARY_ENABLED is "true". A failure means the platform changed under the kit.
+#
+# Set up once: an Entra app registration with a federated credential for this repository and the
+# environment `canary`, a role on the sandbox project, and these:
+#   secrets   AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
+#   variables CANARY_ENABLED, FOUNDRY_PROJECT_ENDPOINT, CANARY_AGENT, CANARY_QUOTA_PROBE (optional)
+
+on:
+  schedule:
+    - cron: "41 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+defaults:
+  run:
+    working-directory: hosted-agent-kit
+
+jobs:
+  canary:
+    if: ${{ vars.CANARY_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    environment: canary
+    timeout-minutes: 30
+    env:
+      FOUNDRY_PROJECT_ENDPOINT: ${{ vars.FOUNDRY_PROJECT_ENDPOINT }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv python install 3.13
+      - run: uv sync --frozen
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Run the canary
+        run: >
+          uv run python scripts/live_canary.py
+          --agent "${{ vars.CANARY_AGENT }}"
+          --quota-probe "${{ vars.CANARY_QUOTA_PROBE || 0 }}"
+          --json | tee canary.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: canary
+          path: hosted-agent-kit/canary.json
+          if-no-files-found: ignore

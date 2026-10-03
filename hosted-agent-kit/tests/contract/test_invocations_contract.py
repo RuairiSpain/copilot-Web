@@ -267,3 +267,69 @@ async def test_a_response_larger_than_the_limit_is_refused() -> None:
         assert response.raw == b"y" * 20
     finally:
         await adapter.close()
+
+
+# ------------------------------------------------------- per-user isolation headers
+
+IDENTITY = "x-ms-user-identity"
+
+
+async def test_per_user_headers_replace_the_constant_key_on_invocations_only() -> None:
+    backend = Backend()
+    adapter = build_adapter(backend, isolation_key="pool-key")
+    await adapter.start()
+    try:
+        backend.route("POST", ROUTE, 200, {"ok": True})
+        backend.route(
+            "POST",
+            "/protocols/openai/responses",
+            200,
+            {"id": "r", "object": "response", "status": "completed", "output": []},
+        )
+        base = context().model_copy(update={"isolation_key": "user-key", "acting_user": "alice"})
+        await adapter.invoke(base)
+        await adapter.invoke(base.model_copy(update={"protocol": AgentProtocol.RESPONSES}))
+        await adapter.invoke(context().model_copy(update={"isolation_key": "user-key"}))
+    finally:
+        await adapter.close()
+    first, second, third = ({k.lower(): v for k, v in r.headers.items()} for r in backend.requests)
+    for headers in (first, second):
+        assert headers[HEADER] == "user-key" and headers[IDENTITY] == "alice"
+    assert third[HEADER] == "user-key" and IDENTITY not in third  # key only, no acting user
+
+
+async def test_without_per_user_values_the_constant_key_is_unchanged() -> None:
+    backend = Backend()
+    adapter = build_adapter(backend, isolation_key="pool-key")
+    await adapter.start()
+    try:
+        backend.route("POST", ROUTE, 200, {"ok": True})
+        await adapter.invoke(context())
+    finally:
+        await adapter.close()
+    headers = {k.lower(): v for k, v in backend.requests[0].headers.items()}
+    assert headers[HEADER] == "pool-key" and IDENTITY not in headers
+
+
+async def test_the_trace_context_is_sent_with_an_invocation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from opentelemetry.sdk.trace import TracerProvider
+
+    from hosted_agent_kit import tracing
+
+    monkeypatch.setattr(tracing, "_tracer", TracerProvider().get_tracer("test"))
+    backend = Backend()
+    adapter = build_adapter(backend)
+    await adapter.start()
+    try:
+        backend.route("POST", ROUTE, 200, {"ok": True})
+        with tracing.span("caller"):
+            await adapter.invoke(context())
+        await adapter.invoke(context())  # outside any span: no header
+    finally:
+        await adapter.close()
+    inside = {k.lower(): v for k, v in backend.requests[0].headers.items()}
+    outside = {k.lower(): v for k, v in backend.requests[1].headers.items()}
+    assert inside["traceparent"].startswith("00-") and "baggage" not in inside
+    assert "traceparent" not in outside

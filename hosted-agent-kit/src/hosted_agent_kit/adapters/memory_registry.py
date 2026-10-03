@@ -7,6 +7,7 @@ subscribers, which is what lets controllers react to state instead of polling fo
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 
 from hosted_agent_kit.domain.enums import FoundrySessionStatus, LocalSessionState
@@ -38,6 +39,7 @@ class MemorySessionRegistry:
     def __init__(self, clock: Clock | None = None) -> None:
         self._clock = clock or SystemClock()
         self._records: dict[_Key, SessionRecord] = {}
+        self._by_agent: dict[str, dict[str, SessionRecord]] = {}  # the same records, by agent
         self._slots: dict[str, dict[str, float]] = {}
         self._listeners: list[ChangeListener] = []
 
@@ -70,11 +72,22 @@ class MemorySessionRegistry:
         return record.model_copy(deep=True) if record else None
 
     async def list(self, agent_name: str) -> list[SessionRecord]:
-        records = [r for r in self._records.values() if r.agent_name == agent_name]
-        return [r.model_copy(deep=True) for r in sorted(records, key=_order_key)]
+        return [r.model_copy(deep=True) for r in await self.view(agent_name)]
+
+    async def view(self, agent_name: str) -> Sequence[SessionRecord]:
+        return sorted(self._by_agent.get(agent_name, {}).values(), key=_order_key)
 
     async def count(self, agent_name: str) -> int:
-        return sum(1 for r in self._records.values() if r.agent_name == agent_name)
+        return len(self._by_agent.get(agent_name, {}))
+
+    def _store(self, record: SessionRecord) -> None:
+        self._records[(record.agent_name, record.session_id)] = record
+        self._by_agent.setdefault(record.agent_name, {})[record.session_id] = record
+
+    def _discard(self, agent_name: str, session_id: str) -> SessionRecord | None:
+        record = self._records.pop((agent_name, session_id), None)
+        self._by_agent.get(agent_name, {}).pop(session_id, None)
+        return record
 
     # -------------------------------------------------------------------- writes
 
@@ -85,7 +98,7 @@ class MemorySessionRegistry:
         stored = record.model_copy(deep=True)
         stored.resource_version = 1
         stored.conditions = derive_session_conditions(stored, self._clock.now())
-        self._records[key] = stored
+        self._store(stored)
         self._emit(ChangeType.ADDED, stored)
 
     async def update(self, record: SessionRecord, *, expected_version: int) -> SessionRecord:
@@ -100,7 +113,7 @@ class MemorySessionRegistry:
         stored = record.model_copy(deep=True)
         stored.resource_version = current.resource_version
         stored.generation = current.generation
-        self._records[key] = stored
+        self._store(stored)
         self._commit(stored, desired=desired)
         return stored.model_copy(deep=True)
 
@@ -149,6 +162,7 @@ class MemorySessionRegistry:
             or record.agent_version != agent_version
             or record.expires_at != expires_at
         )
+        touched = record.last_accessed_at != last_accessed_at
         record.platform_status = platform_status
         record.agent_version = agent_version
         record.last_accessed_at = last_accessed_at
@@ -156,6 +170,10 @@ class MemorySessionRegistry:
         record.last_seen_at = last_seen_at  # a heartbeat: it does not count as a change
         if changed:
             self._commit(record)
+        elif touched:
+            # Foundry saw the session used. Nothing for a controller to do, but the quota count
+            # extends the session's idle window from it.
+            self._emit(ChangeType.MODIFIED, record, status_only=True)
         return record.model_copy(deep=True)
 
     async def set_local_state(
@@ -242,7 +260,7 @@ class MemorySessionRegistry:
         return True
 
     async def remove(self, agent_name: str, session_id: str) -> SessionRecord | None:
-        record = self._records.pop((agent_name, session_id), None)
+        record = self._discard(agent_name, session_id)
         if record is None:
             return None
         record.resource_version += 1
@@ -255,7 +273,7 @@ class MemorySessionRegistry:
         self, agent_name: str, token: str, limit: int, *, force: bool = False
     ) -> bool:
         slots = self._slots.setdefault(agent_name, {})
-        in_use = sum(1 for r in self._records.values() if r.agent_name == agent_name)
+        in_use = len(self._by_agent.get(agent_name, {}))
         if not force and in_use + len(slots) >= limit:
             return False
         slots[token] = self._clock.monotonic()
