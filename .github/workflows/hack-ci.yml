@@ -169,13 +169,14 @@ jobs:
           output-file: hosted-agent-kit/sbom.cdx.json
           upload-artifact: false
       - name: Vulnerability scan (fails on fixable high or critical findings)
-        uses: aquasecurity/trivy-action@v0.28.0
-        with:
-          image-ref: hosted-agent-kit:ci
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: "1"
-          format: table
+        # Run Trivy from its image: trivy-action@v0.28.0 needs aquasecurity/setup-trivy@v0.2.1,
+        # which no longer resolves. Pin this image to a version or digest once one is chosen.
+        run: >
+          docker run --rm
+          -v /var/run/docker.sock:/var/run/docker.sock
+          aquasec/trivy:latest image
+          --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --format table
+          hosted-agent-kit:ci
       - name: Publish SBOM
         if: always()
         uses: actions/upload-artifact@v4
