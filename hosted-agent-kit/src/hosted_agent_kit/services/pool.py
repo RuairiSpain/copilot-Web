@@ -260,6 +260,10 @@ class PoolService:
         return self._affinity
 
     @property
+    def clock(self) -> Clock:
+        return self._clock
+
+    @property
     def quota(self) -> QuotaGate:
         return self._gate
 

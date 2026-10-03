@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 
 from hosted_agent_kit.config.holder import ConfigSource
 from hosted_agent_kit.config.models import AgentConfig
+from hosted_agent_kit.config.settings import ShardSettings
 from hosted_agent_kit.controllers.plane import ControlPlane
 from hosted_agent_kit.controllers.reports import ReconcileReport
 from hosted_agent_kit.controllers.runtime import ReconcileResult
@@ -36,6 +37,7 @@ from hosted_agent_kit.ports.registry import ChangeEvent, SessionRegistry
 from hosted_agent_kit.services.clock import Clock
 from hosted_agent_kit.services.events import EventType
 from hosted_agent_kit.services.session_ids import SessionIdDeriver
+from hosted_agent_kit.services.sharding import shard_of
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +84,9 @@ class ObservationController:
         clock: Clock,
         cache: ObservationCache,
         session_ids: SessionIdDeriver | None = None,
+        shard: ShardSettings | None = None,
     ) -> None:
+        self._shard = shard
         self._config = config
         self._adapter = adapter
         self._registry = registry
@@ -184,6 +188,8 @@ class ObservationController:
                 await self._retire(cfg, session.session_id, "gone", cleanup=False, report=report)
             return
         if record is None:
+            if not self._belongs_to_this_shard(session):
+                return  # another kit owns it: not ours to adopt, count or delete
             if not (cfg.adopt_unbound_sessions or self._owned_by_derivation(cfg, session)):
                 log_event(
                     logger,
@@ -255,6 +261,15 @@ class ObservationController:
                 LocalSessionState.AVAILABLE,
                 only_from=frozenset({LocalSessionState.UNAVAILABLE}),
             )
+
+    def _belongs_to_this_shard(self, session: FoundrySession) -> bool:
+        """With sharding, a session is ours if its id carries our shard. Ids without a shard
+        prefix (made before sharding, or by someone else) belong to shard 0, so exactly one kit
+        decides whether to adopt them."""
+        if self._shard is None:
+            return True
+        owner = shard_of(session.session_id)
+        return owner == self._shard.index if owner is not None else self._shard.index == 0
 
     def _owned_by_derivation(self, cfg: AgentConfig, session: FoundrySession) -> bool:
         """A derived id was created by this service for one user, who can reclaim it."""

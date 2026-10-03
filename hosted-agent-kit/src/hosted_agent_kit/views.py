@@ -156,3 +156,34 @@ class AgentInfo(BaseModel):
     default_timeout_seconds: float
     max_timeout_seconds: float
     max_stream_seconds: float
+
+
+class RegionalView(BaseModel):
+    """What every kit that shares the ledger reports for one subscription and region."""
+
+    region_limit: int | None = Field(description="The subscription's concurrent session limit.")
+    total_active: int = Field(description="Sum of the counts the live kits last published.")
+    headroom: int | None = Field(
+        description="Region limit minus total active, when the limit is known."
+    )
+    spare_size: int
+    spare_used: int
+    kits: dict[str, int] = Field(description="Kit id to the active sessions it last reported.")
+
+
+class QuotaView(BaseModel):
+    """This kit's use of the session quota."""
+
+    kit_id: str
+    counted: int = Field(description="Sessions this kit assumes hold compute, all agents.")
+    budget: int | None = Field(description="The configured static budget, if any.")
+    limit: int | None = Field(
+        description="The limit now: the budget as lowered or raised by Foundry's answers, plus "
+        "borrowed permits. Null when nothing limits the kit."
+    )
+    borrowed: int = Field(description="Spare-pool permits this kit holds.")
+    refusals: int = Field(description="Times Foundry refused a session for quota.")
+    evictions: int = Field(description="Idle sessions this kit stopped to make room.")
+    regional: RegionalView | None = Field(
+        default=None, description="The shared view, when a ledger is configured and reachable."
+    )

@@ -244,6 +244,39 @@ class ReloadUnavailableError(AppError):
     retry_safe = True
 
 
+class WrongShardError(AppError):
+    """This kit serves another shard of the agent. Send the call to the shard named in the error."""
+
+    status = 421
+    code = "WRONG_SHARD"
+    title = "This user is served by another shard"
+    phase = "request"
+    retry_safe = True
+
+    def __init__(self, detail: str | None = None, *, shard: int, count: int) -> None:
+        super().__init__(detail)
+        self.shard = shard
+        self.count = count
+
+    @property
+    def problem_extra(self) -> dict[str, int]:
+        return {"shard": self.shard, "shard_count": self.count}
+
+
+class NotActiveError(AppError):
+    """This kit is a standby or has lost ownership of its agents. Another kit is serving them."""
+
+    status = 503
+    code = "KIT_NOT_ACTIVE"
+    title = "This kit is not the active owner of its agents"
+    phase = "request"
+    retry_safe = True
+
+
+class OwnershipConflictError(Exception):
+    """Another live kit owns an agent this kit was asked to schedule."""
+
+
 class ServiceDrainingError(AppError):
     status = 503
     code = "SERVICE_SHUTTING_DOWN"

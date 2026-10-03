@@ -38,6 +38,12 @@
             "title": "Generation",
             "type": "integer"
           },
+          "max_active_sessions": {
+            "default": 0,
+            "description": "Most sessions that may hold compute at once.",
+            "title": "Max Active Sessions",
+            "type": "integer"
+          },
           "max_sessions": {
             "title": "Max Sessions",
             "type": "integer"
@@ -66,6 +72,12 @@
           },
           "sessions_available": {
             "title": "Sessions Available",
+            "type": "integer"
+          },
+          "sessions_counted": {
+            "default": 0,
+            "description": "Sessions assumed to hold compute: leased, starting, or in the idle window.",
+            "title": "Sessions Counted",
             "type": "integer"
           },
           "sessions_leased": {
@@ -736,6 +748,141 @@
           "retry_safe"
         ],
         "title": "ProblemDetails",
+        "type": "object"
+      },
+      "QuotaView": {
+        "description": "This kit's use of the session quota.",
+        "properties": {
+          "borrowed": {
+            "description": "Spare-pool permits this kit holds.",
+            "title": "Borrowed",
+            "type": "integer"
+          },
+          "budget": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The configured static budget, if any.",
+            "title": "Budget"
+          },
+          "counted": {
+            "description": "Sessions this kit assumes hold compute, all agents.",
+            "title": "Counted",
+            "type": "integer"
+          },
+          "evictions": {
+            "description": "Idle sessions this kit stopped to make room.",
+            "title": "Evictions",
+            "type": "integer"
+          },
+          "kit_id": {
+            "title": "Kit Id",
+            "type": "string"
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The limit now: the budget as lowered or raised by Foundry's answers, plus borrowed permits. Null when nothing limits the kit.",
+            "title": "Limit"
+          },
+          "refusals": {
+            "description": "Times Foundry refused a session for quota.",
+            "title": "Refusals",
+            "type": "integer"
+          },
+          "regional": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RegionalView"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The shared view, when a ledger is configured and reachable."
+          }
+        },
+        "required": [
+          "kit_id",
+          "counted",
+          "budget",
+          "limit",
+          "borrowed",
+          "refusals",
+          "evictions"
+        ],
+        "title": "QuotaView",
+        "type": "object"
+      },
+      "RegionalView": {
+        "description": "What every kit that shares the ledger reports for one subscription and region.",
+        "properties": {
+          "headroom": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Region limit minus total active, when the limit is known.",
+            "title": "Headroom"
+          },
+          "kits": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Kit id to the active sessions it last reported.",
+            "title": "Kits",
+            "type": "object"
+          },
+          "region_limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The subscription's concurrent session limit.",
+            "title": "Region Limit"
+          },
+          "spare_size": {
+            "title": "Spare Size",
+            "type": "integer"
+          },
+          "spare_used": {
+            "title": "Spare Used",
+            "type": "integer"
+          },
+          "total_active": {
+            "description": "Sum of the counts the live kits last published.",
+            "title": "Total Active",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "region_limit",
+          "total_active",
+          "headroom",
+          "spare_size",
+          "spare_used",
+          "kits"
+        ],
+        "title": "RegionalView",
         "type": "object"
       },
       "ReloadResult": {
@@ -2201,6 +2348,103 @@
           }
         ],
         "summary": "Metrics Snapshot",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/quota": {
+      "get": {
+        "description": "This instance's use of the session quota, and the regional view when a ledger is shared.",
+        "operationId": "quota_v1_admin_quota_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuotaView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "502": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Quota",
         "tags": [
           "admin"
         ]

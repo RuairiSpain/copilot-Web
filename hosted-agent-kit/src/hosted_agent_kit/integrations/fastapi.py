@@ -34,6 +34,7 @@ from hosted_agent_kit.views import (
     DeleteAccepted,
     EventView,
     PoolResourceView,
+    QuotaView,
     ReloadResult,
     SessionAdminView,
     SyncReportView,
@@ -181,6 +182,10 @@ def reporting_router(
         limit: Annotated[int, Query(ge=1, le=500)] = 100,
     ) -> list[EventView]:
         return rep.events(agent_name, limit=limit)
+
+    @router.get("/quota", response_model=QuotaView)
+    async def quota(rep: ReportingDep) -> QuotaView:
+        return await rep.quota()
 
     @router.get("/metrics")
     async def metrics(rep: ReportingDep) -> dict[str, Any]:

@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import math
 import uuid
 from datetime import datetime, timedelta
 
@@ -166,7 +167,10 @@ class KitGovernor:
         now = self._clock.monotonic()
         if now - self._last_change < self._s.probe_seconds or now < self._cooldown_until:
             return
-        self._base = min(self._ceiling, self._base + self._s.increase_step)
+        # At least ``increase_step``, and 5 percent of the ceiling, so a large kit recovers
+        # in minutes rather than hours.
+        step = max(self._s.increase_step, math.ceil(self._ceiling * 0.05))
+        self._base = min(self._ceiling, self._base + step)
         self._last_change = now
 
     # -------------------------------------------------------------- borrowing
@@ -370,7 +374,8 @@ class QuotaGate:
 
         def apply(r: SessionRecord) -> None:
             if stopped:
-                r.compute_released_at = now
+                # Never earlier than the last use, so the stop is not read as older than it.
+                r.compute_released_at = max(now, last_activity(r))
             if r.local_state is LocalSessionState.UNAVAILABLE and r.lease_request_id is None:
                 r.local_state = LocalSessionState.AVAILABLE
 

@@ -71,6 +71,7 @@ def test_documented_routes_are_exactly_the_expected_set(spec: dict[str, Any]) ->
         ("/v1/admin/agents", "get"),
         ("/v1/admin/agents/{agent_name}", "get"),
         ("/v1/admin/events", "get"),
+        ("/v1/admin/quota", "get"),
         ("/v1/admin/config/reload", "post"),
         ("/v1/admin/agents/{agent_name}/sessions", "get"),
         ("/v1/admin/agents/{agent_name}/sessions/{session_id}", "get"),

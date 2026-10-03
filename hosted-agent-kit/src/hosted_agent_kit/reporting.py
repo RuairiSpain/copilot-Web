@@ -21,6 +21,8 @@ from hosted_agent_kit.views import (
     ConditionView,
     EventView,
     PoolResourceView,
+    QuotaView,
+    RegionalView,
     SessionAdminView,
 )
 
@@ -163,6 +165,38 @@ class Reporting:
             last_released_at=record.last_released_at,
         )
 
+    async def quota(self) -> QuotaView:
+        """This kit's use of the session quota, and the regional view when a ledger is shared."""
+        rt = self._rt
+        gate = rt.pool.quota
+        governor = gate.governor
+        regional: RegionalView | None = None
+        section = rt.settings.quota
+        if rt.ledger is not None:
+            try:
+                snap = await rt.ledger.snapshot(section.spare, section.region_limit)
+            except Exception:  # the ledger is optional: report without it
+                snap = None
+            if snap is not None:
+                regional = RegionalView(
+                    region_limit=snap.region_limit,
+                    total_active=snap.total_active,
+                    headroom=snap.headroom,
+                    spare_size=snap.spare_size,
+                    spare_used=snap.spare_used,
+                    kits=snap.kits,
+                )
+        return QuotaView(
+            kit_id=rt.kit_id,
+            counted=await gate.kit_counted(rt.pool.clock.now()),
+            budget=section.budget,
+            limit=governor.limit(),
+            borrowed=governor.borrowed,
+            refusals=governor.refusals,
+            evictions=gate.evictions,
+            regional=regional,
+        )
+
     def metrics(self) -> dict[str, Any]:
         """Counters, gauges and histograms as a JSON-friendly dict."""
         return self._rt.metrics_store.snapshot()
@@ -180,4 +214,8 @@ class Reporting:
             "workers": rt.reconciler.workers_started,
             "initial_sync": rt.reconciler.initial_sync_done,
         }
-        return {"status": "ready" if all(checks.values()) else "not_ready", "checks": checks}
+        return {
+            "status": "ready" if all(checks.values()) else "not_ready",
+            "checks": checks,
+            "kit_id": rt.kit_id,
+        }

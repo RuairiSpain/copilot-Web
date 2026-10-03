@@ -77,6 +77,7 @@ class Reconciler:
             clock=clock,
             cache=self.cache,
             session_ids=session_ids,
+            shard=pool.settings.shard,
         )
         self.pool_controller = PoolController(
             config=config,

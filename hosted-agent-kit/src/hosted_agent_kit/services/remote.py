@@ -33,6 +33,7 @@ from hosted_agent_kit.ports.metrics import MetricsRecorder
 from hosted_agent_kit.services.clock import Clock
 from hosted_agent_kit.services.errors_map import to_app_error
 from hosted_agent_kit.services.session_ids import SessionIdDeriver
+from hosted_agent_kit.services.sharding import fresh_session_id
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +124,11 @@ class RemoteSessions:
             return None
         return self._session_ids.for_user(cfg.name, key.user_id, key.conversation_key)
 
+    def fresh_id(self) -> str | None:
+        """A caller-chosen id carrying the shard, for a kit that owns one shard of its agents."""
+        shard = self._settings.shard
+        return fresh_session_id(shard.index) if shard is not None else None
+
     async def lookup(self, cfg: AgentConfig, session_id: str) -> FoundrySession | None:
         try:
             return await self._adapter.get_session(cfg.name, session_id)
@@ -152,7 +158,7 @@ class RemoteSessions:
                 if session is None:
                     try:
                         session = await self._adapter.create_session(
-                            cfg.name, desired, cfg.agent_version
+                            cfg.name, desired or self.fresh_id(), cfg.agent_version
                         )
                     except FoundryConflict:
                         if desired is None:
@@ -160,7 +166,7 @@ class RemoteSessions:
                         log_event(logger, "session_id_conflict", agent_name=cfg.name)
                         desired = None
                         session = await self._adapter.create_session(
-                            cfg.name, None, cfg.agent_version
+                            cfg.name, self.fresh_id(), cfg.agent_version
                         )
                 # From here the session is recorded, so it cannot be forgotten.
                 await hooks.created(session, owned=not restored, restored=restored)
