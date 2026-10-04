@@ -1,0 +1,6 @@
+id: FND-NET-007
+version: 1
+group: NET
+title: "Restricted mode has allowed IP range"
+status: proposed
+phases: ["1"]

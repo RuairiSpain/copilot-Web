@@ -1,0 +1,6 @@
+id: FND-COST-004
+version: 1
+group: COST
+title: "Informational monthly fixed-capacity estimate"
+status: proposed
+phases: ["7"]

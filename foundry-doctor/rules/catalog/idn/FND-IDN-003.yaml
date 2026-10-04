@@ -1,0 +1,6 @@
+id: FND-IDN-003
+version: 1
+group: IDN
+title: "Role assignments use object IDs and principalType"
+status: proposed
+phases: ["1"]

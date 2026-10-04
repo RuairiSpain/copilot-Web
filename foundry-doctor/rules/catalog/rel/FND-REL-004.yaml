@@ -1,0 +1,6 @@
+id: FND-REL-004
+version: 1
+group: REL
+title: "Delete locks on stateful services"
+status: proposed
+phases: ["4"]

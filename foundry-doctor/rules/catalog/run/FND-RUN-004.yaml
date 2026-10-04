@@ -1,0 +1,6 @@
+id: FND-RUN-004
+version: 1
+group: RUN
+title: "Model deployment state and throttling signal"
+status: proposed
+phases: ["3"]

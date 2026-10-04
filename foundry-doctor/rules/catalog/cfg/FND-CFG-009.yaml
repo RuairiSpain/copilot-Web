@@ -1,0 +1,6 @@
+id: FND-CFG-009
+version: 1
+group: CFG
+title: "Cron expressions are valid"
+status: proposed
+phases: ["later"]

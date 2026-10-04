@@ -1,0 +1,6 @@
+id: FND-CFG-010
+version: 1
+group: CFG
+title: "Model versions pinned in stricter profiles"
+status: proposed
+phases: ["later"]

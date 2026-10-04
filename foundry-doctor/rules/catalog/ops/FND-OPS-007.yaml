@@ -1,0 +1,6 @@
+id: FND-OPS-007
+version: 1
+group: OPS
+title: "CI/CD pipeline exists"
+status: proposed
+phases: ["1"]

@@ -1,0 +1,6 @@
+id: FND-REL-009
+version: 1
+group: REL
+title: "APIM availability tier recommendation"
+status: proposed
+phases: ["4", "8"]

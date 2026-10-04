@@ -1,0 +1,6 @@
+id: FND-RUN-006
+version: 1
+group: RUN
+title: "Search index/documents/vector/indexer health"
+status: proposed
+phases: ["3"]

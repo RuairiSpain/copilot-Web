@@ -1,0 +1,6 @@
+id: FND-SEC-007
+version: 1
+group: SEC
+title: "RAI/content filter bound to chat deployments"
+status: proposed
+phases: ["later"]

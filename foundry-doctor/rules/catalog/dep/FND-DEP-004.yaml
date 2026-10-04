@@ -1,0 +1,6 @@
+id: FND-DEP-004
+version: 1
+group: DEP
+title: "Model/version/SKU offered in target region"
+status: proposed
+phases: ["2"]

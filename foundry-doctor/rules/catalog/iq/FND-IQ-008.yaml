@@ -1,0 +1,6 @@
+id: FND-IQ-008
+version: 1
+group: IQ
+title: "Source connection uses managed identity"
+status: proposed
+phases: ["8"]

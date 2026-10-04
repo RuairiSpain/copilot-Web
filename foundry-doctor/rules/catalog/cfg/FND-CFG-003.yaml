@@ -1,0 +1,6 @@
+id: FND-CFG-003
+version: 1
+group: CFG
+title: "All inter-service references resolve"
+status: proposed
+phases: ["1"]

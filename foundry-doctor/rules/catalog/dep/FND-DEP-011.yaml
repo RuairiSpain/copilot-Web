@@ -1,0 +1,6 @@
+id: FND-DEP-011
+version: 1
+group: DEP
+title: "Subnet delegation/capacity/use is compatible"
+status: proposed
+phases: ["2"]

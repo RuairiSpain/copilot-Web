@@ -1,0 +1,6 @@
+id: FND-SEC-006
+version: 1
+group: SEC
+title: "Firewall rules reject private/open ranges"
+status: proposed
+phases: ["1"]

@@ -1,0 +1,6 @@
+id: FND-SEC-014
+version: 1
+group: SEC
+title: "Secrets not emitted as Bicep outputs"
+status: proposed
+phases: ["1"]

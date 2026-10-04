@@ -1,0 +1,6 @@
+id: FND-CFG-005
+version: 1
+group: CFG
+title: "No raw secrets in YAML/Bicep/environment blocks"
+status: proposed
+phases: ["1"]

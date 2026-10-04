@@ -1,0 +1,6 @@
+id: FND-IQ-010
+version: 1
+group: IQ
+title: "ADLS Gen2 hierarchical namespace enabled"
+status: proposed
+phases: ["8"]

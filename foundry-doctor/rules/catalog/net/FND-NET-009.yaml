@@ -1,0 +1,6 @@
+id: FND-NET-009
+version: 1
+group: NET
+title: "APIM SKU supports required private backend connectivity"
+status: proposed
+phases: ["8"]

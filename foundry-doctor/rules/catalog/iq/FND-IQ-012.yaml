@@ -1,0 +1,6 @@
+id: FND-IQ-012
+version: 1
+group: IQ
+title: "Semantic ranking enabled when used"
+status: proposed
+phases: ["8"]

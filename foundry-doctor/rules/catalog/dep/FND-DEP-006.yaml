@@ -1,0 +1,6 @@
+id: FND-DEP-006
+version: 1
+group: DEP
+title: "No blocking soft-deleted resource/name"
+status: proposed
+phases: ["2"]

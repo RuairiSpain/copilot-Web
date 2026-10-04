@@ -1,0 +1,6 @@
+id: FND-IQ-001
+version: 1
+group: IQ
+title: "Filter fields/claims reference filterable fields"
+status: proposed
+phases: ["8"]

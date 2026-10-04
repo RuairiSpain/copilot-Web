@@ -1,0 +1,6 @@
+id: FND-SEC-005
+version: 1
+group: SEC
+title: "Key Vault soft delete, purge protection and RBAC"
+status: proposed
+phases: ["later"]

@@ -1,0 +1,6 @@
+id: FND-NET-010
+version: 1
+group: NET
+title: "Azure Monitor private-link choice is explicit"
+status: proposed
+phases: ["4"]

@@ -1,0 +1,6 @@
+id: FND-COST-001
+version: 1
+group: COST
+title: "Budget and alerts exist"
+status: proposed
+phases: ["2", "7"]

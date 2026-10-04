@@ -1,0 +1,6 @@
+id: FND-COST-002
+version: 1
+group: COST
+title: "Dev avoids production-sized fixed SKUs"
+status: proposed
+phases: ["1"]

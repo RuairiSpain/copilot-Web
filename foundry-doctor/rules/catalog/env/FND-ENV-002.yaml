@@ -1,0 +1,6 @@
+id: FND-ENV-002
+version: 1
+group: ENV
+title: "Environment-bound names/IDs/rules were not copied unchanged"
+status: proposed
+phases: ["1"]

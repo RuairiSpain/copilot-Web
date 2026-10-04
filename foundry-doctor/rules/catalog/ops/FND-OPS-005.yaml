@@ -1,0 +1,6 @@
+id: FND-OPS-005
+version: 1
+group: OPS
+title: "Resource-name provider constraints"
+status: proposed
+phases: ["1"]

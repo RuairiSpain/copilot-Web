@@ -1,0 +1,6 @@
+id: FND-IQ-006
+version: 1
+group: IQ
+title: "Chunk overlap and hybrid weights valid"
+status: proposed
+phases: ["8"]

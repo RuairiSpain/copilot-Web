@@ -1,0 +1,6 @@
+id: FND-SEC-003
+version: 1
+group: SEC
+title: "Cosmos DB local authentication disabled"
+status: proposed
+phases: ["1"]

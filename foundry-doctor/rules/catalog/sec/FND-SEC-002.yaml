@@ -1,0 +1,6 @@
+id: FND-SEC-002
+version: 1
+group: SEC
+title: "AI Search key authentication disabled or RBAC-only"
+status: proposed
+phases: ["1"]

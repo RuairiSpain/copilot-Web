@@ -1,0 +1,6 @@
+id: FND-OPS-002
+version: 1
+group: OPS
+title: "Application Insights connected"
+status: proposed
+phases: ["4"]

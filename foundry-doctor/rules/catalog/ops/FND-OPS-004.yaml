@@ -1,0 +1,6 @@
+id: FND-OPS-004
+version: 1
+group: OPS
+title: "Required tags exist"
+status: proposed
+phases: ["1"]

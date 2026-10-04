@@ -1,0 +1,6 @@
+id: FND-GW-002
+version: 1
+group: GW
+title: "Verified token-limit/metric policies are present"
+status: proposed
+phases: ["8"]

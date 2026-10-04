@@ -1,0 +1,6 @@
+id: FND-SEC-011
+version: 1
+group: SEC
+title: "Controlled outbound egress informational"
+status: proposed
+phases: ["4"]

@@ -1,0 +1,6 @@
+id: FND-CFG-012
+version: 1
+group: CFG
+title: "Azure region values are valid"
+status: proposed
+phases: ["1"]

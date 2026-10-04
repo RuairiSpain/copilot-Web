@@ -1,0 +1,6 @@
+id: FND-GW-006
+version: 1
+group: GW
+title: "Telemetry sink exists for token tracking"
+status: proposed
+phases: ["8"]

@@ -1,0 +1,6 @@
+id: FND-IDN-006
+version: 1
+group: IDN
+title: "Federated credentials use HTTPS issuer and specific subject"
+status: proposed
+phases: ["1"]

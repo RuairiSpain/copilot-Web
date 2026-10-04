@@ -1,0 +1,6 @@
+id: FND-DEP-007
+version: 1
+group: DEP
+title: "Globally unique names available"
+status: proposed
+phases: ["2"]

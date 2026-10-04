@@ -1,0 +1,6 @@
+id: FND-REL-002
+version: 1
+group: REL
+title: "Storage redundancy posture"
+status: proposed
+phases: ["4"]

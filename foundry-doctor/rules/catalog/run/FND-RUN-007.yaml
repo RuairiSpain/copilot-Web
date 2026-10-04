@@ -1,0 +1,6 @@
+id: FND-RUN-007
+version: 1
+group: RUN
+title: "Diagnostic logs are arriving"
+status: proposed
+phases: ["3"]

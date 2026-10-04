@@ -1,0 +1,6 @@
+id: FND-REL-006
+version: 1
+group: REL
+title: "Gateway retry/circuit breaker"
+status: proposed
+phases: ["8"]

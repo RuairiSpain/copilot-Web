@@ -1,0 +1,6 @@
+id: FND-CFG-006
+version: 1
+group: CFG
+title: "Every variable has an environment or infrastructure producer"
+status: proposed
+phases: ["1"]

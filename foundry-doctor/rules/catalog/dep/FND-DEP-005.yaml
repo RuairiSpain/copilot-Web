@@ -1,0 +1,6 @@
+id: FND-DEP-005
+version: 1
+group: DEP
+title: "Quota covers requested capacity"
+status: proposed
+phases: ["2"]

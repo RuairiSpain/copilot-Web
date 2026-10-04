@@ -1,0 +1,6 @@
+id: FND-DEP-002
+version: 1
+group: DEP
+title: "Required providers registered"
+status: proposed
+phases: ["2"]

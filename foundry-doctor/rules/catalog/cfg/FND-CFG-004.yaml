@@ -1,0 +1,6 @@
+id: FND-CFG-004
+version: 1
+group: CFG
+title: "Prompt model or hosted source/image is valid"
+status: proposed
+phases: ["1"]

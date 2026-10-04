@@ -1,0 +1,6 @@
+id: FND-DEP-010
+version: 1
+group: DEP
+title: "Locks do not block change"
+status: proposed
+phases: ["2"]

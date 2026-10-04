@@ -1,0 +1,6 @@
+id: FND-NET-008
+version: 1
+group: NET
+title: "Search SKU supports private endpoints"
+status: proposed
+phases: ["1"]

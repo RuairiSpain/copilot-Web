@@ -1,0 +1,6 @@
+id: FND-SEC-008
+version: 1
+group: SEC
+title: "Relevant Defender plans enabled"
+status: proposed
+phases: ["2", "4"]

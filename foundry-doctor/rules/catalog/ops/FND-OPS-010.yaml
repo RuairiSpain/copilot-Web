@@ -1,0 +1,6 @@
+id: FND-OPS-010
+version: 1
+group: OPS
+title: "Model allow/deny lists remain consistent"
+status: proposed
+phases: ["1", "8"]

@@ -1,0 +1,6 @@
+id: FND-CFG-001
+version: 1
+group: CFG
+title: "Valid YAML, duplicate-key detection and compatible azure.ai.* schema"
+status: proposed
+phases: ["1"]

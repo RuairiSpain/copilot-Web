@@ -1,0 +1,6 @@
+id: FND-CFG-008
+version: 1
+group: CFG
+title: "MCP tools use allow lists"
+status: proposed
+phases: ["later"]

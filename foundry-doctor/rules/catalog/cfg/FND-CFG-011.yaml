@@ -1,0 +1,6 @@
+id: FND-CFG-011
+version: 1
+group: CFG
+title: "Preview/retired fields are version-aware"
+status: proposed
+phases: ["1"]

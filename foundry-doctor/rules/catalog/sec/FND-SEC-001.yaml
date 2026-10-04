@@ -1,0 +1,6 @@
+id: FND-SEC-001
+version: 1
+group: SEC
+title: "Foundry local authentication disabled"
+status: proposed
+phases: ["1"]

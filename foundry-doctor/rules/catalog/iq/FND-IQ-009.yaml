@@ -1,0 +1,6 @@
+id: FND-IQ-009
+version: 1
+group: IQ
+title: "Document-level access control configured when required"
+status: proposed
+phases: ["8"]

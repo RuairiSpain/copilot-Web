@@ -1,0 +1,6 @@
+id: FND-OPS-001
+version: 1
+group: OPS
+title: "Diagnostic settings to Log Analytics"
+status: proposed
+phases: ["4"]

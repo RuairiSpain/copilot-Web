@@ -1,0 +1,6 @@
+id: FND-IDN-001
+version: 1
+group: IDN
+title: "Managed identities used for Foundry and workloads"
+status: proposed
+phases: ["1"]

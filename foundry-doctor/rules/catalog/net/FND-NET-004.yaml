@@ -1,0 +1,6 @@
+id: FND-NET-004
+version: 1
+group: NET
+title: "Agent subnet delegation and sizing"
+status: proposed
+phases: ["1"]

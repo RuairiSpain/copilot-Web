@@ -1,0 +1,6 @@
+id: FND-COST-003
+version: 1
+group: COST
+title: "Gateway token limits exist"
+status: proposed
+phases: ["8"]

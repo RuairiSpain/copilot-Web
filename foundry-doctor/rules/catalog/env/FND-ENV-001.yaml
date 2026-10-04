@@ -1,0 +1,6 @@
+id: FND-ENV-001
+version: 1
+group: ENV
+title: "Environments do not unintentionally share resource groups"
+status: proposed
+phases: ["1"]

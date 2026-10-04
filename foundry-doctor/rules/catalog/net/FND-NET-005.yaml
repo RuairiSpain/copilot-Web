@@ -1,0 +1,6 @@
+id: FND-NET-005
+version: 1
+group: NET
+title: "Private-mode VNet/region consistency"
+status: proposed
+phases: ["1"]

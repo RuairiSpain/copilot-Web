@@ -1,0 +1,6 @@
+id: FND-CFG-002
+version: 1
+group: CFG
+title: "Unique service names by kind"
+status: proposed
+phases: ["1"]

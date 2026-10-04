@@ -1,0 +1,6 @@
+id: FND-ENV-003
+version: 1
+group: ENV
+title: "Prod does not reference non-prod resource IDs"
+status: proposed
+phases: ["1"]

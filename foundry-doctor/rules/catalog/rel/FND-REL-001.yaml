@@ -1,0 +1,6 @@
+id: FND-REL-001
+version: 1
+group: REL
+title: "Search replica/SLA posture"
+status: proposed
+phases: ["4"]

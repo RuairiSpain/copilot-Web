@@ -1,0 +1,6 @@
+id: FND-DEP-003
+version: 1
+group: DEP
+title: "Deployer can create resources and role assignments"
+status: proposed
+phases: ["2"]

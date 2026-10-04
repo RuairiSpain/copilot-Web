@@ -1,0 +1,6 @@
+id: FND-GW-004
+version: 1
+group: GW
+title: "Route paths unique"
+status: proposed
+phases: ["8"]

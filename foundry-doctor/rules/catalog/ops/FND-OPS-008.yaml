@@ -1,0 +1,6 @@
+id: FND-OPS-008
+version: 1
+group: OPS
+title: "Evaluations run before promotion"
+status: proposed
+phases: ["4"]

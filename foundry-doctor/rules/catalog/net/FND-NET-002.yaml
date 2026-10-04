@@ -1,0 +1,6 @@
+id: FND-NET-002
+version: 1
+group: NET
+title: "Dependent services public access/default-deny/private endpoints"
+status: proposed
+phases: ["1"]

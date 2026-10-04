@@ -1,0 +1,6 @@
+id: FND-OPS-009
+version: 1
+group: OPS
+title: "Data-residency regions and deployment SKU"
+status: proposed
+phases: ["1", "2"]

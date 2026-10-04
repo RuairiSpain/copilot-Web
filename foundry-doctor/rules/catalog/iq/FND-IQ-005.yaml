@@ -1,0 +1,6 @@
+id: FND-IQ-005
+version: 1
+group: IQ
+title: "Retrieval mode supported by index and service tier"
+status: proposed
+phases: ["8"]

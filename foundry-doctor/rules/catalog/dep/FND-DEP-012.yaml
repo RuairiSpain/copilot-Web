@@ -1,0 +1,6 @@
+id: FND-DEP-012
+version: 1
+group: DEP
+title: "Target region supports selected setup"
+status: proposed
+phases: ["2"]

@@ -1,0 +1,6 @@
+id: FND-RUN-008
+version: 1
+group: RUN
+title: "Deployed properties versus compiled template drift"
+status: proposed
+phases: ["future"]

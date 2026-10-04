@@ -1,0 +1,6 @@
+id: FND-NET-001
+version: 1
+group: NET
+title: "Foundry public access/private endpoint posture"
+status: proposed
+phases: ["1"]

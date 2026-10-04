@@ -1,0 +1,6 @@
+id: FND-REL-003
+version: 1
+group: REL
+title: "Cosmos zone redundancy and continuous backup"
+status: proposed
+phases: ["4"]

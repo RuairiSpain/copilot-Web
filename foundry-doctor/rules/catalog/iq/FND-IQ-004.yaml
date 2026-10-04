@@ -1,0 +1,6 @@
+id: FND-IQ-004
+version: 1
+group: IQ
+title: "Vector dimensions match embedding deployment metadata"
+status: proposed
+phases: ["8"]

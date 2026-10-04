@@ -1,0 +1,6 @@
+id: FND-CFG-007
+version: 1
+group: CFG
+title: "Outbound endpoints use HTTPS and reject unsafe local/metadata targets"
+status: proposed
+phases: ["1"]

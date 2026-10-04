@@ -1,0 +1,6 @@
+id: FND-DEP-008
+version: 1
+group: DEP
+title: "What-if has no unexpected delete/replace"
+status: proposed
+phases: ["2"]

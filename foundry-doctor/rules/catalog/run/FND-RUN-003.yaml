@@ -1,0 +1,6 @@
+id: FND-RUN-003
+version: 1
+group: RUN
+title: "Capability host and project connections healthy"
+status: proposed
+phases: ["3"]

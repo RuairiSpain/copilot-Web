@@ -1,0 +1,6 @@
+id: FND-RUN-002
+version: 1
+group: RUN
+title: "Private DNS resolves from an appropriate vantage point"
+status: proposed
+phases: ["3"]

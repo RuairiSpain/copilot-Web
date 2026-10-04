@@ -1,0 +1,6 @@
+id: FND-GW-001
+version: 1
+group: GW
+title: "JWT validates issuer, audience and tenant"
+status: proposed
+phases: ["8"]

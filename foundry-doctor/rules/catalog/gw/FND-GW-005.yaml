@@ -1,0 +1,6 @@
+id: FND-GW-005
+version: 1
+group: GW
+title: "Gateway calls Foundry using managed identity"
+status: proposed
+phases: ["8"]

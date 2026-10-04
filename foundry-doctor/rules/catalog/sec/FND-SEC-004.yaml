@@ -1,0 +1,6 @@
+id: FND-SEC-004
+version: 1
+group: SEC
+title: "Storage shared key/anonymous access disabled; HTTPS/TLS required"
+status: proposed
+phases: ["1"]
