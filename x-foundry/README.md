@@ -17,14 +17,14 @@ per platform.
 | --- | --- | --- |
 | 1 | Schema engine and validation | **Implemented here** |
 | 2 | Bicep infrastructure generator | **Implemented here** (see [docs/phase-2.md](docs/phase-2.md)) |
-| 3 | Foundry provisioning engine | Not started |
+| 3 | Foundry provisioning engine | **Implemented here** for agents and toolboxes (see [docs/phase-3.md](docs/phase-3.md)) |
 | 4 | Foundry IQ and Search engine | Not started |
 | 5 | Gateway and governance | Not started |
 | 6 | azd integration and developer experience | Not started |
 | 7 | Drift detection (optional, after first release) | Not started |
 
 Phase 1 turns an `azure.yaml` into a validated `DeploymentPlan`. Phase 2 turns the plan into
-Bicep (`xfoundry generate`). Nothing is deployed by this tool yet.
+Bicep (`xfoundry generate`), and Phase 3 deploys the agents and toolboxes (`xfoundry deploy`).
 Decisions and ideas for later phases are recorded in `docs/roadmap.md`.
 
 ## Quick start
@@ -37,6 +37,7 @@ bin/xfoundry validate examples/hub-spoke.yaml     # exit 0 when valid, 1 otherwi
 bin/xfoundry plan examples/hub-spoke.yaml         # deployment steps, dependencies first
 bin/xfoundry plan examples/hub-spoke.yaml --json  # full normalised plan
 bin/xfoundry generate examples/hub-spoke.yaml --out infra   # write the Bicep project
+bin/xfoundry deploy examples/hub-spoke.yaml --dry-run       # agents and toolboxes: what would change
 bin/xfoundry schema                               # print the JSON Schema
 
 go test -race ./...                               # unit and end-to-end tests

@@ -80,11 +80,16 @@ above:
   Before the first release, run it through `what-if` and a test deployment in a real subscription
   and record the findings here.
 
-## Phase 3: provisioning and state
+## Phase 3: provisioning and state (partly implemented)
 
-- Provisioning engine for Foundry data-plane items: agents, toolboxes, MCPs and evaluation
-  datasets and evaluators (definitions only; the user runs evaluations from their own CI).
-- State tracking, and validation rule XF025 (needs deployed state).
+See [phase-3.md](phase-3.md). Against the plan above:
+
+- Done: `xfoundry deploy` for toolboxes and prompt agents (with the MCP servers they use), the
+  state file, idempotent redeploys and rule XF025 (destructive changes need `--allow-destroy`).
+- Not done: evaluation datasets and evaluators, project connections for authenticated MCP servers
+  and connectors (an ARM resource), and every tool type other than `mcp` and `codeInterpreter`.
+- To verify against a live project before the first release: the request shapes, and whether an
+  agent can reach its toolbox without an embedded token (see the last bullet in phase-3.md).
 
 ## Phase 4: Foundry IQ and Search
 

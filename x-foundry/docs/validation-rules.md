@@ -32,7 +32,7 @@ Severity is *error* unless marked (w). Retired codes are not reused.
 | XF022 | Existing resources cannot carry creation settings; resource IDs must match the component type | declared |
 | XF023 | Region names, data residency, cross-region inheritance (w) | declared |
 | XF024 | Explicit names meet each Azure provider's constraints | declared |
-| XF025 | Destructive changes need approval | **Phase 3** (needs deployed state) |
+| XF025 | Destructive changes need approval | deploy (needs the state file); see [phase-3.md](phase-3.md) |
 
 ## Other codes
 
@@ -71,10 +71,10 @@ Severity is *error* unless marked (w). Retired codes are not reused.
 | XF131 | Cosmos DB: throughput applies to provisioned capacity, not serverless |
 | XF132 | Retired (the `runtime` section was removed) |
 
-## Generator diagnostics (XF2xx)
+## Generator and deploy diagnostics (XF2xx)
 
-`xfoundry generate` can add `XF201`-`XF207` while writing Bicep; they are listed in
-[phase-2.md](phase-2.md#diagnostics).
+`xfoundry generate` can add `XF201`-`XF207` while writing Bicep ([phase-2.md](phase-2.md#diagnostics)).
+`xfoundry deploy` adds `XF210` and `XF211` ([phase-3.md](phase-3.md#diagnostics)).
 
 ## Well-Architected recommendations (XF3xx, warnings)
 

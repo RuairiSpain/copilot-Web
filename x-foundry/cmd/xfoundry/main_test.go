@@ -2,10 +2,16 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -174,5 +180,175 @@ func TestGenerateFailures(t *testing.T) {
 	}
 	if code, _, errOut := exec("generate", minimal, "--out", dir); code != 1 || errOut == "" {
 		t.Fatalf("blocked file: %d %q", code, errOut)
+	}
+}
+
+const deployDoc = `name: demo
+x-foundry:
+  topology: {mode: standalone}
+  security: {roles: {admins: [Admins]}}
+  models: {default: gpt-5, allowed: [gpt-5]}
+  projects: [{name: finance}]
+  mcps: [{name: graph, endpoint: "https://graph.example/mcp", allowedTools: [search]}]
+  toolboxes: [{name: search, tools: [{name: gt, type: mcp, reference: graph}]}]
+  agents: [{name: bot, instructions: hi, toolboxes: [search]}, {name: extra, instructions: more}]
+`
+
+// foundryServer is a project data plane that remembers versions and records calls.
+type foundryServer struct {
+	mu       sync.Mutex
+	versions map[string]int // "agents/bot" -> latest version
+	calls    []string
+	last     map[string]string // path -> last request body
+}
+
+func newFoundryServer(t *testing.T) (*foundryServer, string) {
+	t.Helper()
+	f := &foundryServer{versions: map[string]int{}, last: map[string]string{}}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		if r.Header.Get("Authorization") != "Bearer test-token" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		path := strings.TrimPrefix(r.URL.Path, "/api/projects/finance/")
+		f.calls = append(f.calls, r.Method+" "+path)
+		kind, name, _ := strings.Cut(path, "/")
+		name = strings.TrimSuffix(name, "/versions")
+		key := kind + "/" + name
+		switch r.Method {
+		case http.MethodPost:
+			body, _ := io.ReadAll(r.Body)
+			f.last[key] = string(body)
+			f.versions[key]++
+			_, _ = fmt.Fprintf(w, `{"name":%q,"version":"%d"}`, name, f.versions[key])
+		case http.MethodGet:
+			if v, ok := f.versions[key]; ok {
+				_, _ = fmt.Fprintf(w, `{"name":%q,"default_version":"%d"}`, name, v)
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+		case http.MethodDelete:
+			delete(f.versions, key)
+			w.WriteHeader(http.StatusNoContent)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return f, srv.URL + "/api/projects"
+}
+
+func TestDeployDryRunNeedsNoAzure(t *testing.T) {
+	code, out, _ := exec("deploy", minimal, "--dry-run", "--state", filepath.Join(t.TempDir(), "state.json"))
+	if code != 0 || !strings.Contains(out, "nothing to do") {
+		t.Fatalf("code %d, out %q", code, out)
+	}
+	state := filepath.Join(t.TempDir(), "state.json")
+	code, out, _ = exec("deploy", write(t, deployDoc), "--dry-run", "--state", state)
+	for _, want := range []string{"+ finance/toolbox/search", "+ finance/agent/bot", "+ finance/agent/extra", "3 to create [environment: dev]"} {
+		if code != 0 || !strings.Contains(out, want) {
+			t.Fatalf("code %d, missing %q in %q", code, want, out)
+		}
+	}
+	if _, err := os.Stat(state); err == nil {
+		t.Fatal("a dry run must not write the state")
+	}
+}
+
+func TestDeployCreatesUpdatesAndGuardsDeletes(t *testing.T) {
+	t.Setenv("XFOUNDRY_ACCESS_TOKEN", "test-token")
+	f, base := newFoundryServer(t)
+	file := write(t, deployDoc)
+	state := filepath.Join(t.TempDir(), "state", "dev.json")
+	args := []string{"deploy", file, "--endpoint-base", base, "--state", state}
+
+	code, out, errOut := exec(args...)
+	if code != 0 || !strings.Contains(out, "deployed; state saved to") {
+		t.Fatalf("first deploy: %d %q %q", code, out, errOut)
+	}
+	if !strings.Contains(f.last["agents/bot"], "/toolboxes/search/versions/1/mcp") || !strings.Contains(f.last["toolboxes/search"], `"server_label":"graph"`) {
+		t.Fatalf("bodies: %v", f.last)
+	}
+	if data, _ := os.ReadFile(state); !strings.Contains(string(data), `"name": "bot"`) {
+		t.Fatalf("state = %s", data)
+	}
+
+	// Nothing changed: each item is only checked.
+	f.calls = nil
+	code, out, _ = exec(args...)
+	if code != 0 || !strings.Contains(out, "3 unchanged") || strings.Contains(strings.Join(f.calls, ","), "POST") {
+		t.Fatalf("second deploy: %d %q %v", code, out, f.calls)
+	}
+
+	// Removing an agent from the file needs approval before anything is deleted.
+	smaller := strings.Replace(deployDoc, ", {name: extra, instructions: more}", "", 1)
+	if err := os.WriteFile(file, []byte(smaller), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f.calls = nil
+	code, _, errOut = exec(args...)
+	if code != 1 || !strings.Contains(errOut, "XF025") || len(f.calls) != 0 {
+		t.Fatalf("blocked deploy: %d %q %v", code, errOut, f.calls)
+	}
+	if code, _, errOut = exec(append(args, "--dry-run")...); code != 1 || !strings.Contains(errOut, "XF025") {
+		t.Fatalf("a dry run reports the destructive change too: %d %q", code, errOut)
+	}
+	code, out, errOut = exec(append(args, "--allow-destroy")...)
+	if code != 0 || !strings.Contains(out, "delete finance/agent/extra") || errOut != "" {
+		t.Fatalf("approved deploy: %d %q %q", code, out, errOut)
+	}
+	if _, still := f.versions["agents/extra"]; still {
+		t.Fatal("the agent should be deleted")
+	}
+}
+
+func TestDeployFailures(t *testing.T) {
+	file := write(t, deployDoc)
+	state := filepath.Join(t.TempDir(), "state.json")
+	if code, _, errOut := exec("deploy", file, "--state", state); code != 2 || !strings.Contains(errOut, "--account") {
+		t.Fatalf("missing account: %d %q", code, errOut)
+	}
+	t.Setenv("XFOUNDRY_ACCESS_TOKEN", "wrong-token")
+	_, base := newFoundryServer(t)
+	if code, _, errOut := exec("deploy", file, "--endpoint-base", base, "--state", state); code != 1 || !strings.Contains(errOut, "401") {
+		t.Fatalf("rejected token: %d %q", code, errOut)
+	}
+	if code, _, errOut := exec("deploy", write(t, "name: x\n")); code != 1 || !strings.Contains(errOut, "XF101") {
+		t.Fatalf("invalid file: %d %q", code, errOut)
+	}
+	// A state file of another environment is refused.
+	other := filepath.Join(t.TempDir(), "state.json")
+	if err := os.WriteFile(other, []byte(`{"schemaVersion":1,"environment":"prod","items":[]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, errOut := exec("deploy", file, "--dry-run", "--state", other); code != 1 || !strings.Contains(errOut, "belongs to environment") {
+		t.Fatalf("wrong environment: %d %q", code, errOut)
+	}
+}
+
+func TestDeployDefaultsAndEndpointBase(t *testing.T) {
+	o := deployOptions{file: filepath.Join("a", "azure.yaml"), account: "acct"}
+	if o.projectEndpointBase() != "https://acct.services.ai.azure.com/api/projects" || o.stateFile("dev") != filepath.Join("a", ".xfoundry", "dev.state.json") {
+		t.Fatalf("%s %s", o.projectEndpointBase(), o.stateFile("dev"))
+	}
+	o.endpointBase, o.statePath = "http://x/base/", "mine.json"
+	if o.projectEndpointBase() != "http://x/base" || o.stateFile("dev") != "mine.json" {
+		t.Fatal("overrides")
+	}
+}
+
+func TestTokenSource(t *testing.T) {
+	t.Setenv("XFOUNDRY_ACCESS_TOKEN", "ready-made")
+	get, err := tokenSource()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tok, err := get(context.Background()); err != nil || tok != "ready-made" {
+		t.Fatalf("%q %v", tok, err)
+	}
+	// Without a ready-made token the default credential chain is built; it is only used on demand.
+	t.Setenv("XFOUNDRY_ACCESS_TOKEN", "")
+	if get, err := tokenSource(); err != nil || get == nil {
+		t.Fatalf("%v %v", get, err)
 	}
 }

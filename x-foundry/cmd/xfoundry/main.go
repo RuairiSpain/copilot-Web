@@ -31,6 +31,8 @@ commands:
                              print the ordered deployment plan
   generate <file> [--out infra] [--environment dev|test|prod]
                              write the Bicep infrastructure for the plan
+  deploy <file> [--account <name>] [--dry-run] [--allow-destroy] [--state <file>] [--environment dev|test|prod]
+                             create or update the agents and toolboxes in the Foundry projects
   schema                     print the x-foundry JSON Schema
 `
 
@@ -46,7 +48,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		out, _ := json.MarshalIndent(v, "", "  ")
 		fprintln(stdout, string(out))
 		return 0
-	case "validate", "plan", "generate":
+	case "validate", "plan", "generate", "deploy":
 		return runFile(args[0], args[1:], stdout, stderr)
 	case "-h", "--help", "help":
 		fprint(stdout, usage)
@@ -62,6 +64,11 @@ func runFile(command string, args []string, stdout, stderr io.Writer) int {
 	asJSON := fs.Bool("json", false, "print JSON")
 	environment := fs.String("environment", "", "preview an environment profile: dev, test or prod")
 	outDir := fs.String("out", "infra", "generate: directory to write the Bicep project to")
+	account := fs.String("account", os.Getenv("AZURE_AI_ACCOUNT_NAME"), "deploy: name of the Foundry resource (default: $AZURE_AI_ACCOUNT_NAME)")
+	endpointBase := fs.String("endpoint-base", "", "deploy: project endpoint base URL, <base>/<project> (for sovereign clouds and tests)")
+	statePath := fs.String("state", "", "deploy: state file (default: .xfoundry/<environment>.state.json next to the file)")
+	dryRun := fs.Bool("dry-run", false, "deploy: show what would change without calling Azure")
+	allowDestroy := fs.Bool("allow-destroy", false, "deploy: approve deleting agents and toolboxes that left the configuration (XF025)")
 	// Allow flags before or after the file name.
 	var files []string
 	for len(args) > 0 {
@@ -87,6 +94,9 @@ func runFile(command string, args []string, stdout, stderr io.Writer) int {
 	p := analysis.Plan
 	if command == "generate" {
 		return runGenerate(p, *outDir, stdout, stderr)
+	}
+	if command == "deploy" {
+		return runDeploy(p, deployOptions{file: files[0], account: *account, endpointBase: *endpointBase, statePath: *statePath, dryRun: *dryRun, allowDestroy: *allowDestroy}, stdout, stderr)
 	}
 	if command == "validate" {
 		printDiagnostics(p.Warnings, *asJSON, stdout, stderr)
