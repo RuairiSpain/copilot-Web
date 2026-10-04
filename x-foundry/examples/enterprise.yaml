@@ -30,9 +30,20 @@ x-foundry:
       allowed:
         - gpt-5
         - gpt-5-mini
+      # Declared (not derived) so a content-filter policy can be bound; DataZone SKUs
+      # because governance.dataResidency is set.
+      deployments:
+        - name: gpt-5
+          model: gpt-5
+          sku: DataZoneStandard
+          raiPolicy: contoso-content-filter
+        - name: gpt-5-mini
+          model: gpt-5-mini
+          sku: DataZoneStandard
+          raiPolicy: contoso-content-filter
     search:
       sku: standard
-      replicas: 2
+      replicas: 3
     inheritance:
       iq: true
     iq:
@@ -53,6 +64,9 @@ x-foundry:
     mcps:
       - name: graph
         endpoint: https://graph.contoso.com/mcp
+        allowedTools:
+          - search_users
+          - read_calendar
         authentication:
           mode: managedIdentity
     toolboxes:
@@ -123,6 +137,10 @@ x-foundry:
     purposes:
       - knowledge
       - evaluations
+  # Zone redundancy and continuous backup for agent state.
+  cosmos:
+    zoneRedundant: true
+    continuousBackup: true
   redis:
     enabled: true
   keyVault: {}
@@ -139,6 +157,14 @@ x-foundry:
     budgets:
       monthlyTokens: 100000000
       monthlyAmount: 20000
+    policyAssignments:
+      - require-no-local-auth
+      - allowed-locations
+    defenderPlans:
+      - servers
+      - appService
+      - cosmosDb
+      - ai
     modelPolicy:
       allowedModels:
         - gpt-5

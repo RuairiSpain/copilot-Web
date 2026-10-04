@@ -60,7 +60,7 @@ Severity is *error* unless marked (w).
 | XF120 | Project location differs from the Foundry resource or hub (w; error in private mode, where the VNet and workspace resources must share a region) |
 | XF121 | IP rules: private ranges are invalid in service firewalls; `0.0.0.0/0` and `::/0` are rejected |
 | XF122 | Outbound endpoints (MCP, connector, web source, federated issuer) must be https and not loopback or link-local |
-| XF123 | Search sizing: per-SKU replica/partition limits, 36 search units, free tier has no private endpoints, one replica in prod (w) |
+| XF123 | Search sizing: per-SKU replica/partition limits, 36 search units, free tier has no private endpoints |
 | XF124 | Gateway SKU in private mode: Consumption unsupported; BasicV2 cannot reach private backends (w) |
 | XF125 | Azure Cache for Redis can no longer be created; use Azure Managed Redis |
 | XF126 | Data residency forbids Global deployment SKUs (implicit deployments become `DataZoneStandard`) |
@@ -70,3 +70,8 @@ Severity is *error* unless marked (w).
 | XF130 | Identity type: `systemAssigned` creates no user-assigned identity, so name, existing resource and federated credentials are rejected; image pull from the managed registry needs a user-assigned identity (w) |
 | XF131 | Cosmos DB: throughput applies to provisioned capacity, not serverless |
 | XF132 | Runtime image has no pinned tag or digest, or uses `latest` (w) |
+
+## Well-Architected recommendations (XF3xx, warnings)
+
+`XF301`-`XF330` are environment-profile recommendations for `test` and `prod`; they are
+listed with their source in [waf-profiles.md](waf-profiles.md).

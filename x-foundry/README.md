@@ -105,6 +105,14 @@ they are stale):
 * `schemas/versions/1.0/` pins the version. `schemaVersion` defaults to `1.0`; a different
   major version is rejected (`XF103`).
 
+## Environment profiles
+
+`defaults.environment` is `dev` (default), `test` or `prod`. `dev` has no recommendations;
+`test` and `prod` report Azure Well-Architected recommendations (reliability, security,
+operations, cost) as warnings that never block. Preview a stricter profile with
+`xfoundry validate azure.yaml --environment prod`. See
+[docs/waf-profiles.md](docs/waf-profiles.md) for each recommendation and its source.
+
 ## Network: public unless a VNet is specified
 
 * **No network settings means no VNet and public endpoints** (`mode: public`). Access is

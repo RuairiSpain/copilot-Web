@@ -298,5 +298,6 @@ func Effective(norm *normalise.Config, declared *config.XFoundry) []diag.Diagnos
 	out = append(out, widening(declared)...)
 	out = append(out, validateGateway(norm)...)
 	out = append(out, requiredTags(norm)...)
+	out = append(out, Profile(norm, declared)...)
 	return diag.Dedupe(out)
 }

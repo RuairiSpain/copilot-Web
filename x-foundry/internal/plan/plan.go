@@ -5,7 +5,9 @@ package plan
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 
+	"github.com/RuairiSpain/copilot-Web/x-foundry/internal/config"
 	"github.com/RuairiSpain/copilot-Web/x-foundry/internal/diag"
 	"github.com/RuairiSpain/copilot-Web/x-foundry/internal/graph"
 	"github.com/RuairiSpain/copilot-Web/x-foundry/internal/normalise"
@@ -95,9 +97,35 @@ func build(cfg *normalise.Config, warnings []diag.Diagnostic) (*Plan, error) {
 	return &Plan{SchemaVersion: schemas.SchemaVersion, Config: cfg, Nodes: nodes, Layers: layers, Warnings: warnings}, nil
 }
 
+// Options adjust an analysis without editing the document.
+type Options struct {
+	// Environment overrides defaults.environment (dev, test or prod), for example to preview
+	// the Well-Architected recommendations of a stricter environment.
+	Environment string
+}
+
+// Environments are the valid environment profiles.
+var Environments = []string{"dev", "test", "prod"}
+
 // AnalyseParsed validates, normalises and plans an already-parsed document. Each phase
 // that reports errors stops the pipeline so later phases can rely on earlier guarantees.
-func AnalyseParsed(p *parser.Parsed) (Analysis, error) {
+func AnalyseParsed(p *parser.Parsed) (Analysis, error) { return AnalyseParsedWith(p, Options{}) }
+
+// AnalyseParsedWith is AnalyseParsed with options.
+func AnalyseParsedWith(p *parser.Parsed, opts Options) (Analysis, error) {
+	if opts.Environment != "" {
+		valid := false
+		for _, e := range Environments {
+			valid = valid || e == opts.Environment
+		}
+		if !valid {
+			return Analysis{}, fmt.Errorf("unknown environment %q (use dev, test or prod)", opts.Environment)
+		}
+		clone := *p
+		clone.Config = config.Clone(p.Config)
+		clone.Config.Defaults.Environment = opts.Environment
+		p = &clone
+	}
 	diags := validate.Declared(p.Config)
 	if diag.HasErrors(diags) {
 		return Analysis{Diagnostics: diags}, nil
@@ -124,7 +152,7 @@ func AnalyseParsed(p *parser.Parsed) (Analysis, error) {
 	return Analysis{Plan: pl, Diagnostics: diags}, nil
 }
 
-func analyse(p *parser.Parsed, err error) (Analysis, error) {
+func analyse(opts Options, p *parser.Parsed, err error) (Analysis, error) {
 	var failure *diag.Failure
 	if errors.As(err, &failure) {
 		return Analysis{Diagnostics: failure.Diagnostics}, nil
@@ -132,20 +160,28 @@ func analyse(p *parser.Parsed, err error) (Analysis, error) {
 	if err != nil {
 		return Analysis{}, err
 	}
-	return AnalyseParsed(p)
+	return AnalyseParsedWith(p, opts)
 }
 
 // AnalyseText analyses azure.yaml text.
 func AnalyseText(text, source string) (Analysis, error) {
-	return analyse(parser.ParseText(text, source))
+	p, err := parser.ParseText(text, source)
+	return analyse(Options{}, p, err)
 }
 
 // AnalyseFile analyses an azure.yaml file.
-func AnalyseFile(path string) (Analysis, error) { return analyse(parser.ParseFile(path)) }
+func AnalyseFile(path string) (Analysis, error) { return AnalyseFileWith(path, Options{}) }
+
+// AnalyseFileWith is AnalyseFile with options.
+func AnalyseFileWith(path string, opts Options) (Analysis, error) {
+	p, err := parser.ParseFile(path)
+	return analyse(opts, p, err)
+}
 
 // AnalyseMapping analyses an already-loaded azure.yaml mapping.
 func AnalyseMapping(doc any, source string) (Analysis, error) {
-	return analyse(parser.ParseMapping(doc, source))
+	p, err := parser.ParseMapping(doc, source)
+	return analyse(Options{}, p, err)
 }
 
 func must(a Analysis, err error) (*Plan, error) {

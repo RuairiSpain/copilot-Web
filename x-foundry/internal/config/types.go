@@ -66,7 +66,7 @@ type Defaults struct {
 	Location      string `json:"location,omitempty"`
 	ResourceGroup string `json:"resourceGroup,omitempty"`
 	NamingPrefix  string `json:"namingPrefix,omitempty"`
-	Environment   string `json:"environment" default:"dev"`
+	Environment   string `json:"environment" default:"dev"` // dev | test | prod
 	Tags          Tags   `json:"tags,omitempty"`
 }
 
@@ -767,6 +767,7 @@ type Cosmos struct {
 	CapacityMode        string `json:"capacityMode" default:"provisioned"`
 	Throughput          int    `json:"throughput" default:"3000"`
 	ZoneRedundant       bool   `json:"zoneRedundant"`
+	ContinuousBackup    bool   `json:"continuousBackup"`
 	PublicNetworkAccess bool   `json:"publicNetworkAccess"`
 	LocalAuthentication bool   `json:"localAuthentication"`
 	Tags                Tags   `json:"tags,omitempty"`
@@ -897,6 +898,7 @@ type Governance struct {
 	ResourceLocks     bool        `json:"resourceLocks" default:"true"`
 	RequiredTags      []string    `json:"requiredTags" default:"environment,project,managed-by"`
 	PolicyAssignments []string    `json:"policyAssignments,omitempty"`
+	DefenderPlans     []string    `json:"defenderPlans,omitempty"`
 	DataResidency     []string    `json:"dataResidency,omitempty"`
 }
 

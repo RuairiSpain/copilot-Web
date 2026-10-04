@@ -6,7 +6,7 @@ x-foundry:
   defaults:
     location: westeurope
     namingPrefix: fin
-    environment: prod
+    environment: test
     tags:
       cost-center: "4711"
   security:
@@ -38,6 +38,13 @@ x-foundry:
     allowed:
       - gpt-5
       - gpt-5-mini
+    deployments:
+      - name: gpt-5
+        model: gpt-5
+        raiPolicy: contoso-content-filter
+      - name: gpt-5-mini
+        model: gpt-5-mini
+        raiPolicy: contoso-content-filter
   storage:
     purposes:
       - knowledge
@@ -65,6 +72,8 @@ x-foundry:
       - name: ingest-worker
         type: subscription
         parent: ingest-events
+  evaluation:
+    enabled: true
   governance:
     requiredTags:
       - environment

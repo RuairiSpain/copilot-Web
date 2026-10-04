@@ -213,9 +213,13 @@
         },
         "environment": {
           "type": "string",
-          "description": "Environment identifier used in names and tags.",
+          "enum": [
+            "dev",
+            "test",
+            "prod"
+          ],
           "default": "dev",
-          "pattern": "^[a-z0-9-]{1,12}$"
+          "description": "Environment profile. dev has no recommendations. test adds security, operations and cost recommendations. prod adds the Azure Well-Architected recommendations for reliability, security, operations and cost. Recommendations are warnings; they never block a deployment."
         },
         "tags": {
           "$ref": "#/$defs/tags"
@@ -3541,6 +3545,21 @@
           "items": {
             "type": "string"
           }
+        },
+        "defenderPlans": {
+          "type": "array",
+          "default": [],
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "servers",
+              "appService",
+              "cosmosDb",
+              "ai"
+            ]
+          },
+          "description": "Microsoft Defender for Cloud plans to enable on the subscription."
         }
       },
       "additionalProperties": false
@@ -3712,6 +3731,11 @@
         },
         "tags": {
           "$ref": "#/$defs/tags"
+        },
+        "continuousBackup": {
+          "type": "boolean",
+          "default": false,
+          "description": "Continuous backup with 7-day point-in-time restore."
         }
       },
       "additionalProperties": false,

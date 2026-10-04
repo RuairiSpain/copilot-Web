@@ -389,7 +389,7 @@ var existingKinds = map[string]existingKind{
 	"storage":         {"Microsoft.Storage/storageAccounts", []string{"sku", "hierarchicalNamespace", "publicNetworkAccess", "localAuthentication", "retentionDays", "tags"}},
 	"redis":           {"Microsoft.Cache/(?:redis|redisEnterprise)", []string{"service", "sku", "capacity", "tlsOnly", "publicNetworkAccess", "persistence", "tags"}},
 	"keyVault":        {"Microsoft.KeyVault/vaults", []string{"sku", "rbacAuthorisation", "softDeleteDays", "purgeProtection", "publicNetworkAccess", "tags"}},
-	"cosmos":          {"Microsoft.DocumentDB/databaseAccounts", []string{"capacityMode", "throughput", "zoneRedundant", "publicNetworkAccess", "localAuthentication", "tags"}},
+	"cosmos":          {"Microsoft.DocumentDB/databaseAccounts", []string{"capacityMode", "throughput", "zoneRedundant", "continuousBackup", "publicNetworkAccess", "localAuthentication", "tags"}},
 	"managedIdentity": {"Microsoft.ManagedIdentity/userAssignedIdentities", []string{"tags"}},
 }
 
@@ -764,7 +764,6 @@ var searchLimits = map[string][2]int{ // sku -> max replicas, max partitions
 func searchSizing(cfg *config.XFoundry) []diag.Diagnostic {
 	var out []diag.Diagnostic
 	private := cfg.Security.Network.Mode == "private"
-	prod := cfg.Defaults.Environment == "prod"
 	for _, h := range scopes(cfg) {
 		s := h.search
 		if s == nil || !s.Enabled || s.ExistingResourceID != "" {
@@ -783,9 +782,6 @@ func searchSizing(cfg *config.XFoundry) []diag.Diagnostic {
 		}
 		if s.SKU == "free" && private {
 			out = append(out, diag.Err("XF123", where+".sku", "the free tier does not support private endpoints; use basic or higher in private mode"))
-		}
-		if prod && s.SKU != "free" && s.Replicas < 2 {
-			out = append(out, diag.Warn("XF123", where+".replicas", "a single replica has no availability SLA; use 2 replicas for read and 3 for read/write in prod"))
 		}
 	}
 	return out

@@ -23,8 +23,10 @@ func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 const usage = `usage: xfoundry <command> [flags] [file]
 
 commands:
-  validate <file> [--json]   validate x-foundry in an azure.yaml (exit 1 when invalid)
-  plan <file> [--json]       print the ordered deployment plan
+  validate <file> [--json] [--environment dev|test|prod]
+                             validate x-foundry in an azure.yaml (exit 1 when invalid)
+  plan <file> [--json] [--environment dev|test|prod]
+                             print the ordered deployment plan
   schema                     print the x-foundry JSON Schema
 `
 
@@ -54,6 +56,7 @@ func runFile(command string, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet(command, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	asJSON := fs.Bool("json", false, "print JSON")
+	environment := fs.String("environment", "", "preview an environment profile: dev, test or prod")
 	// Allow flags before or after the file name.
 	var files []string
 	for len(args) > 0 {
@@ -67,7 +70,7 @@ func runFile(command string, args []string, stdout, stderr io.Writer) int {
 		fprintf(stderr, "%s needs exactly one file\n", command)
 		return 2
 	}
-	analysis, err := plan.AnalyseFile(files[0])
+	analysis, err := plan.AnalyseFileWith(files[0], plan.Options{Environment: *environment})
 	if err != nil {
 		fprintln(stderr, err)
 		return 1
@@ -80,7 +83,10 @@ func runFile(command string, args []string, stdout, stderr io.Writer) int {
 	if command == "validate" {
 		printDiagnostics(p.Warnings, *asJSON, stdout, stderr)
 		if !*asJSON {
-			fprintf(stdout, "%s: valid (%d resources, %d warning(s))\n", files[0], len(p.Nodes), len(p.Warnings))
+			fprintf(stdout, "%s: valid (%d resources, %d warning(s)) [environment: %s]\n", files[0], len(p.Nodes), len(p.Warnings), p.Config.Environment)
+			if p.Config.Environment == "dev" {
+				fprintf(stdout, "note: dev has no recommendations; run with --environment test or --environment prod to preview the Well-Architected checks\n")
+			}
 		}
 		return 0
 	}

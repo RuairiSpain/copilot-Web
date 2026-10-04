@@ -24,6 +24,8 @@ type Diagnostic struct {
 	Severity Severity `json:"severity"`
 	Path     string   `json:"path,omitempty"`
 	Message  string   `json:"message"`
+	// Pillar is the Azure Well-Architected pillar of a recommendation (environment profiles).
+	Pillar string `json:"pillar,omitempty"`
 }
 
 // String renders "error XF001 at path: message".

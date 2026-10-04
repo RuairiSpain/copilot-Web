@@ -306,14 +306,7 @@ func TestHardeningRules(t *testing.T) {
 	}
 	MustOK(t, Run(t, `search: {sku: basic, replicas: 3}`))
 	MustOK(t, Run(t, `search: {sku: storage_optimized_l1, replicas: 3, partitions: 12}`))
-	prod := Run(t, `defaults: {environment: prod}`, `search: {sku: standard}`)
-	if !prod.OK() {
-		t.Fatalf("a prod warning must not fail:\n%s", Lines(prod.Diagnostics))
-	}
-	OnlyCodes(t, prod, "XF123")
-	OK(t, Run(t, `defaults: {environment: prod}`, `search: {sku: standard, replicas: 2}`))
 	OK(t, Run(t, `search: {sku: free}`, Public))
-	OK(t, Run(t, `defaults: {environment: prod}`, fmt.Sprintf(`search: {existingResourceId: "%s/Microsoft.Search/searchServices/s1"}`, arm)))
 	if !Codes(Run(t, `search: {sku: storage_optimised_l1}`), "")["XF102"] {
 		t.Fatal("the British spelling is not a valid SKU")
 	}

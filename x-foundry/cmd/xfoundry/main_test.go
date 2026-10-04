@@ -114,3 +114,25 @@ func TestUsageAndErrors(t *testing.T) {
 		t.Fatalf("missing file: %d %q", code, errOut)
 	}
 }
+
+func TestEnvironmentFlag(t *testing.T) {
+	code, out, errOut := exec("validate", minimal, "--environment", "prod")
+	if code != 0 || !strings.Contains(out, "[environment: prod]") || !strings.Contains(errOut, "XF310") || strings.Contains(out, "note:") {
+		t.Fatalf("code %d, out %q, err %q", code, out, errOut)
+	}
+	code, out, _ = exec("validate", minimal)
+	if code != 0 || !strings.Contains(out, "[environment: dev]") || !strings.Contains(out, "--environment test") {
+		t.Fatalf("dev should hint at the stricter profiles: %q", out)
+	}
+	code, out, _ = exec("validate", minimal, "--environment", "test", "--json")
+	var ds []map[string]string
+	if code != 0 || json.Unmarshal([]byte(out), &ds) != nil || len(ds) == 0 || ds[0]["pillar"] == "" {
+		t.Fatalf("code %d, out %q", code, out)
+	}
+	if code, _, errOut := exec("validate", minimal, "--environment", "staging"); code != 1 || !strings.Contains(errOut, "unknown environment") {
+		t.Fatalf("an unknown environment must fail: %d %q", code, errOut)
+	}
+	if code, _, _ := exec("plan", minimal, "--environment", "prod"); code != 0 {
+		t.Fatalf("plan --environment: %d", code)
+	}
+}
