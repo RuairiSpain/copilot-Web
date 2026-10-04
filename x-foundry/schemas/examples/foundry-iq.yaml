@@ -1,0 +1,84 @@
+# Foundry IQ: knowledge bases over SharePoint and Blob, hybrid retrieval with security filters.
+name: policy-assistant
+x-foundry:
+  topology:
+    mode: standalone
+  defaults:
+    location: westeurope
+  security:
+    roles:
+      admins:
+        - Foundry-Admins
+  projects:
+    - name: policies
+      agents:
+        - name: policy-agent
+          model: gpt-5
+          instructions: Answer using the policies knowledge base only.
+          knowledgeBases:
+            - policies
+  models:
+    default: gpt-5
+    allowed:
+      - gpt-5
+    deployments:
+      - name: embeddings
+        model: text-embedding-3-large
+        capacity: 20
+  search:
+    sku: standard
+    semanticRanking: true
+  connectors:
+    - name: hr-sharepoint
+      type: sharepoint
+  iq:
+    knowledgeBases:
+      - name: policies
+        description: Company policies
+        sources:
+          - name: hr-site
+            type: sharepoint
+            site: hr
+            connection: hr-sharepoint
+          - name: policy-files
+            type: blob
+            container: policies
+        index:
+          chunking:
+            size: 1024
+            overlap: 128
+          vector:
+            model: text-embedding-3-large
+            deployment: embeddings
+            dimensions: 3072
+          fields:
+            - name: department
+              type: Edm.String
+              filterable: true
+              facetable: true
+            - name: createdDate
+              type: Edm.DateTimeOffset
+              sortable: true
+              filterable: true
+            - name: groupIds
+              type: Collection(Edm.String)
+              filterable: true
+        retrieval:
+          mode: hybrid
+          semanticRanking: true
+          topK: 20
+          vectorWeight: 0.7
+          keywordWeight: 0.3
+          filterFields:
+            - department
+        routing:
+          strategy: semantic
+          fallback: keyword
+          threshold: 0.75
+        access:
+          allowedGroups:
+            - Policy-Readers
+          filterClaims:
+            groups: groupIds
+        refresh:
+          schedule: "0 2 * * *"

@@ -1,0 +1,71 @@
+# Standalone deployment with private networking, shared platform services and governance.
+name: finance-ai
+x-foundry:
+  topology:
+    mode: standalone
+  defaults:
+    location: westeurope
+    namingPrefix: fin
+    environment: prod
+    tags:
+      cost-center: "4711"
+  security:
+    network:
+      mode: private
+      allowedDomains:
+        - contoso.com
+      allowedIps:
+        - 10.0.0.0/8
+    roles:
+      admins:
+        - Foundry-Admins
+      developers:
+        - Foundry-Devs
+      consumers:
+        - Foundry-Users
+      operators:
+        - Foundry-Operations
+  projects:
+    - name: finance
+      roles:
+        developers:
+          - Finance-AI-Dev
+        consumers:
+          - Finance-AI-Users
+  models:
+    default: gpt-5
+    allowed:
+      - gpt-5
+      - gpt-5-mini
+  storage:
+    purposes:
+      - knowledge
+      - documents
+      - evaluations
+  redis:
+    enabled: true
+    sku: balanced
+  keyVault:
+    enabled: true
+  managedIdentity:
+    enabled: true
+  observability:
+    retentionDays: 90
+  events:
+    enabled: true
+    entities:
+      - name: ingest-events
+        type: topic
+      - name: ingest-worker
+        type: subscription
+        parent: ingest-events
+  governance:
+    requiredTags:
+      - environment
+      - project
+      - managed-by
+      - cost-center
+    budgets:
+      monthlyAmount: 5000
+      monthlyTokens: 100000000
+      thresholds: [50, 80, 100]

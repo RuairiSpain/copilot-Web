@@ -1,0 +1,13 @@
+# The smallest valid configuration: one standalone Foundry project.
+name: finance-ai
+x-foundry:
+  topology:
+    mode: standalone
+  security:
+    roles:
+      admins:
+        - Foundry-Admins
+      developers:
+        - Foundry-Devs
+  projects:
+    - name: finance

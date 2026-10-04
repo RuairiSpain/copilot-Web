@@ -1,0 +1,41 @@
+name: x-foundry-ci
+
+# GitHub only reads workflows from the repository root, so this file lives here and
+# points at the x-foundry/ folder.
+on:
+  pull_request:
+    paths:
+      - "x-foundry/**"
+      - ".github/workflows/x-foundry-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "x-foundry/**"
+      - ".github/workflows/x-foundry-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: lint, schemas and tests (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.13"]
+    defaults:
+      run:
+        working-directory: x-foundry
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: x-foundry/pyproject.toml
+      - run: python -m pip install -e ".[dev]"
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: python scripts/build_schemas.py --check
+      - run: python -m pytest --cov
