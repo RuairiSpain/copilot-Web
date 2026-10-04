@@ -7,26 +7,26 @@ Azure Advisor, the Bicep linter and Checkov. Generated from `rules/catalog/`. Th
 each decision is in the rule's `overlap.rationale`; per-group research notes, unverified items and
 proposed new rules are in `docs/overlap/`.
 
-An empty Defender or Advisor cell means "not verified", not "no equivalent": those sources were not
-reachable during Phase 0. See `docs/development/hand-offs/phase-0.md`.
+An empty Defender or Advisor cell means "not verified", not "no equivalent", unless the rule's own
+notes say otherwise. A rule with no decision yet is counted as unresearched.
 
 ## Decisions by group
 
-| Group | reuse | wrap | adapt | native | drop | total |
-|---|---|---|---|---|---|---|
-| CFG | 0 | 0 | 3 | 9 | 0 | 12 |
-| COST | 0 | 0 | 0 | 4 | 0 | 4 |
-| DEP | 0 | 1 | 3 | 8 | 0 | 12 |
-| ENV | 0 | 0 | 0 | 4 | 0 | 4 |
-| GW | 0 | 0 | 0 | 6 | 0 | 6 |
-| IDN | 0 | 0 | 3 | 3 | 0 | 6 |
-| IQ | 0 | 0 | 1 | 11 | 0 | 12 |
-| NET | 0 | 0 | 7 | 4 | 0 | 11 |
-| OPS | 0 | 0 | 7 | 3 | 0 | 10 |
-| REL | 0 | 0 | 4 | 5 | 0 | 9 |
-| RUN | 0 | 0 | 3 | 5 | 0 | 8 |
-| SEC | 1 | 1 | 6 | 6 | 0 | 14 |
-| **all** | 1 | 2 | 37 | 68 | 0 | 108 |
+| Group | reuse | wrap | adapt | native | drop | unresearched | total |
+|---|---|---|---|---|---|---|---|
+| CFG | 0 | 0 | 3 | 9 | 0 | 0 | 12 |
+| COST | 0 | 0 | 0 | 4 | 0 | 0 | 4 |
+| DEP | 0 | 1 | 3 | 8 | 0 | 0 | 12 |
+| ENV | 0 | 0 | 0 | 4 | 0 | 0 | 4 |
+| GW | 0 | 0 | 0 | 6 | 0 | 0 | 6 |
+| IDN | 0 | 0 | 3 | 3 | 0 | 0 | 6 |
+| IQ | 0 | 0 | 1 | 11 | 0 | 0 | 12 |
+| NET | 0 | 0 | 7 | 4 | 0 | 0 | 11 |
+| OPS | 0 | 0 | 7 | 3 | 0 | 0 | 10 |
+| REL | 0 | 0 | 4 | 5 | 0 | 0 | 9 |
+| RUN | 0 | 0 | 3 | 5 | 0 | 0 | 8 |
+| SEC | 1 | 1 | 6 | 6 | 0 | 0 | 14 |
+| **all** | 1 | 2 | 37 | 68 | 0 | 0 | 108 |
 
 ## Per-rule matrix
 

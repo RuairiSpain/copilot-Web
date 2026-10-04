@@ -2,7 +2,7 @@ package catalog
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -10,7 +10,7 @@ import (
 // with the external rule IDs it maps to. Output depends only on rules.
 func OverlapMatrix(rules []Rule) string {
 	sorted := append([]Rule(nil), rules...)
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i].ID < sorted[j].ID })
+	slices.SortFunc(sorted, func(a, b Rule) int { return strings.Compare(a.ID, b.ID) })
 
 	decisions := []string{"reuse", "wrap", "adapt", "native", "drop"}
 	groups := []string{}
@@ -30,15 +30,16 @@ func OverlapMatrix(rules []Rule) string {
 	b.WriteString("Azure Advisor, the Bicep linter and Checkov. Generated from `rules/catalog/`. The reasoning behind\n")
 	b.WriteString("each decision is in the rule's `overlap.rationale`; per-group research notes, unverified items and\n")
 	b.WriteString("proposed new rules are in `docs/overlap/`.\n\n")
-	b.WriteString("An empty Defender or Advisor cell means \"not verified\", not \"no equivalent\": those sources were not\n")
-	b.WriteString("reachable during Phase 0. See `docs/development/hand-offs/phase-0.md`.\n\n")
+	b.WriteString("An empty Defender or Advisor cell means \"not verified\", not \"no equivalent\", unless the rule's own\n")
+	b.WriteString("notes say otherwise. A rule with no decision yet is counted as unresearched.\n\n")
 
-	b.WriteString("## Decisions by group\n\n| Group | reuse | wrap | adapt | native | drop | total |\n|---|---|---|---|---|---|---|\n")
+	b.WriteString("## Decisions by group\n\n| Group | reuse | wrap | adapt | native | drop | unresearched | total |\n|---|---|---|---|---|---|---|---|\n")
 	totals := map[string]int{}
+	cols := append(append([]string(nil), decisions...), "")
 	for _, g := range groups {
-		fmt.Fprintf(&b, "| %s", g)
+		fmt.Fprintf(&b, "| %s", esc(g))
 		n := 0
-		for _, d := range decisions {
+		for _, d := range cols {
 			c := byGroup[g][d]
 			totals[d] += c
 			n += c
@@ -48,7 +49,7 @@ func OverlapMatrix(rules []Rule) string {
 	}
 	b.WriteString("| **all**")
 	all := 0
-	for _, d := range decisions {
+	for _, d := range cols {
 		all += totals[d]
 		fmt.Fprintf(&b, " | %d", totals[d])
 	}
@@ -57,7 +58,7 @@ func OverlapMatrix(rules []Rule) string {
 	b.WriteString("\n## Per-rule matrix\n\n| Rule | Decision | Coverage | PSRule | Azure Policy | Bicep linter | Checkov | Defender | Advisor |\n|---|---|---|---|---|---|---|---|---|\n")
 	for _, r := range sorted {
 		o := r.Overlap
-		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s | %s | %s | %s |\n", r.ID, dash(o.Decision), dash(o.Coverage),
+		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s | %s | %s | %s |\n", esc(r.ID), esc(dash(o.Decision)), esc(dash(o.Coverage)),
 			ids(o.PSRule), ids(o.AzurePolicy), ids(o.BicepLinter), ids(o.Checkov), ids(o.Defender), ids(o.Advisor))
 	}
 	return b.String()

@@ -7,16 +7,16 @@ Azure Advisor, the Bicep linter and Checkov. Generated from `rules/catalog/`. Th
 each decision is in the rule's `overlap.rationale`; per-group research notes, unverified items and
 proposed new rules are in `docs/overlap/`.
 
-An empty Defender or Advisor cell means "not verified", not "no equivalent": those sources were not
-reachable during Phase 0. See `docs/development/hand-offs/phase-0.md`.
+An empty Defender or Advisor cell means "not verified", not "no equivalent", unless the rule's own
+notes say otherwise. A rule with no decision yet is counted as unresearched.
 
 ## Decisions by group
 
-| Group | reuse | wrap | adapt | native | drop | total |
-|---|---|---|---|---|---|---|
-| CFG | 0 | 1 | 0 | 0 | 0 | 1 |
-| SEC | 0 | 0 | 1 | 1 | 0 | 2 |
-| **all** | 0 | 1 | 1 | 1 | 0 | 3 |
+| Group | reuse | wrap | adapt | native | drop | unresearched | total |
+|---|---|---|---|---|---|---|---|
+| CFG | 0 | 1 | 0 | 0 | 0 | 1 | 2 |
+| SEC | 0 | 0 | 1 | 1 | 0 | 0 | 2 |
+| **all** | 0 | 1 | 1 | 1 | 0 | 1 | 4 |
 
 ## Per-rule matrix
 

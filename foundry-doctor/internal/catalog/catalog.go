@@ -6,16 +6,28 @@ package catalog
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"path"
-	"sort"
+	"slices"
 	"strings"
+	"time"
 
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
+
+// maxRuleFileBytes bounds the size of one rule file; real files are a few KiB.
+const maxRuleFileBytes = 1 << 20
+
+// InvalidError reports catalogue content that is malformed, as opposed to an I/O failure.
+// Callers use errors.As to tell the two apart (the CLI maps content problems to exit 1 and I/O to 2).
+type InvalidError struct{ Problems []error }
+
+func (e *InvalidError) Error() string   { return errors.Join(e.Problems...).Error() }
+func (e *InvalidError) Unwrap() []error { return e.Problems }
 
 // Status is the lifecycle state of a rule in the catalogue.
 type Status string
@@ -125,7 +137,6 @@ var (
 	inputPlanes  = set("azure.yaml", "bicep-arm", "azd-env", "control-plane", "data-plane", "network", "external-tool")
 	basisValues  = set("platform", "security", "waf", "wara", "opinion", "reliability", "cost", "operations")
 	phaseValues  = set("0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "later", "future")
-	dateLen      = len("2006-01-02")
 	errEmptyTree = errors.New("catalogue is empty")
 )
 
@@ -156,34 +167,73 @@ func parseID(id string) (string, bool) {
 	return parts[1], true
 }
 
-// Load reads every rules/catalog/<group>/<ID>.yaml under root in fsys.
-// Rules are returned sorted by ID. Unknown YAML fields are errors.
-func Load(fsys fs.FS, root string) ([]Rule, error) {
+// Load reads every <root>/<group>/<ID>.yaml in fsys. Rules are returned sorted by ID.
+//
+// Loading is strict. Unknown YAML fields, duplicate keys, empty files, files with more than one
+// YAML document, symlinks, files over 1 MiB, files that are not .yaml, and files not exactly two
+// levels below root are reported as an *InvalidError. I/O failures are returned as is.
+func Load(ctx context.Context, fsys fs.FS, root string) ([]Rule, error) {
 	var rules []Rule
-	var errs []error
+	var problems []error
+	bad := func(format string, a ...any) { problems = append(problems, fmt.Errorf(format, a...)) }
+
 	err := fs.WalkDir(fsys, root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if d.IsDir() || path.Ext(p) != ".yaml" {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if d.IsDir() {
 			return nil
 		}
-		b, err := fs.ReadFile(fsys, p)
+		if d.Type()&fs.ModeSymlink != 0 {
+			bad("%s: symlinks are not allowed in the catalogue", p)
+			return nil
+		}
+		if path.Ext(p) != ".yaml" {
+			bad("%s: unexpected file; the catalogue holds only .yaml rule files", p)
+			return nil
+		}
+		rel := strings.TrimPrefix(strings.TrimPrefix(p, root), "/")
+		if strings.Count(rel, "/") != 1 {
+			bad("%s: rule files must be exactly <group>/<ID>.yaml below the catalogue root", p)
+			return nil
+		}
+		f, err := fsys.Open(p)
 		if err != nil {
 			return err
+		}
+		defer f.Close()
+		b, err := io.ReadAll(io.LimitReader(f, maxRuleFileBytes+1))
+		if err != nil {
+			return err
+		}
+		if len(b) > maxRuleFileBytes {
+			bad("%s: file exceeds %d bytes", p, maxRuleFileBytes)
+			return nil
 		}
 		var r Rule
 		dec := yaml.NewDecoder(bytes.NewReader(b))
 		dec.KnownFields(true)
-		if err := dec.Decode(&r); err != nil && !errors.Is(err, io.EOF) {
-			errs = append(errs, fmt.Errorf("%s: %w", p, err))
+		if err := dec.Decode(&r); err != nil {
+			if errors.Is(err, io.EOF) {
+				bad("%s: file is empty", p)
+			} else {
+				bad("%s: %w", p, err)
+			}
+			return nil
+		}
+		var extra yaml.Node
+		if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
+			bad("%s: more than one YAML document in a rule file", p)
 			return nil
 		}
 		if want := strings.TrimSuffix(path.Base(p), ".yaml"); want != r.ID {
-			errs = append(errs, fmt.Errorf("%s: file name must equal rule id %q, got id %q", p, want, r.ID))
+			bad("%s: file name must equal rule id %q, got id %q", p, want, r.ID)
 		}
 		if g, ok := parseID(r.ID); ok && path.Base(path.Dir(p)) != strings.ToLower(g) {
-			errs = append(errs, fmt.Errorf("%s: rule %s must live in directory %q", p, r.ID, strings.ToLower(g)))
+			bad("%s: rule %s must live in directory %q", p, r.ID, strings.ToLower(g))
 		}
 		rules = append(rules, r)
 		return nil
@@ -191,10 +241,10 @@ func Load(fsys fs.FS, root string) ([]Rule, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(errs) > 0 {
-		return nil, errors.Join(errs...)
+	if len(problems) > 0 {
+		return nil, &InvalidError{Problems: problems}
 	}
-	sort.Slice(rules, func(i, j int) bool { return rules[i].ID < rules[j].ID })
+	slices.SortFunc(rules, func(a, b Rule) int { return strings.Compare(a.ID, b.ID) })
 	return rules, nil
 }
 
@@ -241,6 +291,14 @@ func Validate(rules []Rule, opt Options) error {
 		if len(r.Phases) == 0 {
 			add(r, "phases is required")
 		}
+		for _, l := range []struct {
+			name string
+			list []string
+		}{{"phases", r.Phases}, {"inputs", r.Inputs}, {"basis", r.Basis}} {
+			if len(slices.Compact(slices.Sorted(slices.Values(l.list)))) != len(l.list) {
+				add(r, "%s contains duplicate entries", l.name)
+			}
+		}
 		for _, p := range r.Phases {
 			if !phaseValues[p] {
 				add(r, "unknown phase %q", p)
@@ -278,8 +336,8 @@ func validateSources(r Rule, add func(Rule, string, ...any)) {
 		if !strings.HasPrefix(s.URL, "https://") {
 			add(r, "sources[%d].url must be https", i)
 		}
-		if len(s.LastVerified) != dateLen || s.LastVerified[4] != '-' || s.LastVerified[7] != '-' {
-			add(r, "sources[%d].lastVerified must be YYYY-MM-DD", i)
+		if _, err := time.Parse("2006-01-02", s.LastVerified); err != nil {
+			add(r, "sources[%d].lastVerified must be a valid YYYY-MM-DD date, got %q", i, s.LastVerified)
 		}
 	}
 }
@@ -314,9 +372,9 @@ func validateResearched(r Rule, add func(Rule, string, ...any)) {
 	if !categories[r.Category] {
 		add(r, "category must be must-have|nice-to-have")
 	}
-	for name, v := range map[string]string{"dev": r.Severity.Dev, "test": r.Severity.Test, "prod": r.Severity.Prod} {
-		if !severities[v] {
-			add(r, "severity.%s must be info|warning|error, got %q", name, v)
+	for _, sv := range []struct{ name, value string }{{"dev", r.Severity.Dev}, {"test", r.Severity.Test}, {"prod", r.Severity.Prod}} {
+		if !severities[sv.value] {
+			add(r, "severity.%s must be info|warning|error, got %q", sv.name, sv.value)
 		}
 	}
 	if contains(r.Basis, "platform") {
@@ -333,6 +391,18 @@ func validateResearched(r Rule, add func(Rule, string, ...any)) {
 	if strings.TrimSpace(r.Recommendation) == "" {
 		add(r, "recommendation is required")
 	}
+	if strings.TrimSpace(r.Description) == "" {
+		add(r, "description is required")
+	}
+	if len(r.Tests.Positive) == 0 || len(r.Tests.Negative) == 0 {
+		add(r, "tests.positive and tests.negative need at least one scenario each")
+	}
+	if strings.TrimSpace(r.Implementation.Package) == "" {
+		add(r, "implementation.package is required")
+	}
+	if r.Compatibility.Azd == "" && len(r.Compatibility.APIVersions) == 0 && len(r.Compatibility.Extensions) == 0 {
+		add(r, "compatibility must name an azd version, extension versions or API versions")
+	}
 	if !owners[r.Implementation.Owner] {
 		add(r, "implementation.owner must be one of native|psrule|azure-policy|defender|advisor|bicep|checkov|adapter")
 	}
@@ -348,11 +418,4 @@ func validateResearched(r Rule, add func(Rule, string, ...any)) {
 	}
 }
 
-func contains(s []string, v string) bool {
-	for _, x := range s {
-		if x == v {
-			return true
-		}
-	}
-	return false
-}
+func contains(s []string, v string) bool { return slices.Contains(s, v) }
