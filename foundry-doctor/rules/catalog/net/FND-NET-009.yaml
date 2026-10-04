@@ -2,5 +2,124 @@ id: FND-NET-009
 version: 1
 group: NET
 title: "APIM SKU supports required private backend connectivity"
-status: proposed
+description: >-
+  When Azure API Management fronts Foundry (AI gateway pattern) in a network-isolated design, its tier
+  must support the private connectivity the design needs. Documented support: classic VNet injection
+  (external or internal) on Developer and Premium; Premium v2 VNet injection; outbound VNet
+  integration to reach private backends on Standard v2 and Premium v2; inbound private endpoint on
+  Developer, Basic, Standard, Standard v2, Premium and Premium v2. The Consumption tier and Basic v2
+  are not listed for any of these models. The rule compares the APIM sku.name with the connectivity
+  the template configures or the design declares, and fails on a combination the documentation does
+  not support.
+status: verified
 phases: ["8"]
+inputs: ["bicep-arm", "control-plane"]
+basis: ["platform"]
+category: must-have
+pillar: reliability
+severity:
+  dev: error
+  test: error
+  prod: error
+compatibility:
+  azd: "not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked)"
+  extensions: {}
+  apiVersions:
+    - "Microsoft.ApiManagement/service@2025-09-01-preview (sku.name incl. PremiumV2)"
+    - "Microsoft.ApiManagement/service@2024-05-01 (stable; no PremiumV2 in enum)"
+evidence:
+  description: >-
+    Read Microsoft.ApiManagement/service sku.name, virtualNetworkType (None, External, Internal),
+    virtualNetworkConfiguration.subnetResourceId and any Microsoft.Network/privateEndpoints targeting
+    it. Required connectivity is taken from the template: VNet type External/Internal needs Developer
+    or Premium (classic); a V2 subnet delegated to Microsoft.Web/serverFarms is outbound integration
+    (StandardV2 or PremiumV2) and one delegated to Microsoft.Web/hostingEnvironments is injection
+    (PremiumV2 only); an inbound private endpoint needs one of the six tiers above. Fail when the SKU is not in the supported set for a configured model. When the design only
+    declares intent (Foundry private plus an APIM gateway connection with no network settings), emit
+    uncertain/skipped, because the needed model cannot be derived without a declaration. Preview
+    AI Gateway tier resources are out of scope until they reach GA.
+  confidence: likely
+recommendation: >-
+  Choose the tier for the connectivity model: Standard v2 or Premium v2 for outbound integration to a
+  private backend, Premium v2 or classic Premium/Developer for VNet injection, and any tier in the
+  inbound private endpoint list for private clients. Do not plan on Consumption for private networking.
+fix: |
+  resource apim 'Microsoft.ApiManagement/service@2025-09-01-preview' = {
+    name: apimName
+    location: location
+    sku: { name: 'StandardV2', capacity: 1 } // outbound VNet integration is documented for Standard v2 and Premium v2
+    properties: {
+      publisherEmail: publisherEmail
+      publisherName: publisherName
+      // then configure the delegated integration subnet as described in the API Management VNet integration article
+    }
+  }
+sources:
+  - url: https://learn.microsoft.com/azure/api-management/virtual-network-concepts
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-docs/articles/api-management/virtual-network-concepts.md (ms.date 11/13/2025)
+    note: Networking models by supported tier (table); VNet integration for v2 tiers; inbound private endpoint tiers.
+  - url: https://learn.microsoft.com/azure/api-management/private-endpoint
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-docs/articles/api-management/private-endpoint.md (ms.date 06/09/2026)
+    note: Inbound private endpoint availability and limitations (classic tiers cannot combine with VNet injection).
+  - url: https://learn.microsoft.com/azure/api-management/integrate-vnet-outbound
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-docs/articles/api-management/integrate-vnet-outbound.md (ms.date 12/04/2025) and inject-vnet-v2.md (ms.date 10/08/2025)
+    note: V2 integration subnet delegated to Microsoft.Web/serverFarms; Premium v2 injection subnet delegated to Microsoft.Web/hostingEnvironments.
+  - url: https://learn.microsoft.com/azure/foundry/agents/how-to/ai-gateway
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/ai-gateway.md (Supported configurations section)
+    note: For full network isolation deploy Foundry and API Management together (template 16) or a self-hosted gateway reachable in the Agent Service VNet; prompt agents only.
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/preview/2025-09-01-preview/openapi.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/preview/2025-09-01-preview/openapi.json
+    note: SkuType enum Developer, Standard, Premium, Basic, Consumption, Isolated, BasicV2, StandardV2, PremiumV2; VirtualNetworkType None/External/Internal; ApiManagementServiceBaseProperties virtualNetworkConfiguration, privateEndpointConnections.
+overlap:
+  decision: adapt
+  coverage: partial
+  rationale: >-
+    The built-in policy "API Management service should use a SKU that supports virtual networks"
+    defaults to Developer, Premium and Isolated (classic injection) and does not cover v2 integration or
+    the inbound private endpoint tiers. Checkov CKV_AZURE_107 and CKV_AZURE_174 test VNet use and public
+    access, not tier fit. PSRule has no APIM networking rule in the local clone. Foundry Doctor adapts
+    the SKU test to the full documented matrix and ties it to the connectivity the Foundry gateway
+    design needs. Evidence is a tier-versus-model comparison.
+  psrule: []
+  azurePolicy:
+    - "73ef9241-5d81-4cd4-b483-8443d1730fe5 (API Management service should use a SKU that supports virtual networks)"
+    - "ef619a2c-cc4d-4d03-b2ba-8c94a834d85b (API Management services should use a virtual network)"
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov:
+    - CKV_AZURE_107
+    - CKV_AZURE_174
+implementation:
+  owner: native
+  package: internal/rules/net
+testability: >-
+  Offline with a table-driven tier by model matrix and fixtures. Declared design intent (config) is
+  needed to cover the case where the template sets no network properties.
+tests:
+  positive:
+    - consumption-with-private-endpoint
+    - standard-classic-with-vnet-injection
+    - basic-with-vnet-injection
+  negative:
+    - standardv2-with-vnet-integration
+    - premium-with-internal-vnet
+    - developer-with-inbound-private-endpoint
+  skipped:
+    - apim-network-model-not-declared
+    - ai-gateway-tier-preview-resource
+notes: >-
+  Unverified: the exact ARM properties that express v2 outbound integration versus Premium v2
+  injection (the articles describe the portal and the subnet delegations Microsoft.Web/serverFarms and
+  Microsoft.Web/hostingEnvironments but give no ARM property names; the spec shows
+  virtualNetworkType and virtualNetworkConfiguration only).
+  Unverified: whether Basic v2 supports inbound private endpoints (the availability include lists
+  Basic v2 for the article, but the table does not list it for any model); the rule reports it as
+  uncertain, not as a failure. Phase 8 rule: premium v2 VNet injection and the AI Gateway tier are
+  preview or recently changed; re-verify before implementation. The 2025-09-01-preview spec was read for
+  the SKU names; PremiumV2 is absent from the 2024-05-01 stable enum.
