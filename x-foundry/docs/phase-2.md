@@ -65,6 +65,9 @@ resource group.
   | the deploying identity (`principalId` parameter) | Foundry User | Foundry resource |
   | each project's identity (standard setup) | Storage Blob Data Contributor and Owner (container-limited), Cosmos DB Operator and Data Contributor, Search Index Data Contributor and Search Service Contributor | its Storage, Cosmos DB and Search |
 
+  Each role assignment in `resources.bicep` has a comment naming the role and who gets it, and
+  the same text is the description of the role assignment in Azure, so the GUIDs stay readable.
+
   The Foundry role GUIDs come from the Azure built-in roles reference; the others from the
   Foundry sample templates. The ordering of the project identity's assignments around the
   capability host follows those samples.

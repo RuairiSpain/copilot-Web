@@ -54,6 +54,19 @@ const (
 	roleMonitoringReader       = "43d0d8ad-25c7-4714-9337-8ba259a9fe05"
 )
 
+// roleNames are the display names of the built-in roles the generator assigns.
+var roleNames = map[string]string{
+	roleFoundryAccountOwner:    "Foundry Account Owner",
+	roleFoundryProjectManager:  "Foundry Project Manager",
+	roleFoundryUser:            "Foundry User",
+	roleStorageBlobContributor: "Storage Blob Data Contributor",
+	roleCosmosDBOperator:       "Cosmos DB Operator",
+	roleSearchIndexContributor: "Search Index Data Contributor",
+	roleSearchServiceContrib:   "Search Service Contributor",
+	roleReader:                 "Reader",
+	roleMonitoringReader:       "Monitoring Reader",
+}
+
 // ref is how generated code refers to a resource, whether it is created or already exists.
 type ref struct {
 	id, name, location string // Bicep expressions
@@ -793,12 +806,27 @@ func (g *gen) connections(p *normalise.EffectiveProject) string {
 	return "[\n" + strings.Join(items, "\n") + "\n    ]"
 }
 
-// role emits a role assignment module and returns its symbol.
-func (g *gen) role(kind string, params []param, scope string, deps []string) string {
+// role emits a role assignment module and returns its symbol. The label names the role and
+// who gets it; it becomes a comment above the module and, where the resource supports it, the
+// description of the role assignment, so the GUIDs are readable.
+func (g *gen) role(kind, label string, params []param, scope string, deps []string) string {
 	g.raCount++
 	sym := symbol(fmt.Sprintf("ra_%03d", g.raCount), g.used)
+	g.body.WriteString("// " + label + "\n")
+	if kind != "ra-cosmos-sql" {
+		params = append(params, param{"assignmentDescription", str(label)})
+	}
 	g.module(sym, kind, "", scope, params, deps)
 	return sym
+}
+
+// roleLabel is "<role name> for <who>".
+func roleLabel(roleID, who string) string {
+	name := roleNames[roleID]
+	if name == "" {
+		name = roleID
+	}
+	return name + " for " + who
 }
 
 // resourceScope is the scope expression for a role assignment on a resource.
@@ -820,14 +848,15 @@ func (g *gen) emitCapabilityHost(node plan.Node) {
 		return
 	}
 	principal := projectSym + ".outputs.principalId"
+	who := "the " + p.Name + " project identity"
 	base := []param{{"principalId", principal}, {"principalType", "'ServicePrincipal'"}}
 	with := func(extra ...param) []param { return append(append([]param{}, extra...), base...) }
 	var before []string
 	before = append(before,
-		g.role("ra-storage", with(param{"storageName", storage.name}, param{"roleId", str(roleStorageBlobContributor)}), resourceScope(storage), nil),
-		g.role("ra-cosmos", with(param{"cosmosName", cosmos.name}, param{"roleId", str(roleCosmosDBOperator)}), resourceScope(cosmos), nil),
-		g.role("ra-search", with(param{"searchName", search.name}, param{"roleId", str(roleSearchIndexContributor)}), resourceScope(search), nil),
-		g.role("ra-search", with(param{"searchName", search.name}, param{"roleId", str(roleSearchServiceContrib)}), resourceScope(search), nil),
+		g.role("ra-storage", roleLabel(roleStorageBlobContributor, who), with(param{"storageName", storage.name}, param{"roleId", str(roleStorageBlobContributor)}), resourceScope(storage), nil),
+		g.role("ra-cosmos", roleLabel(roleCosmosDBOperator, who), with(param{"cosmosName", cosmos.name}, param{"roleId", str(roleCosmosDBOperator)}), resourceScope(cosmos), nil),
+		g.role("ra-search", roleLabel(roleSearchIndexContributor, who), with(param{"searchName", search.name}, param{"roleId", str(roleSearchIndexContributor)}), resourceScope(search), nil),
+		g.role("ra-search", roleLabel(roleSearchServiceContrib, who), with(param{"searchName", search.name}, param{"roleId", str(roleSearchServiceContrib)}), resourceScope(search), nil),
 	)
 	deps := append(append([]string{}, before...), g.peModules...)
 	for _, d := range g.depsOf(node) {
@@ -843,8 +872,8 @@ func (g *gen) emitCapabilityHost(node plan.Node) {
 	}, append(deps, g.chain))
 	g.chain = capSym
 	workspace := projectSym + ".outputs.workspaceId"
-	g.role("ra-storage-containers", []param{{"storageName", storage.name}, {"principalId", principal}, {"workspaceId", workspace}}, resourceScope(storage), []string{capSym})
-	g.role("ra-cosmos-sql", []param{{"cosmosName", cosmos.name}, {"principalId", principal}, {"workspaceId", workspace}}, resourceScope(cosmos), []string{capSym})
+	g.role("ra-storage-containers", "Storage Blob Data Owner (limited to the project's agent containers) for "+who, []param{{"storageName", storage.name}, {"principalId", principal}, {"workspaceId", workspace}}, resourceScope(storage), []string{capSym})
+	g.role("ra-cosmos-sql", "Cosmos DB Built-in Data Contributor (limited to enterprise_memory) for "+who, []param{{"cosmosName", cosmos.name}, {"principalId", principal}, {"workspaceId", workspace}}, resourceScope(cosmos), []string{capSym})
 }
 
 // ------------------------------------------------------------------------------ principals
@@ -882,7 +911,7 @@ func (g *gen) emitPrincipals() {
 	}
 	account := g.account + ".outputs.name"
 	for _, p := range usable(g.n.Roles.Admins, "Foundry Account Owner") {
-		g.role("ra-account", []param{{"accountName", account}, {"principalId", str(p.ID)}, {"principalType", str(armPrincipalType(p.Type))}, {"roleId", str(roleFoundryAccountOwner)}}, "", nil)
+		g.role("ra-account", roleLabel(roleFoundryAccountOwner, "admin "+p.Key()), []param{{"accountName", account}, {"principalId", str(p.ID)}, {"principalType", str(armPrincipalType(p.Type))}, {"roleId", str(roleFoundryAccountOwner)}}, "", nil)
 	}
 	for _, p := range g.n.Projects {
 		projectSym := g.syms[ids.ProjectNode(ids.ProjectScope(p.Name))]
@@ -901,10 +930,10 @@ func (g *gen) emitPrincipals() {
 			}
 		}
 		for _, pr := range usable(projectAdmins, "Foundry Project Manager") {
-			g.role("ra-project", append(append([]param{}, pa...), param{"principalId", str(pr.ID)}, param{"principalType", str(armPrincipalType(pr.Type))}, param{"roleId", str(roleFoundryProjectManager)}), "", nil)
+			g.role("ra-project", roleLabel(roleFoundryProjectManager, "admin "+pr.Key()+" of project "+p.Name), append(append([]param{}, pa...), param{"principalId", str(pr.ID)}, param{"principalType", str(armPrincipalType(pr.Type))}, param{"roleId", str(roleFoundryProjectManager)}), "", nil)
 		}
 		for _, pr := range usable(p.Roles.Developers, "Foundry User") {
-			g.role("ra-project", append(append([]param{}, pa...), param{"principalId", str(pr.ID)}, param{"principalType", str(armPrincipalType(pr.Type))}, param{"roleId", str(roleFoundryUser)}), "", nil)
+			g.role("ra-project", roleLabel(roleFoundryUser, "developer "+pr.Key()+" of project "+p.Name), append(append([]param{}, pa...), param{"principalId", str(pr.ID)}, param{"principalType", str(armPrincipalType(pr.Type))}, param{"roleId", str(roleFoundryUser)}), "", nil)
 		}
 	}
 	seen := map[string]bool{}
@@ -923,15 +952,18 @@ func (g *gen) emitPrincipals() {
 	}
 	for _, pr := range usable(operators, "Reader and Monitoring Reader") {
 		for _, role := range []string{roleReader, roleMonitoringReader} {
-			g.role("ra-resource-group", []param{{"principalId", str(pr.ID)}, {"principalType", str(armPrincipalType(pr.Type))}, {"roleId", str(role)}}, "", nil)
+			g.role("ra-resource-group", roleLabel(role, "operator "+pr.Key()), []param{{"principalId", str(pr.ID)}, {"principalType", str(armPrincipalType(pr.Type))}, {"roleId", str(role)}}, "", nil)
 		}
 	}
 	// The identity running the deployment (azd sets principalId) can use the Foundry resource.
 	g.mods["ra-account"] = true
 	g.raCount++
 	sym := symbol(fmt.Sprintf("ra_%03d", g.raCount), g.used)
+	label := roleLabel(roleFoundryUser, "the identity running the deployment")
+	g.body.WriteString("// " + label + "\n")
 	g.module(sym, "ra-account", "!empty(principalId)", "", []param{
 		{"accountName", account}, {"principalId", "principalId"}, {"principalType", "principalType"}, {"roleId", str(roleFoundryUser)},
+		{"assignmentDescription", str(label)},
 	}, nil)
 }
 

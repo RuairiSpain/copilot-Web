@@ -9,6 +9,8 @@ param principalId string
 param principalType string = 'ServicePrincipal'
 @description('Built-in role definition GUID.')
 param roleId string
+@description('Shown on the role assignment in the portal.')
+param assignmentDescription string = ''
 
 resource target 'Microsoft.Search/searchServices@2024-06-01-preview' existing = {
   name: searchName
@@ -25,6 +27,7 @@ resource assignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   properties: {
     principalId: principalId
     principalType: principalType
+    description: empty(assignmentDescription) ? null : assignmentDescription
     roleDefinitionId: roleDefinition.id
   }
 }

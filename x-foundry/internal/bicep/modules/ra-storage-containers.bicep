@@ -5,6 +5,8 @@ param storageName string
 param principalId string
 @description('The project workspace id: 32 hexadecimal characters.')
 param workspaceId string
+@description('Shown on the role assignment in the portal.')
+param assignmentDescription string = ''
 
 var formattedWorkspaceId = '${substring(workspaceId, 0, 8)}-${substring(workspaceId, 8, 4)}-${substring(workspaceId, 12, 4)}-${substring(workspaceId, 16, 4)}-${substring(workspaceId, 20, 12)}'
 var blobDataOwner = 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b'
@@ -25,6 +27,7 @@ resource assignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   properties: {
     principalId: principalId
     principalType: 'ServicePrincipal'
+    description: empty(assignmentDescription) ? null : assignmentDescription
     roleDefinitionId: roleDefinition.id
     conditionVersion: '2.0'
     condition: condition

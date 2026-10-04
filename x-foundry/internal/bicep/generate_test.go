@@ -477,3 +477,18 @@ func TestAccountChildrenAreDeployedOneAfterAnother(t *testing.T) {
 	mustContain(t, moduleText(t, r, "capability_host_project_hr_agents"), "capability_host_project_finance_agents")
 	mustContain(t, moduleText(t, r, "model_deployments"), "capability_host_project_hr_agents")
 }
+
+func TestRoleAssignmentsAreLabelledWithTheRoleName(t *testing.T) {
+	admin := "11111111-1111-1111-1111-111111111111"
+	out := generate(t, `security: {network: {mode: private}, roles: {admins: [{type: user, id: "`+admin+`"}]}}`)
+	r := file(t, out, "resources.bicep")
+	mustContain(t, r,
+		"// Foundry Account Owner for admin "+admin+"\n",
+		"assignmentDescription: 'Foundry Account Owner for admin "+admin+"'",
+		"// Storage Blob Data Contributor for the finance project identity\n",
+		"// Search Index Data Contributor for the finance project identity\n",
+		"// Cosmos DB Built-in Data Contributor (limited to enterprise_memory) for the finance project identity\n",
+		"// Foundry User for the identity running the deployment\n")
+	// The Cosmos DB SQL role assignment has no description property.
+	mustNotContain(t, moduleText(t, r, "ra_006"), "assignmentDescription")
+}
