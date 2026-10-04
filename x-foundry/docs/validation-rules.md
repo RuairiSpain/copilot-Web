@@ -27,7 +27,7 @@ Severity is *error* unless marked (w).
 | XF017 | Raw secret values are rejected; only Key Vault references | declared |
 | XF018 | Session-pool or agent-pool settings are rejected | parser |
 | XF019 | Redis is application caching only (no session settings) | parser |
-| XF020 | Foundry IQ needs Azure AI Search; the resolved Search is shown in the normalised config | normaliser |
+| XF020 | Foundry IQ and the standard agent setup need Azure AI Search; the resolved Search is shown in the normalised config | normaliser |
 | XF021 | Private mode: no public access, identity enabled, DNS, internal gateway, no external ingress | declared + effective |
 | XF022 | Existing resources cannot carry creation settings; resource IDs must match the component type; registry modes | declared |
 | XF023 | Region names, data residency, cross-region inheritance (w) | declared |
@@ -64,3 +64,9 @@ Severity is *error* unless marked (w).
 | XF124 | Gateway SKU in private mode: Consumption unsupported; BasicV2 cannot reach private backends (w) |
 | XF125 | Azure Cache for Redis can no longer be created; use Azure Managed Redis |
 | XF126 | Data residency forbids Global deployment SKUs (implicit deployments become `DataZoneStandard`) |
+| XF127 | Network addressing: `addressSpace` must be a private range with room for the agent subnet; existing-VNet subnets must belong to the VNet and be supplied for private endpoints and the standard setup |
+| XF128 | Agent service: `cosmos` needs the standard setup; the standard setup needs Storage, Cosmos DB and Search enabled; basic setup in private mode (w) |
+| XF129 | Service tiers: Service Bus Premium and Container Registry Premium for private endpoints; capacity and zone redundancy are Premium only; Basic Service Bus has queues only |
+| XF130 | Identity type: `systemAssigned` creates no user-assigned identity, so name, existing resource and federated credentials are rejected; image pull from the managed registry needs a user-assigned identity (w) |
+| XF131 | Cosmos DB: throughput applies to provisioned capacity, not serverless |
+| XF132 | Runtime image has no pinned tag or digest, or uses `latest` (w) |

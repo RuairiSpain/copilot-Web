@@ -12,6 +12,9 @@ x-foundry:
   security:
     network:
       mode: private
+      # Private range for the generated VNet; pick one that does not overlap on-premises networks.
+      addressSpace: 10.40.0.0/16
+      agentSubnetPrefixLength: 24
       allowedDomains:
         - contoso.com
     roles:
@@ -47,10 +50,15 @@ x-foundry:
     enabled: true
   managedIdentity:
     enabled: true
+    type: systemAssignedAndUserAssigned
+  # The standard agent setup (the default in private mode) stores threads in Cosmos DB.
+  cosmos:
+    throughput: 4000
   observability:
     retentionDays: 90
   events:
     enabled: true
+    sku: Premium
     entities:
       - name: ingest-events
         type: topic
