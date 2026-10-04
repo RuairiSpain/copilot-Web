@@ -10,13 +10,16 @@ package bicepspike
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 )
 
 func bicep(t *testing.T, args ...string) (stdout, stderr string, exit int) {
@@ -25,8 +28,14 @@ func bicep(t *testing.T, args ...string) (stdout, stderr string, exit int) {
 	if path == "" {
 		t.Skip("BICEP_PATH not set")
 	}
-	cmd := exec.Command(path, args...)
-	cmd.Env = append(os.Environ(), "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1")
+	if !filepath.IsAbs(path) {
+		t.Fatalf("BICEP_PATH must be an absolute path, got %q", path)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, path, args...)
+	// Minimal environment: the compiler needs no Azure credentials, so none are passed through.
+	cmd.Env = []string{"HOME=" + os.Getenv("HOME"), "PATH=" + os.Getenv("PATH"), "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1"}
 	var o, e bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &o, &e
 	err := cmd.Run()
@@ -60,10 +69,16 @@ func TestBuildMainARMShape(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &arm); err != nil {
 		t.Fatal(err)
 	}
-	res := arm["resources"].([]any)
+	res, ok := arm["resources"].([]any)
+	if !ok {
+		t.Fatalf("ARM output has no resources array: %v", arm["resources"])
+	}
 	var sawCond, sawCopy, sawModule bool
 	for _, r := range res {
-		m := r.(map[string]any)
+		m, ok := r.(map[string]any)
+		if !ok {
+			t.Fatalf("resource is not an object: %v", r)
+		}
 		if _, ok := m["condition"]; ok {
 			sawCond = true
 		}
@@ -163,7 +178,10 @@ func TestLintSARIF(t *testing.T) {
 		t.Fatalf("unexpected SARIF: %s", out)
 	}
 	for _, r := range s.Runs[0].Results {
-		if r.RuleID == "BCP057" && (r.Level != "error" || r.Locations[0].Physical.Region.StartLine != 11) {
+		if r.RuleID != "BCP057" {
+			continue
+		}
+		if len(r.Locations) == 0 || r.Level != "error" || r.Locations[0].Physical.Region.StartLine != 11 {
 			t.Errorf("BCP057 = %+v", r)
 		}
 	}

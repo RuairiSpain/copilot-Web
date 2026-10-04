@@ -28,16 +28,22 @@ Path-scoped rules (`.claude/rules/foundry-doctor-*.md`) load only when matching 
 
 | Event | Script | Effect |
 |---|---|---|
-| PreToolUse Bash | `guard-bash.sh` | Blocks `azd down/up/provision/deploy`, `az` writes and deletes, force-push, hard resets, and credential-file reads, including inside compound commands. |
+| PreToolUse Bash | `guard-bash.sh` -> `guard_bash.py` | Tokenises the command and looks through `sh -c`, `eval`, `env`, `sudo`, `xargs`, `find -exec`, `$(...)` and backticks. Allows only read-only `az` and `azd` verbs and `az rest` GET. Blocks force, delete and mirror pushes (all flag and refspec forms), hard resets, mutating requests to Azure endpoints, code piped from the network into an interpreter, commands whose name comes from a variable, and reads of credential files. |
 | PostToolUse Edit/Write | `post-edit.sh` | Runs `gofmt -w` on edited Go files; blocks if the file contains secret-shaped content. |
-| Stop | `stop-check.sh` | Blocks ending the turn if `foundry-doctor/` contains secret-shaped content. |
+| Stop | `stop-check.sh` | Blocks ending the turn if the project, the Claude harness or this project's workflow contain secret-shaped content. Runs even when the stop hook is already active. |
 
-Hooks enforce; the rules and skills guide. Permission `deny` entries are a second layer,
-but they match command prefixes, which is why the hook also exists.
+All three fail closed: empty or malformed hook input, a missing `jq` or `python3`, or a command the guard
+cannot parse blocks the action. Secret scans also cover `.claude/`, `.mcp.json` and the project workflow,
+not only `foundry-doctor/`.
 
-`guard-bash.sh` matches the command text, not its intent. A command that merely mentions a
-blocked phrase (in a heredoc or commit message) is blocked too. Write such text with the
-Write tool, or reword it.
+**The guard is a speed bump, not a security boundary.** It cannot see inside scripts or interpreters
+(`python3 script.py`, `node`), so a determined or compromised agent can bypass it. The real boundaries are the
+permission rules in `.claude/settings.json` (exact command forms only, no wildcards on `go test`, `go run` or scripts)
+and the credentials the session holds: give the session a read-only identity, or none. The guard's unit tests
+(`test_guard_bash.py`) list the bypass forms found in the Phase 0 security review and run in `verify-phase.sh`.
+
+The guard inspects commands, not prose. Quoted arguments and heredoc bodies are not treated as commands, so
+a commit message that mentions a blocked phrase is allowed.
 
 ## Deferred
 
