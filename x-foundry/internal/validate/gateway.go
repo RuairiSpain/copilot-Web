@@ -2,7 +2,6 @@ package validate
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/RuairiSpain/copilot-Web/x-foundry/internal/diag"
@@ -24,11 +23,16 @@ func searchNames(norm *normalise.Config) map[string]bool {
 	return names
 }
 
-func deploymentNames(norm *normalise.Config) map[string]bool {
+// modelNames are the models the configuration names: allowed or default in any scope. The
+// deployments themselves are declared on the azd azure.ai.project service.
+func modelNames(norm *normalise.Config) map[string]bool {
 	names := map[string]bool{}
 	for _, s := range norm.Scopes {
-		for _, d := range s.Models.Deployments {
-			names[d.Name], names[d.Model] = true, true
+		if s.Models.Default != "" {
+			names[s.Models.Default] = true
+		}
+		for _, m := range s.Models.Allowed {
+			names[m] = true
 		}
 	}
 	return names
@@ -79,48 +83,17 @@ func validateGateway(norm *normalise.Config) []diag.Diagnostic {
 	}
 
 	// Rule 14: targets resolve.
-	agentOwners := map[string]map[string]bool{}
-	for _, p := range norm.Projects {
-		for _, a := range p.Agents {
-			if agentOwners[a.Name] == nil {
-				agentOwners[a.Name] = map[string]bool{}
-			}
-			owner := p.Name
-			if p.Origins["agent:"+a.Name] == "root" {
-				owner = ""
-			}
-			agentOwners[a.Name][owner] = true
-		}
-	}
-	searches, models := searchNames(norm), deploymentNames(norm)
+	searches, models := searchNames(norm), modelNames(norm)
 	for _, m := range g.Models.Allowed {
 		models[m] = true
 	}
 	for _, e := range g.Endpoints {
 		where := fmt.Sprintf("%s.endpoints[%s].target", gw, e.Name)
 		switch e.TargetType {
-		case "agent":
-			owners := agentOwners[e.Target]
-			switch {
-			case e.Project != "":
-				p := norm.Project(e.Project)
-				found := false
-				if p != nil {
-					for _, a := range p.Agents {
-						found = found || a.Name == e.Target
-					}
-				}
-				if !found {
-					out = append(out, diag.Err("XF014", where, "agent '%s' does not exist in project '%s'", e.Target, e.Project))
-				}
-			case len(owners) == 0:
-				out = append(out, diag.Err("XF014", where, "endpoint target agent '%s' does not exist", e.Target))
-			case len(owners) > 1:
-				out = append(out, diag.Err("XF014", where, "agent '%s' exists in several projects; set endpoint.project", e.Target))
-			}
+		// Agent targets are azd azure.ai.agent services, which x-foundry cannot see.
 		case "model":
 			if !models[e.Target] {
-				out = append(out, diag.Err("XF014", where, "endpoint target model '%s' has no deployment", e.Target))
+				out = append(out, diag.Err("XF014", where, "endpoint target model '%s' is not in any models.allowed or models.default", e.Target))
 			}
 		case "search":
 			if !searches[e.Target] {
@@ -185,17 +158,6 @@ func validateGateway(norm *normalise.Config) []diag.Diagnostic {
 	}
 	if m.Default != "" && contains(m.Denied, m.Default) {
 		out = append(out, diag.Err("XF006", gw+".models.default", "gateway default model '%s' is denied", m.Default))
-	}
-	deployed := deploymentNames(norm)
-	missing := []string{}
-	for _, a := range m.Allowed {
-		if !deployed[a] {
-			missing = append(missing, a)
-		}
-	}
-	sort.Strings(missing)
-	for _, a := range missing {
-		out = append(out, diag.Err("XF005", gw+".models.allowed", "gateway allows model '%s' but no deployment serves it", a))
 	}
 	if norm.Network.Mode == "private" && !g.Security.InternalOnly {
 		out = append(out, diag.Err("XF021", gw+".security.internalOnly", "gateway.security.internalOnly cannot be false when network mode is 'private'"))

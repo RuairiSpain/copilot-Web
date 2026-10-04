@@ -44,17 +44,12 @@ func duplicates[T named](items []T) []string {
 
 // holder is one declaring scope (root, hub or a project) with the fields it can declare.
 type holder struct {
-	id         string
-	path       string
-	project    string
-	models     *config.ModelConfiguration
-	agents     []config.Agent
-	toolboxes  []config.Toolbox
-	mcps       []config.Mcp
-	connectors []config.Connector
-	iq         *config.FoundryIQ
-	search     *config.Search
-	evaluation *config.Evaluation
+	id      string
+	path    string
+	project string
+	models  *config.ModelConfiguration
+	iq      *config.FoundryIQ
+	search  *config.Search
 }
 
 func (h holder) kbs() []config.KnowledgeBase {
@@ -66,22 +61,18 @@ func (h holder) kbs() []config.KnowledgeBase {
 
 func scopes(cfg *config.XFoundry) []holder {
 	out := []holder{{
-		id: "root", path: root, models: &cfg.Models, agents: cfg.Agents, toolboxes: cfg.Toolboxes,
-		mcps: cfg.Mcps, connectors: cfg.Connectors, iq: cfg.IQ, search: cfg.Search,
-		evaluation: cfg.Evaluation,
+		id: "root", path: root, models: &cfg.Models, iq: cfg.IQ, search: cfg.Search,
 	}}
 	if h := cfg.Hub; h != nil {
 		out = append(out, holder{
-			id: "hub", path: root + ".hub", models: &h.Models, toolboxes: h.Toolboxes, mcps: h.Mcps,
-			iq: h.IQ, search: h.Search,
+			id: "hub", path: root + ".hub", models: &h.Models, iq: h.IQ, search: h.Search,
 		})
 	}
 	for i := range cfg.Projects {
 		p := &cfg.Projects[i]
 		out = append(out, holder{
 			id: "project:" + p.Name, path: fmt.Sprintf("%s.projects[%s]", root, p.Name), project: p.Name,
-			models: &p.Models, agents: p.Agents, toolboxes: p.Toolboxes, mcps: p.Mcps, connectors: p.Connectors,
-			iq: p.IQ, search: p.Search, evaluation: p.Evaluation,
+			models: &p.Models, iq: p.IQ, search: p.Search,
 		})
 	}
 	return out

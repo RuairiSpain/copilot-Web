@@ -13,7 +13,6 @@ import (
 var (
 	kvReference = regexp.MustCompile(`^(?:@Microsoft\.KeyVault\(.+\)|keyvault:[A-Za-z0-9-]{1,127}|https://[A-Za-z0-9-]{3,24}\.vault\.azure\.net/secrets/[A-Za-z0-9-]{1,127}(?:/[0-9a-f]{32})?)$`)
 	secretName  = regexp.MustCompile(`^[A-Za-z0-9-]{1,127}$`)
-	sensitive   = regexp.MustCompile(`(?i)(api[-_]?key|secret|password|passwd|pwd|access[-_]?token|auth[-_]?token|bearer|connection[-_]?string|sas[-_]?token|private[-_]?key|client[-_]?secret|credential|subscription[-_]?key|(^|[-_])token$|^authorization$|^cookie$)`)
 )
 
 type rawSecret struct {
@@ -80,15 +79,6 @@ func scanSecrets(node any, parts []string, out *[]diag.Diagnostic) {
 		sort.Strings(keys)
 		for _, k := range keys {
 			child := append(append([]string{}, parts...), k)
-			if s, ok := t[k].(string); ok && len(parts) > 0 &&
-				(parts[len(parts)-1] == "environment" || parts[len(parts)-1] == "headers") &&
-				sensitive.MatchString(k) {
-				if !IsKeyVaultReference(s) {
-					*out = append(*out, diag.Err("XF017", pointerPath(child),
-						"'%s' looks like a secret; use a Key Vault reference (@Microsoft.KeyVault(...), keyvault:<name> or a vault secret URI)", k))
-				}
-				continue
-			}
 			scanSecrets(t[k], child, out)
 		}
 	case []any:

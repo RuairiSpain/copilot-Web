@@ -55,7 +55,7 @@ func TestDefaultsTagsAndEnvironment(t *testing.T) {
 		}
 	}
 	p := c.Project("finance")
-	if p.Tags["project"] != "finance" || p.Location != "westeurope" || p.DisplayName != "finance" {
+	if p.Tags["project"] != "finance" {
 		t.Fatalf("project = %+v", p)
 	}
 }
@@ -183,10 +183,10 @@ func TestBlobSourcesCreateStorageWithContainers(t *testing.T) {
 }
 
 func TestDeclaredStorageGainsRequiredPurposes(t *testing.T) {
-	c := cfgOf(t, Public, `storage: {purposes: [documents]}`,
+	c := cfgOf(t, Public,
 		`iq: {knowledgeBases: [{name: policies, sources: [{name: files, type: blob, container: policies}]}]}`,
-		`evaluation: {enabled: true, datasets: [{name: golden, path: g.jsonl}]}`)
-	same(t, c.Storage.Purposes, []string{"documents", "knowledge", "evaluations"})
+		`storage: {purposes: [documents, evaluations]}`)
+	same(t, c.Storage.Purposes, []string{"documents", "evaluations", "knowledge"})
 	if !implicit(c)["storage-purpose:knowledge"] || implicit(c)["storage:storage"] {
 		t.Fatalf("implicit = %v", implicit(c))
 	}
@@ -202,49 +202,25 @@ func TestDeclaredStorageGainsRequiredPurposes(t *testing.T) {
 }
 
 func TestConnectorBackedSourcesDoNotNeedStorage(t *testing.T) {
-	c := cfgOf(t, Public, `connectors: [{name: sp, type: sharepoint}]`,
+	c := cfgOf(t, Public,
 		`iq: {knowledgeBases: [{name: policies, sources: [{name: site, type: sharepoint, site: hr, connection: sp}]}]}`)
 	if c.Storage != nil {
 		t.Fatal("no storage needed")
 	}
 }
 
-func TestSecretReferencesImplyKeyVault(t *testing.T) {
-	for name, doc := range map[string]string{
-		"mcp":       `mcps: [{name: graph, endpoint: "https://a.example", authentication: {mode: apiKey, secretRef: graph-key}}]`,
-		"connector": `connectors: [{name: svc, type: api, authentication: {mode: apiKey, secretRef: svc-key}}]`,
-	} {
-		t.Run(name, func(t *testing.T) {
-			if c := cfgOf(t, Public, doc); c.KeyVault == nil || !implicit(c)["key-vault:key-vault"] {
-				t.Fatal("expected an implicit Key Vault")
-			}
-		})
-	}
-	c := cfgOf(t, Public, `keyVault: {sku: premium}`, `connectors: [{name: svc, type: api, authentication: {mode: apiKey, secretRef: svc-key}}]`)
-	if c.KeyVault.SKU != "premium" || implicit(c)["key-vault:key-vault"] {
-		t.Fatal("an explicit Key Vault is not duplicated")
-	}
-}
-
-func TestImplicitModelDeployments(t *testing.T) {
-	c := cfgOf(t, Public, `models: {default: gpt-5, allowed: [gpt-5, gpt-4.1]}`)
-	same(t, names(c.Scope("root").Models.Deployments), []string{"gpt-5", "gpt-4-1"})
-	if c.Project("finance").Models.Default != "gpt-5" || !implicit(c)["model-deployment:gpt-5"] {
-		t.Fatal("implicit deployments")
-	}
-}
-
-func TestEmbeddingDeploymentIsReusedOrCreated(t *testing.T) {
+func TestEmbeddingDeploymentDefaultsToTheModelName(t *testing.T) {
 	kb := `iq: {knowledgeBases: [{name: policies, sources: [{name: files, type: blob, container: policies}]}]}`
-	reuse := cfgOf(t, Public, `models: {deployments: [{name: emb, model: text-embedding-3-large}]}`, kb)
-	if got := reuse.Scope("root").KnowledgeBases[0].Index.Vector.Deployment; got != "emb" || len(reuse.Scope("root").Models.Deployments) != 1 {
+	if got := cfgOf(t, Public, kb).Scope("root").KnowledgeBases[0].Index.Vector.Deployment; got != "text-embedding-3-large" {
 		t.Fatalf("deployment = %s", got)
 	}
-	created := cfgOf(t, Public, kb)
-	same(t, names(created.Scope("root").Models.Deployments), []string{"text-embedding-3-large"})
+	named := cfgOf(t, Public, `iq: {knowledgeBases: [{name: policies, sources: [{name: files, type: blob, container: policies}], index: {vector: {deployment: emb}}}]}`)
+	if got := named.Scope("root").KnowledgeBases[0].Index.Vector.Deployment; got != "emb" {
+		t.Fatalf("an explicit deployment name wins, got %s", got)
+	}
 	none := cfgOf(t, Public, `iq: {knowledgeBases: [{name: policies, sources: [{name: files, type: blob, container: policies}], index: {vector: {enabled: false}}, retrieval: {mode: keyword}}]}`)
-	if len(none.Scope("root").Models.Deployments) != 0 {
-		t.Fatal("no embedding deployment without vectors")
+	if got := none.Scope("root").KnowledgeBases[0].Index.Vector.Deployment; got != "" {
+		t.Fatalf("no embedding deployment without vectors, got %s", got)
 	}
 }
 
@@ -293,12 +269,14 @@ func TestPrivateModeDerivesPrivateConnectivity(t *testing.T) {
 		got[pe.Component+"/"+pe.Group] = true
 	}
 	for _, want := range []string{
-		"foundry/account", "search:root/searchService", "storage/blob", "storage/dfs", "key-vault/vault",
-		"cosmos/Sql",
+		"search:root/searchService", "storage/blob", "storage/dfs", "key-vault/vault", "cosmos/Sql",
 	} {
 		if !got[want] {
 			t.Fatalf("missing private endpoint %s in %v", want, got)
 		}
+	}
+	if got["foundry/account"] {
+		t.Fatal("the Foundry resource's private endpoint is created by azd")
 	}
 	zones := map[string]bool{}
 	for _, z := range n.PrivateDNSZones {
@@ -343,30 +321,27 @@ func TestNonPrivateModesHaveNoPrivateEndpoints(t *testing.T) {
 
 // Hub and inheritance -------------------------------------------------------------------------
 
-func TestSpokesInheritHubResourcesAndOverrideByName(t *testing.T) {
-	tool := func(ref string) string { return fmt.Sprintf(`tools: [{name: t1, type: function, reference: %s}]`, ref) }
-	c := hubCfg(t,
-		fmt.Sprintf(`hub: {name: shared, toolboxes: [{name: tb, %s}], mcps: [{name: graph, endpoint: "https://hub.example"}]}`, tool("hub")),
-		fmt.Sprintf(`projects: [{name: aa, toolboxes: [{name: tb, %s}, {name: extra, %s}]}, {name: bb}, {name: cc, inheritHub: false}]`, tool("spoke"), tool("x")),
-		Public)
+func TestSpokesInheritHubKnowledgeBasesAndOverrideByName(t *testing.T) {
+	src := `sources: [{name: files, type: blob, container: policies}]`
+	c := hubCfg(t, Public,
+		`hub: {name: shared, inheritance: {iq: true}, iq: {knowledgeBases: [{name: policies, description: hub, `+src+`}, {name: shared-kb, `+src+`}]}}`,
+		`projects: [{name: aa, iq: {knowledgeBases: [{name: policies, description: spoke, `+src+`}]}}, {name: bb}, {name: cc, inheritHub: false}]`)
 	aa, bb, cc := c.Project("aa"), c.Project("bb"), c.Project("cc")
-	same(t, names(aa.Toolboxes), []string{"tb", "extra"})
-	if aa.Toolboxes[0].Tools[0].Reference != "spoke" || aa.Origins["toolbox:tb"] != "project:aa" || bb.Origins["toolbox:tb"] != "hub" {
+	same(t, names(aa.KnowledgeBases), []string{"policies", "shared-kb"})
+	if aa.KnowledgeBases[0].Description != "spoke" || aa.Origins["knowledgeBase:policies"] != "project:aa" || bb.Origins["knowledgeBase:policies"] != "hub" {
 		t.Fatal("override by name")
 	}
-	if bb.Toolboxes[0].Tools[0].Reference != "hub" {
+	if bb.KnowledgeBases[0].Description != "hub" {
 		t.Fatal("inherited")
 	}
-	same(t, names(bb.Mcps), []string{"graph"})
-	if len(cc.Toolboxes) != 0 || len(cc.Mcps) != 0 || cc.InheritsHub {
+	if len(cc.KnowledgeBases) != 0 || cc.InheritsHub {
 		t.Fatal("inheritHub false")
 	}
 }
 
 func TestInheritanceFlagsSwitchOffResourceKinds(t *testing.T) {
-	c := hubCfg(t, `hub: {name: shared, inheritance: {toolboxes: false, mcps: false, models: false}, toolboxes: [{name: tb, tools: [{name: t1, type: function, reference: f}]}], mcps: [{name: graph, endpoint: "https://hub.example"}], models: {default: gpt-5, allowed: [gpt-5]}}`, Public)
-	p := c.Project("finance")
-	if len(p.Toolboxes) != 0 || len(p.Mcps) != 0 || p.Models.Default != "" {
+	c := hubCfg(t, `hub: {name: shared, inheritance: {models: false}, models: {default: gpt-5, allowed: [gpt-5]}}`, Public)
+	if p := c.Project("finance"); p.Models.Default != "" {
 		t.Fatalf("project = %+v", p)
 	}
 }
@@ -411,35 +386,14 @@ func TestModelsMergeAcrossLevels(t *testing.T) {
 	}
 	same(t, m.Allowed, []string{"gpt-5-mini"})
 	same(t, m.Denied, []string{"gpt-2", "gpt-3", "gpt-1"})
-	var served []string
-	for _, d := range m.Deployments {
-		served = append(served, d.Model)
-	}
-	same(t, served, []string{"gpt-5", "gpt-5-mini"})
-}
-
-func TestProjectDeploymentOverridesInherited(t *testing.T) {
-	c := hubCfg(t, Public, `hub: {name: shared, models: {deployments: [{name: chat, model: gpt-5, capacity: 50}]}}`,
-		`projects: [{name: fin, models: {deployments: [{name: chat, model: gpt-5, capacity: 5}]}}]`)
-	d := c.Project("fin").Models.Deployments
-	if len(d) != 1 || d[0].Capacity != 5 {
-		t.Fatalf("deployments = %+v", d)
-	}
 }
 
 func TestRootItemsAssignedToAProjectMoveIntoIt(t *testing.T) {
 	c := cfgOf(t, Public, models, `projects: [{name: aa}, {name: bb}]`,
-		`agents: [{name: shared}, {name: only-bb, project: bb}]`,
-		`iq: {project: aa, knowledgeBases: [{name: kb-aa, sources: [{name: s1, type: web, url: "https://x.example"}]}, {name: kb-bb, project: bb, sources: [{name: s1, type: web, url: "https://x.example"}]}]}`,
-		`evaluation: {enabled: true, project: aa}`)
+		`iq: {project: aa, knowledgeBases: [{name: kb-aa, sources: [{name: s1, type: web, url: "https://x.example"}]}, {name: kb-bb, project: bb, sources: [{name: s1, type: web, url: "https://x.example"}]}]}`)
 	aa, bb := c.Project("aa"), c.Project("bb")
-	same(t, names(aa.Agents), []string{"shared"})
-	same(t, names(bb.Agents), []string{"shared", "only-bb"})
 	same(t, names(aa.KnowledgeBases), []string{"kb-aa"})
 	same(t, names(bb.KnowledgeBases), []string{"kb-bb"})
-	if !aa.Evaluation.Enabled || bb.Evaluation != nil {
-		t.Fatal("evaluation assignment")
-	}
 }
 
 func TestDisabledIQContributesNothing(t *testing.T) {

@@ -9,21 +9,21 @@ Severity is *error* unless marked (w). Retired codes are not reused.
 | Code | Rule | Phase |
 | --- | --- | --- |
 | XF001 | Project names are unique (and differ from the hub name) | declared |
-| XF002 | Names unique within their effective scope: agents, deployments, toolboxes, MCPs, knowledge bases, connectors, and nested lists | declared |
+| XF002 | Names unique within their effective scope: knowledge bases, sources, gateway endpoints, storage containers | declared |
 | XF003 | `hub` only when `topology.mode` is `hub-spoke`, and required then | declared |
 | XF004 | Explicit `inheritHub: true` needs a hub (the default resolves to false without one) | declared |
-| XF005 | Referenced projects, models, toolboxes, MCPs, knowledge bases, connectors, embedding deployments exist | declared + effective |
-| XF006 | `models.default` is a deployment or allowed model, and not denied | effective |
-| XF007 | `vector.dimensions` matches the embedding deployment (`3-large` up to 3072, `3-small` up to 1536, `ada-002` exactly 1536) and vector field | effective |
+| XF005 | Referenced projects and knowledge bases exist | declared + effective |
+| XF006 | `models.default` is in `models.allowed` (when set) and not denied | effective |
+| XF007 | `vector.dimensions` matches the embedding model (`3-large` up to 3072, `3-small` up to 1536, `ada-002` exactly 1536) and vector field. The deployment itself is declared in azd | effective |
 | XF008 | `filterFields` and `filterClaims` reference filterable fields | effective |
 | XF009 | `keyField`, `contentField`, `titleField`, `vectorField` and semantic fields exist with usable types; one key field | effective |
 | XF010 | Vector fields are `Collection(Edm.Single)` with dimensions and a vector profile | effective |
 | XF011 | `chunking.overlap` < `chunking.size` | effective |
 | XF012 | Hybrid weights sum to 1.0 | effective |
 | XF013 | Gateway endpoint paths (and project registrations) are unique | declared + effective |
-| XF014 | Gateway endpoint targets resolve to an agent, model, Search or knowledge base | effective |
+| XF014 | Gateway endpoint targets resolve to a model, Search or knowledge base (agent targets are azd services and are not checked) | effective |
 | XF015 | Gateway quota, limit and routing (backend) profile references exist | effective |
-| XF016 | Allowed and denied model sets do not overlap; deployments and agents respect them | declared + effective |
+| XF016 | Allowed and denied model sets do not overlap | declared + effective |
 | XF017 | Raw secret values are rejected; only Key Vault references | declared |
 | XF018 | Session-pool or agent-pool settings are rejected | parser |
 | XF019 | Retired (Redis is no longer part of the schema) | |
@@ -32,7 +32,7 @@ Severity is *error* unless marked (w). Retired codes are not reused.
 | XF022 | Existing resources cannot carry creation settings; resource IDs must match the component type | declared |
 | XF023 | Region names, data residency, cross-region inheritance (w) | declared |
 | XF024 | Explicit names meet each Azure provider's constraints | declared |
-| XF025 | Destructive changes need approval | deploy (needs the state file); see [phase-3.md](phase-3.md) |
+| XF025 | Retired (it belonged to the removed `deploy` command) | |
 
 ## Other codes
 
@@ -50,20 +50,20 @@ Severity is *error* unless marked (w). Retired codes are not reused.
 | XF109 | Retired (the `events` section was removed) |
 | XF110 | Pydantic model validation (backstop behind JSON Schema) |
 | XF111 | Gateway: registration needs an enabled gateway, token tracking and the telemetry sink |
-| XF112 | Agent: prompt agents need a model, hosted agents need a source |
-| XF113 | Governance model policy (allowed/denied models, SKUs) |
+| XF112 | Retired (agents are azd services) |
+| XF113 | Governance model policy (allowed/denied models) against the gateway models |
 | XF114 | No administrators configured (w) |
 | XF115 | A project widens the allowed models it inherits |
 | XF117 | Retrieval needs vectors / semantic ranking that the index or Search service does not provide |
 | XF118 | Invalid cron expression; explicit routing without routes |
-| XF119 | `apiKey` authentication without `secretRef` |
-| XF120 | Project location differs from the Foundry resource or hub (w; error in private mode, where the VNet and workspace resources must share a region) |
+| XF119 | Retired (connectors are azd services) |
+| XF120 | Retired (projects no longer carry a location) |
 | XF121 | IP rules: private ranges are invalid in service firewalls; `0.0.0.0/0` and `::/0` are rejected |
-| XF122 | Outbound endpoints (MCP, connector, web source, federated issuer) must be https and not loopback or link-local |
+| XF122 | Outbound endpoints (web source, federated issuer) must be https and not loopback or link-local |
 | XF123 | Search sizing: per-SKU replica/partition limits, 36 search units, free tier has no private endpoints |
 | XF124 | Gateway SKU in private mode: Consumption unsupported; BasicV2 cannot reach private backends (w) |
 | XF125 | Retired (the `redis` section was removed) |
-| XF126 | Data residency forbids Global deployment SKUs (implicit deployments become `DataZoneStandard`) |
+| XF126 | Retired (deployments are azd-owned) |
 | XF127 | Network addressing: VNet settings need private mode; `addressSpace` must be a private range with room for the agent subnet; existing-VNet subnets must belong to the VNet and be supplied for private endpoints and the standard setup |
 | XF128 | Agent service: `cosmos` needs the standard setup; the standard setup needs Storage, Cosmos DB and Search enabled; basic setup in private mode (w) |
 | XF129 | Retired (Service Bus and Container Registry are no longer in the schema) |
@@ -71,12 +71,14 @@ Severity is *error* unless marked (w). Retired codes are not reused.
 | XF131 | Cosmos DB: throughput applies to provisioned capacity, not serverless |
 | XF132 | Retired (the `runtime` section was removed) |
 
-## Generator and deploy diagnostics (XF2xx)
+## Generator diagnostics (XF2xx)
 
-`xfoundry generate` can add `XF201`-`XF207` while writing Bicep ([phase-2.md](phase-2.md#diagnostics)).
-`xfoundry deploy` adds `XF210` and `XF211` ([phase-3.md](phase-3.md#diagnostics)).
+`xfoundry generate` can add `XF201`, `XF205`, `XF206` and `XF207` while writing Bicep
+([phase-2.md](phase-2.md#diagnostics)). `XF202`-`XF204` (deployments and resource groups) and
+`XF210`-`XF211` (the removed `deploy` command) are retired.
 
 ## Well-Architected recommendations (XF3xx, warnings)
 
-`XF301`-`XF330` are environment-profile recommendations for `test` and `prod`; they are
+`XF301`-`XF330` are environment-profile recommendations for `test` and `prod` (`XF314`, `XF315`,
+`XF322` and `XF323` are retired: they concerned azd-owned features); they are
 listed with their source in [waf-profiles.md](waf-profiles.md).

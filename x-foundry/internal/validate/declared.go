@@ -19,7 +19,7 @@ func Declared(cfg *config.XFoundry) []diag.Diagnostic {
 	rules := []func(*config.XFoundry) []diag.Diagnostic{
 		projectsAndHub, uniqueNames, projectReferences, modelSets, secrets, existingVsCreated,
 		explicitNames, locations, securityRules, ipRules, insecureEndpoints, searchSizing,
-		gatewayNetwork, cronRules, agentRules, networkAddressing, agentServiceRules, identityRules,
+		gatewayNetwork, cronRules, networkAddressing, agentServiceRules, identityRules,
 	}
 	var out []diag.Diagnostic
 	for _, rule := range rules {
@@ -99,32 +99,6 @@ func uniqueNames(cfg *config.XFoundry) []diag.Diagnostic {
 	}
 	unassigned := func(project string) bool { return !projectNames[project] }
 
-	var agents, toolboxes, mcps, connectors []string
-	for _, a := range cfg.Agents {
-		if unassigned(a.Project) {
-			agents = append(agents, a.Name)
-		}
-	}
-	for _, t := range cfg.Toolboxes {
-		if unassigned(t.Project) {
-			toolboxes = append(toolboxes, t.Name)
-		}
-	}
-	for _, m := range cfg.Mcps {
-		if unassigned(m.Project) {
-			mcps = append(mcps, m.Name)
-		}
-	}
-	for _, c := range cfg.Connectors {
-		if unassigned(c.Project) {
-			connectors = append(connectors, c.Name)
-		}
-	}
-	check("agent", path("agents"), agents)
-	check("toolbox", path("toolboxes"), toolboxes)
-	check("MCP", path("mcps"), mcps)
-	check("connector", path("connectors"), connectors)
-	check("model deployment", path("models", "deployments"), names(cfg.Models.Deployments))
 	kbList, kbOwner := rootKBs(cfg)
 	var rootOnly []string
 	for i, kb := range kbList {
@@ -135,39 +109,12 @@ func uniqueNames(cfg *config.XFoundry) []diag.Diagnostic {
 	check("knowledge base", path("iq", "knowledgeBases"), rootOnly)
 	if h := cfg.Hub; h != nil {
 		hp := root + ".hub"
-		check("toolbox", hp+".toolboxes", names(h.Toolboxes))
-		check("MCP", hp+".mcps", names(h.Mcps))
-		check("model deployment", hp+".models.deployments", names(h.Models.Deployments))
 		if h.IQ != nil {
 			check("knowledge base", hp+".iq.knowledgeBases", names(h.IQ.KnowledgeBases))
 		}
 	}
 	for _, p := range cfg.Projects {
 		pp := fmt.Sprintf("%s.projects[%s]", root, p.Name)
-		ag := names(p.Agents)
-		for _, a := range cfg.Agents {
-			if a.Project == p.Name {
-				ag = append(ag, a.Name)
-			}
-		}
-		tb := names(p.Toolboxes)
-		for _, t := range cfg.Toolboxes {
-			if t.Project == p.Name {
-				tb = append(tb, t.Name)
-			}
-		}
-		mc := names(p.Mcps)
-		for _, m := range cfg.Mcps {
-			if m.Project == p.Name {
-				mc = append(mc, m.Name)
-			}
-		}
-		cn := names(p.Connectors)
-		for _, c := range cfg.Connectors {
-			if c.Project == p.Name {
-				cn = append(cn, c.Name)
-			}
-		}
 		var kbs []string
 		if p.IQ != nil {
 			kbs = names(p.IQ.KnowledgeBases)
@@ -177,27 +124,15 @@ func uniqueNames(cfg *config.XFoundry) []diag.Diagnostic {
 				kbs = append(kbs, kb.Name)
 			}
 		}
-		check("agent", pp+".agents", ag)
-		check("toolbox", pp+".toolboxes", tb)
-		check("MCP", pp+".mcps", mc)
-		check("connector", pp+".connectors", cn)
-		check("model deployment", pp+".models.deployments", names(p.Models.Deployments))
 		check("knowledge base", pp+".iq.knowledgeBases", kbs)
 	}
 	for _, h := range scopes(cfg) {
-		for _, t := range h.toolboxes {
-			check("tool", fmt.Sprintf("%s.toolboxes[%s].tools", h.path, t.Name), names(t.Tools))
-		}
 		for _, kb := range h.kbs() {
 			kp := fmt.Sprintf("%s.iq.knowledgeBases[%s]", h.path, kb.Name)
 			check("knowledge source", kp+".sources", names(kb.Sources))
 			check("index field", kp+".index.fields", names(kb.Index.Fields))
 			check("route", kp+".routing.routes", names(kb.Routing.Routes))
 			check("scoring profile", kp+".index.scoringProfiles", names(kb.Index.ScoringProfiles))
-		}
-		if h.evaluation != nil {
-			check("dataset", h.path+".evaluation.datasets", names(h.evaluation.Datasets))
-			check("evaluator", h.path+".evaluation.evaluators", names(h.evaluation.Evaluators))
 		}
 	}
 	if g := cfg.Gateway; g != nil {
@@ -255,18 +190,6 @@ func projectReferences(cfg *config.XFoundry) []diag.Diagnostic {
 	}
 	for _, h := range scopes(cfg) {
 		owner := h.project
-		for _, a := range h.agents {
-			check(a.Project, fmt.Sprintf("%s.agents[%s].project", h.path, a.Name), owner)
-		}
-		for _, t := range h.toolboxes {
-			check(t.Project, fmt.Sprintf("%s.toolboxes[%s].project", h.path, t.Name), owner)
-		}
-		for _, m := range h.mcps {
-			check(m.Project, fmt.Sprintf("%s.mcps[%s].project", h.path, m.Name), owner)
-		}
-		for _, c := range h.connectors {
-			check(c.Project, fmt.Sprintf("%s.connectors[%s].project", h.path, c.Name), owner)
-		}
 		if h.iq != nil {
 			check(h.iq.Project, h.path+".iq.project", owner)
 			for _, kb := range h.iq.KnowledgeBases {
@@ -276,9 +199,6 @@ func projectReferences(cfg *config.XFoundry) []diag.Diagnostic {
 					check(r.When.Project, fmt.Sprintf("%s.routing.routes[%s].when.project", base, r.Name), "")
 				}
 			}
-		}
-		if h.evaluation != nil {
-			check(h.evaluation.Project, h.path+".evaluation.project", owner)
 		}
 	}
 	if cfg.Gateway != nil {
@@ -328,30 +248,7 @@ func secrets(cfg *config.XFoundry) []diag.Diagnostic {
 	b, _ := json.Marshal(cfg)
 	var doc map[string]any
 	_ = json.Unmarshal(b, &doc)
-	out := findRawSecrets(doc)
-	for _, h := range scopes(cfg) {
-		for _, m := range h.mcps {
-			out = append(out, authChecks(m.Authentication, fmt.Sprintf("%s.mcps[%s]", h.path, m.Name))...)
-		}
-		for _, c := range h.connectors {
-			out = append(out, authChecks(c.Authentication, fmt.Sprintf("%s.connectors[%s]", h.path, c.Name))...)
-		}
-	}
-	return diag.Dedupe(out)
-}
-
-func authChecks(a *config.ConnectionAuthentication, where string) []diag.Diagnostic {
-	if a == nil {
-		return nil
-	}
-	var out []diag.Diagnostic
-	if a.SecretRef != "" && !IsSecretNameOrReference(a.SecretRef) {
-		out = append(out, diag.Err("XF017", where+".authentication.secretRef", "secretRef must be a Key Vault secret name or reference"))
-	}
-	if a.Mode == "apiKey" && a.SecretRef == "" {
-		out = append(out, diag.Err("XF119", where+".authentication", "apiKey authentication requires secretRef"))
-	}
-	return out
+	return diag.Dedupe(findRawSecrets(doc))
 }
 
 // ------------------------------------------------------------------------ rule 22
@@ -464,12 +361,6 @@ func explicitNames(cfg *config.XFoundry) []diag.Diagnostic {
 		check("apim", g.Name, path("gateway", "name"))
 	}
 	check("resource-group", cfg.Defaults.ResourceGroup, path("defaults", "resourceGroup"))
-	if cfg.Hub != nil {
-		check("resource-group", cfg.Hub.ResourceGroup, path("hub", "resourceGroup"))
-	}
-	for _, p := range cfg.Projects {
-		check("resource-group", p.ResourceGroup, path("projects["+p.Name+"]", "resourceGroup"))
-	}
 	for _, h := range scopes(cfg) {
 		for _, kb := range h.kbs() {
 			for _, s := range kb.Sources {
@@ -494,17 +385,6 @@ func locations(cfg *config.XFoundry) []diag.Diagnostic {
 		}
 	}
 	add(cfg.Defaults.Location, path("defaults", "location"))
-	if cfg.Hub != nil {
-		add(cfg.Hub.Location, path("hub", "location"))
-	}
-	for _, p := range cfg.Projects {
-		add(p.Location, path("projects["+p.Name+"]", "location"))
-	}
-	for _, h := range scopes(cfg) {
-		for _, d := range h.models.Deployments {
-			add(d.Location, fmt.Sprintf("%s.models.deployments[%s].location", h.path, d.Name))
-		}
-	}
 	var residency []string
 	if cfg.Governance != nil {
 		residency = cfg.Governance.DataResidency
@@ -527,50 +407,6 @@ func locations(cfg *config.XFoundry) []diag.Diagnostic {
 			}
 			sort.Strings(list)
 			out = append(out, diag.Err("XF023", l.path, "'%s' is outside governance.dataResidency (%s)", l.location, strings.Join(list, ", ")))
-		}
-	}
-	// Private networking (a delegated agent subnet) needs the VNet and every Foundry
-	// workspace resource in one region, so a mismatch is an error there.
-	regionDiag := diag.Warn
-	if cfg.Security.Network.Mode == "private" {
-		regionDiag = diag.Err
-	}
-	accountLocation := cfg.Defaults.Location
-	if cfg.Hub != nil && cfg.Hub.Location != "" {
-		accountLocation = cfg.Hub.Location
-	}
-	if accountLocation == "" {
-		for _, p := range cfg.Projects {
-			if p.Location != "" {
-				accountLocation = p.Location
-				break
-			}
-		}
-	}
-	if accountLocation != "" {
-		for _, p := range cfg.Projects {
-			if p.Location != "" && canonicalRegion(p.Location) != canonicalRegion(accountLocation) {
-				out = append(out, regionDiag("XF120", path("projects["+p.Name+"]", "location"),
-					"project '%s' asks for %s, but the Foundry resource is created in %s; one Foundry resource is deployed per configuration",
-					p.Name, p.Location, accountLocation))
-			}
-		}
-	}
-	if cfg.Hub != nil {
-		hubLocation := cfg.Hub.Location
-		if hubLocation == "" {
-			hubLocation = cfg.Defaults.Location
-		}
-		for _, p := range cfg.Projects {
-			location := p.Location
-			if location == "" {
-				location = cfg.Defaults.Location
-			}
-			if p.InheritHub && hubLocation != "" && location != "" && canonicalRegion(hubLocation) != canonicalRegion(location) {
-				out = append(out, regionDiag("XF120", path("projects["+p.Name+"]", "location"),
-					"project '%s' (%s) inherits shared resources from hub '%s' in %s; expect cross-region latency and data movement",
-					p.Name, location, cfg.Hub.Name, hubLocation))
-			}
 		}
 	}
 	return out
@@ -658,12 +494,6 @@ func insecureEndpoints(cfg *config.XFoundry) []diag.Diagnostic {
 		}
 	}
 	for _, h := range scopes(cfg) {
-		for _, m := range h.mcps {
-			check(m.Endpoint, fmt.Sprintf("%s.mcps[%s].endpoint", h.path, m.Name))
-		}
-		for _, c := range h.connectors {
-			check(c.Endpoint, fmt.Sprintf("%s.connectors[%s].endpoint", h.path, c.Name))
-		}
 		for _, kb := range h.kbs() {
 			for _, s := range kb.Sources {
 				if s.Type == "web" {
@@ -734,21 +564,6 @@ func cronRules(cfg *config.XFoundry) []diag.Diagnostic {
 		for _, kb := range h.kbs() {
 			if !cron.MatchString(kb.Refresh.Schedule) {
 				out = append(out, diag.Err("XF118", fmt.Sprintf("%s.iq.knowledgeBases[%s].refresh.schedule", h.path, kb.Name), "'%s' is not a 5-field cron expression", kb.Refresh.Schedule))
-			}
-		}
-		if ev := h.evaluation; ev != nil && ev.Schedule != "" && !cron.MatchString(ev.Schedule) {
-			out = append(out, diag.Err("XF118", h.path+".evaluation.schedule", "'%s' is not a 5-field cron expression", ev.Schedule))
-		}
-	}
-	return out
-}
-
-func agentRules(cfg *config.XFoundry) []diag.Diagnostic {
-	var out []diag.Diagnostic
-	for _, h := range scopes(cfg) {
-		for _, a := range h.agents {
-			if a.Kind == "hosted" && a.Source == "" {
-				out = append(out, diag.Err("XF112", fmt.Sprintf("%s.agents[%s]", h.path, a.Name), "hosted agent '%s' needs 'source'", a.Name))
 			}
 		}
 	}

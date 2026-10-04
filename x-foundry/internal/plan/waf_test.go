@@ -54,12 +54,12 @@ func TestEnvironmentMustBeDevTestOrProd(t *testing.T) {
 
 func TestBareProdAndTestRecommendations(t *testing.T) {
 	prod := Run(t, env("prod"))
-	want := []string{"XF304", "XF310", "XF316", "XF317", "XF320", "XF323", "XF330"}
+	want := []string{"XF304", "XF310", "XF316", "XF317", "XF320", "XF330"}
 	if got := profileCodes(prod); fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Fatalf("prod = %v, want %v\n%s", got, want, Lines(prod.Diagnostics))
 	}
 	test := Run(t, env("test"))
-	wantTest := []string{"XF310", "XF320", "XF323", "XF330"}
+	wantTest := []string{"XF310", "XF320", "XF330"}
 	if got := profileCodes(test); fmt.Sprint(got) != fmt.Sprint(wantTest) {
 		t.Fatalf("test = %v, want %v", got, wantTest)
 	}
@@ -85,16 +85,11 @@ var wafCases = []waf{
 	{"purge protection", "XF312", "Security", y(`security: {roles: {admins: [a]}, purgeProtection: false}`), y(Private), false},
 	{"key vault purge", "XF312", "Security", y(`keyVault: {purgeProtection: false}`), y(`keyVault: {purgeProtection: true}`), false},
 	{"egress", "XF313", "Security", y(`security: {network: {mode: private, egress: azure-default}, roles: {admins: [a]}}`), y(`security: {network: {mode: private, egress: restricted}, roles: {admins: [a]}}`), false},
-	{"content filter", "XF314", "Security", y(`models: {deployments: [{name: chat, model: gpt-5}]}`), y(`models: {deployments: [{name: chat, model: gpt-5, raiPolicy: contoso-filter}]}`), true},
-	{"implicit deployment", "XF314", "Security", y(`models: {allowed: [gpt-5]}`), y(`models: {deployments: [{name: chat, model: gpt-5, raiPolicy: contoso-filter}]}`), true},
-	{"mcp tools", "XF315", "Security", y(`mcps: [{name: graph, endpoint: "https://a.example"}]`), y(`mcps: [{name: graph, endpoint: "https://a.example", allowedTools: [read]}]`), true},
 	{"policy", "XF316", "Security", y(`governance: {}`), y(`governance: {policyAssignments: [no-local-auth]}`), false},
 	{"defender", "XF317", "Security", y(`governance: {defenderPlans: [ai]}`), y(`governance: {defenderPlans: [servers, appService, cosmosDb, ai]}`), false},
 	{"identity", "XF319", "Security", y(`managedIdentity: {enabled: false}`), y(`managedIdentity: {enabled: true}`), false},
 	{"diagnostics", "XF320", "Operational Excellence", y(`observability: {logAnalytics: false}`), y(`observability: {}`), true},
 	{"alerts", "XF321", "Operational Excellence", y(`observability: {alerts: false}`), y(`observability: {alerts: true}`), false},
-	{"version pin", "XF322", "Operational Excellence", y(`models: {deployments: [{name: chat, model: gpt-5, versionUpgradeOption: OnceNewDefaultVersionAvailable}]}`), y(`models: {deployments: [{name: chat, model: gpt-5, versionUpgradeOption: NoAutoUpgrade}]}`), true},
-	{"evaluation", "XF323", "Operational Excellence", y(`evaluation: {enabled: false}`), y(`evaluation: {enabled: true}`), true},
 	{"agent subnet", "XF324", "Operational Excellence", y(`security: {network: {agentSubnetPrefixLength: 26}, roles: {admins: [a]}}`), y(`security: {network: {agentSubnetPrefixLength: 24}, roles: {admins: [a]}}`), false},
 	{"budget", "XF330", "Cost Optimization", y(`governance: {}`), y(`governance: {budgets: {monthlyAmount: 1000}}`), true},
 }

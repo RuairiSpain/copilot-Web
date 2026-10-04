@@ -78,17 +78,6 @@ func tagsObject(tags map[string]string) string {
 	return b.String()
 }
 
-// object renders ordered key/value pairs as a multi-line Bicep object; values are expressions.
-func object(indent string, pairs [][2]string) string {
-	var b strings.Builder
-	b.WriteString("{\n")
-	for _, kv := range pairs {
-		fmt.Fprintf(&b, "%s  %s: %s\n", indent, kv[0], kv[1])
-	}
-	b.WriteString(indent + "}")
-	return b.String()
-}
-
 func boolean(v bool) string {
 	if v {
 		return "true"

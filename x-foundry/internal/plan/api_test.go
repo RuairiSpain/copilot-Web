@@ -62,7 +62,7 @@ func TestAnalysisStopsAtTheFirstFailingPhase(t *testing.T) {
 		{"schema", y(`projects: []`), "XF102"},
 		{"declared", y(`projects: [{name: aa}, {name: aa}]`, web, Public, `search: {enabled: false}`), "XF001"},
 		{"normalise", y(Public, `search: {enabled: false}`, web), "XF020"},
-		{"effective", y(`models: {default: nope}`), "XF006"},
+		{"effective", y(`models: {default: nope, allowed: [other]}`), "XF006"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

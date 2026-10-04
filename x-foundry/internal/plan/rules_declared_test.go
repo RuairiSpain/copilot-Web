@@ -37,30 +37,22 @@ func TestRule1Projects(t *testing.T) {
 }
 
 func TestRule2DuplicateNames(t *testing.T) {
-	tool := `{name: t1, type: function, reference: f}`
 	runRules(t, []rule{
-		{"project agents", "XF002", "projects[fin].agents", "agent name 'bot'", y(`projects: [{name: fin, agents: [{name: bot}, {name: bot}]}]`)},
-		{"root agents", "XF002", "x-foundry.agents", "", y(`agents: [{name: bot}, {name: bot}]`)},
-		{"root agent assigned to project", "XF002", "projects[fin]", "", y(`agents: [{name: bot, project: fin}]`, `projects: [{name: fin, agents: [{name: bot}]}]`)},
-		{"deployments", "XF002", "deployments", "model deployment", y(`models: {deployments: [{name: m1, model: gpt-5}, {name: m1, model: gpt-5}]}`)},
-		{"mcps", "XF002", "mcps", "MCP", y(`mcps: [{name: graph, endpoint: "https://a.example"}, {name: graph, endpoint: "https://b.example"}]`)},
-		{"connectors", "XF002", "connectors", "connector", y(`connectors: [{name: sp, type: sharepoint}, {name: sp, type: graph}]`)},
-		{"toolboxes", "XF002", "toolboxes", "toolbox", y(fmt.Sprintf(`toolboxes: [{name: tb, tools: [%s]}, {name: tb, tools: [%s]}]`, tool, tool))},
-		{"tools", "XF002", "tools", "tool name", y(fmt.Sprintf(`toolboxes: [{name: tb, tools: [%s, %s]}]`, tool, tool))},
 		{"knowledge bases", "XF002", "knowledgeBases", "knowledge base", y(`iq: {knowledgeBases: [{name: one, sources: [{name: s1, type: web, url: "https://x.example"}]}, {name: one, sources: [{name: s1, type: web, url: "https://x.example"}]}]}`)},
 		{"project knowledge bases", "XF002", "projects[fin]", "knowledge base", y(`projects: [{name: fin, iq: {knowledgeBases: [{name: one, sources: [{name: s1, type: web, url: "https://x.example"}]}, {name: one, sources: [{name: s1, type: web, url: "https://x.example"}]}]}}]`)},
 		{"sources", "XF002", "sources", "knowledge source", y(`iq: {knowledgeBases: [{name: one, sources: [{name: s1, type: web, url: "https://x.example"}, {name: s1, type: web, url: "https://x.example"}]}]}`)},
 		{"endpoints", "XF002", "endpoints", "gateway endpoint", y(`gateway: {enabled: true, endpoints: [{name: ep1, path: /a, target: x, targetType: agent}, {name: ep1, path: /b, target: x, targetType: agent}]}`)},
 		{"containers", "XF002", "containers", "storage container", y(`storage: {containers: [{name: abc}, {name: abc}]}`)},
-		{"datasets", "XF002", "datasets", "dataset", y(`evaluation: {datasets: [{name: d1, path: p}, {name: d1, path: p}]}`)},
-		{"hub mcps", "XF002", "hub.mcps", "MCP", y("topology: {mode: hub-spoke}\nhub: {name: shared, mcps: [{name: graph, endpoint: \"https://a.example\"}, {name: graph, endpoint: \"https://a.example\"}]}")},
 	})
 }
 
 func TestRule2SameNameInDifferentScopesIsAnOverride(t *testing.T) {
+	kb := func(src string) string {
+		return fmt.Sprintf(`iq: {knowledgeBases: [{name: kb1, sources: [{name: s1, type: web, url: %q}]}]}`, src)
+	}
 	a := RunHub(t,
-		`hub: {name: shared, toolboxes: [{name: tb, tools: [{name: t1, type: function, reference: g}]}]}`,
-		`projects: [{name: fin, toolboxes: [{name: tb, tools: [{name: t1, type: function, reference: f}]}]}]`)
+		"hub: {name: shared, "+strings.TrimPrefix(kb("https://a.example"), "")+"}",
+		"projects: [{name: fin, "+kb("https://b.example")+"}]")
 	MustOK(t, a)
 }
 
@@ -78,18 +70,14 @@ func TestRule3And4(t *testing.T) {
 
 func TestRule5UnknownProjects(t *testing.T) {
 	cases := map[string]string{
-		"agent":      `agents: [{name: bot, project: nope}]`,
-		"toolbox":    `toolboxes: [{name: tb, project: nope, tools: [{name: t1, type: function, reference: f}]}]`,
-		"iq":         `iq: {project: nope, knowledgeBases: [{name: kb1, sources: [{name: s1, type: web, url: "https://x.example"}]}]}`,
-		"kb":         `iq: {knowledgeBases: [{name: kb1, project: nope, sources: [{name: s1, type: web, url: "https://x.example"}]}]}`,
-		"evaluation": `evaluation: {project: nope}`,
-		"endpoint":   `gateway: {enabled: true, endpoints: [{name: ep1, path: /a, target: x, targetType: agent, project: nope}]}`,
-		"route":      `iq: {knowledgeBases: [{name: kb1, sources: [{name: s1, type: web, url: "https://x.example"}], routing: {routes: [{name: r1, when: {project: nope}, knowledgeBase: kb1}]}}]}`,
+		"iq":       `iq: {project: nope, knowledgeBases: [{name: kb1, sources: [{name: s1, type: web, url: "https://x.example"}]}]}`,
+		"kb":       `iq: {knowledgeBases: [{name: kb1, project: nope, sources: [{name: s1, type: web, url: "https://x.example"}]}]}`,
+		"endpoint": `gateway: {enabled: true, endpoints: [{name: ep1, path: /a, target: x, targetType: agent, project: nope}]}`,
+		"route":    `iq: {knowledgeBases: [{name: kb1, sources: [{name: s1, type: web, url: "https://x.example"}], routing: {routes: [{name: r1, when: {project: nope}, knowledgeBase: kb1}]}}]}`,
 	}
 	for name, doc := range cases {
 		t.Run(name, func(t *testing.T) { ExpectCase(t, "XF005", "", "unknown project 'nope'", doc) })
 	}
-	ExpectCase(t, "XF005", "", "declared inside project 'bb'", `projects: [{name: aa}, {name: bb, agents: [{name: bot, project: aa}]}]`)
 }
 
 func TestRule16Overlap(t *testing.T) {
@@ -114,33 +102,9 @@ func TestRule17Secrets(t *testing.T) {
 		"https://user:pass@example.com/path",
 	} {
 		t.Run(value[:12], func(t *testing.T) {
-			ExpectCase(t, "XF017", "description", "appears to contain", fmt.Sprintf(`projects: [{name: fin, description: %q}]`, value))
+			ExpectCase(t, "XF017", "description", "appears to contain", fmt.Sprintf(`iq: {knowledgeBases: [{name: kb1, description: %q, sources: [{name: s1, type: web, url: "https://x.example"}]}]}`, value))
 		})
 	}
-	a := Run(t, `agents: [{name: bot, kind: hosted, source: ./bot, environment: {DB_PASSWORD: hunter2, MAX_TOKENS: 4096, LOG_LEVEL: info}}]`)
-	var paths []string
-	for _, d := range a.Diagnostics {
-		if d.Code == "XF017" {
-			paths = append(paths, d.Path)
-		}
-	}
-	if len(paths) != 1 || paths[0] != "x-foundry.agents[0].environment.DB_PASSWORD" {
-		t.Fatalf("paths = %v", paths)
-	}
-	ExpectCase(t, "XF017", "headers.x-api-key", "", `mcps: [{name: graph, endpoint: "https://a.example", headers: {x-api-key: abc, accept: json}}]`)
-	for _, ref := range []string{
-		"@Microsoft.KeyVault(SecretUri=https://kv.vault.azure.net/secrets/key/)",
-		"keyvault:search-key",
-		"https://my-vault.vault.azure.net/secrets/search-key",
-		"https://my-vault.vault.azure.net/secrets/search-key/0123456789abcdef0123456789abcdef",
-	} {
-		a := Run(t, fmt.Sprintf(`agents: [{name: bot, kind: hosted, source: ./bot, environment: {SEARCH_API_KEY: %q}}]`, ref))
-		if Codes(a, "")["XF017"] {
-			t.Fatalf("reference %q rejected:\n%s", ref, Lines(a.Diagnostics))
-		}
-	}
-	ExpectCase(t, "XF017", "secretRef", "", `mcps: [{name: graph, endpoint: "https://a.example", authentication: {mode: apiKey, secretRef: "bad value"}}]`)
-	ExpectCase(t, "XF119", "", "", `connectors: [{name: svc, type: api, authentication: {mode: apiKey}}]`)
 }
 
 func TestRule22ExistingResources(t *testing.T) {
@@ -175,30 +139,11 @@ func TestRule22ExistingResources(t *testing.T) {
 func TestRule23Regions(t *testing.T) {
 	runRules(t, []rule{
 		{"defaults", "XF023", "defaults.location", "", y(`defaults: {location: atlantis}`)},
-		{"project", "XF023", "projects[fin].location", "", y(`projects: [{name: fin, location: moon}]`)},
-		{"deployment", "XF023", "deployments[m1]", "", y(`models: {deployments: [{name: m1, model: gpt-5, location: nowhere}]}`)},
 		{"residency", "XF023", "", "outside governance.dataResidency", y(`defaults: {location: eastus}`, `governance: {dataResidency: [westeurope, northeurope]}`)},
 		{"residency region", "XF023", "dataResidency", "", y(`governance: {dataResidency: [atlantis]}`)},
 	})
 	MustOK(t, Run(t, `defaults: {location: "West Europe"}`))
 	MustOK(t, Run(t, `defaults: {location: westeurope}`, `governance: {dataResidency: [westeurope]}`))
-	// Region mismatch: warning outside private mode, error in private mode.
-	a := Run(t, Public, `defaults: {location: westeurope}`, `projects: [{name: fin, location: eastus}]`)
-	if !a.OK() || !Codes(a, diag.Warning)["XF120"] {
-		t.Fatalf("expected an XF120 warning:\n%s", Lines(a.Diagnostics))
-	}
-	ExpectCase(t, "XF120", "projects[fin].location", "", Private, `defaults: {location: westeurope}`, `projects: [{name: fin, location: eastus}]`)
-	hub := Analyse(t, HubDoc(t, Public, `defaults: {location: westeurope}`, `projects: [{name: fin, location: eastus}]`))
-	if !hub.OK() || !Codes(hub, diag.Warning)["XF120"] {
-		t.Fatalf("expected warnings only:\n%s", Lines(hub.Diagnostics))
-	}
-	privateHub := RunHub(t, Private, `defaults: {location: westeurope}`, `projects: [{name: fin, location: eastus}]`)
-	if privateHub.OK() {
-		t.Fatal("a cross-region spoke must fail in private mode")
-	}
-	if w := hub.Plan.Warnings; len(w) == 0 || w[0].Code != "XF120" {
-		t.Fatalf("warnings = %v", w)
-	}
 }
 
 func TestRule24ExplicitNames(t *testing.T) {
@@ -211,7 +156,6 @@ func TestRule24ExplicitNames(t *testing.T) {
 		{"apim", "XF024", "gateway.name", "", y(`gateway: {enabled: true, name: 1apim}`)},
 		{"identity", "XF024", "managedIdentity.name", "", y(`managedIdentity: {name: ab}`)},
 		{"resource group", "XF024", "defaults.resourceGroup", "", y(`defaults: {resourceGroup: "rg."}`)},
-		{"project resource group", "XF024", "projects[fin].resourceGroup", "", y(`projects: [{name: fin, resourceGroup: "bad!"}]`)},
 		{"source container", "XF024", "container", "", y(`iq: {knowledgeBases: [{name: kb1, sources: [{name: files, type: blob, container: Policies}]}]}`)},
 		{"storage container", "XF024", "containers[a--b]", "", y(`storage: {containers: [{name: a--b}]}`)},
 	})
@@ -254,17 +198,10 @@ func TestHardeningRules(t *testing.T) {
 	MustOK(t, Run(t, `security: {network: {mode: private, allowedIps: [10.0.0.0/8]}, roles: {admins: [a]}}`))
 
 	for name, doc := range map[string]string{
-		"http":      `mcps: [{name: graph, endpoint: "http://graph.example/mcp"}]`,
-		"metadata":  `mcps: [{name: graph, endpoint: "https://169.254.169.254/metadata"}]`,
-		"localhost": `mcps: [{name: graph, endpoint: "https://localhost/mcp"}]`,
-		"ipv6":      `mcps: [{name: graph, endpoint: "https://[::1]/mcp"}]`,
-		"connector": `connectors: [{name: svc, type: api, endpoint: "http://svc.example"}]`,
-		"web":       `iq: {knowledgeBases: [{name: kb1, sources: [{name: web1, type: web, url: "http://x.example"}]}]}`,
-		"issuer":    `managedIdentity: {federatedCredentials: [{name: gh, issuer: "http://issuer.example", subject: s}]}`,
+		"web": `iq: {knowledgeBases: [{name: kb1, sources: [{name: web1, type: web, url: "http://x.example"}]}]}`,
 	} {
 		t.Run(name, func(t *testing.T) { ExpectCase(t, "XF122", "", "", doc) })
 	}
-	MustOK(t, Run(t, `mcps: [{name: graph, endpoint: "https://graph.contoso.com/mcp"}]`))
 
 	for _, c := range []struct{ search, message string }{
 		{`{sku: free, replicas: 2}`, "at most 1 replica"},
@@ -293,9 +230,6 @@ func TestHardeningRules(t *testing.T) {
 
 func TestCronAndAgentRules(t *testing.T) {
 	ExpectCase(t, "XF118", "refresh.schedule", "", `iq: {knowledgeBases: [{name: kb1, sources: [{name: s1, type: web, url: "https://x.example"}], refresh: {schedule: daily}}]}`)
-	ExpectCase(t, "XF118", "evaluation.schedule", "", `evaluation: {enabled: true, schedule: "every day"}`)
-	ExpectCase(t, "XF112", "", "", `agents: [{name: bot, kind: hosted}]`)
-	MustOK(t, Run(t, `agents: [{name: bot, kind: hosted, source: ./bot}]`, `models: {default: gpt-5, allowed: [gpt-5]}`))
 }
 
 func TestNetworkAddressing(t *testing.T) {

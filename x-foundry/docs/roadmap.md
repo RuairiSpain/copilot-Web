@@ -52,15 +52,10 @@ AI-Gateway samples repository (`github.com/Azure-Samples/AI-Gateway`). The URLs 
 fetched, because learn.microsoft.com is not reachable from the development sandbox. Confirm each
 link resolves, and pick the specific chargeback samples, before they are written into the code.
 
-### Pending Phase 1 clean-up for these removals
+### Phase 1 clean-up for these removals (done)
 
-The decisions above are not yet applied to the Phase 1 code. Doing so means removing the `events`,
-`redis` and `runtime` sections (and the multi-dimension `chargeback` settings) from the schema, and
-removing or revising the rules and tests that refer to them. A first look at
-`docs/validation-rules.md` shows these are affected: XF014 and XF112 (runtime targets and hosted
-agent sources), XF019 and XF106 and XF125 (Redis), XF108 and XF132 (runtime), XF111 (chargeback),
-and the events rules. The examples and the published schemas also change. Do this as one change
-before Phase 2 starts, so the Bicep generator does not build on fields that are going away.
+The decisions above have been applied: the schema, rules, examples and tests no longer contain
+them, and the retired diagnostic codes are listed in `validation-rules.md`.
 
 ## Phase 2: Bicep generator (implemented)
 
@@ -80,16 +75,25 @@ above:
   Before the first release, run it through `what-if` and a test deployment in a real subscription
   and record the findings here.
 
-## Phase 3: provisioning and state (partly implemented)
+## Phase 3: removed (azd owns it)
 
-See [phase-3.md](phase-3.md). Against the plan above:
+The Foundry provisioning engine (`xfoundry deploy`, the data-plane client and the state file) was
+built for toolboxes and prompt agents and then removed. azd's own `azure.yaml` already declares the
+project, model deployments, agents, toolboxes, connections, skills and routines, and the preference
+is no overlap between the two YAML files. See [azd-boundary.md](azd-boundary.md) for who owns what.
 
-- Done: `xfoundry deploy` for toolboxes and prompt agents (with the MCP servers they use), the
-  state file, idempotent redeploys and rule XF025 (destructive changes need `--allow-destroy`).
-- Not done: evaluation datasets and evaluators, project connections for authenticated MCP servers
-  and connectors (an ARM resource), and every tool type other than `mcp` and `codeInterpreter`.
-- To verify against a live project before the first release: the request shapes, and whether an
-  agent can reach its toolbox without an embedded token (see the last bullet in phase-3.md).
+Consequences for the other phases:
+
+- Phase 2 generates only what azd does not: network, private DNS, Storage, Cosmos DB, Search, Key
+  Vault, observability, locks and operator roles, plus outputs azd consumes.
+- Removed from the x-foundry schema: agents, toolboxes, MCPs, connectors, evaluation, model
+  deployments and project creation attributes. `models` keeps only the `default`, `allowed` and
+  `denied` policy.
+- `doctor` and `promote` write comments for the azd-owned items (for example "declare agents as
+  `azure.ai.agent` services in azure.yaml"), the same way as for the other removed features.
+- Open questions, to check in a real subscription: whether azd's project service can use the
+  existing Storage, Cosmos DB and Search for the standard agent setup, and how azd treats an
+  `infra` folder next to the services. See azd-boundary.md.
 
 ## Phase 4: Foundry IQ and Search
 
@@ -101,6 +105,7 @@ No change from the original plan.
 - Generate the governance-related low-effort items: Azure Policy assignments, Defender plans,
   budgets and alerts.
 - Chargeback is not built here; see the comments decision above.
+- Endpoints refer to azd-owned agents by name; the gateway does not check that the agent exists.
 
 ## Phase 6: azd integration and developer experience
 

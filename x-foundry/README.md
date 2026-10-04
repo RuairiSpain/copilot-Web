@@ -1,8 +1,10 @@
 # x-foundry
 
-A declarative `x-foundry` extension for `azure.yaml`. Teams describe Microsoft Foundry
-projects, Foundry IQ, search, a gateway, security and governance as intent; the extension
-turns that into infrastructure and Foundry resources.
+A declarative `x-foundry` extension for `azure.yaml`. It is the landing zone around an azd
+Foundry project: shared network, Storage, Cosmos DB, AI Search, Key Vault and monitoring, plus
+Foundry IQ, a gateway, security and governance, declared as intent. The Foundry project, model
+deployments, agents, toolboxes and connections stay in azd's own services; x-foundry does not
+repeat them (see [docs/azd-boundary.md](docs/azd-boundary.md)).
 
 `x-foundry` is **not** a native azd capability. It is implemented by this custom extension,
 and the schema contains no session-pool settings (session and agent pooling are separate
@@ -17,14 +19,14 @@ per platform.
 | --- | --- | --- |
 | 1 | Schema engine and validation | **Implemented here** |
 | 2 | Bicep infrastructure generator | **Implemented here** (see [docs/phase-2.md](docs/phase-2.md)) |
-| 3 | Foundry provisioning engine | **Implemented here** for agents and toolboxes (see [docs/phase-3.md](docs/phase-3.md)) |
+| 3 | Foundry provisioning engine | **Removed**: azd owns agents, toolboxes and connections ([docs/azd-boundary.md](docs/azd-boundary.md)) |
 | 4 | Foundry IQ and Search engine | Not started |
 | 5 | Gateway and governance | Not started |
 | 6 | azd integration and developer experience | Not started |
 | 7 | Drift detection (optional, after first release) | Not started |
 
 Phase 1 turns an `azure.yaml` into a validated `DeploymentPlan`. Phase 2 turns the plan into
-Bicep (`xfoundry generate`), and Phase 3 deploys the agents and toolboxes (`xfoundry deploy`).
+Bicep for the shared infrastructure (`xfoundry generate`).
 Decisions and ideas for later phases are recorded in `docs/roadmap.md`.
 
 ## Quick start
@@ -37,7 +39,6 @@ bin/xfoundry validate examples/hub-spoke.yaml     # exit 0 when valid, 1 otherwi
 bin/xfoundry plan examples/hub-spoke.yaml         # deployment steps, dependencies first
 bin/xfoundry plan examples/hub-spoke.yaml --json  # full normalised plan
 bin/xfoundry generate examples/hub-spoke.yaml --out infra   # write the Bicep project
-bin/xfoundry deploy examples/hub-spoke.yaml --dry-run       # agents and toolboxes: what would change
 bin/xfoundry schema                               # print the JSON Schema
 
 go test -race ./...                               # unit and end-to-end tests
@@ -134,28 +135,23 @@ operations, cost) as warnings that never block. Preview a stricter profile with
 * **`restricted`** keeps public endpoints but limits them to `allowedIps` (public ranges
   only; Azure service firewalls reject private ranges).
 * **`agentService.setup: auto`** picks `standard` in private mode or when `cosmos` is
-  configured, otherwise `basic`. The standard setup brings your own Storage, AI Search and
-  Cosmos DB (created implicitly when you do not declare them), a capability host per
-  project, and an agent subnet delegated to `Microsoft.App/environments`
-  (`agentSubnetPrefixLength`, default `/24`). A minimal configuration therefore creates just
-  a Foundry resource and project; adding a VNet also creates Search, Storage and Cosmos DB.
+  configured, otherwise `basic`. The standard setup needs your own Storage, AI Search and
+  Cosmos DB (created implicitly when you do not declare them) and an agent subnet delegated to
+  `Microsoft.App/environments` (`agentSubnetPrefixLength`, default `/24`). x-foundry creates
+  those; the Foundry project and its capability host are azd's.
 * To use an existing VNet, give `existingVnetResourceId` plus
   `existingPrivateEndpointSubnetResourceId` and, for the standard setup,
   `existingAgentSubnetResourceId`.
-* **Identity.** Foundry accounts and projects always use a system-assigned identity (the
-  platform requires it). `managedIdentity.type` (`userAssigned`, `systemAssigned`,
-  `systemAssignedAndUserAssigned`) controls the identity attached to the gateway and
-  Search resources you create.
-* **Model deployments pin their version** (`versionUpgradeOption: NoAutoUpgrade`) so model
-  behaviour only changes when your configuration does.
+* **Identity.** `managedIdentity.type` (`userAssigned`, `systemAssigned`,
+  `systemAssignedAndUserAssigned`) controls the identity attached to the gateway and Search
+  resources you create.
 
 ## Normalisation
 
 * **Implicit resources.** Anything the normaliser derives is listed in
   `Plan.Config.Implicit` with the reason: a Search service for Foundry IQ or the standard
   setup, storage for blob/ADLS sources and evaluation datasets, Cosmos DB for the standard
-  setup, deployments for models named in `models.allowed` and for embedding models, a
-  managed identity, a Key Vault when secret references are used, observability for the
+  setup, a managed identity, a Key Vault when secret references are used, observability for the
   gateway, and the VNet, private DNS and private endpoints for private mode.
 * **Absent means not created** unless something requires it. A missing `keyVault`, `cosmos` or
   `governance` section creates nothing unless a setting requires it.
@@ -177,13 +173,9 @@ operations, cost) as warnings that never block. Preview a stricter profile with
   `optionalResourceName` merged into `resourceName`; `projects[].roles` uses a
   `projectRoles` shape (the draft required `admins` on every project); Search SKUs use the
   ARM spelling `storage_optimized_*`; `PremiumV2` added to the gateway SKUs.
-* **Deployment order** follows the PRD, with two deliberate deviations (see
-  `internal/graph/builder.go`): MCPs, connectors and knowledge bases come before toolboxes
-  and agents because those reference them, and the observability workspace is created early
-  because the gateway logs to it. Alerts are the late "Monitoring" step.
-* **One Foundry resource per configuration.** A project `location` that differs from the
-  account location is a warning outside private mode and an error in private mode (the
-  VNet and every workspace resource must share a region).
+* **Deployment order** follows the PRD, with one deliberate deviation (see
+  `internal/graph/builder.go`): the observability workspace is created early because the
+  gateway logs to it. Alerts are the late "Monitoring" step.
 * **Bare Key Vault secret names** in `secretRef` are accepted as names
   in the extension's Key Vault; a literal value that happens to look like a name cannot be
   told apart. Values that look like keys, tokens or connection strings are rejected anywhere
@@ -191,12 +183,9 @@ operations, cost) as warnings that never block. Preview a stricter profile with
 
 ## Not in Phase 1
 
-* Rule 25 (destructive changes need approval) needs deployed state to diff against; it
-  belongs with state tracking in Phase 3.
-* Rule 24 checks names you write explicitly. Names the extension generates are checked when
-  the naming engine exists (Phase 2); `internal/azurenames` is ready for it.
-* Rule 23 checks region names, data residency and hub/spoke distance. Per-region
-  availability of models and SKUs needs a provider lookup (Phase 2/3).
+* Rule 24 checks names you write explicitly; the generator checks names it creates.
+* Rule 23 checks region names and data residency. Per-region availability of models and SKUs
+  needs a provider lookup.
 
 See [docs/validation-rules.md](docs/validation-rules.md) for every diagnostic code and
 [docs/production-readiness.md](docs/production-readiness.md) for the review backlog.

@@ -114,38 +114,6 @@ var recommendations = []recommendation{
 		}
 		return nil
 	}},
-	{"XF314", Security, true, func(n *normalise.Config, _ *config.XFoundry) []finding {
-		implicit := map[string]bool{}
-		for _, i := range n.Implicit {
-			if i.Kind == "model-deployment" {
-				implicit[i.Scope+"/"+i.Name] = true
-			}
-		}
-		var out []finding
-		for _, s := range n.Scopes {
-			for _, d := range s.Models.Deployments {
-				if d.RaiPolicy == "" && !strings.HasPrefix(d.Model, "text-embedding") {
-					hint := "bind a content-filter policy (raiPolicy)"
-					if implicit[s.Scope+"/"+d.Name] {
-						hint = "declare this deployment so you can bind a content-filter policy (raiPolicy)"
-					}
-					out = append(out, finding{fmt.Sprintf("%s.models.deployments[%s]", scopePath(s.Scope), d.Name), hint})
-				}
-			}
-		}
-		return out
-	}},
-	{"XF315", Security, true, func(n *normalise.Config, _ *config.XFoundry) []finding {
-		var out []finding
-		for _, s := range n.Scopes {
-			for _, m := range s.Mcps {
-				if len(m.AllowedTools) == 0 {
-					out = append(out, finding{fmt.Sprintf("%s.mcps[%s].allowedTools", scopePath(s.Scope), m.Name), "restrict the tools an agent may call on this MCP server"})
-				}
-			}
-		}
-		return out
-	}},
 	{"XF316", Security, false, func(n *normalise.Config, _ *config.XFoundry) []finding {
 		if g := n.Governance; g == nil || !g.Enabled || len(g.PolicyAssignments) == 0 {
 			return []finding{{path("governance", "policyAssignments"), "assign Azure Policy to require no local authentication, explicit network rules, encryption and allowed regions"}}
@@ -185,26 +153,6 @@ var recommendations = []recommendation{
 			return []finding{{path("observability", "alerts"), "keep alerts on so failures and throttling are noticed"}}
 		}
 		return nil
-	}},
-	{"XF322", OperationalExcellence, true, func(n *normalise.Config, _ *config.XFoundry) []finding {
-		var out []finding
-		for _, s := range n.Scopes {
-			for _, d := range s.Models.Deployments {
-				if d.VersionUpgradeOption != "NoAutoUpgrade" {
-					out = append(out, finding{fmt.Sprintf("%s.models.deployments[%s].versionUpgradeOption", scopePath(s.Scope), d.Name),
-						"pin the model version (NoAutoUpgrade) so updates go through change control"})
-				}
-			}
-		}
-		return out
-	}},
-	{"XF323", OperationalExcellence, true, func(n *normalise.Config, _ *config.XFoundry) []finding {
-		for _, p := range n.Projects {
-			if p.Evaluation != nil && p.Evaluation.Enabled {
-				return nil
-			}
-		}
-		return []finding{{path("evaluation", "enabled"), "run evaluations (a test suite of realistic questions) before promoting agents"}}
 	}},
 	{"XF324", OperationalExcellence, false, func(n *normalise.Config, _ *config.XFoundry) []finding {
 		if n.Network.AgentSubnet == "create" && n.Network.AgentSubnetPrefixLength > 24 {

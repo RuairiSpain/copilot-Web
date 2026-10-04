@@ -115,7 +115,7 @@ func TestPrincipalTypes(t *testing.T) {
 
 func TestDeferredLabels(t *testing.T) {
 	for kind, want := range map[string]string{
-		"agent": "data plane", "evaluation": "data plane", "gateway": "Phase 5", "alerts": "Phase 5", "weird": "later phase",
+		"knowledge-base": "Phase 4", "foundry role assignments": "azd creates", "gateway": "Phase 5", "alerts": "Phase 5", "weird": "later phase",
 		"governance (policy assignments, Defender plans, budgets)": "Phase 5",
 	} {
 		if got := deferredLabel(kind); !strings.Contains(got, want) {

@@ -42,7 +42,7 @@ func itemPath(scope, collection, name, tail string) string {
 }
 
 // validateKnowledgeBase checks one knowledge base: rules 7-12 and 117/118.
-func validateKnowledgeBase(kb *config.KnowledgeBase, scope string, deployments []config.ModelDeployment) []diag.Diagnostic {
+func validateKnowledgeBase(kb *config.KnowledgeBase, scope string) []diag.Diagnostic {
 	var out []diag.Diagnostic
 	at := func(tail string) string { return itemPath(scope, "knowledgeBases", kb.Name, tail) }
 	index, vector, retrieval := &kb.Index, &kb.Index.Vector, &kb.Retrieval
@@ -110,7 +110,7 @@ func validateKnowledgeBase(kb *config.KnowledgeBase, scope string, deployments [
 					"vector field '%s' uses profile '%s' but index.vector.profile is '%s'", vf.Name, vf.VectorProfile, vector.Profile))
 			}
 		}
-		out = append(out, embedding(kb, scope, deployments)...)
+		out = append(out, embedding(kb, scope)...)
 	} else if retrieval.Mode == "vector" || retrieval.Mode == "hybrid" {
 		out = append(out, diag.Err("XF117", at("retrieval.mode"), "retrieval mode '%s' requires index.vector.enabled", retrieval.Mode))
 	}
@@ -148,29 +148,19 @@ func validateKnowledgeBase(kb *config.KnowledgeBase, scope string, deployments [
 	return out
 }
 
-func embedding(kb *config.KnowledgeBase, scope string, deployments []config.ModelDeployment) []diag.Diagnostic {
+// embedding checks the vector dimensions against the embedding model. The deployment itself is
+// declared on the azd azure.ai.project service and cannot be checked here.
+func embedding(kb *config.KnowledgeBase, scope string) []diag.Diagnostic {
 	vector := kb.Index.Vector
 	where := itemPath(scope, "knowledgeBases", kb.Name, "index.vector")
-	var d *config.ModelDeployment
-	for i := range deployments {
-		if deployments[i].Name == vector.Deployment {
-			d = &deployments[i]
-		}
-	}
-	if d == nil {
-		return []diag.Diagnostic{diag.Err("XF005", where+".deployment", "embedding deployment '%s' does not exist", vector.Deployment)}
-	}
-	if d.Model != vector.Model {
-		return []diag.Diagnostic{diag.Err("XF007", where+".model", "deployment '%s' serves '%s' but index.vector.model is '%s'", d.Name, d.Model, vector.Model)}
-	}
-	limit, known := embeddingModels[d.Model]
+	limit, known := embeddingModels[vector.Model]
 	switch {
 	case !known:
-		return []diag.Diagnostic{diag.Warn("XF007", where+".dimensions", "'%s' is not a known embedding model; dimensions cannot be verified", d.Model)}
+		return []diag.Diagnostic{diag.Warn("XF007", where+".dimensions", "'%s' is not a known embedding model; dimensions cannot be verified", vector.Model)}
 	case limit.flexible && vector.Dimensions > limit.max:
-		return []diag.Diagnostic{diag.Err("XF007", where+".dimensions", "%s produces at most %d dimensions, not %d", d.Model, limit.max, vector.Dimensions)}
+		return []diag.Diagnostic{diag.Err("XF007", where+".dimensions", "%s produces at most %d dimensions, not %d", vector.Model, limit.max, vector.Dimensions)}
 	case !limit.flexible && vector.Dimensions != limit.max:
-		return []diag.Diagnostic{diag.Err("XF007", where+".dimensions", "%s produces exactly %d dimensions, not %d", d.Model, limit.max, vector.Dimensions)}
+		return []diag.Diagnostic{diag.Err("XF007", where+".dimensions", "%s produces exactly %d dimensions, not %d", vector.Model, limit.max, vector.Dimensions)}
 	}
 	return nil
 }

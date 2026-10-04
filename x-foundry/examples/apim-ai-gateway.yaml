@@ -1,4 +1,5 @@
-# APIM AI Gateway in front of agents: Entra auth, token tracking, chargeback, quotas and limits.
+# APIM AI Gateway in front of agents: Entra auth, token tracking, quotas and limits.
+# The agents are azd azure.ai.agent services; endpoints refer to them by name.
 name: gateway
 x-foundry:
   topology:
@@ -18,9 +19,6 @@ x-foundry:
       - gpt-5-mini
   projects:
     - name: finance
-      agents:
-        - name: finance-agent
-          instructions: Finance assistant.
       gateway:
         path: /finance
         quotaProfile: standard-user

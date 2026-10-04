@@ -1,4 +1,6 @@
 # Foundry IQ: knowledge bases over SharePoint and Blob, hybrid retrieval with security filters.
+# The agent that uses the knowledge base, the model deployments and the SharePoint connection are
+# azd services (azure.ai.agent, azure.ai.project, azure.ai.connection).
 name: policy-assistant
 x-foundry:
   topology:
@@ -11,26 +13,13 @@ x-foundry:
         - Foundry-Admins
   projects:
     - name: policies
-      agents:
-        - name: policy-agent
-          model: gpt-5
-          instructions: Answer using the policies knowledge base only.
-          knowledgeBases:
-            - policies
   models:
     default: gpt-5
     allowed:
       - gpt-5
-    deployments:
-      - name: embeddings
-        model: text-embedding-3-large
-        capacity: 20
   search:
     sku: standard
     semanticRanking: true
-  connectors:
-    - name: hr-sharepoint
-      type: sharepoint
   iq:
     knowledgeBases:
       - name: policies
@@ -39,7 +28,7 @@ x-foundry:
           - name: hr-site
             type: sharepoint
             site: hr
-            connection: hr-sharepoint
+            connection: hr-sharepoint # an azd azure.ai.connection service
           - name: policy-files
             type: blob
             container: policies
@@ -49,7 +38,7 @@ x-foundry:
             overlap: 128
           vector:
             model: text-embedding-3-large
-            deployment: embeddings
+            deployment: embeddings # declared on the azd azure.ai.project service
             dimensions: 3072
           fields:
             - name: department

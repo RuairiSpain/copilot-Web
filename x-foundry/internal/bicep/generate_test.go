@@ -176,7 +176,7 @@ func TestExamplesGenerateDeterministicBicepThatCompiles(t *testing.T) {
 func TestStaticModulesCompile(t *testing.T) {
 	cli := bicepCLI(t)
 	entries, err := filepath.Glob("modules/*.bicep")
-	if err != nil || len(entries) < 20 {
+	if err != nil || len(entries) < 10 {
 		t.Fatalf("modules: %v %v", entries, err)
 	}
 	for _, m := range entries {
@@ -206,18 +206,18 @@ func TestEveryModuleIsUsedByOneOfTheScenarios(t *testing.T) {
 	}
 }
 
-func TestPublicMinimalHasNoNetworkingOrAgentSetup(t *testing.T) {
+func TestPublicMinimalHasNoNetworkingOrSharedServices(t *testing.T) {
 	out := generate(t, Public)
 	r := file(t, out, "resources.bicep")
-	mustContain(t, r, "module foundry 'modules/foundry-account.bicep'", "publicNetworkAccess: true", "agentSubnetId: ''", "module foundry_project_project_finance")
-	mustNotContain(t, r, "network.bicep", "private-dns", "private-endpoint", "capability-host", "storage.bicep", "cosmos.bicep", "search.bicep")
+	mustContain(t, r, "module identity 'modules/identity.bicep'")
+	mustNotContain(t, r, "network.bicep", "private-dns", "private-endpoint", "storage.bicep", "cosmos.bicep", "search.bicep", "foundry-account")
 	if has(out, "modules/network.bicep") || has(out, "modules/private-endpoint.bicep") {
 		t.Fatalf("unused modules were copied: %v", paths(out))
 	}
 	main := file(t, out, "main.bicep")
 	mustContain(t, main, "targetScope = 'subscription'", "name: 'rg-${environmentName}'", "param location string\n", "'azd-env-name': environmentName")
 	mustContain(t, file(t, out, "main.parameters.json"), "${AZURE_ENV_NAME}")
-	mustContain(t, file(t, out, "README.md"), "Network: `public` (explicit)", "x-foundry-id")
+	mustContain(t, file(t, out, "README.md"), "Network: `public` (explicit)", "x-foundry-id", "does **not** create the Foundry resource")
 }
 
 func TestPrivateStandardSetup(t *testing.T) {
@@ -226,26 +226,18 @@ func TestPrivateStandardSetup(t *testing.T) {
 	mustContain(t, r,
 		"module network 'modules/network.bicep'", "agentSubnetPrefix: '10.20.0.0/24'", "peSubnetPrefix: '10.20.1.0/24'",
 		"module private_dns", "module storage 'modules/storage.bicep'", "module cosmos 'modules/cosmos.bicep'", "module search_root",
-		"module private_endpoint_foundry_account", "groupId: 'account'", "agentSubnetId: network.outputs.agentSubnetId",
-		"publicNetworkAccess: false", "module capability_host_project_finance_agents", "'ba92f5b4-2d11-453d-a403-e96b0029c9fe'",
-		"ra-storage-containers.bicep", "ra-cosmos-sql.bicep", "category: 'CosmosDB'", "category: 'CognitiveSearch'", "category: 'AzureStorageAccount'",
-		"'privatelink.blob.${environment().suffixes.storage}'")
-	// The capability host waits for the role assignments that must exist first; the
-	// container-level assignments wait for it.
-	host := r[strings.Index(r, "module capability_host_project_finance_agents"):]
-	host = host[:strings.Index(host, "\n}\n")]
-	mustContain(t, host, "ra_001", "ra_004", "private_endpoint_storage_blob")
-	mustNotContain(t, host, "    network\n")
-	if !strings.Contains(r, "dependsOn: [\n    capability_host_project_finance_agents\n  ]") {
-		t.Fatal("container role assignments must wait for the capability host")
-	}
+		"module private_endpoint_storage_blob", "groupId: 'blob'", "groupId: 'Sql'", "groupId: 'searchService'",
+		"publicNetworkAccess: false", "'privatelink.blob.${environment().suffixes.storage}'")
+	mustNotContain(t, r, "capability", "foundry-account", "connection")
+	mustContain(t, r, "output VNET_RESOURCE_ID string = network.outputs.id", "output PE_SUBNET_NAME string = 'pe-subnet'",
+		"output AGENT_SUBNET_NAME string = 'agent-subnet'", "output STORAGE_ACCOUNT_RESOURCE_ID", "output COSMOS_DB_RESOURCE_ID", "output AI_SEARCH_RESOURCE_ID")
 }
 
-func TestBasicSetupInPrivateModeHasNoAgentSubnetOrCapabilityHost(t *testing.T) {
+func TestBasicSetupInPrivateModeHasNoAgentSubnetOrCosmos(t *testing.T) {
 	out := generate(t, Private, `agentService: {setup: basic}`)
 	r := file(t, out, "resources.bicep")
-	mustContain(t, r, "module network", "agentSubnetPrefix: ''", "agentSubnetId: ''", "module private_endpoint_foundry_account")
-	mustNotContain(t, r, "capability-host", "module storage", "module cosmos")
+	mustContain(t, r, "module network", "agentSubnetPrefix: ''")
+	mustNotContain(t, r, "module storage", "module cosmos", "AGENT_SUBNET_NAME")
 }
 
 func TestRestrictedModeAppliesAllowedIPs(t *testing.T) {
@@ -261,27 +253,31 @@ func TestRestrictedModeAppliesAllowedIPs(t *testing.T) {
 }
 
 func TestExistingResourcesAreReferencedNotCreated(t *testing.T) {
-	out := generate(t, Private,
-		`storage: {existingResourceId: "`+arm+`/Microsoft.Storage/storageAccounts/stshared"}`,
-		`cosmos: {existingResourceId: "`+arm+`/Microsoft.DocumentDB/databaseAccounts/cosshared"}`,
-		`search: {existingResourceId: "`+arm+`/Microsoft.Search/searchServices/srchshared"}`,
-		`keyVault: {existingResourceId: "`+arm+`/Microsoft.KeyVault/vaults/kvshared"}`)
+	overrides := []string{Private,
+		`storage: {existingResourceId: "` + arm + `/Microsoft.Storage/storageAccounts/stshared"}`,
+		`cosmos: {existingResourceId: "` + arm + `/Microsoft.DocumentDB/databaseAccounts/cosshared"}`,
+		`search: {existingResourceId: "` + arm + `/Microsoft.Search/searchServices/srchshared"}`,
+		`keyVault: {existingResourceId: "` + arm + `/Microsoft.KeyVault/vaults/kvshared"}`}
+	out := generate(t, overrides...)
 	r := file(t, out, "resources.bicep")
 	mustContain(t, r,
-		"existing = {\n  name: 'stshared'\n  scope: resourceGroup('00000000-0000-0000-0000-000000000001', 'rg-shared')",
-		"Microsoft.DocumentDB/databaseAccounts@2024-11-15' existing", "Microsoft.Search/searchServices@2024-06-01-preview' existing",
-		"Microsoft.KeyVault/vaults@2024-11-01' existing",
-		"scope: resourceGroup('00000000-0000-0000-0000-000000000001', 'rg-shared')\n  params: {\n    storageName: 'stshared'")
-	mustNotContain(t, r, "module storage ", "module cosmos ", "module search_root ", "module key_vault ")
-	// Private endpoints and connections still target the existing resources.
+		"output STORAGE_ACCOUNT_RESOURCE_ID string = '"+arm+"/Microsoft.Storage/storageAccounts/stshared'",
+		"output COSMOS_DB_RESOURCE_ID string = '"+arm+"/Microsoft.DocumentDB/databaseAccounts/cosshared'",
+		"output AI_SEARCH_RESOURCE_ID string = '"+arm+"/Microsoft.Search/searchServices/srchshared'",
+		"output KEY_VAULT_RESOURCE_ID string = '"+arm+"/Microsoft.KeyVault/vaults/kvshared'")
+	mustNotContain(t, r, "module storage ", "module cosmos ", "module search_root ", "module key_vault ", " existing = ")
+	// Private endpoints still target the existing resources.
 	mustContain(t, r, "targetId: '"+arm+"/Microsoft.Storage/storageAccounts/stshared'", "pe-${'stshared'}-blob")
+	if cli := os.Getenv("XFOUNDRY_BICEP"); cli != "" {
+		build(t, cli, filepath.Join(writeAll(t, out), "main.bicep"))
+	}
 }
 
 func TestExistingVNetAndSubnets(t *testing.T) {
 	vnet := arm + "/Microsoft.Network/virtualNetworks/v1"
 	out := generate(t, `security: {network: {existingVnetResourceId: "`+vnet+`", existingPrivateEndpointSubnetResourceId: "`+vnet+`/subnets/pe", existingAgentSubnetResourceId: "`+vnet+`/subnets/agents"}, roles: {admins: [a]}}`)
 	r := file(t, out, "resources.bicep")
-	mustContain(t, r, "agentSubnetId: '"+vnet+"/subnets/agents'", "subnetId: '"+vnet+"/subnets/pe'", "vnetId: '"+vnet+"'")
+	mustContain(t, r, "subnetId: '"+vnet+"/subnets/pe'", "vnetId: '"+vnet+"'", "output AGENT_SUBNET_NAME string = 'agents'", "output PE_SUBNET_NAME string = 'pe'")
 	mustNotContain(t, r, "module network ")
 }
 
@@ -293,26 +289,13 @@ func TestExplicitNamesAndResourceGroup(t *testing.T) {
 	mustContain(t, m, "name: 'rg-finance'", "param location string = 'westeurope'")
 }
 
-func TestHubSpokeGeneratesHubAndSpokeProjects(t *testing.T) {
-	out := generateHub(t, Private, `projects: [{name: finance}, {name: hr, displayName: HR assistants, description: "HR agents", tags: {team: hr}}]`,
-		`hub: {name: shared, models: {deployments: [{name: chat, model: gpt-5, capacity: 50}]}}`)
-	r := file(t, out, "resources.bicep")
-	mustContain(t, r, "module foundry_project_hub", "name: 'shared'", "module foundry_project_project_hr", "displayName: 'HR assistants'", "team: 'hr'",
-		"module capability_host_project_finance_agents", "module capability_host_project_hr_agents", "name: 'chat'", "capacity: 50")
-	hub := r[strings.Index(r, "module foundry_project_hub"):]
-	hub = hub[:strings.Index(hub, "\n}\n")]
-	mustNotContain(t, hub, "connections")
-	mustContain(t, r, "output foundryProjects array = [\n  foundry_project_project_finance.outputs.name\n  foundry_project_project_hr.outputs.name\n]")
-}
-
-func TestHubAndProjectSearchServicesAreConnectedPerProject(t *testing.T) {
+func TestHubAndProjectSearchServicesAreSeparate(t *testing.T) {
 	out := generateHub(t, Private, `projects: [{name: finance, search: {name: srch-finance}}, {name: hr}]`,
 		`hub: {name: shared, search: {name: srch-hub}}`)
 	r := file(t, out, "resources.bicep")
-	finance := r[strings.Index(r, "module foundry_project_project_finance"):]
-	finance = finance[:strings.Index(finance, "\n}\n")]
-	mustContain(t, finance, "search_project_finance.outputs.name")
-	mustNotContain(t, finance, "search_hub.outputs.name")
+	mustContain(t, r, "module search_hub", "name: 'srch-hub'", "module search_project_finance", "name: 'srch-finance'",
+		"module private_endpoint_search_hub_searchService", "module private_endpoint_search_project_finance_searchService")
+	mustContain(t, r, "output AI_SEARCH_HUB_RESOURCE_ID string = search_hub.outputs.id", "output AI_SEARCH_FINANCE_RESOURCE_ID string = search_project_finance.outputs.id")
 }
 
 func TestGovernanceLocksReachTheModules(t *testing.T) {
@@ -334,53 +317,21 @@ func TestGovernanceLocksReachTheModules(t *testing.T) {
 }
 
 func TestRoleAssignments(t *testing.T) {
-	admin, dev, ops, projectAdmin := "11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222", "33333333-3333-3333-3333-333333333333", "44444444-4444-4444-4444-444444444444"
+	admin, dev, ops := "11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222", "33333333-3333-3333-3333-333333333333"
 	out := generate(t,
 		`security: {network: {mode: public}, roles: {admins: [{type: user, id: "`+admin+`"}], developers: ["`+dev+`"], operators: [{type: servicePrincipal, id: "`+ops+`"}, Ops-Group]}}`,
-		`projects: [{name: finance, roles: {admins: [{type: group, id: "`+projectAdmin+`"}, {type: user, id: "`+admin+`"}]}}]`)
+		`projects: [{name: finance}]`)
 	r := file(t, out, "resources.bicep")
-	mustContain(t, r, "principalId: '"+admin+"'", "principalType: 'User'", "e47c6f54-e4a2-4754-9501-8e0985b135e1",
-		"eadc314b-1a2d-4efa-be10-5d325db5065e", "principalId: '"+projectAdmin+"'", "principalType: 'Group'",
-		"53ca6127-db72-4b80-b1b0-d745d6d5456d", "acdd72a7-3385-48ef-bd42-f606fba81ae7", "43d0d8ad-25c7-4714-9337-8ba259a9fe05",
-		"if (!empty(principalId))")
-	// A root admin is not also made a project manager, and a name without an object ID is reported once.
-	if strings.Count(r, "principalId: '"+admin+"'") != 1 {
-		t.Fatalf("the root admin should be assigned once:\n%s", r)
-	}
+	mustContain(t, r, "principalId: '"+ops+"'", "principalType: 'ServicePrincipal'",
+		"acdd72a7-3385-48ef-bd42-f606fba81ae7", "43d0d8ad-25c7-4714-9337-8ba259a9fe05")
+	// Only operators get roles here (on the resource group); admins and developers need the Foundry
+	// resources azd creates, so they are listed as not generated. A name without an object ID is reported once.
+	mustNotContain(t, r, "principalId: '"+admin+"'", "principalId: '"+dev+"'")
 	if !codes(out)["XF201"] || len(out.Diagnostics) != 1 {
 		t.Fatalf("diagnostics = %v", out.Diagnostics)
 	}
-}
-
-func TestDeploymentsAreDeduplicatedAndLocationsIgnored(t *testing.T) {
-	out := generateHub(t, Public,
-		`hub: {name: shared, models: {deployments: [{name: chat, model: gpt-5, capacity: 50, location: eastus}]}}`,
-		`projects: [{name: fin, models: {deployments: [{name: chat, model: gpt-5, capacity: 5}]}}]`, `defaults: {location: westeurope}`)
-	r := file(t, out, "resources.bicep")
-	if strings.Count(r, "name: 'chat'") != 1 || !strings.Contains(r, "capacity: 50") {
-		t.Fatalf("the hub declaration should win:\n%s", r)
-	}
-	c := codes(out)
-	if !c["XF203"] || !c["XF202"] {
-		t.Fatalf("diagnostics = %v", out.Diagnostics)
-	}
-	same := generateHub(t, Public, `hub: {name: shared, models: {deployments: [{name: chat, model: gpt-5}]}}`,
-		`projects: [{name: fin, models: {deployments: [{name: chat, model: gpt-5}]}}]`)
-	if codes(same)["XF203"] {
-		t.Fatal("identical declarations are not a conflict")
-	}
-}
-
-func TestResourceGroupOverridesAreReported(t *testing.T) {
-	out := generateHub(t, Public, `defaults: {resourceGroup: rg-a}`, `hub: {name: shared, resourceGroup: rg-b}`, `projects: [{name: fin, resourceGroup: rg-c}]`)
-	n := 0
-	for _, d := range out.Diagnostics {
-		if d.Code == "XF204" {
-			n++
-		}
-	}
-	if n != 2 {
-		t.Fatalf("want two XF204, got %v", out.Diagnostics)
+	if !strings.Contains(strings.Join(out.Deferred, "\n"), "role assignments for admins and developers") {
+		t.Fatalf("deferred = %v", out.Deferred)
 	}
 }
 
@@ -424,7 +375,7 @@ func TestLongSymbolsGetShortDeploymentNames(t *testing.T) {
 
 func TestOutputsCoverTheRunnableFiles(t *testing.T) {
 	out := generate(t, Private)
-	want := []string{"README.md", "main.bicep", "main.parameters.json", "resources.bicep", "modules/foundry-account.bicep"}
+	want := []string{"README.md", "main.bicep", "main.parameters.json", "resources.bicep", "modules/storage.bicep"}
 	for _, w := range want {
 		if !has(out, w) {
 			t.Errorf("missing %s in %v", w, paths(out))
@@ -435,11 +386,10 @@ func TestOutputsCoverTheRunnableFiles(t *testing.T) {
 }
 
 func TestDeferredItemsAreListed(t *testing.T) {
-	out := generateHub(t, Public, `hub: {name: shared, mcps: [{name: graph, endpoint: "https://a.example"}]}`,
-		`projects: [{name: fin, agents: [{name: bot, instructions: x}], evaluation: {enabled: true}}]`, `gateway: {enabled: true}`, `observability: {}`,
-		`models: {default: gpt-5, allowed: [gpt-5]}`)
+	out := generateHub(t, Public, `hub: {name: shared, search: {}, inheritance: {iq: true, search: true}, iq: {knowledgeBases: [{name: kb1, sources: [{name: files, type: blob, container: docs}]}]}}`,
+		`projects: [{name: fin}]`, `gateway: {enabled: true}`, `observability: {}`)
 	text := strings.Join(out.Deferred, "\n")
-	mustContain(t, text, "agent (data plane", "mcp (data plane", "evaluation (data plane", "gateway (API Management, Phase 5)", "alerts (Phase 5)")
+	mustContain(t, text, "knowledge-base (data plane on the Search service, Phase 4)", "gateway (API Management, Phase 5)", "alerts (Phase 5)", "role assignments for admins and developers")
 	mustContain(t, file(t, out, "README.md"), "## Not generated yet")
 }
 
@@ -455,40 +405,12 @@ func TestAnUnusableAddressSpaceFailsGeneration(t *testing.T) {
 	}
 }
 
-func moduleText(t *testing.T, r, name string) string {
-	t.Helper()
-	i := strings.Index(r, "module "+name+" ")
-	if i < 0 {
-		t.Fatalf("no module %s in:\n%s", name, r)
-	}
-	text := r[i:]
-	return text[:strings.Index(text, "\n}\n")]
-}
-
-func TestAccountChildrenAreDeployedOneAfterAnother(t *testing.T) {
-	// The Foundry resource rejects concurrent changes to its children, so projects, capability
-	// hosts and deployments form a chain.
-	out := generateHub(t, Private, `projects: [{name: finance}, {name: hr}]`, `models: {default: gpt-5, allowed: [gpt-5]}`, `observability: {}`)
-	r := file(t, out, "resources.bicep")
-	mustContain(t, moduleText(t, r, "foundry_project_hub"), "foundry_appinsights_connection")
-	mustContain(t, moduleText(t, r, "foundry_project_project_finance"), "foundry_project_hub")
-	mustContain(t, moduleText(t, r, "foundry_project_project_hr"), "foundry_project_project_finance")
-	mustContain(t, moduleText(t, r, "capability_host_project_finance_agents"), "foundry_project_project_hr")
-	mustContain(t, moduleText(t, r, "capability_host_project_hr_agents"), "capability_host_project_finance_agents")
-	mustContain(t, moduleText(t, r, "model_deployments"), "capability_host_project_hr_agents")
-}
-
 func TestRoleAssignmentsAreLabelledWithTheRoleName(t *testing.T) {
-	admin := "11111111-1111-1111-1111-111111111111"
-	out := generate(t, `security: {network: {mode: private}, roles: {admins: [{type: user, id: "`+admin+`"}]}}`)
+	ops := "33333333-3333-3333-3333-333333333333"
+	out := generate(t, `security: {network: {mode: private}, roles: {admins: [a], operators: [{type: user, id: "`+ops+`"}]}}`)
 	r := file(t, out, "resources.bicep")
 	mustContain(t, r,
-		"// Foundry Account Owner for admin "+admin+"\n",
-		"assignmentDescription: 'Foundry Account Owner for admin "+admin+"'",
-		"// Storage Blob Data Contributor for the finance project identity\n",
-		"// Search Index Data Contributor for the finance project identity\n",
-		"// Cosmos DB Built-in Data Contributor (limited to enterprise_memory) for the finance project identity\n",
-		"// Foundry User for the identity running the deployment\n")
-	// The Cosmos DB SQL role assignment has no description property.
-	mustNotContain(t, moduleText(t, r, "ra_006"), "assignmentDescription")
+		"// Reader for operator "+ops+"\n",
+		"assignmentDescription: 'Reader for operator "+ops+"'",
+		"// Monitoring Reader for operator "+ops+"\n")
 }

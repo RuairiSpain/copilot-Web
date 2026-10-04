@@ -2,8 +2,8 @@
 
 A two-reviewer review of the schema, validation rules and the Azure services the extension
 will deploy. **Foundry** is the Foundry architect and lead developer; **Infra** is the Azure
-infrastructure specialist. Phase 1 generates no Bicep or CLI commands yet, so the generator
-items below are requirements for Phases 2 to 6, not defects in shipped code.
+infrastructure specialist. Several findings below concern Foundry resources that azd now owns (see
+`azd-boundary.md`); they apply to the azd project, not to the x-foundry generator.
 
 Status: `fixed` (in this change), `backlog` (planned), `decision` (needs a maintainer choice).
 Agreement: `both`, or the single reviewer who raised it.

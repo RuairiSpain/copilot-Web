@@ -1,4 +1,5 @@
-# A shared hub (models, toolboxes, MCPs) inherited by spoke projects, which may override it.
+# A shared hub (models policy, Search, Foundry IQ) inherited by spoke projects, which may override it.
+# The Foundry projects, model deployments, agents and toolboxes are azd services.
 name: enterprise-ai
 x-foundry:
   topology:
@@ -11,51 +12,30 @@ x-foundry:
         - Foundry-Admins
   hub:
     name: shared-ai
-    location: westeurope
     models:
       default: gpt-5
       allowed:
         - gpt-5
         - gpt-5-mini
-    mcps:
-      - name: graph
-        endpoint: https://graph.contoso.com/mcp
-      - name: servicenow
-        endpoint: https://servicenow.contoso.com/mcp
-    toolboxes:
-      - name: enterprise-search
-        tools:
-          - name: graph-tool
-            type: mcp
-            reference: graph
+    search:
+      sku: standard
+    inheritance:
+      iq: true
+    iq:
+      knowledgeBases:
+        - name: policies
+          sources:
+            - name: policy-files
+              type: blob
+              container: policies
   projects:
     - name: finance
       models:
         default: gpt-5-mini
         allowed:
           - gpt-5-mini
-      toolboxes:
-        - name: finance-tools
-          tools:
-            - name: servicenow-tool
-              type: mcp
-              reference: servicenow
-      agents:
-        - name: finance-agent
-          instructions: Answer finance policy questions.
-          toolboxes:
-            - enterprise-search
-            - finance-tools
     - name: hr
-      agents:
-        - name: hr-agent
-          toolboxes:
-            - enterprise-search
     - name: sandbox
       inheritHub: false
       models:
         default: gpt-5
-        deployments:
-          - name: gpt-5
-            model: gpt-5
-            capacity: 5

@@ -7,13 +7,8 @@ import "github.com/RuairiSpain/copilot-Web/x-foundry/internal/config"
 type ScopeResources struct {
 	Scope          string                    `json:"scope"`
 	Models         config.ModelConfiguration `json:"models"`
-	Agents         []config.Agent            `json:"agents,omitempty"`
-	Toolboxes      []config.Toolbox          `json:"toolboxes,omitempty"`
-	Mcps           []config.Mcp              `json:"mcps,omitempty"`
-	Connectors     []config.Connector        `json:"connectors,omitempty"`
 	KnowledgeBases []config.KnowledgeBase    `json:"knowledgeBases,omitempty"`
 	Search         *config.Search            `json:"search,omitempty"`
-	Evaluation     *config.Evaluation        `json:"evaluation,omitempty"`
 }
 
 // Implicit is a resource the normaliser derived because another setting requires it.
@@ -59,33 +54,22 @@ type Roles struct {
 // EffectiveProject is a project's resources after inheritance (root < hub < project).
 type EffectiveProject struct {
 	Name           string                    `json:"name"`
-	DisplayName    string                    `json:"displayName"`
-	Description    string                    `json:"description,omitempty"`
-	Location       string                    `json:"location,omitempty"`
-	ResourceGroup  string                    `json:"resourceGroup,omitempty"`
 	InheritsHub    bool                      `json:"inheritsHub"`
 	Roles          Roles                     `json:"roles"`
 	Tags           config.Tags               `json:"tags,omitempty"`
 	Models         config.ModelConfiguration `json:"models"`
-	Agents         []config.Agent            `json:"agents,omitempty"`
-	Toolboxes      []config.Toolbox          `json:"toolboxes,omitempty"`
-	Mcps           []config.Mcp              `json:"mcps,omitempty"`
-	Connectors     []config.Connector        `json:"connectors,omitempty"`
 	KnowledgeBases []config.KnowledgeBase    `json:"knowledgeBases,omitempty"`
 	SearchScope    string                    `json:"searchScope,omitempty"`
-	Evaluation     *config.Evaluation        `json:"evaluation,omitempty"`
 	Gateway        *config.ProjectGateway    `json:"gateway,omitempty"`
 	Origins        map[string]string         `json:"origins,omitempty"`
 }
 
 // HubView is the resolved hub.
 type HubView struct {
-	Name          string             `json:"name"`
-	Location      string             `json:"location,omitempty"`
-	ResourceGroup string             `json:"resourceGroup,omitempty"`
-	Inheritance   config.Inheritance `json:"inheritance"`
-	SearchScope   string             `json:"searchScope,omitempty"`
-	Tags          config.Tags        `json:"tags,omitempty"`
+	Name        string             `json:"name"`
+	Inheritance config.Inheritance `json:"inheritance"`
+	SearchScope string             `json:"searchScope,omitempty"`
+	Tags        config.Tags        `json:"tags,omitempty"`
 }
 
 // Config is the fully resolved configuration used for planning.

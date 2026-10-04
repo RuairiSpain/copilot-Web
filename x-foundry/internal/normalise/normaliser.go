@@ -10,6 +10,9 @@ import (
 	"github.com/RuairiSpain/copilot-Web/x-foundry/internal/ids"
 )
 
+// foundryComponent stands for the Foundry resource, whose private endpoint azd creates.
+const foundryComponent = "foundry"
+
 type zoneInfo struct {
 	group string
 	zones []string
@@ -76,37 +79,13 @@ func (n *normaliser) inherits(projectName string) bool {
 	return n.hub != nil && p != nil && p.InheritHub
 }
 
-// ancestors are the scopes whose model deployments are visible from scope (broadest first).
-func (n *normaliser) ancestors(scope string) []string {
-	switch scope {
-	case ids.RootScope:
-		return []string{ids.RootScope}
-	case ids.HubScope:
-		return []string{ids.RootScope, ids.HubScope}
-	}
-	chain := []string{ids.RootScope}
-	if n.inherits(ids.ProjectName(scope)) && n.hub.Inheritance.Models {
-		chain = append(chain, ids.HubScope)
-	}
-	return append(chain, scope)
-}
-
-func (n *normaliser) deploymentsVisible(scope string) []config.ModelDeployment {
-	var layers []layer[config.ModelDeployment]
-	for _, s := range n.ancestors(scope) {
-		layers = append(layers, layer[config.ModelDeployment]{s, n.byID[s].Models.Deployments})
-	}
-	merged, _ := mergeNamed(layers)
-	return merged
-}
-
 // ------------------------------------------------------------------------ assembly
 
 func (n *normaliser) assemble() {
 	cfg := n.cfg
 	root := n.addScope(&ScopeResources{Scope: ids.RootScope, Models: cfg.Models, Search: cfg.Search})
 	if h := n.hub; h != nil {
-		hub := &ScopeResources{Scope: ids.HubScope, Models: h.Models, Toolboxes: h.Toolboxes, Mcps: h.Mcps, Search: h.Search}
+		hub := &ScopeResources{Scope: ids.HubScope, Models: h.Models, Search: h.Search}
 		if h.IQ != nil && h.IQ.Enabled {
 			hub.KnowledgeBases = append(hub.KnowledgeBases, h.IQ.KnowledgeBases...)
 		}
@@ -114,10 +93,7 @@ func (n *normaliser) assemble() {
 	}
 	for i := range cfg.Projects {
 		p := &cfg.Projects[i]
-		s := &ScopeResources{
-			Scope: ids.ProjectScope(p.Name), Models: p.Models, Agents: p.Agents, Toolboxes: p.Toolboxes,
-			Mcps: p.Mcps, Connectors: p.Connectors, Search: p.Search, Evaluation: p.Evaluation,
-		}
+		s := &ScopeResources{Scope: ids.ProjectScope(p.Name), Models: p.Models, Search: p.Search}
 		if p.IQ != nil && p.IQ.Enabled {
 			s.KnowledgeBases = append(s.KnowledgeBases, p.IQ.KnowledgeBases...)
 		}
@@ -129,22 +105,6 @@ func (n *normaliser) assemble() {
 		}
 		return root
 	}
-	for _, a := range cfg.Agents {
-		t := target(a.Project)
-		t.Agents = append(t.Agents, a)
-	}
-	for _, x := range cfg.Toolboxes {
-		t := target(x.Project)
-		t.Toolboxes = append(t.Toolboxes, x)
-	}
-	for _, x := range cfg.Mcps {
-		t := target(x.Project)
-		t.Mcps = append(t.Mcps, x)
-	}
-	for _, x := range cfg.Connectors {
-		t := target(x.Project)
-		t.Connectors = append(t.Connectors, x)
-	}
 	if cfg.IQ != nil && cfg.IQ.Enabled {
 		for _, kb := range cfg.IQ.KnowledgeBases {
 			project := kb.Project
@@ -155,68 +115,20 @@ func (n *normaliser) assemble() {
 			t.KnowledgeBases = append(t.KnowledgeBases, kb)
 		}
 	}
-	if cfg.Evaluation != nil {
-		if t := target(cfg.Evaluation.Project); t.Evaluation == nil {
-			t.Evaluation = cfg.Evaluation
-		}
-	}
 }
 
 // ---------------------------------------------------------------------------- models
 
-// defaultSKU: global deployments may process data in any region, so data residency
-// forces DataZone.
-func (n *normaliser) defaultSKU() string {
-	if g := n.cfg.Governance; g != nil && g.Enabled && len(g.DataResidency) > 0 {
-		return "DataZoneStandard"
-	}
-	return "GlobalStandard"
-}
-
-func (n *normaliser) newDeployment(name, model string) config.ModelDeployment {
-	d := config.New[config.ModelDeployment]()
-	d.Name, d.Model, d.SKU = name, model, n.defaultSKU()
-	return *d
-}
-
-// implicitDeployments deploys models named in allowed, or used for embeddings, when
-// nothing else does.
-func (n *normaliser) implicitDeployments() {
+// embeddingDeployments names the embedding deployment of every vector-enabled knowledge base
+// that does not name one: by convention the deployment is called after its model. Deployments
+// are declared on the azd azure.ai.project service, not here.
+func (n *normaliser) embeddingDeployments() {
 	for _, s := range n.scopes {
-		visible := map[string]bool{}
-		for _, d := range n.deploymentsVisible(s.Scope) {
-			visible[d.Name], visible[d.Model] = true, true
-		}
-		for _, model := range s.Models.Allowed {
-			if visible[model] {
-				continue
-			}
-			d := n.newDeployment(ids.Slug(model), model)
-			s.Models.Deployments = append(s.Models.Deployments, d)
-			visible[d.Name], visible[model] = true, true
-			n.addImplicit("model-deployment", d.Name, s.Scope, fmt.Sprintf("'%s' is in models.allowed", model))
-		}
 		for i := range s.KnowledgeBases {
-			kb := &s.KnowledgeBases[i]
-			vector := &kb.Index.Vector
-			if !vector.Enabled || vector.Deployment != "" {
-				continue
+			vector := &s.KnowledgeBases[i].Index.Vector
+			if vector.Enabled && vector.Deployment == "" {
+				vector.Deployment = ids.Slug(vector.Model)
 			}
-			var match *config.ModelDeployment
-			for _, d := range n.deploymentsVisible(s.Scope) {
-				if d.Model == vector.Model {
-					d := d
-					match = &d
-					break
-				}
-			}
-			if match == nil {
-				d := n.newDeployment(ids.Slug(vector.Model), vector.Model)
-				s.Models.Deployments = append(s.Models.Deployments, d)
-				match = &d
-				n.addImplicit("model-deployment", d.Name, s.Scope, fmt.Sprintf("embedding model for knowledge base '%s'", kb.Name))
-			}
-			vector.Deployment = match.Name
 		}
 	}
 }
@@ -394,34 +306,14 @@ func (n *normaliser) effectiveProject(name string) *EffectiveProject {
 	eff := &EffectiveProject{Name: name, InheritsHub: inherits, Models: mergeModels(modelLayers)}
 
 	var o map[string]string
-	eff.Agents, o = mergeNamed([]layer[config.Agent]{{ids.RootScope, root.Agents}, {scopeID, own.Agents}})
-	record("agent", o)
-	tb := []layer[config.Toolbox]{{ids.RootScope, root.Toolboxes}}
-	mc := []layer[config.Mcp]{{ids.RootScope, root.Mcps}}
 	kb := []layer[config.KnowledgeBase]{{ids.RootScope, root.KnowledgeBases}}
-	if useHub(inh.Toolboxes) {
-		tb = append(tb, layer[config.Toolbox]{ids.HubScope, hub.Toolboxes})
-	}
-	if useHub(inh.Mcps) {
-		mc = append(mc, layer[config.Mcp]{ids.HubScope, hub.Mcps})
-	}
 	if useHub(inh.IQ) {
 		kb = append(kb, layer[config.KnowledgeBase]{ids.HubScope, hub.KnowledgeBases})
 	}
-	eff.Toolboxes, o = mergeNamed(append(tb, layer[config.Toolbox]{scopeID, own.Toolboxes}))
-	record("toolbox", o)
-	eff.Mcps, o = mergeNamed(append(mc, layer[config.Mcp]{scopeID, own.Mcps}))
-	record("mcp", o)
-	eff.Connectors, o = mergeNamed([]layer[config.Connector]{{ids.RootScope, root.Connectors}, {scopeID, own.Connectors}})
-	record("connector", o)
 	eff.KnowledgeBases, o = mergeNamed(append(kb, layer[config.KnowledgeBase]{scopeID, own.KnowledgeBases}))
 	record("knowledgeBase", o)
 	eff.Origins = origins
 
-	eff.Evaluation = own.Evaluation
-	if eff.Evaluation == nil {
-		eff.Evaluation = root.Evaluation
-	}
 	if p.Gateway != nil {
 		g := config.Clone(*p.Gateway)
 		if g.Path == "" {
@@ -429,10 +321,6 @@ func (n *normaliser) effectiveProject(name string) *EffectiveProject {
 		}
 		eff.Gateway = &g
 	}
-	eff.DisplayName = firstNonEmpty(p.DisplayName, name)
-	eff.Description = p.Description
-	eff.Location = firstNonEmpty(p.Location, cfg.Defaults.Location)
-	eff.ResourceGroup = firstNonEmpty(p.ResourceGroup, cfg.Defaults.ResourceGroup)
 	eff.Roles = mergeRoles(cfg.Security.Roles, p.Roles)
 	eff.Tags = config.Tags{}
 	for k, v := range n.baseTags {
@@ -480,9 +368,6 @@ func (n *normaliser) resolveStorage() *config.Storage {
 				}
 				adls = adls || src.Type == "adls"
 			}
-		}
-		if ev := s.Evaluation; ev != nil && ev.Enabled && len(ev.Datasets) > 0 {
-			need("evaluations", "evaluation datasets are enabled")
 		}
 	}
 	if len(purposes) == 0 {
@@ -600,7 +485,9 @@ func (n *normaliser) resolveNetwork(c componentSet, searchScopes []string) Netwo
 		}
 	}
 	type endpoint struct{ component, zoneKey string }
-	endpoints := []endpoint{{ids.Foundry, "foundry"}}
+	// The Foundry resource's private endpoint is created by azd (azure.ai.project network); its
+	// DNS zones are still created here so azd can reuse them (dns.resourceGroup).
+	endpoints := []endpoint{{foundryComponent, "foundry"}}
 	for _, s := range searchScopes {
 		endpoints = append(endpoints, endpoint{ids.SearchNode(s), "search"})
 	}
@@ -624,7 +511,9 @@ func (n *normaliser) resolveNetwork(c componentSet, searchScopes []string) Netwo
 	var zones []string
 	for _, e := range endpoints {
 		info := privateLinkZones[e.zoneKey]
-		out.PrivateEndpoints = append(out.PrivateEndpoints, PrivateEndpoint{Component: e.component, Group: info.group, Zones: info.zones})
+		if e.component != foundryComponent {
+			out.PrivateEndpoints = append(out.PrivateEndpoints, PrivateEndpoint{Component: e.component, Group: info.group, Zones: info.zones})
+		}
 		for _, z := range info.zones {
 			if !has(zones, z) {
 				zones = append(zones, z)
@@ -653,7 +542,7 @@ func (n *normaliser) run() Result {
 		}
 	}
 	n.assemble()
-	n.implicitDeployments()
+	n.embeddingDeployments()
 	for _, s := range n.scopes {
 		for i := range s.KnowledgeBases {
 			materialiseIndex(&s.KnowledgeBases[i])
@@ -673,20 +562,7 @@ func (n *normaliser) run() Result {
 		identity = config.New[config.ManagedIdentity]()
 		n.addImplicit("managed-identity", "identity", ids.RootScope, "keyless access and RBAC")
 	}
-	usesSecrets := false
-	for _, s := range n.scopes {
-		for _, m := range s.Mcps {
-			usesSecrets = usesSecrets || (m.Authentication != nil && m.Authentication.SecretRef != "")
-		}
-		for _, c := range s.Connectors {
-			usesSecrets = usesSecrets || (c.Authentication != nil && c.Authentication.SecretRef != "")
-		}
-	}
 	keyVault := cfg.KeyVault
-	if keyVault == nil && usesSecrets {
-		keyVault = config.New[config.KeyVault]()
-		n.addImplicit("key-vault", "key-vault", ids.RootScope, "secret references are used")
-	}
 	observability := cfg.Observability
 	if observability == nil && gateway != nil && gateway.Enabled {
 		observability = config.New[config.Observability]()
@@ -724,9 +600,7 @@ func (n *normaliser) run() Result {
 			tags[k] = v
 		}
 		hubView = &HubView{
-			Name: h.Name, Location: firstNonEmpty(h.Location, cfg.Defaults.Location),
-			ResourceGroup: firstNonEmpty(h.ResourceGroup, cfg.Defaults.ResourceGroup),
-			Inheritance:   h.Inheritance, SearchScope: n.hubSearch, Tags: tags,
+			Name: h.Name, Inheritance: h.Inheritance, SearchScope: n.hubSearch, Tags: tags,
 		}
 	}
 	out := &Config{

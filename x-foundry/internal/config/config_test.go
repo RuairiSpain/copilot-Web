@@ -48,12 +48,8 @@ func TestDecodeFillsDefaultsAndTracksExplicitKeys(t *testing.T) {
 
 func TestDecodeListDefaults(t *testing.T) {
 	c := decode(t, `{"topology":{"mode":"standalone"},"security":{"roles":{"admins":["a"]}},
-		"projects":[{"name":"finance","agents":[{"name":"bot"},{"name":"two","protocols":["a2a"]}]}],
+		"projects":[{"name":"finance"}],
 		"gateway":{"enabled":true}}`)
-	agents := c.Projects[0].Agents
-	if len(agents[0].Protocols) != 1 || agents[0].Protocols[0] != "responses" || agents[1].Protocols[0] != "a2a" {
-		t.Fatalf("protocols = %v %v", agents[0].Protocols, agents[1].Protocols)
-	}
 	g := c.Gateway
 	if len(g.Routing.RetryStatusCodes) != 5 || g.Routing.RetryStatusCodes[0] != 429 || g.TokenTracking.Dimensions[3] != "model" {
 		t.Fatalf("gateway defaults = %+v", g.Routing)
@@ -92,9 +88,9 @@ func TestNewAppliesDefaults(t *testing.T) {
 	if !s.Enabled || s.SKU != "Standard_ZRS" || s.RetentionDays != 30 || len(s.Purposes) != 1 || s.Has("sku") {
 		t.Fatalf("storage = %+v", s)
 	}
-	d := config.New[config.ModelDeployment]()
-	if d.VersionUpgradeOption != "NoAutoUpgrade" || d.Capacity != 10 {
-		t.Fatalf("deployment = %+v", d)
+	k := config.New[config.KeyVault]()
+	if !k.Enabled || !k.PurgeProtection || k.SoftDeleteDays != 90 {
+		t.Fatalf("key vault = %+v", k)
 	}
 }
 
@@ -110,13 +106,14 @@ func TestCloneIsDeepAndKeepsExplicitKeys(t *testing.T) {
 		t.Fatal("explicit-key sets are copied")
 	}
 	c2 := decode(t, `{"topology":{"mode":"standalone"},"security":{"roles":{"admins":["a"]}},"projects":[{"name":"finance"}],
-		"mcps":[{"name":"graph","endpoint":"https://a.example","headers":{"x":"y"}}],"agents":[{"name":"bot","environment":{"k":["v",1]}}]}`)
+		"tags":{"x":"y"},"gateway":{"enabled":true,"endpoints":[{"name":"ep","path":"/a","target":"t","targetType":"model"}]}}`)
 	cl := config.Clone(c2)
-	cl.Mcps[0].Headers["x"] = "changed"
-	if c2.Mcps[0].Headers["x"] != "y" {
-		t.Fatal("maps are copied")
+	cl.Tags["x"] = "changed"
+	cl.Gateway.Endpoints[0].Name = "changed"
+	if c2.Tags["x"] != "y" || c2.Gateway.Endpoints[0].Name != "ep" {
+		t.Fatal("maps and slices are copied")
 	}
-	if !reflect.DeepEqual(config.Clone(c2.Agents), c2.Agents) {
+	if !reflect.DeepEqual(config.Clone(c2.Tags), c2.Tags) {
 		t.Fatal("clone must be equal to the original")
 	}
 }

@@ -1,4 +1,5 @@
-# Everything together: hub-spoke, private networking, shared Foundry IQ, runtime, gateway and governance.
+# Everything together: hub-spoke, private networking, shared Foundry IQ, gateway and governance.
+# The Foundry projects, model deployments, agents, toolboxes and connections are azd services.
 name: enterprise-ai
 x-foundry:
   topology:
@@ -30,17 +31,6 @@ x-foundry:
       allowed:
         - gpt-5
         - gpt-5-mini
-      # Declared (not derived) so a content-filter policy can be bound; DataZone SKUs
-      # because governance.dataResidency is set.
-      deployments:
-        - name: gpt-5
-          model: gpt-5
-          sku: DataZoneStandard
-          raiPolicy: contoso-content-filter
-        - name: gpt-5-mini
-          model: gpt-5-mini
-          sku: DataZoneStandard
-          raiPolicy: contoso-content-filter
     search:
       sku: standard
       replicas: 3
@@ -61,23 +51,6 @@ x-foundry:
               - name: department
                 type: Edm.String
                 filterable: true
-    mcps:
-      - name: graph
-        endpoint: https://graph.contoso.com/mcp
-        allowedTools:
-          - search_users
-          - read_calendar
-        authentication:
-          mode: managedIdentity
-    toolboxes:
-      - name: enterprise-search
-        tools:
-          - name: policies
-            type: knowledgeBase
-            reference: policies
-          - name: graph-tool
-            type: mcp
-            reference: graph
   projects:
     - name: finance
       roles:
@@ -85,26 +58,7 @@ x-foundry:
           - Finance-AI-Dev
         consumers:
           - Finance-AI-Users
-      agents:
-        - name: finance-agent
-          knowledgeBases:
-            - policies
-          toolboxes:
-            - enterprise-search
-      evaluation:
-        enabled: true
-        datasets:
-          - name: finance-golden
-            path: ./eval/finance.jsonl
-        evaluators:
-          - name: groundedness
-            type: groundedness
-            threshold: 0.8
     - name: hr
-      agents:
-        - name: hr-agent
-          toolboxes:
-            - enterprise-search
   gateway:
     enabled: true
     authentication:

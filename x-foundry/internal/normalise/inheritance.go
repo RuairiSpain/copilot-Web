@@ -36,11 +36,10 @@ type modelLayer struct {
 }
 
 // mergeModels combines model configurations from broadest to narrowest scope:
-// default is overridden, deployments merge by name, a non-empty allowed set replaces the
+// default is overridden, a non-empty allowed set replaces the
 // inherited one, denied sets accumulate.
 func mergeModels(layers []modelLayer) config.ModelConfiguration {
 	var out config.ModelConfiguration
-	var deploymentLayers []layer[config.ModelDeployment]
 	for _, l := range layers {
 		if l.models.Default != "" {
 			out.Default = l.models.Default
@@ -53,10 +52,7 @@ func mergeModels(layers []modelLayer) config.ModelConfiguration {
 				out.Denied = append(out.Denied, d)
 			}
 		}
-		deploymentLayers = append(deploymentLayers, layer[config.ModelDeployment]{l.scope, l.models.Deployments})
 	}
-	merged, _ := mergeNamed(deploymentLayers)
-	out.Deployments = config.Clone(merged)
 	return out
 }
 

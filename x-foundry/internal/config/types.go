@@ -35,9 +35,6 @@ type XFoundry struct {
 	Hub             *Hub               `json:"hub,omitempty"`
 	Projects        []Project          `json:"projects"`
 	Models          ModelConfiguration `json:"models"`
-	Agents          []Agent            `json:"agents,omitempty"`
-	Toolboxes       []Toolbox          `json:"toolboxes,omitempty"`
-	Mcps            []Mcp              `json:"mcps,omitempty"`
 	Search          *Search            `json:"search,omitempty"`
 	IQ              *FoundryIQ         `json:"iq,omitempty"`
 	Gateway         *Gateway           `json:"gateway,omitempty"`
@@ -47,8 +44,6 @@ type XFoundry struct {
 	AgentService    AgentService       `json:"agentService"`
 	ManagedIdentity *ManagedIdentity   `json:"managedIdentity,omitempty"`
 	Observability   *Observability     `json:"observability,omitempty"`
-	Connectors      []Connector        `json:"connectors,omitempty"`
-	Evaluation      *Evaluation        `json:"evaluation,omitempty"`
 	Governance      *Governance        `json:"governance,omitempty"`
 	Tags            Tags               `json:"tags,omitempty"`
 }
@@ -100,109 +95,15 @@ type SecurityRoles struct {
 	Operators  []Principal `json:"operators,omitempty"`
 }
 
-// ------------------------------------------------------------------ models, agents
+// ------------------------------------------------------------------------ models
 
-// ModelDeployment is one Foundry model deployment.
-type ModelDeployment struct {
-	Name                 string `json:"name"`
-	Model                string `json:"model"`
-	Version              string `json:"version,omitempty"`
-	Format               string `json:"format" default:"OpenAI"`
-	SKU                  string `json:"sku" default:"GlobalStandard"`
-	Capacity             int    `json:"capacity" default:"10"`
-	Location             string `json:"location,omitempty"`
-	RaiPolicy            string `json:"raiPolicy,omitempty"`
-	VersionUpgradeOption string `json:"versionUpgradeOption" default:"NoAutoUpgrade"`
-}
-
-// GetName returns the deployment name.
-func (d ModelDeployment) GetName() string { return d.Name }
-
-// ModelConfiguration is deployment and model-governance configuration.
+// ModelConfiguration is model governance: the allowed and denied models. Deployments are
+// declared on the azd azure.ai.project service.
 type ModelConfiguration struct {
-	Default     string            `json:"default,omitempty"`
-	Deployments []ModelDeployment `json:"deployments,omitempty"`
-	Allowed     []string          `json:"allowed,omitempty"`
-	Denied      []string          `json:"denied,omitempty"`
+	Default string   `json:"default,omitempty"`
+	Allowed []string `json:"allowed,omitempty"`
+	Denied  []string `json:"denied,omitempty"`
 }
-
-// Tool is one tool in a toolbox.
-type Tool struct {
-	Name          string         `json:"name"`
-	Type          string         `json:"type"`
-	Reference     string         `json:"reference"`
-	Configuration map[string]any `json:"configuration,omitempty"`
-}
-
-// GetName returns the tool name.
-func (t Tool) GetName() string { return t.Name }
-
-// Toolbox groups tools.
-type Toolbox struct {
-	Name        string `json:"name"`
-	Project     string `json:"project,omitempty"`
-	Description string `json:"description,omitempty"`
-	Tools       []Tool `json:"tools"`
-}
-
-// GetName returns the toolbox name.
-func (t Toolbox) GetName() string { return t.Name }
-
-// ConnectionAuthentication describes how a connection authenticates.
-type ConnectionAuthentication struct {
-	Mode      string   `json:"mode" default:"managedIdentity"`
-	ClientID  string   `json:"clientId,omitempty"`
-	TenantID  string   `json:"tenantId,omitempty"`
-	Scopes    []string `json:"scopes,omitempty"`
-	SecretRef string   `json:"secretRef,omitempty"`
-}
-
-// Mcp is a Model Context Protocol server.
-type Mcp struct {
-	Name           string                    `json:"name"`
-	Project        string                    `json:"project,omitempty"`
-	Endpoint       string                    `json:"endpoint"`
-	Transport      string                    `json:"transport" default:"streamable-http"`
-	Authentication *ConnectionAuthentication `json:"authentication,omitempty"`
-	AllowedTools   []string                  `json:"allowedTools,omitempty"`
-	Headers        map[string]string         `json:"headers,omitempty"`
-}
-
-// GetName returns the MCP name.
-func (m Mcp) GetName() string { return m.Name }
-
-// Connector is an external connection.
-type Connector struct {
-	Name           string                    `json:"name"`
-	Type           string                    `json:"type"`
-	Endpoint       string                    `json:"endpoint,omitempty"`
-	Authentication *ConnectionAuthentication `json:"authentication,omitempty"`
-	Project        string                    `json:"project,omitempty"`
-	Shared         bool                      `json:"shared"`
-	Configuration  map[string]any            `json:"configuration,omitempty"`
-}
-
-// GetName returns the connector name.
-func (c Connector) GetName() string { return c.Name }
-
-// Agent is a Foundry agent.
-type Agent struct {
-	Name           string         `json:"name"`
-	Project        string         `json:"project,omitempty"`
-	Kind           string         `json:"kind" default:"prompt"`
-	Model          string         `json:"model,omitempty"`
-	Instructions   string         `json:"instructions,omitempty"`
-	Source         string         `json:"source,omitempty"`
-	Protocols      []string       `json:"protocols" default:"responses"`
-	Toolboxes      []string       `json:"toolboxes,omitempty"`
-	Mcps           []string       `json:"mcps,omitempty"`
-	KnowledgeBases []string       `json:"knowledgeBases,omitempty"`
-	Environment    map[string]any `json:"environment,omitempty"`
-	Tags           Tags           `json:"tags,omitempty"`
-}
-
-// GetName returns the agent name.
-func (a Agent) GetName() string { return a.Name }
 
 // ------------------------------------------------------------------ search and IQ
 
@@ -712,38 +613,6 @@ type Observability struct {
 	Tags                Tags     `json:"tags,omitempty"`
 }
 
-// EvaluationDataset is an evaluation dataset.
-type EvaluationDataset struct {
-	Name   string `json:"name"`
-	Path   string `json:"path"`
-	Format string `json:"format" default:"jsonl"`
-}
-
-// GetName returns the dataset name.
-func (d EvaluationDataset) GetName() string { return d.Name }
-
-// Evaluator is an evaluator.
-type Evaluator struct {
-	Name          string         `json:"name"`
-	Type          string         `json:"type"`
-	Threshold     float64        `json:"threshold,omitempty"`
-	Configuration map[string]any `json:"configuration,omitempty"`
-}
-
-// GetName returns the evaluator name.
-func (e Evaluator) GetName() string { return e.Name }
-
-// Evaluation configures evaluation.
-type Evaluation struct {
-	Enabled       bool                `json:"enabled"`
-	Project       string              `json:"project,omitempty"`
-	Datasets      []EvaluationDataset `json:"datasets,omitempty"`
-	Evaluators    []Evaluator         `json:"evaluators,omitempty"`
-	Schedule      string              `json:"schedule,omitempty"`
-	RetentionDays int                 `json:"retentionDays" default:"90"`
-	FailThreshold float64             `json:"failThreshold,omitempty"`
-}
-
 // Budgets configures cost budgets.
 type Budgets struct {
 	MonthlyAmount float64   `json:"monthlyAmount,omitempty"`
@@ -777,47 +646,32 @@ type Governance struct {
 
 // Inheritance controls which hub resources spoke projects inherit.
 type Inheritance struct {
-	Models    bool `json:"models" default:"true"`
-	Toolboxes bool `json:"toolboxes" default:"true"`
-	Mcps      bool `json:"mcps" default:"true"`
-	IQ        bool `json:"iq"`
-	Search    bool `json:"search" default:"true"`
+	Models bool `json:"models" default:"true"`
+	IQ     bool `json:"iq"`
+	Search bool `json:"search" default:"true"`
 }
 
 // Hub is the shared configuration for hub-spoke topologies.
 type Hub struct {
-	Name          string             `json:"name"`
-	Location      string             `json:"location,omitempty"`
-	ResourceGroup string             `json:"resourceGroup,omitempty"`
-	Models        ModelConfiguration `json:"models"`
-	Toolboxes     []Toolbox          `json:"toolboxes,omitempty"`
-	Mcps          []Mcp              `json:"mcps,omitempty"`
-	IQ            *FoundryIQ         `json:"iq,omitempty"`
-	Search        *Search            `json:"search,omitempty"`
-	Inheritance   Inheritance        `json:"inheritance"`
-	Tags          Tags               `json:"tags,omitempty"`
+	Name        string             `json:"name"`
+	Models      ModelConfiguration `json:"models"`
+	IQ          *FoundryIQ         `json:"iq,omitempty"`
+	Search      *Search            `json:"search,omitempty"`
+	Inheritance Inheritance        `json:"inheritance"`
+	Tags        Tags               `json:"tags,omitempty"`
 }
 
 // Project is a Foundry project.
 type Project struct {
 	Tracked
-	Name          string             `json:"name"`
-	DisplayName   string             `json:"displayName,omitempty"`
-	Description   string             `json:"description,omitempty"`
-	Location      string             `json:"location,omitempty"`
-	ResourceGroup string             `json:"resourceGroup,omitempty"`
-	InheritHub    bool               `json:"inheritHub" default:"true"`
-	Roles         SecurityRoles      `json:"roles"`
-	Models        ModelConfiguration `json:"models"`
-	Agents        []Agent            `json:"agents,omitempty"`
-	Toolboxes     []Toolbox          `json:"toolboxes,omitempty"`
-	Mcps          []Mcp              `json:"mcps,omitempty"`
-	IQ            *FoundryIQ         `json:"iq,omitempty"`
-	Search        *Search            `json:"search,omitempty"`
-	Gateway       *ProjectGateway    `json:"gateway,omitempty"`
-	Connectors    []Connector        `json:"connectors,omitempty"`
-	Evaluation    *Evaluation        `json:"evaluation,omitempty"`
-	Tags          Tags               `json:"tags,omitempty"`
+	Name       string             `json:"name"`
+	InheritHub bool               `json:"inheritHub" default:"true"`
+	Roles      SecurityRoles      `json:"roles"`
+	Models     ModelConfiguration `json:"models"`
+	IQ         *FoundryIQ         `json:"iq,omitempty"`
+	Search     *Search            `json:"search,omitempty"`
+	Gateway    *ProjectGateway    `json:"gateway,omitempty"`
+	Tags       Tags               `json:"tags,omitempty"`
 }
 
 // GetName returns the project name.

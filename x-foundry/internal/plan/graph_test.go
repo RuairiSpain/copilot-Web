@@ -63,8 +63,8 @@ func TestStageOrderFollowsTheSpecification(t *testing.T) {
 	p := MustOK(t, mustEnterprise(t))
 	for _, pair := range [][2]string{
 		{"resource-group", "identity"}, {"identity", "network"}, {"network", "storage"},
-		{"storage", "search:hub"}, {"search:hub", "foundry"}, {"foundry", "foundry-project:hub"},
-		{"foundry-project:hub", "model-deployment:hub:gpt-5"}, {"gateway", "alerts"}, {"alerts", "governance"},
+		{"storage", "search:hub"}, {"search:hub", "private-endpoint:search:hub:searchService"},
+		{"search:hub", "knowledge-base:hub:policies"}, {"gateway", "alerts"}, {"alerts", "governance"},
 	} {
 		if index(p, pair[0]) < 0 || index(p, pair[0]) > index(p, pair[1]) {
 			t.Fatalf("%s must come before %s in %v", pair[0], pair[1], p.Order())
@@ -73,17 +73,15 @@ func TestStageOrderFollowsTheSpecification(t *testing.T) {
 }
 
 func TestStandardSetupDependencies(t *testing.T) {
-	p := MustPlan(t, Private, `projects: [{name: fin, agents: [{name: bot, model: gpt-5}]}]`, `models: {allowed: [gpt-5]}`)
-	exactDeps(t, p, "capability-host:project:fin:agents",
-		"foundry-project:project:fin", "storage", "cosmos", "network", "search:root",
-		"private-endpoint:storage:blob", "private-endpoint:cosmos:Sql", "private-endpoint:search:root:searchService")
-	wantDeps(t, p, "agent:project:fin:bot", "capability-host:project:fin:agents", "model-deployment:root:gpt-5", "foundry-project:project:fin")
+	p := MustPlan(t, Private, `projects: [{name: fin}]`)
 	wantDeps(t, p, "cosmos", "resource-group", "identity")
 	wantDeps(t, p, "private-endpoint:cosmos:Sql", "network", "private-dns", "cosmos")
-	basic := MustPlan(t, Public, `projects: [{name: fin, agents: [{name: bot, model: gpt-5}]}]`, `models: {allowed: [gpt-5]}`)
+	wantDeps(t, p, "private-endpoint:storage:blob", "network", "private-dns", "storage")
+	wantDeps(t, p, "private-endpoint:search:root:searchService", "network", "private-dns", "search:root")
+	basic := MustPlan(t, Public, `projects: [{name: fin}]`)
 	for _, id := range basic.Order() {
-		if id == "cosmos" || id == "capability-host:project:fin:agents" {
-			t.Fatalf("basic setup must not create %s", id)
+		if id == "cosmos" || id == "network" {
+			t.Fatalf("basic public setup must not create %s", id)
 		}
 	}
 }
@@ -102,47 +100,43 @@ func TestIdentityNodeFollowsTheIdentityType(t *testing.T) {
 	}
 }
 
-func TestKnowledgeBaseAndAgentDependencies(t *testing.T) {
-	p := MustPlan(t, Public, models,
-		`connectors: [{name: sp, type: sharepoint, authentication: {mode: apiKey, secretRef: sp-key}}]`,
+func TestKnowledgeBaseDependencies(t *testing.T) {
+	p := MustPlan(t, Public,
 		`iq: {knowledgeBases: [{name: policies, sources: [{name: site, type: sharepoint, site: hr, connection: sp}, {name: files, type: blob, container: policies}]}]}`,
-		`projects: [{name: fin, agents: [{name: bot, knowledgeBases: [policies]}]}]`)
-	kb := "knowledge-base:project:fin:policies"
-	exactDeps(t, p, kb, "foundry-project:project:fin", "search:root", "storage", "connector:project:fin:sp", "model-deployment:root:text-embedding-3-large")
-	exactDeps(t, p, "connector:project:fin:sp", "foundry-project:project:fin", "key-vault")
-	exactDeps(t, p, "agent:project:fin:bot", "foundry-project:project:fin", kb, "model-deployment:root:gpt-5")
+		`projects: [{name: fin}]`)
+	exactDeps(t, p, "knowledge-base:project:fin:policies", "search:root", "storage")
 }
 
-func TestHubItemsAreSharedAndRootItemsAreInstantiatedPerProject(t *testing.T) {
-	p := MustOK(t, RunHub(t, Public, models, `agents: [{name: shared}]`, `projects: [{name: aa}, {name: bb}]`,
-		`hub: {name: hub1, mcps: [{name: graph, endpoint: "https://a.example"}], toolboxes: [{name: tb, tools: [{name: t1, type: mcp, reference: graph}]}]}`))
-	for _, id := range []string{"agent:project:aa:shared", "agent:project:bb:shared", "mcp:hub:graph", "toolbox:hub:tb"} {
+func TestHubKnowledgeBasesAreSharedAndRootOnesAreInstantiatedPerProject(t *testing.T) {
+	kb := `knowledgeBases: [{name: %s, sources: [{name: files, type: blob, container: policies}]}]`
+	p := MustOK(t, RunHub(t, Public, `iq: {`+fmt.Sprintf(kb, "shared")+`}`, `projects: [{name: aa}, {name: bb}]`,
+		`hub: {name: hub1, search: {}, inheritance: {iq: true, search: true}, iq: {`+fmt.Sprintf(kb, "central")+`}}`))
+	for _, id := range []string{"knowledge-base:project:aa:shared", "knowledge-base:project:bb:shared", "knowledge-base:hub:central"} {
 		if index(p, id) < 0 {
 			t.Fatalf("missing %s in %v", id, p.Order())
 		}
 	}
-	if index(p, "mcp:project:aa:graph") >= 0 {
-		t.Fatal("hub MCP is not instantiated per project")
+	if index(p, "knowledge-base:project:aa:central") >= 0 {
+		t.Fatal("a hub knowledge base is not instantiated per project")
 	}
-	exactDeps(t, p, "toolbox:hub:tb", "foundry-project:hub", "mcp:hub:graph")
+	wantDeps(t, p, "knowledge-base:hub:central", "search:hub")
 }
 
-func TestGatewayDependsOnEveryEndpointTarget(t *testing.T) {
+func TestGatewayDependsOnSearchAndKnowledgeBaseTargets(t *testing.T) {
 	p := MustPlan(t, Public, models, `observability: {}`, `search: {name: srch-main}`,
 		`iq: {knowledgeBases: [{name: policies, sources: [{name: files, type: blob, container: policies}]}]}`,
-		`projects: [{name: fin, agents: [{name: bot, instructions: x}]}]`,
+		`projects: [{name: fin}]`,
 		`gateway: {enabled: true, endpoints: [
 			{name: ep1, path: /a, target: bot, targetType: agent},
 			{name: ep2, path: /m, target: gpt-5, targetType: model},
 			{name: ep3, path: /s, target: srch-main, targetType: search},
 			{name: ep4, path: /k, target: policies, targetType: knowledgeBase}]}`)
-	wantDeps(t, p, "gateway", "agent:project:fin:bot", "model-deployment:root:gpt-5", "search:root",
-		"knowledge-base:project:fin:policies", "observability")
+	wantDeps(t, p, "gateway", "search:root", "knowledge-base:project:fin:policies", "observability")
 }
 
 func TestAlertsAndGovernance(t *testing.T) {
 	p := MustPlan(t, Public, `observability: {alerts: true}`, `search: {}`, `governance: {}`, `gateway: {enabled: true}`)
-	wantDeps(t, p, "alerts", "observability", "search:root", "gateway", "foundry")
+	wantDeps(t, p, "alerts", "observability", "search:root", "gateway")
 	wantDeps(t, p, "governance", "resource-group", "gateway", "alerts")
 	if p.Order()[len(p.Nodes)-1] != "governance" {
 		t.Fatalf("governance should be last: %v", p.Order())
@@ -165,9 +159,6 @@ func TestExistingResourcesAreMarked(t *testing.T) {
 			t.Fatalf("%s should be marked existing", id)
 		}
 	}
-	if n, _ := p.Node("foundry"); n.Existing {
-		t.Fatal("the Foundry resource is always created")
-	}
 }
 
 func TestExistingVNetHasNoNetworkNode(t *testing.T) {
@@ -178,11 +169,6 @@ func TestExistingVNetHasNoNetworkNode(t *testing.T) {
 		t.Fatal("no network node for an existing VNet")
 	}
 	exactDeps(t, p, "private-dns", "resource-group")
-}
-
-func TestEvaluationDependsOnStorageAndAgents(t *testing.T) {
-	p := MustPlan(t, Public, models, `projects: [{name: fin, agents: [{name: bot}], evaluation: {enabled: true, datasets: [{name: golden, path: g.jsonl}]}}]`)
-	exactDeps(t, p, "evaluation:project:fin:evaluation", "foundry-project:project:fin", "storage", "agent:project:fin:bot")
 }
 
 func mustEnterprise(t *testing.T) plan.Analysis {

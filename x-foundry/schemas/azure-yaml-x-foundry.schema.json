@@ -38,7 +38,7 @@
         },
         "projects": {
           "type": "array",
-          "description": "Foundry projects managed by the extension. Projects are the primary deployment unit.",
+          "description": "Foundry projects this configuration applies to. The projects themselves are created by azd (azure.ai.project services); use the same names here.",
           "minItems": 1,
           "items": {
             "$ref": "#/$defs/project"
@@ -46,30 +46,6 @@
         },
         "models": {
           "$ref": "#/$defs/modelConfiguration"
-        },
-        "agents": {
-          "type": "array",
-          "description": "Agent definitions shared by, or assigned to, projects.",
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/agent"
-          }
-        },
-        "toolboxes": {
-          "type": "array",
-          "description": "Toolbox definitions shared by, or assigned to, projects.",
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/toolbox"
-          }
-        },
-        "mcps": {
-          "type": "array",
-          "description": "Model Context Protocol server definitions.",
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/mcp"
-          }
         },
         "search": {
           "$ref": "#/$defs/search"
@@ -91,17 +67,6 @@
         },
         "observability": {
           "$ref": "#/$defs/observability"
-        },
-        "connectors": {
-          "type": "array",
-          "description": "External connection definitions consumed by agents, toolboxes or MCP servers.",
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/connector"
-          }
-        },
-        "evaluation": {
-          "$ref": "#/$defs/evaluation"
         },
         "governance": {
           "$ref": "#/$defs/governance"
@@ -438,28 +403,8 @@
         "name": {
           "$ref": "#/$defs/resourceName"
         },
-        "location": {
-          "type": "string"
-        },
-        "resourceGroup": {
-          "type": "string"
-        },
         "models": {
           "$ref": "#/$defs/modelConfiguration"
-        },
-        "toolboxes": {
-          "type": "array",
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/toolbox"
-          }
-        },
-        "mcps": {
-          "type": "array",
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/mcp"
-          }
         },
         "iq": {
           "$ref": "#/$defs/foundryIQ"
@@ -487,14 +432,6 @@
           "type": "boolean",
           "default": true
         },
-        "toolboxes": {
-          "type": "boolean",
-          "default": true
-        },
-        "mcps": {
-          "type": "boolean",
-          "default": true
-        },
         "iq": {
           "type": "boolean",
           "default": false
@@ -513,21 +450,6 @@
         "name": {
           "$ref": "#/$defs/resourceName"
         },
-        "displayName": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 128
-        },
-        "description": {
-          "type": "string",
-          "maxLength": 1024
-        },
-        "location": {
-          "type": "string"
-        },
-        "resourceGroup": {
-          "type": "string"
-        },
         "inheritHub": {
           "type": "boolean",
           "description": "Whether this project inherits resources from the configured hub. Defaults to true when a hub exists.",
@@ -539,27 +461,6 @@
         "models": {
           "$ref": "#/$defs/modelConfiguration"
         },
-        "agents": {
-          "type": "array",
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/agent"
-          }
-        },
-        "toolboxes": {
-          "type": "array",
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/toolbox"
-          }
-        },
-        "mcps": {
-          "type": "array",
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/mcp"
-          }
-        },
         "iq": {
           "$ref": "#/$defs/foundryIQ"
         },
@@ -568,16 +469,6 @@
         },
         "gateway": {
           "$ref": "#/$defs/projectGateway"
-        },
-        "connectors": {
-          "type": "array",
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/connector"
-          }
-        },
-        "evaluation": {
-          "$ref": "#/$defs/evaluation"
         },
         "tags": {
           "$ref": "#/$defs/tags"
@@ -590,18 +481,11 @@
     },
     "modelConfiguration": {
       "type": "object",
-      "description": "Model deployment and model-governance configuration.",
+      "description": "Model governance: which models are allowed and denied. Model deployments are declared on the azd azure.ai.project service, not here.",
       "properties": {
         "default": {
           "type": "string",
-          "description": "Logical name of the default model deployment."
-        },
-        "deployments": {
-          "type": "array",
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/modelDeployment"
-          }
+          "description": "Name of the default model deployment (declared on the azd azure.ai.project service)."
         },
         "allowed": {
           "type": "array",
@@ -620,249 +504,6 @@
           }
         }
       },
-      "additionalProperties": false
-    },
-    "modelDeployment": {
-      "type": "object",
-      "properties": {
-        "name": {
-          "$ref": "#/$defs/resourceName"
-        },
-        "model": {
-          "type": "string",
-          "minLength": 1
-        },
-        "version": {
-          "type": "string"
-        },
-        "format": {
-          "type": "string",
-          "default": "OpenAI"
-        },
-        "sku": {
-          "type": "string",
-          "enum": [
-            "GlobalStandard",
-            "GlobalProvisionedManaged",
-            "DataZoneStandard",
-            "DataZoneProvisionedManaged",
-            "Standard",
-            "ProvisionedManaged"
-          ],
-          "default": "GlobalStandard"
-        },
-        "capacity": {
-          "type": "integer",
-          "minimum": 1,
-          "default": 10
-        },
-        "location": {
-          "type": "string"
-        },
-        "raiPolicy": {
-          "type": "string"
-        },
-        "versionUpgradeOption": {
-          "type": "string",
-          "enum": [
-            "OnceNewDefaultVersionAvailable",
-            "OnceCurrentVersionExpired",
-            "NoAutoUpgrade"
-          ],
-          "default": "NoAutoUpgrade",
-          "description": "How the deployment follows model version changes. NoAutoUpgrade pins the version so model behaviour only changes when this file does."
-        }
-      },
-      "required": [
-        "name",
-        "model"
-      ],
-      "additionalProperties": false
-    },
-    "agent": {
-      "type": "object",
-      "description": "Foundry agent definition. No session-pool configuration is supported by x-foundry.",
-      "properties": {
-        "name": {
-          "$ref": "#/$defs/resourceName"
-        },
-        "project": {
-          "type": "string"
-        },
-        "kind": {
-          "type": "string",
-          "enum": [
-            "prompt",
-            "hosted"
-          ],
-          "default": "prompt"
-        },
-        "model": {
-          "type": "string"
-        },
-        "instructions": {
-          "type": "string"
-        },
-        "source": {
-          "type": "string",
-          "description": "Path to the agent source directory or source manifest."
-        },
-        "protocols": {
-          "type": "array",
-          "default": [
-            "responses"
-          ],
-          "uniqueItems": true,
-          "items": {
-            "type": "string",
-            "enum": [
-              "responses",
-              "a2a",
-              "invocations"
-            ]
-          }
-        },
-        "toolboxes": {
-          "type": "array",
-          "default": [],
-          "uniqueItems": true,
-          "items": {
-            "type": "string"
-          }
-        },
-        "mcps": {
-          "type": "array",
-          "default": [],
-          "uniqueItems": true,
-          "items": {
-            "type": "string"
-          }
-        },
-        "knowledgeBases": {
-          "type": "array",
-          "default": [],
-          "uniqueItems": true,
-          "items": {
-            "type": "string"
-          }
-        },
-        "environment": {
-          "$ref": "#/$defs/environmentVariables"
-        },
-        "tags": {
-          "$ref": "#/$defs/tags"
-        }
-      },
-      "required": [
-        "name"
-      ],
-      "additionalProperties": false
-    },
-    "toolbox": {
-      "type": "object",
-      "properties": {
-        "name": {
-          "$ref": "#/$defs/resourceName"
-        },
-        "project": {
-          "type": "string"
-        },
-        "description": {
-          "type": "string"
-        },
-        "tools": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "$ref": "#/$defs/tool"
-          }
-        }
-      },
-      "required": [
-        "name",
-        "tools"
-      ],
-      "additionalProperties": false
-    },
-    "tool": {
-      "type": "object",
-      "properties": {
-        "name": {
-          "$ref": "#/$defs/resourceName"
-        },
-        "type": {
-          "type": "string",
-          "enum": [
-            "mcp",
-            "knowledgeBase",
-            "openapi",
-            "function",
-            "codeInterpreter",
-            "fileSearch"
-          ]
-        },
-        "reference": {
-          "type": "string",
-          "description": "Logical reference to an MCP, knowledge base, OpenAPI document or function."
-        },
-        "configuration": {
-          "type": "object",
-          "default": {},
-          "additionalProperties": true
-        }
-      },
-      "required": [
-        "name",
-        "type",
-        "reference"
-      ],
-      "additionalProperties": false
-    },
-    "mcp": {
-      "type": "object",
-      "properties": {
-        "name": {
-          "$ref": "#/$defs/resourceName"
-        },
-        "project": {
-          "type": "string"
-        },
-        "endpoint": {
-          "type": "string",
-          "format": "uri"
-        },
-        "transport": {
-          "type": "string",
-          "enum": [
-            "streamable-http",
-            "sse"
-          ],
-          "default": "streamable-http"
-        },
-        "authentication": {
-          "$ref": "#/$defs/connectionAuthentication"
-        },
-        "allowedTools": {
-          "type": "array",
-          "default": [],
-          "uniqueItems": true,
-          "items": {
-            "type": "string"
-          }
-        },
-        "headers": {
-          "type": "object",
-          "description": "Non-secret HTTP headers. Secret values must reference Key Vault.",
-          "default": {},
-          "additionalProperties": {
-            "type": "string"
-          }
-        }
-      },
-      "required": [
-        "name",
-        "endpoint"
-      ],
       "additionalProperties": false
     },
     "search": {
@@ -1017,7 +658,7 @@
         },
         "connection": {
           "type": "string",
-          "description": "Logical connector name or existing connection reference."
+          "description": "Name of an azd azure.ai.connection service (or an existing project connection); x-foundry does not create connections."
         },
         "site": {
           "type": "string"
@@ -1292,7 +933,8 @@
           "default": "text-embedding-3-large"
         },
         "deployment": {
-          "type": "string"
+          "type": "string",
+          "description": "Name of the embedding model deployment declared on the azd azure.ai.project service."
         },
         "dimensions": {
           "type": "integer",
@@ -2816,193 +2458,6 @@
       },
       "additionalProperties": false
     },
-    "connector": {
-      "type": "object",
-      "properties": {
-        "name": {
-          "$ref": "#/$defs/resourceName"
-        },
-        "type": {
-          "type": "string",
-          "enum": [
-            "azureOpenAI",
-            "azureAISearch",
-            "storage",
-            "sharepoint",
-            "graph",
-            "serviceNow",
-            "salesforce",
-            "sap",
-            "sql",
-            "api",
-            "custom"
-          ]
-        },
-        "endpoint": {
-          "type": "string",
-          "format": "uri"
-        },
-        "authentication": {
-          "$ref": "#/$defs/connectionAuthentication"
-        },
-        "project": {
-          "type": "string"
-        },
-        "shared": {
-          "type": "boolean",
-          "default": false
-        },
-        "configuration": {
-          "type": "object",
-          "default": {},
-          "additionalProperties": true
-        }
-      },
-      "required": [
-        "name",
-        "type"
-      ],
-      "additionalProperties": false
-    },
-    "connectionAuthentication": {
-      "type": "object",
-      "properties": {
-        "mode": {
-          "type": "string",
-          "enum": [
-            "managedIdentity",
-            "entra",
-            "apiKey",
-            "oauth2",
-            "none"
-          ],
-          "default": "managedIdentity"
-        },
-        "clientId": {
-          "type": "string",
-          "format": "uuid"
-        },
-        "tenantId": {
-          "type": "string",
-          "format": "uuid"
-        },
-        "scopes": {
-          "type": "array",
-          "default": [],
-          "items": {
-            "type": "string"
-          }
-        },
-        "secretRef": {
-          "type": "string",
-          "description": "Key Vault secret reference. Secret material must not be stored in azure.yaml."
-        }
-      },
-      "additionalProperties": false
-    },
-    "evaluation": {
-      "type": "object",
-      "properties": {
-        "enabled": {
-          "type": "boolean",
-          "default": false
-        },
-        "project": {
-          "type": "string"
-        },
-        "datasets": {
-          "type": "array",
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/evaluationDataset"
-          }
-        },
-        "evaluators": {
-          "type": "array",
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/evaluator"
-          }
-        },
-        "schedule": {
-          "type": "string",
-          "description": "Optional cron expression."
-        },
-        "retentionDays": {
-          "type": "integer",
-          "minimum": 30,
-          "maximum": 730,
-          "default": 90
-        },
-        "failThreshold": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1
-        }
-      },
-      "additionalProperties": false
-    },
-    "evaluationDataset": {
-      "type": "object",
-      "properties": {
-        "name": {
-          "$ref": "#/$defs/resourceName"
-        },
-        "path": {
-          "type": "string"
-        },
-        "format": {
-          "type": "string",
-          "enum": [
-            "jsonl",
-            "json",
-            "csv",
-            "parquet"
-          ],
-          "default": "jsonl"
-        }
-      },
-      "required": [
-        "name",
-        "path"
-      ],
-      "additionalProperties": false
-    },
-    "evaluator": {
-      "type": "object",
-      "properties": {
-        "name": {
-          "$ref": "#/$defs/resourceName"
-        },
-        "type": {
-          "type": "string",
-          "enum": [
-            "groundedness",
-            "relevance",
-            "coherence",
-            "fluency",
-            "similarity",
-            "safety",
-            "custom"
-          ]
-        },
-        "threshold": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1
-        },
-        "configuration": {
-          "type": "object",
-          "default": {},
-          "additionalProperties": true
-        }
-      },
-      "required": [
-        "name",
-        "type"
-      ],
-      "additionalProperties": false
-    },
     "governance": {
       "type": "object",
       "properties": {
@@ -3137,17 +2592,6 @@
         }
       },
       "additionalProperties": false
-    },
-    "environmentVariables": {
-      "type": "object",
-      "default": {},
-      "additionalProperties": {
-        "type": [
-          "string",
-          "number",
-          "boolean"
-        ]
-      }
     },
     "tags": {
       "type": "object",

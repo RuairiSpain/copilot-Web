@@ -40,39 +40,22 @@ type Output struct {
 	Deferred    []string          // what the plan contains that this phase does not generate
 }
 
-// Built-in role definition GUIDs. Foundry roles: MicrosoftDocs/azure-docs, "Azure built-in roles
-// for AI + machine learning". Other roles: the foundry-samples infrastructure templates.
+// Built-in role definition GUIDs (the foundry-samples infrastructure templates and the Azure
+// built-in roles reference).
 const (
-	roleFoundryAccountOwner    = "e47c6f54-e4a2-4754-9501-8e0985b135e1"
-	roleFoundryProjectManager  = "eadc314b-1a2d-4efa-be10-5d325db5065e"
-	roleFoundryUser            = "53ca6127-db72-4b80-b1b0-d745d6d5456d"
-	roleStorageBlobContributor = "ba92f5b4-2d11-453d-a403-e96b0029c9fe"
-	roleCosmosDBOperator       = "230815da-be43-4aae-9cb4-875f7bd000aa"
-	roleSearchIndexContributor = "8ebe5a00-799e-43f5-93ac-243d3dce84a7"
-	roleSearchServiceContrib   = "7ca78c08-252a-4471-8644-bb5ff32d4ba0"
-	roleReader                 = "acdd72a7-3385-48ef-bd42-f606fba81ae7"
-	roleMonitoringReader       = "43d0d8ad-25c7-4714-9337-8ba259a9fe05"
+	roleReader           = "acdd72a7-3385-48ef-bd42-f606fba81ae7"
+	roleMonitoringReader = "43d0d8ad-25c7-4714-9337-8ba259a9fe05"
 )
 
 // roleNames are the display names of the built-in roles the generator assigns.
 var roleNames = map[string]string{
-	roleFoundryAccountOwner:    "Foundry Account Owner",
-	roleFoundryProjectManager:  "Foundry Project Manager",
-	roleFoundryUser:            "Foundry User",
-	roleStorageBlobContributor: "Storage Blob Data Contributor",
-	roleCosmosDBOperator:       "Cosmos DB Operator",
-	roleSearchIndexContributor: "Search Index Data Contributor",
-	roleSearchServiceContrib:   "Search Service Contributor",
-	roleReader:                 "Reader",
-	roleMonitoringReader:       "Monitoring Reader",
+	roleReader:           "Reader",
+	roleMonitoringReader: "Monitoring Reader",
 }
 
 // ref is how generated code refers to a resource, whether it is created or already exists.
 type ref struct {
-	id, name, location string // Bicep expressions
-	scope              string // Bicep scope expression, "" for the deployment's resource group
-	armType            string // resource type, for the existing-resource declaration
-	existing           bool
+	id, name string // Bicep expressions
 }
 
 type gen struct {
@@ -86,18 +69,14 @@ type gen struct {
 	diags    []diag.Diagnostic
 	deferred map[string]int
 	raCount  int
+	outputs  [][2]string // name, Bicep expression
 
 	private, standard bool
 	ipRules           []string
 	locks             bool
 	workspace         string // Bicep expression for the workspace id, "" when there is none
-	agentSubnetID     string
 	peSubnetID        string
 	vnetID            string
-	peModules         []string
-	account           string // module symbol of the Foundry account
-	chain             string // the last module that changed the Foundry account's children
-	deploymentsModule string
 }
 
 // Generate renders the Bicep project for a plan.
@@ -118,7 +97,6 @@ func Generate(p *plan.Plan) (*Output, error) {
 	if m := n.Governance; m != nil && m.Enabled && m.ResourceLocks {
 		g.locks = true
 	}
-	g.checkScopes()
 	if err := g.emit(); err != nil {
 		return nil, err
 	}
@@ -156,6 +134,22 @@ func (g *gen) fail(code, path, format string, args ...any) {
 	g.diags = append(g.diags, diag.Err(code, path, format, args...))
 }
 
+// Subnet names in the generated VNet; azd refers to them by name.
+const (
+	agentSubnetName = "agent-subnet"
+	peSubnetName    = "pe-subnet"
+)
+
+// output records a value for azd to pick up from the deployment outputs.
+func (g *gen) output(name, expr string) {
+	for _, o := range g.outputs {
+		if o[0] == name {
+			return
+		}
+	}
+	g.outputs = append(g.outputs, [2]string{name, expr})
+}
+
 // ------------------------------------------------------------------------------ naming
 
 func (g *gen) prefix() string {
@@ -175,18 +169,6 @@ func (g *gen) resourceGroupName() string {
 		return str(g.n.ResourceGroup)
 	}
 	return "'rg-${environmentName}'"
-}
-
-// checkScopes reports settings Phase 2 cannot honour.
-func (g *gen) checkScopes() {
-	if h := g.n.Hub; h != nil && h.ResourceGroup != "" && h.ResourceGroup != g.n.ResourceGroup {
-		g.warn("XF204", "x-foundry.hub.resourceGroup", "resourceGroup '%s' is ignored: the Foundry resource, its projects and the shared resources are deployed to one resource group", h.ResourceGroup)
-	}
-	for _, p := range g.n.Projects {
-		if p.ResourceGroup != "" && p.ResourceGroup != g.n.ResourceGroup {
-			g.warn("XF204", "x-foundry.projects["+p.Name+"].resourceGroup", "resourceGroup '%s' is ignored: projects live in the Foundry resource's resource group", p.ResourceGroup)
-		}
-	}
 }
 
 // tags renders the tag expression for a resource: shared tags, the resource's own, and its node id.
@@ -305,17 +287,13 @@ func parseARMID(id string) armID {
 	return a
 }
 
-// existingRef declares an existing resource so its location can be read.
-func (g *gen) existingRef(id, armType, apiVersion, resourceID string) ref {
-	a := parseARMID(resourceID)
-	sym := symbol(id+"_existing", g.used)
-	scope := fmt.Sprintf("resourceGroup(%s, %s)", str(a.sub), str(a.group))
-	fmt.Fprintf(&g.body, "resource %s '%s@%s' existing = {\n  name: %s\n  scope: %s\n}\n\n", sym, armType, apiVersion, str(a.name), scope)
-	return ref{id: str(resourceID), name: str(a.name), location: sym + ".location", scope: scope, armType: armType, existing: true}
+// existingRef refers to a resource that already exists by its ARM ID; nothing is declared for it.
+func (g *gen) existingRef(resourceID string) ref {
+	return ref{id: str(resourceID), name: str(parseARMID(resourceID).name)}
 }
 
 func (g *gen) createdRef(sym string) ref {
-	return ref{id: sym + ".outputs.id", name: sym + ".outputs.name", location: sym + ".outputs.location"}
+	return ref{id: sym + ".outputs.id", name: sym + ".outputs.name"}
 }
 
 // ------------------------------------------------------------------------------ emit
@@ -323,7 +301,6 @@ func (g *gen) createdRef(sym string) ref {
 func (g *gen) emit() error {
 	g.workspace = ""
 	g.networkRefs()
-	var obsSym string
 	names := g.names()
 	for _, node := range g.p.Nodes {
 		switch node.Kind {
@@ -331,7 +308,7 @@ func (g *gen) emit() error {
 		case "identity":
 			g.emitIdentity(node, names)
 		case "observability":
-			obsSym = g.emitObservability(node, names)
+			g.emitObservability(node, names)
 		case "network":
 			g.emitNetwork(node, names)
 		case "private-dns":
@@ -344,16 +321,8 @@ func (g *gen) emit() error {
 			g.emitCosmos(node, names)
 		case "search":
 			g.emitSearch(node, names)
-		case "foundry-account":
-			g.emitAccount(node, names, obsSym)
 		case "private-endpoint":
 			g.emitPrivateEndpoint(node)
-		case "model-deployment":
-			g.emitDeployments(node)
-		case "foundry-project":
-			g.emitProject(node)
-		case "capability-host":
-			g.emitCapabilityHost(node)
 		case "governance":
 			g.noteGovernance()
 		default:
@@ -365,11 +334,10 @@ func (g *gen) emit() error {
 }
 
 // nameSet holds the Bicep expressions for generated resource names.
-type nameSet struct{ foundry, storage, keyVault, search, cosmos, vnet, identity, workspace, appInsights string }
+type nameSet struct{ storage, keyVault, search, cosmos, vnet, identity, workspace, appInsights string }
 
 func (g *gen) names() nameSet {
 	return nameSet{
-		foundry:     "'${base}-${token}'",
 		storage:     "'st${take(baseCompact, 9)}${take(token, 12)}'",
 		keyVault:    "'kv-${take(baseCompact, 6)}-${take(token, 12)}'",
 		search:      "'srch-${base}-${token}'",
@@ -399,7 +367,7 @@ func (g *gen) emitIdentity(node plan.Node, nm nameSet) {
 	}, g.depsOf(node))
 }
 
-func (g *gen) emitObservability(node plan.Node, nm nameSet) string {
+func (g *gen) emitObservability(node plan.Node, nm nameSet) {
 	o := g.n.Observability
 	sym := g.newSym(node.ID)
 	appInsights := "''"
@@ -411,7 +379,10 @@ func (g *gen) emitObservability(node plan.Node, nm nameSet) string {
 		{"tags", g.tags(node.ID, o.Tags)}, {"retentionDays", fmt.Sprint(o.RetentionDays)},
 	}, g.depsOf(node))
 	g.workspace = sym + ".outputs.workspaceId"
-	return sym
+	g.output("LOG_ANALYTICS_WORKSPACE_ID", g.workspace)
+	if o.ApplicationInsights {
+		g.output("APPLICATIONINSIGHTS_RESOURCE_ID", sym+".outputs.appInsightsId")
+	}
 }
 
 // subnets splits the address space: the agent subnet first, then a /24 (or smaller) for private
@@ -466,12 +437,15 @@ func (g *gen) emitNetwork(node plan.Node, nm nameSet) {
 	sym := g.newSym(node.ID)
 	g.module(sym, "network", "", "", []param{
 		{"name", nm.vnet}, {"location", "location"}, {"tags", g.tags(node.ID)}, {"addressSpace", str(net.AddressSpace)},
-		{"agentSubnetPrefix", str(agent)}, {"peSubnetPrefix", str(pe)},
+		{"agentSubnetName", str(agentSubnetName)}, {"agentSubnetPrefix", str(agent)},
+		{"peSubnetName", str(peSubnetName)}, {"peSubnetPrefix", str(pe)},
 	}, g.depsOf(node))
 	g.vnetID = sym + ".outputs.id"
 	g.peSubnetID = sym + ".outputs.peSubnetId"
+	g.output("VNET_RESOURCE_ID", g.vnetID)
+	g.output("PE_SUBNET_NAME", str(peSubnetName))
 	if withAgent {
-		g.agentSubnetID = sym + ".outputs.agentSubnetId"
+		g.output("AGENT_SUBNET_NAME", str(agentSubnetName))
 	}
 }
 
@@ -483,8 +457,10 @@ func (g *gen) networkRefs() {
 	}
 	g.vnetID = str(net.ExistingVnetResourceID)
 	g.peSubnetID = str(net.PrivateEndpointSubnetResourceID)
+	g.output("VNET_RESOURCE_ID", g.vnetID)
+	g.output("PE_SUBNET_NAME", str(parseARMID(net.PrivateEndpointSubnetResourceID).name))
 	if g.standard && net.AgentSubnetResourceID != "" {
-		g.agentSubnetID = str(net.AgentSubnetResourceID)
+		g.output("AGENT_SUBNET_NAME", str(parseARMID(net.AgentSubnetResourceID).name))
 	}
 }
 
@@ -494,12 +470,17 @@ func (g *gen) emitPrivateDNS(node plan.Node) {
 	g.module(sym, "private-dns", "", "", []param{
 		{"zoneNames", zoneNames(g.n.Network.PrivateDNSZones)}, {"vnetId", g.vnetID}, {"tags", g.tags(node.ID)},
 	}, g.depsOf(node))
+	// azd creates the Foundry resource's private endpoint; pointing it at these zones
+	// (azure.ai.project network.dns) keeps all DNS in one place.
+	g.output("PRIVATE_DNS_RESOURCE_GROUP", "resourceGroup().name")
+	g.output("PRIVATE_DNS_SUBSCRIPTION_ID", "subscription().subscriptionId")
 }
 
 func (g *gen) emitStorage(node plan.Node, nm nameSet) {
 	s := g.n.Storage
 	if node.Existing {
-		g.refs[node.ID] = g.existingRef(node.ID, "Microsoft.Storage/storageAccounts", "2023-05-01", s.ExistingResourceID)
+		g.refs[node.ID] = g.existingRef(s.ExistingResourceID)
+		g.output("STORAGE_ACCOUNT_RESOURCE_ID", g.refs[node.ID].id)
 		return
 	}
 	g.networkRefs()
@@ -513,6 +494,7 @@ func (g *gen) emitStorage(node plan.Node, nm nameSet) {
 		{"containers", strs(containers)}, {"deleteLock", boolean(g.locks)}, {"workspaceId", g.workspaceExpr()},
 	}, g.depsOf(node))
 	g.refs[node.ID] = g.createdRef(sym)
+	g.output("STORAGE_ACCOUNT_RESOURCE_ID", g.refs[node.ID].id)
 }
 
 func (g *gen) workspaceExpr() string {
@@ -555,7 +537,8 @@ func (g *gen) containers(s *config.Storage) []string {
 func (g *gen) emitKeyVault(node plan.Node, nm nameSet) {
 	k := g.n.KeyVault
 	if node.Existing {
-		g.refs[node.ID] = g.existingRef(node.ID, "Microsoft.KeyVault/vaults", "2024-11-01", k.ExistingResourceID)
+		g.refs[node.ID] = g.existingRef(k.ExistingResourceID)
+		g.output("KEY_VAULT_RESOURCE_ID", g.refs[node.ID].id)
 		return
 	}
 	sym := g.newSym(node.ID)
@@ -569,12 +552,14 @@ func (g *gen) emitKeyVault(node plan.Node, nm nameSet) {
 		{"publicNetworkAccess", boolean(!g.private)}, {"ipRules", strs(g.ipRules)}, {"workspaceId", g.workspaceExpr()},
 	}, g.depsOf(node))
 	g.refs[node.ID] = g.createdRef(sym)
+	g.output("KEY_VAULT_RESOURCE_ID", g.refs[node.ID].id)
 }
 
 func (g *gen) emitCosmos(node plan.Node, nm nameSet) {
 	c := g.n.Cosmos
 	if node.Existing {
-		g.refs[node.ID] = g.existingRef(node.ID, "Microsoft.DocumentDB/databaseAccounts", "2024-11-15", c.ExistingResourceID)
+		g.refs[node.ID] = g.existingRef(c.ExistingResourceID)
+		g.output("COSMOS_DB_RESOURCE_ID", g.refs[node.ID].id)
 		return
 	}
 	sym := g.newSym(node.ID)
@@ -586,6 +571,7 @@ func (g *gen) emitCosmos(node plan.Node, nm nameSet) {
 		{"deleteLock", boolean(g.locks)}, {"workspaceId", g.workspaceExpr()},
 	}, g.depsOf(node))
 	g.refs[node.ID] = g.createdRef(sym)
+	g.output("COSMOS_DB_RESOURCE_ID", g.refs[node.ID].id)
 }
 
 func (g *gen) emitSearch(node plan.Node, nm nameSet) {
@@ -595,7 +581,8 @@ func (g *gen) emitSearch(node plan.Node, nm nameSet) {
 	}
 	s := sc.Search
 	if node.Existing {
-		g.refs[node.ID] = g.existingRef(node.ID, "Microsoft.Search/searchServices", "2024-06-01-preview", s.ExistingResourceID)
+		g.refs[node.ID] = g.existingRef(s.ExistingResourceID)
+		g.output(searchOutput(node.Scope), g.refs[node.ID].id)
 		return
 	}
 	sym := g.newSym(node.ID)
@@ -611,51 +598,25 @@ func (g *gen) emitSearch(node plan.Node, nm nameSet) {
 		{"systemIdentity", boolean(s.ManagedIdentity)}, {"deleteLock", boolean(g.locks)}, {"workspaceId", g.workspaceExpr()},
 	}, g.depsOf(node))
 	g.refs[node.ID] = g.createdRef(sym)
+	g.output(searchOutput(node.Scope), g.refs[node.ID].id)
 }
 
-func (g *gen) emitAccount(node plan.Node, nm nameSet, obsSym string) {
-	sym := g.newSym(node.ID)
-	g.account = sym
-	g.chain = sym
-	g.module(sym, "foundry-account", "", "", []param{
-		{"name", nm.foundry}, {"location", "location"}, {"tags", g.tags(node.ID)},
-		{"publicNetworkAccess", boolean(!g.private)}, {"ipRules", strs(g.ipRules)},
-		{"localAuthentication", boolean(g.n.LocalAuthentication)},
-		{"agentSubnetId", g.agentSubnetExpr()}, {"workspaceId", g.workspaceExpr()},
-	}, g.depsOf(node))
-	g.refs[node.ID] = ref{id: sym + ".outputs.id", name: sym + ".outputs.name"}
-	if o := g.n.Observability; o != nil && o.Enabled && o.ApplicationInsights && obsSym != "" {
-		conn := symbol("foundry_appinsights_connection", g.used)
-		g.module(conn, "foundry-appinsights-connection", "", "", []param{
-			{"accountName", sym + ".outputs.name"}, {"appInsightsId", obsSym + ".outputs.appInsightsId"}, {"name", "'appinsights'"},
-		}, nil)
-		g.chain = conn
+// searchOutput names the deployment output for the Search service of a scope.
+func searchOutput(scope string) string {
+	switch scope {
+	case ids.RootScope:
+		return "AI_SEARCH_RESOURCE_ID"
+	case ids.HubScope:
+		return "AI_SEARCH_HUB_RESOURCE_ID"
 	}
-}
-
-func (g *gen) agentSubnetExpr() string {
-	g.networkRefs()
-	if g.private && g.standard && g.agentSubnetID != "" {
-		return g.agentSubnetID
-	}
-	return "''"
-}
-
-// targetOf resolves a private-endpoint component to a reference.
-func (g *gen) targetOf(component string) (ref, bool) {
-	if component == ids.Foundry {
-		r, ok := g.refs[ids.Foundry]
-		return r, ok
-	}
-	r, ok := g.refs[component]
-	return r, ok
+	return "AI_SEARCH_" + strings.ToUpper(strings.ReplaceAll(ids.Slug(ids.ProjectName(scope)), "-", "_")) + "_RESOURCE_ID"
 }
 
 func (g *gen) emitPrivateEndpoint(node plan.Node) {
 	component := strings.TrimPrefix(node.ID, "private-endpoint:")
 	group := component[strings.LastIndex(component, ":")+1:]
 	component = component[:strings.LastIndex(component, ":")]
-	target, ok := g.targetOf(component)
+	target, ok := g.refs[component]
 	if !ok {
 		return
 	}
@@ -672,138 +633,10 @@ func (g *gen) emitPrivateEndpoint(node plan.Node) {
 		zoneIDs = "[\n      " + strings.Join(zones, "\n      ") + "\n    ]"
 	}
 	sym := g.newSym(node.ID)
-	deps := g.depsOf(node)
 	g.module(sym, "private-endpoint", "", "", []param{
 		{"name", fmt.Sprintf("'pe-${%s}-%s'", target.name, group)}, {"location", "location"}, {"tags", g.tags(node.ID)},
 		{"subnetId", g.peSubnetID}, {"targetId", target.id}, {"groupId", str(group)}, {"zoneIds", zoneIDs},
-	}, deps)
-	g.peModules = append(g.peModules, sym)
-}
-
-// deploymentKey compares the settings that matter when the same name is declared twice.
-func deploymentKey(d config.ModelDeployment) string {
-	return strings.Join([]string{d.Model, d.Format, d.Version, d.SKU, fmt.Sprint(d.Capacity), d.RaiPolicy, d.VersionUpgradeOption}, "|")
-}
-
-func (g *gen) emitDeployments(node plan.Node) {
-	if g.deploymentsModule != "" {
-		return
-	}
-	seen := map[string]config.ModelDeployment{}
-	declared := map[string]string{}
-	var order []string
-	for _, s := range g.n.Scopes {
-		for _, d := range s.Models.Deployments {
-			if d.Location != "" && d.Location != g.n.Location {
-				g.warn("XF202", "x-foundry.deployments["+d.Name+"].location", "deployment '%s' location '%s' is ignored: deployments always run in the Foundry resource's region", d.Name, d.Location)
-			}
-			prev, dup := seen[d.Name]
-			if dup {
-				if deploymentKey(prev) != deploymentKey(d) {
-					g.warn("XF203", "x-foundry.deployments["+d.Name+"]", "deployment '%s' is declared in %s and %s with different settings; the %s declaration is used because the Foundry resource has one deployment per name", d.Name, declared[d.Name], s.Scope, declared[d.Name])
-				}
-				continue
-			}
-			seen[d.Name] = d
-			declared[d.Name] = s.Scope
-			order = append(order, d.Name)
-		}
-	}
-	if len(order) == 0 {
-		return
-	}
-	var items []string
-	for _, name := range order {
-		d := seen[name]
-		items = append(items, "      "+object("      ", [][2]string{
-			{"name", str(d.Name)}, {"model", str(d.Model)}, {"format", str(d.Format)}, {"version", str(d.Version)},
-			{"sku", str(d.SKU)}, {"capacity", fmt.Sprint(d.Capacity)}, {"versionUpgradeOption", str(d.VersionUpgradeOption)},
-			{"raiPolicy", str(d.RaiPolicy)},
-		}))
-	}
-	sym := symbol("model_deployments", g.used)
-	g.syms[node.ID] = sym
-	g.deploymentsModule = sym
-	g.module(sym, "foundry-deployments", "", "", []param{
-		{"accountName", g.account + ".outputs.name"}, {"deployments", "[\n" + strings.Join(items, "\n") + "\n    ]"},
-	}, []string{g.chain})
-	g.chain = sym
-}
-
-func (g *gen) emitProject(node plan.Node) {
-	name := ""
-	var tags config.Tags
-	display, description := "", ""
-	if node.Scope == ids.HubScope {
-		if h := g.n.Hub; h != nil {
-			name, tags, display = h.Name, h.Tags, h.Name
-			description = "Shared hub project for " + h.Name
-		}
-	} else if p := g.n.Project(ids.ProjectName(node.Scope)); p != nil {
-		name, tags, display, description = p.Name, p.Tags, p.DisplayName, p.Description
-	}
-	if name == "" {
-		return
-	}
-	sym := g.newSym(node.ID)
-	params := []param{
-		{"accountName", g.account + ".outputs.name"}, {"name", str(name)}, {"location", "location"},
-		{"displayName", str(display)}, {"projectDescription", str(description)}, {"tags", g.tags(node.ID, tags)},
-	}
-	var deps []string
-	if g.standard && node.Scope != ids.HubScope {
-		conns := g.connections(g.n.Project(ids.ProjectName(node.Scope)))
-		if conns != "" {
-			params = append(params, param{"connections", conns})
-		}
-		deps = append(deps, g.componentModules()...)
-		deps = append(deps, g.peModules...)
-	}
-	g.module(sym, "foundry-project", "", "", params, append(deps, g.chain))
-	g.chain = sym
-}
-
-// componentModules are the modules of the bring-your-own resources.
-func (g *gen) componentModules() []string {
-	var out []string
-	for id, s := range g.syms {
-		if id == ids.Storage || id == ids.Cosmos || strings.HasPrefix(id, "search:") {
-			out = append(out, s)
-		}
-	}
-	sort.Strings(out)
-	return out
-}
-
-func (g *gen) searchNode(p *normalise.EffectiveProject) (ref, bool) {
-	if p == nil || p.SearchScope == "" {
-		return ref{}, false
-	}
-	r, ok := g.refs[ids.SearchNode(p.SearchScope)]
-	return r, ok
-}
-
-// connections renders the project connections to Cosmos DB, Storage and Search.
-func (g *gen) connections(p *normalise.EffectiveProject) string {
-	var items []string
-	add := func(name, category, target, resourceID, location string) {
-		items = append(items, "      "+object("      ", [][2]string{
-			{"name", name}, {"category", str(category)}, {"target", target}, {"resourceId", resourceID}, {"location", location},
-		}))
-	}
-	if c, ok := g.refs[ids.Cosmos]; ok {
-		add(c.name, "CosmosDB", "'https://${"+c.name+"}.documents.azure.com:443/'", c.id, c.location)
-	}
-	if s, ok := g.refs[ids.Storage]; ok {
-		add(s.name, "AzureStorageAccount", "'https://${"+s.name+"}.blob.${environment().suffixes.storage}/'", s.id, s.location)
-	}
-	if s, ok := g.searchNode(p); ok {
-		add(s.name, "CognitiveSearch", "'https://${"+s.name+"}.search.windows.net'", s.id, s.location)
-	}
-	if len(items) == 0 {
-		return ""
-	}
-	return "[\n" + strings.Join(items, "\n") + "\n    ]"
+	}, g.depsOf(node))
 }
 
 // role emits a role assignment module and returns its symbol. The label names the role and
@@ -829,55 +662,6 @@ func roleLabel(roleID, who string) string {
 	return name + " for " + who
 }
 
-// resourceScope is the scope expression for a role assignment on a resource.
-func resourceScope(r ref) string { return r.scope }
-
-func (g *gen) emitCapabilityHost(node plan.Node) {
-	p := g.n.Project(ids.ProjectName(node.Scope))
-	if p == nil {
-		return
-	}
-	projectSym := g.syms[ids.ProjectNode(node.Scope)]
-	if projectSym == "" {
-		return
-	}
-	cosmos, cok := g.refs[ids.Cosmos]
-	storage, sok := g.refs[ids.Storage]
-	search, hok := g.searchNode(p)
-	if !cok || !sok || !hok {
-		return
-	}
-	principal := projectSym + ".outputs.principalId"
-	who := "the " + p.Name + " project identity"
-	base := []param{{"principalId", principal}, {"principalType", "'ServicePrincipal'"}}
-	with := func(extra ...param) []param { return append(append([]param{}, extra...), base...) }
-	var before []string
-	before = append(before,
-		g.role("ra-storage", roleLabel(roleStorageBlobContributor, who), with(param{"storageName", storage.name}, param{"roleId", str(roleStorageBlobContributor)}), resourceScope(storage), nil),
-		g.role("ra-cosmos", roleLabel(roleCosmosDBOperator, who), with(param{"cosmosName", cosmos.name}, param{"roleId", str(roleCosmosDBOperator)}), resourceScope(cosmos), nil),
-		g.role("ra-search", roleLabel(roleSearchIndexContributor, who), with(param{"searchName", search.name}, param{"roleId", str(roleSearchIndexContributor)}), resourceScope(search), nil),
-		g.role("ra-search", roleLabel(roleSearchServiceContrib, who), with(param{"searchName", search.name}, param{"roleId", str(roleSearchServiceContrib)}), resourceScope(search), nil),
-	)
-	deps := append(append([]string{}, before...), g.peModules...)
-	for _, d := range g.depsOf(node) {
-		// The private endpoints already depend on the network.
-		if d != g.syms[ids.Network] || len(g.peModules) == 0 {
-			deps = append(deps, d)
-		}
-	}
-	capSym := g.newSym(node.ID)
-	g.module(capSym, "foundry-capability-host", "", "", []param{
-		{"accountName", g.account + ".outputs.name"}, {"projectName", projectSym + ".outputs.name"},
-		{"threadStorageConnection", cosmos.name}, {"storageConnection", storage.name}, {"vectorStoreConnection", search.name},
-	}, append(deps, g.chain))
-	g.chain = capSym
-	workspace := projectSym + ".outputs.workspaceId"
-	g.role("ra-storage-containers", "Storage Blob Data Owner (limited to the project's agent containers) for "+who, []param{{"storageName", storage.name}, {"principalId", principal}, {"workspaceId", workspace}}, resourceScope(storage), []string{capSym})
-	g.role("ra-cosmos-sql", "Cosmos DB Built-in Data Contributor (limited to enterprise_memory) for "+who, []param{{"cosmosName", cosmos.name}, {"principalId", principal}, {"workspaceId", workspace}}, resourceScope(cosmos), []string{capSym})
-}
-
-// ------------------------------------------------------------------------------ principals
-
 func armPrincipalType(t string) string {
 	switch t {
 	case "user":
@@ -888,53 +672,14 @@ func armPrincipalType(t string) string {
 	return "ServicePrincipal"
 }
 
-// emitPrincipals assigns Foundry and monitoring roles to the configured principals. A principal
-// that is only a display name cannot be assigned in Bicep, so it is reported instead.
+// emitPrincipals assigns the read roles of the operators on the resource group. The Foundry
+// roles (account owner, project manager, user) apply to the Foundry resource and its projects,
+// which azd creates, so they are not generated. A principal that is only a display name cannot
+// be assigned in Bicep, so it is reported instead.
 func (g *gen) emitPrincipals() {
-	if g.account == "" {
-		return
-	}
-	reported := map[string]bool{}
-	usable := func(list []config.Principal, role string) []config.Principal {
-		var out []config.Principal
-		for _, p := range list {
-			if p.ID == "" {
-				if !reported[p.Key()] {
-					reported[p.Key()] = true
-					g.warn("XF201", "x-foundry.security.roles", "principal '%s' has no object ID, so no role assignment is generated; use its object ID (id) to assign %s", p.Name, role)
-				}
-				continue
-			}
-			out = append(out, p)
-		}
-		return out
-	}
-	account := g.account + ".outputs.name"
-	for _, p := range usable(g.n.Roles.Admins, "Foundry Account Owner") {
-		g.role("ra-account", roleLabel(roleFoundryAccountOwner, "admin "+p.Key()), []param{{"accountName", account}, {"principalId", str(p.ID)}, {"principalType", str(armPrincipalType(p.Type))}, {"roleId", str(roleFoundryAccountOwner)}}, "", nil)
-	}
-	for _, p := range g.n.Projects {
-		projectSym := g.syms[ids.ProjectNode(ids.ProjectScope(p.Name))]
-		if projectSym == "" {
-			continue
-		}
-		pa := []param{{"accountName", account}, {"projectName", projectSym + ".outputs.name"}}
-		rootAdmins := map[string]bool{}
-		for _, a := range g.n.Roles.Admins {
-			rootAdmins[a.Key()] = true
-		}
-		var projectAdmins []config.Principal
-		for _, a := range p.Roles.Admins {
-			if !rootAdmins[a.Key()] {
-				projectAdmins = append(projectAdmins, a)
-			}
-		}
-		for _, pr := range usable(projectAdmins, "Foundry Project Manager") {
-			g.role("ra-project", roleLabel(roleFoundryProjectManager, "admin "+pr.Key()+" of project "+p.Name), append(append([]param{}, pa...), param{"principalId", str(pr.ID)}, param{"principalType", str(armPrincipalType(pr.Type))}, param{"roleId", str(roleFoundryProjectManager)}), "", nil)
-		}
-		for _, pr := range usable(p.Roles.Developers, "Foundry User") {
-			g.role("ra-project", roleLabel(roleFoundryUser, "developer "+pr.Key()+" of project "+p.Name), append(append([]param{}, pa...), param{"principalId", str(pr.ID)}, param{"principalType", str(armPrincipalType(pr.Type))}, param{"roleId", str(roleFoundryUser)}), "", nil)
-		}
+	r := g.n.Roles
+	if len(r.Admins)+len(r.Developers) > 0 {
+		g.deferred["foundry role assignments"]++
 	}
 	seen := map[string]bool{}
 	var operators []config.Principal
@@ -946,25 +691,21 @@ func (g *gen) emitPrincipals() {
 			}
 		}
 	}
-	add(g.n.Roles.Operators)
+	add(r.Operators)
 	for _, p := range g.n.Projects {
 		add(p.Roles.Operators)
 	}
-	for _, pr := range usable(operators, "Reader and Monitoring Reader") {
+	for _, p := range operators {
+		if p.ID == "" {
+			g.warn("XF201", "x-foundry.security.roles", "principal '%s' has no object ID, so no role assignment is generated; use its object ID (id) to assign Reader and Monitoring Reader", p.Name)
+			continue
+		}
 		for _, role := range []string{roleReader, roleMonitoringReader} {
-			g.role("ra-resource-group", roleLabel(role, "operator "+pr.Key()), []param{{"principalId", str(pr.ID)}, {"principalType", str(armPrincipalType(pr.Type))}, {"roleId", str(role)}}, "", nil)
+			g.role("ra-resource-group", roleLabel(role, "operator "+p.Key()), []param{
+				{"principalId", str(p.ID)}, {"principalType", str(armPrincipalType(p.Type))}, {"roleId", str(role)},
+			}, "", nil)
 		}
 	}
-	// The identity running the deployment (azd sets principalId) can use the Foundry resource.
-	g.mods["ra-account"] = true
-	g.raCount++
-	sym := symbol(fmt.Sprintf("ra_%03d", g.raCount), g.used)
-	label := roleLabel(roleFoundryUser, "the identity running the deployment")
-	g.body.WriteString("// " + label + "\n")
-	g.module(sym, "ra-account", "!empty(principalId)", "", []param{
-		{"accountName", account}, {"principalId", "principalId"}, {"principalType", "principalType"}, {"roleId", str(roleFoundryUser)},
-		{"assignmentDescription", str(label)},
-	}, nil)
 }
 
 // ------------------------------------------------------------------------------ governance
@@ -994,16 +735,16 @@ func (g *gen) deferredList() []string {
 
 func deferredLabel(kind string) string {
 	switch kind {
-	case "governance (policy assignments, Defender plans, budgets)":
-		return kind + " (Phase 5)"
-	case "connector", "mcp", "knowledge-base", "toolbox", "agent":
-		return kind + " (data plane, Phase 3 and 4)"
-	case "evaluation":
-		return "evaluation (data plane, Phase 3)"
+	case "knowledge-base":
+		return "knowledge-base (data plane on the Search service, Phase 4)"
 	case "gateway":
 		return "gateway (API Management, Phase 5)"
 	case "alerts":
 		return "alerts (Phase 5)"
+	case "governance (policy assignments, Defender plans, budgets)":
+		return kind + " (Phase 5)"
+	case "foundry role assignments":
+		return "role assignments for admins and developers on the Foundry resource and projects (they need the resources azd creates)"
 	}
 	return kind + " (later phase)"
 }

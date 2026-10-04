@@ -52,15 +52,11 @@ dependencies, but they do not publish a per-environment checklist.
 | XF311 | Security | test, prod | No local (key-based) authentication | Azure Policy for no key-based/local authentication; Entra ID for connections |
 | XF312 | Security | prod | Purge protection | protect against catastrophic loss |
 | XF313 | Security | prod | Egress through a firewall (`egress` not `azure-default`) | "force all outbound (egress) traffic through Azure Firewall" |
-| XF314 | Security | test, prod | Bind a content-filter policy (`raiPolicy`) to chat deployments | "content-filter policy that screens prompts and model completions", managed as code |
-| XF315 | Security | test, prod | Restrict MCP tools (`allowedTools`) | "Restrict MCP server available tools using allowed_tools" |
 | XF316 | Security | prod | Azure Policy assignments | "Use Azure Policy to ensure all workload resources meet requirements" |
 | XF317 | Security | prod | Defender for Cloud plans: servers, appService, cosmosDb, ai | plans for Servers, App Service, Cosmos DB and AI services |
 | XF319 | Security | prod | Do not disable managed identities | distinct managed identities per component |
 | XF320 | Operations | test, prod | Logs of every service to a Log Analytics workspace | "all available log categories for each service" |
 | XF321 | Operations | prod | Keep alerts on | Azure Monitor baseline alerts |
-| XF322 | Operations | test, prod | Pin model versions (`NoAutoUpgrade`) | "Set the deployment's version upgrade option to not auto-upgrade" |
-| XF323 | Operations | test, prod | Run evaluations before promotion | evaluation framework; test suite of realistic questions |
 | XF324 | Operations | prod | Agent subnet at least /24 | "/24 CIDR range" for the agent egress subnet |
 | XF330 | Cost | test, prod | A budget with alerts | "set budgets and alerts early" (the basic architecture leaves cost controls out) |
 

@@ -2,7 +2,6 @@ package plan_test
 
 import (
 	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/RuairiSpain/copilot-Web/x-foundry/internal/diag"
@@ -22,86 +21,37 @@ func kbRule(t *testing.T, code, message, body string) {
 }
 
 func TestRule6DefaultModel(t *testing.T) {
-	ExpectCase(t, "XF006", "models.default", "", `models: {default: gpt-9}`)
+	// Deployments are declared on the azd azure.ai.project service, so only the allowed and
+	// denied sets can be checked.
 	for _, ok := range []string{
-		`models: {default: gpt-5, deployments: [{name: gpt-5, model: gpt-5}]}`,
+		`models: {default: gpt-5}`,
 		`models: {default: gpt-5, allowed: [gpt-5]}`,
-		`models: {default: chat, deployments: [{name: chat, model: gpt-5}]}`,
+		`models: {default: chat, denied: [gpt-5]}`,
 	} {
 		MustOK(t, Run(t, ok))
 	}
-	ExpectCase(t, "XF006", "", "denied", `models: {default: gpt-5, deployments: [{name: gpt-5, model: gpt-5}], denied: [gpt-5]}`)
-	ExpectCase(t, "XF006", "", "denied", `models: {default: chat, deployments: [{name: chat, model: gpt-5}], denied: [gpt-5]}`)
-	ExpectCase(t, "XF006", "", "not in models.allowed", `models: {default: mini, allowed: [gpt-5], deployments: [{name: mini, model: gpt-5-mini}]}`)
+	ExpectCase(t, "XF006", "models.default", "denied", `models: {default: gpt-5, denied: [gpt-5]}`)
+	ExpectCase(t, "XF006", "models.default", "not in models.allowed", `models: {default: mini, allowed: [gpt-5]}`)
 }
 
-func TestRule5AgentReferences(t *testing.T) {
-	a := Run(t, models, `projects: [{name: fin, agents: [{name: bot, model: gpt-5, toolboxes: [nope], mcps: [nope], knowledgeBases: [nope]}]}]`)
-	var kinds []string
-	for _, d := range a.Diagnostics {
-		for _, k := range []string{"toolbox", "MCP", "knowledge base"} {
-			if d.Code == "XF005" && strings.Contains(d.Message, "unknown "+k) {
-				kinds = append(kinds, k)
-			}
-		}
-	}
-	if len(kinds) != 3 {
-		t.Fatalf("kinds = %v\n%s", kinds, Lines(a.Diagnostics))
-	}
-	ExpectCase(t, "XF005", "", "unknown model", models, `agents: [{name: bot, model: gpt-9}]`)
-	ExpectCase(t, "XF112", "", "no model", `agents: [{name: bot}]`)
-	MustOK(t, Run(t, models, `agents: [{name: bot}]`))
-	ExpectCase(t, "XF016", "", "agent 'bot' uses denied model", `models: {denied: [gpt-4], deployments: [{name: old, model: gpt-4}]}`, `agents: [{name: bot, model: old}]`)
-}
-
-func TestSharedAgentReferencesMustResolveForEveryProject(t *testing.T) {
-	a := Run(t, models,
-		`agents: [{name: bot, toolboxes: [tb]}]`,
-		`projects: [{name: aa, toolboxes: [{name: tb, tools: [{name: t1, type: function, reference: f}]}]}, {name: bb}]`)
-	var found []diag.Diagnostic
-	for _, d := range a.Diagnostics {
-		if d.Code == "XF005" {
-			found = append(found, d)
-		}
-	}
-	if len(found) != 1 || !strings.Contains(found[0].Message, "project 'bb'") {
-		t.Fatalf("diagnostics:\n%s", Lines(a.Diagnostics))
-	}
-}
-
-func TestToolConnectorAndRouteReferences(t *testing.T) {
-	a := Run(t, `toolboxes: [{name: tb, tools: [{name: t1, type: mcp, reference: ghost}, {name: t2, type: knowledgeBase, reference: ghost}]}]`)
-	n := 0
-	for _, d := range a.Diagnostics {
-		if d.Code == "XF005" {
-			n++
-		}
-	}
-	if n != 2 {
-		t.Fatalf("want 2 tool reference errors:\n%s", Lines(a.Diagnostics))
-	}
-	a = Run(t, models, `iq: {knowledgeBases: [{name: kb1, sources: [{name: sp, type: sharepoint, site: hr, connection: ghost}], routing: {routes: [{name: r1, when: {agent: ghost}, knowledgeBase: ghost}]}}]}`)
-	for _, want := range []string{"connector 'ghost'", "unknown knowledge base 'ghost'", "unknown agent 'ghost'"} {
-		Expect(t, a, "XF005", "", want)
-	}
+func TestRouteReferences(t *testing.T) {
+	a := Run(t, models, `iq: {knowledgeBases: [{name: kb1, sources: [{name: files, type: blob, container: policies}], routing: {routes: [{name: r1, when: {agent: ghost}, knowledgeBase: ghost}]}}]}`)
+	Expect(t, a, "XF005", "", "unknown knowledge base 'ghost'")
+	// Sources may name an azd connection; it cannot be checked here.
+	MustOK(t, Run(t, models, `iq: {knowledgeBases: [{name: kb1, sources: [{name: sp, type: sharepoint, site: hr, connection: any-connection}]}]}`))
 }
 
 func TestRule7EmbeddingDimensions(t *testing.T) {
-	deploy := func(model string) string {
-		return fmt.Sprintf(`models: {deployments: [{name: emb, model: %s}]}`, model)
-	}
 	index := func(model string, dims int) string {
 		return fmt.Sprintf(`iq: {knowledgeBases: [{name: kb1, sources: [{name: s1, type: web, url: "https://x.example"}], index: {vector: {model: %s, deployment: emb, dimensions: %d}}}]}`, model, dims)
 	}
-	ExpectCase(t, "XF007", "", "at most 1536", deploy("text-embedding-3-small"), index("text-embedding-3-small", 3072))
-	ExpectCase(t, "XF007", "", "exactly 1536", deploy("text-embedding-ada-002"), index("text-embedding-ada-002", 1024))
-	MustOK(t, Run(t, deploy("text-embedding-3-small"), index("text-embedding-3-small", 1024)))
-	ExpectCase(t, "XF007", "", "serves 'text-embedding-3-small'", deploy("text-embedding-3-small"), `iq: {knowledgeBases: [{name: kb1, sources: [{name: s1, type: web, url: "https://x.example"}], index: {vector: {deployment: emb}}}]}`)
-	custom := Run(t, deploy("custom-embed"), index("custom-embed", 100))
+	ExpectCase(t, "XF007", "", "at most 1536", index("text-embedding-3-small", 3072))
+	ExpectCase(t, "XF007", "", "exactly 1536", index("text-embedding-ada-002", 1024))
+	MustOK(t, Run(t, index("text-embedding-3-small", 1024)))
+	custom := Run(t, index("custom-embed", 100))
 	if !custom.OK() || !Codes(custom, diag.Warning)["XF007"] {
 		t.Fatalf("unknown embedding model should warn:\n%s", Lines(custom.Diagnostics))
 	}
-	ExpectCase(t, "XF005", "", "embedding deployment 'ghost'", `iq: {knowledgeBases: [{name: kb1, sources: [{name: s1, type: web, url: "https://x.example"}], index: {vector: {deployment: ghost}}}]}`)
 	kbRule(t, "XF007", "1536 dimensions", `, index: {fields: [{name: contentVector, type: Collection(Edm.Single), dimensions: 1536, vectorProfile: default-vector-profile, searchable: true}]}`)
 }
 
@@ -184,22 +134,12 @@ func TestStorageRequirements(t *testing.T) {
 	ExpectCase(t, "XF107", "", "hierarchicalNamespace", models, `storage: {hierarchicalNamespace: false}`, adls)
 }
 
-func TestRule16DeploymentsRespectModelSets(t *testing.T) {
-	ExpectCase(t, "XF016", "", "not in models.allowed", `models: {allowed: [gpt-5], deployments: [{name: mini, model: gpt-5-mini}]}`)
-	ExpectCase(t, "XF016", "", "denied model", `models: {denied: [gpt-4], deployments: [{name: old, model: gpt-4}]}`)
-	MustOK(t, Run(t, `models: {allowed: [gpt-5]}`, `iq: {knowledgeBases: [{name: kb1, sources: [{name: s1, type: web, url: "https://x.example"}]}]}`)) // embeddings are exempt
-	a := RunHub(t, `hub: {name: shared, models: {denied: [gpt-4]}}`, `projects: [{name: fin, models: {deployments: [{name: old, model: gpt-4}]}}]`)
-	Expect(t, a, "XF016", "projects[fin]", "denied model")
-}
-
 func TestRule113ModelPolicy(t *testing.T) {
-	policy := `governance: {modelPolicy: {allowedModels: [gpt-5], deniedModels: [gpt-4], allowedSkus: [GlobalStandard]}}`
-	ExpectCase(t, "XF113", "", "allowedModels", policy, `models: {deployments: [{name: mm, model: gpt-5-mini}]}`)
-	ExpectCase(t, "XF113", "", "denies", `governance: {modelPolicy: {deniedModels: [gpt-4]}}`, `models: {deployments: [{name: mm, model: gpt-4}]}`)
-	ExpectCase(t, "XF113", "", "allowedSkus", policy, `models: {deployments: [{name: mm, model: gpt-5, sku: Standard}]}`)
 	ExpectCase(t, "XF113", "", "gateway allows", `governance: {modelPolicy: {allowedModels: [gpt-5]}}`, `models: {allowed: [gpt-5]}`,
 		`gateway: {enabled: true, models: {allowed: [gpt-5, gpt-5-mini]}}`, `observability: {}`)
-	MustOK(t, Run(t, policy, `models: {deployments: [{name: mm, model: gpt-5}]}`))
+	MustOK(t, Run(t, `governance: {modelPolicy: {allowedModels: [gpt-5, gpt-5-mini]}}`, `models: {allowed: [gpt-5]}`,
+		`gateway: {enabled: true, models: {allowed: [gpt-5]}}`, `observability: {}`))
+	MustOK(t, Run(t, `governance: {modelPolicy: {allowedSkus: [GlobalStandard]}}`))
 }
 
 func TestRule115SpokesMayOnlyNarrow(t *testing.T) {
@@ -219,44 +159,11 @@ func TestRule104RequiredTags(t *testing.T) {
 	MustOK(t, Run(t, `governance: {enabled: false, requiredTags: [cost-center]}`))
 }
 
-func TestRule126DataResidency(t *testing.T) {
-	residency := `governance: {dataResidency: [westeurope]}`
-	ExpectCase(t, "XF126", "deployments[chat].sku", "", `defaults: {location: westeurope}`, residency,
-		`models: {deployments: [{name: chat, model: gpt-5, sku: GlobalStandard}]}`)
-	MustOK(t, Run(t, `defaults: {location: westeurope}`, residency, `models: {deployments: [{name: chat, model: gpt-5, sku: DataZoneStandard}]}`))
-	p := MustPlan(t, `defaults: {location: westeurope}`, residency, `models: {allowed: [gpt-5]}`,
-		`iq: {knowledgeBases: [{name: kb1, sources: [{name: s1, type: web, url: "https://x.example"}]}]}`)
-	for _, d := range p.Config.Scope("root").Models.Deployments {
-		if d.SKU != "DataZoneStandard" {
-			t.Fatalf("%s uses %s", d.Name, d.SKU)
-		}
-	}
-	plain := MustPlan(t, `models: {allowed: [gpt-5]}`)
-	if got := plain.Config.Scope("root").Models.Deployments[0].SKU; got != "GlobalStandard" {
-		t.Fatalf("sku = %s", got)
-	}
-}
-
-func TestModelDeploymentsPinTheirVersionByDefault(t *testing.T) {
-	p := MustPlan(t, `models: {allowed: [gpt-5, gpt-5-mini], deployments: [{name: chat, model: gpt-5}, {name: auto, model: gpt-5-mini, versionUpgradeOption: OnceNewDefaultVersionAvailable}]}`)
-	got := map[string]string{}
-	for _, d := range p.Config.Scope("root").Models.Deployments {
-		got[d.Name] = d.VersionUpgradeOption
-	}
-	if got["chat"] != "NoAutoUpgrade" || got["auto"] != "OnceNewDefaultVersionAvailable" {
-		t.Fatalf("upgrade options = %v", got)
-	}
-	implicit := MustPlan(t, `models: {allowed: [gpt-5]}`)
-	if got := implicit.Config.Scope("root").Models.Deployments[0].VersionUpgradeOption; got != "NoAutoUpgrade" {
-		t.Fatalf("implicit deployment upgrade option = %s", got)
-	}
-}
-
 // Gateway ----------------------------------------------------------------------------------
 
 func gwDoc(gateway string, extra ...string) []string {
 	return append(y(`models: {default: gpt-5, allowed: [gpt-5, gpt-5-mini]}`,
-		`projects: [{name: fin, agents: [{name: bot, instructions: x}]}]`,
+		`projects: [{name: fin}]`,
 		`observability: {}`,
 		fmt.Sprintf(`gateway: {enabled: true, authentication: {audiences: ["api://gw"]}%s}`, gateway)), extra...)
 }
@@ -277,8 +184,6 @@ func TestRule13GatewayPaths(t *testing.T) {
 
 func TestRule14GatewayTargets(t *testing.T) {
 	for _, c := range []struct{ endpoint, message string }{
-		{`{name: ep1, path: /a, target: ghost, targetType: agent}`, "agent 'ghost' does not exist"},
-		{`{name: ep1, path: /a, target: ghost, targetType: agent, project: fin}`, "in project 'fin'"},
 		{`{name: ep1, path: /a, target: ghost, targetType: model}`, "model 'ghost'"},
 		{`{name: ep1, path: /a, target: ghost, targetType: search}`, "search 'ghost'"},
 		{`{name: ep1, path: /a, target: ghost, targetType: knowledgeBase}`, "knowledge base 'ghost'"},
@@ -288,14 +193,13 @@ func TestRule14GatewayTargets(t *testing.T) {
 	MustOK(t, Run(t,
 		`models: {default: gpt-5, allowed: [gpt-5]}`, `observability: {}`, `search: {name: srch-main}`,
 		`iq: {knowledgeBases: [{name: policies, sources: [{name: files, type: blob, container: policies}]}]}`,
-		`projects: [{name: fin, agents: [{name: bot, instructions: x}]}]`,
+		`projects: [{name: fin}]`,
 		`gateway: {enabled: true, authentication: {audiences: ["api://gw"]}, endpoints: [`+ep+`,
 			{name: ep2, path: /m, target: gpt-5, targetType: model},
 			{name: ep3, path: /s, target: srch-main, targetType: search},
 			{name: ep4, path: /k, target: policies, targetType: knowledgeBase, project: fin}]}`))
-	ExpectCase(t, "XF014", "", "several projects", models, `observability: {}`,
-		`projects: [{name: aa, agents: [{name: bot}]}, {name: bb, agents: [{name: bot}]}]`, `gateway: {enabled: true, endpoints: [`+ep+`]}`)
-	MustOK(t, Run(t, models, `observability: {}`, `agents: [{name: bot}]`, `projects: [{name: aa}, {name: bb}]`, `gateway: {enabled: true, endpoints: [`+ep+`]}`))
+	// An agent is an azd azure.ai.agent service, so its name cannot be checked.
+	MustOK(t, Run(t, models, `observability: {}`, `projects: [{name: aa}, {name: bb}]`, `gateway: {enabled: true, endpoints: [`+ep+`]}`))
 }
 
 func TestRule15GatewayProfiles(t *testing.T) {
@@ -334,7 +238,6 @@ func TestGatewayTrackingAndTelemetry(t *testing.T) {
 func TestGatewayModels(t *testing.T) {
 	ExpectCase(t, "XF006", "", "not in gateway.models.allowed", gwDoc(`, models: {default: gpt-5, allowed: [gpt-5-mini]}`)...)
 	ExpectCase(t, "XF006", "", "denied", gwDoc(`, models: {default: gpt-5, denied: [gpt-5]}`)...)
-	ExpectCase(t, "XF005", "", "no deployment serves it", gwDoc(`, models: {allowed: [gpt-9]}`)...)
 	ExpectCase(t, "XF021", "", "internalOnly", append(gwDoc(`, security: {internalOnly: false}`), Private)...)
 }
 
