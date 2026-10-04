@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "gopls": {
+      "command": "bash",
+      "args": ["foundry-doctor/scripts/claude/gopls-mcp.sh"]
+    },
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"]
+    }
+  }
+}

@@ -23,3 +23,6 @@ __pycache__/
 .pytest_cache/
 /jev-byom/.venv
 /jev-byom/.calibration
+
+# Claude Code personal overrides
+.claude/settings.local.json
