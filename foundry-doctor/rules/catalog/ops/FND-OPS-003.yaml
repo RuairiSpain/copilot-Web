@@ -2,5 +2,112 @@ id: FND-OPS-003
 version: 1
 group: OPS
 title: "Baseline alerts exist"
-status: proposed
+description: >-
+  A production Foundry deployment should define a baseline set of Azure Monitor alerts: a Service Health alert
+  (activity log alert on service health events) and metric alerts on the Foundry model-deployment metrics that detect
+  regressions (availability, error status codes, latency). The baseline set is a Foundry Doctor recommendation built
+  from the signals the Foundry documentation lists; it is not a platform requirement.
+status: product-opinion
 phases: ["4"]
+inputs: ["bicep-arm", "control-plane"]
+basis: ["operations", "waf", "opinion"]
+category: nice-to-have
+pillar: operations
+severity:
+  dev: info
+  test: info
+  prod: warning
+compatibility:
+  azd: ">=1.27.1"
+  extensions: {}
+  apiVersions: ["2018-03-01", "2026-01-01", "2020-10-01", "2026-03-01"]
+evidence:
+  description: >-
+    Offline: in the compiled ARM template, (a) at least one Microsoft.Insights/activityLogAlerts resource whose
+    condition targets category ServiceHealth, and (b) at least one Microsoft.Insights/metricAlerts resource, or a
+    Microsoft.Insights/scheduledQueryRules resource, whose scopes include the Foundry account and whose criteria use
+    at least one of the metrics ModelAvailabilityRate, ModelRequests (optionally split on StatusCode),
+    TimeToResponse or NormalizedTimeBetweenTokens, with at least one action group attached. Control plane: list the
+    alert rules on the resource group and subscription. Report each missing signal class separately. The signal
+    classes and the profile that requires them are configurable; no numeric thresholds are checked.
+  confidence: likely
+recommendation: >-
+  Add a Service Health alert and metric alerts on ModelAvailabilityRate, ModelRequests filtered by StatusCode (429 and
+  5xx) and TimeToResponse for the Foundry account, each with an action group. Choose thresholds from your own traffic
+  and latency targets.
+fix: |
+  resource availabilityAlert 'Microsoft.Insights/metricAlerts@2026-01-01' = {
+    name: 'foundry-model-availability'
+    location: 'global'
+    properties: {
+      severity: 2
+      enabled: true
+      scopes: [ foundryAccount.id ]
+      evaluationFrequency: 'PT5M'
+      windowSize: 'PT15M'
+      criteria: {
+        'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
+        allOf: [ { name: 'avail', metricName: 'ModelAvailabilityRate', operator: 'LessThan', threshold: 99, timeAggregation: 'Average', criterionType: 'StaticThresholdCriterion' } ]
+      }
+      actions: [ { actionGroupId: actionGroup.id } ]
+    }
+  }
+sources:
+  - url: https://learn.microsoft.com/azure/foundry/how-to/stay-informed-service-health
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/how-to/stay-informed-service-health.md
+    note: Service Health alerts for platform events and Azure Monitor metric alerts on ModelRequests, ModelAvailabilityRate, TimeToResponse and NormalizedTimeBetweenTokens, with an action group. Page ms.date 06/29/2026.
+  - url: https://learn.microsoft.com/azure/azure-monitor/reference/supported-metrics/microsoft-cognitiveservices-accounts-metrics
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-monitor-docs/articles/azure-monitor/reference/supported-metrics/microsoft-cognitiveservices-accounts-metrics.md
+    note: Metric names ModelAvailabilityRate, ModelRequests, TimeToResponse, NormalizedTimeBetweenTokens, ProvisionedUtilization exist on Microsoft.CognitiveServices/accounts. Page ms.date 09/28/2026.
+  - url: https://learn.microsoft.com/azure/azure-resource-manager/management/resource-name-rules
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-docs/articles/azure-resource-manager/management/resource-name-rules.md
+    note: Microsoft.Insights resource types actionGroups, metricAlerts and scheduledQueryRules exist (name rules only).
+  - url: https://github.com/Azure/azure-rest-api-specs/tree/main/specification/monitor/resource-manager/Microsoft.Insights/Insights
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/monitor/resource-manager/Microsoft.Insights/Insights (stable/2018-03-01/metricAlert_API.json, stable/2026-01-01/metricAlert.json and activityLogAlerts_API.json, stable/2020-10-01/activityLogAlerts_API.json, stable/2026-03-01/scheduledQueryRule_API.json; example MetricAlertApi/examples/2026-01-01/createOrUpdateMetricAlertSingleResource.json)
+    note: API versions present in the specification; metric alert properties scopes, criteria (odata.type SingleResourceMultipleMetricCriteria, allOf with metricName, operator, threshold, timeAggregation, criterionType), evaluationFrequency, windowSize, severity, enabled and actions[].actionGroupId read from the example. A ServiceHealth activity log alert example exists under ActivityLogAlertsApi/examples/2023-01-01-preview (preview).
+overlap:
+  decision: adapt
+  coverage: partial
+  rationale: >-
+    PSRule Azure.Monitor.ServiceHealth and the Azure Policy definition 98903777-a9f6-47f5-90a9-acaf62ab01a8 (configure
+    subscriptions to enable service health alert monitoring) cover only the Service Health part at subscription scope.
+    Azure Policy 'an activity log alert should exist for specific operations' definitions (b954148f-4c11-4c38-8221-be76711e194a,
+    3b980d31-7904-4bb7-8575-5665739a8052, c5447c04-a4d7-4ba8-a263-c9ee321a6858) cover administrative, security and policy
+    operations, not Foundry metrics. None checks Foundry model-deployment metric alerts. Foundry Doctor adapts the idea
+    and adds the Foundry-specific metric set and the link between alert scope and the Foundry account.
+  psrule: [Azure.Monitor.ServiceHealth]
+  azurePolicy:
+    - 98903777-a9f6-47f5-90a9-acaf62ab01a8
+    - b954148f-4c11-4c38-8221-be76711e194a
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/ops
+testability: >-
+  Offline against fixture ARM JSON with and without each alert class; control-plane variant is a recorded alert-rule list.
+tests:
+  positive:
+    - no-alert-rules-in-template
+    - metric-alert-without-action-group
+    - service-health-alert-missing
+    - alert-scope-is-not-foundry-account
+  negative:
+    - service-health-plus-availability-and-latency-alerts
+    - scheduled-query-rule-on-foundry-metrics-with-action-group
+  skipped:
+    - alerts-managed-at-subscription-level-outside-repo
+    - control-plane-unavailable
+notes: >-
+  Product opinion: the Foundry article tells users how to create these alerts but does not say that a deployment without
+  them is invalid, and no source defines a canonical baseline set. Unverified: the exact activity log alert condition
+  property layout for a stable API version (only a preview example for ServiceHealth was read), and scheduledQueryRules
+  property names (API version listed from the folder only); Defender for Cloud and Advisor have no verified
+  recommendation for this. The fix example follows the metric alert example read in the 2026-01-01 specification;
+  the 2018-03-01 stable version also exists but its property shapes were not compared.

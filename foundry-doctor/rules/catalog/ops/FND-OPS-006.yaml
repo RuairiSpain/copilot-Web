@@ -2,5 +2,101 @@ id: FND-OPS-006
 version: 1
 group: OPS
 title: "Log retention meets policy"
-status: proposed
+description: >-
+  Log retention on the Log Analytics workspace that receives Foundry diagnostics and Application Insights traces must
+  meet the minimum retention that the active profile declares. The Azure platform defaults to 30 days (90 days for
+  Application Insights tables and the Usage and AzureActivity tables); any longer period is an organisational
+  requirement, not a platform one.
+status: product-opinion
 phases: ["4"]
+inputs: ["bicep-arm", "control-plane"]
+basis: ["operations", "waf", "opinion"]
+category: nice-to-have
+pillar: operations
+severity:
+  dev: info
+  test: warning
+  prod: error
+compatibility:
+  azd: ">=1.27.1"
+  extensions: {}
+  apiVersions: ["2026-03-01"]
+evidence:
+  description: >-
+    Resolve the workspace that FND-OPS-001 diagnostic settings and the Application Insights component point to
+    (Microsoft.Insights/components properties.WorkspaceResourceId, diagnosticSettings properties.workspaceId). In the
+    compiled template read Microsoft.OperationalInsights/workspaces properties.retentionInDays and any
+    workspaces/tables resource retentionInDays and totalRetentionInDays for the tables that matter (AzureDiagnostics for
+    Foundry resource logs; the App* tables for traces). Compare the effective total retention (totalRetentionInDays, or
+    retentionInDays when total is -1 or absent, or the workspace default) with the minimum days declared in the profile
+    per environment. Report: effective retention below the minimum; a value outside the documented ranges (analytics
+    retention 4-730 days, total retention 4-4383 days per table); retention 30 with features.immediatePurgeDataOn30Days
+    true when the profile requires more. Control plane: read the same properties from the deployed workspace. With no
+    minimum declared in the profile, or a workspace that cannot be resolved, the rule is skipped, not passed.
+  confidence: likely
+recommendation: >-
+  Set workspace retentionInDays to at least the value your policy requires, or set totalRetentionInDays on the tables
+  that hold Foundry diagnostics and traces to keep older data in low-cost long-term retention. Retention beyond the
+  free period is billed.
+fix: |
+  resource law 'Microsoft.OperationalInsights/workspaces@2025-07-01' = {
+    name: lawName
+    location: location
+    properties: {
+      retentionInDays: 90
+    }
+  }
+sources:
+  - url: https://learn.microsoft.com/azure/azure-monitor/logs/data-retention-configure
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-monitor-docs/articles/azure-monitor/logs/data-retention-configure.md
+    note: Default 30 days (90 for Usage, AzureActivity and Application Insights tables); analytics retention up to two years (730 days), total retention up to 12 years (4383 days); workspace properties.retentionInDays and features.immediatePurgeDataOn30Days; table retentionInDays and totalRetentionInDays. Page ms.date 09/02/2026.
+  - url: https://github.com/Azure/azure-rest-api-specs/tree/main/specification/operationalinsights/resource-manager/Microsoft.OperationalInsights/OperationalInsights/stable/2026-03-01
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/operationalinsights/resource-manager/Microsoft.OperationalInsights/OperationalInsights/stable/2026-03-01/openapi.json
+    note: WorkspaceProperties.retentionInDays (allowed values per pricing plan); TableProperties.retentionInDays 4-730 and totalRetentionInDays 4-4383.
+  - url: https://learn.microsoft.com/azure/foundry/observability/concepts/trace-agent-concept
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/observability/concepts/trace-agent-concept.md
+    note: Foundry trace data retention and sampling follow the Application Insights configuration.
+overlap:
+  decision: adapt
+  coverage: partial
+  rationale: >-
+    No PSRule rule, Azure Policy built-in or Bicep linter rule checks Log Analytics workspace retention against a
+    declared minimum (PSRule Azure.Log.* covers naming and replication; Checkov CKV_AZURE_37 checks the legacy Activity
+    Log profile retention of 365 days, which does not apply to workspaces). Foundry Doctor adapts the idea of a
+    retention floor and adds the correlation from the Foundry resources and the Application Insights connection to the
+    workspace that actually stores their data.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: [CKV_AZURE_37]
+implementation:
+  owner: native
+  package: internal/rules/ops
+testability: >-
+  Offline against fixture ARM JSON (workspace with and without table overrides); control-plane variant is a recorded
+  workspace and table read.
+tests:
+  positive:
+    - workspace-retention-30-days-below-90-minimum
+    - table-total-retention-below-minimum
+    - retention-value-outside-documented-range
+    - immediate-purge-true-with-longer-minimum
+  negative:
+    - workspace-retention-at-minimum
+    - table-total-retention-overrides-low-workspace-default
+  skipped:
+    - no-minimum-in-profile
+    - workspace-is-existing-resource-not-in-template
+    - control-plane-unavailable
+notes: >-
+  Product opinion: the documents give the defaults and ranges, but no source says what retention is correct; the minimum
+  comes from the user's profile. Unverified: allowed workspace retentionInDays values per pricing plan (the specification
+  defers to pricing-tier documentation, and Learn cost-logs.md states 30-730 for the Standalone and Per Node tiers only);
+  whether tables inherit when only the workspace value is set in an ARM template (documented behaviour, not a
+  specification statement); retention for Application Insights classic (non-workspace) components, which are not
+  covered. Which tables carry Foundry traces is not enumerated beyond the App* tables named on the Learn page.

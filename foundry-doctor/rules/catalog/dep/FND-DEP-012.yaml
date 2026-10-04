@@ -2,5 +2,114 @@ id: FND-DEP-012
 version: 1
 group: DEP
 title: "Target region supports selected setup"
-status: proposed
+description: >-
+  The target region must support the setup the project selects: the subscription can use the region, every
+  resource type in the compiled template is offered there by its provider, and Foundry Agent Service
+  documents support for the selected features (agents, Responses API, private VNet injection, and the
+  configured tools) in that region.
+status: verified
 phases: ["2"]
+inputs: ["azure.yaml", "bicep-arm", "azd-env", "control-plane"]
+basis: ["platform"]
+category: must-have
+pillar: reliability
+severity:
+  dev: error
+  test: error
+  prod: error
+compatibility:
+  azd: ">=1.27.1"
+  extensions:
+    azure.ai.agents: ">=1.0.0-beta.8"
+    azure.ai.projects: ">=1.0.0-beta.4"
+  apiVersions: ["Microsoft.Resources subscriptions 2022-12-01", "Microsoft.Resources providers 2025-04-01"]
+evidence:
+  description: >-
+    Two live read-only GET checks plus one dated data check. (1) GET /subscriptions/{subscriptionId}/locations
+    api-version 2022-12-01 (Subscriptions_ListLocations); the target AZURE_LOCATION must match a Location.name
+    in the list (fields id, name, displayName, regionalDisplayName, metadata). (2) GET
+    /subscriptions/{subscriptionId}/providers/{resourceProviderNamespace} api-version 2025-04-01
+    (Providers_Get): for every resource type in the compiled template, the matching
+    resourceTypes[].resourceType entry must list the target location in resourceTypes[].locations (the spec
+    does not say whether these entries are location names or display names, so the comparison normalises
+    both through Location.name and Location.displayName from check 1; this normalisation is unverified). Failures
+    are certain: the provider says the type is not offered in the region. (3) A data file maintained by
+    Foundry Doctor from the Learn article "Foundry Agent Service limits, quotas, and regional support":
+    the Supported regions table (Responses API, Agents, Voice-based agents (preview), Private VNet), the Tool
+    support by region and model table (for example File Search: no in Brazil South and Italy North), and the
+    Grounding with Bing Search region list. The data records the Learn ms.date it was taken from
+    (09/07/2026 here). A mismatch with the selected features is a violation (likely: the page can lag the
+    service, and says that availability can change over time); the finding includes the data date. Model
+    availability is FND-DEP-004 and is not repeated. Role family: Microsoft.Resources/subscriptions/locations/read
+    and Microsoft.Resources/subscriptions/providers/read, both covered by Reader (*/read). Reader suffices.
+    The answer is definitive for checks (1) and (2) and likely for (3).
+  confidence: likely
+recommendation: >-
+  Choose a region that offers every selected resource type and feature, or change the feature selection (for
+  example a different tool). Use the Learn supported-regions table to compare candidate regions.
+fix: |
+  azd env set AZURE_LOCATION eastus2
+sources:
+  - url: https://learn.microsoft.com/azure/foundry/agents/concepts/limits-quotas-regions
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/limits-quotas-regions.md (ms.date 09/07/2026)
+    note: "Supported regions table (Responses API, Agents, voice-based agents preview, Private VNet); tool support by region and model; troubleshooting 'A model or version isn't available in your region' and 'A tool isn't available in your region'; Grounding with Bing region list; model availability varies by region and changes over time."
+  - url: https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/includes/how-to-virtual-networks-content.md (ms.date 06/15/2026)
+    note: "Foundry resource must be in the same region as the virtual network; every region where Agent Service is available supports the private Class A address space."
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/subscriptions/stable/2022-12-01/subscriptions.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/resources/resource-manager/Microsoft.Resources/subscriptions/stable/2022-12-01/subscriptions.json
+    note: "Subscriptions_ListLocations (GET /subscriptions/{subscriptionId}/locations); Location (name, displayName, regionalDisplayName, metadata)."
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/resources/stable/2025-04-01/resources.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/resources/resource-manager/Microsoft.Resources/resources/stable/2025-04-01/resources.json
+    note: "Providers_Get (GET); ProviderResourceType.locations, locationMappings, zoneMappings."
+  - url: https://learn.microsoft.com/azure/role-based-access-control/permissions/management-and-governance
+    lastVerified: "2026-10-04"
+    verifiedVia: https://raw.githubusercontent.com/MicrosoftDocs/azure-docs/main/articles/role-based-access-control/permissions/management-and-governance.md
+    note: "Microsoft.Resources/subscriptions/locations/read and Microsoft.Resources/subscriptions/providers/read."
+overlap:
+  decision: adapt
+  coverage: partial
+  rationale: >-
+    PSRule Azure.Resource.AllowedRegions and the Azure Policy built-ins Allowed locations
+    (e56962a6-4747-49cd-b67b-bf8b01975c4c) and Allowed locations for resource groups
+    (e765b5de-1225-4ba3-bd56-1ac6695af988) enforce an organisation's permitted region list, which is a different
+    question (governance, not service availability), so they are not mapped here; the policy side is FND-DEP-009.
+    The Bicep linter no-hardcoded-location is about parameterising location. Foundry Doctor takes the idea of
+    a location check and answers it with live provider offerings plus a dated Foundry feature matrix, correlated
+    with the project's selected features.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/dep
+testability: >-
+  Offline with recorded locations and provider responses and a versioned regional data file; the display-name
+  to location-name mapping and the feature matrix lookup are pure logic.
+tests:
+  positive:
+    - region-not-in-subscription-locations
+    - resource-type-not-offered-in-region-by-provider
+    - file-search-tool-selected-in-brazil-south
+    - private-vnet-selected-in-region-without-private-vnet-support
+  negative:
+    - region-and-all-features-supported
+  skipped:
+    - no-azure-credential-available
+    - location-unresolved-in-azd-environment
+    - regional-data-file-older-than-staleness-threshold
+  uncertain:
+    - feature-support-from-learn-page-may-lag-service
+    - resource-type-has-no-locations-entry-global-resource
+notes: >-
+  The data file is a Foundry Doctor artefact derived from documentation, not an API; its staleness threshold is a
+  product decision. The Learn page does not enumerate every setup (for example hosted agents or specific model
+  regions), so only documented columns are checked. The Learn model-region page was not read for this rule;
+  model offering is covered by FND-DEP-004's live API.

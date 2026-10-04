@@ -2,5 +2,149 @@ id: FND-NET-010
 version: 1
 group: NET
 title: "Azure Monitor private-link choice is explicit"
-status: proposed
+description: >-
+  In a private Foundry design, the telemetry path (Application Insights component and its Log
+  Analytics workspace) must be a deliberate choice: either connected through an Azure Monitor Private
+  Link Scope (AMPLS) with explicit ingestion and query access modes, or declared as public telemetry.
+  The Foundry documentation states that Application Insights reaches a private Foundry setup through
+  an AMPLS. The documentation also warns that a Private Only access mode blocks traffic to Azure
+  Monitor resources outside the AMPLS for every network that shares the same DNS, and that several
+  AMPLS objects on one DNS override each other. The platform does not require AMPLS, so the rule
+  asks for an explicit decision and checks that the chosen option is internally consistent. It does
+  not claim that public telemetry is a platform error.
+status: product-opinion
 phases: ["4"]
+inputs: ["bicep-arm", "control-plane"]
+basis: ["opinion", "security"]
+category: nice-to-have
+pillar: security
+severity:
+  dev: info
+  test: warning
+  prod: warning
+compatibility:
+  azd: "not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked)"
+  extensions: {}
+  apiVersions:
+    - "Microsoft.Insights/privateLinkScopes@2021-09-01 (stable; accessModeSettings.queryAccessMode, ingestionAccessMode, exclusions)"
+    - "Microsoft.Insights/privateLinkScopes@2023-06-01-preview (same properties; both modes required)"
+    - "Microsoft.Insights/privateLinkScopes/scopedResources (linkedResourceId)"
+    - "Microsoft.Insights/components@2020-02-02 (publicNetworkAccessForIngestion, publicNetworkAccessForQuery; default Enabled)"
+    - "Microsoft.OperationalInsights/workspaces@2026-03-01 (publicNetworkAccessForIngestion, publicNetworkAccessForQuery; Enabled, Disabled, SecuredByPerimeter)"
+evidence:
+  description: >-
+    Applies when the Foundry account is private by the FND-NET-001 test and an Application Insights
+    component is connected to the account or project (Application Insights connection) or the
+    template deploys one beside it. Classify the telemetry path as exactly one of:
+    (a) AMPLS: a Microsoft.Insights/privateLinkScopes/scopedResources child whose
+    properties.linkedResourceId is the component (and, for a workspace-based component, its Log
+    Analytics workspace), plus a private endpoint whose privateLinkServiceConnections[].groupIds
+    contains azuremonitor and whose privateLinkServiceId is the scope; (b) declared public: the
+    design declares public telemetry in Foundry Doctor config and the component sets
+    publicNetworkAccessForIngestion explicitly; (c) implicit: neither, which is the finding.
+    For (a), also require accessModeSettings.ingestionAccessMode and queryAccessMode to be present
+    and explicit (the 2021-09-01 schema defaults them to Open when omitted). Emit info when either
+    is PrivateOnly, quoting the documented all-networks-on-the-same-DNS effect. Fail path (a) when the
+    component or workspace sets a public access property to Disabled but is not in any scope in the
+    template, because ingestion or query then has no path. Emit a warning when more than one scope
+    in the template could be reached from the same private DNS zone (the documented override
+    problem), and skip when a linkedResourceId, location or access mode is an unresolved parameter.
+    Live mode lists scopedResources and privateEndpointConnections from ARM.
+  confidence: likely
+recommendation: >-
+  Decide the telemetry path. For private telemetry, create one AMPLS per DNS boundary, add the
+  Application Insights component and its workspace as scoped resources, create the private endpoint
+  with group ID azuremonitor and link the Azure Monitor private DNS zones, and set both access modes
+  explicitly. Use Open while resources are still being added and switch to Private Only only when all
+  Azure Monitor resources are in the scope. If you accept public telemetry, record that decision in
+  the Foundry Doctor config so the finding is suppressed with a reason.
+fix: |
+  resource ampls 'Microsoft.Insights/privateLinkScopes@2021-09-01' = {
+    name: 'ampls-${name}'
+    location: 'global'
+    properties: {
+      accessModeSettings: { ingestionAccessMode: 'Open', queryAccessMode: 'Open' } // explicit; move to PrivateOnly once every resource is scoped
+    }
+  }
+  resource scoped 'Microsoft.Insights/privateLinkScopes/scopedResources@2021-09-01' = {
+    parent: ampls
+    name: 'appi'
+    properties: { linkedResourceId: appInsights.id }
+  }
+  // private endpoint with groupIds: ['azuremonitor'] and privateLinkServiceId: ampls.id
+sources:
+  - url: https://learn.microsoft.com/azure/azure-monitor/fundamentals/private-link-design
+    lastVerified: "2026-10-04"
+    verifiedVia: github.com/MicrosoftDocs/azure-monitor-docs articles/azure-monitor/fundamentals/private-link-design.md (ms.date 08/07/2026); the article moved out of azure-docs
+    note: Access modes (Private Only versus Open), Private Only affects all networks sharing the DNS, one AMPLS per DNS, per-resource public ingestion and query settings, Application Insights guidance.
+  - url: https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/virtual-networks.md (ms.date 06/15/2026, table row and DNS zone list)
+    note: Application Insights is supported in the private setup through an Azure Monitor Private Link Scope; DNS zones privatelink.monitor.azure.com, privatelink.ods.opinsights.azure.com, privatelink.oms.opinsights.azure.com, privatelink.agentsvc.azure-automation.net.
+  - url: https://learn.microsoft.com/azure/foundry/includes/how-to-managed-virtual-network-content
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/includes/how-to-managed-virtual-network-content.md (managed private endpoint targets list)
+    note: Azure Application Insights (via Azure Monitor Private Link Scope) is a supported managed-network target.
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/monitor/resource-manager/Microsoft.Insights/Insights/stable/2021-09-01/privateLinkScopes_API.json
+    lastVerified: "2026-10-04"
+    verifiedVia: github.com/Azure/azure-rest-api-specs specification/monitor/resource-manager/Microsoft.Insights/Insights/{stable/2021-09-01/privateLinkScopes_API.json, preview/2023-06-01-preview/privateLinkScopes.json}
+    note: AccessModeSettings (queryAccessMode, ingestionAccessMode, exclusions), AccessMode enum Open and PrivateOnly, ScopedResourceProperties.linkedResourceId.
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/applicationinsights/resource-manager/Microsoft.Insights/ApplicationInsights/Components/models.tsp
+    lastVerified: "2026-10-04"
+    verifiedVia: github.com/Azure/azure-rest-api-specs specification/applicationinsights/resource-manager/Microsoft.Insights/ApplicationInsights/Components/models.tsp; operationalinsights stable/2026-03-01/openapi.json
+    note: publicNetworkAccessForIngestion and publicNetworkAccessForQuery default Enabled on components; workspaces accept Enabled, Disabled, SecuredByPerimeter.
+overlap:
+  decision: adapt
+  coverage: partial
+  rationale: >-
+    Built-in policies already audit pieces: the AMPLS should use private link (private endpoints exist),
+    the AMPLS should block access to non private link resources (both access modes PrivateOnly), the
+    DINE policies that create endpoints and DNS, and the deny policies for public ingestion and
+    query on Application Insights and Log Analytics. All are per-resource and subscription scoped;
+    the "block" policy would flag the Open mode that the documentation recommends during onboarding.
+    PSRule for Azure, Checkov and the Bicep linter have no AMPLS rule in the local clones. Foundry
+    Doctor adapts the idea: it asks for an explicit decision tied to the Foundry connection, checks
+    that scope membership and public-access settings agree, and runs before deployment. Evidence is
+    the correlation of connection, component, scope and endpoint, not one property.
+  psrule: []
+  azurePolicy:
+    - "0fc55270-f8bf-4feb-b7b8-5e7e7eacc6a6 (Azure Monitor Private Link Scope should use private link)"
+    - "a499fed8-bcc8-4195-b154-641f14743757 (Azure Monitor Private Link Scope should block access to non private link resources)"
+    - "bec5db8e-c4e3-40f9-a545-e0bd00065c82 (Configure Azure Monitor Private Link Scope to block access to non private link resources)"
+    - "e8185402-357b-4768-8058-f620bc0ae6b5 (Configure Azure Monitor Private Link Scopes with private endpoints)"
+    - "437914ee-c176-4fff-8986-7e05eb971365 (Configure Azure Monitor Private Link Scope to use private DNS zones)"
+    - "1bc02227-0cb6-4e11-8f53-eb0b22eab7e8 (Application Insights components should block log ingestion and querying from public networks)"
+    - "6c53d030-cc64-46f0-906d-2bc061cd1334 (Log Analytics workspaces should block log ingestion and querying from public networks)"
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/net
+testability: >-
+  Offline with compiled ARM fixtures (component, scope, scopedResources, private endpoint) and a
+  declared-public config fixture. Live mode adds a scopedResources and endpoint listing.
+tests:
+  positive:
+    - private-foundry-appinsights-no-ampls-no-declaration
+    - ampls-access-modes-omitted
+    - component-ingestion-disabled-not-in-scope
+    - two-ampls-same-dns-zone
+  negative:
+    - appinsights-in-ampls-with-explicit-modes-and-endpoint
+    - public-telemetry-declared-in-config
+    - foundry-not-private
+  skipped:
+    - linked-resource-id-is-parameter
+    - appinsights-referenced-by-existing-resource-id-only
+  uncertain:
+    - private-only-mode-with-other-networks-on-same-dns
+notes: >-
+  Product opinion: the platform documents AMPLS as the way to keep Application Insights private
+  and documents the Private Only side effects, but it does not require a private telemetry path, so
+  the rule is an explicit-choice check (severity warning in test and prod, info in dev).
+  Unverified: the Foundry Doctor config key for declaring public telemetry (defined in Phase 4);
+  the exact private endpoint DNS zone set required for the azuremonitor group ID (the Foundry article
+  lists four zones; the Azure Monitor private-link-configure article was not reviewed);
+  Defender for Cloud and Advisor equivalents were not available in any clone.

@@ -2,5 +2,87 @@ id: FND-OPS-008
 version: 1
 group: OPS
 title: "Evaluations run before promotion"
-status: proposed
+description: >-
+  An agent project that is promoted to test or production should have a repeatable evaluation recipe and a pipeline
+  step that runs it before promotion. In azd the recipe is eval.yaml (agent target, dataset, evaluator references,
+  thresholds) and the documented CI command is azd ai agent eval run. This is a Foundry Doctor recommendation built on
+  the documented commands.
+status: product-opinion
 phases: ["4"]
+inputs: ["azure.yaml", "external-tool"]
+basis: ["operations", "waf", "opinion"]
+category: nice-to-have
+pillar: operations
+severity:
+  dev: info
+  test: warning
+  prod: warning
+compatibility:
+  azd: ">=1.27.1"
+  extensions:
+    azure.ai.agents: "1.0.0-beta.18"
+  apiVersions: []
+evidence:
+  description: >-
+    Repository evidence only. Pass when (a) an eval.yaml exists in the agent project root or at a path passed with
+    --config in the pipeline, and (b) a pipeline definition (see FND-OPS-007) contains a step that runs azd ai agent
+    eval run, and that step appears before any step that promotes to production (a pipeline job or environment
+    named for prod/production, or a documented version-pinning step). Report separately - no eval.yaml; eval.yaml has
+    no evaluators list or no dataset reference (keys agent, dataset_file or dataset, evaluators as read in the
+    extension source); the pipeline never runs eval run; eval run runs only after the production deployment step. The
+    ordering heuristic is reported as confidence likely. Scores and thresholds are never evaluated by Foundry Doctor.
+  confidence: likely
+recommendation: >-
+  Generate the evaluation recipe with azd ai agent eval generate, commit eval.yaml, and run azd ai agent eval run in the
+  pipeline against the candidate version; promote to production only after the evaluation passes your thresholds.
+fix: |
+  # in .github/workflows/azure-dev.yml, before the production promotion job
+  - run: azd ai agent eval run --no-prompt
+sources:
+  - url: https://learn.microsoft.com/azure/foundry/agents/how-to/set-up-ci-cd-cli
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/set-up-ci-cd-cli.md
+    note: "Verify with eval in CI: azd ai agent eval run for regression checks, fail the job if scores drop below your threshold; section on validating a candidate before production promotion. Page ms.date 09/23/2026 (preview)."
+  - url: https://learn.microsoft.com/azure/foundry/observability/how-to/azure-developer-cli-evaluation
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/observability/how-to/azure-developer-cli-evaluation.md and refs/azure-dev/cli/azd/extensions/azure.ai.agents/internal/pkg/agents/opt_eval/yaml.go
+    note: eval.yaml is the local evaluation recipe (agent target, dataset reference, evaluator references, thresholds); azd ai agent eval generate/run/update; requires the azure.ai.agents extension 0.1.40-preview or later. Page ms.date 09/25/2026 (preview).
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    No existing tool examined checks that a pipeline gates promotion on Foundry evaluations; the commands are Foundry and
+    azd specific and PSRule, Policy, Defender, Advisor and Checkov do not read pipeline definitions for them.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/ops
+testability: >-
+  Offline against fixture repositories with workflow YAML in several orders. Evaluation scores and Foundry evaluation runs
+  are out of scope and never queried.
+tests:
+  positive:
+    - agent-project-without-eval-yaml
+    - eval-yaml-present-pipeline-never-runs-eval
+    - eval-run-step-after-production-deploy
+    - eval-yaml-without-evaluators
+  negative:
+    - eval-run-before-promotion-job
+  skipped:
+    - project-has-no-agent-services
+    - dev-profile
+    - pipeline-not-in-repository
+notes: >-
+  Product opinion. The docs recommend eval run for regression checks and describe gated promotion, but do not require it.
+  The extension minimum 0.1.40-preview is quoted from the evaluation article and is newer-versioned than the clone's
+  azure.ai.agents 1.0.0-beta.18 numbering, so the version scheme should be re-checked at implementation. Top-level eval.yaml keys
+  name, agent, dataset_file, dataset, evaluators (name, version, local_uri, initialization_parameters) and options
+  (eval_model) were read in the azure.ai.agents extension source (internal/pkg/agents/opt_eval/yaml.go,
+  1.0.0-beta.18); no dedicated threshold key was found there, so where thresholds live (the Learn article says
+  eval.yaml references thresholds, possibly via evaluator initialization_parameters) is unverified and thresholds are
+  not checked. Evaluation-before-promotion for non-azd pipelines (Foundry SDK evaluation jobs) is not covered.

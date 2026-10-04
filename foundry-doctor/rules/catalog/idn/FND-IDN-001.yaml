@@ -2,5 +2,133 @@ id: FND-IDN-001
 version: 1
 group: IDN
 title: "Managed identities used for Foundry and workloads"
-status: proposed
+description: >-
+  The Foundry account, each Foundry project and the compute workloads the template deploys beside
+  them must have a managed identity (system-assigned, user-assigned or both) so that access to
+  Storage, Cosmos DB, Search and Container Registry is granted to an identity instead of a key or a
+  secret. The Foundry documentation states that the project managed identity is what running agents
+  use to reach Cosmos DB, Search and Storage, and that a user-assigned project identity can only be
+  chosen when the project is created. The rule reads identity.type on the account, the project and
+  the workload resources and reports resources whose identity is absent or None. API-key based
+  connections are handled by the SEC group; gateway and Search-source identity by FND-GW-005 and
+  FND-IQ-008.
+status: verified
 phases: ["1"]
+inputs: ["bicep-arm", "control-plane"]
+basis: ["security"]
+category: must-have
+pillar: security
+severity:
+  dev: warning
+  test: warning
+  prod: error
+compatibility:
+  azd: "not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked)"
+  extensions: {}
+  apiVersions:
+    - "Microsoft.CognitiveServices/accounts@2026-09-01 (identity.type: None, SystemAssigned, UserAssigned, SystemAssigned, UserAssigned)"
+    - "Microsoft.CognitiveServices/accounts/projects@2026-09-01 (identity, same type)"
+    - "Microsoft.CognitiveServices/accounts/projects/connections@2026-09-01 (ConnectionAuthType incl. ProjectManagedIdentity, AccountManagedIdentity)"
+evidence:
+  description: >-
+    For each Microsoft.CognitiveServices/accounts and accounts/projects resource, read identity.type.
+    Report when identity is absent or type is None. For workloads, evaluate Microsoft.App/containerApps,
+    Microsoft.Web/sites and Microsoft.Web/sites/slots in the template that carry a Foundry endpoint,
+    project or connection setting, and read identity.type on each (PSRule documents identity.type
+    SystemAssigned or UserAssigned on these types). When identity.type contains UserAssigned, require
+    identity.userAssignedIdentities to be non-empty. When the project identity type is user-assigned,
+    report an info note that the documentation says the type cannot be changed after project
+    creation. In live mode confirm identity.principalId is populated for SystemAssigned. Skip an
+    identity.type that is an unresolved parameter. Do not evaluate APIM or Search identities here.
+  confidence: certain
+recommendation: >-
+  Enable a system-assigned or user-assigned managed identity on the Foundry account, on each project
+  and on every workload that calls Foundry, then grant that identity data-plane roles on the
+  dependent resources (see FND-IDN-002). Choose the user-assigned option at project creation if you
+  need it, because the project identity type cannot be changed later.
+fix: |
+  resource account 'Microsoft.CognitiveServices/accounts@2026-09-01' = {
+    name: accountName
+    location: location
+    kind: 'AIServices'
+    sku: { name: 'S0' }
+    identity: { type: 'SystemAssigned' }
+    properties: { /* ... */ }
+  }
+  resource project 'Microsoft.CognitiveServices/accounts/projects@2026-09-01' = {
+    parent: account
+    name: projectName
+    location: location
+    identity: { type: 'SystemAssigned' }
+    properties: {}
+  }
+sources:
+  - url: https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/includes/concepts-standard-agent-setup-content.md (concept ms.date 07/09/2026; Phase 3 and 4 runtime roles for the project managed identity, SMI and UMI)
+    note: The project managed identity includes SMI and UMI; roles govern runtime access for running agents.
+  - url: https://learn.microsoft.com/azure/foundry/agents/concepts/hosted-agent-permissions
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/hosted-agent-permissions.md (ms.date 04/21/2026)
+    note: The project has a managed identity; user-assigned managed identity is supported only when configured at project creation and the type cannot be changed afterwards.
+  - url: https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/includes/how-to-virtual-networks-content.md (Runtime access after deployment)
+    note: The project managed identity is what running agents use to reach Cosmos DB, Search and Storage.
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    note: Identity definition (type, principalId, tenantId, userAssignedIdentities), ResourceIdentityType enum, present on Account and Project.
+  - url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.AI.ManagedIdentity/
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/psrule/docs/en/rules/Azure.AI.ManagedIdentity.md and refs/psrule/src/PSRule.Rules.Azure/rules/Azure.AI.Rule.yaml (ref AZR-000281, Security, MCSB IM-1 and IM-3; where kind in TextAnalytics)
+    note: PSRule applies only to kind TextAnalytics, so it does not cover kind AIServices accounts or projects.
+overlap:
+  decision: adapt
+  coverage: partial
+  rationale: >-
+    The identity.type test already exists in three places: the built-in policy "Cognitive Services
+    accounts should use a managed identity" (all kinds), Checkov CKV_AZURE_238 (all accounts), and
+    PSRule Azure.AI.ManagedIdentity, which the local rule file restricts to kind TextAnalytics and
+    therefore skips AIServices accounts. None evaluates projects, and none relates identity to the
+    Foundry workloads in the same template. Foundry Doctor adapts the property test and adds the
+    project and workload scope plus profile severity. If Phase 1 only checks the account, downgrade to
+    reuse and map the policy and Checkov IDs.
+  psrule:
+    - Azure.AI.ManagedIdentity
+    - Azure.ContainerApp.ManagedIdentity
+    - Azure.AppService.ManagedIdentity
+  azurePolicy:
+    - "fe3fd216-4f83-4fc1-8984-2bbec80a3418 (Cognitive Services accounts should use a managed identity)"
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov:
+    - CKV_AZURE_238
+implementation:
+  owner: native
+  package: internal/rules/idn
+testability: >-
+  Offline with compiled ARM fixtures for account, project and workload identity blocks, including
+  parameterised identity.type. Live mode compares ARM state.
+tests:
+  positive:
+    - account-without-identity
+    - project-identity-none
+    - container-app-calling-foundry-without-identity
+    - user-assigned-type-with-empty-identity-map
+  negative:
+    - account-and-project-system-assigned
+    - workload-user-assigned-with-identity-map
+  skipped:
+    - identity-type-is-parameter
+    - project-defined-outside-template
+  uncertain:
+    - workload-identity-set-by-module-output
+notes: >-
+  Unverified: whether the platform rejects or degrades a Foundry account created without an identity
+  (no source states it; the severity is security-basis, not platform). Unverified: Defender for Cloud
+  and Advisor equivalents were not available in any clone. The sources do not state whether an
+  account-level identity is required for the standard agent setup; the account identity is
+  documented as needed for managed-network private endpoint approval
+  (Azure AI Enterprise Network Connection Approver on the account managed identity).

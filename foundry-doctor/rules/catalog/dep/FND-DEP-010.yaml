@@ -2,5 +2,104 @@ id: FND-DEP-010
 version: 1
 group: DEP
 title: "Locks do not block change"
-status: proposed
+description: >-
+  Resource locks at or above the deployment scope must not block the changes the deployment will make. A
+  ReadOnly lock blocks creating, updating and deleting in its scope, a CanNotDelete lock blocks deletes, and
+  locks are inherited by child scopes.
+status: verified
 phases: ["2"]
+inputs: ["bicep-arm", "azd-env", "control-plane"]
+basis: ["platform"]
+category: must-have
+pillar: reliability
+severity:
+  dev: error
+  test: error
+  prod: error
+compatibility:
+  azd: ">=1.27.1"
+  extensions: {}
+  apiVersions: ["Microsoft.Authorization locks 2020-05-01", "Microsoft.Resources deployments 2026-06-01"]
+evidence:
+  description: >-
+    Read-only GET calls, api-version 2020-05-01 (Microsoft.Authorization locks spec): subscription
+    GET /subscriptions/{subscriptionId}/providers/Microsoft.Authorization/locks (ManagementLocks_ListAtSubscriptionLevel);
+    resource group GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Authorization/locks
+    (ManagementLocks_ListAtResourceGroupLevel); resource GET .../{resourceProviderNamespace}/{parentResourcePath}/{resourceType}/{resourceName}/providers/Microsoft.Authorization/locks
+    (ManagementLocks_ListAtResourceLevel); any scope GET /{scope}/providers/Microsoft.Authorization/locks
+    (ManagementLocks_ListByScope). Each lock has properties.level (NotSpecified, CanNotDelete, ReadOnly)
+    and properties.notes. Target resources and their scopes come from the Bicep snapshot; deleted or
+    replaced resources come from FND-DEP-008 when what-if is available. Violations: (a) a ReadOnly lock on
+    the subscription, resource group or an existing resource that the deployment would create, update or
+    delete beneath, since a ReadOnly lock is similar to restricting every user to Reader permissions and
+    locks are inherited by child resources, including resources added later; (b) a CanNotDelete lock on a
+    resource that what-if predicts to Delete; (c) a CanNotDelete lock on the resource group when the
+    group's deployment history is near the 800-deployment limit (counted with GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Resources/deployments, Deployments_ListByResourceGroup, api-version 2026-06-01; Microsoft.Resources/deployments/read is covered by Reader), because a cannot-delete lock on a resource
+    group prevents automatic deletion of deployments in the history and at 800 deployments new deployments
+    fail. Whether a lock also blocks a specific create call is not documented per resource type, so case (a)
+    for resource creation beneath a ReadOnly group lock is reported as likely, not certain. Specific
+    documented side effects (for example POST-based operations being blocked by a ReadOnly lock) are not
+    enumerated per Foundry resource type; the sources read do not list Foundry resource types, so none is
+    claimed. Role family: Microsoft.Authorization/locks/read is covered by Reader (*/read). Reader
+    suffices. Creating or deleting locks is never done. The answer is definitive for the existence, scope
+    and level of a lock and likely for its effect on a given operation.
+  confidence: likely
+recommendation: >-
+  Remove or relax the lock for the duration of the deployment through your change process, deploy to a
+  scope without a ReadOnly lock, or scope locks to the specific resources that need protection and reapply
+  them after the deployment.
+fix: |
+  az lock list --resource-group <rg> --output table
+  az lock delete --name <lock-name> --resource-group <rg>   # then redeploy and re-create the lock
+sources:
+  - url: https://learn.microsoft.com/azure/azure-resource-manager/management/lock-resources
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-docs/articles/azure-resource-manager/management/lock-resources.md (ms.date 02/06/2025)
+    note: "CanNotDelete and ReadOnly semantics; locks override user permissions; inheritance from parent scope including resources added later; POST operations blocked by ReadOnly; cannot-delete lock on a resource group prevents automatic deployment-history deletion (800-deployment limit)."
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Authorization/locks/stable/2020-05-01/locks.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/resources/resource-manager/Microsoft.Authorization/locks/stable/2020-05-01/locks.json
+    note: "ManagementLocks_List* and _GetByScope GET paths; level enum NotSpecified, CanNotDelete, ReadOnly."
+  - url: https://learn.microsoft.com/azure/role-based-access-control/permissions/management-and-governance
+    lastVerified: "2026-10-04"
+    verifiedVia: https://raw.githubusercontent.com/MicrosoftDocs/azure-docs/main/articles/role-based-access-control/permissions/management-and-governance.md
+    note: "Microsoft.Authorization/locks/read ('Gets locks at the specified scope')."
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    No PSRule rule, Azure Policy built-in, Defender or Advisor recommendation was found that reports an
+    existing lock as a deployment blocker; PSRule and Policy evaluate templates and resource configuration,
+    not live locks. Checkov and the Bicep linter do not see live state. The value is correlating the live
+    lock set with the planned operations.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/dep
+testability: >-
+  Offline with recorded lock list responses at subscription, group and resource scope and a Bicep snapshot
+  fixture; scope inheritance is pure logic.
+tests:
+  positive:
+    - readonly-lock-on-target-resource-group
+    - readonly-lock-on-subscription
+    - cannotdelete-lock-on-resource-that-whatif-deletes
+    - cannotdelete-lock-on-group-near-800-deployments
+  negative:
+    - no-locks-at-or-above-target-scope
+    - cannotdelete-lock-no-deletes-planned
+  skipped:
+    - no-azure-credential-available
+    - bicep-cli-missing-cannot-derive-target-scope
+  uncertain:
+    - create-beneath-readonly-lock-effect-not-documented-per-resource-type
+notes: >-
+  The Learn page was last updated 02/06/2025, older than most sources here; no newer version was found in the
+  clone. Locks do not apply to data-plane operations (Learn), so this rule says nothing about data-plane writes.
+  Deletion of a lock needs Microsoft.Authorization/locks/* rights (Owner, User Access Administrator); that
+  context belongs in the remediation, never in an action the doctor performs.

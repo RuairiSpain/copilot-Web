@@ -32,9 +32,9 @@ evidence:
     the Learn article); Key Vault GET /subscriptions/{subscriptionId}/providers/Microsoft.KeyVault/deletedVaults
     api-version 2026-05-15 (Vaults_ListDeleted; deletionDate, scheduledPurgeDate, vaultId, location). Planned
     names come from the Bicep snapshot (accounts, service, vaults). Violation: a planned resource name equals
-    a deleted entry's name in the same subscription, matched case-insensitively, for Cognitive Services
-    additionally the same resource group and location (the purge path is keyed by location, resource group
-    and name). Cognitive Services and API Management matches are certain (documented name reuse block);
+    a deleted entry's name in the same subscription, matched as an exact string, case folding is not documented (the Learn text says the same name cannot be
+    reused; a Cognitive Services purge path is keyed by location, resource group and name, which the
+    finding reports for the remediation). Cognitive Services and API Management matches are certain (documented name reuse block);
     Key Vault matches are likely, because the Learn Key Vault soft-delete page could not be read here and the
     name-reservation behaviour is taken from the list API only. A match is waived when the template
     explicitly restores the account (the documented restore property is set) and for a redeployment of a
@@ -67,9 +67,9 @@ sources:
     lastVerified: "2026-10-04"
     verifiedVia: refs/rest-api-specs/specification/keyvault/resource-manager/Microsoft.KeyVault/KeyVault/stable/2026-05-15/openapi.json
     note: "Vaults_ListDeleted (GET) and Vaults_GetDeleted (GET); DeletedVaultProperties (vaultId, location, deletionDate, scheduledPurgeDate, purgeProtectionEnabled)."
-  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/stable/2024-05-01/apimdeployment.json
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/stable/2024-05-01/apimdeletedservices.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/stable/2024-05-01 (DeletedServices_ListBySubscription path confirmed by schema scan; exact file name not recorded)
+    verifiedVia: refs/rest-api-specs/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/stable/2024-05-01/apimdeletedservices.json
     note: "GET /subscriptions/{subscriptionId}/providers/Microsoft.ApiManagement/deletedservices."
   - url: https://learn.microsoft.com/azure/role-based-access-control/permissions/ai-machine-learning
     lastVerified: "2026-10-04"
