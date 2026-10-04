@@ -2,5 +2,109 @@ id: FND-CFG-003
 version: 1
 group: CFG
 title: "All inter-service references resolve"
-status: proposed
+description: >-
+  Every cross-service reference in azure.yaml must resolve inside the same file: each uses
+  entry must match a service key (or a resources entry); agent toolboxes entries must be
+  azure.ai.toolbox services that are also listed in the agent uses; toolbox tools[].connection
+  and prompt-agent connections entries must name azure.ai.connection services; a voice
+  conversationEngine.name must be a hosted azure.ai.agent service in the same project;
+  a routine must use the agent it invokes; memory-store chatModel and embeddingModel must
+  name model deployments.
+status: verified
 phases: ["1"]
+inputs: ["azure.yaml"]
+basis: ["platform"]
+category: must-have
+pillar: reliability
+severity:
+  dev: error
+  test: error
+  prod: error
+compatibility:
+  azd: ">=1.27.1"
+  extensions:
+    azure.ai.agents: ">=1.0.0-beta.8"
+    azure.ai.projects: ">=1.0.0-beta.4"
+  apiVersions: []
+evidence:
+  description: >-
+    Build the service graph from services, uses, toolboxes, connections, toolbox tools[].connection,
+    conversationEngine.name, routine action.agent_name and registryConnectionId, then report each
+    edge whose target is not a service key (or a top-level resources key) of the required host
+    kind. Cycles in uses are reported. Memory-store model names are checked against
+    azure.ai.project deployments names and are skipped when the project sets endpoint (existing
+    project, deployments not enumerable offline).
+  confidence: certain
+recommendation: >-
+  Make each referenced name match a service key defined under services, and add toolbox and
+  connection services to the consuming agent uses list as well as its toolboxes or connections list.
+fix: |
+  services:
+    github-conn:
+      host: azure.ai.connection
+      uses: [ai-project]
+    agent-tools:
+      host: azure.ai.toolbox
+      uses: [ai-project, github-conn]
+      tools:
+        - type: mcp
+          connection: github-conn
+    my-agent:
+      host: azure.ai.agent
+      uses: [ai-project, github-conn, agent-tools]
+      toolboxes: [agent-tools]
+sources:
+  - url: https://learn.microsoft.com/azure/foundry/agents/how-to/author-azure-yaml
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/author-azure-yaml.md
+    note: "Troubleshooting: every entry in uses must match a service name; toolbox must be in both uses and toolboxes."
+  - url: https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/azure-yaml-reference.md
+    note: Dependencies with uses, toolbox connection field, conversationEngine.name, memoryStores chatModel/embeddingModel.
+  - url: https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-dev/schemas/v1.0/azure.yaml.json
+    note: Generic uses description - "service names and resource names"; top-level resources map.
+  - url: https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/extensions/azure.ai.routines/schemas/azure.ai.routine.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.routines/schemas/azure.ai.routine.json
+    note: The routine service must use the agent it invokes.
+overlap:
+  decision: native
+  coverage: partial
+  rationale: >-
+    azd and the agents extension fail at provision or deploy time on some unresolved dependencies
+    (for example "toolbox service is not declared in <agent> uses" in the extension source), but
+    only for the resource being deployed and only after authentication. Foundry Doctor checks
+    the whole graph offline before any deploy and names the file and line. No external lower-level
+    rule reads azure.yaml.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/cfg
+testability: Fully offline from azure.yaml and $ref includes. Existing-project deployments are skipped, not passed.
+tests:
+  positive:
+    - uses-unknown-service
+    - toolbox-in-toolboxes-but-not-in-uses
+    - toolbox-tool-names-missing-connection
+    - routine-without-uses-agent
+    - voice-conversation-engine-unknown-target
+    - uses-cycle
+  negative:
+    - full-example-from-reference
+    - uses-names-resources-entry
+  skipped:
+    - memory-model-with-existing-project-endpoint
+    - service-defined-in-missing-ref-file
+notes: >-
+  Unverified: whether a uses entry may name a Bicep-defined resource for azure.ai.* hosts (the generic
+  schema allows "resource names"; the Foundry docs only say service names), so uses entries are resolved
+  against services plus top-level resources and reported uncertain when infra Bicep is not compiled.
+  The routine "must uses the agent" requirement comes from the schema description only.
