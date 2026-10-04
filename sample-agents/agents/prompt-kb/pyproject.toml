@@ -1,0 +1,31 @@
+[project]
+name = "kb-prompt-agent-tools"
+version = "0.1.0"
+description = "Ingestion helper for the kb-prompt-agent: loads PDFs into a Foundry vector store."
+requires-python = ">=3.13"
+dependencies = [
+    "azure-ai-projects>=2.7.0",
+    "azure-identity>=1.26.0",
+]
+
+# The prompt agent itself has no code. Its definition lives in the repo-level
+# azure.yaml. This project only holds the one-off knowledge ingestion script.
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0",
+    "pytest-asyncio>=1.0",
+    "ruff>=0.15",
+    "mypy>=1.18",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+exclude = ["^tests/"]
+ignore_missing_imports = true

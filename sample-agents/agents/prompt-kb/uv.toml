@@ -1,0 +1,3 @@
+# Corporate TLS inspection friendly, and allow the beta Foundry SDK releases.
+system-certs = true
+prerelease = "allow"
