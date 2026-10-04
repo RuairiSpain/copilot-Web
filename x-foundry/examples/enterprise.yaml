@@ -1,0 +1,114 @@
+# Everything together: hub-spoke, private networking, shared Foundry IQ, gateway and governance.
+# The Foundry projects, model deployments, agents, toolboxes and connections are azd services.
+name: enterprise-ai
+x-foundry:
+  topology:
+    mode: hub-spoke
+  defaults:
+    location: westeurope
+    namingPrefix: ent
+    environment: prod
+    tags:
+      cost-center: "9000"
+  security:
+    network:
+      mode: private
+      allowedDomains:
+        - contoso.com
+    roles:
+      admins:
+        - Foundry-Admins
+      developers:
+        - Foundry-Devs
+      consumers:
+        - Foundry-Users
+      operators:
+        - Foundry-Operations
+  hub:
+    name: shared-ai
+    models:
+      default: gpt-5
+      allowed:
+        - gpt-5
+        - gpt-5-mini
+    search:
+      sku: standard
+      replicas: 3
+    inheritance:
+      iq: true
+    iq:
+      knowledgeBases:
+        - name: policies
+          sources:
+            - name: policy-files
+              type: blob
+              container: policies
+          retrieval:
+            filterFields:
+              - department
+          index:
+            fields:
+              - name: department
+                type: Edm.String
+                filterable: true
+  projects:
+    - name: finance
+      roles:
+        developers:
+          - Finance-AI-Dev
+        consumers:
+          - Finance-AI-Users
+    - name: hr
+  gateway:
+    enabled: true
+    authentication:
+      audiences:
+        - api://contoso-ai-gateway
+    endpoints:
+      - name: finance-agent
+        path: /agents/finance
+        target: finance-agent
+        targetType: agent
+        allowedGroups:
+          - Finance-AI-Users
+    quotas:
+      profiles:
+        - name: standard-user
+          scope: user
+          dailyTokens: 100000
+  storage:
+    purposes:
+      - knowledge
+      - evaluations
+  # Zone redundancy and continuous backup for agent state.
+  cosmos:
+    zoneRedundant: true
+    continuousBackup: true
+  keyVault: {}
+  observability:
+    retentionDays: 90
+  governance:
+    requiredTags:
+      - environment
+      - project
+      - managed-by
+      - cost-center
+    budgets:
+      monthlyTokens: 100000000
+      monthlyAmount: 20000
+    policyAssignments:
+      - require-no-local-auth
+      - allowed-locations
+    defenderPlans:
+      - servers
+      - appService
+      - cosmosDb
+      - ai
+    modelPolicy:
+      allowedModels:
+        - gpt-5
+        - gpt-5-mini
+        - text-embedding-3-large
+    dataResidency:
+      - westeurope
+      - northeurope

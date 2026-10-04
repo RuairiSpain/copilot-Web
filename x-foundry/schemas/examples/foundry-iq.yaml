@@ -1,0 +1,73 @@
+# Foundry IQ: knowledge bases over SharePoint and Blob, hybrid retrieval with security filters.
+# The agent that uses the knowledge base, the model deployments and the SharePoint connection are
+# azd services (azure.ai.agent, azure.ai.project, azure.ai.connection).
+name: policy-assistant
+x-foundry:
+  topology:
+    mode: standalone
+  defaults:
+    location: westeurope
+  security:
+    roles:
+      admins:
+        - Foundry-Admins
+  projects:
+    - name: policies
+  models:
+    default: gpt-5
+    allowed:
+      - gpt-5
+  search:
+    sku: standard
+    semanticRanking: true
+  iq:
+    knowledgeBases:
+      - name: policies
+        description: Company policies
+        sources:
+          - name: hr-site
+            type: sharepoint
+            site: hr
+            connection: hr-sharepoint # an azd azure.ai.connection service
+          - name: policy-files
+            type: blob
+            container: policies
+        index:
+          chunking:
+            size: 1024
+            overlap: 128
+          vector:
+            model: text-embedding-3-large
+            deployment: embeddings # declared on the azd azure.ai.project service
+            dimensions: 3072
+          fields:
+            - name: department
+              type: Edm.String
+              filterable: true
+              facetable: true
+            - name: createdDate
+              type: Edm.DateTimeOffset
+              sortable: true
+              filterable: true
+            - name: groupIds
+              type: Collection(Edm.String)
+              filterable: true
+        retrieval:
+          mode: hybrid
+          semanticRanking: true
+          topK: 20
+          vectorWeight: 0.7
+          keywordWeight: 0.3
+          filterFields:
+            - department
+        routing:
+          strategy: semantic
+          fallback: keyword
+          threshold: 0.75
+        access:
+          allowedGroups:
+            - Policy-Readers
+          filterClaims:
+            groups: groupIds
+        refresh:
+          schedule: "0 2 * * *"

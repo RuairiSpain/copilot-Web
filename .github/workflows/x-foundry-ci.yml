@@ -1,0 +1,68 @@
+name: x-foundry-ci
+
+# GitHub only reads workflows from the repository root, so this file lives here and
+# points at the x-foundry/ folder.
+on:
+  pull_request:
+    paths:
+      - "x-foundry/**"
+      - ".github/workflows/x-foundry-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "x-foundry/**"
+      - ".github/workflows/x-foundry-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: vet, lint and tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    defaults:
+      run:
+        working-directory: x-foundry
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: x-foundry/go.mod
+          cache-dependency-path: x-foundry/go.sum
+      - run: go vet ./...
+      - name: Bicep CLI (compiles and lints the generated infrastructure)
+        if: runner.os == 'Linux'
+        run: |
+          curl -sSLfo "$RUNNER_TEMP/bicep" https://github.com/Azure/bicep/releases/download/v0.47.16/bicep-linux-x64
+          chmod +x "$RUNNER_TEMP/bicep"
+          echo "XFOUNDRY_BICEP=$RUNNER_TEMP/bicep" >> "$GITHUB_ENV"
+          echo "XFOUNDRY_REQUIRE_BICEP=1" >> "$GITHUB_ENV"
+      - name: gofmt
+        if: runner.os == 'Linux'
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+      - name: published schemas are current
+        run: go run ./tools/schemagen -check
+      - run: go test -race -count=1 ./... -coverpkg=./internal/...,./cmd/... -coverprofile=coverage.out
+      - name: coverage gate (90%)
+        if: runner.os == 'Linux'
+        run: |
+          go tool cover -func=coverage.out | tail -1
+          total=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | tr -d '%')
+          awk -v t="$total" 'BEGIN { exit (t >= 90) ? 0 : 1 }'
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: x-foundry/go.mod
+          cache-dependency-path: x-foundry/go.sum
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.5.0
+          working-directory: x-foundry

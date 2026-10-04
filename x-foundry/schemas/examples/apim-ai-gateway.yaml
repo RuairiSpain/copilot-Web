@@ -1,0 +1,78 @@
+# APIM AI Gateway in front of agents: Entra auth, token tracking, quotas and limits.
+# The agents are azd azure.ai.agent services; endpoints refer to them by name.
+name: gateway
+x-foundry:
+  topology:
+    mode: standalone
+  defaults:
+    location: westeurope
+  security:
+    network:
+      mode: private
+    roles:
+      admins:
+        - Foundry-Admins
+  models:
+    default: gpt-5
+    allowed:
+      - gpt-5
+      - gpt-5-mini
+  projects:
+    - name: finance
+      gateway:
+        path: /finance
+        quotaProfile: standard-user
+  observability:
+    retentionDays: 90
+  gateway:
+    enabled: true
+    sku: StandardV2
+    authentication:
+      mode: entra
+      tenantRestriction: true
+      audiences:
+        - api://contoso-ai-gateway
+      allowedDomains:
+        - contoso.com
+    authorisation:
+      defaultAction: deny
+      admins:
+        - Foundry-Admins
+      consumers:
+        - Finance-AI-Users
+    endpoints:
+      - name: finance-agent
+        path: /agents/finance
+        target: finance-agent
+        targetType: agent
+        project: finance
+        allowedGroups:
+          - Finance-AI-Users
+        quotaProfile: standard-user
+        limitProfile: default-limit
+    models:
+      default: gpt-5
+      allowed:
+        - gpt-5
+        - gpt-5-mini
+    tokenTracking:
+      enabled: true
+      dimensions:
+        - user
+        - project
+        - agent
+        - model
+        - knowledgeBase
+    quotas:
+      profiles:
+        - name: standard-user
+          scope: user
+          dailyTokens: 100000
+    limits:
+      profiles:
+        - name: default-limit
+          requests: 100
+          concurrentRequests: 20
+    monitoring:
+      trackLatency: true
+      trackFailures: true

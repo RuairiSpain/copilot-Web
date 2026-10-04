@@ -1,0 +1,67 @@
+# Standalone deployment with private networking, shared platform services and governance.
+# The Foundry project, its model deployments and the agents are azd services; this file builds the
+# network and shared resources around them.
+name: finance-ai
+x-foundry:
+  topology:
+    mode: standalone
+  defaults:
+    location: westeurope
+    namingPrefix: fin
+    environment: test
+    tags:
+      cost-center: "4711"
+  security:
+    network:
+      mode: private
+      # Private range for the generated VNet; pick one that does not overlap on-premises networks.
+      addressSpace: 10.40.0.0/16
+      agentSubnetPrefixLength: 24
+      allowedDomains:
+        - contoso.com
+    roles:
+      admins:
+        - Foundry-Admins
+      developers:
+        - Foundry-Devs
+      consumers:
+        - Foundry-Users
+      operators:
+        - Foundry-Operations
+  projects:
+    - name: finance
+      roles:
+        developers:
+          - Finance-AI-Dev
+        consumers:
+          - Finance-AI-Users
+  models:
+    default: gpt-5
+    allowed:
+      - gpt-5
+      - gpt-5-mini
+  storage:
+    purposes:
+      - knowledge
+      - documents
+      - evaluations
+  keyVault:
+    enabled: true
+  managedIdentity:
+    enabled: true
+    type: systemAssignedAndUserAssigned
+  # The standard agent setup (the default in private mode) stores threads in Cosmos DB.
+  cosmos:
+    throughput: 4000
+  observability:
+    retentionDays: 90
+  governance:
+    requiredTags:
+      - environment
+      - project
+      - managed-by
+      - cost-center
+    budgets:
+      monthlyAmount: 5000
+      monthlyTokens: 100000000
+      thresholds: [50, 80, 100]

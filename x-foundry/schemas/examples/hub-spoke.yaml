@@ -1,0 +1,41 @@
+# A shared hub (models policy, Search, Foundry IQ) inherited by spoke projects, which may override it.
+# The Foundry projects, model deployments, agents and toolboxes are azd services.
+name: enterprise-ai
+x-foundry:
+  topology:
+    mode: hub-spoke
+  defaults:
+    location: westeurope
+  security:
+    roles:
+      admins:
+        - Foundry-Admins
+  hub:
+    name: shared-ai
+    models:
+      default: gpt-5
+      allowed:
+        - gpt-5
+        - gpt-5-mini
+    search:
+      sku: standard
+    inheritance:
+      iq: true
+    iq:
+      knowledgeBases:
+        - name: policies
+          sources:
+            - name: policy-files
+              type: blob
+              container: policies
+  projects:
+    - name: finance
+      models:
+        default: gpt-5-mini
+        allowed:
+          - gpt-5-mini
+    - name: hr
+    - name: sandbox
+      inheritHub: false
+      models:
+        default: gpt-5
