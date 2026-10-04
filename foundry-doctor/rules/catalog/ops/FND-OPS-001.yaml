@@ -121,7 +121,7 @@ tests:
     - workspace-id-is-unresolved-parameter
     - control-plane-unavailable-policy-may-deploy-setting
 notes: >-
-  Basis is a Well-Architected style recommendation (operations), not a platform error: the sources state which
+  Basis is a Well-Architected style recommendation (operations), not a platform error: The Well-Architected guidance text itself was not read (the source repository is not public); the expectation rests on the Microsoft documentation and built-in policy definitions cited. the sources state which
   categories exist and the limits, not that a missing setting is invalid. Unverified: the Learn page for the Cosmos
   list is dated 09/15/2026 while others are 08/21/2026; the table is re-read at catalogue refresh. Whether Foundry
   projects emit logs independently of the account setting was not established; both are checked separately.

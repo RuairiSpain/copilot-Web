@@ -2,5 +2,150 @@ id: FND-IDN-002
 version: 1
 group: IDN
 title: "Project identity has required data roles"
-status: proposed
+description: >-
+  In the standard agent setup the Foundry project managed identity needs data-plane role
+  assignments on the resources named in the account capability settings, otherwise running agents
+  fail with 403. The documented set is: Search Index Data Contributor and Search Service Contributor
+  on Azure AI Search; Storage Blob Data Contributor on the blob store container and Storage Blob
+  Data Owner on the agent container, plus Storage Account Contributor at account level; Cosmos DB
+  Operator at the Cosmos DB account and the Cosmos DB Built-in Data Contributor SQL role at the
+  database level. Hosted agents add Foundry User on the account (created automatically when the
+  project creator can assign it), a Container Registry Repository Reader or AcrPull assignment on the
+  registry, and, for evaluations, Log Analytics Data Reader on the workspace. Phase 1 checks the
+  role assignments declared in the template. Phase 2 reads the live assignments. The rule applies
+  only to the stores and features the project actually uses.
+status: verified
 phases: ["1", "2"]
+inputs: ["bicep-arm", "control-plane"]
+basis: ["platform"]
+category: must-have
+pillar: security
+severity:
+  dev: error
+  test: error
+  prod: error
+compatibility:
+  azd: "not version dependent; reads compiled ARM JSON and ARM role assignments (azd 1.36.0-beta.1 clone checked)"
+  extensions: {}
+  apiVersions:
+    - "Microsoft.Authorization/roleAssignments@2022-04-01 (roleDefinitionId, principalId, principalType, scope)"
+    - "Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2025-10-15 (roleDefinitionId, scope, principalId)"
+    - "Microsoft.CognitiveServices/accounts@2026-07-15-preview (properties.capabilitySettings.documentStore, vectorStore, blobStore; CapabilitySettings definition read in cognitiveservices.json)"
+evidence:
+  description: >-
+    Resolve the project principal: identity.principalId of the project (system-assigned) or the
+    principalId of each identity in identity.userAssignedIdentities. Resolve the stores from the
+    account capability settings (documentStore, vectorStore, blobStore) or the project connections.
+    For each store, require an assignment for that principal whose roleDefinitionId ends with the
+    GUID of a documented role and whose scope is the store, its parent or the container named in the
+    docs. Role GUIDs (Azure built-in roles reference, ms.date 07/01/2026): Search Index Data
+    Contributor 8ebe5a00-799e-43f5-93ac-243d3dce84a7; Search Service Contributor
+    7ca78c08-252a-4471-8644-bb5ff32d4ba0; Storage Blob Data Contributor
+    ba92f5b4-2d11-453d-a403-e96b0029c9fe; Storage Blob Data Owner
+    b7e6dc6d-f1e8-4753-8033-0f276bb0955b; Storage Account Contributor
+    17d1049b-9a84-46fb-8f53-869881c3d3ab; Cosmos DB Operator
+    230815da-be43-4aae-9cb4-875f7bd000aa; Foundry User 53ca6127-db72-4b80-b1b0-d745d6d5456d;
+    Container Registry Repository Reader b93aa761-3e63-49ed-ac28-beffa264f7ac; AcrPull
+    7f951dda-4ed3-4680-a7ca-43fe172d538d; Log Analytics Data Reader
+    3b03c2da-16b3-4a49-8834-0f8130efdd3b. The Cosmos DB Built-in Data Contributor role is a Cosmos
+    SQL role, so look for a Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments resource for the
+    principal on the database, not an Azure RBAC assignment. Fail when a required data role is
+    missing for a store the project uses (Storage Account Contributor is reported as info only). Emit uncertain in Phase 1 when the scope depends on the
+    project workspace ID (the container names contain it) or the principal is a module output that
+    cannot be resolved; Phase 2 resolves them from live data. Do not fail on a role granted through
+    a group when group membership cannot be read; report skipped with the missing permission.
+  confidence: likely
+recommendation: >-
+  Assign the project managed identity the documented data roles on each store before agents run:
+  Search Index Data Contributor and Search Service Contributor on Search, Storage Blob Data
+  Contributor and Storage Blob Data Owner on the storage containers, Cosmos DB Operator on the
+  account plus the Cosmos DB Built-in Data Contributor SQL role on the database. Assign them at the
+  narrowest scope that works. These roles are separate from the roles the deploying identity needs.
+fix: |
+  resource searchIndexData 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+    scope: search
+    name: guid(search.id, project.id, '8ebe5a00-799e-43f5-93ac-243d3dce84a7')
+    properties: {
+      roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '8ebe5a00-799e-43f5-93ac-243d3dce84a7') // Search Index Data Contributor
+      principalId: project.identity.principalId
+      principalType: 'ServicePrincipal'
+    }
+  }
+sources:
+  - url: https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/includes/concepts-standard-agent-setup-content.md (concept ms.date 07/09/2026; Phase 3 and Phase 4 role assignments and the troubleshooting table)
+    note: Project managed identity roles per resource; Cosmos DB Built-in Data Contributor at database level on enterprise_memory; 403 symptoms for missing roles.
+  - url: https://learn.microsoft.com/azure/foundry/concepts/administrator-guide
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/concepts/administrator-guide.md (ms.date 09/11/2026)
+    note: Per-resource role table for the project managed identity; Cosmos built-in data contributor is a data-plane role assigned through az cosmosdb sql role assignment or Bicep, not the IAM blade.
+  - url: https://learn.microsoft.com/azure/foundry/how-to/configure-capability-settings
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/how-to/configure-capability-settings.md (ms.date 09/22/2026)
+    note: Capability settings documentStore, vectorStore, blobStore; caller roles (Storage Blob Data Contributor, Cosmos DB Operator) differ from the project identity runtime roles.
+  - url: https://learn.microsoft.com/azure/foundry/agents/concepts/hosted-agent-permissions
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/hosted-agent-permissions.md (ms.date 04/21/2026)
+    note: Foundry User for the project identity on the account, Container Registry Repository Reader or AcrPull on the registry, Log Analytics Data Reader for evaluations.
+  - url: https://learn.microsoft.com/azure/role-based-access-control/built-in-roles
+    lastVerified: "2026-10-04"
+    verifiedVia: github.com/MicrosoftDocs/azure-docs articles/role-based-access-control/built-in-roles/{ai-machine-learning,storage,databases,containers,monitor}.md (ms.date 07/01/2026; role id fields)
+    note: Role definition GUIDs listed in the evidence.
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2025-10-15/rbac.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2025-10-15/rbac.json
+    note: SqlRoleAssignmentResource has roleDefinitionId, scope and principalId.
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    No PSRule rule, built-in policy, Checkov check or Bicep linter rule models the Foundry standard
+    agent setup role matrix. Policies and PSRule test whether a resource has a managed identity or
+    local auth is off, not whether a specific principal holds a specific role on a specific store.
+    The value is the correlation of project identity, capability-settings stores and role
+    assignments, before deployment. FND-RUN-001 covers effective access at runtime; this rule is the
+    template and assignment-inventory view.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/idn
+testability: >-
+  Offline with compiled ARM fixtures (project, capability settings, role assignments, Cosmos SQL role
+  assignments). Phase 2 uses recorded role-assignment list responses. The container-scope cases need a
+  fixture with the workspace ID resolved.
+tests:
+  positive:
+    - search-missing-service-contributor
+    - blobstore-without-blob-data-owner-on-agent-container
+    - cosmos-operator-without-sql-data-contributor
+    - hosted-agent-acr-without-pull-role
+  negative:
+    - all-documented-roles-assigned
+    - store-not-referenced-by-capability-settings
+    - roles-granted-at-account-scope-containing-store
+  skipped:
+    - principal-is-module-output
+    - group-membership-unreadable
+    - live-role-assignments-not-readable
+  uncertain:
+    - container-scope-uses-workspace-id-expression
+notes: >-
+  Unverified: the Cosmos DB Built-in Data Contributor SQL role definition GUID (the Azure RBAC
+  built-in roles reference does not list Cosmos data-plane roles and no local Cosmos doc was
+  available); match it by resolving the sqlRoleDefinitions name, or add it once read from the Cosmos
+  DB RBAC article. Unverified: the Foundry Agent Consumer role GUID eed3b665-ab3a-47b6-8f48-c9382fb1dad6
+  appears only in the Foundry RBAC article, not in the built-in roles reference. Documentation
+  inconsistency: the standard agent setup article names the containers
+  workspaceId-azureml-blobstore and workspaceId-azureml-agent while the administrator guide names
+  azureml-blobstore and agents-blobstore; the rule accepts a role at storage account scope for either
+  until the container naming is confirmed. The same article lists Storage Account Contributor at
+  account level for the system-assigned identity while the capability settings article lists only
+  data roles; the rule reports a missing Storage Account Contributor as an info note, not a failure,
+  until a reviewer confirms it is required. The capability settings property names were read in the
+  2026-07-15-preview spec (preview API; recheck before implementation).

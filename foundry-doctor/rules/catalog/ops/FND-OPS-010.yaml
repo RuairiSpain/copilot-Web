@@ -2,5 +2,107 @@ id: FND-OPS-010
 version: 1
 group: OPS
 title: "Model allow/deny lists remain consistent"
-status: proposed
+description: >-
+  The model allow and deny lists that the active profile declares must be internally consistent, must agree with the models
+  the project actually deploys, and must agree with any Azure Policy assignment of the built-in definition "Foundry model
+  deployments should only use approved models" that is declared in the repository (allowedPublishers and allowedAssetIds).
+  The goal is to catch, before deployment, a model that a policy would block or a list that silently contradicts itself.
+status: product-opinion
 phases: ["1", "8"]
+inputs: ["azure.yaml", "bicep-arm", "control-plane"]
+basis: ["security", "operations", "opinion"]
+category: nice-to-have
+pillar: security
+severity:
+  dev: warning
+  test: error
+  prod: error
+compatibility:
+  azd: ">=1.27.1"
+  extensions: {}
+  apiVersions: ["2026-09-01"]
+evidence:
+  description: >-
+    Phase 1, offline. Inputs - the profile allow and deny lists (publisher, model name, or asset-ID fragment); model
+    deployments from azure.yaml (azure.ai.project deployments[].model.format, name, version) and from
+    Microsoft.CognitiveServices/accounts/deployments in the compiled template; and, when present in the template, a
+    Microsoft.Authorization/policyAssignments resource for policy definition aafe3651-cb78-4f68-9f81-e7e41509110f
+    parameters allowedPublishers and allowedAssetIds. Report - an entry that appears in both
+    allow and deny; a deployed model that is denied or is not matched by a non-empty allow list; a profile allow entry
+    that the policy assignment would not allow, or a policy entry missing from the profile, compared exactly because the
+    definition documents that asset IDs and publisher names are case-sensitive; a policy parameter that is empty while its
+    effect is Deny (the definition then blocks every model, because both lists are empty). Phase 8 adds model router
+    deployments - the models the router can select are evaluated against the same lists. Control plane - read the
+    policy assignment and its compliance state. Unresolved parameters are skipped, never passed.
+  confidence: likely
+recommendation: >-
+  Keep one source of truth for approved models, mirror it in the policy assignment parameters allowedPublishers and
+  allowedAssetIds, and remove any model from azure.yaml that the lists exclude. Assign the policy with Audit first and move
+  to Deny after the compliance dashboard is clean.
+fix: |
+  # profile excerpt (allow list) - mirror the same values in the policy assignment parameters
+  models:
+    allow:
+      publishers: ["OpenAI"]
+    deny: []
+sources:
+  - url: https://learn.microsoft.com/azure/foundry/how-to/model-deployment-policy
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/how-to/model-deployment-policy.md and refs/azure-ai-docs/articles/foundry/includes/how-to-model-deployment-policy-2.md
+    note: Built-in policies "Foundry model deployments should only use approved models" and "should meet eligibility requirements"; evaluated at deployment time; parameters allowedPublishers and allowedAssetIds; asset IDs and publisher names are case-sensitive; policy takes at least 15 minutes to apply. Page ms.date 08/18/2026.
+  - url: https://github.com/Azure/azure-policy/blob/master/built-in-policies/policyDefinitions/Cognitive%20Services/AllowDeployRegistryModels_Audit.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-policy/built-in-policies/policyDefinitions/Cognitive Services/AllowDeployRegistryModels_Audit.json
+    note: Definition aafe3651-cb78-4f68-9f81-e7e41509110f - effect Audit, Deny or Disabled (default Audit); parameters allowedPublishers and allowedAssetIds (both default empty); the rule targets type Microsoft.CognitiveServices.Data/accounts/deployments and matches model.publisher and model.assetId (contains).
+  - url: https://learn.microsoft.com/azure/foundry/how-to/model-router-policy
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/how-to/model-router-policy.md
+    note: Model router honors the same policy; a model router deployment with an unapproved model is rejected with a policy violation across REST, CLI and ARM templates. Page ms.date 08/19/2026.
+overlap:
+  decision: adapt
+  coverage: partial
+  rationale: >-
+    The built-in Azure Policy definitions aafe3651-cb78-4f68-9f81-e7e41509110f (approved models) and
+    8791d062-ba96-4c34-b604-8538f7e30ca0 (eligibility, preview) enforce or audit the allow list at deployment time on the
+    deployed resource. They do not read azure.yaml, do not check that the allow list and deny list agree with each other,
+    and do not tell a developer before deployment that a model will be blocked. Foundry Doctor adapts the allow-list idea
+    as a preflight and consistency check against the declared policy parameters, and does not replace the enforcement.
+    The Azure Policy Allowed resource types definitions (a08ec900-254a-4555-9bf5-e42af04b5c5c, 6c112d4e-5bc7-47ae-a041-ea2d9dccd749)
+    work on resource types, not models, and are not mapped.
+  psrule: []
+  azurePolicy:
+    - aafe3651-cb78-4f68-9f81-e7e41509110f
+    - 8791d062-ba96-4c34-b604-8538f7e30ca0
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/ops
+testability: >-
+  Offline against fixture azure.yaml, ARM JSON with a policy assignment, and profile lists; control-plane variant uses a
+  recorded policy assignment read.
+tests:
+  positive:
+    - model-in-both-allow-and-deny
+    - deployed-model-not-in-allow-list
+    - deployed-model-on-deny-list
+    - profile-allow-list-differs-from-policy-parameters
+    - publisher-case-differs-from-policy
+    - policy-deny-effect-with-empty-allow-lists
+  negative:
+    - deployed-models-all-allowed-and-lists-match-policy
+  skipped:
+    - no-allow-or-deny-list-in-profile
+    - policy-assignment-not-in-repository
+    - model-router-deployment-before-phase-8
+    - deployment-model-name-is-unresolved-parameter
+notes: >-
+  Product opinion: the Foundry lists are an organisational choice, and no source defines what "consistent" means; the policy
+  parameter names, case sensitivity and matching semantics (publisher exact match; asset ID substring) are verified from the
+  definition and Learn. Unverified - whether the approved-models definition blocks ARM or Bicep deployments of
+  Microsoft.CognitiveServices/accounts/deployments (the Learn article describes the portal Deploy action and the definition
+  targets the Microsoft.CognitiveServices.Data resource type; only the model router article states ARM rejection); how
+  azure.yaml model.format and model.name map to the policy model.publisher and model.assetId values; the model router
+  azure.yaml or ARM property that carries the allowed model subset (phase 8, not read).

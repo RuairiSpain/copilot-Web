@@ -2,5 +2,140 @@ id: FND-IDN-006
 version: 1
 group: IDN
 title: "Federated credentials use HTTPS issuer and specific subject"
-status: proposed
+description: >-
+  A federated identity credential on a user-assigned managed identity trusts tokens from an external
+  identity provider (for example GitHub Actions or an AKS cluster) by matching issuer, subject and
+  audience. The issuer must be an https URL that matches the iss claim, and the subject must name one
+  specific workload. A standard federated credential matches the subject exactly: a wildcard or
+  pattern in the subject does not match several workloads, it matches none. Name-based GitHub and
+  GitLab subjects are mutable and can be recycled, so the immutable subject format should be
+  preferred where the issuer offers it. The rule inspects
+  Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials in the template.
+status: verified
 phases: ["1"]
+inputs: ["bicep-arm"]
+basis: ["security"]
+category: must-have
+pillar: security
+severity:
+  dev: warning
+  test: error
+  prod: error
+compatibility:
+  azd: "not version dependent; reads compiled ARM JSON (azd 1.36.0-beta.1 clone checked)"
+  extensions: {}
+  apiVersions:
+    - "Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials@2024-11-30 (properties.issuer format uri, subject, audiences; all required)"
+evidence:
+  description: >-
+    For each federatedIdentityCredentials resource read properties.issuer, subject and audiences.
+    Fail when issuer is not an absolute URL with the https scheme, has no host, or is a parameter
+    default that is http. Fail when subject is empty, contains the wildcard characters * or ?, or
+    for a GitHub issuer (https://token.actions.githubusercontent.com) does not follow
+    repo:{owner}/{repo}:{environment|ref|pull_request...} with a concrete entity (the documented
+    entity types are environment, branch, pull request and tag, matched exactly), or for an AKS
+    issuer (host ending .oic.prod-aks.azure.com or a cluster issuer URL) is not
+    system:serviceaccount:{namespace}:{serviceaccount} with both parts concrete. Report as info
+    when a GitHub or GitLab subject is name-based and the immutable form is available (the GitHub
+    immutable form embeds the owner and repository IDs, repo:{owner}@{owner_id}/{repo}@{repo_id}:...;
+    not available on GitHub Enterprise Server). Report as info when audiences is not exactly
+    api://AzureADTokenExchange (the documented single supported audience), when two credentials on
+    one identity share issuer and subject, or when an identity has more than 20 credentials (the
+    documented limit). Skip issuer or subject values that are unresolved parameters, and record the
+    parameter name. Credentials on Entra app registrations are Microsoft Graph objects, not ARM
+    resources; they are skipped in the static phase and reported in the fragment as a later live
+    check.
+  confidence: likely
+recommendation: >-
+  Use the exact https issuer of the provider and a subject that names one workload: for GitHub
+  Actions an environment, branch, pull request or tag of one repository, preferably in the immutable
+  subject form; for AKS the exact namespace and service account. Do not put wildcards in a standard
+  credential; if one credential must cover several branches, use a flexible federated identity
+  credential (preview) with an immutable claim, and remove credentials whose workload no longer
+  exists.
+fix: |
+  resource fic 'Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials@2024-11-30' = {
+    parent: deployIdentity
+    name: 'github-prod'
+    properties: {
+      issuer: 'https://token.actions.githubusercontent.com'
+      subject: 'repo:contoso/payments-api:environment:prod' // one repository and one environment
+      audiences: [ 'api://AzureADTokenExchange' ]
+    }
+  }
+sources:
+  - url: https://learn.microsoft.com/entra/workload-id/workload-identity-federation-create-trust-user-assigned-managed-identity
+    lastVerified: "2026-10-04"
+    verifiedVia: github.com/MicrosoftDocs/entra-docs docs/workload-id/workload-identity-federation-create-trust-user-assigned-managed-identity.md (ms.date 05/12/2025)
+    note: Issuer must match the iss claim and be a URL that complies with OIDC Discovery; subject must match the sub claim; GitHub values must exactly match and pattern matching is not supported for branches and tags; name limits.
+  - url: https://learn.microsoft.com/entra/workload-id/workload-identity-federation-considerations
+    lastVerified: "2026-10-04"
+    verifiedVia: github.com/MicrosoftDocs/entra-docs docs/workload-id/workload-identity-federation-considerations.md (ms.date 02/28/2024; error table with single audience api://AzureADTokenExchange, duplicate issuer and subject, serial creation)
+    note: Documented constraints on audience and uniqueness; concurrent updates under one identity return 409.
+  - url: https://learn.microsoft.com/entra/workload-id/workload-identities-federated-credential-mutable-subjects
+    lastVerified: "2026-10-04"
+    verifiedVia: github.com/MicrosoftDocs/entra-docs docs/workload-id/workload-identities-federated-credential-mutable-subjects.md (ms.date 07/28/2026)
+    note: Mutable name-based subjects, subject recycling, dangling credentials; prefer immutable subjects; a standard credential matches the sub value exactly.
+  - url: https://learn.microsoft.com/entra/workload-id/workload-identities-github-immutable-subjects
+    lastVerified: "2026-10-04"
+    verifiedVia: github.com/MicrosoftDocs/entra-docs docs/workload-id/workload-identities-github-immutable-subjects.md (ms.date 07/28/2026)
+    note: Immutable GitHub subject format with owner and repository IDs; GitHub.com only.
+  - url: https://learn.microsoft.com/entra/workload-id/workload-identities-flexible-federated-identity-credentials
+    lastVerified: "2026-10-04"
+    verifiedVia: github.com/MicrosoftDocs/entra-docs docs/workload-id/workload-identities-flexible-federated-identity-credentials.md (ms.date 09/18/2026; preview)
+    note: Wildcards are available only through flexible federated identity credentials (preview) and GitHub expressions must include an immutable claim; limit of 20 credentials per identity.
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/msi/resource-manager/Microsoft.ManagedIdentity/ManagedIdentity/stable/2024-11-30/ManagedIdentity.json
+    lastVerified: "2026-10-04"
+    verifiedVia: github.com/Azure/azure-rest-api-specs specification/msi/resource-manager/Microsoft.ManagedIdentity/ManagedIdentity/stable/2024-11-30/ManagedIdentity.json
+    note: FederatedIdentityCredentialProperties issuer (format uri), subject, audiences, all required. The stable schema has no claims matching expression property.
+overlap:
+  decision: adapt
+  coverage: partial
+  rationale: >-
+    Three preview built-in policies restrict federated credentials: allowed issuer types, GitHub
+    credentials limited to approved repository owners, and AKS issuers limited to approved tenants and
+    regions. They are allow-list governance with parameters, in preview, and they do not test the
+    https scheme, wildcard or empty subjects, entity specificity, the immutable subject form, or
+    audience. PSRule for Azure, Checkov and the Bicep linter have no federated credential rule in the
+    local clones. Foundry Doctor adapts the idea into a pre-deployment structural check with a clear
+    reason per credential.
+  psrule: []
+  azurePolicy:
+    - "2571b7c3-3056-4a61-b00a-9bc5232234f5 ([Preview] Managed Identity Federated Credentials should be from allowed issuer types)"
+    - "fd1a8e20-2c4f-4a6c-9354-b58d786d9a1f ([Preview] Managed Identity Federated Credentials from GitHub should be from trusted repository owners)"
+    - "ae62c456-33de-4dc8-b100-7ce9028a7d99 ([Preview] Managed Identity Federated Credentials from Azure Kubernetes should be from trusted sources)"
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/idn
+testability: >-
+  Offline with compiled ARM fixtures: http issuer, wildcard subject, incomplete GitHub subject,
+  immutable and name-based subjects, duplicate credentials, parameterised values.
+tests:
+  positive:
+    - http-issuer
+    - subject-with-wildcard
+    - github-subject-without-entity
+    - aks-subject-with-wildcard-service-account
+  negative:
+    - github-environment-subject-https-issuer
+    - github-immutable-subject
+    - aks-exact-namespace-and-service-account
+  skipped:
+    - issuer-is-parameter
+    - app-registration-credential-graph-only
+  uncertain:
+    - custom-issuer-subject-format-unknown
+notes: >-
+  Unverified: an explicit statement that the issuer must use https. The Entra articles say the
+  issuer is a URL that complies with the OIDC Discovery specification and every example uses https;
+  the OIDC Discovery text itself (openid.net) was blocked by the egress proxy. The https failure is
+  therefore a security-basis check, not a platform-basis one. Unverified: the exact subject formats
+  for Azure Pipelines, GitLab and Terraform Cloud issuers (only GitHub and AKS formats are checked;
+  other issuers get only the non-empty and no-wildcard tests). The 20-credential limit is quoted from the
+  flexible credentials article, which states it for applications and user-assigned managed identities. The Foundry sources
+  only reference federated credentials for GitHub Actions sign-in (azd auth login with a federated
+  credential provider and the Azure login action) and do not prescribe a subject.

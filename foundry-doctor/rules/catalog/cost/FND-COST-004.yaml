@@ -2,5 +2,99 @@ id: FND-COST-004
 version: 1
 group: COST
 title: "Informational monthly fixed-capacity estimate"
-status: proposed
+description: >-
+  Report an informational, per-environment monthly range for the fixed-capacity resources in the compiled plan (AI Search
+  units, API Management units, Cosmos DB provisioned RU/s and similar verified meters) using public retail prices, with the
+  assumptions, region, currency, price date and the resources that are excluded. It never produces a pass or fail and never
+  estimates token consumption.
+status: product-opinion
 phases: ["7"]
+inputs: ["bicep-arm", "external-tool"]
+basis: ["cost", "opinion"]
+category: nice-to-have
+pillar: cost
+severity:
+  dev: info
+  test: info
+  prod: info
+compatibility:
+  azd: ">=1.27.1"
+  extensions: {}
+  apiVersions: ["2025-05-01", "2024-05-01", "2026-03-15"]
+evidence:
+  description: >-
+    From the compiled resource plan, derive fixed-capacity drivers - Search units as replicaCount x partitionCount for the
+    sku.name; API Management sku.name and sku.capacity; Cosmos DB provisioned throughput or autoscale maximum; PTU capacity of
+    provisioned Foundry deployments (sku.capacity). Map each driver to a retail meter through a supported-meter catalogue and
+    multiply by the quantity and hours with a documented assumption (for example 730 hours in a month, configurable). Output a
+    low and high estimate, the meter date and currency, and an explicit list of unsupported or consumption-based resources
+    (model tokens, storage, bandwidth). Offline mode uses a cached price file and says so; no price is invented when a meter is
+    missing, the resource is listed as unsupported. Nothing is compared with actual spend.
+  confidence: uncertain
+recommendation: >-
+  Treat the figure as a planning aid for comparing dev, test and prod fixed capacity, and confirm with the Azure pricing
+  calculator and your own agreement before committing spend.
+fix: |
+  foundry-doctor cost --env prod --compare dev
+sources:
+  - url: https://learn.microsoft.com/azure/search/search-sku-tier
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/search/search-sku-tier.md
+    note: Search units are replicas x partitions and are billed at a fixed hourly rate per unit and tier.
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
+    note: replicaCount (1-12 standard, 1-3 basic) and partitionCount (1, 2, 3, 4, 6, 12) properties.
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/stable/2024-05-01/apimdeployment.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/stable/2024-05-01/apimdeployment.json
+    note: sku.name enumeration and sku.capacity (number of deployed units; 0 for Consumption).
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
+    note: ThroughputSettingsResource throughput or autoscaleSettings.
+  - url: https://learn.microsoft.com/azure/foundry/concepts/manage-costs
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/concepts/manage-costs.md
+    note: Foundry estimates cover standard deployment costs only, not provisioned throughput, and do not reflect discounts or contracted pricing; invoices and meter records are the source of truth. Page ms.date 08/27/2026.
+  - url: https://learn.microsoft.com/rest/api/cost-management/retail-prices/azure-retail-prices
+    lastVerified: "2026-10-04"
+    verifiedVia: web search result summary only (learn.microsoft.com is blocked by the egress proxy; prices.azure.com is also blocked)
+    note: Not verified from a primary source file. The search summary described an unauthenticated endpoint https://prices.azure.com/api/retail/prices with a $filter query parameter and an api-version 2023-01-01-preview with case-sensitive filters; none of this is used until confirmed.
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    Advisor cost recommendations describe the deployed state after the fact and Azure Cost Management reports actual spend; neither
+    produces a pre-deployment, per-environment estimate from the compiled plan. PSRule, Azure Policy, Checkov and the Bicep
+    linter have no cost estimation. The PRD names Advisor cost recommendations as optional, separate deployed-state evidence, so
+    no Advisor recommendation ID is mapped.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/cost
+testability: >-
+  Driver extraction is offline against fixture ARM JSON; pricing uses recorded Retail Prices API responses and a cache with a
+  retrieval date, as the PRD testing strategy states.
+tests:
+  positive:
+    - estimate-includes-search-units-and-apim-units
+    - unsupported-resource-listed-in-exclusions
+    - dev-and-prod-fixed-capacity-comparison
+  negative:
+    - token-based-deployments-are-excluded-not-priced
+  skipped:
+    - price-cache-missing-and-offline
+    - meter-not-in-supported-catalogue
+    - sku-or-capacity-unresolved-parameter
+notes: >-
+  Informational only (PRD section 15). Marked product opinion because there is no platform rule to verify; the capacity drivers
+  and property names are verified from the specifications. Unverified - the Azure Retail Prices API contract (endpoint,
+  filtering, versions, meter and SKU naming) because Learn and prices.azure.com are blocked here; the mapping from each sku to a
+  retail meter; the hours-per-month assumption; whether provisioned throughput (PTU) meters can be priced from the public API.
+  Mapped IDs are intentionally empty.

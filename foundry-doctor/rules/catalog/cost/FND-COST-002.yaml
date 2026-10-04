@@ -2,5 +2,112 @@ id: FND-COST-002
 version: 1
 group: COST
 title: "Dev avoids production-sized fixed SKUs"
-status: proposed
+description: >-
+  Environments classified as dev should not provision fixed-capacity SKUs that bill continuously regardless of use and
+  are sized for production, such as provisioned-throughput (PTU) model deployments, AI Search standard2, standard3 or
+  storage-optimised tiers or multiple replicas and partitions, API Management Premium or Isolated, or Cosmos DB throughput
+  above a profile limit. What counts as production-sized is a Foundry Doctor opinion; the SKU names and billing model are
+  documented.
+status: product-opinion
 phases: ["1"]
+inputs: ["azure.yaml", "bicep-arm"]
+basis: ["cost", "waf", "opinion"]
+category: nice-to-have
+pillar: cost
+severity:
+  dev: warning
+  test: info
+  prod: info
+compatibility:
+  azd: ">=1.27.1"
+  extensions: {}
+  apiVersions: ["2026-09-01", "2025-05-01", "2024-05-01", "2026-03-15"]
+evidence:
+  description: >-
+    Evaluated only for environments the profile classifies as dev; test and prod environments are not evaluated. Offline,
+    in azure.yaml and the compiled template - Foundry model deployments with sku.name GlobalProvisionedManaged,
+    DataZoneProvisionedManaged or ProvisionedManaged (reserved PTU capacity); Microsoft.Search/searchServices with sku.name
+    standard2, standard3, storage_optimized_l1 or storage_optimized_l2, or replicaCount or partitionCount greater than 1;
+    Microsoft.ApiManagement/service with sku.name Premium or Isolated, or sku.capacity greater than 1;
+    Microsoft.DocumentDB throughputSettings with throughput or autoscale maximum above the profile limit (no default limit is
+    shipped). An exemption list in the profile silences intentional uses. A Cosmos DB account configured for the Foundry
+    Agent Service standard setup needs at least 3000 RU/s in total (both provisioned and serverless modes are supported), so
+    throughput at or below that platform minimum is never reported. A dev environment is identified by the profile or the
+    azd environment name mapping, never guessed.
+  confidence: likely
+recommendation: >-
+  In dev use pay-per-token deployments (GlobalStandard or Standard), the Search free or basic tier with one replica and one
+  partition, an API Management Developer or consumption-style tier, and the lowest Cosmos DB throughput that the Foundry
+  Agent Service setup allows. Reserve production-sized capacity for test and production environments.
+fix: |
+  # azure.yaml - dev environment values
+  deployments:
+    - name: chat
+      model: { format: OpenAI, name: gpt-5.4-mini, version: "2026-03-17" }
+      sku: { name: GlobalStandard, capacity: 10 }
+sources:
+  - url: https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/foundry-models/includes/concepts-deployment-types-content-6.md
+    note: Provisioned types (GlobalProvisionedManaged, DataZoneProvisionedManaged, ProvisionedManaged) purchase a fixed number of PTUs for reserved capacity; Standard types are pay-per-token; minimum PTUs vary by model.
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
+    note: SkuName enumeration free, basic, standard, standard2, standard3, storage_optimized_l1, storage_optimized_l2; replicaCount and partitionCount ranges. The serverless value appears in the sku description and in preview 2026-03-01-preview and 2026-09-01-preview files.
+  - url: https://learn.microsoft.com/azure/search/search-sku-tier
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/search/search-sku-tier.md
+    note: Search units (replicas x partitions) are the billing unit for Dedicated services, billed at a fixed hourly rate per unit and tier.
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/stable/2024-05-01/apimdeployment.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/stable/2024-05-01/apimdeployment.json
+    note: ApiManagementServiceSkuProperties name enumeration Developer, Standard, Premium, Basic, Consumption, Isolated, BasicV2, StandardV2; capacity is the number of deployed units (0 for Consumption).
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
+    note: ThroughputSettingsResource has throughput or autoscaleSettings, not both.
+  - url: https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/includes/concepts-standard-agent-setup-content.md
+    note: Standard setup needs a Cosmos DB for NoSQL account with at least 3000 RU/s total; provisioned throughput and serverless are both supported.
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    No PSRule, Azure Policy, Checkov or Bicep linter rule was found that flags oversized SKUs in non-production
+    environments. PSRule Azure.Search.SKU points the other way (it warns against the Free tier for demanding workloads) and
+    is a performance rule, so it is not mapped as equivalent. The value is the environment-aware correlation between the
+    azd environment classification and the SKUs in azure.yaml and Bicep.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/cost
+testability: >-
+  Offline against fixture azure.yaml and ARM JSON per environment; each SKU family has one positive and one negative case.
+tests:
+  positive:
+    - dev-environment-with-global-provisioned-managed-deployment
+    - dev-search-standard3
+    - dev-search-two-replicas
+    - dev-apim-premium
+    - dev-cosmos-throughput-above-profile-limit
+  negative:
+    - dev-global-standard-deployment
+    - dev-search-basic-single-unit
+    - prod-environment-with-provisioned-managed
+    - dev-cosmos-at-foundry-minimum-3000-ru
+  skipped:
+    - environment-not-classified-as-dev
+    - sku-value-is-unresolved-parameter
+    - no-cosmos-limit-in-profile
+notes: >-
+  Product opinion: no source defines production-sized. Unverified - minimum PTU quantities per model (documented as varying
+  by model and not read); whether Standard, StandardV2 or BasicV2 APIM tiers are appropriate for dev (only Premium and
+  Isolated are flagged); Cosmos DB account-level versus container-level throughput resources in Bicep (only the
+  throughputSettings definition was read); Foundry hosted-agent container CPU and memory sizing is out of scope. SKU
+  string comparison is case-sensitive as typed in the sources.

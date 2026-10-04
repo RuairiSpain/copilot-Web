@@ -100,7 +100,7 @@ tests:
     - connection-target-is-unresolved-parameter
     - control-plane-unavailable
 notes: >-
-  Basis is operational guidance. Foundry documents the consequence of a missing connection (no server-side traces) but
+  Basis is operational guidance. The Well-Architected guidance text itself was not read (the source repository is not public). Foundry documents the consequence of a missing connection (no server-side traces) but
   not that it is an invalid configuration, so no platform basis is claimed. Unverified: the exact ARM property that
   carries the component resource ID for category AppInsights (target versus metadata.ResourceId) was not confirmed from
   a Learn article; the fix example uses target as the generic connection property and must be checked against a

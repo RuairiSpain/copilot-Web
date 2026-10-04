@@ -2,5 +2,134 @@ id: FND-IDN-004
 version: 1
 group: IDN
 title: "No broad Owner/Contributor for application identities"
-status: proposed
+description: >-
+  Identities that run the workload (the Foundry project and account managed identities, agent
+  identities, and managed identities of the workloads in the design) should not hold the privileged
+  administrator roles Owner, Contributor, User Access Administrator or Role Based Access Control
+  Administrator, especially at subscription or resource group scope. The Azure RBAC documentation
+  lists these as privileged administrator roles and advises avoiding broad roles at broad scopes. The
+  Foundry documentation gives application identities narrower roles (Foundry User, data-plane roles)
+  and notes that Owner and Contributor alone do not grant Foundry data-plane access, so they are not
+  needed to run agents. Deployment pipeline identities may legitimately need Contributor on a
+  project or resource group and are not treated as application identities unless configured so.
+status: verified
 phases: ["1"]
+inputs: ["bicep-arm", "control-plane"]
+basis: ["security"]
+category: must-have
+pillar: security
+severity:
+  dev: warning
+  test: error
+  prod: error
+compatibility:
+  azd: "not version dependent; reads compiled ARM JSON and ARM role assignments (azd 1.36.0-beta.1 clone checked)"
+  extensions: {}
+  apiVersions:
+    - "Microsoft.Authorization/roleAssignments@2022-04-01 (roleDefinitionId, principalId, principalType, condition, conditionVersion)"
+evidence:
+  description: >-
+    Identify application identities: the identity.principalId of Foundry accounts and projects,
+    identity principals of workload resources declared in the design (container apps, web apps), and
+    declared agent identities (live mode). Find role assignments in the template, or in live mode at
+    the subscription, resource group and Foundry resource scopes, whose roleDefinitionId ends with a
+    privileged role GUID (Azure built-in roles reference, ms.date 07/01/2026): Owner
+    8e3af657-a8ff-443c-a75c-2fe8c4bcb635; Contributor b24988ac-6180-42a0-ab88-20f7382dd24c; User
+    Access Administrator 18d7d88d-d35e-4fb5-a5c3-7773c20a72d9; Role Based Access Control
+    Administrator f58310d9-a9f6-439a-9e8d-f62e7b41a168. Fail when such an assignment targets an
+    application identity at subscription, management group or resource group scope. Report Owner,
+    User Access Administrator and Role Based Access Control Administrator at resource scope as the
+    same failure. Report Contributor at the scope of a single Foundry resource as info with the
+    reason that narrower Foundry roles exist. Downgrade a Role Based Access Control Administrator or
+    User Access Administrator assignment that carries a condition to info (the documentation
+    recommends conditions to constrain role assignment). Skip assignments whose principal cannot be
+    resolved and report the unresolved principal. Identities listed in the Foundry Doctor config as
+    deployment identities are excluded.
+  confidence: likely
+recommendation: >-
+  Replace Owner, Contributor, User Access Administrator and Role Based Access Control Administrator
+  on application identities with the narrow roles the workload needs, such as Foundry User on the
+  project, Foundry Agent Consumer for callers, and the data-plane roles in FND-IDN-002. Keep any
+  unavoidable privileged role at the narrowest scope and add an ABAC condition when the role can
+  assign roles. Give pipelines a separate deployment identity.
+fix: |
+  // Instead of Contributor on the resource group, grant the project identity only what the agent needs:
+  resource projectUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+    scope: account
+    name: guid(account.id, project.id, '53ca6127-db72-4b80-b1b0-d745d6d5456d')
+    properties: {
+      roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '53ca6127-db72-4b80-b1b0-d745d6d5456d') // Foundry User
+      principalId: project.identity.principalId
+      principalType: 'ServicePrincipal'
+    }
+  }
+sources:
+  - url: https://learn.microsoft.com/azure/role-based-access-control/role-assignments-steps
+    lastVerified: "2026-10-04"
+    verifiedVia: github.com/MicrosoftDocs/azure-docs articles/role-based-access-control/role-assignments-steps.md (ms.date 10/15/2025, Privileged administrator roles table)
+    note: Owner, Contributor, Reservations Administrator, Role Based Access Control Administrator and User Access Administrator are privileged administrator roles.
+  - url: https://learn.microsoft.com/azure/role-based-access-control/best-practices
+    lastVerified: "2026-10-04"
+    verifiedVia: github.com/MicrosoftDocs/azure-docs articles/role-based-access-control/best-practices.md (ms.date 03/30/2025)
+    note: Grant the least privilege; avoid broader roles at broader scopes; limit privileged administrator role assignments; use a narrow scope; add a condition when a role can create role assignments.
+  - url: https://learn.microsoft.com/azure/foundry/concepts/rbac-foundry
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/concepts/rbac-foundry.md (ms.date 09/16/2026, role permission tables)
+    note: Owner and Contributor have no data-plane access to build in a project; Foundry User, Project Manager and Agent Consumer cover agent use.
+  - url: https://learn.microsoft.com/azure/foundry/agents/concepts/hosted-agent-permissions
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/hosted-agent-permissions.md (ms.date 04/21/2026)
+    note: Owner and Contributor do not include data-plane permissions; the least-privilege tip for agent identities (Foundry User or a custom role).
+  - url: https://learn.microsoft.com/azure/foundry/agents/quickstarts/set-up-cicd-hosted-agent
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/quickstarts/set-up-cicd-hosted-agent.md (ms.date 09/16/2026)
+    note: The Foundry CI/CD quickstart assigns Foundry User and Contributor on the target project to the workflow identity, which is why pipeline identities are separate from application identities.
+  - url: https://learn.microsoft.com/azure/role-based-access-control/built-in-roles
+    lastVerified: "2026-10-04"
+    verifiedVia: github.com/MicrosoftDocs/azure-docs articles/role-based-access-control/built-in-roles/privileged.md (ms.date 07/01/2026; role id fields)
+    note: Role definition GUIDs.
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    No PSRule rule, Checkov check (CKV_AZURE_39 tests custom roles with subscription-owner
+    permissions, not assignments) or built-in policy tests which role an application identity holds.
+    Built-in policies cover subscription-level owner counts and guest owners, which are about human
+    accounts (see FND-IDN-005). Defender for Cloud permission management for overprivileged identities
+    could not be verified from the local sources. The Foundry-specific value is knowing which
+    principals are the project, account and agent identities and that Foundry data-plane access does
+    not need these roles.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/idn
+testability: >-
+  Offline with compiled ARM fixtures (identity references, privileged and narrow assignments, scopes,
+  conditions). Live mode uses recorded role-assignment lists with principal types.
+tests:
+  positive:
+    - project-identity-contributor-on-resource-group
+    - workload-identity-owner-on-subscription
+    - project-identity-user-access-administrator-no-condition
+  negative:
+    - project-identity-foundry-user-on-account
+    - pipeline-identity-contributor-on-project
+    - rbac-administrator-with-condition
+  skipped:
+    - principal-is-parameter
+    - live-role-assignments-not-readable
+  uncertain:
+    - identity-is-both-application-and-deployment
+notes: >-
+  Unverified: Defender for Cloud (Defender CSPM permission management) recommendations about
+  overprivileged identities; no Defender reference was in the local sources. Product decision inside
+  a verified rule: Contributor at the scope of a single Foundry resource is reported as info, not a
+  failure, because the Foundry sources themselves list Contributor as the minimum role for several
+  tools and the CI/CD quickstart. Foundry Owner (c883944f-8b7b-4483-af10-35834be79c4a) and Foundry
+  Account Owner (e47c6f54-e4a2-4754-9501-8e0985b135e1) are broad Foundry roles; they are not in the
+  privileged administrator roles documentation, so the rule does not flag them.
