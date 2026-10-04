@@ -37,6 +37,18 @@ func Markdown(rules []Rule) string {
 		}
 	}
 
+	mvp := []Rule{}
+	for _, r := range sorted {
+		if slices.Contains(r.Phases, "1") {
+			mvp = append(mvp, r)
+		}
+	}
+	fmt.Fprintf(&b, "\n## Phase 1 MVP set (%d rules)\n\nRules whose phases include 1, including those shared with a later phase. The PRD target is 35 to 40.\n\n", len(mvp))
+	b.WriteString("| Rule | Title | Phases | Status | Decision |\n|---|---|---|---|---|\n")
+	for _, r := range mvp {
+		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s |\n", esc(r.ID), esc(r.Title), esc(strings.Join(r.Phases, "/")), r.Status, esc(dash(r.Overlap.Decision)))
+	}
+
 	group := ""
 	for _, r := range sorted {
 		if r.Group != group {

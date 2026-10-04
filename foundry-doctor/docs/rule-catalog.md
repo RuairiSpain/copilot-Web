@@ -18,6 +18,51 @@
 | adapt | 38 |
 | native | 68 |
 
+## Phase 1 MVP set (38 rules)
+
+Rules whose phases include 1, including those shared with a later phase. The PRD target is 35 to 40.
+
+| Rule | Title | Phases | Status | Decision |
+|---|---|---|---|---|
+| FND-CFG-001 | Valid YAML, duplicate-key detection and compatible azure.ai.* schema | 1 | verified | adapt |
+| FND-CFG-002 | Unique service names by kind | 1 | verified | native |
+| FND-CFG-003 | All inter-service references resolve | 1 | verified | native |
+| FND-CFG-004 | Prompt model or hosted source/image is valid | 1 | verified | native |
+| FND-CFG-005 | No raw secrets in YAML/Bicep/environment blocks | 1 | verified | adapt |
+| FND-CFG-006 | Every variable has an environment or infrastructure producer | 1 | verified | native |
+| FND-CFG-007 | Outbound endpoints use HTTPS and reject unsafe local/metadata targets | 1 | product-opinion | native |
+| FND-CFG-011 | Preview/retired fields are version-aware | 1 | verified | native |
+| FND-CFG-012 | Azure region values are valid | 1 | product-opinion | adapt |
+| FND-COST-002 | Dev avoids production-sized fixed SKUs | 1 | product-opinion | native |
+| FND-ENV-001 | Environments do not unintentionally share resource groups | 1 | verified | native |
+| FND-ENV-002 | Environment-bound names/IDs/rules were not copied unchanged | 1 | product-opinion | native |
+| FND-ENV-003 | Prod does not reference non-prod resource IDs | 1 | product-opinion | native |
+| FND-ENV-004 | Informational difference summary | 1 | product-opinion | native |
+| FND-IDN-001 | Managed identities used for Foundry and workloads | 1 | verified | adapt |
+| FND-IDN-002 | Project identity has required data roles | 1/2 | verified | native |
+| FND-IDN-003 | Role assignments use object IDs and principalType | 1 | verified | native |
+| FND-IDN-004 | No broad Owner/Contributor for application identities | 1 | verified | native |
+| FND-IDN-006 | Federated credentials use HTTPS issuer and specific subject | 1 | verified | adapt |
+| FND-NET-001 | Foundry public access/private endpoint posture | 1 | verified | adapt |
+| FND-NET-002 | Dependent services public access/default-deny/private endpoints | 1 | verified | adapt |
+| FND-NET-003 | Private endpoint DNS zone groups and VNet links | 1 | verified | native |
+| FND-NET-004 | Agent subnet delegation and sizing | 1 | verified | native |
+| FND-NET-005 | Private-mode VNet/region consistency | 1 | verified | native |
+| FND-NET-007 | Restricted mode has allowed IP range | 1 | verified | adapt |
+| FND-NET-008 | Search SKU supports private endpoints | 1 | verified | adapt |
+| FND-OPS-004 | Required tags exist | 1 | product-opinion | adapt |
+| FND-OPS-005 | Resource-name provider constraints | 1 | verified | adapt |
+| FND-OPS-007 | CI/CD pipeline exists | 1 | product-opinion | native |
+| FND-OPS-009 | Data-residency regions and deployment SKU | 1/2 | verified | adapt |
+| FND-OPS-010 | Model allow/deny lists remain consistent | 1/8 | product-opinion | adapt |
+| FND-REL-005 | Search sizing within platform limits | 1 | verified | native |
+| FND-SEC-001 | Foundry local authentication disabled | 1 | verified | adapt |
+| FND-SEC-002 | AI Search key authentication disabled or RBAC-only | 1 | verified | adapt |
+| FND-SEC-003 | Cosmos DB local authentication disabled | 1 | verified | adapt |
+| FND-SEC-004 | Storage shared key/anonymous access disabled; HTTPS/TLS required | 1 | verified | adapt |
+| FND-SEC-006 | Firewall rules reject private/open ranges | 1 | verified | native |
+| FND-SEC-014 | Secrets not emitted as Bicep outputs | 1 | verified | wrap |
+
 ## CFG
 
 | Rule | Title | Phase | Status | Decision | dev/test/prod | Source |

@@ -17,6 +17,15 @@
 | adapt | 1 |
 | native | 1 |
 
+## Phase 1 MVP set (2 rules)
+
+Rules whose phases include 1, including those shared with a later phase. The PRD target is 35 to 40.
+
+| Rule | Title | Phases | Status | Decision |
+|---|---|---|---|---|
+| FND-CFG-002 | Seed | 1 | proposed | - |
+| FND-SEC-001 | Local auth \| disabled | 1/2 | verified | adapt |
+
 ## CFG
 
 | Rule | Title | Phase | Status | Decision | dev/test/prod | Source |
