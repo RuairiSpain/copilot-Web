@@ -709,3 +709,33 @@ def test_gateway_chargeback_dimensions_are_tracked_and_department_has_a_claim():
 def test_gateway_explicit_models_are_kept():
     plan = analyse(gw_doc(models={"default": "gpt-5", "allowed": ["gpt-5"]})).plan
     assert plan.config.gateway.models.allowed == ["gpt-5"]
+
+
+def test_xf126_data_residency_rules_out_global_deployments(expect):
+    residency = {"dataResidency": ["westeurope"]}
+    doc = mk(
+        defaults={"location": "westeurope"},
+        governance=residency,
+        models={"deployments": [{"name": "chat", "model": "gpt-5", "sku": "GlobalStandard"}]},
+    )
+    expect(doc, "XF126", "deployments[chat].sku")
+    ok = mk(
+        defaults={"location": "westeurope"},
+        governance=residency,
+        models={"deployments": [{"name": "chat", "model": "gpt-5", "sku": "DataZoneStandard"}]},
+    )
+    assert analyse(ok).ok
+
+
+def test_implicit_deployments_follow_data_residency():
+    doc = mk(
+        defaults={"location": "westeurope"},
+        governance={"dataResidency": ["westeurope"]},
+        models={"allowed": ["gpt-5"]},
+        iq=iq(kb()),
+    )
+    plan = analyse(doc).plan
+    skus = {d.name: d.sku for d in plan.config.scopes["root"].models.deployments}
+    assert skus == {"gpt-5": "DataZoneStandard", "text-embedding-3-large": "DataZoneStandard"}
+    plain = analyse(mk(models={"allowed": ["gpt-5"]})).plan
+    assert plain.config.scopes["root"].models.deployments[0].sku == "GlobalStandard"

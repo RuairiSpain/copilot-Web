@@ -368,8 +368,8 @@ class Search(_NameOrExisting):
         "standard",
         "standard2",
         "standard3",
-        "storage_optimised_l1",
-        "storage_optimised_l2",
+        "storage_optimized_l1",
+        "storage_optimized_l2",
     ] = "standard"
     semantic_ranking: bool = True
     local_authentication: bool = False
@@ -752,7 +752,9 @@ class Gateway(Model):
     enabled: bool = False
     name: ResourceName | None = None
     mode: Literal["ai-gateway"] = "ai-gateway"
-    sku: Literal["Consumption", "Developer", "BasicV2", "StandardV2", "Premium"] = "StandardV2"
+    sku: Literal["Consumption", "Developer", "BasicV2", "StandardV2", "Premium", "PremiumV2"] = (
+        "StandardV2"
+    )
     endpoint: Hostname | None = None
     authentication: GatewayAuthentication | None = None
     authorisation: GatewayAuthorisation = Field(default_factory=GatewayAuthorisation)

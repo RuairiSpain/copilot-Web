@@ -57,4 +57,10 @@ Severity is *error* unless marked (w).
 | XF117 | Retrieval needs vectors / semantic ranking that the index or Search service does not provide |
 | XF118 | Invalid cron expression; explicit routing without routes |
 | XF119 | `apiKey` authentication without `secretRef` |
-| XF120 | Project location differs from the Foundry resource or hub (w) |
+| XF120 | Project location differs from the Foundry resource or hub (w; error in private mode, where the VNet and workspace resources must share a region) |
+| XF121 | IP rules: private ranges are invalid in service firewalls; `0.0.0.0/0` and `::/0` are rejected |
+| XF122 | Outbound endpoints (MCP, connector, web source, federated issuer) must be https and not loopback or link-local |
+| XF123 | Search sizing: per-SKU replica/partition limits, 36 search units, free tier has no private endpoints, one replica in prod (w) |
+| XF124 | Gateway SKU in private mode: Consumption unsupported; BasicV2 cannot reach private backends (w) |
+| XF125 | Azure Cache for Redis can no longer be created; use Azure Managed Redis |
+| XF126 | Data residency forbids Global deployment SKUs (implicit deployments become `DataZoneStandard`) |

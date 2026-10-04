@@ -242,9 +242,7 @@ def test_semantic_fields_follow_custom_index_fields():
     assert "id" not in {f.name for f in built.fields}
 
 
-def test_redis_default_sku_follows_the_service():
-    cfg = plan(mk(redis={"enabled": True, "service": "azure-cache-for-redis"}))
-    assert cfg.redis.sku == "standard"
+def test_redis_defaults():
     assert plan(mk(redis={"enabled": True})).redis.sku == "balanced"
 
 
@@ -308,10 +306,10 @@ def test_non_private_modes_have_no_private_endpoints():
     assert net.vnet is None and net.private_endpoints == []
     restricted = {
         "roles": {"admins": ["a"]},
-        "network": {"mode": "restricted", "allowedIps": ["10.0.0.0/8"]},
+        "network": {"mode": "restricted", "allowedIps": ["203.0.113.0/24"]},
     }
     net = plan(mk(security=restricted)).network
-    assert net.allowed_ips == ["10.0.0.0/8"] and net.private_endpoints == []
+    assert net.allowed_ips == ["203.0.113.0/24"] and net.private_endpoints == []
 
 
 # Hub and inheritance ---------------------------------------------------------------------------------
@@ -384,7 +382,7 @@ def test_search_resolution_precedence():
         search={"sku": "basic"},
         projects=[
             {"name": "aa"},
-            {"name": "bb", "search": {"sku": "free"}},
+            {"name": "bb", "search": {"sku": "basic"}},
             {"name": "cc", "inheritHub": False},
         ],
     )

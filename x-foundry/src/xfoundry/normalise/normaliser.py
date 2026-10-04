@@ -167,6 +167,12 @@ class _Normaliser:
 
     # ------------------------------------------------------------------- models
 
+    def _default_sku(self) -> str:
+        """Global deployments may process data in any region, so data residency forces DataZone."""
+        governance = self.cfg.governance
+        residency = governance.data_residency if governance and governance.enabled else []
+        return "DataZoneStandard" if residency else "GlobalStandard"
+
     def _implicit_deployments(self) -> None:
         """Deploy models named in ``allowed`` or used for embeddings when nothing else does."""
         for scope_id, scope in self.scopes.items():
@@ -176,7 +182,9 @@ class _Normaliser:
             for model in scope.models.allowed:
                 if model in visible:
                     continue
-                scope.models.deployments.append(ModelDeployment(name=ids.slug(model), model=model))
+                scope.models.deployments.append(
+                    ModelDeployment(name=ids.slug(model), model=model, sku=self._default_sku())
+                )
                 visible |= {ids.slug(model), model}
                 self._add_implicit(
                     "model-deployment", ids.slug(model), scope_id, f"'{model}' is in models.allowed"
@@ -190,7 +198,9 @@ class _Normaliser:
                     None,
                 )
                 if match is None:
-                    match = ModelDeployment(name=ids.slug(vector.model), model=vector.model)
+                    match = ModelDeployment(
+                        name=ids.slug(vector.model), model=vector.model, sku=self._default_sku()
+                    )
                     scope.models.deployments.append(match)
                     self._add_implicit(
                         "model-deployment",
@@ -543,12 +553,6 @@ class _Normaliser:
         self.storage = self._storage()
         gateway = self._gateway()
         redis = cfg.redis
-        if (
-            redis is not None
-            and redis.service == "azure-cache-for-redis"
-            and "sku" not in redis.model_fields_set
-        ):
-            redis.sku = "standard"
 
         identity = cfg.managed_identity
         if identity is None:

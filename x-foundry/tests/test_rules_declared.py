@@ -10,6 +10,7 @@ from xfoundry.validators import validate_declared
 
 from .conftest import analyse, codes, gateway, hub_doc, iq, kb, mk
 
+PUBLIC = {"network": {"mode": "public"}, "roles": {"admins": ["a"]}}
 ARM = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers"
 
 
@@ -429,7 +430,9 @@ def test_rule23_data_residency(expect):
 
 def test_rule23_cross_region_inheritance_warns_not_errors():
     doc = hub_doc(
-        defaults={"location": "westeurope"}, projects=[{"name": "fin", "location": "eastus"}]
+        defaults={"location": "westeurope"},
+        projects=[{"name": "fin", "location": "eastus"}],
+        security=PUBLIC,
     )
     result = analyse(doc)
     assert result.ok
@@ -438,8 +441,21 @@ def test_rule23_cross_region_inheritance_warns_not_errors():
 
 
 def test_rule23_project_location_differing_from_the_account_warns():
-    doc = mk(defaults={"location": "westeurope"}, projects=[{"name": "fin", "location": "eastus"}])
+    doc = mk(
+        defaults={"location": "westeurope"},
+        projects=[{"name": "fin", "location": "eastus"}],
+        security=PUBLIC,
+    )
     assert codes(doc, Severity.WARNING) == {"XF120"}
+
+
+def test_rule23_region_mismatch_is_an_error_in_private_mode(expect):
+    doc = mk(defaults={"location": "westeurope"}, projects=[{"name": "fin", "location": "eastus"}])
+    expect(doc, "XF120", "projects[fin].location")
+    hub = hub_doc(
+        defaults={"location": "westeurope"}, projects=[{"name": "fin", "location": "eastus"}]
+    )
+    assert codes(hub, Severity.ERROR) == {"XF120"}
 
 
 # Rule 24 -----------------------------------------------------------------------------
@@ -501,7 +517,7 @@ def test_restricted_network_needs_allowed_ips(expect):
     expect(mk(security={"network": {"mode": "restricted"}, "roles": {"admins": ["a"]}}), "XF105")
     ok = mk(
         security={
-            "network": {"mode": "restricted", "allowedIps": ["10.0.0.0/8"]},
+            "network": {"mode": "restricted", "allowedIps": ["203.0.113.0/24"]},
             "roles": {"admins": ["a"]},
         }
     )
@@ -550,9 +566,8 @@ def test_redis_service_and_sku_must_match(expect):
         "redis.sku",
     )
     expect(mk(redis={"enabled": True, "sku": "premium"}), "XF106", "redis.sku")
-    assert analyse(
-        mk(redis={"enabled": True, "service": "azure-cache-for-redis", "sku": "premium"})
-    ).ok
+    existing = {"existingResourceId": f"{ARM}/Microsoft.Cache/redis/r1"}
+    assert analyse(mk(redis=existing)).ok
 
 
 def test_runtime_rules(expect):
@@ -629,3 +644,110 @@ def test_hosted_agents_need_a_source_or_runtime(expect):
             models={"default": "gpt-5", "allowed": ["gpt-5"]},
         )
     ).ok
+
+
+# Hardening rules --------------------------------------------------------------------------
+
+
+def restricted(*ips):
+    return {"network": {"mode": "restricted", "allowedIps": list(ips)}, "roles": {"admins": ["a"]}}
+
+
+@pytest.mark.parametrize(
+    "value", ["10.0.0.0/8", "172.20.1.0/24", "192.168.1.5", "100.64.0.0/10", "fd00::/8"]
+)
+def test_xf121_private_ranges_are_rejected_in_firewall_rules(value, expect):
+    expect(mk(security=restricted(value)), "XF121", "allowedIps", "private range")
+
+
+@pytest.mark.parametrize("value", ["0.0.0.0/0", "::/0"])
+def test_xf121_allow_all_is_rejected(value, expect):
+    expect(mk(security=restricted(value)), "XF121", message="whole internet")
+    expect(
+        mk(gateway=gateway(security={"allowIps": [value]}), observability={}), "XF121", "allowIps"
+    )
+
+
+def test_xf121_public_ranges_and_documentation_ranges_are_fine():
+    assert analyse(mk(security=restricted("203.0.113.0/24", "198.51.100.7"))).ok
+    private_mode = {
+        "network": {"mode": "private", "allowedIps": ["10.0.0.0/8"]},
+        "roles": {"admins": ["a"]},
+    }
+    assert analyse(mk(security=private_mode)).ok  # not a firewall rule in private mode
+
+
+@pytest.mark.parametrize(
+    "doc",
+    [
+        mk(mcps=[{"name": "graph", "endpoint": "http://graph.example/mcp"}]),
+        mk(mcps=[{"name": "graph", "endpoint": "https://169.254.169.254/metadata"}]),
+        mk(mcps=[{"name": "graph", "endpoint": "https://localhost/mcp"}]),
+        mk(mcps=[{"name": "graph", "endpoint": "https://[::1]/mcp"}]),
+        mk(connectors=[{"name": "svc", "type": "api", "endpoint": "http://svc.example"}]),
+        mk(iq=iq(kb(sources=[{"name": "web1", "type": "web", "url": "http://x.example"}]))),
+        mk(
+            managedIdentity={
+                "federatedCredentials": [
+                    {"name": "gh", "issuer": "http://issuer.example", "subject": "s"}
+                ]
+            }
+        ),
+    ],
+)
+def test_xf122_insecure_or_internal_endpoints(doc, expect):
+    expect(doc, "XF122")
+
+
+def test_xf122_https_endpoints_are_fine():
+    assert analyse(mk(mcps=[{"name": "graph", "endpoint": "https://graph.contoso.com/mcp"}])).ok
+
+
+@pytest.mark.parametrize(
+    "search, message",
+    [
+        ({"sku": "free", "replicas": 2}, "at most 1 replica"),
+        ({"sku": "basic", "partitions": 2}, "at most 1 partition"),
+        ({"sku": "basic", "replicas": 4}, "at most 3 replica"),
+        ({"sku": "standard", "replicas": 12, "partitions": 4}, "36 search units"),
+        ({"sku": "free"}, "private endpoints"),
+    ],
+)
+def test_xf123_search_sizing(search, message, expect):
+    expect(mk(search=search), "XF123", message=message)
+
+
+def test_xf123_valid_sizing_and_prod_replica_warning():
+    assert analyse(mk(search={"sku": "basic", "replicas": 3})).ok
+    assert analyse(mk(search={"sku": "storage_optimized_l1", "replicas": 3, "partitions": 12})).ok
+    prod = mk(defaults={"environment": "prod"}, search={"sku": "standard"})
+    assert analyse(prod).ok and codes(prod, Severity.WARNING) == {"XF123"}
+    ha = mk(defaults={"environment": "prod"}, search={"sku": "standard", "replicas": 2})
+    assert codes(ha) == set()
+    assert codes(mk(search={"sku": "free"}, security=PUBLIC)) == set()
+    existing = mk(
+        defaults={"environment": "prod"},
+        search={"existingResourceId": f"{ARM}/Microsoft.Search/searchServices/s1"},
+    )
+    assert codes(existing) == set()
+
+
+def test_search_sku_uses_the_arm_spelling():
+    assert "XF102" in codes(mk(search={"sku": "storage_optimised_l1"}))
+
+
+def test_xf124_gateway_sku_in_private_mode(expect):
+    expect(mk(gateway=gateway(sku="Consumption"), observability={}), "XF124", "gateway.sku")
+    basic = mk(gateway=gateway(sku="BasicV2"), observability={})
+    assert analyse(basic).ok and codes(basic, Severity.WARNING) == {"XF124"}
+    assert codes(mk(gateway=gateway(sku="PremiumV2"), observability={})) == set()
+    assert codes(mk(gateway=gateway(sku="Consumption"), observability={}, security=PUBLIC)) == set()
+
+
+def test_xf125_azure_cache_for_redis_cannot_be_created(expect):
+    expect(
+        mk(redis={"enabled": True, "service": "azure-cache-for-redis", "sku": "standard"}),
+        "XF125",
+        "redis.service",
+    )
+    assert "XF125" not in codes(mk(redis={"enabled": False, "service": "azure-cache-for-redis"}))

@@ -860,8 +860,8 @@
             "standard",
             "standard2",
             "standard3",
-            "storage_optimised_l1",
-            "storage_optimised_l2"
+            "storage_optimized_l1",
+            "storage_optimized_l2"
           ],
           "default": "standard"
         },
@@ -1943,7 +1943,8 @@
             "Developer",
             "BasicV2",
             "StandardV2",
-            "Premium"
+            "Premium",
+            "PremiumV2"
           ],
           "default": "StandardV2"
         },

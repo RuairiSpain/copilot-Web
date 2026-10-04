@@ -185,6 +185,9 @@ def _model_policy(norm: NormalisedConfig) -> list[Diagnostic]:
     """Rules 16 and 113: declared deployments respect allowed/denied sets and policy."""
     out: list[Diagnostic] = []
     policy = norm.governance.model_policy if norm.governance and norm.governance.enabled else None
+    residency = (
+        norm.governance.data_residency if norm.governance and norm.governance.enabled else []
+    )
     for scope_id, scope in norm.scopes.items():
         effective = scope_models(norm, scope_id)
         for d in scope.models.deployments:
@@ -204,6 +207,15 @@ def _model_policy(norm: NormalisedConfig) -> list[Diagnostic]:
                         "XF016",
                         f"deployment '{d.name}' uses model '{d.model}' which is not in models.allowed",
                         path,
+                    )
+                )
+            if residency and d.sku.startswith("Global"):
+                out.append(
+                    error(
+                        "XF126",
+                        f"deployment '{d.name}' uses SKU '{d.sku}', which can process data outside "
+                        "governance.dataResidency; use a DataZone or regional SKU",
+                        f"{path}.sku",
                     )
                 )
             if policy is None:

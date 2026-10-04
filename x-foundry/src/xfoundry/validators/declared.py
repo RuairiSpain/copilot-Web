@@ -6,9 +6,11 @@ These rules need to know what the author wrote, so they run on the parsed model 
 
 from __future__ import annotations
 
+import ipaddress
 import re
 from collections.abc import Iterable
 from typing import Any
+from urllib.parse import urlparse
 
 from pydantic import BaseModel
 
@@ -513,6 +515,9 @@ def _explicit_names(cfg: XFoundry) -> list[Diagnostic]:
 
 def _locations(cfg: XFoundry) -> list[Diagnostic]:
     out: list[Diagnostic] = []
+    # Private networking (a delegated agent subnet) needs the VNet and every Foundry
+    # workspace resource in one region, so a mismatch is an error there.
+    region_diag = error if cfg.security.network.mode == "private" else warning
     located: list[tuple[str, str]] = []
 
     def add(location: str | None, path: str) -> None:
@@ -559,7 +564,7 @@ def _locations(cfg: XFoundry) -> list[Diagnostic]:
         for p in cfg.projects:
             if p.location and canonical(p.location) != canonical(account_location):
                 out.append(
-                    warning(
+                    region_diag(
                         "XF120",
                         f"project '{p.name}' asks for {p.location}, but the Foundry resource is created "
                         f"in {account_location}; one Foundry resource is deployed per configuration",
@@ -577,7 +582,7 @@ def _locations(cfg: XFoundry) -> list[Diagnostic]:
                 and canonical(hub_location) != canonical(location)
             ):
                 out.append(
-                    warning(
+                    region_diag(
                         "XF120",
                         f"project '{p.name}' ({location}) inherits shared resources from hub "
                         f"'{cfg.hub.name}' in {hub_location}; expect cross-region latency and data movement",
@@ -820,6 +825,186 @@ def _agent(agent: Agent, path: str) -> list[Diagnostic]:
     return []
 
 
+_PRIVATE_RANGES = tuple(
+    ipaddress.ip_network(n)
+    for n in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "fc00::/7")
+)
+_ALLOW_ALL = {"0.0.0.0/0", "::/0"}
+_SEARCH_LIMITS = {  # sku -> (max replicas, max partitions)
+    "free": (1, 1),
+    "basic": (3, 1),
+    "standard": (12, 12),
+    "standard2": (12, 12),
+    "standard3": (12, 12),
+    "storage_optimized_l1": (12, 12),
+    "storage_optimized_l2": (12, 12),
+}
+
+
+def _is_private_range(value: str) -> bool:
+    net = ipaddress.ip_network(value, strict=False)
+    return any(net.version == p.version and net.subnet_of(p) for p in _PRIVATE_RANGES)
+
+
+def _ip_rules(cfg: XFoundry) -> list[Diagnostic]:
+    """Service firewalls take public addresses only, and never allow the whole internet."""
+    out: list[Diagnostic] = []
+    net = cfg.security.network
+    lists = [(_p("security", "network", "allowedIps"), net.allowed_ips, net.mode == "restricted")]
+    if cfg.gateway is not None:
+        lists.append((_p("gateway", "security", "allowIps"), cfg.gateway.security.allow_ips, False))
+    for path, ranges, firewall in lists:
+        for value in ranges:
+            if ipaddress.ip_network(value, strict=False).prefixlen == 0:
+                out.append(
+                    error(
+                        "XF121", f"'{value}' allows the whole internet; list specific ranges", path
+                    )
+                )
+            elif firewall and _is_private_range(value):
+                out.append(
+                    error(
+                        "XF121",
+                        f"'{value}' is a private range; Azure service firewalls accept public "
+                        "addresses only (use private mode or an existing VNet for private traffic)",
+                        path,
+                    )
+                )
+    return out
+
+
+def _insecure_endpoints(cfg: XFoundry) -> list[Diagnostic]:
+    """Outbound integrations must use HTTPS and must not target link-local or loopback hosts."""
+    out: list[Diagnostic] = []
+
+    def check(url: str | None, path: str) -> None:
+        if not url:
+            return
+        parsed = urlparse(url)
+        if parsed.scheme != "https":
+            out.append(error("XF122", f"'{url}' must use https", path))
+        host = (parsed.hostname or "").lower()
+        try:
+            address = ipaddress.ip_address(host)
+            bad = address.is_link_local or address.is_loopback
+        except ValueError:
+            bad = host == "localhost" or host.endswith(".localhost")
+        if bad:
+            out.append(
+                error(
+                    "XF122",
+                    f"'{host}' is a loopback or link-local host (for example the instance metadata endpoint)",
+                    path,
+                )
+            )
+
+    for _, prefix, holder in _scopes(cfg):
+        for mcp in getattr(holder, "mcps", []):
+            check(mcp.endpoint, f"{prefix}.mcps[{mcp.name}].endpoint")
+        for connector in getattr(holder, "connectors", []):
+            check(connector.endpoint, f"{prefix}.connectors[{connector.name}].endpoint")
+        for kb in _kbs(holder):
+            for source in kb.sources:
+                if source.type == "web":
+                    check(
+                        source.url,
+                        f"{prefix}.iq.knowledgeBases[{kb.name}].sources[{source.name}].url",
+                    )
+    if cfg.managed_identity is not None:
+        for cred in cfg.managed_identity.federated_credentials:
+            check(
+                cred.issuer, _p("managedIdentity", f"federatedCredentials[{cred.name}]", "issuer")
+            )
+    return out
+
+
+def _search_sizing(cfg: XFoundry) -> list[Diagnostic]:
+    out: list[Diagnostic] = []
+    private = cfg.security.network.mode == "private"
+    prod = cfg.defaults.environment == "prod"
+    for _, prefix, holder in _scopes(cfg):
+        search = getattr(holder, "search", None)
+        if search is None or not search.enabled or search.existing_resource_id:
+            continue
+        path = f"{prefix}.search"
+        max_replicas, max_partitions = _SEARCH_LIMITS[search.sku]
+        if search.replicas > max_replicas:
+            out.append(
+                error(
+                    "XF123",
+                    f"sku '{search.sku}' allows at most {max_replicas} replica(s)",
+                    f"{path}.replicas",
+                )
+            )
+        if search.partitions > max_partitions:
+            out.append(
+                error(
+                    "XF123",
+                    f"sku '{search.sku}' allows at most {max_partitions} partition(s)",
+                    f"{path}.partitions",
+                )
+            )
+        if search.replicas * search.partitions > 36:
+            out.append(error("XF123", "replicas x partitions cannot exceed 36 search units", path))
+        if search.sku == "free" and private:
+            out.append(
+                error(
+                    "XF123",
+                    "the free tier does not support private endpoints; use basic or higher in private mode",
+                    f"{path}.sku",
+                )
+            )
+        if prod and search.sku != "free" and search.replicas < 2:
+            out.append(
+                warning(
+                    "XF123",
+                    "a single replica has no availability SLA; use 2 replicas for read and 3 for read/write in prod",
+                    f"{path}.replicas",
+                )
+            )
+    return out
+
+
+def _gateway_network(cfg: XFoundry) -> list[Diagnostic]:
+    gateway = cfg.gateway
+    if gateway is None or not gateway.enabled or cfg.security.network.mode != "private":
+        return []
+    path = _p("gateway", "sku")
+    if gateway.sku == "Consumption":
+        return [
+            error(
+                "XF124",
+                "the Consumption tier supports neither private endpoints nor VNet integration; use StandardV2 or higher in private mode",
+                path,
+            )
+        ]
+    if gateway.sku == "BasicV2":
+        return [
+            warning(
+                "XF124",
+                "BasicV2 has no outbound VNet integration, so it cannot reach private backends; use StandardV2 or higher",
+                path,
+            )
+        ]
+    return []
+
+
+def _redis_service(cfg: XFoundry) -> list[Diagnostic]:
+    redis = cfg.redis
+    if redis is None or not redis.enabled or redis.existing_resource_id:
+        return []
+    if redis.service == "azure-cache-for-redis":
+        return [
+            error(
+                "XF125",
+                "Azure Cache for Redis (Basic/Standard/Premium) can no longer be created "
+                "and retires on 2028-09-30; use service 'azure-managed-redis'",
+                _p("redis", "service"),
+            )
+        ]
+    return []
+
+
 def validate_declared(cfg: XFoundry) -> list[Diagnostic]:
     """Run every rule that needs the configuration exactly as authored."""
     rules = (
@@ -832,6 +1017,11 @@ def validate_declared(cfg: XFoundry) -> list[Diagnostic]:
         _explicit_names,
         _locations,
         _security,
+        _ip_rules,
+        _insecure_endpoints,
+        _search_sizing,
+        _gateway_network,
+        _redis_service,
         _runtime_rules,
         _events,
         _cron,
