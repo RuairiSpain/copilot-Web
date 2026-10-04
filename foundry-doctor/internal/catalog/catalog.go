@@ -105,9 +105,10 @@ type Implementation struct {
 
 // Tests lists the scenarios the implementation must cover.
 type Tests struct {
-	Positive []string `yaml:"positive"`
-	Negative []string `yaml:"negative"`
-	Skipped  []string `yaml:"skipped"`
+	Positive  []string `yaml:"positive"`
+	Negative  []string `yaml:"negative"`
+	Skipped   []string `yaml:"skipped"`
+	Uncertain []string `yaml:"uncertain"`
 }
 
 // Allowed enumerations.
