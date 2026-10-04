@@ -21,6 +21,7 @@ per platform.
 | 4 | Foundry IQ and Search engine | Not started |
 | 5 | Gateway and governance | Not started |
 | 6 | azd integration and developer experience | Not started |
+| 7 | Drift detection (optional, after first release) | Not started |
 
 Phase 1 turns an `azure.yaml` into a validated `DeploymentPlan`. Nothing is deployed.
 Decisions and ideas for later phases are recorded in `docs/roadmap.md`.
