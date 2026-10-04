@@ -28,6 +28,44 @@ recommendations):
 - Pseudo-Bicep for the medium and high groups is written here as reference material for `doctor`
   (Phase 6). It is unverified until it can be tested against Azure, and the comments must say so.
 
+- Tag every resource the extension creates with `x-foundry-env` (the environment) and
+  `x-foundry-id` (the graph node id). Drift detection (Phase 3) uses these to map Azure resources
+  to YAML entries exactly. This must be in place from the first generated template.
+
+## Phase 3: provisioning and state
+
+### `xfoundry drift` (Azure back to YAML)
+
+Compares what is deployed in Azure with an environment's YAML file and proposes updates. Drift
+between the YAML and Azure is separate from drift between environment files.
+
+- Scope: a resource group, a tag set (azd's `azd-env-name` is a natural default), or both. Lists
+  resources with Azure Resource Graph or ARM list calls, then reads each resource's properties.
+  Reader access is enough.
+- Reverse-maps each modelled resource type to `x-foundry` values, then classifies each finding:
+  - Matches the YAML: nothing to do.
+  - A native property differs: propose the Azure value for the YAML.
+  - A modelled resource exists in Azure but not in the YAML: propose adding it, or referencing it
+    as an existing resource.
+  - An Azure resource has no schema equivalent (Azure Firewall, extra storage accounts, Front
+    Door, unmanaged VMs): add a comment such as
+    `# Non-native dependency in Azure: Microsoft.Network/azureFirewalls/fw-hub`.
+  - Declared in the YAML but missing in Azure: report as not deployed or deleted.
+- Output: a drift report and an updated copy of the YAML. The file is never edited in place by
+  default. `--apply` writes to the file after the user confirms each change.
+- Matching uses the `x-foundry-id` tags from Phase 2. Resources without them (created earlier or
+  by other tools) fall back to matching by type and name; anything ambiguous goes to the
+  non-native comments.
+- Values equal to what the normaliser would derive are not written to the YAML as explicit
+  settings, so the file does not fill with noise. Reuse the normaliser to tell them apart.
+- Secrets are never read or written; references only.
+- Data-plane content (agents, toolboxes, knowledge bases, indexes, evaluation datasets) is not an
+  ARM resource and needs Foundry and Search data-plane calls. Cover it here for Foundry and in
+  Phase 4 for Search and IQ.
+- Related: validation rule XF025 (needs deployed state) lands in this phase.
+- Testing: recorded API fixtures for unit tests, and a test subscription for real validation.
+  This cannot be exercised in the development sandbox, which has no Azure access.
+
 ## Phase 5: gateway and governance
 
 - Generate the governance-related low-effort items: Azure Policy assignments, Defender plans,
@@ -73,6 +111,8 @@ does not need deployed state.
 - Interactive by default: it walks through each top-level section with what will be copied and
   lets the user include, exclude or edit. `--yes` accepts the defaults; `--include` and
   `--exclude` give the same control in scripts.
+- Optional source: promote from what is deployed (using the drift reverse-mapping from Phase 3)
+  rather than from a possibly stale YAML file.
 - Decision: each environment has its own file (for example `azure.dev.yaml`, `azure.test.yaml`,
   `azure.prod.yaml`). There is no `environments` overlay in the schema, so no schema change or
   merge rule is needed. The cost is that files can drift apart after promotion; Phase 6 should
