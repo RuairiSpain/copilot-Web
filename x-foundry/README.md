@@ -23,6 +23,7 @@ per platform.
 | 6 | azd integration and developer experience | Not started |
 
 Phase 1 turns an `azure.yaml` into a validated `DeploymentPlan`. Nothing is deployed.
+Decisions and ideas for later phases are recorded in `docs/roadmap.md`.
 
 ## Quick start
 
