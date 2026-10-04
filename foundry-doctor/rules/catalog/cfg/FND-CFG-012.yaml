@@ -2,5 +2,80 @@ id: FND-CFG-012
 version: 1
 group: CFG
 title: "Azure region values are valid"
-status: proposed
+description: >-
+  Azure region values supplied to the project (AZURE_LOCATION in the azd environment, location parameters in
+  parameter files, and location fields in Bicep/ARM) must be valid Azure location names available to the
+  subscription. azure.yaml itself has no location field; the location comes from the azd environment and
+  infrastructure parameters.
+status: product-opinion
 phases: ["1"]
+inputs: ["azd-env", "bicep-arm", "control-plane"]
+basis: ["operations", "opinion"]
+category: nice-to-have
+pillar: reliability
+severity:
+  dev: warning
+  test: error
+  prod: error
+compatibility:
+  azd: ">=1.27.1"
+  extensions: {}
+  apiVersions: ["2022-12-01"]
+evidence:
+  description: >-
+    Offline, check that the value is a non-empty, lower-case, space-free location name in the form azd stores
+    (for example eastus2) and that it is consistent across AZURE_LOCATION and parameter files. When a
+    control-plane capability is available, compare it to the Subscriptions_ListLocations result (API
+    2022-12-01) for the subscription and report values not in the list. Without that capability the
+    list membership check is skipped, never passed. Values with ${VAR} are not evaluated.
+  confidence: likely
+recommendation: >-
+  Use a location name returned by az account list-locations for your subscription (the name field, such as
+  eastus2), and set it with azd env set AZURE_LOCATION. Check model and resource availability for the region
+  before provisioning.
+fix: |
+  azd env set AZURE_LOCATION eastus2
+sources:
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/subscriptions/stable/2022-12-01/subscriptions.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/resources/resource-manager/Microsoft.Resources/subscriptions/stable/2022-12-01/subscriptions.json
+    note: Subscriptions_ListLocations - all locations available for resource providers; each provider may support a subset.
+  - url: https://learn.microsoft.com/azure/developer/azure-developer-cli/manage-environment-variables
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azd-docs/articles/azure-developer-cli/manage-environment-variables.md
+    note: AZURE_LOCATION is the Azure region where resources are deployed, set during first provisioning.
+overlap:
+  decision: adapt
+  coverage: partial
+  rationale: >-
+    Azure Policy Allowed locations (e56962a6-4747-49cd-b67b-bf8b01975c4c) and PSRule Azure.Resource.AllowedRegions
+    enforce an organisational allow list, and Azure.Template.ResourceLocation/UseLocationParameter check how a
+    template sets location; none validates that a value is a real location for the subscription, nor reads
+    AZURE_LOCATION from the azd environment. Foundry Doctor reuses the allow-list idea only as a
+    separate organisational control and adds validity and cross-file consistency.
+  psrule: [Azure.Resource.AllowedRegions, Azure.Template.ResourceLocation, Azure.Template.UseLocationParameter]
+  azurePolicy: [e56962a6-4747-49cd-b67b-bf8b01975c4c, e765b5de-1225-4ba3-bd56-1ac6695af988]
+  defender: []
+  advisor: []
+  bicepLinter: [no-hardcoded-location, explicit-values-for-loc-params]
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/cfg
+testability: >-
+  Format and consistency checks are offline. List membership needs a control-plane capability and is skipped without it.
+tests:
+  positive:
+    - location-with-space-and-capitals
+    - location-not-in-subscription-list
+    - azure-location-differs-from-parameter-file
+  negative:
+    - lowercase-region-in-subscription-list
+  skipped:
+    - control-plane-unavailable
+    - location-is-env-reference
+notes: >-
+  Product opinion: no source read states that a malformed or unlisted location fails deployment, so no platform basis
+  is claimed. Unverified: that the azd environment stores the short name form (the docs example shows eastus); the
+  rule does not accept display names such as East US as an inferred error and reports them as warnings.
+  Region availability of specific models or Foundry features is not covered and is not inferred.

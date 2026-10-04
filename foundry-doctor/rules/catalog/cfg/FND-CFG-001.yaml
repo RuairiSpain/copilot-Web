@@ -81,7 +81,7 @@ overlap:
   bicepLinter: []
   checkov: []
 implementation:
-  owner: adapter
+  owner: native
   package: internal/rules/cfg
 testability: >-
   Fully offline. Golden fixtures for each schema constraint; schema files vendored per pinned

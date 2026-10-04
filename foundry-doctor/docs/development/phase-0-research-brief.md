@@ -56,6 +56,8 @@ Decision guide: `reuse` = the existing tool already gives equivalent evidence, F
 `native` = no equivalent, or Foundry-specific correlation is the value; `drop` = low value or unverifiable.
 Do not copy PSRule implementation code.
 
+Implementation owner: `native` for `native` and `adapt` (our code); an adapter/tool owner (`psrule`, `azure-policy`, `defender`, `advisor`, `bicep`, `checkov`, `adapter`) only for `reuse` and `wrap`.
+
 ## Fragment
 
 Write `docs/overlap/<your-groups>.md` (lowercase, e.g. `cfg-env.md`) with: a table of every rule in your groups

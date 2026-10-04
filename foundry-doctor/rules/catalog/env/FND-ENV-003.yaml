@@ -2,5 +2,77 @@ id: FND-ENV-003
 version: 1
 group: ENV
 title: "Prod does not reference non-prod resource IDs"
-status: proposed
+description: >-
+  A production environment's configuration should not point at resources that belong to a non-production environment of
+  the same project: resource IDs, endpoints or names that match another environment's resource group, project endpoint or
+  provisioned resources (azure.ai.project endpoint, connection targets, ARM IDs in parameters).
+status: product-opinion
 phases: ["1"]
+inputs: ["azd-env", "azure.yaml", "bicep-arm"]
+basis: ["opinion"]
+category: must-have
+pillar: reliability
+severity:
+  dev: info
+  test: warning
+  prod: error
+compatibility:
+  azd: ">=1.27.1"
+  extensions:
+    azure.ai.projects: ">=1.0.0-beta.4"
+  apiVersions: []
+evidence:
+  description: >-
+    Take the environment marked prod in Foundry Doctor configuration (the azd environment name is not assumed to indicate
+    tier). Extract ARM resource IDs, endpoint host names and resource group names from its .env values, azure.yaml
+    after substitution for that environment, and parameter files. Report any that reference the resource group, subscription
+    and resource name, or endpoint host of an environment configured as non-prod. Matching is exact on normalised IDs;
+    no naming heuristics are applied.
+  confidence: certain
+recommendation: >-
+  Point the production environment at production resources, or provision the dependency in production. Re-run provisioning
+  for the production environment so its outputs are written to its own .env.
+fix: |
+  # .azure/prod/.env
+  AZURE_AI_PROJECT_ENDPOINT=https://prod-account.services.ai.azure.com/api/projects/prod-project
+sources:
+  - url: https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azd-docs/articles/azure-developer-cli/environments-overview.md
+    note: Environments are isolated configurations for development, testing and production (context only).
+  - url: https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/extensions/azure.ai.projects/schemas/azure.ai.project.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.projects/schemas/azure.ai.project.json
+    note: azure.ai.project endpoint connects to an existing project; may contain ${VAR}.
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    PSRule for Azure, Azure Policy and Defender judge a resource on its own; none can tell that a prod environment points at
+    a sibling dev environment. The environment tier mapping and cross-file correlation is the value.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/env
+testability: >-
+  Offline when environment tiers are configured and the sibling environments' .env files are visible; otherwise skipped
+  with the missing capability.
+tests:
+  positive:
+    - prod-project-endpoint-is-dev-project
+    - prod-parameter-references-dev-resource-group-id
+  negative:
+    - prod-references-prod-resources
+    - prod-references-shared-explicitly-allowed
+  skipped:
+    - environment-tiers-not-configured
+    - sibling-environments-not-visible
+notes: >-
+  Product opinion: no source states a prohibition. Tier mapping is Foundry Doctor configuration (profiles), which does not
+  exist in azd. Resources that a prod environment legitimately shares with non-prod (central registries, shared search)
+  need an allow entry with a reason and expiry.

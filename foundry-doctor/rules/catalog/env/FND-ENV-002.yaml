@@ -2,5 +2,69 @@ id: FND-ENV-002
 version: 1
 group: ENV
 title: "Environment-bound names/IDs/rules were not copied unchanged"
-status: proposed
+description: >-
+  Values that identify an environment's own resources (resource group, subscription, account and project names or
+  endpoints, Key Vault and search service names, resource IDs, RAI policy IDs, connection targets) should differ
+  between environments unless sharing is intended. Identical values across a dev and a prod environment usually mean
+  the environment file or parameter file was copied without edits.
+status: product-opinion
 phases: ["1"]
+inputs: ["azd-env", "azure.yaml", "bicep-arm"]
+basis: ["opinion"]
+category: nice-to-have
+pillar: operations
+severity:
+  dev: info
+  test: warning
+  prod: warning
+compatibility:
+  azd: ">=1.27.1"
+  extensions: {}
+  apiVersions: []
+evidence:
+  description: >-
+    Compare per-environment .env files and per-environment parameter files by key. For keys classified as
+    environment-bound (ARM resource IDs, *.services.ai.azure.com and other service endpoints, keys ending in _NAME,
+    _ENDPOINT, _ID, _RESOURCE_GROUP, AZURE_SUBSCRIPTION_ID), report keys whose values are byte-equal in two
+    environments that have different AZURE_ENV_NAME. Values are never printed; the finding carries the key and a
+    salted hash fingerprint.
+  confidence: likely
+recommendation: >-
+  Review each reported key and give the environment its own value, or suppress the finding with a reason and
+  an expiry where the shared value is intentional. Prefer deriving names from AZURE_ENV_NAME.
+fix: |
+  # .azure/prod/.env
+  AZURE_RESOURCE_GROUP=rg-myapp-prod
+  AZURE_AI_PROJECT_ENDPOINT=https://prod-account.services.ai.azure.com/api/projects/prod-project
+sources:
+  - url: https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azd-docs/articles/azure-developer-cli/environments-overview.md
+    note: Environment isolation and the contents of .azure/<env>/.env (context only; no source states that copied values are an error).
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    No external tool compares azd environments; the value is the cross-environment correlation.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/env
+testability: Offline when more than one environment is visible; skipped otherwise.
+tests:
+  positive:
+    - identical-project-endpoint-in-dev-and-prod
+    - identical-key-vault-name-across-environments
+  negative:
+    - environment-specific-values
+    - shared-value-suppressed-with-reason
+  skipped:
+    - single-environment-visible
+notes: >-
+  Product opinion. The classification of keys as environment-bound is a heuristic of Foundry Doctor, not a documented
+  azd property, which is why confidence is likely and severity never exceeds warning.

@@ -2,5 +2,85 @@ id: FND-CFG-010
 version: 1
 group: CFG
 title: "Model versions pinned in stricter profiles"
-status: proposed
+description: >-
+  Model deployments should state an explicit model version and an explicit version upgrade policy so that a
+  default-version change does not alter production behaviour unnoticed. azure.yaml deployments require a
+  model.version (schema-enforced); Bicep or ARM deployments carry versionUpgradeOption, where an absent value
+  behaves as OnceCurrentVersionExpired and OnceNewDefaultVersionAvailable upgrades to a new default within two
+  weeks.
+status: product-opinion
 phases: ["later"]
+inputs: ["azure.yaml", "bicep-arm"]
+basis: ["reliability", "opinion"]
+category: nice-to-have
+pillar: reliability
+severity:
+  dev: info
+  test: warning
+  prod: warning
+compatibility:
+  azd: ">=1.27.1"
+  extensions:
+    azure.ai.projects: ">=1.0.0-beta.4"
+  apiVersions: []
+evidence:
+  description: >-
+    Report deployments in azure.yaml whose model.version is empty, a placeholder or a literal such as latest,
+    and Bicep/ARM Microsoft.CognitiveServices deployments whose model.version is missing or whose
+    versionUpgradeOption is OnceNewDefaultVersionAvailable or absent, in profiles where the rule is enabled.
+    Deployments that use model router or other auto-managed models are marked uncertain.
+  confidence: likely
+recommendation: >-
+  Pin model.version, and in Bicep set versionUpgradeOption explicitly (NoAutoUpgrade pins until retirement,
+  OnceCurrentVersionExpired upgrades only at retirement). Track retirement dates so a pinned version is moved
+  before it stops working.
+fix: |
+  services:
+    ai-project:
+      host: azure.ai.project
+      deployments:
+        - name: gpt-5.4-mini
+          model: {format: OpenAI, name: gpt-5.4-mini, version: "2026-03-17"}
+          sku: {name: GlobalStandard, capacity: 10}
+sources:
+  - url: https://learn.microsoft.com/azure/foundry/openai/how-to/working-with-models
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/openai/includes/how-to-working-with-models-content.md
+    note: Version upgrade options table; null is equivalent to OnceCurrentVersionExpired; NoAutoUpgrade stops working at retirement.
+  - url: https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/extensions/azure.ai.projects/schemas/azure.ai.project.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.projects/schemas/azure.ai.project.json
+    note: Deployment requires name, model {format, name, version} and sku; additionalProperties false (no upgrade policy field).
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    PSRule for Azure has no Foundry model-version rule (its AI rules are DisableLocalAuth, FoundryNaming,
+    ManagedIdentity, PrivateEndpoints, PublicAccess). Retirement awareness is runtime/API data and belongs to the
+    later lifecycle rules; this rule is the static configuration half.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/cfg
+testability: Offline for azure.yaml and compiled Bicep/ARM. Retirement dates are not checked here.
+tests:
+  positive:
+    - deployment-version-latest
+    - bicep-deployment-auto-update-default
+    - bicep-deployment-no-upgrade-option
+  negative:
+    - deployment-explicit-version
+    - bicep-no-auto-upgrade
+  skipped:
+    - model-router-deployment
+    - deployments-in-ref-file-unreadable
+notes: >-
+  Product opinion on when to require pinning; the property facts are sourced. Unverified: the API version in which
+  versionUpgradeOption is available (the property is documented in the Learn include; the stable
+  Microsoft.CognitiveServices spec was not searched for it) and whether azd azure.ai.project can set it (the schema
+  has no such field). The Learn page itself recommends auto-update for early testing, so dev stays info.

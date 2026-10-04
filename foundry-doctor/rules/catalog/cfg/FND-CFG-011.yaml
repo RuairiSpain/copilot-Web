@@ -2,5 +2,92 @@ id: FND-CFG-011
 version: 1
 group: CFG
 title: "Preview/retired fields are version-aware"
-status: proposed
+description: >-
+  azure.yaml uses preview schemas that change between extension betas. The rule reports fields and hosts that
+  the sources mark as deprecated, replaced or compatibility-only (service-level config for the agent,
+  microsoft.foundry host, kind prompt-voice alias, the two-file agent.manifest.yaml/agent.yaml model, ignored
+  hosted-agent fields displayName/inputSchema/outputSchema) and reports when requiredVersions or the installed
+  extensions are older than the version that introduced the construct used.
+status: verified
 phases: ["1"]
+inputs: ["azure.yaml"]
+basis: ["operations"]
+category: must-have
+pillar: operations
+severity:
+  dev: warning
+  test: warning
+  prod: error
+compatibility:
+  azd: ">=1.27.1"
+  extensions:
+    azure.ai.agents: ">=1.0.0-beta.8"
+    azure.ai.projects: ">=1.0.0-beta.4"
+  apiVersions: []
+evidence:
+  description: >-
+    Match the document against a table of constructs, each with source and the extension version range
+    verified: config under an azure.ai.agent service (deprecated in the v1.0 schema; env moved to service level),
+    host microsoft.foundry (legacy compatibility), kind prompt-voice (alias of voice), displayName/inputSchema/
+    outputSchema on hosted agents (accepted but not used by the create request), env keys with FOUNDRY_ or AGENT_
+    prefixes (reserved). Compare requiredVersions against the table minimums. Unsupported shapes (modelType
+    hosted_agent, targetAgent) are errors under FND-CFG-001 and are not duplicated here.
+  confidence: certain
+recommendation: >-
+  Move to the unified service-level shape: put env on the agent service, use kind voice, use host
+  azure.ai.project instead of microsoft.foundry, drop fields the hosted-agent create request ignores, and declare
+  requiredVersions for the extensions.
+fix: |
+  requiredVersions:
+    extensions:
+      azure.ai.agents: ">=1.0.0-beta.8"
+      azure.ai.projects: ">=1.0.0-beta.4"
+  services:
+    my-agent:
+      host: azure.ai.agent
+      env:
+        MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME: ${MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME}
+sources:
+  - url: https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/azure-yaml-reference.md
+    note: Extension compatibility, legacy configuration migration, metadata and schema limitations, reserved prefixes, preview banner.
+  - url: https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-dev/schemas/v1.0/azure.yaml.json
+    note: config deprecated on azure.ai.agent; microsoft.foundry legacy host comment.
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    Schema lifecycle awareness of the azure.ai.* preview surface exists only in the azd schemas and docs; JSON
+    Schema validation (FND-CFG-001) does not flag deprecated-but-valid constructs. No other tool covers it.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/cfg
+testability: Offline. The construct table is versioned data refreshed on each extension release.
+tests:
+  positive:
+    - legacy-config-env
+    - microsoft-foundry-host
+    - prompt-voice-kind
+    - env-declares-foundry-endpoint
+    - requiredversions-below-minimum
+  negative:
+    - unified-service-level-env
+    - kind-voice
+  skipped:
+    - installed-extension-versions-unavailable
+notes: >-
+  Verified against azure-dev schemas v1.0 and extension schemas in the clone (azure.ai.agents 1.0.0-beta.18,
+  azure.ai.projects 1.0.0-beta.13); the Learn reference page is dated 09/17/2026. Unverified: the exact extension
+  version in which each construct was introduced or retired (no per-field changelog was read), so version-introduced
+  checks beyond the documented minimums (azure.ai.agents beta.8, azure.ai.projects beta.4, azd 1.27.1, voice azd 1.32.0)
+  stay out of the table until sourced. Mixed severities (deprecated versus ignored fields) are collapsed into one
+  per-profile severity; a per-finding downgrade for deprecated-but-working constructs is an implementation choice.
