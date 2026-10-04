@@ -2,5 +2,105 @@ id: FND-DEP-001
 version: 1
 group: DEP
 title: "Signed into matching tenant/subscription"
-status: proposed
+description: >-
+  The azd environment names a subscription (AZURE_SUBSCRIPTION_ID) and a tenant (AZURE_TENANT_ID). The
+  signed-in identity must be able to see that subscription, the subscription must belong to that tenant,
+  and the subscription must be in a usable state. A token issued by a tenant that cannot manage the
+  subscription cannot deploy to it.
+status: verified
 phases: ["2"]
+inputs: ["azd-env", "control-plane"]
+basis: ["platform"]
+category: must-have
+pillar: operations
+severity:
+  dev: error
+  test: error
+  prod: error
+compatibility:
+  azd: ">=1.27.1"
+  extensions: {}
+  apiVersions: ["Microsoft.Resources subscriptions 2022-12-01"]
+evidence:
+  description: >-
+    Read-only ARM calls, both GET, api-version 2022-12-01 (Microsoft.Resources/subscriptions spec):
+    (1) GET /subscriptions/{subscriptionId} returns Subscription.tenantId, Subscription.state and
+    displayName; (2) GET /tenants lists the tenants the caller can see (TenantIdDescription.tenantId).
+    Inputs: AZURE_SUBSCRIPTION_ID and AZURE_TENANT_ID from the selected azd environment (both documented as
+    set by azd during provisioning). Violations (certain): Subscription.tenantId differs from
+    AZURE_TENANT_ID; Subscription.state is not Enabled (enum Enabled, Warned, PastDue, Disabled, Deleted;
+    what each non-Enabled state blocks is not documented, so Warned and PastDue are reported as warnings
+    in the finding text, not as a separate severity). Uncertain, never passed: the subscription GET returns
+    a non-success status (the caller may lack access, or the subscription may not exist; the response
+    cannot tell these apart in the sources read) and AZURE_TENANT_ID is unset. The signed-in account is
+    read with azd's own status command (azd auth login --check-status); token contents are never read or
+    emitted. Role family: any Azure RBAC role on the subscription that includes
+    Microsoft.Resources/subscriptions/read, for example Reader (Reader grants */read). Reader suffices.
+    The answer is definitive for a tenant mismatch and for a disabled or deleted state, and only
+    uncertain for an inaccessible subscription.
+  confidence: certain
+recommendation: >-
+  Sign in to the tenant that owns the subscription (azd auth login --tenant-id <tenant-id>), then confirm
+  AZURE_SUBSCRIPTION_ID and AZURE_TENANT_ID in the selected azd environment (azd env get-values). If the
+  subscription is in another tenant, create a separate azd environment for that tenant.
+fix: |
+  azd auth login --tenant-id <tenant-id>
+  azd env set AZURE_TENANT_ID <tenant-id>
+  azd env set AZURE_SUBSCRIPTION_ID <subscription-id>
+sources:
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/subscriptions/stable/2022-12-01/subscriptions.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/resources/resource-manager/Microsoft.Resources/subscriptions/stable/2022-12-01/subscriptions.json
+    note: "GET /subscriptions/{subscriptionId} (Subscriptions_Get) and GET /tenants (Tenants_List); Subscription.tenantId and state enum Enabled, Warned, PastDue, Disabled, Deleted."
+  - url: https://learn.microsoft.com/azure/azure-resource-manager/management/authenticate-multi-tenant
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-docs/articles/azure-resource-manager/management/authenticate-multi-tenant.md (ms.date 02/27/2026)
+    note: "Resource Manager runs the request under the primary token identity; the primary token must be from a tenant that can manage the subscription."
+  - url: https://learn.microsoft.com/azure/developer/azure-developer-cli/manage-environment-variables
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azd-docs/articles/azure-developer-cli/manage-environment-variables.md (ms.date 08/06/2025)
+    note: "AZURE_SUBSCRIPTION_ID and AZURE_TENANT_ID are set in the azd environment during provisioning."
+  - url: https://learn.microsoft.com/azure/developer/azure-developer-cli/reference
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azd-docs/articles/azure-developer-cli/reference.md (ms.date 09/30/2026)
+    note: "azd auth login --check-status and --tenant-id."
+  - url: https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/general
+    lastVerified: "2026-10-04"
+    verifiedVia: https://raw.githubusercontent.com/MicrosoftDocs/azure-docs/main/articles/role-based-access-control/built-in-roles/general.md (ms.date 07/01/2026)
+    note: "Reader role definition: actions */read."
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    No PSRule, Azure Policy, Defender for Cloud, Advisor, Bicep linter or Checkov rule compares an azd
+    environment with the subscription's tenant; they analyse resources, not the deployment session. azd
+    itself prompts for a subscription, but no azd document read states that it validates the tenant match.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/dep
+testability: >-
+  Offline with recorded ARM responses for subscriptions and tenants plus a fake azd environment reader.
+  No live Azure needed for unit tests.
+tests:
+  positive:
+    - env-tenant-differs-from-subscription-tenant
+    - subscription-state-disabled
+    - subscription-state-deleted
+  negative:
+    - tenant-and-subscription-match-state-enabled
+  skipped:
+    - azd-environment-not-selected
+    - no-azure-credential-available
+    - azure-tenant-id-unset
+  uncertain:
+    - subscription-get-returns-non-success
+notes: >-
+  The sources do not enumerate the error codes returned for a wrong-tenant token, so none is named. The
+  uncertain branch exists because a 403/404 style failure is ambiguous. azd itself does not document a
+  tenant validation step.

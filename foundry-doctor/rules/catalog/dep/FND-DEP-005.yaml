@@ -2,5 +2,115 @@ id: FND-DEP-005
 version: 1
 group: DEP
 title: "Quota covers requested capacity"
-status: proposed
+description: >-
+  The capacity requested by each model deployment (sku.capacity) must fit within the subscription's remaining
+  quota for that model and deployment type in the target region, and the region must report deployable
+  capacity for it. Capacity pressure that is not a quota problem (temporary rate-limit adjustments, 429s)
+  is a runtime concern outside this rule.
+status: verified
 phases: ["2"]
+inputs: ["azure.yaml", "bicep-arm", "azd-env", "control-plane"]
+basis: ["operations"]
+category: must-have
+pillar: reliability
+severity:
+  dev: warning
+  test: error
+  prod: error
+compatibility:
+  azd: ">=1.27.1"
+  extensions:
+    azure.ai.projects: ">=1.0.0-beta.4"
+  apiVersions: ["Microsoft.CognitiveServices 2026-09-01", "Microsoft.CognitiveServices 2024-10-01 (Learn examples)"]
+evidence:
+  description: >-
+    Two read-only GET calls (api-version 2026-09-01 in the spec; the Learn examples use 2024-10-01):
+    (1) GET /subscriptions/{subscriptionId}/providers/Microsoft.CognitiveServices/locations/{location}/usages
+    (Usages_List, paged). Each Usage has name.value in the documented format {Provider}.{DeploymentType}.{Model},
+    currentValue, limit, unit and status (Included, Blocked, InOverage, Unknown). (2) GET
+    /subscriptions/{subscriptionId}/providers/Microsoft.CognitiveServices/modelCapacities with query
+    parameters modelFormat, modelName and modelVersion (ModelCapacities_List; a per-location variant exists
+    under locations/{location}/modelCapacities). Items carry location and properties.{model, skuName,
+    availableCapacity, availableFinetuneCapacity}. Computation: for each requested deployment, remaining =
+    limit - currentValue for the matching usage line, and the sum of requested capacity per usage line
+    across the deployment set must not exceed remaining; availableCapacity for the matching skuName at the
+    location must be at least the requested capacity. A deployment that already exists with the same name
+    is already counted in currentValue, so its current capacity is added back before comparison, using the
+    what-if or deployments list result (a deployment not in those inputs makes the check uncertain).
+    The unit of sku.capacity against the usage unit is not documented for every deployment type; the check
+    is only run for lines whose unit and scale are explicitly known to the rule's data, otherwise uncertain.
+    Role family: Microsoft.CognitiveServices/locations/usages/read and
+    Microsoft.CognitiveServices/(locations/)modelCapacities/read. Cognitive Services Usages Reader at
+    subscription scope is the documented least-privilege role; Reader also includes usages/read (*/read).
+    The role must be assigned at subscription scope; resource group or resource scope does not authorize the
+    Usages API. Reader suffices. The answer is definitive for the comparison when the unit mapping is known
+    and no existing deployment is being updated, otherwise uncertain.
+  confidence: likely
+recommendation: >-
+  Reduce sku.capacity, move the deployment to a region or deployment type with remaining quota, free quota
+  from unused deployments, or request a quota increase before provisioning.
+fix: |
+  # lower the requested capacity in the model deployment or choose another location
+  deployments:
+    - name: chat
+      model: { format: OpenAI, name: gpt-4o, version: "2024-08-06" }
+      sku: { name: GlobalStandard, capacity: 50 }
+sources:
+  - url: https://learn.microsoft.com/azure/foundry/openai/how-to/quota
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/openai/includes/quota-2.md (included by openai/how-to/quota.md, ms.date 05/04/2026), section "Programmatically check quota and capacity"
+    note: "Usages API (subscription and location) and Model Capacities API (subscription, model name/version/format); both also return retired models; name.value format; Cognitive Services Usages Reader at subscription scope."
+  - url: https://learn.microsoft.com/azure/foundry/concepts/rbac-foundry
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/concepts/rbac-foundry.md (ms.date 09/16/2026), section "Access quota and usage information"
+    note: "Cognitive Services Usages Reader at subscription scope is the least-privilege role; resource group, Foundry resource and project role assignments do not authorize subscription-level quota information."
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    note: "Usages_List, LocationBasedModelCapacities_List, ModelCapacities_List GET paths; Usage and ModelSkuCapacityProperties schemas; QuotaUsageStatus enum."
+  - url: https://learn.microsoft.com/azure/role-based-access-control/permissions/ai-machine-learning
+    lastVerified: "2026-10-04"
+    verifiedVia: https://raw.githubusercontent.com/MicrosoftDocs/azure-docs/main/articles/role-based-access-control/permissions/ai-machine-learning.md
+    note: "Microsoft.CognitiveServices/locations/usages/read, locations/modelCapacities/read and modelCapacities/read."
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    No PSRule, Policy, Defender or Checkov rule compares requested model capacity with live quota. The only
+    equivalent is the Foundry portal quota page and the two APIs, which are the evidence source. Advisor
+    quota recommendations were not found in the sources read (the advisor clone was not available).
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/dep
+testability: >-
+  Offline with recorded usages and modelCapacities responses and deployment fixtures. The remaining-quota
+  arithmetic, paging and add-back of existing deployments are pure logic.
+tests:
+  positive:
+    - requested-capacity-exceeds-remaining-quota
+    - two-deployments-share-one-usage-line-and-exceed-it
+    - available-capacity-below-requested-at-location
+    - usage-status-blocked
+  negative:
+    - requested-capacity-within-remaining-quota
+    - update-of-existing-deployment-adds-back-current-capacity
+  skipped:
+    - no-azure-credential-available
+    - usages-api-forbidden-caller-lacks-subscription-scope-role
+    - location-unresolved-in-azd-environment
+  uncertain:
+    - capacity-unit-mapping-unknown-for-deployment-type
+    - existing-deployment-capacity-unknown
+notes: >-
+  Severity dev is a warning because a sandbox failure is cheap to retry; this is a product choice, not a
+  documented platform behaviour, so the basis is operations, not platform. The sources read do not state
+  that a deployment fails with a specific error when quota is short, so the rule does not name an error code.
+  The Foundry docs describe 429 capacity pressure as distinct from quota; this rule does not model it.
+  Quota units differ by deployment type; only the documented example (thousands of tokens per minute) is
+  asserted.

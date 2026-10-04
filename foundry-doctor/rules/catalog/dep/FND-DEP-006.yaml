@@ -2,5 +2,116 @@ id: FND-DEP-006
 version: 1
 group: DEP
 title: "No blocking soft-deleted resource/name"
-status: proposed
+description: >-
+  A resource name planned for a new deployment must not be held by a soft-deleted Foundry (Cognitive
+  Services) account or API Management service. Foundry documents that after deletion the same name cannot be
+  reused for 48 hours unless the resource is purged, and API Management documents the same 48-hour
+  soft-delete period during which the name cannot be reused. Soft-deleted Key Vault vaults are reported when
+  the vault name matches, with lower confidence.
+status: verified
 phases: ["2"]
+inputs: ["bicep-arm", "azd-env", "control-plane"]
+basis: ["platform"]
+category: must-have
+pillar: reliability
+severity:
+  dev: error
+  test: error
+  prod: error
+compatibility:
+  azd: ">=1.27.1"
+  extensions: {}
+  apiVersions: ["Microsoft.CognitiveServices 2026-09-01", "Microsoft.ApiManagement 2024-05-01", "Microsoft.KeyVault 2026-05-15"]
+evidence:
+  description: >-
+    Read-only GET calls, subscription-wide lists then name match: Cognitive Services
+    GET /subscriptions/{subscriptionId}/providers/Microsoft.CognitiveServices/deletedAccounts api-version
+    2026-09-01 (DeletedAccounts_List; properties include deletionDate and scheduledPurgeDate; the Learn
+    article shows api-version 2021-04-30); API Management GET /subscriptions/{subscriptionId}/providers/Microsoft.ApiManagement/deletedservices
+    api-version 2024-05-01 (DeletedServices_ListBySubscription; fields deletionDate and scheduledPurgeDate per
+    the Learn article); Key Vault GET /subscriptions/{subscriptionId}/providers/Microsoft.KeyVault/deletedVaults
+    api-version 2026-05-15 (Vaults_ListDeleted; deletionDate, scheduledPurgeDate, vaultId, location). Planned
+    names come from the Bicep snapshot (accounts, service, vaults). Violation: a planned resource name equals
+    a deleted entry's name in the same subscription, matched case-insensitively, for Cognitive Services
+    additionally the same resource group and location (the purge path is keyed by location, resource group
+    and name). Cognitive Services and API Management matches are certain (documented name reuse block);
+    Key Vault matches are likely, because the Learn Key Vault soft-delete page could not be read here and the
+    name-reservation behaviour is taken from the list API only. A match is waived when the template
+    explicitly restores the account (the documented restore property is set) and for a redeployment of a
+    live resource with the same id. Foundry Doctor never recovers or purges: purge is a DELETE and recover is
+    a PUT. Role family: Microsoft.CognitiveServices/deletedAccounts/read, Microsoft.ApiManagement/deletedservices/read,
+    Microsoft.KeyVault/deletedVaults/read, each included in Reader (*/read). Reader suffices for the
+    check. Purging needs delete rights, which the docs say must be assigned at subscription scope.
+    The answer is definitive for list membership.
+  confidence: certain
+recommendation: >-
+  Recover the soft-deleted resource if you still need it, or purge it (needs the delete permission at
+  subscription scope) before provisioning, or choose a different name. Purging permanently deletes data.
+fix: |
+  # purge a soft-deleted Foundry account so the name can be reused (permanently deletes the account)
+  az resource delete --ids /subscriptions/<sub-id>/providers/Microsoft.CognitiveServices/locations/<region>/resourceGroups/<rg>/deletedAccounts/<name>
+sources:
+  - url: https://learn.microsoft.com/azure/ai-services/recover-purge-resources
+    lastVerified: "2026-10-04"
+    verifiedVia: https://raw.githubusercontent.com/MicrosoftDocs/azure-ai-docs/main/articles/ai-services/recover-purge-resources.md (ms.date 10/02/2025)
+    note: "Once deleted, you can't create another resource with the same name for 48 hours unless purged; recoverable within 48 hours; deletedAccounts list; purge needs deletedAccounts/delete at subscription level (Cognitive Services Contributor or Contributor)."
+  - url: https://learn.microsoft.com/azure/api-management/soft-delete
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-docs/articles/api-management/soft-delete.md (ms.date 11/26/2025)
+    note: "Soft-deleted API Management instance can only be listed, recovered or purged; permanent deletion after 48 hours; you can't reuse the name; deletedservices list and purge APIs."
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    note: "DeletedAccounts_List (GET), DeletedAccounts_Get (GET) and DeletedAccounts_Purge (DELETE); AccountProperties.deletionDate and scheduledPurgeDate."
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/keyvault/resource-manager/Microsoft.KeyVault/KeyVault/stable/2026-05-15/openapi.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/keyvault/resource-manager/Microsoft.KeyVault/KeyVault/stable/2026-05-15/openapi.json
+    note: "Vaults_ListDeleted (GET) and Vaults_GetDeleted (GET); DeletedVaultProperties (vaultId, location, deletionDate, scheduledPurgeDate, purgeProtectionEnabled)."
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/stable/2024-05-01/apimdeployment.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/stable/2024-05-01 (DeletedServices_ListBySubscription path confirmed by schema scan; exact file name not recorded)
+    note: "GET /subscriptions/{subscriptionId}/providers/Microsoft.ApiManagement/deletedservices."
+  - url: https://learn.microsoft.com/azure/role-based-access-control/permissions/ai-machine-learning
+    lastVerified: "2026-10-04"
+    verifiedVia: https://raw.githubusercontent.com/MicrosoftDocs/azure-docs/main/articles/role-based-access-control/permissions/ai-machine-learning.md, perm-integration and security permission pages in MicrosoftDocs/azure-docs
+    note: "Microsoft.CognitiveServices/deletedAccounts/read, Microsoft.ApiManagement/deletedservices/read, Microsoft.KeyVault/deletedVaults/read."
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    PSRule Azure.KeyVault.SoftDelete and Azure.KeyVault.PurgeProtect and the Azure Policy built-ins
+    1e66c121-a66a-4b1f-9b83-0fd99bf0fc2d (soft delete enabled) and 0b60c0b2-2dc2-4e1c-b5c9-abbed971de53
+    (deletion protection) audit whether protection is enabled on a vault; they do not detect that a planned
+    name is held by an existing soft-deleted resource, so they are not mapped. No Defender, Advisor or Checkov
+    rule covers deployment-time name blocking.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/dep
+testability: >-
+  Offline with recorded deleted-resource list responses and Bicep snapshot names.
+tests:
+  positive:
+    - foundry-account-name-held-by-soft-deleted-account
+    - apim-service-name-held-by-soft-deleted-service
+    - key-vault-name-held-by-soft-deleted-vault-likely
+  negative:
+    - no-soft-deleted-resources-in-subscription
+    - soft-deleted-account-different-name
+    - template-restores-deleted-account-explicitly
+  skipped:
+    - no-azure-credential-available
+    - names-are-unresolved-expressions
+    - deleted-resources-list-forbidden
+  uncertain:
+    - key-vault-name-reservation-semantics-unverified
+notes: >-
+  The 48-hour figure is the documented value in two Learn pages; other services may differ and the rule does
+  not assert a window, it reports scheduledPurgeDate from the API. Key Vault Learn pages (soft-delete overview,
+  key vault recovery) are in a repository not reachable here, hence the likely confidence for Key Vault. The
+  exact APIM spec file name was not recorded in the scan; the path and api-version were confirmed.

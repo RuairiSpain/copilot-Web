@@ -1,6 +1,100 @@
 id: FND-RUN-002
 version: 1
 group: RUN
-title: "Private DNS resolves from an appropriate vantage point"
-status: proposed
+title: Private DNS resolves from an appropriate vantage point
+description: >-
+  For each private-endpoint-backed dependency of a Foundry project (Foundry account, Azure AI Search, Azure Cosmos DB,
+  Azure Storage blob), the service FQDN must resolve to a private IP address when resolved from inside the virtual network
+  that hosts the agent and private endpoint subnets. Resolution from outside the VNet is not evidence either way, so the
+  rule is Skipped there and is never Passed.
+status: verified
 phases: ["3"]
+inputs: [network, control-plane]
+basis: [platform]
+category: must-have
+pillar: reliability
+severity:
+  dev: error
+  test: error
+  prod: error
+compatibility:
+  azd: n/a (DNS lookup and ARM reads; no azd behaviour dependency)
+  extensions: {}
+  apiVersions:
+    - Microsoft.Network/privateDnsZones and virtualNetworkLinks 2018-09-01 (stable)
+evidence:
+  description: >-
+    Probe 1 (data-plane-free): resolve each FQDN (for example <account>.cognitiveservices.azure.com, <account>.openai.azure.com,
+    <account>.services.ai.azure.com, <search>.search.windows.net, <cosmos>.documents.azure.com, <storage>.blob.core.windows.net)
+    with the operating-system resolver of the host that runs the doctor and compare the answers to private address space.
+    Pass requires: operator-declared in-VNet vantage point AND every answer is a private IP. Fail requires the same vantage
+    point and any public-IP or NXDOMAIN answer for an endpoint that has a private endpoint. Any other vantage point yields
+    Skipped with reason "private DNS resolves only from inside the VNet". Probe 2 (control plane, any vantage point, read
+    only): GET /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Network/privateDnsZones/{zone}/virtualNetworkLinks?api-version=2018-09-01
+    to report zones with no link or virtualNetworkLinkState other than Completed as supporting context (never a Pass).
+    Required permission: ARM read on the private DNS zones (probe 2 only); probe 1 needs none. Metadata read: DNS answers
+    and zone link names. No request is sent to the data plane, so no content is touched.
+  confidence: certain
+recommendation: >-
+  Link each required privatelink zone to the VNet that hosts the agent client and private endpoint subnets, configure
+  conditional forwarders to 168.63.129.16 where custom DNS is used, and re-run the doctor from a machine inside the VNet.
+fix: |-
+  resource searchDnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2018-09-01' = {
+    parent: searchPrivateDnsZone // privatelink.search.windows.net
+    name: 'link-to-agent-vnet'
+    location: 'global'
+    properties: {
+      virtualNetwork: { id: agentVnet.id }
+      registrationEnabled: false
+    }
+  }
+sources:
+  - url: https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/includes/how-to-virtual-networks-content.md
+    note: DNS zone summary table, validation step ("From a machine connected to the VNet, run nslookup"), troubleshooting (private IP expected, 168.63.129.16 forwarders).
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/privatedns/resource-manager/Microsoft.Network/PrivateDns/stable/2018-09-01/privatedns.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/privatedns/resource-manager/Microsoft.Network/PrivateDns/stable/2018-09-01/privatedns.json
+    note: virtualNetworkLinks path and virtualNetworkLinkState read-only property (documented values InProgress, Completed in the enum).
+  - url: https://learn.microsoft.com/azure/foundry/agents/concepts/agents-networking-deep-dive
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/agents-networking-deep-dive.md
+    note: Private DNS zones keep name resolution inside the VNet for storage, database and Key Vault private endpoints.
+overlap:
+  decision: native
+  coverage: partial
+  rationale: >-
+    Azure Policy c4bc6f10 (Configure Cognitive Services accounts to use private DNS zones) configures zone group
+    association; it does not observe resolution from a vantage point. PSRule Azure.AI.PrivateEndpoints and Policy
+    EnablePrivateEndpoints audits check that a private endpoint exists, not that the name resolves privately. Observing the
+    answer from the declared vantage point, and refusing to Pass elsewhere, is the Foundry Doctor value. azd ai agent doctor
+    has no DNS check.
+  psrule:
+    - Azure.AI.PrivateEndpoints
+  azurePolicy:
+    - c4bc6f10-cb41-49eb-b000-d5ab82e2a091
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/run
+tests:
+  positive:
+    - declared in-VNet vantage point and every FQDN resolves to a private IP
+  negative:
+    - declared in-VNet vantage point and the Search FQDN resolves to a public IP
+    - declared in-VNet vantage point and the zone has no VNet link
+  skipped:
+    - vantage point is outside the VNet or not declared
+    - no private endpoint is configured for the dependency
+    - resolver unavailable or timed out
+  uncertain:
+    - split-horizon custom DNS returns different answers on repeated lookups
+testability: Resolver is an injected interface so tests use fake answers; real validation needs a host inside the VNet.
+notes: >-
+  Unverified: what counts as a private address (RFC 1918 versus any VNet range) is not stated in the Foundry docs; the
+  docs say the name must resolve to a private IP address. The full Policy GUID was read from the definition file; it should
+  be re-checked when the mapping is finalised. Defender and Advisor IDs were not available in any clone.

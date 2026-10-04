@@ -1,6 +1,108 @@
 id: FND-RUN-007
 version: 1
 group: RUN
-title: "Diagnostic logs are arriving"
-status: proposed
+title: Diagnostic logs are arriving
+description: >-
+  A Foundry account that has a diagnostic setting sending resource logs to Log Analytics should show recent log rows in
+  the destination workspace when traffic exists. The rule confirms the setting exists, then runs one bounded, count-only
+  query. Logs can take up to two hours to appear, so an empty result for a recently changed setting or an idle resource
+  is Uncertain, not Fail.
+status: verified
 phases: ["3"]
+inputs: [control-plane, data-plane]
+basis: [operations]
+category: nice-to-have
+pillar: operations
+severity:
+  dev: info
+  test: warning
+  prod: warning
+compatibility:
+  azd: n/a (Azure Monitor reads; no azd behaviour dependency)
+  extensions: {}
+  apiVersions:
+    - Microsoft.Insights/diagnosticSettings 2021-05-01-preview (the only version in the spec clone; no stable version found)
+    - Microsoft.Insights/metrics 2024-02-01 (stable)
+    - Log Analytics query API (spec 2022-10-27 as pinned by the azquery Go SDK)
+evidence:
+  description: >-
+    Probe 1: GET /{accountResourceId}/providers/Microsoft.Insights/diagnosticSettings?api-version=2021-05-01-preview; at
+    least one setting with a workspaceId and an enabled RequestResponse or Audit category must exist, otherwise the
+    rule is Skipped as not configured (configuration is the concern of an OPS rule, not this one). Probe 2 (traffic):
+    Microsoft.Insights/metrics for AzureOpenAIRequests over the same window; no traffic is Uncertain. Probe 3: POST
+    /workspaces/{workspaceId}/query (read-only despite the verb) with a Kusto query of the form AzureDiagnostics |
+    where ResourceProvider == "MICROSOFT.COGNITIVESERVICES" | where ResourceId has "<account>" | where TimeGenerated > ago(<window>)
+    | summarize count() by Category. The query projects only Category and a count; message, request, response and
+    properties columns are never selected. Fail requires traffic in the window, the setting older than two hours, and zero
+    rows; a destination using resource-specific tables instead of AzureDiagnostics is Uncertain. Required permission:
+    read of diagnostic settings on the account and a Log Analytics reader permission on the workspace (built-in role
+    names not verified in the clones). Vantage point: control plane and the Log Analytics query endpoint, any network
+    unless the workspace is network-isolated, in which case Skipped. Metadata read: setting names, categories, row counts.
+  confidence: likely
+recommendation: >-
+  Enable a diagnostic setting for the Foundry account that sends Audit and Request and Response logs to a Log Analytics
+  workspace, wait up to two hours, and confirm rows with a count query. Check workspace access and ingestion errors if
+  rows stay at zero while the account has traffic.
+fix: |-
+  resource diag 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+    name: 'to-law'
+    scope: account
+    properties: {
+      workspaceId: law.id
+      logs: [
+        { category: 'Audit', enabled: true }
+        { category: 'RequestResponse', enabled: true }
+      ]
+    }
+  }
+sources:
+  - url: https://learn.microsoft.com/azure/foundry/how-to/diagnostic-logging
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/how-to/diagnostic-logging.md
+    note: Categories (Audit, Request and Response, Azure OpenAI Request Usage, AllMetrics), up to two hours before data is queryable, AzureDiagnostics sample queries with ResourceProvider and Category filters.
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/monitor/resource-manager/Microsoft.Insights/Insights/preview/2021-05-01-preview/diagnosticsSettings_API.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/monitor/resource-manager/Microsoft.Insights/Insights/preview/2021-05-01-preview/diagnosticsSettings_API.json
+    note: diagnosticSettings path under providers/Microsoft.Insights on a resource URI.
+  - url: https://github.com/Azure/azure-sdk-for-go/blob/main/sdk/monitor/azquery/logs_client.go
+    lastVerified: "2026-10-04"
+    verifiedVia: https://raw.githubusercontent.com/Azure/azure-sdk-for-go/main/sdk/monitor/azquery/logs_client.go (POST /workspaces/{workspaceId}/query); autorest.md pins operationalinsights data-plane 2022-10-27
+    note: Query API shape. The REST spec file itself was not in the clones and could not be fetched, so the path is verified from the SDK only.
+overlap:
+  decision: native
+  coverage: partial
+  rationale: >-
+    Azure Policy 1b4d1c4e (Diagnostic logs in Azure AI services resources should be enabled), b4330a05 (Resource logs in
+    Search services) and the DINE deployments 55d1f543 and 08ba64b8 check or create the diagnostic setting; they cannot
+    observe whether rows arrive. No PSRule rule for Foundry diagnostic settings was found. The arrival check and its
+    traffic correlation are new. The configuration half belongs to an OPS rule that should reuse the Policy mappings.
+  psrule: []
+  azurePolicy:
+    - 1b4d1c4e-934c-4703-944c-27c82c06bebb
+    - b4330a05-a843-4bc8-bf9a-cacce50c67f4
+    - 55d1f543-d1b0-4811-9663-d6d0dbc6326d
+    - 08ba64b8-738f-4918-9686-730d2ed79c7d
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/run
+tests:
+  positive:
+    - diagnostic setting present, traffic in window, count query returns rows for RequestResponse
+  negative:
+    - diagnostic setting present for over two hours, traffic in window, zero rows
+  skipped:
+    - no diagnostic setting to a workspace
+    - caller cannot query the workspace
+  uncertain:
+    - setting created less than two hours ago
+    - no traffic in the window
+    - destination uses resource-specific tables
+testability: Deterministic against recorded Monitor and query responses; live mode needs Monitor and workspace read access.
+notes: >-
+  Unverified: Log Analytics query REST spec file and required workspace role; the stable API version for diagnostic
+  settings (only 2021-05-01-preview and 2017-05-01-preview were found); resource-specific table names for Foundry.
+  Defender and Advisor IDs not available in any clone.

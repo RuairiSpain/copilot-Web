@@ -2,5 +2,104 @@ id: FND-DEP-004
 version: 1
 group: DEP
 title: "Model/version/SKU offered in target region"
-status: proposed
+description: >-
+  Each model deployment (model format, name, version and SKU name) declared in azure.yaml or the compiled
+  template must appear in the list of models offered in the target location, with the declared SKU, and
+  must not be retired. Offered in the list is necessary, not sufficient: gated models and quota are separate
+  conditions.
+status: verified
 phases: ["2"]
+inputs: ["azure.yaml", "bicep-arm", "azd-env", "control-plane"]
+basis: ["platform"]
+category: must-have
+pillar: reliability
+severity:
+  dev: error
+  test: error
+  prod: error
+compatibility:
+  azd: ">=1.27.1"
+  extensions:
+    azure.ai.projects: ">=1.0.0-beta.4"
+  apiVersions: ["Microsoft.CognitiveServices 2026-09-01"]
+evidence:
+  description: >-
+    Read-only ARM call, GET /subscriptions/{subscriptionId}/providers/Microsoft.CognitiveServices/locations/{location}/models
+    api-version 2026-09-01 (Models_List, paged by nextLink). The same path exists in earlier stable versions
+    back to 2025-09-01 in the spec clone. Each item is a Model with model.{format,name,version},
+    model.skus[].name, model.isDefaultVersion, model.lifecycleStatus (Stable, Preview, GenerallyAvailable,
+    Deprecating, Deprecated, Legacy), model.deprecation, and per-SKU deprecationDate and capacity.
+    Inputs: location from AZURE_LOCATION (or the resource's own location), and the model/version/sku
+    triples from the Bicep snapshot (Microsoft.CognitiveServices/accounts/deployments properties.model and
+    sku) and from azure.ai.project deployments in azure.yaml. Violations (certain): no item with that
+    format+name+version at the location; the requested SKU name is absent from that item's skus; the item's
+    lifecycleStatus is Deprecated, or the SKU deprecationDate is in the past. Deprecating or a future
+    deprecationDate is reported as a warning in the finding text. Not covered: models that are listed but
+    need prior registration or eligibility (the Learn limits article says gpt-5 models require
+    registration), so a listed model is "offered", never "deployable"; those cases stay uncertain.
+    Role family: Microsoft.CognitiveServices/locations/models/read, included in Reader (*/read).
+    Reader suffices at subscription scope. The answer is definitive for "not offered", uncertain for
+    "offered but gated".
+  confidence: certain
+recommendation: >-
+  Choose a model, version and SKU that the target region lists, or move the Foundry resource to a region
+  that offers it. To list what a region offers, query the models API for that location. If the model is
+  deprecating, plan the move to the replacement version.
+fix: |
+  az cognitiveservices model list --location <region> --query "[?model.name=='gpt-4o'].{version:model.version,sku:model.skus[].name}"
+sources:
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    note: "Models_List GET path; AccountModel (skus, lifecycleStatus, deprecation, isDefaultVersion), ModelSku (name, deprecationDate, capacity), ModelLifecycleStatus enum, DeploymentModel (format, name, version)."
+  - url: https://learn.microsoft.com/azure/role-based-access-control/permissions/ai-machine-learning
+    lastVerified: "2026-10-04"
+    verifiedVia: https://raw.githubusercontent.com/MicrosoftDocs/azure-docs/main/articles/role-based-access-control/permissions/ai-machine-learning.md
+    note: "Microsoft.CognitiveServices/locations/models/read ('Reads available models')."
+  - url: https://learn.microsoft.com/azure/foundry/agents/concepts/limits-quotas-regions
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/limits-quotas-regions.md (ms.date 09/07/2026)
+    note: "Troubleshooting: a model or version isn't available in your region; gpt-5 models require registration."
+  - url: https://learn.microsoft.com/azure/foundry/how-to/create-resource-template
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/how-to/create-resource-template.md (ms.date 07/28/2026)
+    note: "ServiceModelDeprecating error when a template references a retired or deprecating model version; az cognitiveservices model list --location."
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    No PSRule, Policy, Defender, Advisor or Checkov rule checks that a declared model, version and SKU is
+    offered in a location; PSRule validates resource configuration, not catalogue availability. Foundry
+    Doctor value is correlating azure.yaml and Bicep deployments with the live regional catalogue.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/dep
+testability: >-
+  Offline with recorded Models_List pages (including nextLink paging) and a deployments fixture from azure.yaml
+  and a Bicep snapshot.
+tests:
+  positive:
+    - model-version-not-listed-in-location
+    - sku-not-offered-for-model
+    - model-lifecycle-deprecated
+    - sku-deprecation-date-in-past
+  negative:
+    - model-version-and-sku-listed
+    - model-deprecating-future-date-warning-only
+  skipped:
+    - no-azure-credential-available
+    - location-unresolved-in-azd-environment
+    - model-name-is-unresolved-expression
+  uncertain:
+    - model-listed-but-requires-registration
+notes: >-
+  The Learn quota article warns that the Usages and Model Capacities APIs also return retired models; the same
+  caution is applied here, hence the lifecycleStatus check. The Learn examples use api-version 2024-10-01
+  (usages); this rule's path was read in the 2026-09-01 spec. The deployment-type naming (Standard,
+  GlobalStandard, ProvisionedManaged and so on) is not asserted; the SKU name is compared as a string.
