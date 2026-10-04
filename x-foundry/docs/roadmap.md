@@ -73,6 +73,8 @@ does not need deployed state.
 - Interactive by default: it walks through each top-level section with what will be copied and
   lets the user include, exclude or edit. `--yes` accepts the defaults; `--include` and
   `--exclude` give the same control in scripts.
-- Open question for Phase 6: separate files per environment, or one file with an `environments`
-  overlay of per-environment overrides that azd environments select. The overlay avoids drift
-  between files but needs a schema change and a merge rule; decide when integrating with azd.
+- Decision: each environment has its own file (for example `azure.dev.yaml`, `azure.test.yaml`,
+  `azure.prod.yaml`). There is no `environments` overlay in the schema, so no schema change or
+  merge rule is needed. The cost is that files can drift apart after promotion; Phase 6 should
+  decide how azd selects the file per environment and whether a `diff` between environment
+  files is worth adding.
