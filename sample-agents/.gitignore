@@ -1,0 +1,14 @@
+# azd environments (contain endpoints and secrets)
+.azure/
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+# Local config
+.env
+# Dev-team agent scratch space (git worktrees live here at runtime)
+.worktrees/
+workspace/

@@ -1,0 +1,4 @@
+# Allow the beta releases of the Agent Framework hosting packages, and trust the
+# operating system certificate store (corporate TLS inspection).
+system-certs = true
+prerelease = "allow"

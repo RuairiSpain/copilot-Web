@@ -1,0 +1,22 @@
+# Repository-level tooling configuration only. Each agent under agents/ is an
+# independent Python project with its own pyproject.toml and uv.lock, because each
+# one is built and deployed on its own.
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+extend-exclude = [".venv", ".worktrees", "workspace"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "ASYNC", "S", "RUF"]
+ignore = [
+    "S101",   # assert is fine in tests
+    "S603",   # subprocess is used deliberately, with an allow-list
+    "S607",   # partial executable paths are resolved by the allow-list
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S", "B011", "E501", "ASYNC240", "ASYNC230"]
+
+[tool.ruff.format]
+quote-style = "double"
