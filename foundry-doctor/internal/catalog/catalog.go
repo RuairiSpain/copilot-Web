@@ -336,8 +336,15 @@ func validateResearched(r Rule, add func(Rule, string, ...any)) {
 	if !owners[r.Implementation.Owner] {
 		add(r, "implementation.owner must be one of native|psrule|azure-policy|defender|advisor|bicep|checkov|adapter")
 	}
-	if r.Overlap.Decision == "native" && r.Implementation.Owner != "native" {
-		add(r, "decision native requires implementation.owner native")
+	switch r.Overlap.Decision {
+	case "native", "adapt":
+		if r.Implementation.Owner != "native" {
+			add(r, "decision %s requires implementation.owner native (our own code), got %q", r.Overlap.Decision, r.Implementation.Owner)
+		}
+	case "reuse", "wrap":
+		if r.Implementation.Owner == "native" {
+			add(r, "decision %s requires an external implementation.owner, got native", r.Overlap.Decision)
+		}
 	}
 }
 

@@ -8,175 +8,180 @@
 
 | Status | Rules |
 |---|---|
-| proposed | 108 |
+| verified | 86 |
+| product-opinion | 22 |
 
 | Overlap decision | Rules |
 |---|---|
+| reuse | 1 |
+| wrap | 2 |
+| adapt | 37 |
+| native | 68 |
 
 ## CFG
 
 | Rule | Title | Phase | Status | Decision | dev/test/prod | Source |
 |---|---|---|---|---|---|---|
-| FND-CFG-001 | Valid YAML, duplicate-key detection and compatible azure.ai.* schema | 1 | proposed | - | - | - |
-| FND-CFG-002 | Unique service names by kind | 1 | proposed | - | - | - |
-| FND-CFG-003 | All inter-service references resolve | 1 | proposed | - | - | - |
-| FND-CFG-004 | Prompt model or hosted source/image is valid | 1 | proposed | - | - | - |
-| FND-CFG-005 | No raw secrets in YAML/Bicep/environment blocks | 1 | proposed | - | - | - |
-| FND-CFG-006 | Every variable has an environment or infrastructure producer | 1 | proposed | - | - | - |
-| FND-CFG-007 | Outbound endpoints use HTTPS and reject unsafe local/metadata targets | 1 | proposed | - | - | - |
-| FND-CFG-008 | MCP tools use allow lists | later | proposed | - | - | - |
-| FND-CFG-009 | Cron expressions are valid | later | proposed | - | - | - |
-| FND-CFG-010 | Model versions pinned in stricter profiles | later | proposed | - | - | - |
-| FND-CFG-011 | Preview/retired fields are version-aware | 1 | proposed | - | - | - |
-| FND-CFG-012 | Azure region values are valid | 1 | proposed | - | - | - |
+| FND-CFG-001 | Valid YAML, duplicate-key detection and compatible azure.ai.* schema | 1 | verified | adapt | error/error/error | [link](https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference) (2026-10-04) |
+| FND-CFG-002 | Unique service names by kind | 1 | verified | native | warning/error/error | [link](https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference) (2026-10-04) |
+| FND-CFG-003 | All inter-service references resolve | 1 | verified | native | error/error/error | [link](https://learn.microsoft.com/azure/foundry/agents/how-to/author-azure-yaml) (2026-10-04) |
+| FND-CFG-004 | Prompt model or hosted source/image is valid | 1 | verified | native | error/error/error | [link](https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference) (2026-10-04) |
+| FND-CFG-005 | No raw secrets in YAML/Bicep/environment blocks | 1 | verified | adapt | warning/error/error | [link](https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference) (2026-10-04) |
+| FND-CFG-006 | Every variable has an environment or infrastructure producer | 1 | verified | native | warning/error/error | [link](https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference) (2026-10-04) |
+| FND-CFG-007 | Outbound endpoints use HTTPS and reject unsafe local/metadata targets | 1 | product-opinion | native | info/warning/error | [link](https://learn.microsoft.com/azure/foundry/agents/how-to/tools/model-context-protocol) (2026-10-04) |
+| FND-CFG-008 | MCP tools use allow lists | later | verified | native | info/warning/warning | [link](https://learn.microsoft.com/azure/foundry/agents/how-to/tools/model-context-protocol) (2026-10-04) |
+| FND-CFG-009 | Cron expressions are valid | later | verified | native | error/error/error | [link](https://learn.microsoft.com/azure/foundry/agents/how-to/use-routines) (2026-10-04) |
+| FND-CFG-010 | Model versions pinned in stricter profiles | later | product-opinion | native | info/warning/warning | [link](https://learn.microsoft.com/azure/foundry/openai/how-to/working-with-models) (2026-10-04) |
+| FND-CFG-011 | Preview/retired fields are version-aware | 1 | verified | native | warning/warning/error | [link](https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference) (2026-10-04) |
+| FND-CFG-012 | Azure region values are valid | 1 | product-opinion | adapt | warning/error/error | [link](https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/subscriptions/stable/2022-12-01/subscriptions.json) (2026-10-04) |
 
 ## COST
 
 | Rule | Title | Phase | Status | Decision | dev/test/prod | Source |
 |---|---|---|---|---|---|---|
-| FND-COST-001 | Budget and alerts exist | 2/7 | proposed | - | - | - |
-| FND-COST-002 | Dev avoids production-sized fixed SKUs | 1 | proposed | - | - | - |
-| FND-COST-003 | Gateway token limits exist | 8 | proposed | - | - | - |
-| FND-COST-004 | Informational monthly fixed-capacity estimate | 7 | proposed | - | - | - |
+| FND-COST-001 | Budget and alerts exist | 2/7 | product-opinion | native | info/info/warning | [link](https://github.com/Azure/azure-rest-api-specs/tree/main/specification/consumption/resource-manager/Microsoft.Consumption/Consumption/stable/2023-11-01) (2026-10-04) |
+| FND-COST-002 | Dev avoids production-sized fixed SKUs | 1 | product-opinion | native | warning/info/info | [link](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types) (2026-10-04) |
+| FND-COST-003 | Gateway token limits exist | 8 | product-opinion | native | info/warning/warning | [link](https://learn.microsoft.com/azure/api-management/llm-token-limit-policy) (2026-10-04) |
+| FND-COST-004 | Informational monthly fixed-capacity estimate | 7 | product-opinion | native | info/info/info | [link](https://learn.microsoft.com/azure/search/search-sku-tier) (2026-10-04) |
 
 ## DEP
 
 | Rule | Title | Phase | Status | Decision | dev/test/prod | Source |
 |---|---|---|---|---|---|---|
-| FND-DEP-001 | Signed into matching tenant/subscription | 2 | proposed | - | - | - |
-| FND-DEP-002 | Required providers registered | 2 | proposed | - | - | - |
-| FND-DEP-003 | Deployer can create resources and role assignments | 2 | proposed | - | - | - |
-| FND-DEP-004 | Model/version/SKU offered in target region | 2 | proposed | - | - | - |
-| FND-DEP-005 | Quota covers requested capacity | 2 | proposed | - | - | - |
-| FND-DEP-006 | No blocking soft-deleted resource/name | 2 | proposed | - | - | - |
-| FND-DEP-007 | Globally unique names available | 2 | proposed | - | - | - |
-| FND-DEP-008 | What-if has no unexpected delete/replace | 2 | proposed | - | - | - |
-| FND-DEP-009 | Likely policy denials identified | 2 | proposed | - | - | - |
-| FND-DEP-010 | Locks do not block change | 2 | proposed | - | - | - |
-| FND-DEP-011 | Subnet delegation/capacity/use is compatible | 2 | proposed | - | - | - |
-| FND-DEP-012 | Target region supports selected setup | 2 | proposed | - | - | - |
+| FND-DEP-001 | Signed into matching tenant/subscription | 2 | verified | native | error/error/error | [link](https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/subscriptions/stable/2022-12-01/subscriptions.json) (2026-10-04) |
+| FND-DEP-002 | Required providers registered | 2 | verified | native | error/error/error | [link](https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/resources/stable/2025-04-01/resources.json) (2026-10-04) |
+| FND-DEP-003 | Deployer can create resources and role assignments | 2 | verified | adapt | error/error/error | [link](https://github.com/Azure/azure-rest-api-specs/blob/main/specification/authorization/resource-manager/Microsoft.Authorization/Authorization/stable/2022-04-01/authorization-RoleDefinitionsCalls.json) (2026-10-04) |
+| FND-DEP-004 | Model/version/SKU offered in target region | 2 | verified | native | error/error/error | [link](https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json) (2026-10-04) |
+| FND-DEP-005 | Quota covers requested capacity | 2 | verified | native | warning/error/error | [link](https://learn.microsoft.com/azure/foundry/openai/how-to/quota) (2026-10-04) |
+| FND-DEP-006 | No blocking soft-deleted resource/name | 2 | verified | native | error/error/error | [link](https://learn.microsoft.com/azure/ai-services/recover-purge-resources) (2026-10-04) |
+| FND-DEP-007 | Globally unique names available | 2 | verified | adapt | error/error/error | [link](https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json) (2026-10-04) |
+| FND-DEP-008 | What-if has no unexpected delete/replace | 2 | verified | native | warning/error/error | [link](https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/deployments/stable/2026-06-01/deployments.json) (2026-10-04) |
+| FND-DEP-009 | Likely policy denials identified | 2 | verified | wrap | warning/warning/error | [link](https://github.com/Azure/azure-rest-api-specs/blob/main/specification/policyinsights/resource-manager/Microsoft.PolicyInsights/PolicyInsights/stable/2024-10-01/openapi.json) (2026-10-04) |
+| FND-DEP-010 | Locks do not block change | 2 | verified | native | error/error/error | [link](https://learn.microsoft.com/azure/azure-resource-manager/management/lock-resources) (2026-10-04) |
+| FND-DEP-011 | Subnet delegation/capacity/use is compatible | 2 | verified | native | error/error/error | [link](https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks) (2026-10-04) |
+| FND-DEP-012 | Target region supports selected setup | 2 | verified | adapt | error/error/error | [link](https://learn.microsoft.com/azure/foundry/agents/concepts/limits-quotas-regions) (2026-10-04) |
 
 ## ENV
 
 | Rule | Title | Phase | Status | Decision | dev/test/prod | Source |
 |---|---|---|---|---|---|---|
-| FND-ENV-001 | Environments do not unintentionally share resource groups | 1 | proposed | - | - | - |
-| FND-ENV-002 | Environment-bound names/IDs/rules were not copied unchanged | 1 | proposed | - | - | - |
-| FND-ENV-003 | Prod does not reference non-prod resource IDs | 1 | proposed | - | - | - |
-| FND-ENV-004 | Informational difference summary | 1 | proposed | - | - | - |
+| FND-ENV-001 | Environments do not unintentionally share resource groups | 1 | verified | native | info/warning/error | [link](https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview) (2026-10-04) |
+| FND-ENV-002 | Environment-bound names/IDs/rules were not copied unchanged | 1 | product-opinion | native | info/warning/warning | [link](https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview) (2026-10-04) |
+| FND-ENV-003 | Prod does not reference non-prod resource IDs | 1 | product-opinion | native | info/warning/error | [link](https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview) (2026-10-04) |
+| FND-ENV-004 | Informational difference summary | 1 | product-opinion | native | info/info/info | [link](https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview) (2026-10-04) |
 
 ## GW
 
 | Rule | Title | Phase | Status | Decision | dev/test/prod | Source |
 |---|---|---|---|---|---|---|
-| FND-GW-001 | JWT validates issuer, audience and tenant | 8 | proposed | - | - | - |
-| FND-GW-002 | Verified token-limit/metric policies are present | 8 | proposed | - | - | - |
-| FND-GW-003 | Routes resolve to existing backends | 8 | proposed | - | - | - |
-| FND-GW-004 | Route paths unique | 8 | proposed | - | - | - |
-| FND-GW-005 | Gateway calls Foundry using managed identity | 8 | proposed | - | - | - |
-| FND-GW-006 | Telemetry sink exists for token tracking | 8 | proposed | - | - | - |
+| FND-GW-001 | JWT validates issuer, audience and tenant | 8 | verified | native | warning/error/error | [link](https://learn.microsoft.com/azure/api-management/validate-jwt-policy) (2026-10-04) |
+| FND-GW-002 | Verified token-limit/metric policies are present | 8 | product-opinion | native | info/warning/warning | [link](https://learn.microsoft.com/azure/api-management/llm-token-limit-policy) (2026-10-04) |
+| FND-GW-003 | Routes resolve to existing backends | 8 | verified | native | warning/error/error | [link](https://learn.microsoft.com/azure/api-management/set-backend-service-policy) (2026-10-04) |
+| FND-GW-004 | Route paths unique | 8 | verified | native | error/error/error | [link](https://learn.microsoft.com/azure/api-management/import-and-publish) (2026-10-04) |
+| FND-GW-005 | Gateway calls Foundry using managed identity | 8 | verified | native | warning/error/error | [link](https://learn.microsoft.com/azure/api-management/api-management-authenticate-authorize-ai-apis) (2026-10-04) |
+| FND-GW-006 | Telemetry sink exists for token tracking | 8 | verified | native | info/warning/error | [link](https://learn.microsoft.com/azure/api-management/llm-emit-token-metric-policy) (2026-10-04) |
 
 ## IDN
 
 | Rule | Title | Phase | Status | Decision | dev/test/prod | Source |
 |---|---|---|---|---|---|---|
-| FND-IDN-001 | Managed identities used for Foundry and workloads | 1 | proposed | - | - | - |
-| FND-IDN-002 | Project identity has required data roles | 1/2 | proposed | - | - | - |
-| FND-IDN-003 | Role assignments use object IDs and principalType | 1 | proposed | - | - | - |
-| FND-IDN-004 | No broad Owner/Contributor for application identities | 1 | proposed | - | - | - |
-| FND-IDN-005 | Standing human admin access reviewed | 2/4 | proposed | - | - | - |
-| FND-IDN-006 | Federated credentials use HTTPS issuer and specific subject | 1 | proposed | - | - | - |
+| FND-IDN-001 | Managed identities used for Foundry and workloads | 1 | verified | adapt | warning/warning/error | [link](https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup) (2026-10-04) |
+| FND-IDN-002 | Project identity has required data roles | 1/2 | verified | native | error/error/error | [link](https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup) (2026-10-04) |
+| FND-IDN-003 | Role assignments use object IDs and principalType | 1 | verified | native | warning/error/error | [link](https://learn.microsoft.com/azure/role-based-access-control/role-assignments-template) (2026-10-04) |
+| FND-IDN-004 | No broad Owner/Contributor for application identities | 1 | verified | native | warning/error/error | [link](https://learn.microsoft.com/azure/role-based-access-control/role-assignments-steps) (2026-10-04) |
+| FND-IDN-005 | Standing human admin access reviewed | 2/4 | verified | adapt | info/info/warning | [link](https://learn.microsoft.com/azure/role-based-access-control/best-practices) (2026-10-04) |
+| FND-IDN-006 | Federated credentials use HTTPS issuer and specific subject | 1 | verified | adapt | warning/error/error | [link](https://learn.microsoft.com/entra/workload-id/workload-identity-federation-create-trust-user-assigned-managed-identity) (2026-10-04) |
 
 ## IQ
 
 | Rule | Title | Phase | Status | Decision | dev/test/prod | Source |
 |---|---|---|---|---|---|---|
-| FND-IQ-001 | Filter fields/claims reference filterable fields | 8 | proposed | - | - | - |
-| FND-IQ-002 | Required key/content/title/vector/semantic fields | 8 | proposed | - | - | - |
-| FND-IQ-003 | Vector field type, dimensions and profile | 8 | proposed | - | - | - |
-| FND-IQ-004 | Vector dimensions match embedding deployment metadata | 8 | proposed | - | - | - |
-| FND-IQ-005 | Retrieval mode supported by index and service tier | 8 | proposed | - | - | - |
-| FND-IQ-006 | Chunk overlap and hybrid weights valid | 8 | proposed | - | - | - |
-| FND-IQ-007 | Knowledge source type/API and planning model supported | 8 | proposed | - | - | - |
-| FND-IQ-008 | Source connection uses managed identity | 8 | proposed | - | - | - |
-| FND-IQ-009 | Document-level access control configured when required | 8 | proposed | - | - | - |
-| FND-IQ-010 | ADLS Gen2 hierarchical namespace enabled | 8 | proposed | - | - | - |
-| FND-IQ-011 | Refresh schedule valid and supportable | 8 | proposed | - | - | - |
-| FND-IQ-012 | Semantic ranking enabled when used | 8 | proposed | - | - | - |
+| FND-IQ-001 | Filter fields/claims reference filterable fields | 8 | verified | native | error/error/error | [link](https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-search-index) (2026-10-04) |
+| FND-IQ-002 | Required key/content/title/vector/semantic fields | 8 | verified | native | error/error/error | [link](https://learn.microsoft.com/azure/search/agentic-retrieval-how-to-create-index) (2026-10-04) |
+| FND-IQ-003 | Vector field type, dimensions and profile | 8 | verified | native | error/error/error | [link](https://learn.microsoft.com/azure/search/vector-search-how-to-create-index) (2026-10-04) |
+| FND-IQ-004 | Vector dimensions match embedding deployment metadata | 8 | verified | native | error/error/error | [link](https://learn.microsoft.com/azure/search/vector-search-how-to-create-index) (2026-10-04) |
+| FND-IQ-005 | Retrieval mode supported by index and service tier | 8 | verified | native | error/error/error | [link](https://learn.microsoft.com/azure/search/agentic-retrieval-how-to-set-retrieval-reasoning-effort) (2026-10-04) |
+| FND-IQ-006 | Chunk overlap and hybrid weights valid | 8 | verified | native | error/error/error | [link](https://learn.microsoft.com/azure/search/cognitive-search-skill-textsplit) (2026-10-04) |
+| FND-IQ-007 | Knowledge source type/API and planning model supported | 8 | verified | native | error/error/error | [link](https://learn.microsoft.com/azure/search/agentic-retrieval-how-to-create-knowledge-base) (2026-10-04) |
+| FND-IQ-008 | Source connection uses managed identity | 8 | verified | adapt | warning/error/error | [link](https://learn.microsoft.com/azure/search/search-how-to-managed-identities) (2026-10-04) |
+| FND-IQ-009 | Document-level access control configured when required | 8 | verified | native | warning/error/error | [link](https://learn.microsoft.com/azure/search/agentic-retrieval-how-to-retrieve) (2026-10-04) |
+| FND-IQ-010 | ADLS Gen2 hierarchical namespace enabled | 8 | verified | native | error/error/error | [link](https://learn.microsoft.com/azure/search/search-how-to-index-azure-data-lake-storage) (2026-10-04) |
+| FND-IQ-011 | Refresh schedule valid and supportable | 8 | verified | native | error/error/error | [link](https://learn.microsoft.com/azure/search/search-howto-schedule-indexers) (2026-10-04) |
+| FND-IQ-012 | Semantic ranking enabled when used | 8 | verified | native | error/error/error | [link](https://learn.microsoft.com/azure/search/semantic-how-to-enable-disable) (2026-10-04) |
 
 ## NET
 
 | Rule | Title | Phase | Status | Decision | dev/test/prod | Source |
 |---|---|---|---|---|---|---|
-| FND-NET-001 | Foundry public access/private endpoint posture | 1 | proposed | - | - | - |
-| FND-NET-002 | Dependent services public access/default-deny/private endpoints | 1 | proposed | - | - | - |
-| FND-NET-003 | Private endpoint DNS zone groups and VNet links | 1 | proposed | - | - | - |
-| FND-NET-004 | Agent subnet delegation and sizing | 1 | proposed | - | - | - |
-| FND-NET-005 | Private-mode VNet/region consistency | 1 | proposed | - | - | - |
-| FND-NET-006 | Private address space and overlap | 2 | proposed | - | - | - |
-| FND-NET-007 | Restricted mode has allowed IP range | 1 | proposed | - | - | - |
-| FND-NET-008 | Search SKU supports private endpoints | 1 | proposed | - | - | - |
-| FND-NET-009 | APIM SKU supports required private backend connectivity | 8 | proposed | - | - | - |
-| FND-NET-010 | Azure Monitor private-link choice is explicit | 4 | proposed | - | - | - |
-| FND-NET-011 | NSG/DDoS recommendations | 4 | proposed | - | - | - |
+| FND-NET-001 | Foundry public access/private endpoint posture | 1 | verified | adapt | info/warning/error | [link](https://learn.microsoft.com/azure/foundry/agents/concepts/networking-options) (2026-10-04) |
+| FND-NET-002 | Dependent services public access/default-deny/private endpoints | 1 | verified | adapt | warning/error/error | [link](https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks) (2026-10-04) |
+| FND-NET-003 | Private endpoint DNS zone groups and VNet links | 1 | verified | native | warning/error/error | [link](https://learn.microsoft.com/azure/private-link/private-endpoint-dns) (2026-10-04) |
+| FND-NET-004 | Agent subnet delegation and sizing | 1 | verified | native | error/error/error | [link](https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks) (2026-10-04) |
+| FND-NET-005 | Private-mode VNet/region consistency | 1 | verified | native | error/error/error | [link](https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks) (2026-10-04) |
+| FND-NET-006 | Private address space and overlap | 2 | verified | native | error/error/error | [link](https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks) (2026-10-04) |
+| FND-NET-007 | Restricted mode has allowed IP range | 1 | verified | adapt | warning/error/error | [link](https://learn.microsoft.com/azure/foundry/how-to/configure-private-link) (2026-10-04) |
+| FND-NET-008 | Search SKU supports private endpoints | 1 | verified | adapt | error/error/error | [link](https://learn.microsoft.com/azure/search/service-create-private-endpoint) (2026-10-04) |
+| FND-NET-009 | APIM SKU supports required private backend connectivity | 8 | verified | adapt | error/error/error | [link](https://learn.microsoft.com/azure/api-management/virtual-network-concepts) (2026-10-04) |
+| FND-NET-010 | Azure Monitor private-link choice is explicit | 4 | product-opinion | adapt | info/warning/warning | [link](https://learn.microsoft.com/azure/azure-monitor/fundamentals/private-link-design) (2026-10-04) |
+| FND-NET-011 | NSG/DDoS recommendations | 4 | verified | adapt | info/warning/warning | [link](https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.VNET.UseNSGs/) (2026-10-04) |
 
 ## OPS
 
 | Rule | Title | Phase | Status | Decision | dev/test/prod | Source |
 |---|---|---|---|---|---|---|
-| FND-OPS-001 | Diagnostic settings to Log Analytics | 4 | proposed | - | - | - |
-| FND-OPS-002 | Application Insights connected | 4 | proposed | - | - | - |
-| FND-OPS-003 | Baseline alerts exist | 4 | proposed | - | - | - |
-| FND-OPS-004 | Required tags exist | 1 | proposed | - | - | - |
-| FND-OPS-005 | Resource-name provider constraints | 1 | proposed | - | - | - |
-| FND-OPS-006 | Log retention meets policy | 4 | proposed | - | - | - |
-| FND-OPS-007 | CI/CD pipeline exists | 1 | proposed | - | - | - |
-| FND-OPS-008 | Evaluations run before promotion | 4 | proposed | - | - | - |
-| FND-OPS-009 | Data-residency regions and deployment SKU | 1/2 | proposed | - | - | - |
-| FND-OPS-010 | Model allow/deny lists remain consistent | 1/8 | proposed | - | - | - |
+| FND-OPS-001 | Diagnostic settings to Log Analytics | 4 | verified | adapt | info/warning/error | [link](https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-cognitiveservices-accounts-logs) (2026-10-04) |
+| FND-OPS-002 | Application Insights connected | 4 | verified | native | info/warning/error | [link](https://learn.microsoft.com/azure/foundry/observability/how-to/trace-agent-setup) (2026-10-04) |
+| FND-OPS-003 | Baseline alerts exist | 4 | product-opinion | adapt | info/info/warning | [link](https://learn.microsoft.com/azure/foundry/how-to/stay-informed-service-health) (2026-10-04) |
+| FND-OPS-004 | Required tags exist | 1 | product-opinion | adapt | info/warning/warning | [link](https://learn.microsoft.com/azure/azure-resource-manager/management/tag-resources) (2026-10-04) |
+| FND-OPS-005 | Resource-name provider constraints | 1 | verified | adapt | error/error/error | [link](https://learn.microsoft.com/azure/azure-resource-manager/management/resource-name-rules) (2026-10-04) |
+| FND-OPS-006 | Log retention meets policy | 4 | product-opinion | adapt | info/warning/error | [link](https://learn.microsoft.com/azure/azure-monitor/logs/data-retention-configure) (2026-10-04) |
+| FND-OPS-007 | CI/CD pipeline exists | 1 | product-opinion | native | info/warning/warning | [link](https://learn.microsoft.com/azure/developer/azure-developer-cli/configure-devops-pipeline) (2026-10-04) |
+| FND-OPS-008 | Evaluations run before promotion | 4 | product-opinion | native | info/warning/warning | [link](https://learn.microsoft.com/azure/foundry/agents/how-to/set-up-ci-cd-cli) (2026-10-04) |
+| FND-OPS-009 | Data-residency regions and deployment SKU | 1/2 | verified | adapt | error/error/error | [link](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types) (2026-10-04) |
+| FND-OPS-010 | Model allow/deny lists remain consistent | 1/8 | product-opinion | adapt | warning/error/error | [link](https://learn.microsoft.com/azure/foundry/how-to/model-deployment-policy) (2026-10-04) |
 
 ## REL
 
 | Rule | Title | Phase | Status | Decision | dev/test/prod | Source |
 |---|---|---|---|---|---|---|
-| FND-REL-001 | Search replica/SLA posture | 4 | proposed | - | - | - |
-| FND-REL-002 | Storage redundancy posture | 4 | proposed | - | - | - |
-| FND-REL-003 | Cosmos zone redundancy and continuous backup | 4 | proposed | - | - | - |
-| FND-REL-004 | Delete locks on stateful services | 4 | proposed | - | - | - |
-| FND-REL-005 | Search sizing within platform limits | 1 | proposed | - | - | - |
-| FND-REL-006 | Gateway retry/circuit breaker | 8 | proposed | - | - | - |
-| FND-REL-007 | Multi-region/DR plan question | 4 | proposed | - | - | - |
-| FND-REL-008 | Provisioned throughput spillover recommendation | 4 | proposed | - | - | - |
-| FND-REL-009 | APIM availability tier recommendation | 4/8 | proposed | - | - | - |
+| FND-REL-001 | Search replica/SLA posture | 4 | verified | adapt | info/info/warning | [link](https://learn.microsoft.com/azure/search/search-limits-quotas-capacity) (2026-10-04) |
+| FND-REL-002 | Storage redundancy posture | 4 | verified | adapt | info/info/warning | [link](https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency) (2026-10-04) |
+| FND-REL-003 | Cosmos zone redundancy and continuous backup | 4 | verified | adapt | info/info/warning | [link](https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency) (2026-10-04) |
+| FND-REL-004 | Delete locks on stateful services | 4 | verified | native | info/info/warning | [link](https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency) (2026-10-04) |
+| FND-REL-005 | Search sizing within platform limits | 1 | verified | native | error/error/error | [link](https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json) (2026-10-04) |
+| FND-REL-006 | Gateway retry/circuit breaker | 8 | verified | native | info/info/warning | [link](https://learn.microsoft.com/azure/api-management/backends) (2026-10-04) |
+| FND-REL-007 | Multi-region/DR plan question | 4 | product-opinion | native | info/info/info | [link](https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency) (2026-10-04) |
+| FND-REL-008 | Provisioned throughput spillover recommendation | 4 | verified | native | info/info/warning | [link](https://learn.microsoft.com/azure/foundry/openai/how-to/spillover-traffic-management) (2026-10-04) |
+| FND-REL-009 | APIM availability tier recommendation | 4/8 | verified | adapt | info/info/warning | [link](https://learn.microsoft.com/azure/api-management/api-management-features) (2026-10-04) |
 
 ## RUN
 
 | Rule | Title | Phase | Status | Decision | dev/test/prod | Source |
 |---|---|---|---|---|---|---|
-| FND-RUN-001 | Effective project identity access | 2/3 | proposed | - | - | - |
-| FND-RUN-002 | Private DNS resolves from an appropriate vantage point | 3 | proposed | - | - | - |
-| FND-RUN-003 | Capability host and project connections healthy | 3 | proposed | - | - | - |
-| FND-RUN-004 | Model deployment state and throttling signal | 3 | proposed | - | - | - |
-| FND-RUN-005 | Agent tools/connections respond | 3 | proposed | - | - | - |
-| FND-RUN-006 | Search index/documents/vector/indexer health | 3 | proposed | - | - | - |
-| FND-RUN-007 | Diagnostic logs are arriving | 3 | proposed | - | - | - |
-| FND-RUN-008 | Deployed properties versus compiled template drift | future | proposed | - | - | - |
+| FND-RUN-001 | Effective project identity access | 2/3 | verified | adapt | error/error/error | [link](https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup) (2026-10-04) |
+| FND-RUN-002 | Private DNS resolves from an appropriate vantage point | 3 | verified | native | error/error/error | [link](https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks) (2026-10-04) |
+| FND-RUN-003 | Capability host and project connections healthy | 3 | verified | native | error/error/error | [link](https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json) (2026-10-04) |
+| FND-RUN-004 | Model deployment state and throttling signal | 3 | verified | native | warning/warning/error | [link](https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json) (2026-10-04) |
+| FND-RUN-005 | Agent tools/connections respond | 3 | product-opinion | adapt | info/warning/warning | [link](https://github.com/Azure/azure-dev/blob/main/cli/azd/extensions/azure.ai.agents/internal/cmd/doctor/checks_agent_status.go) (2026-10-04) |
+| FND-RUN-006 | Search index/documents/vector/indexer health | 3 | verified | native | warning/error/error | [link](https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/data-plane/Search/stable/2026-04-01/search.json) (2026-10-04) |
+| FND-RUN-007 | Diagnostic logs are arriving | 3 | verified | native | info/warning/warning | [link](https://learn.microsoft.com/azure/foundry/how-to/diagnostic-logging) (2026-10-04) |
+| FND-RUN-008 | Deployed properties versus compiled template drift | future | product-opinion | adapt | info/info/warning | [link](https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/deployments/stable/2025-04-01/deployments.json) (2026-10-04) |
 
 ## SEC
 
 | Rule | Title | Phase | Status | Decision | dev/test/prod | Source |
 |---|---|---|---|---|---|---|
-| FND-SEC-001 | Foundry local authentication disabled | 1 | proposed | - | - | - |
-| FND-SEC-002 | AI Search key authentication disabled or RBAC-only | 1 | proposed | - | - | - |
-| FND-SEC-003 | Cosmos DB local authentication disabled | 1 | proposed | - | - | - |
-| FND-SEC-004 | Storage shared key/anonymous access disabled; HTTPS/TLS required | 1 | proposed | - | - | - |
-| FND-SEC-005 | Key Vault soft delete, purge protection and RBAC | later | proposed | - | - | - |
-| FND-SEC-006 | Firewall rules reject private/open ranges | 1 | proposed | - | - | - |
-| FND-SEC-007 | RAI/content filter bound to chat deployments | later | proposed | - | - | - |
-| FND-SEC-008 | Relevant Defender plans enabled | 2/4 | proposed | - | - | - |
-| FND-SEC-009 | Policy coverage and compliance evidence | 2/4 | proposed | - | - | - |
-| FND-SEC-010 | Customer-managed keys informational | 4 | proposed | - | - | - |
-| FND-SEC-011 | Controlled outbound egress informational | 4 | proposed | - | - | - |
-| FND-SEC-012 | Gateway telemetry avoids raw prompt/completion logging | 8 | proposed | - | - | - |
-| FND-SEC-013 | Gateway tenant validation is robust | 8 | proposed | - | - | - |
-| FND-SEC-014 | Secrets not emitted as Bicep outputs | 1 | proposed | - | - | - |
+| FND-SEC-001 | Foundry local authentication disabled | 1 | verified | adapt | warning/error/error | [link](https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json) (2026-10-04) |
+| FND-SEC-002 | AI Search key authentication disabled or RBAC-only | 1 | verified | adapt | warning/error/error | [link](https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json) (2026-10-04) |
+| FND-SEC-003 | Cosmos DB local authentication disabled | 1 | verified | adapt | warning/error/error | [link](https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json) (2026-10-04) |
+| FND-SEC-004 | Storage shared key/anonymous access disabled; HTTPS/TLS required | 1 | verified | adapt | warning/error/error | [link](https://github.com/Azure/azure-rest-api-specs/blob/main/specification/storage/resource-manager/Microsoft.Storage/stable/2026-06-01/openapi.json) (2026-10-04) |
+| FND-SEC-005 | Key Vault soft delete, purge protection and RBAC | later | verified | reuse | info/warning/error | [link](https://github.com/Azure/azure-rest-api-specs/blob/main/specification/keyvault/resource-manager/Microsoft.KeyVault/KeyVault/stable/2026-05-15/openapi.json) (2026-10-04) |
+| FND-SEC-006 | Firewall rules reject private/open ranges | 1 | verified | native | warning/error/error | [link](https://learn.microsoft.com/azure/storage/common/storage-network-security-limitations) (2026-10-04) |
+| FND-SEC-007 | RAI/content filter bound to chat deployments | later | verified | native | warning/error/error | [link](https://learn.microsoft.com/azure/foundry/guardrails/guardrails-overview) (2026-10-04) |
+| FND-SEC-008 | Relevant Defender plans enabled | 2/4 | verified | adapt | info/warning/warning | [link](https://github.com/Azure/azure-rest-api-specs/blob/main/specification/security/resource-manager/Microsoft.Security/Security/stable/2026-07-01/pricings.json) (2026-10-04) |
+| FND-SEC-009 | Policy coverage and compliance evidence | 2/4 | product-opinion | native | info/info/warning | [link](https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Authorization/policy/stable/2025-01-01/policyAssignments.json) (2026-10-04) |
+| FND-SEC-010 | Customer-managed keys informational | 4 | verified | adapt | info/info/info | [link](https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json) (2026-10-04) |
+| FND-SEC-011 | Controlled outbound egress informational | 4 | verified | native | info/info/info | [link](https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json) (2026-10-04) |
+| FND-SEC-012 | Gateway telemetry avoids raw prompt/completion logging | 8 | verified | native | info/warning/error | [link](https://learn.microsoft.com/azure/api-management/api-management-howto-llm-logs) (2026-10-04) |
+| FND-SEC-013 | Gateway tenant validation is robust | 8 | verified | native | warning/error/error | [link](https://learn.microsoft.com/azure/api-management/validate-azure-ad-token-policy) (2026-10-04) |
+| FND-SEC-014 | Secrets not emitted as Bicep outputs | 1 | verified | wrap | warning/error/error | [link](https://learn.microsoft.com/azure/azure-resource-manager/bicep/linter-rule-outputs-should-not-contain-secrets) (2026-10-04) |

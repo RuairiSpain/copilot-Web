@@ -2,6 +2,7 @@
 //
 //	rulecatalog validate [--phase0] [--dir rules/catalog]
 //	rulecatalog generate-docs [--dir rules/catalog] [--out docs/rule-catalog.md] [--check]
+//	rulecatalog generate-overlap [--dir rules/catalog] [--out docs/overlap-analysis.md] [--check]
 //
 // Exit codes: 0 ok, 1 catalogue invalid or generated file stale, 2 usage or I/O error.
 package main
@@ -19,18 +20,20 @@ func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: rulecatalog validate|generate-docs [flags]")
+		fmt.Fprintln(stderr, "usage: rulecatalog validate|generate-docs|generate-overlap [flags]")
 		return 2
 	}
 	fs := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	dir := fs.String("dir", "rules/catalog", "catalogue directory")
 	phase0 := fs.Bool("phase0", false, "validate: fail rules still in the proposed state")
-	out := fs.String("out", "docs/rule-catalog.md", "generate-docs: output file")
-	check := fs.Bool("check", false, "generate-docs: fail if the output file is not up to date, without writing")
+	out := fs.String("out", "docs/rule-catalog.md", "generate-docs/generate-overlap: output file")
+	check := fs.Bool("check", false, "generate-docs/generate-overlap: fail if the output file is not up to date, without writing")
 	if err := fs.Parse(args[1:]); err != nil {
 		return 2
 	}
+	outSet := false
+	fs.Visit(func(f *flag.Flag) { outSet = outSet || f.Name == "out" })
 	rules, err := catalog.Load(os.DirFS("."), *dir)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -44,12 +47,18 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 		fmt.Fprintf(stdout, "catalogue valid: %d rules\n", len(rules))
 		return 0
-	case "generate-docs":
+	case "generate-docs", "generate-overlap":
 		if err := catalog.Validate(rules, catalog.Options{}); err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
 		}
 		md := catalog.Markdown(rules)
+		if args[0] == "generate-overlap" {
+			md = catalog.OverlapMatrix(rules)
+			if !outSet {
+				*out = "docs/overlap-analysis.md"
+			}
+		}
 		if *check {
 			cur, err := os.ReadFile(*out)
 			if err != nil || string(cur) != md {

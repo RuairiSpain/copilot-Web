@@ -10,5 +10,6 @@ if [ ! -d cmd/rulecatalog ]; then
 fi
 go run ./cmd/rulecatalog validate || exit 1
 go run ./cmd/rulecatalog generate-docs || exit 1
-git diff --exit-code -- docs/rule-catalog.md || { echo "check-rule-catalog: docs/rule-catalog.md is stale; commit the regenerated file" >&2; exit 1; }
+go run ./cmd/rulecatalog generate-overlap || exit 1
+git diff --exit-code -- docs/rule-catalog.md docs/overlap-analysis.md || { echo "check-rule-catalog: generated docs are stale; commit the regenerated files" >&2; exit 1; }
 echo "check-rule-catalog: ok"

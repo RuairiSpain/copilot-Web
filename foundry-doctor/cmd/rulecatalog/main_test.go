@@ -38,6 +38,9 @@ func TestRunExitCodes(t *testing.T) {
 		{[]string{"generate-docs", "--check"}, 1}, // not generated yet
 		{[]string{"generate-docs"}, 0},
 		{[]string{"generate-docs", "--check"}, 0},
+		{[]string{"generate-overlap", "--check"}, 1}, // not generated yet
+		{[]string{"generate-overlap"}, 0},
+		{[]string{"generate-overlap", "--check"}, 0},
 		{[]string{"validate", "--dir", "missing"}, 2},
 	}
 	for _, tc := range tests {

@@ -53,6 +53,8 @@ func TestValidate(t *testing.T) {
 		{"missing decision", map[string]string{"rules/catalog/sec/FND-SEC-001.yaml": strings.Replace(goodVerified, "decision: native", "decision: maybe", 1)}, Options{}, "overlap.decision"},
 		{"opinion needs basis", map[string]string{"rules/catalog/sec/FND-SEC-001.yaml": strings.Replace(goodVerified, "status: verified", "status: product-opinion", 1)}, Options{}, "basis \"opinion\""},
 		{"native decision needs native owner", map[string]string{"rules/catalog/sec/FND-SEC-001.yaml": strings.Replace(goodVerified, "owner: native", "owner: psrule", 1)}, Options{}, "requires implementation.owner native"},
+		{"adapt decision needs native owner", map[string]string{"rules/catalog/sec/FND-SEC-001.yaml": strings.Replace(strings.Replace(goodVerified, "decision: native", "decision: adapt", 1), "owner: native", "owner: psrule", 1)}, Options{}, "decision adapt requires implementation.owner native"},
+		{"wrap decision needs external owner", map[string]string{"rules/catalog/sec/FND-SEC-001.yaml": strings.Replace(goodVerified, "decision: native", "decision: wrap", 1)}, Options{}, "decision wrap requires an external"},
 		{"group mismatch", map[string]string{"rules/catalog/sec/FND-SEC-001.yaml": strings.Replace(goodVerified, "group: SEC", "group: NET", 1)}, Options{}, "does not match id group"},
 	}
 	for _, tc := range tests {
