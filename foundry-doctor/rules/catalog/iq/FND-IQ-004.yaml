@@ -2,5 +2,95 @@ id: FND-IQ-004
 version: 1
 group: IQ
 title: "Vector dimensions match embedding deployment metadata"
-status: proposed
+description: >-
+  The dimensions of each vector field must equal the dimensions that the embedding model actually emits:
+  the dimensions set on the integrated-vectorization embedding skill (when one is used) and a value inside
+  the range of the model behind the Azure OpenAI deployment named by the field's vectorizer. The vectorizer
+  modelName must also match the model recorded on the Foundry or Azure OpenAI deployment that deploymentId
+  points to.
+status: verified
 phases: ["8"]
+inputs: ["data-plane", "control-plane", "bicep-arm"]
+basis: ["platform"]
+category: must-have
+pillar: reliability
+severity:
+  dev: error
+  test: error
+  prod: error
+compatibility:
+  azd: ""
+  extensions: {}
+  apiVersions:
+    - "Search data plane 2026-04-01 and 2026-08-01-preview"
+    - "Microsoft.CognitiveServices accounts/deployments 2025-06-01 (properties.model.name and version read in spec)"
+evidence:
+  description: >-
+    Join four metadata reads, no content: the index vector field (dimensions, vectorSearchProfile), the
+    profile's vectorizer (azureOpenAIParameters.resourceUri, deploymentId, modelName), the skillset
+    AzureOpenAIEmbeddingSkill (dimensions, modelName) when present, and the account deployment
+    (properties.model.name) resolved from resourceUri. Fail when the field dimensions differ from the skill
+    dimensions; when dimensions fall outside the documented range for modelName; when ada-002 is not exactly
+    1536; or when the deployment's model name differs from vectorizer modelName. Skip the control-plane leg
+    when the resourceUri host is not an account in the inspected subscription (for example an API Management
+    endpoint); skip when the vectorizer is not azureOpenAI.
+  confidence: certain
+recommendation: >-
+  Set the vector field dimensions to the value the embedding skill or model returns, keep vectorizer
+  modelName identical to the deployed model, and rebuild the index if dimensions must change.
+fix: |
+  // skill and field must agree
+  { "@odata.type": "#Microsoft.Skills.Text.AzureOpenAIEmbeddingSkill",
+    "deploymentId": "text-embedding-3-large", "modelName": "text-embedding-3-large", "dimensions": 1024 }
+  { "name": "contentVector", "type": "Collection(Edm.Single)", "dimensions": 1024, "vectorSearchProfile": "hnsw_text_3_large" }
+sources:
+  - url: https://learn.microsoft.com/azure/search/vector-search-how-to-create-index
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/search/vector-search-how-to-create-index.md
+    note: dimensions must be set to the same value used by the embedding skill; ada-002 fixed at 1536, text-embedding-3-small 1 to 1536, text-embedding-3-large 1 to 3072; indexers throw an error on mismatched vector lengths.
+  - url: https://learn.microsoft.com/azure/search/cognitive-search-skill-azure-openai-embedding
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/search/cognitive-search-skill-azure-openai-embedding.md
+    note: Skill dimensions parameter and Supported dimensions by modelName table.
+  - url: https://learn.microsoft.com/azure/search/vector-search-vectorizer-azure-open-ai
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/search/vector-search-vectorizer-azure-open-ai.md
+    note: Vectorizer parameters resourceUri, deploymentId, modelName; expected field dimensions; API Management endpoints supported.
+  - url: https://github.com/Azure/azure-rest-api-specs/tree/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/models.tsp (DeploymentModel name, version)
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    Nothing correlates a Search vector field with the embedding deployment metadata in Foundry. This is
+    Foundry-specific cross-resource correlation with deterministic evidence from metadata.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/iq
+testability: >-
+  Offline with index, skillset and deployment fixtures. Live control-plane leg needs read access to the
+  account; otherwise the model-name comparison is skipped and the dimension-range checks still run.
+tests:
+  positive:
+    - field-dimensions-differ-from-skill-dimensions
+    - ada-002-field-3072
+    - deployment-model-differs-from-vectorizer-modelname
+    - dimensions-above-model-maximum
+  negative:
+    - matching-3-large-1024
+    - ada-002-1536
+  skipped:
+    - vectorizer-through-api-management-endpoint
+    - deployment-not-in-subscription
+    - non-azure-openai-vectorizer
+notes: >-
+  Deployment property name properties.model.name was read in the Cognitive Services ARM spec; the data-plane
+  retrieval of the deployment through an API Management endpoint is intentionally skipped. Foundry model
+  catalogue embeddings from other providers have no documented dimension table and are not asserted.

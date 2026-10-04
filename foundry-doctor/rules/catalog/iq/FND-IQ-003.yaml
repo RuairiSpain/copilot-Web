@@ -2,5 +2,96 @@ id: FND-IQ-003
 version: 1
 group: IQ
 title: "Vector field type, dimensions and profile"
-status: proposed
+description: >-
+  Each vector field must use a documented vector data type, declare a dimensions value within the service
+  limit (4096) and within the range of the embedding model that produces it, and reference a vector search
+  profile that exists in vectorSearch.profiles and itself references an existing algorithm (and vectorizer or
+  compression when named).
+status: verified
 phases: ["8"]
+inputs: ["data-plane", "bicep-arm"]
+basis: ["platform"]
+category: must-have
+pillar: reliability
+severity:
+  dev: error
+  test: error
+  prod: error
+compatibility:
+  azd: ""
+  extensions: {}
+  apiVersions:
+    - "2026-04-01"
+    - "2026-08-01-preview"
+evidence:
+  description: >-
+    Read the index definition. For each field whose type starts with Collection(Edm.) and has dimensions or
+    vectorSearchProfile, require type in Collection(Edm.Single), Collection(Edm.Half), Collection(Edm.Int16),
+    Collection(Edm.SByte) or Collection(Edm.Byte); require an integer dimensions value between 1 and 4096;
+    require vectorSearchProfile to name an entry of vectorSearch.profiles; require that profile's algorithm to
+    name an entry of vectorSearch.algorithms, its vectorizer (if set) an entry of vectorSearch.vectorizers and
+    its compression (if set) an entry of vectorSearch.compressions. When the profile's vectorizer is
+    kind azureOpenAI, also require dimensions within the documented range for its modelName
+    (text-embedding-ada-002: 1536 only; text-embedding-3-large: 1 to 3072; text-embedding-3-small: 1 to 1536).
+    Edm.Byte packed-binary dimension semantics are not asserted (reported uncertain).
+  confidence: certain
+recommendation: >-
+  Use Collection(Edm.Single) (or a documented narrow type), set dimensions to the value the embedding model
+  emits, and set vectorSearchProfile to a profile defined under vectorSearch.profiles.
+fix: |
+  {
+    "name": "page_chunk_vector",
+    "type": "Collection(Edm.Single)",
+    "searchable": true, "retrievable": false, "stored": false,
+    "dimensions": 3072,
+    "vectorSearchProfile": "hnsw_text_3_large"
+  }
+sources:
+  - url: https://learn.microsoft.com/azure/search/vector-search-how-to-create-index
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/search/vector-search-how-to-create-index.md
+    note: Field attributes (type, dimensions, vectorSearchProfile), unique names per configuration type, embedding model dimension ranges.
+  - url: https://learn.microsoft.com/azure/search/search-limits-quotas-capacity
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/search/search-limits-quotas-capacity.md
+    note: "Index limits table: Maximum dimensions per vector field is 4096 on every tier."
+  - url: https://learn.microsoft.com/azure/search/vector-search-how-to-assign-narrow-data-types
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/search/vector-search-how-to-assign-narrow-data-types.md
+    note: Collection(Edm.Single), Half, Int16, SByte; Byte only with packed binary data types.
+  - url: https://learn.microsoft.com/azure/search/vector-search-vectorizer-azure-open-ai
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/search/vector-search-vectorizer-azure-open-ai.md
+    note: Expected field dimensions by modelName (min and max).
+overlap:
+  decision: native
+  coverage: none
+  rationale: No lower-level tool validates Search index vector schemas; Foundry-specific correlation (index to knowledge source) is the value.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/iq
+testability: Offline against index JSON fixtures.
+tests:
+  positive:
+    - unsupported-vector-type
+    - dimensions-missing
+    - dimensions-over-4096
+    - profile-not-defined
+    - profile-algorithm-not-defined
+    - ada-002-with-3072-dimensions
+  negative:
+    - single-1536-ada-002
+    - text-embedding-3-large-1024-truncated
+    - half-precision-vector
+  skipped:
+    - byte-packed-binary-dimensions
+    - custom-web-api-vectorizer-dimensions-unknown
+notes: >-
+  Dimension ranges are only asserted for the azureOpenAI vectorizer where a table exists. Limits for
+  quantization or truncationDimension (preview-era MRL) are not asserted here.

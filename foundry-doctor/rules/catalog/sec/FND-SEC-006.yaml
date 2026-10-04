@@ -1,6 +1,96 @@
 id: FND-SEC-006
 version: 1
 group: SEC
-title: "Firewall rules reject private/open ranges"
-status: proposed
-phases: ["1"]
+title: Firewall rules reject private/open ranges
+description: IP firewall rules on Foundry-related resources must not contain open ranges (0.0.0.0/0, or 0.0.0.0
+  on Cosmos DB, which means all Azure data centers) or private-network ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16,
+  100.64.0.0/10), which Storage and Cosmos DB document as not enforceable in IP rules.
+status: verified
+phases:
+- '1'
+inputs:
+- bicep-arm
+- control-plane
+basis:
+- security
+category: must-have
+pillar: security
+severity:
+  dev: warning
+  test: error
+  prod: error
+compatibility:
+  azd: n/a (reads compiled ARM JSON or ARM control plane)
+  extensions: {}
+  apiVersions:
+  - Microsoft.Storage/storageAccounts 2026-06-01 (stable) - storage/resource-manager/Microsoft.Storage/stable/2026-06-01/openapi.json
+  - Microsoft.DocumentDB/databaseAccounts 2026-03-15 (stable) - cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
+  - Microsoft.KeyVault/vaults 2026-05-15 (stable) - keyvault/resource-manager/Microsoft.KeyVault/KeyVault/stable/2026-05-15/openapi.json
+  - Microsoft.Search/searchServices 2025-05-01 (stable) - search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
+  - Microsoft.CognitiveServices/accounts 2026-09-01 (stable) - cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+evidence:
+  description: 'IP rule values: Storage networkAcls.ipRules[].value, Cosmos DB ipRules[].ipAddressOrRange, Key Vault
+    networkAcls.ipRules[].value, Search networkRuleSet.ipRules[].value, Cognitive Services networkAcls.ipRules[].value.
+    Open-range finding on any of those resources: value equals 0.0.0.0/0, or equals 0.0.0.0 on Cosmos DB. Private-range
+    finding only for Storage (Learn: RFC 1918 ranges not allowed in IP rules) and Cosmos DB (spec lists 10.0.0.0/8,
+    100.64.0.0/10, 172.16.0.0/12, 192.168.0.0/16 as not enforceable); no private-range check is made on other resource
+    types because no source was verified.'
+  confidence: certain
+recommendation: Remove open or private ranges from IP rules. Use private endpoints, virtual network rules or service
+  endpoints for private traffic, and list only the specific public egress addresses that need access.
+fix: "networkAcls: {\n  defaultAction: 'Deny'\n  ipRules: [\n    { value: '203.0.113.10' } // specific public address,\
+  \ not 0.0.0.0/0 or 10.0.0.0/8\n  ]\n}"
+sources:
+- url: https://learn.microsoft.com/azure/storage/common/storage-network-security-limitations
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-docs/articles/storage/common/storage-network-security-limitations.md
+  note: '''Restrictions for IP network rules'': RFC 1918 ranges aren''t allowed in IP rules.'
+- url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/rest-api-specs/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
+  note: IpAddressOrRange.ipAddressOrRange description lists ranges not enforceable by the IP address filter.
+- url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/keyvault/resource-manager/Microsoft.KeyVault/KeyVault/stable/2026-05-15/openapi.json
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/rest-api-specs/specification/keyvault/resource-manager/Microsoft.KeyVault/KeyVault/stable/2026-05-15/openapi.json
+  note: IPRule / NetworkRuleSet property names.
+- url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/rest-api-specs/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
+  note: NetworkRuleSet.ipRules / IpRule.
+- url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+  note: NetworkRuleSet.ipRules / IpRule.
+overlap:
+  decision: native
+  coverage: partial
+  rationale: PSRule firewall rules (Azure.Storage.Firewall, Azure.KeyVault.Firewall, Azure.Cosmos.PublicAccess,
+    Azure.AI.PublicAccess) and Checkov (CKV_AZURE_35, 109, 99) check defaultAction or public access, not the content
+    of individual IP rules. The only related built-in is Azure Policy 12339a85 (Cosmos 0.0.0.0). No tool checks
+    private ranges in IP rules, so the value is the rule-content check across all Foundry-related resource types
+    in one finding. The private-range part is a documented platform constraint for Storage and Cosmos; the open-range
+    part is a security recommendation, hence basis security and non-error dev severity.
+  psrule: []
+  azurePolicy:
+  - 12339a85-a25c-4f17-9f82-4766f13f5c4c
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/sec
+tests:
+  positive:
+  - specific public /32 or /24 passes
+  negative:
+  - Storage ipRules 10.0.0.0/24 fails as private range
+  - Cosmos ipAddressOrRange 0.0.0.0 fails as all-Azure-datacenters
+  - any resource ipRules 0.0.0.0/0 fails as open range
+  skipped:
+  - ipRules built from an unresolved parameter is skipped
+  - 'uncertain: private range on Key Vault, Search or Cognitive Services is not evaluated (no verified source)'
+testability: Deterministic CIDR parsing on ARM JSON; no network access needed.
+notes: 'Mixed basis: private ranges on Storage/Cosmos are platform-documented, open ranges are a security judgement.
+  Kept as basis security (non-platform) so dev can be warning; the catalogue schema forces error in every profile
+  if platform were listed. Raised as a PRD ambiguity.'

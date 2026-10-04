@@ -1,6 +1,84 @@
 id: FND-SEC-001
 version: 1
 group: SEC
-title: "Foundry local authentication disabled"
-status: proposed
-phases: ["1"]
+title: Foundry local authentication disabled
+description: A Foundry (Microsoft.CognitiveServices) account should reject API-key authentication so that only Microsoft
+  Entra ID tokens are accepted. The rule reads properties.disableLocalAuth on the account that hosts Foundry projects
+  and deployments. A missing value is treated as keys enabled.
+status: verified
+phases:
+- '1'
+inputs:
+- bicep-arm
+- control-plane
+basis:
+- security
+- waf
+category: must-have
+pillar: security
+severity:
+  dev: warning
+  test: error
+  prod: error
+compatibility:
+  azd: n/a (reads compiled ARM JSON or ARM control plane; no azd behaviour dependency)
+  extensions: {}
+  apiVersions:
+  - Microsoft.CognitiveServices/accounts 2026-09-01 (stable) - cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+evidence:
+  description: 'Compiled ARM resource of type Microsoft.CognitiveServices/accounts (or the deployed account read
+    from ARM) that owns at least one child Microsoft.CognitiveServices/accounts/projects or accounts/deployments
+    resource: properties.disableLocalAuth is not literally true. An expression that cannot be resolved at compile
+    time yields Skipped (parameter value unknown), not Pass.'
+  confidence: certain
+recommendation: Set properties.disableLocalAuth to true on the Foundry account and grant callers Entra ID roles
+  instead of distributing keys. Keep keys enabled only in dev with a recorded suppression (reason and expiry).
+fix: "resource account 'Microsoft.CognitiveServices/accounts@2026-09-01' = {\n  name: accountName\n  location: location\n\
+  \  kind: 'AIServices'\n  sku: { name: 'S0' }\n  properties: {\n    customSubDomainName: accountName\n    disableLocalAuth:\
+  \ true\n  }\n}"
+sources:
+- url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+  note: AccountProperties.disableLocalAuth (boolean) read from the definition.
+- url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.AI.DisableLocalAuth/
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/psrule/docs/en/rules/Azure.AI.DisableLocalAuth.md
+  note: Overlap source (PSRule for Azure rule documentation).
+overlap:
+  decision: adapt
+  coverage: partial
+  rationale: 'PSRule Azure.AI.DisableLocalAuth, Azure Policy 71ef260a and Checkov CKV_AZURE_236 all test the same
+    property, so the property check is not new. Foundry Doctor adds: (1) scoping to accounts that actually host
+    Foundry projects or deployments in the same template, so unrelated Cognitive Services accounts are not flagged;
+    (2) one evidence model for Bicep-compiled ARM and the live account, with the same fingerprint; (3) per-profile
+    severity (warning in dev, error in test and prod) and baseline/suppression handling. Without those, this should
+    be reused as a PSRule/Policy mapping. Do not copy PSRule logic.'
+  psrule:
+  - Azure.AI.DisableLocalAuth
+  azurePolicy:
+  - 71ef260a-8f18-47b7-abcb-62d0673d94dc
+  - 14de9e63-1b31-492e-a5a3-c3f7fd57f555
+  - 55eff01b-f2bd-4c32-9203-db285f709d30
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov:
+  - CKV_AZURE_236
+implementation:
+  owner: native
+  package: internal/rules/sec
+tests:
+  positive:
+  - account with projects and disableLocalAuth true passes
+  - live account reports disableLocalAuth true
+  negative:
+  - disableLocalAuth false or absent on an account with projects fails
+  - hosting account in prod profile reports error
+  skipped:
+  - disableLocalAuth driven by an unresolved parameter is skipped with reason
+  - no Reader permission in live mode is skipped
+testability: Fully deterministic on compiled ARM JSON; live mode needs Reader on the account.
+notes: Policy 55eff01b is the DINE (configure) variant; 14de9e63 is the Modify variant; both remediate rather than
+  detect. Defender for Cloud and Advisor recommendation IDs for this control were not verifiable from the local
+  clones and are left empty.

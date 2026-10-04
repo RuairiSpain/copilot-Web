@@ -2,5 +2,108 @@ id: FND-IQ-002
 version: 1
 group: IQ
 title: "Required key/content/title/vector/semantic fields"
-status: proposed
+description: >-
+  An index used for agentic retrieval must contain a string document key, at least one searchable and
+  retrievable string content field, and a semantic configuration whose prioritizedContentFields name such
+  a field (via defaultSemanticConfiguration or the knowledge source semanticConfigurationName). Any vector
+  field must be searchable, non-filterable, non-facetable, non-sortable and reference a vector search profile.
+  Title and citation fields are documented as optional or recommended and are not failure conditions.
+status: verified
 phases: ["8"]
+inputs: ["data-plane", "bicep-arm"]
+basis: ["platform"]
+category: must-have
+pillar: reliability
+severity:
+  dev: error
+  test: error
+  prod: error
+compatibility:
+  azd: ""
+  extensions: {}
+  apiVersions:
+    - "2026-08-01-preview (semanticConfigurationName optional on search index knowledge sources since 2026-05-01-preview)"
+    - "2026-04-01 (semanticConfigurationName still required on the knowledge source)"
+evidence:
+  description: >-
+    Read the index definition. Fail when no field is key=true of type Edm.String; when no string field is
+    both searchable and retrievable; when the index has no semantic configuration or neither
+    semantic.defaultConfiguration nor the knowledge source semanticConfigurationName resolves to a
+    configuration; when that configuration has no prioritizedContentFields entry or the entry names a field
+    that is missing, not a string, not searchable or not retrievable. For every vector-typed field fail when
+    searchable is not true, when filterable, facetable or sortable is true, or when vectorSearchProfile is
+    absent (profile existence is checked by FND-IQ-003). Under 2026-04-01 also fail a knowledge source
+    without semanticConfigurationName when the index has no default configuration. Title field, keyword
+    fields and citation fields are not evaluated here.
+  confidence: certain
+recommendation: >-
+  Add a string key field, a searchable and retrievable content field, and a semantic configuration that
+  lists the content field under prioritizedContentFields; set it as the index default or reference it from the
+  knowledge source.
+fix: |
+  "fields": [
+    { "name": "id", "type": "Edm.String", "key": true, "searchable": false, "retrievable": true, "filterable": true },
+    { "name": "page_chunk", "type": "Edm.String", "searchable": true, "retrievable": true }
+  ],
+  "semantic": {
+    "defaultConfiguration": "semantic_config",
+    "configurations": [
+      { "name": "semantic_config",
+        "prioritizedFields": { "prioritizedContentFields": [ { "fieldName": "page_chunk" } ] } }
+    ]
+  }
+sources:
+  - url: https://learn.microsoft.com/azure/search/agentic-retrieval-how-to-create-index
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/search/agentic-retrieval-how-to-create-index.md
+    note: >-
+      Criteria table (searchable and retrievable string fields required; semantic configuration required;
+      citation fields recommended); semantic configuration needs a named config and prioritizedContentFields
+      with at least one string field that is searchable and retrievable; title and keywords optional.
+  - url: https://learn.microsoft.com/azure/search/vector-search-how-to-create-index
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/search/vector-search-how-to-create-index.md
+    note: Key must be Edm.String key=true; vector field searchable must be true, filterable/facetable/sortable must be false.
+  - url: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-search-index
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/search/agentic-knowledge-source-how-to-search-index.md
+    note: Starting with 2026-05-01-preview semanticConfigurationName is optional; earlier versions still require it.
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    PSRule for Azure checks Search service SKU, naming, managed identity and SLA replica counts only
+    (Azure.Search.*); nothing inspects index fields or semantic configurations. Checkov has only
+    AzureSearchSLAIndex/AzureSearchSLAQueryUpdates (replica counts).
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/iq
+testability: Offline against index JSON fixtures; live read is a metadata GET of the index.
+tests:
+  positive:
+    - no-key-field
+    - key-field-not-string
+    - no-searchable-retrievable-string-field
+    - no-semantic-configuration
+    - semantic-content-field-not-retrievable
+    - semantic-content-field-missing
+    - vector-field-filterable
+    - vector-field-not-searchable
+    - ks-2026-04-01-missing-semantic-configuration-name
+  negative:
+    - minimal-valid-agentic-index
+    - index-with-title-field-absent
+    - vector-field-retrievable-false
+  skipped:
+    - index-metadata-not-readable
+    - knowledge-source-kind-without-backing-index-input
+notes: >-
+  Whether the service rejects an index missing these elements at knowledge source creation or fails later at
+  retrieve time is not stated; the rule asserts only the documented criteria. A recommended-field check
+  (title, citation, description) is proposed as a separate new rule in docs/overlap/iq-gw.md.

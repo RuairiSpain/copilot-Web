@@ -1,6 +1,79 @@
 id: FND-SEC-012
 version: 1
 group: SEC
-title: "Gateway telemetry avoids raw prompt/completion logging"
-status: proposed
-phases: ["8"]
+title: Gateway telemetry avoids raw prompt/completion logging
+description: An API Management AI gateway should not persist raw prompts and completions in logs unless that is
+  a deliberate, suppressed decision. The rule reads the diagnostic largeLanguageModel.requests.messages and responses.messages
+  settings (value all, maxSizeInBytes) and the frontend/backend request/response body.bytes settings of Microsoft.ApiManagement
+  service and API diagnostics.
+status: verified
+phases:
+- '8'
+inputs:
+- bicep-arm
+- control-plane
+basis:
+- security
+category: nice-to-have
+pillar: security
+severity:
+  dev: info
+  test: warning
+  prod: error
+compatibility:
+  azd: n/a (reads compiled ARM JSON or ARM control plane)
+  extensions: {}
+  apiVersions:
+  - Microsoft.ApiManagement diagnostics 2025-09-01-preview (preview; largeLanguageModel property exists only in
+    preview specs in the reviewed clone, the stable 2024-05-01 does not have it) - apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/preview/2025-09-01-preview/openapi.json
+evidence:
+  description: 'Diagnostic resource (service-level or API-level) with properties.largeLanguageModel.requests.messages
+    or responses.messages set (enum all) with a loggerId, or frontend/backend request/response body.bytes greater
+    than 0 on an API that fronts a Foundry/OpenAI backend. Findings name the diagnostic, scope and maximum bytes.
+    Docs: when enabled, prompts and completions are sent to Azure Monitor logs in 32 KB chunks.'
+  confidence: certain
+recommendation: Do not enable LLM message logging in production unless required; if required, restrict workspace
+  access, set retention, apply data masking and record a suppression with reason and expiry. Prefer token-usage
+  logging (largeLanguageModel.logs enabled) which does not log message content.
+fix: "resource diag 'Microsoft.ApiManagement/service/apis/diagnostics@2025-09-01-preview' = {\n  parent: api\n \
+  \ name: 'azuremonitor'\n  properties: {\n    loggerId: loggerId\n    largeLanguageModel: { logs: 'enabled' } //\
+  \ token usage only; no requests/responses message logging\n  }\n}"
+sources:
+- url: https://learn.microsoft.com/azure/api-management/api-management-howto-llm-logs
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-docs/articles/api-management/api-management-howto-llm-logs.md
+  note: Optional logging of request and response messages (prompt and completion), 32 KB chunking.
+- url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/preview/2025-09-01-preview/openapi.json
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/rest-api-specs/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/preview/2025-09-01-preview/openapi.json
+  note: DiagnosticContractProperties.largeLanguageModel; LLMDiagnosticSettings (logs, requests, responses); LLMMessageDiagnosticSettings
+    (messages=all, maxSizeInBytes max 262144); HttpMessageDiagnostic.body.bytes max 8192.
+overlap:
+  decision: native
+  coverage: none
+  rationale: No PSRule APIM rule, Azure Policy built-in in the reviewed APIM policy folder, Defender or Checkov
+    check covers LLM message logging. Foundry-specific semantics (AI gateway in front of a Foundry deployment) make
+    this native. Whether message logging is acceptable is a data-governance choice, so severity is info in dev and
+    escalates with the profile.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/sec
+tests:
+  positive:
+  - largeLanguageModel.logs enabled without requests/responses passes
+  negative:
+  - largeLanguageModel.requests.messages all fails
+  - responses.messages all fails
+  - frontend.request.body.bytes > 0 on an LLM API fails
+  skipped:
+  - diagnostic uses an apiVersion without largeLanguageModel is skipped
+  - 'uncertain: body.bytes > 0 on an API that is not demonstrably an LLM API is reported uncertain'
+testability: Deterministic on ARM JSON when apiVersion carries largeLanguageModel; older API versions are skipped.
+notes: 'Phase 8 preview schema: property names verified against 2025-09-01-preview only. The rule treats prompt
+  logging as a security/privacy recommendation (basis security), not a platform constraint.'

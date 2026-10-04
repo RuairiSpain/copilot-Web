@@ -2,5 +2,116 @@ id: FND-IQ-008
 version: 1
 group: IQ
 title: "Source connection uses managed identity"
-status: proposed
+description: >-
+  Connections that Azure AI Search and Foundry IQ use to reach data sources and models should authenticate
+  with a managed identity instead of a stored key: the knowledge source connectionString should be a
+  ResourceId form (no AccountKey, SharedAccessSignature, password or client secret), vectorizer and
+  knowledge base model parameters should omit apiKey, and the Foundry project connection to the knowledge
+  base MCP endpoint should use authType ProjectManagedIdentity.
+status: verified
 phases: ["8"]
+inputs: ["data-plane", "control-plane", "bicep-arm"]
+basis: ["security"]
+category: must-have
+pillar: security
+severity:
+  dev: warning
+  test: error
+  prod: error
+compatibility:
+  azd: ""
+  extensions: {}
+  apiVersions:
+    - "Search data plane 2026-04-01 and 2026-08-01-preview"
+    - "Foundry project connection API 2025-10-01-preview (RemoteTool, ProjectManagedIdentity; doc example)"
+evidence:
+  description: >-
+    Classify, without emitting any value: for azureBlob knowledge sources, connectionString starts with
+    ResourceId= (managed identity) versus contains AccountKey=, SharedAccessSignature= or a container SAS
+    (key or token); for indexedSql, whether the connection string carries User ID/Password (SQL
+    authentication) versus Database plus a resource ID (managed identity); for indexedSharePoint, whether the
+    connection string uses ClientSecret (client secret) versus secretless authentication; for every
+    azureOpenAIParameters in vectorizers, skills and knowledge base models, presence of apiKey (key) versus
+    authIdentity or absence (managed identity). For a Foundry project connection whose target is
+    {search}/knowledgebases/{name}/mcp, authType must be ProjectManagedIdentity. Report only the
+    classification and JSON path. The search service must have a system-assigned or user-assigned identity
+    (control plane identity.type) for the managed-identity paths.
+  confidence: certain
+recommendation: >-
+  Enable a system-assigned or user-assigned managed identity on the Search service, grant it the data-plane
+  roles in the knowledge source article (for example Storage Blob Data Reader, Cognitive Services User), use
+  a ResourceId= connection string, and drop apiKey from model parameters.
+fix: |
+  "azureBlobParameters": {
+    "connectionString": "ResourceId=/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.Storage/storageAccounts/<account>",
+    "containerName": "docs",
+    "ingestionParameters": { "identity": null }
+  }
+sources:
+  - url: https://learn.microsoft.com/azure/search/search-how-to-managed-identities
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/search/search-how-to-managed-identities.md
+    note: Managed identities and role assignments eliminate the need for secrets in connection strings; a ResourceId connection string indicates a system managed identity, user-assigned through the identity property.
+  - url: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-blob
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/search/agentic-knowledge-source-how-to-blob.md
+    note: Managed identity with Storage Blob Data Reader and Cognitive Services User, ResourceId= connection string, ingestionParameters.identity for user-assigned.
+  - url: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-azure-sql
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/search/agentic-knowledge-source-how-to-azure-sql.md
+    note: SQL authentication versus managed identity connection strings; identity only needed for user-assigned.
+  - url: https://learn.microsoft.com/azure/search/vector-search-vectorizer-azure-open-ai
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/search/vector-search-vectorizer-azure-open-ai.md
+    note: apiKey and authIdentity semantics; leave both empty to use the system-assigned identity; Cognitive Services OpenAI User role.
+  - url: https://learn.microsoft.com/azure/search/search-security-rbac
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/search/search-security-rbac.md
+    note: Role-based access is optional but recommended; key-based authentication is the default alternative.
+  - url: https://learn.microsoft.com/azure/foundry/agents/how-to/foundry-iq-connect
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/foundry-iq-connect.md
+    note: RemoteTool connection with authType ProjectManagedIdentity; role-based access recommended for production, key-based as fallback.
+overlap:
+  decision: adapt
+  coverage: partial
+  rationale: >-
+    PSRule Azure.Search.ManagedIdentity only checks that the Search service has an identity, and the Azure
+    Policy "local authentication methods disabled" governs the Search service's own API keys. Neither
+    inspects the connection strings and key parameters of knowledge sources, vectorizers or Foundry project
+    connections, which is the Foundry-specific evidence. Reuse the identity check, add the per-connection
+    classification natively.
+  psrule: ["Azure.Search.ManagedIdentity"]
+  azurePolicy: ["6300012e-e9a4-4649-b41f-a85f5c43be91"]
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/iq
+testability: >-
+  Offline against knowledge source JSON fixtures with redacted values. Evidence is a classification only;
+  fixtures use fake keys and the scanner must never echo them.
+tests:
+  positive:
+    - blob-connection-string-with-account-key
+    - blob-sas-connection-string
+    - sql-password-connection-string
+    - vectorizer-api-key-set
+    - foundry-connection-api-key-auth
+    - search-service-without-identity-for-resourceid-connection
+  negative:
+    - blob-resourceid-connection
+    - vectorizer-no-key-system-identity
+    - project-managed-identity-connection
+  skipped:
+    - sharepoint-secret-authentication-not-assessable-offline
+    - connection-string-redacted-by-service
+notes: >-
+  Product recommendation, not a platform constraint: the docs say role-based access is recommended and
+  key-based is the supported fallback, so basis is security with warning in dev. The service returns
+  connection strings redacted on GET, so live reads may report skipped for the connection-string part; the
+  azd/Bicep or Search JSON in the repository is the primary input. Role-name inconsistency in Learn: the
+  APIM and Search articles name Cognitive Services User for the Search-to-model path and Cognitive Services
+  OpenAI User for the vectorizer; both are cited as written.

@@ -2,5 +2,89 @@ id: FND-IQ-011
 version: 1
 group: IQ
 title: "Refresh schedule valid and supportable"
-status: proposed
+description: >-
+  An indexed knowledge source ingestionSchedule (and any generated or user indexer schedule) is an
+  IndexingSchedule: interval is required, must be an XSD dayTimeDuration of the form P(nD)(T(nH)(nM)),
+  between 5 minutes (PT5M) and 1440 minutes (24 hours); startTime, when set, is a UTC timestamp. The schedule
+  must also be supportable: the data source needs change detection, and a single run is limited to the
+  indexer maximum running time of the tier.
+status: verified
 phases: ["8"]
+inputs: ["data-plane", "bicep-arm"]
+basis: ["platform"]
+category: must-have
+pillar: reliability
+severity:
+  dev: error
+  test: error
+  prod: error
+compatibility:
+  azd: ""
+  extensions: {}
+  apiVersions:
+    - "2026-04-01 (indexer schedule; IndexingSchedule type)"
+    - "2026-08-01-preview (knowledge source ingestionParameters.ingestionSchedule)"
+evidence:
+  description: >-
+    Parse ingestionSchedule.interval / indexer schedule.interval as the restricted ISO 8601 form. Fail when it
+    does not match, is under PT5M or over 1440 minutes (for example PT4M, P1DT1M), or when startTime is not an
+    RFC 3339 UTC value. Report a schedule of PT5M or the minimum as informational context only. Supportability
+    notes (uncertain, not failures): data source without built-in change detection (Azure Storage and
+    SharePoint have it; SQL and Cosmos DB need it enabled) and a Free-tier service whose indexer run limit is
+    1 to 3 minutes (3 to 10 with a skillset). A null or absent schedule is valid (on demand).
+  confidence: certain
+recommendation: >-
+  Use an interval between PT5M and P1D, for example PT2H, and make sure the data source has change
+  detection so scheduled runs resume where the previous one stopped.
+fix: |
+  "ingestionSchedule": { "interval": "PT2H", "startTime": "2026-01-01T00:00:00Z" }
+sources:
+  - url: https://learn.microsoft.com/azure/search/search-howto-schedule-indexers
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/search/search-howto-schedule-indexers.md
+    note: interval required; smallest 5 minutes, longest 1,440 minutes; pattern P(nD)(T(nH)(nM)); startTime optional UTC; change detection prerequisite.
+  - url: https://learn.microsoft.com/azure/search/search-limits-quotas-capacity
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/search/search-limits-quotas-capacity.md
+    note: Maximum running time per indexer run by tier (Free 1-3 or 3-10 minutes, 2 or 24 hours otherwise) and 24-hour cumulative runtime on S3 HD and serverless.
+  - url: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-blob
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/search/agentic-knowledge-source-how-to-blob.md
+    note: ingestionParameters.ingestionSchedule is part of the knowledge source (null by default).
+  - url: https://github.com/Azure/azure-rest-api-specs/tree/main/specification/search/data-plane/Search
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/search/data-plane/Search/models-service.tsp (IndexingSchedule: interval duration, startTime utcDateTime) and models-knowledgebase.tsp (ingestionSchedule?: IndexingSchedule)
+overlap:
+  decision: native
+  coverage: none
+  rationale: No PSRule, Policy, Defender or Advisor control inspects Search indexer or knowledge source schedules.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/iq
+testability: Pure function over the interval string; fully offline.
+tests:
+  positive:
+    - interval-pt4m
+    - interval-p1dt1m
+    - interval-not-xsd-daytime-duration
+    - start-time-not-utc
+    - interval-missing
+  negative:
+    - interval-pt5m
+    - interval-p1d
+    - interval-pt2h-with-start-time
+    - schedule-null
+  skipped:
+    - schedule-set-through-expression-parameter
+    - change-detection-not-determinable
+notes: >-
+  The knowledge source ingestionSchedule shares the IndexingSchedule type with indexers in the spec; the
+  documented bounds are read from the indexer scheduling article. Whether the knowledge source API enforces
+  the same bounds on its generated indexer is therefore inferred from the shared type and stated here;
+  confidence stays certain for the type and bounds, likely for enforcement location.

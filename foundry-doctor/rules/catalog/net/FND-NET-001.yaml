@@ -2,5 +2,133 @@ id: FND-NET-001
 version: 1
 group: NET
 title: "Foundry public access/private endpoint posture"
-status: proposed
+description: >-
+  A Foundry (Microsoft.CognitiveServices/accounts, AI Services) account must have a deliberate
+  inbound network posture. The rule reads properties.publicNetworkAccess (Enabled or Disabled)
+  and properties.networkAcls (defaultAction Allow or Deny, ipRules, virtualNetworkRules) and
+  correlates them with the private endpoints that target the account. It reports an account that
+  is open to all public networks, and an account whose public access is disabled but that has no
+  approved private endpoint (group ID account) in the analysed scope, because nothing can then
+  reach it. Foundry projects inherit the account posture, so the finding is raised once on the
+  account and names the projects it affects.
+status: verified
 phases: ["1"]
+inputs: ["bicep-arm", "control-plane"]
+basis: ["security", "waf"]
+category: must-have
+pillar: security
+severity:
+  dev: info
+  test: warning
+  prod: error
+compatibility:
+  azd: "not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked)"
+  extensions: {}
+  apiVersions:
+    - "Microsoft.CognitiveServices/accounts@2026-09-01 (stable)"
+    - "Microsoft.CognitiveServices/accounts@2026-07-15-preview"
+evidence:
+  description: >-
+    From the compiled ARM template (or the live account via ARM GET), read
+    properties.publicNetworkAccess and properties.networkAcls.defaultAction on each account of
+    kind AIServices or OpenAI that hosts a Foundry project. Finding A (open): publicNetworkAccess
+    is Enabled or absent and networkAcls.defaultAction is Allow or absent. Finding B (unreachable):
+    publicNetworkAccess is Disabled and no Microsoft.Network/privateEndpoints resource has a
+    privateLinkServiceConnection whose privateLinkServiceId is the account ID and groupIds contains
+    "account" (live mode also requires privateLinkServiceConnectionState approved). Restricted mode
+    (Enabled with defaultAction Deny) is accepted here and checked by FND-NET-007. Skip when the
+    private endpoint can only be a parameter or an existing resource that is not visible, and say so.
+  confidence: certain
+recommendation: >-
+  For test and production set publicNetworkAccess to Disabled and add a private endpoint with group
+  ID account in the VNet that hosts your clients and agents, with its private DNS zones (see
+  FND-NET-003). If you need limited public access, use restricted mode (defaultAction Deny plus an
+  explicit allow list). Public access is acceptable for dev prototyping.
+fix: |
+  resource account 'Microsoft.CognitiveServices/accounts@2026-09-01' = {
+    name: accountName
+    location: location
+    kind: 'AIServices'
+    sku: { name: 'S0' }
+    identity: { type: 'SystemAssigned' }
+    properties: {
+      customSubDomainName: accountName
+      publicNetworkAccess: 'Disabled'
+      networkAcls: { defaultAction: 'Deny' }
+    }
+  }
+  resource pe 'Microsoft.Network/privateEndpoints@2024-05-01' = {
+    name: '${accountName}-pe'
+    location: location
+    properties: {
+      subnet: { id: peSubnetId }
+      privateLinkServiceConnections: [{
+        name: 'account'
+        properties: { privateLinkServiceId: account.id, groupIds: ['account'] }
+      }]
+    }
+  }
+sources:
+  - url: https://learn.microsoft.com/azure/foundry/agents/concepts/networking-options
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/networking-options.md (ms.date 06/29/2026)
+    note: Default is fully public; inbound is public (optionally selected IPs) or private endpoint; isolation of egress implies private endpoint inbound.
+  - url: https://learn.microsoft.com/azure/foundry/how-to/configure-private-link
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/how-to/configure-private-link.md (ms.date 09/29/2026)
+    note: PNA flag decides whether a private endpoint is required; Disabled, selected IPs and all networks; connection stays Pending until approved.
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    note: AccountProperties publicNetworkAccess enum Enabled/Disabled; NetworkRuleSet defaultAction Allow/Deny, bypass None/AzureServices, ipRules, virtualNetworkRules.
+  - url: https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/virtual-networks.md (ms.date 06/15/2026)
+    note: Private endpoint group ID account; projects inherit the account network posture.
+overlap:
+  decision: adapt
+  coverage: partial
+  rationale: >-
+    PSRule Azure.AI.PublicAccess and Azure.AI.PrivateEndpoints, built-in policies "Azure AI Services
+    resources should restrict network access" and "...should use Azure Private Link", and Checkov
+    CKV_AZURE_134 each test the account property in isolation with one severity. Foundry Doctor takes
+    the property test and adds what they lack: correlation with the private endpoint (an account with
+    public access disabled and no endpoint is unreachable), awareness of projects behind the account,
+    and per-profile severity (public access accepted in dev). Evidence differs: a single property
+    versus a property plus endpoint state. Defender for Cloud and Advisor equivalents were not
+    verifiable from the local sources.
+  psrule:
+    - Azure.AI.PublicAccess
+    - Azure.AI.PrivateEndpoints
+  azurePolicy:
+    - "037eea7a-bd0a-46c5-9a66-03aea78705d3 (Azure AI Services resources should restrict network access)"
+    - "d6759c02-b87f-42b7-892e-71b3f471d782 (Azure AI Services resources should use Azure Private Link)"
+    - "47ba1dd7-28d9-4b07-a8d5-9813bed64e0c (Configure Cognitive Services accounts to disable public network access)"
+    - "db630ad5-52e9-4f4d-9c44-53912fe40053 (Configure Cognitive Services accounts with private endpoints)"
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov:
+    - CKV_AZURE_134
+implementation:
+  owner: native
+  package: internal/rules/net
+testability: >-
+  Offline for the template path with golden Bicep/ARM fixtures. The live path needs ARM read access
+  to the account and Microsoft.Network/privateEndpoints; without it the endpoint correlation is skipped.
+tests:
+  positive:
+    - account-public-enabled-default-allow-in-prod
+    - account-public-disabled-no-private-endpoint
+    - account-public-disabled-endpoint-pending-live
+  negative:
+    - account-public-disabled-with-account-groupid-endpoint
+    - account-restricted-mode-with-ip-rules
+    - dev-profile-public-account-reports-info
+  skipped:
+    - private-endpoint-defined-in-another-template
+    - account-resource-id-is-parameter-and-no-arm-access
+notes: >-
+  Unverified: Microsoft Defender for Cloud and Advisor recommendation IDs for AI services network
+  exposure (docs not in the local clones). The 2026-09-01 stable spec has no capability settings; those
+  are in 2026-07-15-preview (see FND-NET-002 and FND-IDN-002).

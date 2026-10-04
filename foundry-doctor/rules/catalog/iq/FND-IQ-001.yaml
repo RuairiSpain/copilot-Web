@@ -2,5 +2,112 @@ id: FND-IQ-001
 version: 1
 group: IQ
 title: "Filter fields/claims reference filterable fields"
-status: proposed
+description: >-
+  Every index field that a Foundry IQ search index knowledge source (or its index) uses in a filter must
+  be attributed filterable: the fields named in searchIndexParameters.queryHints.filters[].field, the
+  field identifiers inside searchIndexParameters.baseFilter, and the security (claims) field that holds
+  user or group identities for security-filter trimming. Azure AI Search evaluates filters only over
+  filterable fields, and an existing field cannot be made filterable without adding a field or
+  rebuilding the index.
+status: verified
 phases: ["8"]
+inputs: ["data-plane", "bicep-arm"]
+basis: ["platform"]
+category: must-have
+pillar: reliability
+severity:
+  dev: error
+  test: error
+  prod: error
+compatibility:
+  azd: ""
+  extensions: {}
+  apiVersions:
+    - "2026-08-01-preview (searchIndexParameters.queryHints, baseFilter; spec and docs read)"
+    - "2026-05-01-preview (searchIndexParameters.baseFilter added; spec read)"
+    - "2026-04-01 (index field filterable attribute only; no queryHints/baseFilter)"
+evidence:
+  description: >-
+    Read the knowledge source (GET /knowledgesources/{name}) and the index named by
+    searchIndexParameters.searchIndexName (GET /indexes/{name}); both are metadata-only reads.
+    For each queryHints.filters[].field, resolve the field in index.fields and fail when it is missing
+    or filterable is false. For baseFilter, extract bare field identifiers from the OData expression
+    with a conservative tokenizer and fail on identifiers that are missing or not filterable; when the
+    expression uses constructs the tokenizer cannot resolve (lambda ranges, functions with computed
+    paths) the baseFilter part is reported uncertain, not failed. For a security-filter field named in
+    project configuration, require filterable true and, as a product recommendation only, retrievable
+    false. Never emit filter values or document content, only field names.
+  confidence: certain
+recommendation: >-
+  Mark every field used in a filter as filterable. Because an existing field cannot be changed to
+  filterable, add a new filterable field and repopulate it, or rebuild the index, then point the filter
+  hint or base filter at it.
+fix: |
+  {
+    "name": "category",
+    "type": "Edm.String",
+    "searchable": false,
+    "retrievable": true,
+    "filterable": true
+  }
+  // knowledge source
+  "searchIndexParameters": {
+    "searchIndexName": "product-docs-index",
+    "queryHints": { "filters": [ { "field": "category", "fieldValues": ["Benefits"] } ] }
+  }
+sources:
+  - url: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-search-index
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/search/agentic-knowledge-source-how-to-search-index.md
+    note: >-
+      Query hints table: a filter hint "field must identify a filterable index field"; baseFilter added in
+      2026-05-01-preview; queryHints in 2026-08-01-preview.
+  - url: https://learn.microsoft.com/azure/search/search-filters
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/search/search-filters.md
+    note: >-
+      Filters apply to fields attributed filterable; you can't modify an existing field to make it filterable.
+  - url: https://learn.microsoft.com/azure/search/search-security-trimming-for-azure-search
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/search/search-security-trimming-for-azure-search.md
+    note: Security field must be Collection(Edm.String) with filterable true; retrievable false is the documented pattern.
+  - url: https://github.com/Azure/azure-rest-api-specs/tree/main/specification/search/data-plane/Search
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/search/data-plane/Search/models-service.tsp (SearchIndexKnowledgeSourceParameters, baseFilter @added 2026-05-01-preview, queryHints @added 2026-08-01-preview)
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    No PSRule, Azure Policy, Defender, Advisor, Bicep linter or Checkov rule reads Search index schemas or
+    Foundry IQ knowledge sources. The value is cross-object correlation (knowledge source to index fields).
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/iq
+testability: >-
+  Offline against recorded knowledge-source and index JSON fixtures per API version. Live runs need
+  Search Service Reader/Search Index Data Reader style metadata access; without it the rule is skipped.
+tests:
+  positive:
+    - filter-hint-field-not-filterable
+    - filter-hint-field-missing-from-index
+    - base-filter-references-non-filterable-field
+    - security-field-not-filterable
+  negative:
+    - filter-hint-field-filterable
+    - base-filter-on-filterable-fields
+    - no-filters-configured
+  skipped:
+    - index-metadata-not-readable
+    - api-version-without-query-hints
+    - base-filter-unparseable-expression-uncertain
+notes: >-
+  PRD ambiguity: "claims" is read as the identity (user or group) field used for security-filter trimming,
+  the only documented filter-over-claims pattern. Whether a non-filterable field in baseFilter is rejected at
+  knowledge source creation or at retrieve time is not stated in the sources, so only the documented
+  requirement (filters evaluate over filterable fields) is asserted.

@@ -2,5 +2,96 @@ id: FND-IQ-012
 version: 1
 group: IQ
 title: "Semantic ranking enabled when used"
-status: proposed
+description: >-
+  When a knowledge base, knowledge source or query uses semantic ranking (agentic retrieval always applies
+  L2 semantic reranking, and a semantic configuration is required), the Search service must not have
+  semantic ranker disabled. On management API versions up to 2025-11-01-preview semanticSearch disabled turns
+  off semantic ranker and paid agentic retrieval; from 2026-03-01-preview disabled is no longer a valid value
+  and is treated as free. The standard plan requires the Basic tier or higher.
+status: verified
 phases: ["8"]
+inputs: ["bicep-arm", "control-plane", "data-plane"]
+basis: ["platform"]
+category: must-have
+pillar: reliability
+severity:
+  dev: error
+  test: error
+  prod: error
+compatibility:
+  azd: ""
+  extensions: {}
+  apiVersions:
+    - "Microsoft.Search/searchServices 2025-05-01 (stable: semanticSearch disabled|free|standard)"
+    - "Microsoft.Search/searchServices 2026-03-01-preview (adds knowledgeRetrieval free|standard; disabled no longer valid)"
+    - "Microsoft.Search/searchServices 2026-09-01-preview (spec read)"
+    - "Search data plane 2026-04-01 (semanticSearch and knowledgeRetrieval billing split)"
+evidence:
+  description: >-
+    Determine "used": the project has an indexed knowledge source (agentic retrieval) or an index with a
+    semantic configuration referenced by queries. Read Microsoft.Search/searchServices properties.semanticSearch
+    and properties.knowledgeRetrieval and sku.name from the Bicep/ARM template or control plane. Fail when
+    semanticSearch is disabled, or when semanticSearch or knowledgeRetrieval is standard and sku.name is free.
+    Where the template omits semanticSearch (default free) pass. Free plan is not a failure; quota exhaustion
+    behaviour (billing error after the monthly allowance) is reported as an informational note because usage is
+    not readable metadata-only.
+  confidence: certain
+recommendation: >-
+  Set semanticSearch to free or standard (use standard on Basic or higher for production), and set
+  knowledgeRetrieval to standard if agentic retrieval usage can exceed the free allowance. Use PATCH, not
+  PUT, when changing these properties on an existing service.
+fix: |
+  resource search 'Microsoft.Search/searchServices@2025-05-01' = {
+    name: searchName
+    location: location
+    sku: { name: 'basic' }
+    properties: { semanticSearch: 'standard' }
+  }
+sources:
+  - url: https://learn.microsoft.com/azure/search/semantic-how-to-enable-disable
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/search/semantic-how-to-enable-disable.md
+    note: Free default plan with billing error after allowance; standard requires Basic or higher; disabled no longer valid from 2026-03-01-preview and treated as free; PATCH versus PUT warning.
+  - url: https://learn.microsoft.com/azure/search/agentic-retrieval-how-to-enable-disable
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/search/agentic-retrieval-how-to-enable-disable.md
+    note: knowledgeRetrieval plan free or standard; payment-required error after the free allowance; semanticSearch controls both before 2026-04-01.
+  - url: https://learn.microsoft.com/azure/search/agentic-retrieval-how-to-create-index
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/search/agentic-retrieval-how-to-create-index.md
+    note: Agentic retrieval uses L2 semantic ranking; semantic configuration is required.
+  - url: https://github.com/Azure/azure-rest-api-specs/tree/main/specification/search/resource-manager/Microsoft.Search/Search
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/search/resource-manager/Microsoft.Search/Search/models.tsp (SearchSemanticSearch disabled|free|standard; KnowledgeRetrieval free|standard added 2026-03-01-preview)
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    No PSRule, Policy, Defender or Advisor rule reads semanticSearch or knowledgeRetrieval; the correlation
+    with "semantic ranking is used by this project" is Foundry-specific.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/iq
+testability: Offline from compiled ARM; live check is a single Search service GET with a management API version that returns the properties.
+tests:
+  positive:
+    - semantic-disabled-with-semantic-configuration-used
+    - standard-plan-on-free-sku
+    - knowledge-retrieval-standard-on-free-sku
+  negative:
+    - semantic-free-default
+    - semantic-standard-on-basic
+    - semantic-not-used-and-disabled
+  skipped:
+    - service-not-in-template-or-subscription
+    - management-api-version-without-property
+notes: >-
+  The ARM TypeSpec still lists disabled for 2026-03-01-preview and later while the Learn article says the
+  value is no longer valid and is treated as free; the rule fails disabled because older API versions honour
+  it. Billing mode is not asserted as required for dev.
