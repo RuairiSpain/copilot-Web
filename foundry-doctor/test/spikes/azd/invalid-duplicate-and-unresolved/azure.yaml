@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+# Spike fixture: INTENTIONALLY INVALID azure.yaml-only project.
+# Defect 1 (duplicate key): `name:` appears twice in service `assistant` (lines marked DUP).
+# Defect 2 (unresolved reference): ${EXAMPLE_MISSING_VAR} is not defined in .azure/dev/env.fixture (real azd file is .azure/dev/.env)
+#   (azure.ai.projects synthesis fails on an unresolved ${VAR}:
+#    azure-dev/cli/azd/extensions/azure.ai.projects/internal/synthesis/synthesizer.go resolveVars).
+# Defect 3 (unresolved service reference): `uses: [ai-projct]` names no service.
+# No field here is invented; only the values are wrong.
+name: foundry-spike-invalid
+
+infra:
+  provider: microsoft.foundry
+
+services:
+  ai-project:
+    host: azure.ai.project
+    deployments:
+      - name: gpt-4o-mini
+        model:
+          format: OpenAI
+          name: gpt-4o-mini
+          version: "2024-07-18"
+        sku:
+          name: GlobalStandard
+          capacity: 50
+
+  assistant:
+    host: azure.ai.agent
+    project: ./agents/assistant
+    uses:
+      - ai-projct
+    kind: hosted
+    name: assistant            # DUP (1 of 2)
+    name: assistant-v2         # DUP (2 of 2)
+    description: A simple assistant.
+    env:
+      LOG_LEVEL: info
+      EXAMPLE_SETTING: ${EXAMPLE_MISSING_VAR}

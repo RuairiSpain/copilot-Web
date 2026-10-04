@@ -1,0 +1,18 @@
+{
+  "lastVerified": "2026-10-04",
+  "azureDevCommit": "afe4b2b4d262bab4c11f4937e7a7942557ab0ecd",
+  "fixtures": {
+    "valid-azure-yaml-only": {
+      "duplicateKeys": [],
+      "unresolvedEnvRefs": [],
+      "unresolvedUses": [],
+      "note": "${AZURE_LOCATION} resolves from .azure/dev/.env"
+    },
+    "invalid-duplicate-and-unresolved": {
+      "duplicateKeys": [{"path": "services.assistant.name", "occurrences": 2}],
+      "unresolvedEnvRefs": [{"path": "services.assistant.env.EXAMPLE_SETTING", "name": "EXAMPLE_MISSING_VAR"}],
+      "unresolvedUses": [{"path": "services.assistant.uses[0]", "value": "ai-projct"}],
+      "note": "A lossless AST reader must report all three; a decode-to-map reader may silently keep the last duplicate."
+    }
+  }
+}
