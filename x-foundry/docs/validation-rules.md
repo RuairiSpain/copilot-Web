@@ -71,6 +71,11 @@ Severity is *error* unless marked (w). Retired codes are not reused.
 | XF131 | Cosmos DB: throughput applies to provisioned capacity, not serverless |
 | XF132 | Retired (the `runtime` section was removed) |
 
+## Generator diagnostics (XF2xx)
+
+`xfoundry generate` can add `XF201`-`XF207` while writing Bicep; they are listed in
+[phase-2.md](phase-2.md#diagnostics).
+
 ## Well-Architected recommendations (XF3xx, warnings)
 
 `XF301`-`XF330` are environment-profile recommendations for `test` and `prod`; they are

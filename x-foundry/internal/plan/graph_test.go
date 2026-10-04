@@ -158,8 +158,9 @@ func TestExistingResourcesAreMarked(t *testing.T) {
 		fmt.Sprintf(`storage: {existingResourceId: "%s/Microsoft.Storage/storageAccounts/st1"}`, arm),
 		fmt.Sprintf(`search: {existingResourceId: "%s/Microsoft.Search/searchServices/s1"}`, arm),
 		fmt.Sprintf(`cosmos: {existingResourceId: "%s/Microsoft.DocumentDB/databaseAccounts/c1"}`, arm),
+		fmt.Sprintf(`keyVault: {existingResourceId: "%s/Microsoft.KeyVault/vaults/kv1"}`, arm),
 		fmt.Sprintf(`managedIdentity: {existingResourceId: "%s/Microsoft.ManagedIdentity/userAssignedIdentities/id1"}`, arm))
-	for _, id := range []string{"storage", "search:root", "cosmos", "identity"} {
+	for _, id := range []string{"storage", "search:root", "cosmos", "key-vault", "identity"} {
 		if n, _ := p.Node(id); !n.Existing {
 			t.Fatalf("%s should be marked existing", id)
 		}

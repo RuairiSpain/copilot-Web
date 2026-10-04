@@ -62,17 +62,23 @@ agent sources), XF019 and XF106 and XF125 (Redis), XF108 and XF132 (runtime), XF
 and the events rules. The examples and the published schemas also change. Do this as one change
 before Phase 2 starts, so the Bicep generator does not build on fields that are going away.
 
-## Phase 2: Bicep generator
+## Phase 2: Bicep generator (implemented)
 
-- Generate the low-effort WAF resources: resource locks, zone-redundant and ZRS settings, Cosmos
-  continuous backup, Key Vault purge protection, diagnostic settings to Log Analytics.
-- Name generation uses `internal/azurenames`.
-- Pseudo-Bicep for the medium and high groups is written here as reference material for `doctor`
-  (Phase 6). It is unverified until it can be tested against Azure, and the comments must say so.
-- Tag every resource the extension creates with `x-foundry-env` (the environment) and
-  `x-foundry-id` (the graph node id). Drift detection (Phase 7) uses these to map Azure resources
-  to YAML entries exactly. This must be in place from the first generated template, because it
-  cannot be added to resources already deployed without redeploying them.
+See [phase-2.md](phase-2.md) for what was built and the decisions behind it. Against the plan
+above:
+
+- Done: the low-effort WAF resources that exist in the schema (resource locks, zone-redundant and
+  ZRS settings, Cosmos continuous backup, Key Vault purge protection, diagnostic settings to Log
+  Analytics), name generation, and the `x-foundry-env` and `x-foundry-id` tags on every resource
+  (the tags drift detection in Phase 7 relies on).
+- Moved to Phase 5: the API Management instance. It needs outbound VNet integration and policies
+  designed together with the gateway section, so creating a bare instance early would have been
+  throw-away work.
+- Moved to Phase 6: the pseudo-Bicep reference text for the medium and high WAF groups. It is
+  written as `doctor` comments rather than as a separate reference, so it is only written once.
+- Phase 2 has not been deployed to Azure (no subscription is available to this repository's CI).
+  Before the first release, run it through `what-if` and a test deployment in a real subscription
+  and record the findings here.
 
 ## Phase 3: provisioning and state
 

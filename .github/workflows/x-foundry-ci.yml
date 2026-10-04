@@ -34,6 +34,13 @@ jobs:
           go-version-file: x-foundry/go.mod
           cache-dependency-path: x-foundry/go.sum
       - run: go vet ./...
+      - name: Bicep CLI (compiles and lints the generated infrastructure)
+        if: runner.os == 'Linux'
+        run: |
+          curl -sSLfo "$RUNNER_TEMP/bicep" https://github.com/Azure/bicep/releases/download/v0.47.16/bicep-linux-x64
+          chmod +x "$RUNNER_TEMP/bicep"
+          echo "XFOUNDRY_BICEP=$RUNNER_TEMP/bicep" >> "$GITHUB_ENV"
+          echo "XFOUNDRY_REQUIRE_BICEP=1" >> "$GITHUB_ENV"
       - name: gofmt
         if: runner.os == 'Linux'
         run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }

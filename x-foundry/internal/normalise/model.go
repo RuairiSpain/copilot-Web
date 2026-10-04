@@ -26,8 +26,9 @@ type Implicit struct {
 
 // PrivateEndpoint is a private endpoint to a component.
 type PrivateEndpoint struct {
-	Component string `json:"component"`
-	Group     string `json:"group"`
+	Component string   `json:"component"`
+	Group     string   `json:"group"`
+	Zones     []string `json:"zones,omitempty"` // private DNS zones the endpoint registers in
 }
 
 // Network is the resolved network configuration.

@@ -95,7 +95,7 @@ func (b *builder) foundations() {
 		b.link(ids.Storage, b.rg, b.identity)
 	}
 	if k := n.KeyVault; k != nil && k.Enabled {
-		b.node(ids.KeyVault, "key-vault", "", false)
+		b.node(ids.KeyVault, "key-vault", "", k.ExistingResourceID != "")
 		b.link(ids.KeyVault, b.rg, b.identity)
 	}
 	if c := n.Cosmos; c != nil && c.Enabled {

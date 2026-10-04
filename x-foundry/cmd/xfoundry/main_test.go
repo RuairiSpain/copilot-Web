@@ -136,3 +136,43 @@ func TestEnvironmentFlag(t *testing.T) {
 		t.Fatalf("plan --environment: %d", code)
 	}
 }
+
+func TestGenerateWritesTheBicepProject(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "infra")
+	code, out, errOut := exec("generate", minimal, "--out", dir)
+	if code != 0 || !strings.Contains(out, "wrote ") {
+		t.Fatalf("code %d, out %q, stderr %q", code, out, errOut)
+	}
+	for _, f := range []string{"main.bicep", "resources.bicep", "main.parameters.json", "README.md", "modules/foundry-account.bicep"} {
+		if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(f))); err != nil {
+			t.Errorf("missing %s: %v", f, err)
+		}
+	}
+	// Unsupported parts of the plan are listed on stdout.
+	_, out, _ = exec("generate", "../../examples/enterprise.yaml", "--out", t.TempDir())
+	if !strings.Contains(out, "not generated yet: gateway") {
+		t.Fatalf("out %q", out)
+	}
+}
+
+func TestGenerateFailures(t *testing.T) {
+	if code, _, errOut := exec("generate", write(t, "name: x\n")); code != 1 || !strings.Contains(errOut, "XF101") {
+		t.Fatalf("invalid file: %d %q", code, errOut)
+	}
+	if code, _, _ := exec("generate"); code != 2 {
+		t.Fatalf("missing file: %d", code)
+	}
+	// The output directory cannot be created below a regular file.
+	blocker := write(t, "x")
+	if code, _, errOut := exec("generate", minimal, "--out", filepath.Join(blocker, "infra")); code != 1 || errOut == "" {
+		t.Fatalf("blocked output: %d %q", code, errOut)
+	}
+	// A directory where a file should go.
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "main.bicep"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, errOut := exec("generate", minimal, "--out", dir); code != 1 || errOut == "" {
+		t.Fatalf("blocked file: %d %q", code, errOut)
+	}
+}

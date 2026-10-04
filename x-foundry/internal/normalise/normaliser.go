@@ -624,7 +624,7 @@ func (n *normaliser) resolveNetwork(c componentSet, searchScopes []string) Netwo
 	var zones []string
 	for _, e := range endpoints {
 		info := privateLinkZones[e.zoneKey]
-		out.PrivateEndpoints = append(out.PrivateEndpoints, PrivateEndpoint{e.component, info.group})
+		out.PrivateEndpoints = append(out.PrivateEndpoints, PrivateEndpoint{Component: e.component, Group: info.group, Zones: info.zones})
 		for _, z := range info.zones {
 			if !has(zones, z) {
 				zones = append(zones, z)
