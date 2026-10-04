@@ -40,11 +40,11 @@ From Python:
 ```python
 from xfoundry.plan import analyse_file, build_plan
 
-plan = build_plan("azure.yaml")        # raises ValidationFailed listing every error
+plan = build_plan("azure.yaml")  # raises ValidationFailed listing every error
 analysis = analyse_file("azure.yaml")  # never raises; analysis.plan is None on errors
-plan.order                             # node ids, dependencies first
-plan.layers                            # groups that can deploy in parallel
-plan.config.projects[0].models         # effective models after inheritance
+plan.order  # node ids, dependencies first
+plan.layers  # groups that can deploy in parallel
+plan.config.projects[0].models  # effective models after inheritance
 ```
 
 ## Pipeline
