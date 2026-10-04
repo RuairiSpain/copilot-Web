@@ -112,6 +112,6 @@ notes: >-
   Product recommendation, not a platform constraint: the docs say role-based access is recommended and
   key-based is the supported fallback, so basis is security with warning in dev. The service returns
   connection strings redacted on GET, so live reads may report skipped for the connection-string part; the
-  azd/Bicep or Search JSON in the repository is the primary input. Role-name inconsistency in Learn: the
-  APIM and Search articles name Cognitive Services User for the Search-to-model path and Cognitive Services
-  OpenAI User for the vectorizer; both are cited as written.
+  azd/Bicep or Search JSON in the repository is the primary input. Learn names Cognitive Services User for the
+  Search-to-model path of knowledge sources and Cognitive Services OpenAI User for the vectorizer; both are
+  cited as written.

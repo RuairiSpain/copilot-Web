@@ -2,5 +2,116 @@ id: FND-NET-004
 version: 1
 group: NET
 title: "Agent subnet delegation and sizing"
-status: proposed
+description: >-
+  A Foundry account that injects Agent Service into your VNet (properties.networkInjections with
+  scenario agent and a subnetArmId) needs a dedicated agent subnet that is delegated to
+  Microsoft.App/environments and is no smaller than /27. The subnet cannot be shared by more than one
+  Foundry resource, and for Azure Container Apps-backed deployments its name must not exceed 63 UTF-8
+  bytes. The size cannot be changed after the subnet is assigned. The rule is skipped when
+  useMicrosoftManagedNetwork is true (Microsoft manages the network). Capacity advice (/24 for
+  production hosted agents) is not part of this rule; see the proposed capacity rule in the overlap
+  fragment.
+status: verified
 phases: ["1"]
+inputs: ["bicep-arm", "control-plane"]
+basis: ["platform"]
+category: must-have
+pillar: reliability
+severity:
+  dev: error
+  test: error
+  prod: error
+compatibility:
+  azd: "not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked)"
+  extensions: {}
+  apiVersions:
+    - "Microsoft.CognitiveServices/accounts@2026-09-01 (networkInjections)"
+    - "Microsoft.Network/virtualNetworks/subnets@2024-05-01"
+evidence:
+  description: >-
+    For each account with networkInjections[].scenario == "agent" and a subnetArmId, resolve the
+    subnet resource (template or ARM). Fail when properties.delegations does not contain an entry
+    whose properties.serviceName is "Microsoft.App/environments"; when the prefix length in
+    addressPrefix (or every addressPrefixes entry) is greater than 27; when the subnet name is longer
+    than 63 UTF-8 bytes; or when another account's networkInjections references the same subnetArmId.
+    Skip when useMicrosoftManagedNetwork is true, or when the subnet ID cannot be resolved (parameter).
+  confidence: certain
+recommendation: >-
+  Create a dedicated subnet for each Foundry account, delegate it to Microsoft.App/environments, size
+  it /27 or larger (the Foundry docs recommend /24 for production hosted agents), keep the name at 63
+  bytes or fewer, and do not reuse it for another Foundry resource or other services. Set the network
+  injection when you create the account; it cannot be added to an existing account for hosted agents.
+fix: |
+  resource agentSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-05-01' = {
+    parent: vnet
+    name: 'agent-subnet'
+    properties: {
+      addressPrefix: '10.0.0.0/24'
+      delegations: [{
+        name: 'Microsoft.App.environments'
+        properties: { serviceName: 'Microsoft.App/environments' }
+      }]
+    }
+  }
+  // on the account:
+  //   networkInjections: [{ scenario: 'agent', subnetArmId: agentSubnet.id, useMicrosoftManagedNetwork: false }]
+sources:
+  - url: https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/includes/how-to-virtual-networks-content.md (ms.date 09/28/2026)
+    note: Delegation to Microsoft.App/environments and /27 or larger required; recommended /24; subnet not shareable; 63 byte name limit; same-region requirement; cannot add injection to an existing hosted-agent account.
+  - url: https://learn.microsoft.com/azure/foundry/agents/concepts/networking-options
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/networking-options.md (ms.date 06/29/2026)
+    note: Plan your subnet size - at least /27, size cannot change after assignment, five addresses reserved per subnet; network injection cannot be changed after the first hosted agent.
+  - url: https://learn.microsoft.com/azure/foundry/agents/concepts/agents-networking-deep-dive
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/agents-networking-deep-dive.md (ms.date 09/07/2026)
+    note: Recommended /24 for production; /27 supports small development or evaluation only; subnet configuration applies at account level.
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    note: NetworkInjection definition - scenario (none, agent), subnetArmId, useMicrosoftManagedNetwork; AccountProperties.networkInjections array.
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/network/resource-manager/Microsoft.Network/Network/stable/2024-05-01/virtualNetwork.json
+    lastVerified: "2026-10-04"
+    verifiedVia: raw.githubusercontent.com/Azure/azure-rest-api-specs/main/specification/network/resource-manager/Microsoft.Network/Network/stable/2024-05-01/virtualNetwork.json
+    note: SubnetPropertiesFormat delegations (serviceName), addressPrefix, addressPrefixes.
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    No PSRule rule, built-in policy, Checkov check or Bicep linter rule knows the Foundry agent subnet
+    contract (Microsoft.App/environments delegation, minimum /27, exclusivity). The only nearby policy
+    ("Subnets should be private") is about default outbound access, and Azure.VNET.* rules do not read
+    networkInjections. The value is the correlation from the account to its subnet.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/net
+testability: >-
+  Offline with Bicep/ARM fixtures (account plus subnet in one template). Live mode follows
+  subnetArmId. Pure CIDR arithmetic; no network calls beyond ARM reads.
+tests:
+  positive:
+    - subnet-without-delegation
+    - subnet-delegated-to-wrong-service
+    - subnet-prefix-slash-28
+    - subnet-name-over-63-bytes
+    - same-subnet-used-by-two-accounts
+  negative:
+    - slash-24-delegated-to-microsoft-app-environments
+    - slash-27-minimum-accepted
+  skipped:
+    - use-microsoft-managed-network
+    - subnet-id-is-parameter
+notes: >-
+  Docs disagree on one point that does not affect this rule: the troubleshooting text still names a
+  172/192-only range error while the limitations name 10.0.0.0/8 as supported (see FND-NET-006). The
+  /27 minimum is stated in networking-options and the virtual-networks article; the deep dive warns
+  against /27 in production, which is capacity advice, so it is not a failure here. Unverified: whether
+  ARM rejects an undelegated subnet at deployment time (only the delegation requirement is documented).
