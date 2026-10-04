@@ -52,7 +52,7 @@ evidence:
     selected features is reported as uncertain, never as a violation ( the page can lag the service, and says that availability
     can change over time); the finding includes the data date. Model availability is FND-DEP-004 and is not repeated. Role
     family: Microsoft.Resources/subscriptions/locations/read and Microsoft.Resources/subscriptions/providers/read, both
-    covered by Reader (*/read). Reader suffices. The answer is definitive for checks (1) and (2) and likely for (3).
+    covered by Reader (*/read). Reader suffices. The answer is definitive for checks (1) and (2) and uncertain only for (3).
   confidence: likely
 recommendation: >-
   Choose a region that offers every selected resource type and feature, or change the feature selection (for example a different

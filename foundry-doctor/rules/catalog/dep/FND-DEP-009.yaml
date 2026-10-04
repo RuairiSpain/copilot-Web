@@ -111,7 +111,7 @@ overlap:
   checkov: []
 implementation:
   owner: native
-  package: internal/adapters/azurepolicy
+  package: internal/azure/policy
 testability: >-
   Offline with recorded CheckRestrictionsResult JSON (deny, audit, field restriction, empty) and a policy assignments list
   fixture. A live check against a sandbox subscription with an assigned Deny policy is an opt-in integration test.

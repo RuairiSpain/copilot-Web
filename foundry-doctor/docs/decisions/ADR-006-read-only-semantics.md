@@ -39,8 +39,9 @@ The DEP agent could not verify whether a what-if leaves a deployment record or a
 7. **Log Analytics and Application Insights queries are fixed templates.** Log tables can hold prompt and completion bodies
    (FND-SEC-012 documents APIM LLM logging). Queries ship in the catalogue, are aggregate-only (`summarize`/`count`), project
    only an allow-listed set of columns, and take the resource name only after it passes the ARM name charset check
-   (`[A-Za-z0-9._-]{1,64}`) and as a parameter, never by string concatenation. The client rejects any query containing
-   `project`, `take`, `top`, `message` or `*`. A replay test with a hostile resource name must fail closed.
+   (`[A-Za-z0-9._-]{1,64}`) and as a parameter, never by string concatenation. The shipped template is the only query text;
+   the client rejects any supplied or interpolated KQL that contains `take`, `top`, `message`, `*` or a projection outside the
+   allow-list. A replay test with a hostile resource name must fail closed.
 8. **Response payloads that can carry secrets or content are discarded at the client boundary, never logged or persisted:**
    `properties.outputs` and `properties.parameters` of deployments (FND-DEP-010), the `before` and `after` bodies of what-if
    results (FND-DEP-008, requested as `FullResourcePayloads` only to read `changeType`), the `resourceContent` we send to
