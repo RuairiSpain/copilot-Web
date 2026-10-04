@@ -46,7 +46,7 @@ func TestMinimalParsesWithDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := p.Config
-	if c.SchemaVersion != "1.0" || c.Security.Network.Mode != "private" || !c.Projects[0].InheritHub || c.Gateway != nil {
+	if c.SchemaVersion != "1.0" || c.Security.Network.Mode != "public" || c.Security.Network.ModeSource != "default" || !c.Projects[0].InheritHub || c.Gateway != nil {
 		t.Fatalf("defaults not applied: %+v", c)
 	}
 	if !c.Projects[0].Has("name") || c.Projects[0].Has("inheritHub") {

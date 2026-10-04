@@ -265,7 +265,7 @@
     },
     "networkSecurity": {
       "type": "object",
-      "description": "High-level network intent. The extension generates the underlying VNet, subnets, NSGs, private endpoints and DNS configuration.",
+      "description": "High-level network intent. Without any network settings no VNet is created and endpoints are public (Entra ID authentication only). Specifying a VNet makes the deployment private: the extension then generates the VNet, subnets, private endpoints and DNS configuration.",
       "properties": {
         "mode": {
           "type": "string",
@@ -274,7 +274,7 @@
             "restricted",
             "private"
           ],
-          "default": "private"
+          "description": "public: no VNet is created. restricted: public endpoints limited to allowedIps. private: a VNet, private endpoints and private DNS. When omitted, the mode is private if any VNet setting is present (addressSpace, agentSubnetPrefixLength or an existing VNet/subnet ID) and public otherwise."
         },
         "allowedDomains": {
           "type": "array",

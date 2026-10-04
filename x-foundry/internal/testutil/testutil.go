@@ -17,6 +17,9 @@ security: {roles: {admins: [Admins]}}
 projects: [{name: finance}]
 `
 
+// Private is a security block with private networking.
+const Private = `security: {network: {mode: private}, roles: {admins: [a]}}`
+
 // Public is a security block with public networking.
 const Public = `security: {network: {mode: public}, roles: {admins: [a]}}`
 

@@ -105,18 +105,27 @@ they are stale):
 * `schemas/versions/1.0/` pins the version. `schemaVersion` defaults to `1.0`; a different
   major version is rejected (`XF103`).
 
-## Secure defaults and the agent setup
+## Network: public unless a VNet is specified
 
-* **Network mode defaults to `private`.** In private mode the extension creates a VNet
-  (`addressSpace`, default `10.20.0.0/16`), private endpoints and private DNS for every
-  data-plane component, and uses the Foundry **standard agent setup**.
+* **No network settings means no VNet and public endpoints** (`mode: public`). Access is
+  still Entra ID only: key-based authentication is off by default, and a component can only
+  expose a public endpoint when the global intent allows it (`XF106`).
+* **Specifying a VNet makes the deployment private.** When `security.network.mode` is
+  omitted, any of `addressSpace`, `agentSubnetPrefixLength`, `existingVnetResourceId` or an
+  existing subnet ID selects `private`. You can also write `mode: private` explicitly.
+  `Plan.Config.Network.ModeSource` records which rule applied (`explicit`, `vnet-settings`
+  or `default`).
+* **Private mode** creates a VNet (`addressSpace`, default `10.20.0.0/16`), private
+  endpoints and private DNS for every data-plane component, and uses the Foundry **standard
+  agent setup**. VNet settings combined with `mode: public` are rejected (`XF127`).
+* **`restricted`** keeps public endpoints but limits them to `allowedIps` (public ranges
+  only; Azure service firewalls reject private ranges).
 * **`agentService.setup: auto`** picks `standard` in private mode or when `cosmos` is
   configured, otherwise `basic`. The standard setup brings your own Storage, AI Search and
-  Cosmos DB (all created implicitly when you do not declare them), a capability host per
+  Cosmos DB (created implicitly when you do not declare them), a capability host per
   project, and an agent subnet delegated to `Microsoft.App/environments`
-  (`agentSubnetPrefixLength`, default `/24`). So a minimal private configuration creates
-  Search, Storage and Cosmos DB too; set `security.network.mode: public` or
-  `agentService.setup: basic` for a lighter development deployment.
+  (`agentSubnetPrefixLength`, default `/24`). A minimal configuration therefore creates just
+  a Foundry resource and project; adding a VNet also creates Search, Storage and Cosmos DB.
 * To use an existing VNet, give `existingVnetResourceId` plus
   `existingPrivateEndpointSubnetResourceId` and, for the standard setup,
   `existingAgentSubnetResourceId`.

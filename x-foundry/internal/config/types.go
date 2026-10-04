@@ -82,7 +82,8 @@ type Security struct {
 // NetworkSecurity is high-level network intent.
 type NetworkSecurity struct {
 	Tracked
-	Mode                                    string   `json:"mode" default:"private"`
+	Mode                                    string   `json:"mode"`
+	ModeSource                              string   `json:"-"` // explicit | default | vnet-settings
 	AllowedDomains                          []string `json:"allowedDomains,omitempty"`
 	AllowedIPs                              []string `json:"allowedIps,omitempty"`
 	PrivateDNS                              bool     `json:"privateDns" default:"true"`

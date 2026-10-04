@@ -55,6 +55,7 @@ func Decode(raw map[string]any) (*XFoundry, error) {
 	if err := fill(reflect.ValueOf(&cfg).Elem(), raw); err != nil {
 		return nil, err
 	}
+	cfg.Security.Network.resolveMode()
 	return &cfg, nil
 }
 
@@ -214,4 +215,21 @@ func New[T any]() *T {
 	v := new(T)
 	_ = fill(reflect.ValueOf(v).Elem(), nil)
 	return v
+}
+
+// resolveMode applies the network default: without a mode, any VNet setting makes the
+// deployment private and otherwise no VNet is created (public).
+func (n *NetworkSecurity) resolveMode() {
+	if n.Has("mode") {
+		n.ModeSource = "explicit"
+		return
+	}
+	for _, key := range []string{"addressSpace", "agentSubnetPrefixLength", "existingVnetResourceId",
+		"existingAgentSubnetResourceId", "existingPrivateEndpointSubnetResourceId"} {
+		if n.Has(key) {
+			n.Mode, n.ModeSource = "private", "vnet-settings"
+			return
+		}
+	}
+	n.Mode, n.ModeSource = "public", "default"
 }

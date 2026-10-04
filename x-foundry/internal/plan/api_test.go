@@ -117,7 +117,7 @@ func TestPlanJSONIsCamelCaseAndRoundTrips(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := data["config"].(map[string]any)
-	if data["schemaVersion"] != "1.0" || cfg["topologyMode"] != "hub-spoke" || cfg["agentSetup"] != "standard" {
+	if data["schemaVersion"] != "1.0" || cfg["topologyMode"] != "hub-spoke" || cfg["agentSetup"] != "basic" {
 		t.Fatalf("json = %v", cfg)
 	}
 	nodes := data["nodes"].([]any)

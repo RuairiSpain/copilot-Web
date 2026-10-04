@@ -34,6 +34,7 @@ type PrivateEndpoint struct {
 // Network is the resolved network configuration.
 type Network struct {
 	Mode                            string            `json:"mode"`
+	ModeSource                      string            `json:"modeSource"`
 	VNet                            string            `json:"vnet,omitempty"` // create | existing
 	ExistingVnetResourceID          string            `json:"existingVnetResourceId,omitempty"`
 	AddressSpace                    string            `json:"addressSpace,omitempty"`

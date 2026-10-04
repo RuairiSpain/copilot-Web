@@ -123,7 +123,9 @@ func TestCloneIsDeepAndKeepsExplicitKeys(t *testing.T) {
 
 func TestResolvedAgentSetup(t *testing.T) {
 	for doc, want := range map[string]string{
-		minimal: "standard",
+		minimal: "basic",
+		`{"topology":{"mode":"standalone"},"security":{"network":{"mode":"private"},"roles":{"admins":["a"]}},"projects":[{"name":"finance"}]}`:                           "standard",
+		`{"topology":{"mode":"standalone"},"security":{"network":{"addressSpace":"10.1.0.0/16"},"roles":{"admins":["a"]}},"projects":[{"name":"finance"}]}`:               "standard",
 		`{"topology":{"mode":"standalone"},"security":{"network":{"mode":"public"},"roles":{"admins":["a"]}},"projects":[{"name":"finance"}]}`:                            "basic",
 		`{"topology":{"mode":"standalone"},"security":{"network":{"mode":"public"},"roles":{"admins":["a"]}},"projects":[{"name":"finance"}],"cosmos":{}}`:                "standard",
 		`{"topology":{"mode":"standalone"},"security":{"roles":{"admins":["a"]}},"projects":[{"name":"finance"}],"agentService":{"setup":"basic"}}`:                       "basic",

@@ -84,8 +84,8 @@ func TestPrincipalsAreResolvedDeduplicatedAndMerged(t *testing.T) {
 	}
 }
 
-func TestMinimalPrivateDefaultsUseTheStandardAgentSetup(t *testing.T) {
-	c := cfgOf(t)
+func TestPrivateModeUsesTheStandardAgentSetup(t *testing.T) {
+	c := cfgOf(t, Private)
 	if c.AgentSetup != "standard" || c.FoundryIdentity != "systemAssigned" {
 		t.Fatalf("setup = %s identity = %s", c.AgentSetup, c.FoundryIdentity)
 	}
@@ -128,7 +128,8 @@ func TestAgentSetupResolution(t *testing.T) {
 		yaml []string
 		want string
 	}{
-		{"private auto", y(), "standard"},
+		{"default is public", y(), "basic"},
+		{"private auto", y(Private), "standard"},
 		{"public auto", y(Public), "basic"},
 		{"public with cosmos", y(Public, `cosmos: {}`), "standard"},
 		{"explicit standard on public", y(Public, `agentService: {setup: standard}`), "standard"},
@@ -209,7 +210,7 @@ func TestConnectorBackedSourcesDoNotNeedStorage(t *testing.T) {
 }
 
 func TestRuntimeImpliesObservabilityAndRegistry(t *testing.T) {
-	c := cfgOf(t, `runtime: {enabled: true, source: ./app}`)
+	c := cfgOf(t, Private, `runtime: {enabled: true, source: ./app}`)
 	got := implicit(c)
 	if !got["observability:observability"] || !got["container-registry:registry"] {
 		t.Fatalf("implicit = %v", got)
@@ -322,7 +323,7 @@ func TestRedisDefaults(t *testing.T) {
 }
 
 func TestEventsTierFollowsNetworkMode(t *testing.T) {
-	if got := cfgOf(t, `events: {enabled: true}`).Events.SKU; got != "Premium" {
+	if got := cfgOf(t, Private, `events: {enabled: true}`).Events.SKU; got != "Premium" {
 		t.Fatalf("private = %s", got)
 	}
 	if got := cfgOf(t, Public, `events: {enabled: true}`).Events.SKU; got != "Standard" {
@@ -345,7 +346,7 @@ func TestContainerMemoryFollowsCPUUnlessSet(t *testing.T) {
 }
 
 func TestPrivateModeDerivesPrivateConnectivity(t *testing.T) {
-	c := cfgOf(t, `storage: {hierarchicalNamespace: true}`, `keyVault: {}`, `redis: {enabled: true}`, `events: {enabled: true}`, `search: {replicas: 2}`, `observability: {}`)
+	c := cfgOf(t, Private, `storage: {hierarchicalNamespace: true}`, `keyVault: {}`, `redis: {enabled: true}`, `events: {enabled: true}`, `search: {replicas: 2}`, `observability: {}`)
 	n := c.Network
 	if n.Mode != "private" || n.VNet != "create" || !n.PrivateDNS {
 		t.Fatalf("network = %+v", n)
@@ -544,5 +545,51 @@ func TestNormaliseDoesNotMutateTheParsedConfig(t *testing.T) {
 	normalise.Normalise(parsed.Config)
 	if after, _ := json.Marshal(parsed.Config); string(after) != string(before) {
 		t.Fatal("Normalise mutated its input")
+	}
+}
+
+func TestNetworkModeDefaultsToPublicUnlessAVNetIsSpecified(t *testing.T) {
+	vnet := arm + "/Microsoft.Network/virtualNetworks/v1"
+	subnet := vnet + "/subnets/pe"
+	cases := []struct {
+		name, network, mode, source string
+	}{
+		{"nothing specified", ``, "public", "default"},
+		{"empty network block", `security: {network: {}, roles: {admins: [a]}}`, "public", "default"},
+		{"explicit public", `security: {network: {mode: public}, roles: {admins: [a]}}`, "public", "explicit"},
+		{"explicit private", `security: {network: {mode: private}, roles: {admins: [a]}}`, "private", "explicit"},
+		{"address space", `security: {network: {addressSpace: 10.30.0.0/16}, roles: {admins: [a]}}`, "private", "vnet-settings"},
+		{"agent subnet size", `security: {network: {agentSubnetPrefixLength: 25}, roles: {admins: [a]}}`, "private", "vnet-settings"},
+		{"existing vnet", fmt.Sprintf(`security: {network: {existingVnetResourceId: %q, existingPrivateEndpointSubnetResourceId: %q, existingAgentSubnetResourceId: %q}, roles: {admins: [a]}}`, vnet, subnet, vnet+"/subnets/agents"), "private", "vnet-settings"},
+		{"restricted", `security: {network: {mode: restricted, allowedIps: [203.0.113.0/24]}, roles: {admins: [a]}}`, "restricted", "explicit"},
+		{"only allowed IPs", `security: {network: {allowedIps: [203.0.113.0/24]}, roles: {admins: [a]}}`, "public", "default"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var yaml []string
+			if c.network != "" {
+				yaml = y(c.network)
+			}
+			n := cfgOf(t, yaml...).Network
+			if n.Mode != c.mode || n.ModeSource != c.source {
+				t.Fatalf("mode = %s (%s), want %s (%s)", n.Mode, n.ModeSource, c.mode, c.source)
+			}
+		})
+	}
+}
+
+func TestDefaultPublicDeploymentCreatesNoVNetAndUsesBasicSetup(t *testing.T) {
+	c := cfgOf(t)
+	if c.Network.VNet != "" || c.Network.AddressSpace != "" || len(c.Network.PrivateEndpoints) != 0 || c.AgentSetup != "basic" {
+		t.Fatalf("network = %+v setup = %s", c.Network, c.AgentSetup)
+	}
+	for _, id := range MustPlan(t).Order() {
+		if id == "network" || id == "private-dns" || id == "cosmos" {
+			t.Fatalf("a default deployment must not create %s", id)
+		}
+	}
+	local := cfgOf(t)
+	if local.LocalAuthentication {
+		t.Fatal("public mode is still Entra ID only by default")
 	}
 }

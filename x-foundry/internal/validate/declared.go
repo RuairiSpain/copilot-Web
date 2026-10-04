@@ -931,6 +931,14 @@ func networkAddressing(cfg *config.XFoundry) []diag.Diagnostic {
 	net := cfg.Security.Network
 	where := path("security", "network")
 	existing := net.ExistingVnetResourceID != ""
+	if net.Mode == "public" || (net.Mode == "restricted" && !existing) {
+		for _, key := range []string{"addressSpace", "agentSubnetPrefixLength", "existingVnetResourceId", "existingAgentSubnetResourceId", "existingPrivateEndpointSubnetResourceId"} {
+			if net.Has(key) {
+				out = append(out, diag.Err("XF127", where+"."+key, "%s needs network mode 'private' (a VNet is only created or used in private mode)", key))
+			}
+		}
+		return out
+	}
 	if !existing {
 		for _, kv := range subnetFields(net) {
 			key, v := kv[0], kv[1]

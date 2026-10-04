@@ -639,7 +639,7 @@ type componentSet struct {
 
 func (n *normaliser) resolveNetwork(c componentSet, searchScopes []string) Network {
 	net := n.cfg.Security.Network
-	out := Network{Mode: net.Mode, AllowedIPs: net.AllowedIPs, ExistingVnetResourceID: net.ExistingVnetResourceID}
+	out := Network{Mode: net.Mode, ModeSource: net.ModeSource, AllowedIPs: net.AllowedIPs, ExistingVnetResourceID: net.ExistingVnetResourceID}
 	switch {
 	case net.ExistingVnetResourceID != "":
 		out.VNet = "existing"

@@ -73,7 +73,7 @@ func TestStageOrderFollowsTheSpecification(t *testing.T) {
 }
 
 func TestStandardSetupDependencies(t *testing.T) {
-	p := MustPlan(t, `projects: [{name: fin, agents: [{name: bot, model: gpt-5}]}]`, `models: {allowed: [gpt-5]}`)
+	p := MustPlan(t, Private, `projects: [{name: fin, agents: [{name: bot, model: gpt-5}]}]`, `models: {allowed: [gpt-5]}`)
 	exactDeps(t, p, "capability-host:project:fin:agents",
 		"foundry-project:project:fin", "storage", "cosmos", "network", "search:root",
 		"private-endpoint:storage:blob", "private-endpoint:cosmos:Sql", "private-endpoint:search:root:searchService")

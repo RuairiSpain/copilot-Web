@@ -170,7 +170,7 @@ func TestStorageRequirements(t *testing.T) {
 	web := `iq: {knowledgeBases: [{name: kb1, sources: [{name: files, type: blob, container: policies}]}]}`
 	ExpectCase(t, "XF107", "", "storage is disabled", Public, models, `storage: {enabled: false}`, web)
 	adls := `iq: {knowledgeBases: [{name: kb1, sources: [{name: lake, type: adls, container: lake}]}]}`
-	p := MustPlan(t, models, adls)
+	p := MustPlan(t, Private, models, adls)
 	if !p.Config.Storage.HierarchicalNamespace {
 		t.Fatal("ADLS sources enable hierarchical namespace")
 	}
@@ -339,7 +339,7 @@ func TestGatewayModels(t *testing.T) {
 	ExpectCase(t, "XF006", "", "not in gateway.models.allowed", gwDoc(`, models: {default: gpt-5, allowed: [gpt-5-mini]}`)...)
 	ExpectCase(t, "XF006", "", "denied", gwDoc(`, models: {default: gpt-5, denied: [gpt-5]}`)...)
 	ExpectCase(t, "XF005", "", "no deployment serves it", gwDoc(`, models: {allowed: [gpt-9]}`)...)
-	ExpectCase(t, "XF021", "", "internalOnly", gwDoc(`, security: {internalOnly: false}`)...)
+	ExpectCase(t, "XF021", "", "internalOnly", append(gwDoc(`, security: {internalOnly: false}`), Private)...)
 }
 
 func TestGatewayDefaultsAreDerived(t *testing.T) {

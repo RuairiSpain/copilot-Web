@@ -64,7 +64,7 @@ Severity is *error* unless marked (w).
 | XF124 | Gateway SKU in private mode: Consumption unsupported; BasicV2 cannot reach private backends (w) |
 | XF125 | Azure Cache for Redis can no longer be created; use Azure Managed Redis |
 | XF126 | Data residency forbids Global deployment SKUs (implicit deployments become `DataZoneStandard`) |
-| XF127 | Network addressing: `addressSpace` must be a private range with room for the agent subnet; existing-VNet subnets must belong to the VNet and be supplied for private endpoints and the standard setup |
+| XF127 | Network addressing: VNet settings need private mode; `addressSpace` must be a private range with room for the agent subnet; existing-VNet subnets must belong to the VNet and be supplied for private endpoints and the standard setup |
 | XF128 | Agent service: `cosmos` needs the standard setup; the standard setup needs Storage, Cosmos DB and Search enabled; basic setup in private mode (w) |
 | XF129 | Service tiers: Service Bus Premium and Container Registry Premium for private endpoints; capacity and zone redundancy are Premium only; Basic Service Bus has queues only |
 | XF130 | Identity type: `systemAssigned` creates no user-assigned identity, so name, existing resource and federated credentials are rejected; image pull from the managed registry needs a user-assigned identity (w) |

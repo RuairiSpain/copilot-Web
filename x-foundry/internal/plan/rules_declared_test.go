@@ -206,12 +206,12 @@ func TestRule23Regions(t *testing.T) {
 	if !a.OK() || !Codes(a, diag.Warning)["XF120"] {
 		t.Fatalf("expected an XF120 warning:\n%s", Lines(a.Diagnostics))
 	}
-	ExpectCase(t, "XF120", "projects[fin].location", "", `defaults: {location: westeurope}`, `projects: [{name: fin, location: eastus}]`)
+	ExpectCase(t, "XF120", "projects[fin].location", "", Private, `defaults: {location: westeurope}`, `projects: [{name: fin, location: eastus}]`)
 	hub := Analyse(t, HubDoc(t, Public, `defaults: {location: westeurope}`, `projects: [{name: fin, location: eastus}]`))
 	if !hub.OK() || !Codes(hub, diag.Warning)["XF120"] {
 		t.Fatalf("expected warnings only:\n%s", Lines(hub.Diagnostics))
 	}
-	privateHub := RunHub(t, `defaults: {location: westeurope}`, `projects: [{name: fin, location: eastus}]`)
+	privateHub := RunHub(t, Private, `defaults: {location: westeurope}`, `projects: [{name: fin, location: eastus}]`)
 	if privateHub.OK() {
 		t.Fatal("a cross-region spoke must fail in private mode")
 	}
@@ -252,13 +252,13 @@ func TestSecurityRules(t *testing.T) {
 	MustOK(t, Run(t, `security: {network: {mode: restricted, allowedIps: [203.0.113.0/24]}, roles: {admins: [a]}}`))
 
 	ExpectCase(t, "XF021", "security.publicNetworkAccess", "", `security: {network: {mode: private}, roles: {admins: [a]}, publicNetworkAccess: true}`)
-	ExpectCase(t, "XF021", "storage.publicNetworkAccess", "", `storage: {publicNetworkAccess: true}`)
+	ExpectCase(t, "XF021", "storage.publicNetworkAccess", "", Private, `storage: {publicNetworkAccess: true}`)
 	ExpectCase(t, "XF106", "redis.publicNetworkAccess", "", Public, `redis: {enabled: true, publicNetworkAccess: true}`)
 	MustOK(t, Run(t, `security: {network: {mode: public}, roles: {admins: [a]}, publicNetworkAccess: true}`, `redis: {enabled: true, publicNetworkAccess: true}`))
 	ExpectCase(t, "XF106", "search.localAuthentication", "", `search: {localAuthentication: true}`)
 	MustOK(t, Run(t, `security: {roles: {admins: [a]}, localAuthentication: true}`, `search: {localAuthentication: true}`))
-	ExpectCase(t, "XF021", "managedIdentity.enabled", "", `managedIdentity: {enabled: false}`)
-	ExpectCase(t, "XF021", "ingress.external", "", `runtime: {enabled: true, image: "i:1", ingress: {external: true}}`)
+	ExpectCase(t, "XF021", "managedIdentity.enabled", "", Private, `managedIdentity: {enabled: false}`)
+	ExpectCase(t, "XF021", "ingress.external", "", Private, `runtime: {enabled: true, image: "i:1", ingress: {external: true}}`)
 	a = Run(t, `security: {network: {mode: private, privateDns: false}, roles: {admins: [a]}}`)
 	if !a.OK() || !Codes(a, diag.Warning)["XF021"] {
 		t.Fatalf("privateDns false should warn:\n%s", Lines(a.Diagnostics))
@@ -302,7 +302,7 @@ func TestHardeningRules(t *testing.T) {
 		{`{sku: standard, replicas: 12, partitions: 4}`, "36 search units"},
 		{`{sku: free}`, "private endpoints"},
 	} {
-		ExpectCase(t, "XF123", "", c.message, "search: "+c.search)
+		ExpectCase(t, "XF123", "", c.message, Private, "search: "+c.search)
 	}
 	MustOK(t, Run(t, `search: {sku: basic, replicas: 3}`))
 	MustOK(t, Run(t, `search: {sku: storage_optimized_l1, replicas: 3, partitions: 12}`))
@@ -318,12 +318,12 @@ func TestHardeningRules(t *testing.T) {
 		t.Fatal("the British spelling is not a valid SKU")
 	}
 
-	ExpectCase(t, "XF124", "gateway.sku", "", `gateway: {enabled: true, sku: Consumption}`, `observability: {}`)
-	basic := Run(t, `gateway: {enabled: true, sku: BasicV2}`, `observability: {}`)
+	ExpectCase(t, "XF124", "gateway.sku", "", Private, `gateway: {enabled: true, sku: Consumption}`, `observability: {}`)
+	basic := Run(t, Private, `gateway: {enabled: true, sku: BasicV2}`, `observability: {}`)
 	if !basic.OK() || !Codes(basic, diag.Warning)["XF124"] {
 		t.Fatalf("BasicV2 should warn:\n%s", Lines(basic.Diagnostics))
 	}
-	OK(t, Run(t, `gateway: {enabled: true, sku: PremiumV2}`, `observability: {}`))
+	OK(t, Run(t, Private, `gateway: {enabled: true, sku: PremiumV2}`, `observability: {}`))
 	OK(t, Run(t, `gateway: {enabled: true, sku: Consumption}`, `observability: {}`, Public))
 
 	ExpectCase(t, "XF125", "redis.service", "", `redis: {enabled: true, service: azure-cache-for-redis, sku: standard}`)
@@ -397,13 +397,13 @@ func TestNetworkAddressing(t *testing.T) {
 
 func TestAgentServiceRules(t *testing.T) {
 	ExpectCase(t, "XF128", "agentService.setup", "only used by the standard", `agentService: {setup: basic}`, `cosmos: {}`)
-	a := Run(t, `agentService: {setup: basic}`)
+	a := Run(t, Private, `agentService: {setup: basic}`)
 	if !a.OK() || !Codes(a, diag.Warning)["XF128"] {
 		t.Fatalf("basic in private mode should warn:\n%s", Lines(a.Diagnostics))
 	}
-	ExpectCase(t, "XF128", "storage.enabled", "", `storage: {enabled: false}`)
-	ExpectCase(t, "XF128", "cosmos.enabled", "", `cosmos: {enabled: false}`)
-	ExpectCase(t, "XF128", "search.enabled", "", `search: {enabled: false}`)
+	ExpectCase(t, "XF128", "storage.enabled", "", Private, `storage: {enabled: false}`)
+	ExpectCase(t, "XF128", "cosmos.enabled", "", Private, `cosmos: {enabled: false}`)
+	ExpectCase(t, "XF128", "search.enabled", "", Private, `search: {enabled: false}`)
 	// Not standard: nothing to enforce.
 	MustOK(t, Run(t, Public, `storage: {enabled: false}`))
 	ExpectCase(t, "XF131", "cosmos.throughput", "", `cosmos: {capacityMode: serverless, throughput: 4000}`)
@@ -414,7 +414,7 @@ func TestAgentServiceRules(t *testing.T) {
 }
 
 func TestServiceTierRequirements(t *testing.T) {
-	ExpectCase(t, "XF129", "events.sku", "Premium", `events: {enabled: true, sku: Standard}`)
+	ExpectCase(t, "XF129", "events.sku", "Premium", Private, `events: {enabled: true, sku: Standard}`)
 	ExpectCase(t, "XF129", "events.capacity", "Premium", Public, `events: {enabled: true, capacity: 2}`)
 	ExpectCase(t, "XF129", "zoneRedundant", "", Public, `events: {enabled: true, zoneRedundant: true}`)
 	ExpectCase(t, "XF129", "entities", "queues only", Public, `events: {enabled: true, sku: Basic, entities: [{name: t1, type: topic}]}`)
@@ -422,7 +422,7 @@ func TestServiceTierRequirements(t *testing.T) {
 	MustOK(t, Run(t, `events: {enabled: true, sku: Premium, capacity: 2, zoneRedundant: true}`))
 	MustOK(t, Run(t, `events: {enabled: true}`)) // Premium is chosen automatically in private mode
 	MustOK(t, Run(t, Public, `events: {enabled: true, sku: Basic, entities: [{name: q1, type: queue}]}`))
-	ExpectCase(t, "XF129", "registry.sku", "Premium", `runtime: {enabled: true, source: ./app, registry: {mode: managed, sku: Standard}}`)
+	ExpectCase(t, "XF129", "registry.sku", "Premium", Private, `runtime: {enabled: true, source: ./app, registry: {mode: managed, sku: Standard}}`)
 	MustOK(t, Run(t, `runtime: {enabled: true, source: ./app, registry: {mode: managed, sku: Premium}}`))
 	MustOK(t, Run(t, Public, `runtime: {enabled: true, source: ./app, registry: {mode: managed, sku: Basic}}`))
 }
@@ -436,4 +436,22 @@ func TestIdentityTypeRules(t *testing.T) {
 	}
 	OK(t, Run(t, `managedIdentity: {type: systemAssigned}`))
 	OK(t, Run(t, `managedIdentity: {type: systemAssignedAndUserAssigned, name: id-finance}`, `runtime: {enabled: true, source: ./app}`))
+}
+
+func TestVNetSettingsNeedPrivateMode(t *testing.T) {
+	vnet := arm + "/Microsoft.Network/virtualNetworks/v1"
+	for _, mode := range []string{"public", "restricted"} {
+		for _, setting := range []string{
+			"addressSpace: 10.30.0.0/16",
+			"agentSubnetPrefixLength: 25",
+			fmt.Sprintf("existingVnetResourceId: %q", vnet),
+		} {
+			if mode == "restricted" && strings.HasPrefix(setting, "existingVnet") {
+				continue // restricted mode may use an existing VNet
+			}
+			key := strings.SplitN(setting, ":", 2)[0]
+			ExpectCase(t, "XF127", key, "needs network mode 'private'",
+				fmt.Sprintf(`security: {network: {mode: %s, allowedIps: [203.0.113.0/24], %s}, roles: {admins: [a]}}`, mode, setting))
+		}
+	}
 }

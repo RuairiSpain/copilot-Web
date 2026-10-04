@@ -1,4 +1,5 @@
-# The smallest valid configuration: one standalone Foundry project.
+# The smallest valid configuration: one standalone Foundry project. With no network
+# settings there is no VNet and endpoints are public (Entra ID authentication only).
 name: finance-ai
 x-foundry:
   topology:
