@@ -19,10 +19,12 @@ severity:
   test: error
   prod: error
 compatibility:
-  azd: "not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked)"
+  azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.Search/searchServices@2025-05-01 (sku.name free, basic, standard, standard2, standard3, storage_optimized_l1, storage_optimized_l2)"
+    - "Microsoft.Search/searchServices 2025-05-01"
+  preview: false
+  notes: "Not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked) Microsoft.Search/searchServices 2025-05-01: sku.name free, basic, standard, standard2, standard3, storage_optimized_l1, storage_optimized_l2."
 evidence:
   description: >-
     Read sku.name of each Microsoft.Search/searchServices. Fail when it equals "free" and any of: a

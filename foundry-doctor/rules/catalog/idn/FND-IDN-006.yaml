@@ -22,10 +22,12 @@ severity:
   test: error
   prod: error
 compatibility:
-  azd: "not version dependent; reads compiled ARM JSON (azd 1.36.0-beta.1 clone checked)"
+  azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials@2024-11-30 (properties.issuer format uri, subject, audiences; all required)"
+    - "Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials 2024-11-30"
+  preview: false
+  notes: "Not version dependent; reads compiled ARM JSON (azd 1.36.0-beta.1 clone checked) Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials 2024-11-30: properties.issuer format uri, subject, audiences; all required."
 evidence:
   description: >-
     For each federatedIdentityCredentials resource read properties.issuer, subject and audiences.

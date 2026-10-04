@@ -22,11 +22,13 @@ severity:
   test: error
   prod: error
 compatibility:
-  azd: "not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked)"
+  azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.Network/virtualNetworks@2024-05-01"
-    - "Microsoft.CognitiveServices/accounts@2026-09-01 (networkInjections)"
+    - "Microsoft.Network/virtualNetworks 2024-05-01"
+    - "Microsoft.CognitiveServices/accounts 2026-09-01"
+  preview: false
+  notes: "Not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked) Microsoft.CognitiveServices/accounts 2026-09-01: networkInjections."
 evidence:
   description: >-
     Take the agent subnet prefix and the address spaces of its VNet and of every peered VNet (live

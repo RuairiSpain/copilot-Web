@@ -20,14 +20,20 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.ApiManagement/service/apis 2025-09-01-preview and 2024-05-01 (properties.path read in spec)"
+    - "Microsoft.ApiManagement/service/apis 2025-09-01-preview"
+    - "Microsoft.ApiManagement/service/apis 2024-05-01"
+  preview: true
+  notes: "Microsoft.ApiManagement/service/apis 2025-09-01-preview / 2024-05-01: properties.path read in spec."
 evidence:
   description: >-
     Group the APIs of one service (compiled ARM or control-plane list) by properties.path, normalised by
     trimming a leading and trailing slash and comparing case-insensitively. Revisions of one API share the
-    path and are collapsed by the base API name (the part before ;rev=), as are versions in a version set only
-    when they use path-based versioning (their paths differ by design). Fail when two different APIs share a
-    normalised path, naming both resources. An empty path is allowed for at most one API.
+    path and are collapsed by the base API name (the part before ;rev=). Versions of one API share an
+    apiVersionSetId (Microsoft.ApiManagement/service/apiVersionSets, versioningScheme Segment, Query or Header);
+    header- and query-versioned versions are served from the same URL path by design, so every API that names
+    the same apiVersionSetId is collapsed into one group whatever the scheme. Fail when two different APIs, or
+    APIs in different version sets, share a normalised path, naming both resources. An empty path is allowed
+    for at most one group.
   confidence: likely
 recommendation: >-
   Give every API a distinct URL suffix (properties.path), for example one prefix per model family or team,
@@ -72,16 +78,26 @@ testability: Fully offline from compiled ARM; pure grouping function.
 tests:
   positive:
     - two-apis-same-path
+    - two-apis-in-different-version-sets-same-path
     - paths-differ-only-by-case-or-slash
   negative:
     - distinct-paths
     - revisions-of-same-api-share-path
+    - header-versioned-version-set-shares-path
+    - query-versioned-version-set-shares-path
+    - segment-versioned-version-set-shares-path
     - single-empty-path
   skipped:
     - path-from-unresolved-parameter
     - apis-in-another-deployment-not-visible
 notes: >-
-  Unverified: how API Management resolves overlapping prefixes (for example foundry and foundry/chat) and
+  Corrected after the Phase 0 Foundry lead review: version sets with the Header or Query scheme serve every
+  version from the same URL path (api-management-versions.md lines 37-53), so they must not be reported. It is
+  not verified whether versions in a Segment-scheme version set repeat the same properties.path in ARM (the
+  gateway appends the version segment) or carry different paths; the rule exempts the whole version set, which
+  avoids a false positive either way and misses a duplicated version identifier within one set (not checked).
+  ARM names: apiVersionSetId on the API, versioningScheme Segment|Query|Header on the version set
+  (2025-09-01-preview spec). Unverified: how API Management resolves overlapping prefixes (for example foundry and foundry/chat) and
   whether the same path may be reused across different hostnames is not stated in the sources read, so only exact
   duplicates are failed. Path case sensitivity and slash normalisation are conservative choices, and are the
   reason confidence is likely. Operation-level duplicates (method plus urlTemplate) were not found in a source

@@ -24,12 +24,13 @@ severity:
   test: info
   prod: warning
 compatibility:
-  azd: n/a (reads compiled ARM JSON or ARM control plane)
+  azd: ""
   extensions: {}
   apiVersions:
-  - 'Microsoft.ApiManagement/service 2024-05-01 (stable) SkuType enum: Developer, Standard, Premium, Basic, Consumption, Isolated,
-    BasicV2, StandardV2; 2025-09-01-preview adds PremiumV2'
-  - properties.additionalLocations[] and top-level zones read in apimdeployment.json 2024-05-01
+    - "Microsoft.ApiManagement/service 2024-05-01"
+    - "Microsoft.ApiManagement/service 2025-09-01-preview"
+  preview: true
+  notes: "properties.additionalLocations[] and top-level zones were read in apimdeployment.json 2024-05-01. No azd dependency: reads compiled ARM JSON or ARM control plane Microsoft.ApiManagement/service 2024-05-01 / 2025-09-01-preview: stable) SkuType enum: Developer, Standard, Premium, Basic, Consumption, Isolated, BasicV2, StandardV2; adds PremiumV2."
 evidence:
   description: 'Compiled ARM or live Microsoft.ApiManagement/service. Read sku.name, sku.capacity, zones, properties.additionalLocations.
     Finding A (prod): sku.name is Developer (no SLA per the features article). Finding B (prod): sku.name is Consumption,

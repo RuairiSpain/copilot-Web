@@ -22,11 +22,12 @@ severity:
   test: info
   prod: warning
 compatibility:
-  azd: n/a (reads compiled ARM JSON or ARM control plane)
+  azd: ""
   extensions: {}
   apiVersions:
-  - Microsoft.Storage/storageAccounts 2026-09-01 (stable) - storage/resource-manager/Microsoft.Storage/stable/2026-09-01/openapi.json
-    (SkuName enum)
+    - "Microsoft.Storage/storageAccounts 2026-09-01"
+  preview: false
+  notes: "No azd dependency: reads compiled ARM JSON or ARM control plane Microsoft.Storage/storageAccounts 2026-09-01 / 2026-09-01: stable) - storage/resource-manager/Microsoft.Storage/stable//openapi.json (SkuName enum."
 evidence:
   description: 'Compiled ARM or live Microsoft.Storage/storageAccounts referenced by a Foundry connection, project or capability
     host (storageConnections / threadStorageConnections). Read sku.name. Zone-redundant or geo-redundant values read in the

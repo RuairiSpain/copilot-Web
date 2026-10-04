@@ -23,11 +23,13 @@ severity:
   test: info
   prod: warning
 compatibility:
-  azd: n/a (reads compiled ARM JSON or ARM control plane)
+  azd: ""
   extensions: {}
   apiVersions:
-  - Microsoft.CognitiveServices/accounts/deployments 2026-05-01 (stable) - properties.spilloverDeploymentName in cognitiveservices.json;
-    Learn REST example uses 2024-10-01
+    - "Microsoft.CognitiveServices/accounts/deployments 2026-05-01"
+    - "Microsoft.CognitiveServices/accounts/deployments 2024-10-01"
+  preview: false
+  notes: "No azd dependency: reads compiled ARM JSON or ARM control plane Microsoft.CognitiveServices/accounts/deployments 2026-05-01 / 2024-10-01: stable) - properties.spilloverDeploymentName in cognitiveservices.json; Learn REST example uses."
 evidence:
   description: 'Compiled ARM or live Microsoft.CognitiveServices/accounts/deployments. In scope when sku.name is one of the
     provisioned names read in the Learn article (ProvisionedManaged, GlobalProvisionedManaged, DataZoneProvisionedManaged).

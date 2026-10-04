@@ -17,11 +17,13 @@ severity:
   test: error
   prod: error
 compatibility:
-  azd: n/a (ARM reads; no azd behaviour dependency)
+  azd: ""
   extensions:
-    azure.ai.agents: "1.0.0-beta.18 (read for overlap only)"
+    azure.ai.agents: ">=1.0.0-beta.18 <=1.0.0-beta.18"
   apiVersions:
-    - Microsoft.CognitiveServices accounts/projects, projects/capabilityHosts, accounts/capabilityHosts, projects/connections 2026-09-01 (stable)
+    - "Microsoft.CognitiveServices accounts/projects projects/capabilityHosts accounts/capabilityHosts projects/connections 2026-09-01"
+  preview: true
+  notes: "No azd dependency: ARM reads; no azd behaviour dependency azure.ai.agents 1.0.0-beta.18: read for overlap only. Extension ranges are exactly the versions whose schemas or source were read; widen them in Phase 1 by reading older tags. Microsoft.CognitiveServices accounts/projects projects/capabilityHosts accounts/capabilityHosts projects/connections 2026-09-01: stable."
 evidence:
   description: >-
     Read-only ARM probes, api-version 2026-09-01. GET .../accounts/{a}/projects/{p}: properties.provisioningState must be

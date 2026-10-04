@@ -22,12 +22,13 @@ severity:
   test: info
   prod: info
 compatibility:
-  azd: 1.36.0-beta.1
+  azd: ">=1.36.0-beta.1 <=1.36.0-beta.1"
   extensions:
-    azure.ai.agents: 1.0.0-beta.18
+    azure.ai.agents: ">=1.0.0-beta.18 <=1.0.0-beta.18"
   apiVersions:
-  - Microsoft.CognitiveServices/accounts 2026-09-01 (stable) - cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
-    (AccountProperties.restrictOutboundNetworkAccess, allowedFqdnList; ManagedNetworkSettings.isolationMode)
+    - "Microsoft.CognitiveServices/accounts 2026-09-01"
+  preview: true
+  notes: "azd verified at exactly 1.36.0-beta.1. Extension ranges are exactly the versions whose schemas or source were read; widen them in Phase 1 by reading older tags. Microsoft.CognitiveServices/accounts 2026-09-01 / 2026-09-01: stable) - cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable//cognitiveservices.json (AccountProperties.restrictOutboundNetworkAccess, allowedFqdnList; ManagedNetworkSettings.isolationMode."
 evidence:
   description: 'Compiled ARM or live account: properties.restrictOutboundNetworkAccess (boolean) and properties.allowedFqdnList;
     ManagedNetworkSettings.isolationMode value; azure.yaml services of host azure.ai.project: network.isolationMode

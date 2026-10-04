@@ -24,9 +24,11 @@ severity:
   test: info
   prod: info
 compatibility:
-  azd: n/a (reads Foundry Doctor configuration and compiled ARM JSON)
+  azd: ""
   extensions: {}
   apiVersions: []
+  preview: false
+  notes: "No azd dependency: reads Foundry Doctor configuration and compiled ARM JSON"
 evidence:
   description: 'No pass/fail evidence exists. Inputs: a DR declaration in Foundry Doctor configuration (name and format decided
     by the configuration schema, not by this catalogue), and as context only the count of distinct locations among the Foundry

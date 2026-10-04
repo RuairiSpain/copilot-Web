@@ -22,11 +22,13 @@ severity:
   test: error
   prod: error
 compatibility:
-  azd: "not version dependent; reads compiled ARM JSON (azd 1.36.0-beta.1 clone checked)"
+  azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.Authorization/roleAssignments@2022-04-01 (principalId, principalType enum User, Group, ServicePrincipal, ForeignGroup, Device, AgentUser, AgentServicePrincipal)"
-    - "Microsoft.ManagedIdentity/userAssignedIdentities@2024-11-30 (properties.principalId, properties.clientId)"
+    - "Microsoft.Authorization/roleAssignments 2022-04-01"
+    - "Microsoft.ManagedIdentity/userAssignedIdentities 2024-11-30"
+  preview: false
+  notes: "Not version dependent; reads compiled ARM JSON (azd 1.36.0-beta.1 clone checked) Microsoft.Authorization/roleAssignments 2022-04-01: principalId, principalType enum User, Group, ServicePrincipal, ForeignGroup, Device, AgentUser, AgentServicePrincipal. Microsoft.ManagedIdentity/userAssignedIdentities 2024-11-30: properties.principalId, properties.clientId."
 evidence:
   description: >-
     For every Microsoft.Authorization/roleAssignments resource in the compiled template:

@@ -21,10 +21,11 @@ severity:
   test: error
   prod: error
 compatibility:
-  azd: n/a (reads policy XML in compiled ARM or live APIM policy)
+  azd: ""
   extensions: {}
-  apiVersions:
-  - Microsoft.ApiManagement policy XML (validate-azure-ad-token reference, ms.date 08/18/2026) - refs/azure-docs/articles/api-management/validate-azure-ad-token-policy.md
+  apiVersions: []
+  preview: false
+  notes: "No azd dependency: reads policy XML in compiled ARM or live APIM policy Microsoft.ApiManagement policy XML (validate-azure-ad-token reference, ms.date 08/18/2026) - refs/azure-docs/articles/api-management/validate-azure-ad-token-policy.md"
 evidence:
   description: 'Policy XML at service, product, API or operation scope: a validate-azure-ad-token element whose
     tenant-id is organizations, common, or the matching https://login.microsoftonline.com/organizations|common URL,

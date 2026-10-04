@@ -2,9 +2,10 @@ id: FND-SEC-014
 version: 1
 group: SEC
 title: Secrets not emitted as Bicep outputs
-description: Bicep outputs must not carry secrets, because deployment outputs are stored in deployment history and,
-  for azd, are copied into the azd environment values. The rule detects outputs derived from secure parameters,
-  list*() functions such as listKeys, and outputs named like password.
+description: >-
+  Bicep outputs must not carry secrets, because deployment outputs are stored in deployment history and, for azd, are copied
+  into the azd environment values. The rule detects outputs derived from secure parameters, list*() functions such as listKeys,
+  and outputs named like password.
 status: verified
 phases:
 - '1'
@@ -12,7 +13,6 @@ inputs:
 - bicep-arm
 basis:
 - security
-- waf
 category: must-have
 pillar: security
 severity:
@@ -20,20 +20,25 @@ severity:
   test: error
   prod: error
 compatibility:
-  azd: 1.36.0-beta.1 (azd stores entry-point outputs as environment values per azd docs)
+  azd: '>=1.36.0-beta.1 <=1.36.0-beta.1'
   extensions: {}
-  apiVersions:
-  - Bicep linter rule outputs-should-not-contain-secrets (Learn ms.date 10/30/2025) - refs/azure-docs/articles/azure-resource-manager/bicep/linter-rule-outputs-should-not-contain-secrets.md
+  apiVersions: []
+  preview: true
+  notes: >-
+    azd verified at exactly 1.36.0-beta.1. Azd stores entry-point outputs as environment values per azd docs Bicep linter
+    rule outputs-should-not-contain-secrets (Learn ms.date 10/30/2025) - refs/azure-docs/articles/azure-resource-manager/bicep/linter-rule-outputs-should-not-contain-secrets.md
 evidence:
-  description: 'Run the Bicep CLI build and collect the diagnostic with code outputs-should-not-contain-secrets
-    (default level warning in Bicep). Foundry Doctor raises or lowers it per profile and ties the output name to
-    the azd environment values it would populate. Fallback when no diagnostic is available: ARM JSON outputs whose
-    value expression contains listKeys / list*, or a reference to a securestring/secureObject parameter.'
+  description: >-
+    Run the Bicep CLI build and collect the diagnostic with code outputs-should-not-contain-secrets (default level warning
+    in Bicep). Foundry Doctor raises or lowers it per profile and ties the output name to the azd environment values it
+    would populate. Fallback when no diagnostic is available: ARM JSON outputs whose value expression contains listKeys
+    / list*, or a reference to a securestring/secureObject parameter.
   confidence: certain
-recommendation: Output the resourceId of the resource that holds the secret, or store the secret in Key Vault, and
-  read it at the consuming resource. Do not output keys, connection strings or passwords.
-fix: output storageId string = stg.id // consumer calls listKeys(storageId, ...) when it needs the key; do not output
-  keys
+recommendation: >-
+  Output the resourceId of the resource that holds the secret, or store the secret in Key Vault, and read it at the consuming
+  resource. Do not output keys, connection strings or passwords.
+fix: >-
+  output storageId string = stg.id // consumer calls listKeys(storageId, ...) when it needs the key; do not output keys
 sources:
 - url: https://learn.microsoft.com/azure/azure-resource-manager/bicep/linter-rule-outputs-should-not-contain-secrets
   lastVerified: '2026-10-04'
@@ -50,12 +55,12 @@ sources:
 overlap:
   decision: wrap
   coverage: full
-  rationale: 'The Bicep linter rule outputs-should-not-contain-secrets already gives equivalent evidence (and it
-    is a compile-time diagnostic, so no Bicep parser is needed). Foundry Doctor wraps it: run bicep build, normalise
-    the diagnostic into FND-SEC-014 with a stable fingerprint, source location and per-profile severity (the linter
-    default is warning and can be silenced with a disable comment, which Foundry Doctor should report as a suppression
-    needing reason and expiry). Checkov has no output-secret check in the reviewed clone (only secure-parameter
-    default checks).'
+  rationale: >-
+    The Bicep linter rule outputs-should-not-contain-secrets already gives equivalent evidence (and it is a compile-time
+    diagnostic, so no Bicep parser is needed). Foundry Doctor wraps it: run bicep build, normalise the diagnostic into FND-SEC-014
+    with a stable fingerprint, source location and per-profile severity (the linter default is warning and can be silenced
+    with a disable comment, which Foundry Doctor should report as a suppression needing reason and expiry). Checkov has
+    no output-secret check in the reviewed clone (only secure-parameter default checks).
   psrule: []
   azurePolicy: []
   defender: []
@@ -77,5 +82,7 @@ tests:
   - Bicep CLI not installed is skipped with the missing capability named
   - '#disable-next-line outputs-should-not-contain-secrets is surfaced as a suppression needing reason and expiry'
 testability: Deterministic given the Bicep CLI; Skipped when the Bicep CLI is missing.
-notes: Bicep linter configuration (bicepconfig.json) can change or disable the level; the wrapper must read the
-  effective level, not assume warning.
+notes: >-
+  Bicep linter configuration (bicepconfig.json) can change or disable the level; the wrapper must read the effective level,
+  not assume warning. The waf basis was removed after the Phase 0 Azure black belt review because no WAF pillar tag or WARA
+  recommendation is cited here; the WAF mapping is added in Phase 4 when the guidance is verified.

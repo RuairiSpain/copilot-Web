@@ -2,9 +2,10 @@ id: FND-SEC-003
 version: 1
 group: SEC
 title: Cosmos DB local authentication disabled
-description: A Cosmos DB account used by Foundry (for example agent thread storage reached through a capability
-  host) should disable key-based authentication. The rule reads properties.disableLocalAuth on Microsoft.DocumentDB/databaseAccounts.
-  PSRule applies its equivalent only to the NoSQL API; this rule applies the same scope.
+description: >-
+  A Cosmos DB account used by Foundry (for example agent thread storage reached through a capability host) should disable
+  key-based authentication. The rule reads properties.disableLocalAuth on Microsoft.DocumentDB/databaseAccounts. PSRule
+  applies its equivalent only to the NoSQL API; this rule applies the same scope.
 status: verified
 phases:
 - '1'
@@ -13,7 +14,6 @@ inputs:
 - control-plane
 basis:
 - security
-- waf
 category: must-have
 pillar: security
 severity:
@@ -21,32 +21,52 @@ severity:
   test: error
   prod: error
 compatibility:
-  azd: n/a (reads compiled ARM JSON or ARM control plane)
+  azd: ''
   extensions: {}
   apiVersions:
-  - Microsoft.DocumentDB/databaseAccounts 2026-03-15 (stable) - cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
+  - Microsoft.DocumentDB/databaseAccounts 2026-03-15
+  preview: false
+  notes: >-
+    No azd dependency: reads compiled ARM JSON or ARM control plane Microsoft.DocumentDB/databaseAccounts 2026-03-15 / 2026-03-15:
+    stable) - cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable//openapi.json.
 evidence:
-  description: 'Compiled ARM or live Microsoft.DocumentDB/databaseAccounts: properties.disableLocalAuth is not true.
-    In scope when the account is referenced by a Foundry connection, or by threadStorageConnections / vectorStoreConnections
-    / storageConnections of a capability host on the Foundry account or project. Connection authType is reported
-    as context only (no breakage is inferred).'
+  description: >-
+    Compiled ARM or live Microsoft.DocumentDB/databaseAccounts: properties.disableLocalAuth is not true. In scope when the
+    account is referenced by a Foundry connection, or by threadStorageConnections / vectorStoreConnections / storageConnections
+    of a capability host on the Foundry account or project. Connection authType is reported as context only (no breakage
+    is inferred).
   confidence: certain
-recommendation: Set properties.disableLocalAuth to true and grant the Foundry project managed identity a Cosmos
-  DB data-plane role assignment. Check that clients use Entra ID before enforcing in an existing environment.
-fix: "resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2026-03-15' = {\n  name: cosmosName\n  location: location\n\
-  \  kind: 'GlobalDocumentDB'\n  properties: {\n    databaseAccountOfferType: 'Standard'\n    locations: [ { locationName:\
-  \ location, failoverPriority: 0 } ]\n    disableLocalAuth: true\n  }\n}"
+recommendation: >-
+  Set properties.disableLocalAuth to true and grant the Foundry project managed identity a Cosmos DB data-plane role assignment.
+  Check that clients use Entra ID before enforcing in an existing environment.
+fix: |-
+  resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2026-03-15' = {
+    name: cosmosName
+    location: location
+    kind: 'GlobalDocumentDB'
+    properties: {
+      databaseAccountOfferType: 'Standard'
+      locations: [ { locationName: location, failoverPriority: 0 } ]
+      disableLocalAuth: true
+    }
+  }
 sources:
-- url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
+- url: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/rest-api-specs/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
-  note: 'DatabaseAccountCreateUpdateProperties/GetProperties.disableLocalAuth: ''only MSI and AAD can be used exclusively
-    for authentication''.'
-- url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+  verifiedVia: >-
+    refs/rest-api-specs/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
+  note: >-
+    DatabaseAccountCreateUpdateProperties/GetProperties.disableLocalAuth: 'only MSI and AAD can be used exclusively for
+    authentication'.
+- url: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
-  note: CapabilityHostProperties.threadStorageConnections / vectorStoreConnections (description names CosmosDB)
-    used for Foundry correlation.
+  verifiedVia: >-
+    refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+  note: >-
+    CapabilityHostProperties.threadStorageConnections / vectorStoreConnections (description names CosmosDB) used for Foundry
+    correlation.
 - url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.Cosmos.NoSQLLocalAuth/
   lastVerified: '2026-10-04'
   verifiedVia: refs/psrule/docs/en/rules/Azure.Cosmos.NoSQLLocalAuth.md
@@ -54,11 +74,11 @@ sources:
 overlap:
   decision: adapt
   coverage: partial
-  rationale: 'PSRule Azure.Cosmos.NoSQLLocalAuth, Azure Policy 5450f5bd (audit/deny) and dc2d41d1 (modify) and Checkov
-    CKV_AZURE_140 test the same property. The Foundry value is cross-resource correlation: only Cosmos accounts
-    that a Foundry capability host or connection actually uses are in scope, and the finding carries the referencing
-    project. Plus per-profile severity. If that correlation is not implemented in a phase, downgrade to reuse of
-    the PSRule mapping.'
+  rationale: >-
+    PSRule Azure.Cosmos.NoSQLLocalAuth, Azure Policy 5450f5bd (audit/deny) and dc2d41d1 (modify) and Checkov CKV_AZURE_140
+    test the same property. The Foundry value is cross-resource correlation: only Cosmos accounts that a Foundry capability
+    host or connection actually uses are in scope, and the finding carries the referencing project. Plus per-profile severity.
+    If that correlation is not implemented in a phase, downgrade to reuse of the PSRule mapping.
   psrule:
   - Azure.Cosmos.NoSQLLocalAuth
   azurePolicy:
@@ -82,5 +102,8 @@ tests:
   - Cosmos account not referenced by any Foundry resource is skipped with reason out-of-scope
   - unresolved disableLocalAuth parameter is skipped
 testability: Deterministic on ARM JSON; correlation requires capability host and connection resources in scope.
-notes: PSRule limits the rule to the NoSQL API because enforcing RBAC-only is documented there as supported only
-  for NoSQL; the API-kind detection (capabilities / kind) was not independently verified here.
+notes: >-
+  PSRule limits the rule to the NoSQL API because enforcing RBAC-only is documented there as supported only for NoSQL; the
+  API-kind detection (capabilities / kind) was not independently verified here. The waf basis was removed after the Phase
+  0 Azure black belt review because no WAF pillar tag or WARA recommendation is cited here; the WAF mapping is added in
+  Phase 4 when the guidance is verified.

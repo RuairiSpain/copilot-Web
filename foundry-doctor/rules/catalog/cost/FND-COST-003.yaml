@@ -1,16 +1,21 @@
 id: FND-COST-003
 version: 1
 group: COST
-title: "Gateway token limits exist"
+title: Gateway token limits exist
 description: >-
   When Azure API Management fronts Foundry or Azure OpenAI model endpoints (the AI gateway pattern, Phase 8), the LLM API
   should apply the llm-token-limit policy so that a single caller key cannot consume unbounded tokens. The policy limits
   tokens per minute, a token quota over a period, or both, and returns 429 for rate and 403 for quota breaches. This rule
   references the policy only; gateway topology rules belong to the GW group.
 status: product-opinion
-phases: ["8"]
-inputs: ["bicep-arm", "control-plane"]
-basis: ["cost", "waf", "opinion"]
+phases:
+- '8'
+inputs:
+- bicep-arm
+- control-plane
+basis:
+- cost
+- opinion
 category: nice-to-have
 pillar: cost
 severity:
@@ -18,19 +23,24 @@ severity:
   test: warning
   prod: warning
 compatibility:
-  azd: ">=1.27.1"
+  azd: '>=1.34.2 <=1.36.0-beta.1'
   extensions: {}
-  apiVersions: ["2024-05-01"]
+  apiVersions:
+  - '2024-05-01'
+  preview: true
+  notes: >-
+    azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects
+    beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from
+    a changelog and was not verified.
 evidence:
   description: >-
     Phase 8. In the compiled template, for each API Management API identified as an LLM API in front of a Foundry or Azure
     OpenAI backend (identification is owned by the GW group rules), find an llm-token-limit policy element in the effective
-    inbound policy at global, product, API or operation scope (including policy fragments that are referenced by
-    include-fragment). The element must set counter-key and estimate-prompt-tokens, and either tokens-per-minute, or
-    token-quota with token-quota-period (Hourly, Daily, Weekly, Monthly or Yearly), or both. Report - no policy; policy
-    missing the required attributes; a quota period outside the documented values. Numeric limits are never judged.
-    Policy expressions in attribute values and unresolved fragments are reported as skipped. Control plane variant reads the
-    effective policy of the deployed API.
+    inbound policy at global, product, API or operation scope (including policy fragments that are referenced by include-fragment).
+    The element must set counter-key and estimate-prompt-tokens, and either tokens-per-minute, or token-quota with token-quota-period
+    (Hourly, Daily, Weekly, Monthly or Yearly), or both. Report - no policy; policy missing the required attributes; a quota
+    period outside the documented values. Numeric limits are never judged. Policy expressions in attribute values and unresolved
+    fragments are reported as skipped. Control plane variant reads the effective policy of the deployed API.
   confidence: likely
 recommendation: >-
   Add an llm-token-limit policy to the inbound section of the LLM API, keyed by caller (for example subscription ID), with
@@ -44,18 +54,21 @@ fix: |
                      estimate-prompt-tokens="true" />
   </inbound>
 sources:
-  - url: https://learn.microsoft.com/azure/api-management/llm-token-limit-policy
-    lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-docs/articles/api-management/llm-token-limit-policy.md
-    note: Attributes counter-key (required), tokens-per-minute, token-quota, token-quota-period (Hourly, Daily, Weekly, Monthly, Yearly), estimate-prompt-tokens (required); inbound section; scopes global, workspace, product, API, operation; 429 for rate, 403 for quota; either a rate limit or a quota or both must be specified. Page ms.date 04/01/2026.
+- url: https://learn.microsoft.com/azure/api-management/llm-token-limit-policy
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-docs/articles/api-management/llm-token-limit-policy.md
+  note: >-
+    Attributes counter-key (required), tokens-per-minute, token-quota, token-quota-period (Hourly, Daily, Weekly, Monthly,
+    Yearly), estimate-prompt-tokens (required); inbound section; scopes global, workspace, product, API, operation; 429
+    for rate, 403 for quota; either a rate limit or a quota or both must be specified. Page ms.date 04/01/2026.
 overlap:
   decision: native
   coverage: none
   rationale: >-
     No PSRule rule, Azure Policy built-in, Checkov or Bicep linter rule checks for the llm-token-limit policy (PSRule Azure.APIM.*
-    rules cover transport, identity, naming and products, not token policies). Detection of the policy on the Foundry-facing LLM
-    API is Foundry-specific and depends on the gateway correlation of the GW group. Only the APIM policy is referenced; no
-    APIM implementation is duplicated here.
+    rules cover transport, identity, naming and products, not token policies). Detection of the policy on the Foundry-facing
+    LLM API is Foundry-specific and depends on the gateway correlation of the GW group. Only the APIM policy is referenced;
+    no APIM implementation is duplicated here.
   psrule: []
   azurePolicy: []
   defender: []
@@ -66,26 +79,27 @@ implementation:
   owner: native
   package: internal/rules/cost
 testability: >-
-  Offline against fixture ARM JSON with policy XML at each scope and with fragments; policy parsing uses an XML parser on the
-  extracted policy value, never a Bicep parser.
+  Offline against fixture ARM JSON with policy XML at each scope and with fragments; policy parsing uses an XML parser on
+  the extracted policy value, never a Bicep parser.
 tests:
   positive:
-    - llm-api-without-token-limit-policy
-    - policy-without-tokens-per-minute-or-quota
-    - policy-without-estimate-prompt-tokens
-    - quota-period-not-in-documented-values
+  - llm-api-without-token-limit-policy
+  - policy-without-tokens-per-minute-or-quota
+  - policy-without-estimate-prompt-tokens
+  - quota-period-not-in-documented-values
   negative:
-    - api-scope-policy-with-tokens-per-minute
-    - global-scope-policy-with-quota-and-period
-    - policy-supplied-through-fragment
+  - api-scope-policy-with-tokens-per-minute
+  - global-scope-policy-with-quota-and-period
+  - policy-supplied-through-fragment
   skipped:
-    - api-not-identified-as-llm-api
-    - policy-uses-expressions-or-unresolved-fragment
-    - phase-8-gateway-rules-not-enabled
+  - api-not-identified-as-llm-api
+  - policy-uses-expressions-or-unresolved-fragment
+  - phase-8-gateway-rules-not-enabled
 notes: >-
-  Product opinion: the documentation describes the policy but does not require it. Unverified - the older
-  azure-openai-token-limit policy name and its attribute parity (the llm-token-limit page was the only token-limit page
-  found in the clone); availability per APIM tier beyond the page's availability include (Developer, Basic, Standard,
-  Premium, Basic v2, Standard v2, Premium v2 were named by the include file name, not read); how to determine the effective
-  policy across scopes in compiled ARM. The APIM apiVersion 2024-05-01 is the latest stable version found in the
-  specification clone and was not used to read policy resource properties.
+  Product opinion: the documentation describes the policy but does not require it. Unverified - the older azure-openai-token-limit
+  policy name and its attribute parity (the llm-token-limit page was the only token-limit page found in the clone); availability
+  per APIM tier beyond the page's availability include (Developer, Basic, Standard, Premium, Basic v2, Standard v2, Premium
+  v2 were named by the include file name, not read); how to determine the effective policy across scopes in compiled ARM.
+  The APIM apiVersion 2024-05-01 is the latest stable version found in the specification clone and was not used to read
+  policy resource properties. The waf basis was removed after the Phase 0 Azure black belt review because no WAF pillar
+  tag or WARA recommendation is cited here; the WAF mapping is added in Phase 4 when the guidance is verified.

@@ -22,8 +22,11 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Search data plane 2026-04-01 and 2026-08-01-preview"
-    - "Foundry project connection API 2025-10-01-preview (RemoteTool, ProjectManagedIdentity; doc example)"
+    - "Search data plane 2026-04-01"
+    - "Search data plane 2026-08-01-preview"
+    - "Foundry project connection API 2025-10-01-preview"
+  preview: true
+  notes: "Foundry project connection API 2025-10-01-preview: RemoteTool, ProjectManagedIdentity; doc example."
 evidence:
   description: >-
     Classify, without emitting any value: for azureBlob knowledge sources, connectionString starts with

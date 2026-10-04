@@ -1,16 +1,21 @@
 id: FND-DEP-003
 version: 1
 group: DEP
-title: "Deployer can create resources and role assignments"
+title: Deployer can create resources and role assignments
 description: >-
-  The identity that runs azd provision needs write access on the resources being deployed, access to all
-  operations on Microsoft.Resources/deployments, and, when the template contains role assignments, the
-  ability to write Microsoft.Authorization/roleAssignments. The doctor can show that a required permission
-  is missing. It cannot prove that a permission present in the effective list is enough to succeed.
+  The identity that runs azd provision needs write access on the resources being deployed, access to all operations on Microsoft.Resources/deployments,
+  and, when the template contains role assignments, the ability to write Microsoft.Authorization/roleAssignments. The doctor
+  can show that a required permission is missing. It cannot prove that a permission present in the effective list is enough
+  to succeed.
 status: verified
-phases: ["2"]
-inputs: ["bicep-arm", "control-plane", "azd-env"]
-basis: ["platform"]
+phases:
+- '2'
+inputs:
+- bicep-arm
+- control-plane
+- azd-env
+basis:
+- platform
 category: must-have
 pillar: security
 severity:
@@ -18,69 +23,86 @@ severity:
   test: error
   prod: error
 compatibility:
-  azd: ">=1.27.1"
+  azd: '>=1.34.2 <=1.36.0-beta.1'
   extensions: {}
-  apiVersions: ["Microsoft.Authorization permissions 2022-04-01", "Microsoft.Authorization roleAssignments 2022-04-01"]
+  apiVersions:
+  - Microsoft.Authorization permissions 2022-04-01
+  - Microsoft.Authorization roleAssignments 2022-04-01
+  preview: true
+  notes: >-
+    azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects
+    beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from
+    a changelog and was not verified.
 evidence:
   description: >-
-    Read-only ARM calls, both GET, api-version 2022-04-01. (1) Effective permissions of the caller:
-    GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Authorization/permissions
-    (Permissions_ListForResourceGroup) or the resource-scope variant (Permissions_ListForResource); the
-    spec defines no subscription-scope variant. Each Permission carries actions, notActions, dataActions
-    and notDataActions. (2) Role assignments at subscription scope for subscription-scoped deployments:
-    GET /subscriptions/{subscriptionId}/providers/Microsoft.Authorization/roleAssignments
-    (RoleAssignments_ListForSubscription). Required actions are derived from the compiled template: for
-    each resource type, <provider>/<type>/write; always Microsoft.Resources/deployments/write (and the
-    deployments/* family per the Learn permission text); Microsoft.Authorization/roleAssignments/write when
-    the Bicep snapshot or ARM JSON contains Microsoft.Authorization/roleAssignments. Wildcard matching
-    follows the actions/notActions semantics. Outcome mapping: a required action absent from the effective
-    actions, or excluded by notActions, is a violation (likely: the list is what ARM reports for the
-    caller). A required action present is NOT proof of success and is reported as uncertain, never passed,
-    because the Permission schema has no field for deny assignments, ABAC conditions, resource locks, Azure
-    Policy, or just-in-time (eligible) role activation, and the sources read do not say these are
-    reflected. Subscription-scope deployments cannot use the permissions API, so the role-assignment list
-    is the only evidence there and is also non-conclusive. Role family: Microsoft.Authorization/permissions/read
-    and Microsoft.Authorization/roleAssignments/read are in Reader (*/read). Reader suffices to read the
-    evidence. The answer is only ever a likely violation or uncertain, never a definitive pass.
+    Read-only ARM calls, both GET, api-version 2022-04-01. (1) Effective permissions of the caller: GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Authorization/permissions
+    (Permissions_ListForResourceGroup) or the resource-scope variant (Permissions_ListForResource); the spec defines no
+    subscription-scope variant. Each Permission carries actions, notActions, dataActions and notDataActions. (2) Role assignments
+    at subscription scope for subscription-scoped deployments: GET /subscriptions/{subscriptionId}/providers/Microsoft.Authorization/roleAssignments
+    (RoleAssignments_ListForSubscription). Required actions are derived from the compiled template: for each resource type,
+    <provider>/<type>/write; always Microsoft.Resources/deployments/write (and the deployments/* family per the Learn permission
+    text); Microsoft.Authorization/roleAssignments/write when the Bicep snapshot or ARM JSON contains Microsoft.Authorization/roleAssignments;
+    and <provider>/register/action for each namespace of a resource defined in the template whose registrationState (read
+    for FND-DEP-002) is not Registered (Contributor and Owner include it; Reader does not). Wildcard matching follows the
+    actions/notActions semantics. Outcome mapping: a required action absent from the effective actions, or excluded by notActions,
+    is a violation (likely: the list is what ARM reports for the caller). A required action present is NOT proof of success
+    and is reported as uncertain, never passed, because the Permission schema has no field for deny assignments, ABAC conditions,
+    resource locks, Azure Policy, or just-in-time (eligible) role activation, and the sources read do not say these are
+    reflected. Subscription-scope deployments cannot use the permissions API, so the role-assignment list is the only evidence
+    there and is also non-conclusive. Role family: Microsoft.Authorization/permissions/read and Microsoft.Authorization/roleAssignments/read
+    are in Reader (*/read). Reader suffices to read the evidence. The answer is only ever a likely violation or uncertain,
+    never a definitive pass.
   confidence: likely
 recommendation: >-
-  Assign the deployer a role that includes the missing write actions at the narrowest sufficient scope. For
-  templates that create role assignments, Owner or User Access Administrator (or a custom role with
-  Microsoft.Authorization/roleAssignments/write) is needed in addition to a resource-write role.
+  Assign the deployer a role that includes the missing write actions at the narrowest sufficient scope. For templates that
+  create role assignments, Owner or User Access Administrator (or a custom role with Microsoft.Authorization/roleAssignments/write)
+  is needed in addition to a resource-write role.
 fix: |
   az role assignment create --assignee <deployer-object-id> --role "Contributor" --scope /subscriptions/<sub-id>/resourceGroups/<rg>
   az role assignment create --assignee <deployer-object-id> --role "Role Based Access Control Administrator" --scope /subscriptions/<sub-id>/resourceGroups/<rg>
 sources:
-  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/authorization/resource-manager/Microsoft.Authorization/Authorization/stable/2022-04-01/authorization-RoleDefinitionsCalls.json
-    lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/authorization/resource-manager/Microsoft.Authorization/Authorization/stable/2022-04-01/authorization-RoleDefinitionsCalls.json
-    note: "Permissions_ListForResourceGroup and Permissions_ListForResource paths; Permission properties actions, notActions, dataActions, notDataActions."
-  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/authorization/resource-manager/Microsoft.Authorization/Authorization/stable/2022-04-01/authorization-RoleAssignmentsCalls.json
-    lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/authorization/resource-manager/Microsoft.Authorization/Authorization/stable/2022-04-01/authorization-RoleAssignmentsCalls.json
-    note: "RoleAssignments_ListForSubscription, ListForResourceGroup, ListForScope (GET)."
-  - url: https://learn.microsoft.com/azure/azure-resource-manager/templates/deploy-what-if
-    lastVerified: "2026-10-04"
-    verifiedVia: https://raw.githubusercontent.com/MicrosoftDocs/azure-docs/main/includes/template-deploy-permissions.md (include, ms.date 08/19/2025, used by refs/azure-docs/articles/azure-resource-manager/templates/deploy-what-if.md)
-    note: "To deploy you need write access on the resources and access to all operations on Microsoft.Resources/deployments; what-if has the same permission requirements."
-  - url: https://learn.microsoft.com/azure/role-based-access-control/permissions/management-and-governance
-    lastVerified: "2026-10-04"
-    verifiedVia: https://raw.githubusercontent.com/MicrosoftDocs/azure-docs/main/articles/role-based-access-control/permissions/management-and-governance.md
-    note: "Microsoft.Authorization/permissions/read and roleAssignments/read; Microsoft.Resources/deployments/write."
-  - url: https://github.com/Azure/azure-dev/blob/main/cli/azd/docs/design/provision-validation.md
-    lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-dev/cli/azd/docs/design/provision-validation.md
-    note: "azd local provision validation: detects Microsoft.Authorization/roleAssignments in the Bicep snapshot and warns when the principal lacks roleAssignments/write on the subscription. The only built-in check listed."
+- url: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/authorization/resource-manager/Microsoft.Authorization/Authorization/stable/2022-04-01/authorization-RoleDefinitionsCalls.json
+  lastVerified: '2026-10-04'
+  verifiedVia: >-
+    refs/rest-api-specs/specification/authorization/resource-manager/Microsoft.Authorization/Authorization/stable/2022-04-01/authorization-RoleDefinitionsCalls.json
+  note: >-
+    Permissions_ListForResourceGroup and Permissions_ListForResource paths; Permission properties actions, notActions, dataActions,
+    notDataActions.
+- url: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/authorization/resource-manager/Microsoft.Authorization/Authorization/stable/2022-04-01/authorization-RoleAssignmentsCalls.json
+  lastVerified: '2026-10-04'
+  verifiedVia: >-
+    refs/rest-api-specs/specification/authorization/resource-manager/Microsoft.Authorization/Authorization/stable/2022-04-01/authorization-RoleAssignmentsCalls.json
+  note: RoleAssignments_ListForSubscription, ListForResourceGroup, ListForScope (GET).
+- url: https://learn.microsoft.com/azure/azure-resource-manager/templates/deploy-what-if
+  lastVerified: '2026-10-04'
+  verifiedVia: >-
+    https://raw.githubusercontent.com/MicrosoftDocs/azure-docs/main/includes/template-deploy-permissions.md (include, ms.date
+    08/19/2025, used by refs/azure-docs/articles/azure-resource-manager/templates/deploy-what-if.md)
+  note: >-
+    To deploy you need write access on the resources and access to all operations on Microsoft.Resources/deployments; what-if
+    has the same permission requirements.
+- url: https://learn.microsoft.com/azure/role-based-access-control/permissions/management-and-governance
+  lastVerified: '2026-10-04'
+  verifiedVia: >-
+    https://raw.githubusercontent.com/MicrosoftDocs/azure-docs/main/articles/role-based-access-control/permissions/management-and-governance.md
+  note: Microsoft.Authorization/permissions/read and roleAssignments/read; Microsoft.Resources/deployments/write.
+- url: https://github.com/Azure/azure-dev/blob/main/cli/azd/docs/design/provision-validation.md
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-dev/cli/azd/docs/design/provision-validation.md
+  note: >-
+    azd local provision validation: detects Microsoft.Authorization/roleAssignments in the Bicep snapshot and warns when
+    the principal lacks roleAssignments/write on the subscription. The only built-in check listed.
 overlap:
   decision: adapt
   coverage: partial
   rationale: >-
-    azd already runs a local check for roleAssignments/write on the subscription (warning, only when the
-    snapshot has role assignments); its rule ID is not published in the document read, so no ID is mapped.
-    It does not check resource write actions, Microsoft.Resources/deployments/*, resource-group scope, or
-    the uncertain-versus-missing distinction. Foundry Doctor takes the idea and adds Foundry-aware
-    required-action derivation from the compiled template and an explicit uncertain outcome. No PSRule,
-    Policy, Defender, Advisor or Checkov rule evaluates the deployer's permissions.
+    azd already runs a local check for roleAssignments/write on the subscription (warning, only when the snapshot has role
+    assignments); its rule ID is not published in the document read, so no ID is mapped. It does not check resource write
+    actions, Microsoft.Resources/deployments/*, resource-group scope, or the uncertain-versus-missing distinction. Foundry
+    Doctor takes the idea and adds Foundry-aware required-action derivation from the compiled template and an explicit uncertain
+    outcome. No PSRule, Policy, Defender, Advisor or Checkov rule evaluates the deployer's permissions.
   psrule: []
   azurePolicy: []
   defender: []
@@ -91,24 +113,25 @@ implementation:
   owner: native
   package: internal/rules/dep
 testability: >-
-  Offline with recorded permissions and role-assignment responses and a compiled-template fixture.
-  Wildcard and notActions matching is pure logic with table tests.
+  Offline with recorded permissions and role-assignment responses and a compiled-template fixture. Wildcard and notActions
+  matching is pure logic with table tests.
 tests:
   positive:
-    - role-assignments-in-template-but-no-roleassignments-write
-    - deployments-write-missing
-    - resource-write-excluded-by-notactions
+  - role-assignments-in-template-but-no-roleassignments-write
+  - deployments-write-missing
+  - resource-write-excluded-by-notactions
+  - template-provider-unregistered-and-deployer-lacks-register-action
   negative:
-    - template-has-no-role-assignments-so-roleassignments-write-not-required
+  - template-has-no-role-assignments-so-roleassignments-write-not-required
+  - template-provider-already-registered-no-register-action-required
   skipped:
-    - no-azure-credential-available
-    - subscription-scope-deployment-permissions-api-unavailable
-    - bicep-cli-missing-cannot-derive-required-actions
+  - no-azure-credential-available
+  - subscription-scope-deployment-permissions-api-unavailable
+  - bicep-cli-missing-cannot-derive-required-actions
   uncertain:
-    - required-actions-present-but-deny-assignments-conditions-locks-policy-not-evaluated
-    - eligible-role-not-activated-unknown
+  - required-actions-present-but-deny-assignments-conditions-locks-policy-not-evaluated
+  - eligible-role-not-activated-unknown
 notes: >-
-  Reporting present permissions as uncertain is deliberate (CLAUDE.md: skipped is not passed). Whether the
-  permissions API output reflects deny assignments or ABAC conditions is not stated in the sources read; the
-  rule therefore never states that a deployment will succeed. The wildcard "deployments/*" from the Learn text
-  is applied as written.
+  Reporting present permissions as uncertain is deliberate (CLAUDE.md: skipped is not passed). Whether the permissions API
+  output reflects deny assignments or ABAC conditions is not stated in the sources read; the rule therefore never states
+  that a deployment will succeed. The wildcard "deployments/*" from the Learn text is applied as written.

@@ -22,12 +22,14 @@ severity:
   test: info
   prod: warning
 compatibility:
-  azd: "not version dependent; reads ARM role assignments and PIM schedules (azd 1.36.0-beta.1 clone checked)"
+  azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.Authorization/roleAssignments@2022-04-01"
-    - "Microsoft.Authorization/roleAssignmentScheduleInstances@2020-10-01 (assignmentType Activated or Assigned, memberType Inherited, Direct or Group, endDateTime)"
-    - "Microsoft.Authorization/roleEligibilityScheduleInstances@2020-10-01"
+    - "Microsoft.Authorization/roleAssignments 2022-04-01"
+    - "Microsoft.Authorization/roleAssignmentScheduleInstances 2020-10-01"
+    - "Microsoft.Authorization/roleEligibilityScheduleInstances 2020-10-01"
+  preview: false
+  notes: "Not version dependent; reads ARM role assignments and PIM schedules (azd 1.36.0-beta.1 clone checked) Microsoft.Authorization/roleAssignmentScheduleInstances 2020-10-01: assignmentType Activated Assigned, memberType Inherited, Direct Group, endDateTime."
 evidence:
   description: >-
     Phase 2 (live): list role assignments effective at the subscription, resource group, Foundry

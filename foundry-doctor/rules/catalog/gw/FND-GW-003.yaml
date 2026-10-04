@@ -21,8 +21,10 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.ApiManagement/service/backends 2025-09-01-preview and 2024-05-01 (url, protocol, pool.services[].id, circuitBreaker, credentials read in spec)"
-    - "Policy reference set-backend-service (current)"
+    - "Microsoft.ApiManagement/service/backends 2025-09-01-preview"
+    - "Microsoft.ApiManagement/service/backends 2024-05-01"
+  preview: true
+  notes: "Microsoft.ApiManagement/service/backends 2025-09-01-preview / 2024-05-01: url, protocol, pool.services[].id, circuitBreaker, credentials read in spec. Policy reference set-backend-service (current)"
 evidence:
   description: >-
     Collect backend entity names from Microsoft.ApiManagement/service/backends resources (ARM or control plane).

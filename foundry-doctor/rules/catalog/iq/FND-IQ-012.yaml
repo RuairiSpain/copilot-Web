@@ -11,31 +11,37 @@ description: >-
 status: verified
 phases: ["8"]
 inputs: ["bicep-arm", "control-plane", "data-plane"]
-basis: ["platform"]
+basis: ["reliability"]
 category: must-have
 pillar: reliability
 severity:
-  dev: error
+  dev: warning
   test: error
   prod: error
 compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.Search/searchServices 2025-05-01 (stable: semanticSearch disabled|free|standard)"
-    - "Microsoft.Search/searchServices 2026-03-01-preview (adds knowledgeRetrieval free|standard; disabled no longer valid)"
-    - "Microsoft.Search/searchServices 2026-09-01-preview (spec read)"
-    - "Search data plane 2026-04-01 (semanticSearch and knowledgeRetrieval billing split)"
+    - "Microsoft.Search/searchServices 2025-05-01"
+    - "Microsoft.Search/searchServices 2026-03-01-preview"
+    - "Microsoft.Search/searchServices 2026-09-01-preview"
+    - "Search data plane 2026-04-01"
+  preview: true
+  notes: "Microsoft.Search/searchServices 2025-05-01: stable: semanticSearch disabled|free|standard. Microsoft.Search/searchServices 2026-03-01-preview: adds knowledgeRetrieval free|standard; disabled no longer valid. Microsoft.Search/searchServices 2026-09-01-preview: spec read. Search data plane 2026-04-01: semanticSearch knowledgeRetrieval billing split."
 evidence:
   description: >-
     Determine "used": the project has an indexed knowledge source (agentic retrieval) or an index with a
     semantic configuration referenced by queries. Read Microsoft.Search/searchServices properties.semanticSearch
-    and properties.knowledgeRetrieval and sku.name from the Bicep/ARM template or control plane. Fail when
-    semanticSearch is disabled, or when semanticSearch or knowledgeRetrieval is standard and sku.name is free.
-    Where the template omits semanticSearch (default free) pass. Free plan is not a failure; quota exhaustion
+    and properties.knowledgeRetrieval and sku.name from the Bicep/ARM template or control plane, together with
+    the Microsoft.Search/searchServices API version of the resource. Where the API version is older than
+    2026-03-01-preview, fail when semanticSearch is disabled (it turns semantic ranker off). Where the API version
+    is 2026-03-01-preview or later, do not report a disabled ranker: report "disabled is no longer a valid value
+    and is treated as free" as an informational note, because the documentation says so while the ARM TypeSpec
+    still lists the value. At any version, fail when semanticSearch or knowledgeRetrieval is standard and sku.name
+    is free. Where the template omits semanticSearch (default free) pass. Free plan is not a failure; quota exhaustion
     behaviour (billing error after the monthly allowance) is reported as an informational note because usage is
     not readable metadata-only.
-  confidence: certain
+  confidence: likely
 recommendation: >-
   Set semanticSearch to free or standard (use standard on Basic or higher for production), and set
   knowledgeRetrieval to standard if agentic retrieval usage can exceed the free allowance. Use PATCH, not
@@ -81,17 +87,20 @@ implementation:
 testability: Offline from compiled ARM; live check is a single Search service GET with a management API version that returns the properties.
 tests:
   positive:
-    - semantic-disabled-with-semantic-configuration-used
+    - semantic-disabled-with-semantic-configuration-used-api-2025-05-01
     - standard-plan-on-free-sku
     - knowledge-retrieval-standard-on-free-sku
   negative:
     - semantic-free-default
     - semantic-standard-on-basic
     - semantic-not-used-and-disabled
+    - semantic-disabled-api-2026-03-01-preview-reports-note-not-failure
   skipped:
     - service-not-in-template-or-subscription
     - management-api-version-without-property
 notes: >-
-  The ARM TypeSpec still lists disabled for 2026-03-01-preview and later while the Learn article says the
-  value is no longer valid and is treated as free; the rule fails disabled because older API versions honour
-  it. Billing mode is not asserted as required for dev.
+  Corrected after the Phase 0 Foundry lead review. The ARM TypeSpec still lists disabled for 2026-03-01-preview
+  and later while the Learn article says the value is no longer valid and is treated as free (semantic-how-to-
+  enable-disable.md line 118). The rule therefore fails disabled only below 2026-03-01-preview, and its basis
+  is reliability (not platform) with confidence likely until the documentation and the spec agree. Billing mode
+  is not asserted as required for dev.

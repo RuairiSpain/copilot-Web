@@ -17,9 +17,17 @@ severity:
   test: error
   prod: error
 compatibility:
-  azd: ">=1.27.1"
+  azd: ">=1.34.2 <=1.36.0-beta.1"
   extensions: {}
-  apiVersions: ["Microsoft.CognitiveServices 2026-09-01", "Microsoft.Storage 2026-09-01", "Microsoft.KeyVault 2026-05-15", "Microsoft.Search 2025-05-01", "Microsoft.ApiManagement 2024-05-01", "Microsoft.DocumentDB 2026-03-15"]
+  apiVersions:
+    - "Microsoft.CognitiveServices 2026-09-01"
+    - "Microsoft.Storage 2026-09-01"
+    - "Microsoft.KeyVault 2026-05-15"
+    - "Microsoft.Search 2025-05-01"
+    - "Microsoft.ApiManagement 2024-05-01"
+    - "Microsoft.DocumentDB 2026-03-15"
+  preview: true
+  notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from a changelog and was not verified."
 evidence:
   description: >-
     Per-provider availability calls. All POSTs below are request/response checks that create nothing; the

@@ -22,11 +22,13 @@ severity:
   test: info
   prod: warning
 compatibility:
-  azd: n/a (reads compiled ARM JSON or ARM control plane)
+  azd: ""
   extensions: {}
   apiVersions:
-  - Microsoft.DocumentDB/databaseAccounts 2025-10-15 (stable) - cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2025-10-15/cosmos-db.json
-    (2026-03-15 stable exists but only its examples are in the clone)
+    - "Microsoft.DocumentDB/databaseAccounts 2025-10-15"
+    - "Microsoft.DocumentDB/databaseAccounts 2026-03-15"
+  preview: false
+  notes: "No azd dependency: reads compiled ARM JSON or ARM control plane Microsoft.DocumentDB/databaseAccounts 2025-10-15 / 2025-10-15 / 2026-03-15: stable) - cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable//cosmos-db.json ( stable exists but only its examples are in the clone."
 evidence:
   description: 'Compiled ARM or live Microsoft.DocumentDB/databaseAccounts referenced by a Foundry capability host (vectorStoreConnections
     / threadStorageConnections) or connection. Finding 1: any properties.locations[].isZoneRedundant is not true (spec: flag

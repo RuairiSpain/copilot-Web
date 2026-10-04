@@ -16,7 +16,7 @@ notes say otherwise. A rule with no decision yet is counted as unresearched.
 |---|---|---|---|---|---|---|---|
 | CFG | 0 | 0 | 3 | 9 | 0 | 0 | 12 |
 | COST | 0 | 0 | 0 | 4 | 0 | 0 | 4 |
-| DEP | 0 | 1 | 3 | 8 | 0 | 0 | 12 |
+| DEP | 0 | 0 | 4 | 8 | 0 | 0 | 12 |
 | ENV | 0 | 0 | 0 | 4 | 0 | 0 | 4 |
 | GW | 0 | 0 | 0 | 6 | 0 | 0 | 6 |
 | IDN | 0 | 0 | 3 | 3 | 0 | 0 | 6 |
@@ -26,7 +26,7 @@ notes say otherwise. A rule with no decision yet is counted as unresearched.
 | REL | 0 | 0 | 4 | 5 | 0 | 0 | 9 |
 | RUN | 0 | 0 | 3 | 5 | 0 | 0 | 8 |
 | SEC | 1 | 1 | 6 | 6 | 0 | 0 | 14 |
-| **all** | 1 | 2 | 37 | 68 | 0 | 0 | 108 |
+| **all** | 1 | 1 | 38 | 68 | 0 | 0 | 108 |
 
 ## Per-rule matrix
 
@@ -56,7 +56,7 @@ notes say otherwise. A rule with no decision yet is counted as unresearched.
 | FND-DEP-006 | native | none | - | - | - | - | - | - |
 | FND-DEP-007 | adapt | partial | `Azure.KeyVault.Name`, `Azure.Storage.Name`, `Azure.Search.Name`, `Azure.APIM.Name`, `Azure.Cosmos.AccountName`, `Azure.ACR.Name` | - | - | - | - | - |
 | FND-DEP-008 | native | partial | - | - | - | - | - | - |
-| FND-DEP-009 | wrap | partial | - | `e56962a6-4747-49cd-b67b-bf8b01975c4c`, `e765b5de-1225-4ba3-bd56-1ac6695af988` | - | - | - | - |
+| FND-DEP-009 | adapt | partial | - | `e56962a6-4747-49cd-b67b-bf8b01975c4c`, `e765b5de-1225-4ba3-bd56-1ac6695af988` | - | - | - | - |
 | FND-DEP-010 | native | none | - | - | - | - | - | - |
 | FND-DEP-011 | native | partial | - | - | - | - | - | - |
 | FND-DEP-012 | adapt | partial | - | - | - | - | - | - |
@@ -64,7 +64,7 @@ notes say otherwise. A rule with no decision yet is counted as unresearched.
 | FND-ENV-002 | native | none | - | - | - | - | - | - |
 | FND-ENV-003 | native | none | - | - | - | - | - | - |
 | FND-ENV-004 | native | none | - | - | - | - | - | - |
-| FND-GW-001 | native | none | - | `d5448c98-e503-4fdd-bcd2-784960c00d04` | - | - | - | - |
+| FND-GW-001 | native | none | - | - | - | - | - | - |
 | FND-GW-002 | native | none | - | - | - | - | - | - |
 | FND-GW-003 | native | none | - | - | - | - | - | - |
 | FND-GW-004 | native | none | - | - | - | - | - | - |
@@ -119,7 +119,7 @@ notes say otherwise. A rule with no decision yet is counted as unresearched.
 | FND-REL-008 | native | none | - | - | - | - | - | - |
 | FND-REL-009 | adapt | partial | `Azure.APIM.AvailabilityZone`, `Azure.APIM.MultiRegion` | - | - | - | - | - |
 | FND-RUN-001 | adapt | partial | - | - | - | - | - | - |
-| FND-RUN-002 | native | partial | `Azure.AI.PrivateEndpoints` | `c4bc6f10-cb41-49eb-b000-d5ab82e2a091` | - | - | - | - |
+| FND-RUN-002 | native | none | `Azure.AI.PrivateEndpoints` | `c4bc6f10-cb41-49eb-b000-d5ab82e2a091` | - | - | - | - |
 | FND-RUN-003 | native | partial | - | - | - | - | - | - |
 | FND-RUN-004 | native | none | - | - | - | - | - | - |
 | FND-RUN-005 | adapt | partial | - | - | - | - | - | - |

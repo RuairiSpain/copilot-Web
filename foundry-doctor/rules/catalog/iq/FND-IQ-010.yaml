@@ -22,8 +22,11 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Search data plane 2026-04-01 and 2026-08-01-preview (azureBlobParameters.isADLSGen2)"
-    - "Microsoft.Storage/storageAccounts 2025-01-01 (properties.isHnsEnabled read in spec)"
+    - "Search data plane 2026-04-01"
+    - "Search data plane 2026-08-01-preview"
+    - "Microsoft.Storage/storageAccounts 2025-01-01"
+  preview: true
+  notes: "Search data plane 2026-04-01 / 2026-08-01-preview: azureBlobParameters.isADLSGen2. Microsoft.Storage/storageAccounts 2025-01-01: properties.isHnsEnabled read in spec."
 evidence:
   description: >-
     Resolve the storage account from the knowledge source connectionString ResourceId= value (or the data

@@ -20,15 +20,15 @@ severity:
   test: error
   prod: error
 compatibility:
-  azd: >-
-    No dependency on azd behaviour. The overlapping check was read in azd extension azure.ai.agents 1.0.0-beta.18
-    (internal/cmd/doctor/checks_storage_rbac.go); the core azd version was not pinned in the clone.
+  azd: ""
   extensions:
-    azure.ai.agents: "1.0.0-beta.18 (read for overlap only)"
+    azure.ai.agents: ">=1.0.0-beta.18 <=1.0.0-beta.18"
   apiVersions:
-    - Microsoft.CognitiveServices projects, capabilityHosts, connections 2026-09-01 (stable)
-    - Microsoft.Authorization/roleAssignments 2022-04-01 (stable)
-    - Microsoft.DocumentDB sqlRoleAssignments 2025-10-15 (stable)
+    - "Microsoft.CognitiveServices projects capabilityHosts connections 2026-09-01"
+    - "Microsoft.Authorization/roleAssignments 2022-04-01"
+    - "Microsoft.DocumentDB sqlRoleAssignments 2025-10-15"
+  preview: true
+  notes: "No dependency on azd behaviour. The overlapping check was read in azd extension azure.ai.agents 1.0.0-beta.18 (internal/cmd/doctor/checks_storage_rbac.go); the core azd version was not pinned in the clone. azure.ai.agents 1.0.0-beta.18: read for overlap only. Extension ranges are exactly the versions whose schemas or source were read; widen them in Phase 1 by reading older tags. Microsoft.CognitiveServices projects capabilityHosts connections 2026-09-01: stable. Microsoft.Authorization/roleAssignments 2022-04-01: stable. Microsoft.DocumentDB sqlRoleAssignments 2025-10-15: stable."
 evidence:
   description: >-
     Read-only probes. (1) GET project (2026-09-01) for identity.principalId. (2) GET project capabilityHosts (2026-09-01)

@@ -11,7 +11,9 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"path"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -74,11 +76,18 @@ type Severity struct {
 	Prod string `yaml:"prod"`
 }
 
-// Compatibility declares the tool versions a rule was verified against.
+// Compatibility declares the tool and API versions a rule was verified against, in a form the engine can compare.
+//
+// Azd and Extensions hold closed semver ranges (">=1.34.2 <=1.36.0-beta.1"); an empty Azd means the rule does not
+// depend on azd behaviour. APIVersions entries are "<service> <version>" or a bare version. Preview must be true
+// when any API version is a preview version or any extension version is a prerelease. A version outside a closed
+// range is reported as skipped (unsupported-version), never evaluated. Prose goes in Notes.
 type Compatibility struct {
 	Azd         string            `yaml:"azd"`
 	Extensions  map[string]string `yaml:"extensions"`
 	APIVersions []string          `yaml:"apiVersions"`
+	Preview     bool              `yaml:"preview"`
+	Notes       string            `yaml:"notes"`
 }
 
 // Evidence describes what the deterministic check observes.
@@ -400,9 +409,7 @@ func validateResearched(r Rule, add func(Rule, string, ...any)) {
 	if strings.TrimSpace(r.Implementation.Package) == "" {
 		add(r, "implementation.package is required")
 	}
-	if r.Compatibility.Azd == "" && len(r.Compatibility.APIVersions) == 0 && len(r.Compatibility.Extensions) == 0 {
-		add(r, "compatibility must name an azd version, extension versions or API versions")
-	}
+	validateCompatibility(r, add)
 	if !owners[r.Implementation.Owner] {
 		add(r, "implementation.owner must be one of native|psrule|azure-policy|defender|advisor|bicep|checkov|adapter")
 	}
@@ -415,6 +422,65 @@ func validateResearched(r Rule, add func(Rule, string, ...any)) {
 		if r.Implementation.Owner == "native" {
 			add(r, "decision %s requires an external implementation.owner, got native", r.Overlap.Decision)
 		}
+	}
+}
+
+var (
+	comparatorRe = regexp.MustCompile(`^(>=|<=|>|<|=)?\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$`)
+	apiVersionRe = regexp.MustCompile(`^([A-Za-z0-9./_-]+( [A-Za-z0-9./_-]+)* )?\d{4}-\d{2}-\d{2}(-preview)?$`)
+)
+
+// closedRange reports whether r is a valid space-separated comparator list with an upper bound.
+func closedRange(r string) (valid, closed bool) {
+	fields := strings.Fields(r)
+	if len(fields) == 0 {
+		return false, false
+	}
+	for _, f := range fields {
+		m := comparatorRe.FindStringSubmatch(f)
+		if m == nil {
+			return false, false
+		}
+		if op := m[1]; op == "" || op == "=" || op == "<" || op == "<=" {
+			closed = true
+		}
+	}
+	return true, closed
+}
+
+func validateCompatibility(r Rule, add func(Rule, string, ...any)) {
+	c := r.Compatibility
+	if c.Azd == "" && len(c.APIVersions) == 0 && len(c.Extensions) == 0 && strings.TrimSpace(c.Notes) == "" {
+		add(r, "compatibility must name an azd range, extension ranges or API versions, or say in notes why the rule has no versioned dependency")
+	}
+	preview := false
+	if c.Azd != "" {
+		if valid, closed := closedRange(c.Azd); !valid || !closed {
+			add(r, "compatibility.azd must be a closed semver range such as \">=1.34.2 <=1.36.0-beta.1\", got %q", c.Azd)
+		}
+		if strings.Contains(c.Azd, "-") {
+			preview = true
+		}
+	}
+	for _, name := range slices.Sorted(maps.Keys(c.Extensions)) {
+		rng := c.Extensions[name]
+		if valid, closed := closedRange(rng); !valid || !closed {
+			add(r, "compatibility.extensions[%s] must be a closed semver range, got %q", name, rng)
+		}
+		if strings.Contains(rng, "-") {
+			preview = true
+		}
+	}
+	for _, v := range c.APIVersions {
+		if !apiVersionRe.MatchString(v) {
+			add(r, "compatibility.apiVersions entry must be \"<service> <YYYY-MM-DD[-preview]>\", got %q", v)
+		}
+		if strings.HasSuffix(v, "-preview") {
+			preview = true
+		}
+	}
+	if preview && !c.Preview {
+		add(r, "compatibility.preview must be true: a preview API version or prerelease extension is listed")
 	}
 }
 

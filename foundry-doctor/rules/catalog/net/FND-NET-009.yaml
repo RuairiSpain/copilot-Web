@@ -22,11 +22,13 @@ severity:
   test: error
   prod: error
 compatibility:
-  azd: "not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked)"
+  azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.ApiManagement/service@2025-09-01-preview (sku.name incl. PremiumV2)"
-    - "Microsoft.ApiManagement/service@2024-05-01 (stable; no PremiumV2 in enum)"
+    - "Microsoft.ApiManagement/service 2025-09-01-preview"
+    - "Microsoft.ApiManagement/service 2024-05-01"
+  preview: true
+  notes: "Not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked) Microsoft.ApiManagement/service 2025-09-01-preview: sku.name incl. PremiumV2. Microsoft.ApiManagement/service 2024-05-01: stable; no PremiumV2 in enum."
 evidence:
   description: >-
     Read Microsoft.ApiManagement/service sku.name, virtualNetworkType (None, External, Internal),

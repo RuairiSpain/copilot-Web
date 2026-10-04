@@ -22,8 +22,10 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "2026-04-01 (indexer schedule; IndexingSchedule type)"
-    - "2026-08-01-preview (knowledge source ingestionParameters.ingestionSchedule)"
+    - "2026-04-01"
+    - "2026-08-01-preview"
+  preview: true
+  notes: "API 2026-04-01: indexer schedule; IndexingSchedule type. API 2026-08-01-preview: knowledge source ingestionParameters.ingestionSchedule."
 evidence:
   description: >-
     Parse ingestionSchedule.interval / indexer schedule.interval as the restricted ISO 8601 form. Fail when it

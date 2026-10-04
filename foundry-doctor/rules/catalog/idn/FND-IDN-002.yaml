@@ -25,12 +25,14 @@ severity:
   test: error
   prod: error
 compatibility:
-  azd: "not version dependent; reads compiled ARM JSON and ARM role assignments (azd 1.36.0-beta.1 clone checked)"
+  azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.Authorization/roleAssignments@2022-04-01 (roleDefinitionId, principalId, principalType, scope)"
-    - "Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2025-10-15 (roleDefinitionId, scope, principalId)"
-    - "Microsoft.CognitiveServices/accounts@2026-07-15-preview (properties.capabilitySettings.documentStore, vectorStore, blobStore; CapabilitySettings definition read in cognitiveservices.json)"
+    - "Microsoft.Authorization/roleAssignments 2022-04-01"
+    - "Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments 2025-10-15"
+    - "Microsoft.CognitiveServices/accounts 2026-07-15-preview"
+  preview: true
+  notes: "Not version dependent; reads compiled ARM JSON and ARM role assignments (azd 1.36.0-beta.1 clone checked) Microsoft.Authorization/roleAssignments 2022-04-01: roleDefinitionId, principalId, principalType, scope. Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments 2025-10-15: roleDefinitionId, scope, principalId. Microsoft.CognitiveServices/accounts 2026-07-15-preview: properties.capabilitySettings.documentStore, vectorStore, blobStore; CapabilitySettings definition read in cognitiveservices.json."
 evidence:
   description: >-
     Resolve the project principal: identity.principalId of the project (system-assigned) or the

@@ -2,9 +2,10 @@ id: FND-SEC-004
 version: 1
 group: SEC
 title: Storage shared key/anonymous access disabled; HTTPS/TLS required
-description: A Storage account used by Foundry should block Shared Key authorization (properties.allowSharedKeyAccess
-  false), block anonymous blob access (properties.allowBlobPublicAccess false), require HTTPS (properties.supportsHttpsTrafficOnly
-  true) and set properties.minimumTlsVersion to TLS1_2 or TLS1_3. Each sub-check reports separately.
+description: >-
+  A Storage account used by Foundry should block Shared Key authorization (properties.allowSharedKeyAccess false), block
+  anonymous blob access (properties.allowBlobPublicAccess false), require HTTPS (properties.supportsHttpsTrafficOnly true)
+  and set properties.minimumTlsVersion to TLS1_2 or TLS1_3. Each sub-check reports separately.
 status: verified
 phases:
 - '1'
@@ -13,7 +14,6 @@ inputs:
 - control-plane
 basis:
 - security
-- waf
 category: must-have
 pillar: security
 severity:
@@ -21,29 +21,47 @@ severity:
   test: error
   prod: error
 compatibility:
-  azd: n/a (reads compiled ARM JSON or ARM control plane)
+  azd: ''
   extensions: {}
   apiVersions:
-  - Microsoft.Storage/storageAccounts 2026-06-01 (stable) - storage/resource-manager/Microsoft.Storage/stable/2026-06-01/openapi.json
+  - Microsoft.Storage/storageAccounts 2026-06-01
+  preview: false
+  notes: >-
+    No azd dependency: reads compiled ARM JSON or ARM control plane Microsoft.Storage/storageAccounts 2026-06-01 / 2026-06-01:
+    stable) - storage/resource-manager/Microsoft.Storage/stable//openapi.json.
 evidence:
-  description: 'Compiled ARM or live Microsoft.Storage/storageAccounts in Foundry scope. Four independent findings:
-    allowSharedKeyAccess is not false (spec: null is equivalent to true); allowBlobPublicAccess is true (spec: default
-    interpretation is false, so only an explicit true fails); supportsHttpsTrafficOnly is false (spec: default true
-    since API version 2019-04-01 on create); minimumTlsVersion is TLS1_0 or TLS1_1 (spec: default interpretation
-    TLS1_0, so an absent value fails). Blob container publicAccess is out of scope.'
+  description: >-
+    Compiled ARM or live Microsoft.Storage/storageAccounts in Foundry scope. Four independent findings: allowSharedKeyAccess
+    is not false (spec: null is equivalent to true); allowBlobPublicAccess is true (spec: default interpretation is false,
+    so only an explicit true fails); supportsHttpsTrafficOnly is false (spec: default true since API version 2019-04-01
+    on create); minimumTlsVersion is TLS1_0 or TLS1_1 (spec: default interpretation TLS1_0, so an absent value fails). Blob
+    container publicAccess is out of scope.
   confidence: certain
-recommendation: Set allowSharedKeyAccess false, allowBlobPublicAccess false, supportsHttpsTrafficOnly true and minimumTlsVersion
-  TLS1_2 on the account, and give the Foundry identity Storage data roles. Verify no client still uses account keys
-  or SAS signed with the account key before disabling Shared Key.
-fix: "resource st 'Microsoft.Storage/storageAccounts@2026-06-01' = {\n  name: storageName\n  location: location\n\
-  \  sku: { name: 'Standard_LRS' }\n  kind: 'StorageV2'\n  properties: {\n    allowSharedKeyAccess: false\n    allowBlobPublicAccess:\
-  \ false\n    supportsHttpsTrafficOnly: true\n    minimumTlsVersion: 'TLS1_2'\n  }\n}"
+recommendation: >-
+  Set allowSharedKeyAccess false, allowBlobPublicAccess false, supportsHttpsTrafficOnly true and minimumTlsVersion TLS1_2
+  on the account, and give the Foundry identity Storage data roles. Verify no client still uses account keys or SAS signed
+  with the account key before disabling Shared Key.
+fix: |-
+  resource st 'Microsoft.Storage/storageAccounts@2026-06-01' = {
+    name: storageName
+    location: location
+    sku: { name: 'Standard_LRS' }
+    kind: 'StorageV2'
+    properties: {
+      allowSharedKeyAccess: false
+      allowBlobPublicAccess: false
+      supportsHttpsTrafficOnly: true
+      minimumTlsVersion: 'TLS1_2'
+    }
+  }
 sources:
-- url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/storage/resource-manager/Microsoft.Storage/stable/2026-06-01/openapi.json
+- url: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/storage/resource-manager/Microsoft.Storage/stable/2026-06-01/openapi.json
   lastVerified: '2026-10-04'
   verifiedVia: refs/rest-api-specs/specification/storage/resource-manager/Microsoft.Storage/stable/2026-06-01/openapi.json
-  note: 'StorageAccountProperties / StorageAccountPropertiesCreateParameters: allowSharedKeyAccess, allowBlobPublicAccess,
-    supportsHttpsTrafficOnly, minimumTlsVersion (enum TLS1_0..TLS1_3) with the default text quoted in evidence.'
+  note: >-
+    StorageAccountProperties / StorageAccountPropertiesCreateParameters: allowSharedKeyAccess, allowBlobPublicAccess, supportsHttpsTrafficOnly,
+    minimumTlsVersion (enum TLS1_0..TLS1_3) with the default text quoted in evidence.
 - url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.Storage.LocalAuth/
   lastVerified: '2026-10-04'
   verifiedVia: refs/psrule/docs/en/rules/Azure.Storage.LocalAuth.md
@@ -63,11 +81,12 @@ sources:
 overlap:
   decision: adapt
   coverage: partial
-  rationale: PSRule has four separate rules (LocalAuth, BlobPublicAccess, MinTLS, SecureTransfer), Azure Policy
-    has audit/modify built-ins for each and Checkov covers HTTPS, TLS and public access, so each property check
-    is a duplicate. The Foundry rule groups them as one posture finding for Foundry-attached storage accounts, scopes
-    by Foundry usage, and applies per-profile severity. Checkov has no allowSharedKeyAccess check in the reviewed
-    clone. Treat the sub-checks as reuse candidates if the grouping is not wanted.
+  rationale: >-
+    PSRule has four separate rules (LocalAuth, BlobPublicAccess, MinTLS, SecureTransfer), Azure Policy has audit/modify
+    built-ins for each and Checkov covers HTTPS, TLS and public access, so each property check is a duplicate. The Foundry
+    rule groups them as one posture finding for Foundry-attached storage accounts, scopes by Foundry usage, and applies
+    per-profile severity. Checkov has no allowSharedKeyAccess check in the reviewed clone. Treat the sub-checks as reuse
+    candidates if the grouping is not wanted.
   psrule:
   - Azure.Storage.LocalAuth
   - Azure.Storage.BlobPublicAccess
@@ -102,8 +121,11 @@ tests:
   - supportsHttpsTrafficOnly false fails
   skipped:
   - properties driven by unresolved parameters are skipped per sub-check
-  - 'uncertain: supportsHttpsTrafficOnly absent in a template using an API version older than 2019-04-01 is uncertain'
-testability: Deterministic on ARM JSON. Defaults depend on the API version in the template; evidence records the
-  apiVersion.
-notes: Checkov CKV_AZURE_34 targets blob container publicAccess and CKV_AZURE_59 the account-level flag; both listed
-  because they cover the anonymous-access sub-check.
+  - >-
+    uncertain: supportsHttpsTrafficOnly absent in a template using an API version older than 2019-04-01 is uncertain
+testability: >-
+  Deterministic on ARM JSON. Defaults depend on the API version in the template; evidence records the apiVersion.
+notes: >-
+  Checkov CKV_AZURE_34 targets blob container publicAccess and CKV_AZURE_59 the account-level flag; both listed because
+  they cover the anonymous-access sub-check. The waf basis was removed after the Phase 0 Azure black belt review because
+  no WAF pillar tag or WARA recommendation is cited here; the WAF mapping is added in Phase 4 when the guidance is verified.

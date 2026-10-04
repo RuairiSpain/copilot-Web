@@ -1,115 +1,140 @@
 id: FND-DEP-009
 version: 1
 group: DEP
-title: "Likely policy denials identified"
+title: Likely policy denials identified
 description: >-
-  Before deployment, ask Azure Policy what restrictions it would place on the planned resources at the target
-  scope, and list the policies whose evaluation is non-compliant or that restrict a field the template sets.
-  The result is advisory: Azure Policy evaluates the resource content it is given, so unresolved template
-  expressions and effects that act after creation cannot be settled in advance.
+  Before deployment, ask Azure Policy what restrictions it would place on the planned resources at the target scope, and
+  list the policies whose evaluation is non-compliant or that restrict a field the template sets. The result is advisory:
+  Azure Policy evaluates the resource content it is given, so unresolved template expressions and effects that act after
+  creation cannot be settled in advance.
 status: verified
-phases: ["2"]
-inputs: ["bicep-arm", "azd-env", "control-plane"]
-basis: ["operations"]
+phases:
+- '2'
+inputs:
+- bicep-arm
+- azd-env
+- control-plane
+basis:
+- operations
 category: nice-to-have
 pillar: operations
 severity:
   dev: warning
   test: warning
-  prod: error
+  prod: warning
 compatibility:
-  azd: ">=1.27.1"
+  azd: '>=1.34.2 <=1.36.0-beta.1'
   extensions: {}
-  apiVersions: ["Microsoft.PolicyInsights 2024-10-01", "Microsoft.Authorization policyAssignments 2026-07-01"]
+  apiVersions:
+  - Microsoft.PolicyInsights 2024-10-01
+  - Microsoft.Authorization policyAssignments 2026-07-01
+  preview: true
+  notes: >-
+    azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects
+    beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from
+    a changelog and was not verified.
 evidence:
   description: >-
     Preferred: POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PolicyInsights/checkPolicyRestrictions
-    (PolicyRestrictions_CheckAtResourceGroupScope; subscription and management-group variants exist; use the
-    resource group form when the group exists), api-version 2024-10-01. It is a stateless evaluation
-    request, not a deployment. Body CheckRestrictionsRequest {resourceDetails {resourceContent, apiVersion,
-    scope}, pendingFields[], includeAuditEffect (default false)}; resourceContent is the planned resource
-    from the Bicep snapshot (partial content is allowed). Response CheckRestrictionsResult
-    {fieldRestrictions[] {field, restrictions[] {result, defaultValue, values, policy, policyEffect, reason}},
-    contentEvaluationResult.policyEvaluations[] {policyInfo, evaluationResult, evaluationDetails,
-    effectDetails}}. Reported: every policyEvaluations entry (evaluationResult is typically NonCompliant) with
-    its policyEffect, and every field restriction whose values conflict with the planned value. A Deny
-    effect against the planned content is a likely denial, an audit effect is informational (requested only
-    with includeAuditEffect), modify and append effects are informational. Cheaper fallback when the call is
-    unavailable: GET /subscriptions/{subscriptionId}/providers/Microsoft.Authorization/policyAssignments
-    (PolicyAssignments_List, Reader) to list assignments and surface known-risk definitions by ID (allowed
-    locations and allowed locations for resource groups), reported as uncertain because assignment
-    scope, exemptions and parameters are not evaluated. Limits: resource content with unresolved expressions
-    cannot be evaluated; DeployIfNotExists, Modify and AuditIfNotExists effects, policies that depend on
-    other resources, and deny-with-exemptions are not settled by this call (the spec describes
-    ifNotExistsDetails only for evaluated resources). Role family: Microsoft.PolicyInsights/checkPolicyRestrictions/read
-    and Microsoft.Authorization/policyAssignments/read are listed in the Azure RBAC permission tables and
-    are covered by Reader (*/read). Reader suffices. The answer is likely, never certain: a clean result is
-    uncertain (not a pass) and a Deny hit is likely.
+    (PolicyRestrictions_CheckAtResourceGroupScope; subscription and management-group variants exist; use the resource group
+    form when the group exists), api-version 2024-10-01. It is a stateless evaluation request, not a deployment. Body CheckRestrictionsRequest
+    {resourceDetails {resourceContent, apiVersion, scope}, pendingFields[], includeAuditEffect (default false)}; resourceContent
+    is the planned resource from the Bicep snapshot (partial content is allowed). Response CheckRestrictionsResult {fieldRestrictions[]
+    {field, restrictions[] {result, defaultValue, values, policy, policyEffect, reason}}, contentEvaluationResult.policyEvaluations[]
+    {policyInfo, evaluationResult, evaluationDetails, effectDetails}}. Reported: every policyEvaluations entry (evaluationResult
+    is typically NonCompliant) with its policyEffect, and every field restriction whose values conflict with the planned
+    value. A Deny effect against the planned content is a likely denial, an audit effect is informational (requested only
+    with includeAuditEffect), modify and append effects are informational. Cheaper fallback when the call is unavailable:
+    GET /subscriptions/{subscriptionId}/providers/Microsoft.Authorization/policyAssignments (PolicyAssignments_List, Reader)
+    to list assignments and surface known-risk definitions by ID (allowed locations and allowed locations for resource groups),
+    reported as uncertain because assignment scope, exemptions and parameters are not evaluated. Limits: resource content
+    with unresolved expressions cannot be evaluated; DeployIfNotExists, Modify and AuditIfNotExists effects, policies that
+    depend on other resources, and deny-with-exemptions are not settled by this call (the spec describes ifNotExistsDetails
+    only for evaluated resources). Role family: Microsoft.PolicyInsights/checkPolicyRestrictions/read and Microsoft.Authorization/policyAssignments/read
+    are listed in the Azure RBAC permission tables and are covered by Reader (*/read). Reader suffices. The answer is likely,
+    never certain: a clean result is uncertain (not a pass) and a Deny hit is likely.
   confidence: likely
 recommendation: >-
-  Change the planned value to one the policy allows, request a policy exemption, or ask the policy owner for
-  a compliant pattern. Do not disable the policy to make a deployment pass.
+  Change the planned value to one the policy allows, request a policy exemption, or ask the policy owner for a compliant
+  pattern. Do not disable the policy to make a deployment pass.
 fix: |
   # example: a policy restricts locations; pick an allowed one
   azd env set AZURE_LOCATION <allowed-region>
 sources:
-  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/policyinsights/resource-manager/Microsoft.PolicyInsights/PolicyInsights/stable/2024-10-01/openapi.json
-    lastVerified: "2026-10-04"
-    verifiedVia: sparse clone of Azure/azure-rest-api-specs (session scratchpad, outside REFS) at specification/policyinsights/resource-manager/Microsoft.PolicyInsights/PolicyInsights/stable/2024-10-01/openapi.json
-    note: "PolicyRestrictions_CheckAtResourceGroupScope, _CheckAtSubscriptionScope, _CheckAtManagementGroupScope (POST); CheckRestrictionsRequest, CheckRestrictionsResult, FieldRestriction, PolicyEvaluationResult."
-  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Authorization/policy/stable/2026-07-01/openapi.json
-    lastVerified: "2026-10-04"
-    verifiedVia: sparse clone of Azure/azure-rest-api-specs (session scratchpad, outside REFS) at specification/resources/resource-manager/Microsoft.Authorization/policy/stable/2026-07-01/openapi.json
-    note: "PolicyAssignments_List: GET /subscriptions/{subscriptionId}/providers/Microsoft.Authorization/policyAssignments."
-  - url: https://learn.microsoft.com/azure/role-based-access-control/permissions/management-and-governance
-    lastVerified: "2026-10-04"
-    verifiedVia: https://raw.githubusercontent.com/MicrosoftDocs/azure-docs/main/articles/role-based-access-control/permissions/management-and-governance.md
-    note: "Microsoft.PolicyInsights/checkPolicyRestrictions/read ('Get details about the restrictions that policy will enforce on a resource'); Microsoft.Authorization/policyAssignments/read."
-  - url: https://github.com/Azure/azure-policy/blob/master/built-in-policies/policyDefinitions/General/AllowedLocations_Deny.json
-    lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-policy/built-in-policies/policyDefinitions/General/AllowedLocations_Deny.json
-    note: "Built-in 'Allowed locations' (e56962a6-4747-49cd-b67b-bf8b01975c4c); 'Allowed locations for resource groups' (e765b5de-1225-4ba3-bd56-1ac6695af988) in General/ResourceGroupAllowedLocations_Deny.json."
+- url: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/policyinsights/resource-manager/Microsoft.PolicyInsights/PolicyInsights/stable/2024-10-01/openapi.json
+  lastVerified: '2026-10-04'
+  verifiedVia: >-
+    sparse clone of Azure/azure-rest-api-specs (session scratchpad, outside REFS) at specification/policyinsights/resource-manager/Microsoft.PolicyInsights/PolicyInsights/stable/2024-10-01/openapi.json
+  note: >-
+    PolicyRestrictions_CheckAtResourceGroupScope, _CheckAtSubscriptionScope, _CheckAtManagementGroupScope (POST); CheckRestrictionsRequest,
+    CheckRestrictionsResult, FieldRestriction, PolicyEvaluationResult.
+- url: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Authorization/policy/stable/2026-07-01/openapi.json
+  lastVerified: '2026-10-04'
+  verifiedVia: >-
+    sparse clone of Azure/azure-rest-api-specs (session scratchpad, outside REFS) at specification/resources/resource-manager/Microsoft.Authorization/policy/stable/2026-07-01/openapi.json
+  note: >-
+    PolicyAssignments_List: GET /subscriptions/{subscriptionId}/providers/Microsoft.Authorization/policyAssignments.
+- url: https://learn.microsoft.com/azure/role-based-access-control/permissions/management-and-governance
+  lastVerified: '2026-10-04'
+  verifiedVia: >-
+    https://raw.githubusercontent.com/MicrosoftDocs/azure-docs/main/articles/role-based-access-control/permissions/management-and-governance.md
+  note: >-
+    Microsoft.PolicyInsights/checkPolicyRestrictions/read ('Get details about the restrictions that policy will enforce
+    on a resource'); Microsoft.Authorization/policyAssignments/read.
+- url: >-
+    https://github.com/Azure/azure-policy/blob/master/built-in-policies/policyDefinitions/General/AllowedLocations_Deny.json
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-policy/built-in-policies/policyDefinitions/General/AllowedLocations_Deny.json
+  note: >-
+    Built-in 'Allowed locations' (e56962a6-4747-49cd-b67b-bf8b01975c4c); 'Allowed locations for resource groups' (e765b5de-1225-4ba3-bd56-1ac6695af988)
+    in General/ResourceGroupAllowedLocations_Deny.json.
 overlap:
-  decision: wrap
+  decision: adapt
   coverage: partial
   rationale: >-
-    Azure Policy is the authority, and its own restriction-check API is the evidence source, so Foundry Doctor
-    wraps that call and normalises the result into a finding with Foundry resource correlation. PSRule for
-    Azure does not evaluate live assignments; Azure.Resource.AllowedRegions checks a location against a
-    configured list, not the policies actually assigned. The wrap is partial: effects that act after
-    creation and unresolved expressions are not decided by the call, hence likely confidence.
+    Azure Policy is the authority, and its own restriction-check API is the evidence source, so Foundry Doctor wraps that
+    call and normalises the result into a finding with Foundry resource correlation. PSRule for Azure does not evaluate
+    live assignments; Azure.Resource.AllowedRegions checks a location against a configured list, not the policies actually
+    assigned. The wrap is partial: effects that act after creation and unresolved expressions are not decided by the call,
+    hence likely confidence. Reclassified from wrap to adapt after the Phase 0 Azure black belt review: the PolicyInsights
+    call is an Azure API reached through the native Azure client (ADR-006), not an external tool on PATH, so ADR-001 item
+    2 (adapters) does not apply.
   psrule: []
-  azurePolicy: [e56962a6-4747-49cd-b67b-bf8b01975c4c, e765b5de-1225-4ba3-bd56-1ac6695af988]
+  azurePolicy:
+  - e56962a6-4747-49cd-b67b-bf8b01975c4c
+  - e765b5de-1225-4ba3-bd56-1ac6695af988
   defender: []
   advisor: []
   bicepLinter: []
   checkov: []
 implementation:
-  owner: azure-policy
+  owner: native
   package: internal/adapters/azurepolicy
 testability: >-
-  Offline with recorded CheckRestrictionsResult JSON (deny, audit, field restriction, empty) and a policy
-  assignments list fixture. A live check against a sandbox subscription with an assigned Deny policy is an
-  opt-in integration test.
+  Offline with recorded CheckRestrictionsResult JSON (deny, audit, field restriction, empty) and a policy assignments list
+  fixture. A live check against a sandbox subscription with an assigned Deny policy is an opt-in integration test.
 tests:
   positive:
-    - deny-policy-evaluation-non-compliant-for-planned-resource
-    - field-restriction-conflicts-with-planned-value
-    - allowed-locations-policy-assigned-and-location-not-allowed
+  - deny-policy-evaluation-non-compliant-for-planned-resource
+  - field-restriction-conflicts-with-planned-value
+  - allowed-locations-policy-assigned-and-location-not-allowed
   negative:
-    - no-policy-evaluations-or-restrictions
-    - audit-effect-excluded-by-default
+  - no-policy-evaluations-or-restrictions
+  - audit-effect-excluded-by-default
   skipped:
-    - no-azure-credential-available
-    - check-policy-restrictions-not-permitted
-    - bicep-cli-missing-cannot-build-resource-content
+  - no-azure-credential-available
+  - check-policy-restrictions-not-permitted
+  - bicep-cli-missing-cannot-build-resource-content
   uncertain:
-    - resource-content-contains-unresolved-expressions
-    - effect-is-deployifnotexists-or-modify
-    - fallback-assignment-list-only
+  - resource-content-contains-unresolved-expressions
+  - effect-is-deployifnotexists-or-modify
+  - fallback-assignment-list-only
 notes: >-
-  The brief asks for a policy denial check that does not need a content read: the call sends the planned
-  template resource, which is Foundry Doctor's own input, not customer data. It is a POST, but a pure
-  evaluation; the sources read show no state change. Whether the evaluation honours exemptions and
-  initiative parameters is not stated in the spec text read. The implementation owner is the azure-policy
-  adapter because decision is wrap (the brief maps wrap to a tool owner).
+  The brief asks for a policy denial check that does not need a content read: the call sends the planned template resource,
+  which is Foundry Doctor's own input, not customer data. It is a POST, but a pure evaluation; the sources read show no
+  state change. Whether the evaluation honours exemptions and initiative parameters is not stated in the spec text read.
+  The implementation owner is the azure-policy adapter because decision is wrap (the brief maps wrap to a tool owner). Prod
+  severity lowered to warning: the check is confidence likely and category nice-to-have, and an unverified preflight must
+  not fail a production gate.

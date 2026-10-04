@@ -22,8 +22,10 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.ApiManagement/service 2025-09-01-preview and 2024-05-01 (identity.type, userAssignedIdentities read in spec)"
-    - "Policy reference authentication-managed-identity (current)"
+    - "Microsoft.ApiManagement/service 2025-09-01-preview"
+    - "Microsoft.ApiManagement/service 2024-05-01"
+  preview: true
+  notes: "Microsoft.ApiManagement/service 2025-09-01-preview / 2024-05-01: identity.type, userAssignedIdentities read in spec. Policy reference authentication-managed-identity (current)"
 evidence:
   description: >-
     For each API whose serviceUrl or routed backend url host ends with openai.azure.com, services.ai.azure.com or

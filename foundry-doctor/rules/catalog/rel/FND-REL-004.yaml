@@ -22,10 +22,12 @@ severity:
   test: info
   prod: warning
 compatibility:
-  azd: n/a (reads compiled ARM JSON or ARM control plane)
+  azd: ""
   extensions: {}
   apiVersions:
-  - Microsoft.Authorization/locks 2020-05-01 (stable) - resources/resource-manager/Microsoft.Authorization/locks/stable/2020-05-01/locks.json
+    - "Microsoft.Authorization/locks 2020-05-01"
+  preview: false
+  notes: "No azd dependency: reads compiled ARM JSON or ARM control plane Microsoft.Authorization/locks 2020-05-01 / 2020-05-01: stable) - resources/resource-manager/Microsoft.Authorization/locks/stable//locks.json."
 evidence:
   description: 'Compiled ARM: a Microsoft.Authorization/locks resource with properties.level ''CanNotDelete'' (or ''ReadOnly'',
     which is stricter) whose scope or parent is the resource or an enclosing resource group. Live: list locks at the resource,

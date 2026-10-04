@@ -34,7 +34,22 @@ The DEP agent could not verify whether a what-if leaves a deployment record or a
 5. **Forbidden regardless of verb:** recover, purge, register-provider, lock create or delete, role assignment writes,
    listing credentials or keys, and any data-plane call that returns document, prompt or completion bodies.
 6. A unit test in `internal/azure` fails if the client interface gains a method not in the allow-list, and a replay test fails if
-   a recorded request uses a verb or path outside it.
+   a recorded request uses a verb, host or path template outside it. The allow-list covers data-plane Search paths and
+   Log Analytics queries as well as ARM.
+7. **Log Analytics and Application Insights queries are fixed templates.** Log tables can hold prompt and completion bodies
+   (FND-SEC-012 documents APIM LLM logging). Queries ship in the catalogue, are aggregate-only (`summarize`/`count`), project
+   only an allow-listed set of columns, and take the resource name only after it passes the ARM name charset check
+   (`[A-Za-z0-9._-]{1,64}`) and as a parameter, never by string concatenation. The client rejects any query containing
+   `project`, `take`, `top`, `message` or `*`. A replay test with a hostile resource name must fail closed.
+8. **Response payloads that can carry secrets or content are discarded at the client boundary, never logged or persisted:**
+   `properties.outputs` and `properties.parameters` of deployments (FND-DEP-010), the `before` and `after` bodies of what-if
+   results (FND-DEP-008, requested as `FullResourcePayloads` only to read `changeType`), the `resourceContent` we send to
+   `checkPolicyRestrictions` (built from non-secret template content only, FND-DEP-009), and the free-text error strings of
+   Search indexers (FND-RUN-006, reduced to an error code and counts before storage).
+9. **"Reader suffices" is a hypothesis until tested.** The rows marked Reader in the DEP tables rest on RBAC action names alone.
+   The Phase 2 replay suite must run every such row with a Reader-only identity before the permission matrix says Reader suffices.
+10. **Remediation text is output only.** Fix examples that contain delete or purge commands (for example in FND-DEP-006) are
+    printed for a human; the tool never executes them.
 
 ## Consequences
 

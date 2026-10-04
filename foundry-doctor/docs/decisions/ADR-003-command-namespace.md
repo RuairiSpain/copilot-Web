@@ -58,8 +58,30 @@ Rule: the doctor never needs prompts to produce findings; prompts are optional c
 - The extension must declare capabilities `custom-commands` and `metadata` (see notes) and must use `requiredAzdVersion` (>= 1.34.2 recommended; see notes).
 - Exit codes: azd propagates a positive extension exit code (`extension-framework.md`, "Invoking Extension Commands"), so `0` pass, `1` operational failure, `2` gate breach can be preserved under `azd foundry`.
 
+## Collision behaviour (closed after the Phase 0 review)
+
+`bindExtension` de-duplicates only the intermediate namespace segments. The final command is added with
+`ActionDescriptor.Add`, which appends to `children` without a duplicate check
+(`cli/azd/cmd/actions/action_descriptor.go`, `ad.children = append(ad.children, descriptor)`, read from azure-dev `main` on 2026-10-04).
+Two extensions that both register `foundry` would therefore coexist silently and lookup order would decide which one runs.
+The Phase 1 CI check that fails when the pinned `registry.json`, `registry.dev.json` or the azd command reference contains
+`foundry` is mandatory, not advisory. A stub test that documents the intent should land with it.
+
+## Reserved flags (PRD inconsistency, recorded here per CLAUDE.md)
+
+The extension SDK reserves these global flags and enforces them at startup with `ValidateNoReservedFlagConflicts()`:
+`-e/--environment`, `-C/--cwd`, `--debug`, `--no-prompt`, `-o/--output`, `--help`, `--docs`, `--trace-log-file`, `--trace-log-url`
+(`cli/azd/docs/extensions/extensions-style-guide.md`). An extension that registers one for another purpose fails to start.
+The PRD's command surface conflicts in two places:
+
+- `--output <path>` (doctor, annotate): use `--out <path>`. In extension mode `-o/--output` keeps azd's meaning (output format).
+  The standalone binary may accept `--output` as an alias only if it never shares code paths with extension registration.
+- `compare <left-env> <right-env>` cannot take `--environment`/`-e`; the style guide suggests `--env-name` or `--target-env`.
+  The PRD form uses positional arguments, which is compatible.
+
+The PRD text is not changed; this ADR is the record and the command layer follows it in Phase 1.
+
 ## Unverified
 
-- Behaviour when two extensions register the same namespace (core `bindExtension` collision handling).
 - Whether azd core reserves any extension namespace string beyond built-in command names (core command registration code is not in the sparse clone).
 - Whether Microsoft plans a `foundry` command group (no signal in the clones).

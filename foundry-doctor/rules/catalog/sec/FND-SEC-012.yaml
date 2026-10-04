@@ -21,11 +21,13 @@ severity:
   test: warning
   prod: error
 compatibility:
-  azd: n/a (reads compiled ARM JSON or ARM control plane)
+  azd: ""
   extensions: {}
   apiVersions:
-  - Microsoft.ApiManagement diagnostics 2025-09-01-preview (preview; largeLanguageModel property exists only in
-    preview specs in the reviewed clone, the stable 2024-05-01 does not have it) - apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/preview/2025-09-01-preview/openapi.json
+    - "Microsoft.ApiManagement diagnostics 2025-09-01-preview"
+    - "Microsoft.ApiManagement diagnostics 2024-05-01"
+  preview: true
+  notes: "No azd dependency: reads compiled ARM JSON or ARM control plane Microsoft.ApiManagement diagnostics 2025-09-01-preview / 2024-05-01 / 2025-09-01-preview: preview; largeLanguageModel property exists only in preview specs in the reviewed clone, the stable does not have it) - apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/preview//openapi.json."
 evidence:
   description: 'Diagnostic resource (service-level or API-level) with properties.largeLanguageModel.requests.messages
     or responses.messages set (enum all) with a loggerId, or frontend/backend request/response body.bytes greater

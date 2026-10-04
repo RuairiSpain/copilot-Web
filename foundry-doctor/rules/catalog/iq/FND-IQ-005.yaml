@@ -21,9 +21,11 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "2026-08-01-preview (auto, low, medium, minimal; outputMode)"
-    - "2026-05-01-preview (low, medium, outputMode, retrieveDefaults not yet)"
-    - "2026-04-01 (minimal only; no knowledge base models)"
+    - "2026-08-01-preview"
+    - "2026-05-01-preview"
+    - "2026-04-01"
+  preview: true
+  notes: "API 2026-08-01-preview: auto, low, medium, minimal; outputMode. API 2026-05-01-preview: low, medium, outputMode, retrieveDefaults not yet. API 2026-04-01: minimal only; no knowledge base models."
 evidence:
   description: >-
     Read the knowledge base, each referenced knowledge source, the Search service resource (sku, location)

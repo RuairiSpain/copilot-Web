@@ -20,14 +20,16 @@ severity:
   test: error
   prod: error
 compatibility:
-  azd: n/a (reads compiled ARM JSON or ARM control plane)
+  azd: ""
   extensions: {}
   apiVersions:
-  - Microsoft.Storage/storageAccounts 2026-06-01 (stable) - storage/resource-manager/Microsoft.Storage/stable/2026-06-01/openapi.json
-  - Microsoft.DocumentDB/databaseAccounts 2026-03-15 (stable) - cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
-  - Microsoft.KeyVault/vaults 2026-05-15 (stable) - keyvault/resource-manager/Microsoft.KeyVault/KeyVault/stable/2026-05-15/openapi.json
-  - Microsoft.Search/searchServices 2025-05-01 (stable) - search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
-  - Microsoft.CognitiveServices/accounts 2026-09-01 (stable) - cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    - "Microsoft.Storage/storageAccounts 2026-06-01"
+    - "Microsoft.DocumentDB/databaseAccounts 2026-03-15"
+    - "Microsoft.KeyVault/vaults 2026-05-15"
+    - "Microsoft.Search/searchServices 2025-05-01"
+    - "Microsoft.CognitiveServices/accounts 2026-09-01"
+  preview: false
+  notes: "No azd dependency: reads compiled ARM JSON or ARM control plane Microsoft.Storage/storageAccounts 2026-06-01 / 2026-06-01: stable) - storage/resource-manager/Microsoft.Storage/stable//openapi.json. Microsoft.DocumentDB/databaseAccounts 2026-03-15 / 2026-03-15: stable) - cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable//openapi.json. Microsoft.KeyVault/vaults 2026-05-15 / 2026-05-15: stable) - keyvault/resource-manager/Microsoft.KeyVault/KeyVault/stable//openapi.json. Microsoft.Search/searchServices 2025-05-01 / 2025-05-01: stable) - search/resource-manager/Microsoft.Search/Search/stable//search.json. Microsoft.CognitiveServices/accounts 2026-09-01 / 2026-09-01: stable) - cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable//cognitiveservices.json."
 evidence:
   description: 'IP rule values: Storage networkAcls.ipRules[].value, Cosmos DB ipRules[].ipAddressOrRange, Key Vault
     networkAcls.ipRules[].value, Search networkRuleSet.ipRules[].value, Cognitive Services networkAcls.ipRules[].value.

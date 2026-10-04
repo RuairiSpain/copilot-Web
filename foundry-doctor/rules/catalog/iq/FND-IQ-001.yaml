@@ -23,9 +23,11 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "2026-08-01-preview (searchIndexParameters.queryHints, baseFilter; spec and docs read)"
-    - "2026-05-01-preview (searchIndexParameters.baseFilter added; spec read)"
-    - "2026-04-01 (index field filterable attribute only; no queryHints/baseFilter)"
+    - "2026-08-01-preview"
+    - "2026-05-01-preview"
+    - "2026-04-01"
+  preview: true
+  notes: "API 2026-08-01-preview: searchIndexParameters.queryHints, baseFilter; spec docs read. API 2026-05-01-preview: searchIndexParameters.baseFilter added; spec read. API 2026-04-01: index field filterable attribute only; no queryHints/baseFilter."
 evidence:
   description: >-
     Read the knowledge source (GET /knowledgesources/{name}) and the index named by

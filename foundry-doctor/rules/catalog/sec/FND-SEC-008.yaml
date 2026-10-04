@@ -2,9 +2,10 @@ id: FND-SEC-008
 version: 1
 group: SEC
 title: Relevant Defender plans enabled
-description: 'Microsoft Defender for Cloud plans that match the resource types in the Foundry solution should be
-  on the Standard tier on the subscription: AI (when Foundry accounts exist), StorageAccounts, KeyVaults and CosmosDbs.
-  The set of relevant plans is derived from the resources found.'
+description: >-
+  Microsoft Defender for Cloud plans that match the resource types in the Foundry solution should be on the Standard tier
+  on the subscription: AI (when Foundry accounts exist), StorageAccounts, KeyVaults and CosmosDbs. The set of relevant plans
+  is derived from the resources found.
 status: verified
 phases:
 - '2'
@@ -14,7 +15,6 @@ inputs:
 - bicep-arm
 basis:
 - security
-- waf
 category: nice-to-have
 pillar: security
 severity:
@@ -22,30 +22,41 @@ severity:
   test: warning
   prod: warning
 compatibility:
-  azd: n/a (ARM control plane read)
+  azd: ''
   extensions: {}
   apiVersions:
-  - Microsoft.Security/pricings 2026-07-01 (stable) - security/resource-manager/Microsoft.Security/Security/stable/2026-07-01/pricings.json
+  - Microsoft.Security/pricings 2026-07-01
+  preview: false
+  notes: >-
+    No azd dependency: ARM control plane read Microsoft.Security/pricings 2026-07-01 / 2026-07-01: stable) - security/resource-manager/Microsoft.Security/Security/stable//pricings.json.
 evidence:
-  description: 'GET Microsoft.Security/pricings/{name} at subscription scope for each relevant name; pricingTier
-    is not Standard (enum Free | Standard). Plan names: AI (from Azure Policy ASC_Azure_Defender_AI_* definitions),
-    StorageAccounts, KeyVaults, CosmosDbs (from the PSRule Azure.Defender.* rule conditions). The inherited flag
-    from the same resource is included to show whether the setting comes from a parent scope. Needs Security Reader
-    or equivalent.'
+  description: >-
+    GET Microsoft.Security/pricings/{name} at subscription scope for each relevant name; pricingTier is not Standard (enum
+    Free | Standard). Plan names: AI (from Azure Policy ASC_Azure_Defender_AI_* definitions), StorageAccounts, KeyVaults,
+    CosmosDbs (from the PSRule Azure.Defender.* rule conditions). The inherited flag from the same resource is included
+    to show whether the setting comes from a parent scope. Needs Security Reader or equivalent.
   confidence: certain
-recommendation: Enable the Defender plan for each resource type in use on the subscription (Standard tier), or confirm
-  it is enforced at a parent scope. Enabling Defender plans has a cost; review pricing before enabling in non-production.
-fix: "resource defenderAi 'Microsoft.Security/pricings@2026-07-01' = {\n  name: 'AI'\n  properties: { pricingTier:\
-  \ 'Standard' }\n}"
+recommendation: >-
+  Enable the Defender plan for each resource type in use on the subscription (Standard tier), or confirm it is enforced
+  at a parent scope. Enabling Defender plans has a cost; review pricing before enabling in non-production.
+fix: |-
+  resource defenderAi 'Microsoft.Security/pricings@2026-07-01' = {
+    name: 'AI'
+    properties: { pricingTier: 'Standard' }
+  }
 sources:
-- url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/security/resource-manager/Microsoft.Security/Security/stable/2026-07-01/pricings.json
+- url: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/security/resource-manager/Microsoft.Security/Security/stable/2026-07-01/pricings.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/rest-api-specs/specification/security/resource-manager/Microsoft.Security/Security/stable/2026-07-01/pricings.json
-  note: PricingProperties.pricingTier (Free|Standard), inherited, extensions (AIPromptEvidence 'Available for AI
-    plan').
-- url: https://github.com/Azure/azure-policy/blob/master/built-in-policies/policyDefinitions/Security%20Center/ASC_Azure_Defender_AI_Full_Features_DINE.json
+  verifiedVia: >-
+    refs/rest-api-specs/specification/security/resource-manager/Microsoft.Security/Security/stable/2026-07-01/pricings.json
+  note: >-
+    PricingProperties.pricingTier (Free|Standard), inherited, extensions (AIPromptEvidence 'Available for AI plan').
+- url: >-
+    https://github.com/Azure/azure-policy/blob/master/built-in-policies/policyDefinitions/Security%20Center/ASC_Azure_Defender_AI_Full_Features_DINE.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-policy/built-in-policies/policyDefinitions/Security Center/ASC_Azure_Defender_AI_Full_Features_DINE.json
+  verifiedVia: >-
+    refs/azure-policy/built-in-policies/policyDefinitions/Security Center/ASC_Azure_Defender_AI_Full_Features_DINE.json
   note: Policy rule uses Microsoft.Security/pricings name AI.
 - url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.Defender.Storage/
   lastVerified: '2026-10-04'
@@ -54,11 +65,12 @@ sources:
 overlap:
   decision: adapt
   coverage: partial
-  rationale: 'PSRule has Azure.Defender.Storage, KeyVault, CosmosDb, Api, Cspm, Arm and others (no AI plan rule
-    in the reviewed clone); Azure Policy has audit definitions for AI (c2c0c6d8), Key Vault (0e6763cc), Storage
-    (640d2586) and Cosmos DB (adbe85b5); Checkov has CKV_AZURE_84 and 87. Each is a fixed per-plan check. Foundry
-    Doctor adds relevance: it derives which plans matter from the resource types present (cross-resource correlation)
-    and flags the AI plan that PSRule lacks, with cost-aware info severity in dev.'
+  rationale: >-
+    PSRule has Azure.Defender.Storage, KeyVault, CosmosDb, Api, Cspm, Arm and others (no AI plan rule in the reviewed clone);
+    Azure Policy has audit definitions for AI (c2c0c6d8), Key Vault (0e6763cc), Storage (640d2586) and Cosmos DB (adbe85b5);
+    Checkov has CKV_AZURE_84 and 87. Each is a fixed per-plan check. Foundry Doctor adds relevance: it derives which plans
+    matter from the resource types present (cross-resource correlation) and flags the AI plan that PSRule lacks, with cost-aware
+    info severity in dev.
   psrule:
   - Azure.Defender.Storage
   - Azure.Defender.KeyVault
@@ -89,7 +101,10 @@ tests:
   - no Security Reader permission is skipped
   - Bicep-only mode with no pricings resource is skipped (subscription state unknown)
   - 'uncertain: pricing inherited from a management group scope that cannot be read is uncertain'
-testability: Deterministic given a pricings read; Skipped without control-plane access. Bicep mode can only inspect
-  pricings resources declared in the template.
-notes: Defender recommendation IDs (assessment keys) and Advisor IDs were not available in local clones and are
-  left empty; this is listed as unverified.
+testability: >-
+  Deterministic given a pricings read; Skipped without control-plane access. Bicep mode can only inspect pricings resources
+  declared in the template.
+notes: >-
+  Defender recommendation IDs (assessment keys) and Advisor IDs were not available in local clones and are left empty; this
+  is listed as unverified. The waf basis was removed after the Phase 0 Azure black belt review because no WAF pillar tag
+  or WARA recommendation is cited here; the WAF mapping is added in Phase 4 when the guidance is verified.

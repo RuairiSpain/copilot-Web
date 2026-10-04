@@ -17,11 +17,13 @@ severity:
   test: warning
   prod: error
 compatibility:
-  azd: n/a (ARM and Azure Monitor reads; no azd behaviour dependency)
+  azd: ""
   extensions: {}
   apiVersions:
-    - Microsoft.CognitiveServices accounts/deployments 2026-09-01 (stable)
-    - Microsoft.Insights/metrics 2024-02-01 (stable)
+    - "Microsoft.CognitiveServices accounts/deployments 2026-09-01"
+    - "Microsoft.Insights/metrics 2024-02-01"
+  preview: false
+  notes: "No azd dependency: ARM and Azure Monitor reads; no azd behaviour dependency Microsoft.CognitiveServices accounts/deployments 2026-09-01: stable. Microsoft.Insights/metrics 2024-02-01: stable."
 evidence:
   description: >-
     Probe 1: GET /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.CognitiveServices/accounts/{a}/deployments?api-version=2026-09-01

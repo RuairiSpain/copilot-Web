@@ -22,12 +22,15 @@ severity:
   test: info
   prod: warning
 compatibility:
-  azd: n/a (reads compiled ARM JSON or ARM control plane)
+  azd: ""
   extensions: {}
   apiVersions:
-  - Microsoft.ApiManagement/service/backends properties.circuitBreaker verified in 2025-09-01-preview (openapi.json, also
-    present in 2022-09-01-preview to 2024-10-01-preview definitions); absent from stable 2024-05-01 (apimbackends.json has
-    no circuitBreaker match)
+    - "Microsoft.ApiManagement/service/backends properties.circuitBreaker verified in 2025-09-01-preview"
+    - "Microsoft.ApiManagement/service/backends properties.circuitBreaker verified in 2022-09-01-preview"
+    - "Microsoft.ApiManagement/service/backends properties.circuitBreaker verified in 2024-10-01-preview"
+    - "Microsoft.ApiManagement/service/backends properties.circuitBreaker verified in 2024-05-01"
+  preview: true
+  notes: "No azd dependency: reads compiled ARM JSON or ARM control plane Microsoft.ApiManagement/service/backends properties.circuitBreaker verified in 2025-09-01-preview / 2022-09-01-preview / 2024-10-01-preview / 2024-05-01: openapi.json, also present in to definitions); absent from stable (apimbackends.json has no circuitBreaker match."
 evidence:
   description: 'Compiled ARM or live Microsoft.ApiManagement/service/backends whose url points at a Foundry or Azure OpenAI
     endpoint (or a backend pool containing one). Finding 1: properties.circuitBreaker.rules is absent or empty (Learn: one

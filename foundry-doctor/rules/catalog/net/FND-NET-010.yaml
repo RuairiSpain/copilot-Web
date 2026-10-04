@@ -23,14 +23,15 @@ severity:
   test: warning
   prod: warning
 compatibility:
-  azd: "not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked)"
+  azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.Insights/privateLinkScopes@2021-09-01 (stable; accessModeSettings.queryAccessMode, ingestionAccessMode, exclusions)"
-    - "Microsoft.Insights/privateLinkScopes@2023-06-01-preview (same properties; both modes required)"
-    - "Microsoft.Insights/privateLinkScopes/scopedResources (linkedResourceId)"
-    - "Microsoft.Insights/components@2020-02-02 (publicNetworkAccessForIngestion, publicNetworkAccessForQuery; default Enabled)"
-    - "Microsoft.OperationalInsights/workspaces@2026-03-01 (publicNetworkAccessForIngestion, publicNetworkAccessForQuery; Enabled, Disabled, SecuredByPerimeter)"
+    - "Microsoft.Insights/privateLinkScopes 2021-09-01"
+    - "Microsoft.Insights/privateLinkScopes 2023-06-01-preview"
+    - "Microsoft.Insights/components 2020-02-02"
+    - "Microsoft.OperationalInsights/workspaces 2026-03-01"
+  preview: true
+  notes: "Not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked) Microsoft.Insights/privateLinkScopes 2021-09-01: stable; accessModeSettings.queryAccessMode, ingestionAccessMode, exclusions. Microsoft.Insights/privateLinkScopes 2023-06-01-preview: same properties; both modes required. Microsoft.Insights/privateLinkScopes/scopedResources (linkedResourceId) Microsoft.Insights/components 2020-02-02: publicNetworkAccessForIngestion, publicNetworkAccessForQuery; default Enabled. Microsoft.OperationalInsights/workspaces 2026-03-01: publicNetworkAccessForIngestion, publicNetworkAccessForQuery; Enabled, Disabled, SecuredByPerimeter."
 evidence:
   description: >-
     Applies when the Foundry account is private by the FND-NET-001 test and an Application Insights

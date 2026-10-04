@@ -106,7 +106,7 @@ NET:
 IDN:
 1. Managed network connection approver (deployment feasibility). The managed virtual network article requires the
    Foundry account managed identity to hold Azure AI Enterprise Network Connection Approver
-   (`b556d68e-0be0-4f35-a333-ad7ee1ce17ea`, verified in the built-in roles reference) on a customer target to create
+   (`b556d68e-0be0-4f35-a333-ad7ee1ce17ea`, the role name is in the built-in roles reference, but this GUID appears only in the Foundry articles) on a customer target to create
    and approve managed private endpoints. Check the assignment before deployment.
 2. Federated credential serial deployment (deployment feasibility). The Entra considerations article says creating
    several federated credentials under one user-assigned identity concurrently returns 409; check `dependsOn` chains or

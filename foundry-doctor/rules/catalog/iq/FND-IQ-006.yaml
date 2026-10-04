@@ -1,61 +1,68 @@
 id: FND-IQ-006
 version: 1
 group: IQ
-title: "Chunk overlap and hybrid weights valid"
+title: Chunk overlap and hybrid weights valid
 description: >-
-  Chunking and ranking parameters must be inside documented bounds: a Text Split skill with textSplitMode
-  pages must have maximumPageLength between 300 and 50000 characters and, when pageOverlapLength is set, an
-  overlap smaller than half of maximumPageLength; and every vector query weight used in a hybrid query must
-  be a positive number greater than zero.
+  Chunking and ranking parameters must be inside documented bounds: a Text Split skill with textSplitMode pages must have
+  maximumPageLength between 300 and 50000 characters and, when pageOverlapLength is set, an overlap smaller than half of
+  maximumPageLength; and every vector query weight used in a hybrid query must be a positive number greater than zero.
 status: verified
-phases: ["8"]
-inputs: ["data-plane", "external-tool"]
-basis: ["platform"]
+phases:
+- '8'
+inputs:
+- data-plane
+- external-tool
+basis:
+- reliability
 category: nice-to-have
 pillar: performance
 severity:
-  dev: error
-  test: error
-  prod: error
+  dev: warning
+  test: warning
+  prod: warning
 compatibility:
-  azd: ""
+  azd: ''
   extensions: {}
   apiVersions:
-    - "2026-04-01"
-    - "2026-08-01-preview"
+  - '2026-04-01'
+  - 2026-08-01-preview
+  preview: true
 evidence:
   description: >-
-    Read the skillset JSON (SplitSkill / #Microsoft.Skills.Text.SplitSkill) and fail when textSplitMode is
-    pages and unit is characters (or unset) and maximumPageLength is below 300 or above 50000, or when
-    pageOverlapLength is negative or not less than maximumPageLength / 2. For vector queries declared in
-    project query definitions (vectorQueries[].weight) fail when weight is zero or negative. When unit is
-    azureOpenAITokens only the overlap versus half page length rule is asserted. No knowledge source or
-    knowledge base property carries hybrid weights in the 2026-08-01-preview data-plane spec, so the weight
-    check applies only to explicit Search query definitions found in the project; absent them it is skipped.
+    Read the skillset JSON (SplitSkill / #Microsoft.Skills.Text.SplitSkill) and fail when textSplitMode is pages and unit
+    is characters (or unset) and maximumPageLength is below 300 or above 50000, or when pageOverlapLength is negative or
+    not less than maximumPageLength / 2. For vector queries declared in project query definitions (vectorQueries[].weight)
+    fail when weight is zero or negative. When unit is azureOpenAITokens only the overlap versus half page length rule is
+    asserted. No knowledge source or knowledge base property carries hybrid weights in the 2026-08-01-preview data-plane
+    spec, so the weight check applies only to explicit Search query definitions found in the project; absent them it is
+    skipped.
   confidence: likely
 recommendation: >-
-  Keep pageOverlapLength below half of maximumPageLength (the docs recommend roughly 10 to 25 percent), keep
-  maximumPageLength between 300 and 50000 characters, and use a vector weight above zero.
+  Keep pageOverlapLength below half of maximumPageLength (the docs recommend roughly 10 to 25 percent), keep maximumPageLength
+  between 300 and 50000 characters, and use a vector weight above zero.
 fix: |
   { "@odata.type": "#Microsoft.Skills.Text.SplitSkill",
     "textSplitMode": "pages", "maximumPageLength": 2000, "pageOverlapLength": 200 }
   "vectorQueries": [ { "kind": "text", "fields": "contentVector", "k": 10, "weight": 2.0 } ]
 sources:
-  - url: https://learn.microsoft.com/azure/search/cognitive-search-skill-textsplit
-    lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/cognitive-search-skill-textsplit.md
-    note: maximumPageLength minimum 300, maximum 50000, default 5000 (characters); pageOverlapLength 0 means no overlap.
-  - url: https://learn.microsoft.com/azure/search/vector-search-how-to-chunk-documents
-    lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/vector-search-how-to-chunk-documents.md
-    note: "pageOverlapLength: if set, this must be less than half the maximum page length; start overlap around 10 to 25 percent."
-  - url: https://learn.microsoft.com/azure/search/vector-search-how-to-query
-    lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/vector-search-how-to-query.md
-    note: "Vector weighting: default 1.0; the value must be a positive number larger than zero."
-  - url: https://github.com/Azure/azure-rest-api-specs/tree/main/specification/search/data-plane/Search
-    lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/search/data-plane/Search/models-index.tsp (VectorQuery.weight, positive number larger than zero) and models-service.tsp (SplitSkill)
+- url: https://learn.microsoft.com/azure/search/cognitive-search-skill-textsplit
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-ai-docs/articles/search/cognitive-search-skill-textsplit.md
+  note: maximumPageLength minimum 300, maximum 50000, default 5000 (characters); pageOverlapLength 0 means no overlap.
+- url: https://learn.microsoft.com/azure/search/vector-search-how-to-chunk-documents
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-ai-docs/articles/search/vector-search-how-to-chunk-documents.md
+  note: >-
+    pageOverlapLength: if set, this must be less than half the maximum page length; start overlap around 10 to 25 percent.
+- url: https://learn.microsoft.com/azure/search/vector-search-how-to-query
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-ai-docs/articles/search/vector-search-how-to-query.md
+  note: 'Vector weighting: default 1.0; the value must be a positive number larger than zero.'
+- url: https://github.com/Azure/azure-rest-api-specs/tree/main/specification/search/data-plane/Search
+  lastVerified: '2026-10-04'
+  verifiedVia: >-
+    refs/rest-api-specs/specification/search/data-plane/Search/models-index.tsp (VectorQuery.weight, positive number larger
+    than zero) and models-service.tsp (SplitSkill)
 overlap:
   decision: native
   coverage: none
@@ -72,22 +79,24 @@ implementation:
 testability: Offline against skillset and query-definition fixtures; live skillset read is metadata-only.
 tests:
   positive:
-    - overlap-equal-to-half-page-length
-    - overlap-larger-than-page-length
-    - page-length-below-300
-    - page-length-above-50000
-    - vector-weight-zero
-    - vector-weight-negative
+  - overlap-equal-to-half-page-length
+  - overlap-larger-than-page-length
+  - page-length-below-300
+  - page-length-above-50000
+  - vector-weight-zero
+  - vector-weight-negative
   negative:
-    - overlap-10-percent
-    - no-overlap-configured
-    - weight-2
+  - overlap-10-percent
+  - no-overlap-configured
+  - weight-2
   skipped:
-    - no-split-skill-in-project
-    - no-explicit-query-definitions
-    - token-unit-page-length-bounds-not-asserted
+  - no-split-skill-in-project
+  - no-explicit-query-definitions
+  - token-unit-page-length-bounds-not-asserted
 notes: >-
-  The "less than half the maximum page length" statement is in the chunking article only; the Text Split skill
-  reference does not repeat it, so confidence is likely. Hybrid weights as a Foundry IQ setting could not be
-  found in the knowledge base or knowledge source schemas (checked 2026-08-01-preview). Reciprocal rank fusion
-  weights are query-time Search parameters.
+  The "less than half the maximum page length" statement is in the chunking article only; the Text Split skill reference
+  does not repeat it, so confidence is likely. Hybrid weights as a Foundry IQ setting could not be found in the knowledge
+  base or knowledge source schemas (checked 2026-08-01-preview). Reciprocal rank fusion weights are query-time Search parameters.
+  Downgraded after the Phase 0 Foundry lead review: the split-size and weight bounds are API constraints, but "overlap must
+  be less than half the maximum page length" appears only in the chunking article, so it is guidance (warning), and the
+  preview unit parameter is not asserted under the stable 2026-04-01 API.

@@ -26,14 +26,14 @@ Foundry azd projects can have no `infra/` folder. Foundry Doctor's Bicep adapter
 | `azure.yaml` (raw bytes, lossless) | yes: `name`, `metadata`, `infra`, `requiredVersions`, `services.*` (`host`, `project`, `uses`, `env`, `kind`, agent/project/connection/toolbox/skill/routine/eval bodies), `resources` | `schemas/v1.0/azure.yaml.json` |
 | `$ref` files referenced from services | yes (file includes resolved against project root) | `synthesizer.go` `resolveServiceRefs`, `Input.ProjectRoot`; `schemas/examples/complex.azure.yaml` |
 | `.azure/<env>/.env` values | yes (key=value file) | `azd-docs/.../environment-variables-faq.md` ("`.env` file in the `.azure/<environment name>` directory") |
-| `${VAR}` resolution | yes, offline: env map first, then process env; `${VAR:-default}` and `$${VAR}` escape; unresolved without default is an error | `synthesizer.go` `resolveVars`; `synthesis/envrefs.go` `FindEnvReferences` |
+| `${VAR}` resolution | yes, offline: env map first, then process env; unresolved without default is an error. The expander is drone/envsubst with the full shell parameter grammar (`${VAR:=x}`, `${VAR:+x}`, `${VAR:?}`, `${VAR#p}` and so on), `$${VAR}` is an escaped literal, `${{ ... }}` spans are reserved for Foundry expressions and masked before expansion, and a reference nested inside a `:-` default is refused rather than reported | `synthesizer.go` `resolveVars`; `synthesis/envrefs.go` `FindEnvReferences`, `ValidateEnvReferences` (read 2026-10-04) |
 | Synthesised parameters (deployments, includeAcr, network mode) | reimplementable from azure.yaml; do **not** import the extension's internal package | `synthesizer.go` `Synthesize` |
-| Embedded template content | not needed; behaviour is fixed per extension version | unverified which resources each version creates without compiling it |
+| Embedded template content | present in the extension source (`internal/synthesis/templates/main.bicep`, `modules/`, `main.arm.json`, `existing-project.*`) and fixed per extension version | read access confirmed; the resources each version creates have not been enumerated |
 
 ### What it cannot read in that case
 
 - No Bicep source, so no source-map lines for ARM resources, no user-authored resource properties, no module graph. The ARM template is generated in memory by the extension at provision time and is not on disk (`foundry_provisioning_provider.go`: "armTemplate ... embedded ARM JSON; nil when on-disk Bicep is configured").
-- Therefore rules that need ARM resource properties (network ACLs, RBAC assignments, diagnostic settings, SKU, API versions) cannot run in `--local`. They must report **skipped** (reason: no on-disk IaC; synthetic infrastructure is provider-defined) and not pass. Optionally, a later phase may compile the embedded `main.bicep` for the pinned extension version (unverified feasibility) or use `--preflight`/`--runtime` evidence.
+- Therefore rules that need ARM resource properties (network ACLs, RBAC assignments, diagnostic settings, SKU, API versions) cannot run in `--local`. They must report **skipped** (reason: no on-disk IaC; synthetic infrastructure is provider-defined) and not pass. A later phase may compile the embedded `main.bicep` (or read `main.arm.json`) for the pinned extension version, which would let many SEC and NET rules run on the default Foundry path instead of being skipped; the files exist in the extension source, so this is feasible to assess and is a Phase 1 spike item. `--preflight`/`--runtime` evidence is the other route.
 - Values that exist only after provisioning (endpoints, project ID) appear in `.azure/<env>/.env` only if the user has provisioned; `AZURE_AI_PROJECT_ID` is the documented key for an existing project (azure.ai.projects README).
 
 ### azure.yaml facts for Foundry
@@ -42,7 +42,7 @@ Foundry azd projects can have no `infra/` folder. Foundry Doctor's Bicep adapter
 - There is **no schema/format version field** in azure.yaml. The only version-like fields are `requiredVersions.azd` (semver range) and `requiredVersions.extensions` (map of extension id to constraint; "If the version of azd is outside this range, the project will fail to load") and `services.*.apiVersion` (not Foundry-specific). The schema channel (`v1.0` vs `alpha`) is implied by the `$schema` comment only, and `alpha` features are gated by `azd config` alpha flags (`cli/azd/docs/alpha-features.md`; unverified details).
 - `services.<key>.host` is required. Documented values: `appservice`, `containerapp`, `function`, `springapp`, `staticwebapp`, `aks`, `ai.endpoint`, `azure.ai.agent`, `microsoft.foundry` (legacy compatibility), `azure.ai.project`, `azure.ai.connection`, `azure.ai.toolbox`, `azure.ai.skill`, `azure.ai.routine`, `azure.ai.eval` (`schemas/v1.0/azure.yaml.json`, `services...host.examples`). The list is `examples`, not an enum, so unknown hosts are schema-valid.
 - Host bodies are composed from per-extension schemas: `azure.ai.agent` requires `project` (`extensions/azure.ai.agents/schemas/azure.ai.agent.json`; `kind` enum `hosted|prompt|prompt-voice|voice`; `config` deprecated); `azure.ai.project` has `endpoint`, `deployments`, `network` and forbids `project/runtime/docker/image/config` (`azure.ai.projects/schemas/azure.ai.project.json`). Connections, toolboxes, skills, routines and evals are "code-less resource services; the service key is the name".
-- Cross-service references use `uses: [<service key>]`. Env substitution uses `${VAR}`; Foundry runtime expressions use `$${{...}}` (see `complex.azure.yaml`).
+- Cross-service references use `uses: [<name>]` where the schema says the name is a *service name or resource name*, so a `uses` entry may name a `resources:` entry as well as a service. Env substitution uses `${VAR}`. Foundry runtime expressions are written `${{...}}` in the Learn reference (passed through untouched) and `$${{...}}` in the official `complex.azure.yaml` example ("the extra $ preserves this Foundry expression through azd"). **The sources conflict**; the reader must accept both and the rules that mention the syntax (FND-CFG-005, FND-CFG-006, FND-CFG-011) must not treat either as an unresolved reference.
 - Other `resources:` types exist (`ai.project`, `ai.openai.model`, `ai.search`, ...) in the core schema's `resources` map and are a separate (non-service) mechanism.
 
 ### Version fields available for gating
@@ -58,7 +58,7 @@ Foundry azd projects can have no `infra/` folder. Foundry Doctor's Bicep adapter
 ## Decision
 
 1. Foundry Doctor treats azure.yaml-only projects as first-class. Source acquisition reports `iac: synthetic` when no `<infra.path>/<infra.module>.bicep|.bicepparam` exists (and no `infra.layers` path with one) and `infra.provider` is `microsoft.foundry` (or a legacy Foundry host drives it).
-2. The azure.yaml reader is a lossless YAML AST (`internal/azureyaml`) that reports duplicate mapping keys, unresolved `${VAR}` (honouring `:-` defaults and `$$` escapes) and unresolved `uses` targets as findings with line/column. A decode-to-map reader must not be used, because it can silently keep the last duplicate. The spike fixtures `test/spikes/azd/` pin this behaviour (`expected.json`). Whether Go's `yaml.v3` rejects duplicates when decoding to a typed struct is **unverified** here; the AST approach does not depend on it.
+2. The azure.yaml reader is a lossless YAML AST (`internal/azureyaml`) that reports duplicate mapping keys, unresolved `${VAR}` (honouring `:-` defaults and `$$` escapes) and unresolved `uses` targets as findings with line/column. The executable spike `test/spikes/azd/spike_test.go` pins this behaviour against `expected.json` and runs in `go test ./...`. Verified with `go.yaml.in/yaml/v3`: decoding into a map or typed struct rejects a duplicate key with an error that carries no usable location, while decoding into a node AST succeeds, so the AST route is the one that yields every occurrence and its line. Some other YAML libraries keep the last value silently, which is why the AST route is the portable choice. A second, build-tagged test validates the valid fixture against the real azd JSON schema and proves the check can fail (`schema_spike_test.go`).
 3. Rules needing ARM facts are `skipped` with reason `synthetic-infrastructure` in local mode; they never pass. Rules about azure.yaml, references, env keys and cross-service wiring run.
 4. Env resolution order for local mode: selected azd environment file, then process environment, mirroring `resolveVars`. Missing env file: references are `unresolved` and the finding says which env was selected.
 5. Unknown versions fail safely, by tier:
@@ -68,7 +68,7 @@ Foundry azd projects can have no `infra/` folder. Foundry Doctor's Bicep adapter
    - Installed/declared Foundry extension version outside the rule's `compatibility` range: the rule is `skipped` with `unsupported-version`, never `passed`. The run-level summary lists every skipped-for-version rule.
    - `$schema` channel `alpha` or a schema URL we have not pinned: run, but mark confidence lowered and list in the report header.
    - Unparseable YAML: single `invalid-azure-yaml` error, all dependent rules skipped.
-6. Pin supported versions in the catalogue `compatibility` fields (azd >= 1.34.2; azure.ai.projects 1.0.0-beta.13; azure.ai.agents 1.0.0-beta.18 as verified), not in code.
+6. Pin supported versions in the catalogue `compatibility` fields, not in code. They are machine-comparable closed ranges that name exactly the versions whose schemas or source were read (azd `>=1.34.2 <=1.36.0-beta.1`; azure.ai.projects, azure.ai.agents, connections, toolboxes and routines at the single beta version read), plus a `preview` flag. The catalogue validator enforces the format (`internal/catalog`). Widen a range only by reading the schema at the older or newer tag. A version outside the range makes the rule `skipped` with `unsupported-version`.
 
 ## Consequences
 
@@ -77,7 +77,6 @@ Foundry azd projects can have no `infra/` folder. Foundry Doctor's Bicep adapter
 
 ## Unverified
 
-- Exact set of resources the embedded `main.bicep` creates per extension version (templates not read in this spike).
-- Whether a typed YAML decode in the Go library we choose rejects duplicate keys.
+- Exact set of resources the embedded `main.bicep` creates per extension version (the files exist; they were not compiled or enumerated).
 - Where azd records the default environment (`.azure/config.json` field names) and `.azure/<env>/config.json` schema (docs mention the files; fields not read).
 - Alpha-schema gating specifics.

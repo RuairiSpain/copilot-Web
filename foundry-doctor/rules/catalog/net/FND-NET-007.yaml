@@ -1,20 +1,22 @@
 id: FND-NET-007
 version: 1
 group: NET
-title: "Restricted mode has allowed IP range"
+title: Restricted mode has allowed IP range
 description: >-
-  "Restricted mode" is the Foundry account state where public access stays enabled but is limited to
-  selected networks (portal: Enabled from selected IP addresses). In ARM this is
-  publicNetworkAccess Enabled together with networkAcls.defaultAction Deny. A restricted account must
-  name who is allowed: at least one ipRules entry (an IPv4 address or CIDR) or one
-  virtualNetworkRules entry. Without any, no public caller matches a rule, so the account is
-  restricted for everybody and the configuration is almost certainly not what the author intended.
-  The PRD does not define "restricted mode"; this definition is derived from the Foundry network
-  isolation article and the ARM schema and should be confirmed by the product owner.
+  "Restricted mode" is the Foundry account state where public access stays enabled but is limited to selected networks (portal:
+  Enabled from selected IP addresses). In ARM this is publicNetworkAccess Enabled together with networkAcls.defaultAction
+  Deny. A restricted account must name who is allowed: at least one ipRules entry (an IPv4 address or CIDR) or one virtualNetworkRules
+  entry. Without any, no public caller matches a rule, so the account is restricted for everybody and the configuration
+  is almost certainly not what the author intended. The PRD does not define "restricted mode"; this definition is derived
+  from the Foundry network isolation article and the ARM schema and should be confirmed by the product owner.
 status: verified
-phases: ["1"]
-inputs: ["bicep-arm", "control-plane"]
-basis: ["security"]
+phases:
+- '1'
+inputs:
+- bicep-arm
+- control-plane
+basis:
+- security
 category: must-have
 pillar: security
 severity:
@@ -22,24 +24,29 @@ severity:
   test: error
   prod: error
 compatibility:
-  azd: "not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked)"
+  azd: ''
   extensions: {}
   apiVersions:
-    - "Microsoft.CognitiveServices/accounts@2026-09-01 (stable)"
+  - Microsoft.CognitiveServices/accounts 2026-09-01
+  preview: false
+  notes: >-
+    Not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked) Microsoft.CognitiveServices/accounts
+    2026-09-01: stable.
 evidence:
   description: >-
-    On each Foundry account with publicNetworkAccess Enabled and networkAcls.defaultAction Deny, read
-    networkAcls.ipRules[].value and networkAcls.virtualNetworkRules[].id. Fail when both lists are
-    empty or absent. Fail when an ipRules value is not an IPv4 address or IPv4 CIDR (the schema
-    describes ipRules values as IPv4 address ranges in CIDR notation). Open ranges such as 0.0.0.0/0
-    are left to FND-SEC-006. Accounts with defaultAction Allow are not restricted mode and are covered
-    by FND-NET-001; accounts with publicNetworkAccess Disabled ignore ipRules and are covered by
-    FND-NET-001.
+    On each Foundry account with publicNetworkAccess Enabled and networkAcls.defaultAction Deny, read networkAcls.ipRules[].value
+    and networkAcls.virtualNetworkRules[].id. Fail when both lists are empty or absent. Fail when an ipRules value is not
+    an IPv4 address or IPv4 CIDR (the schema describes ipRules values as IPv4 address ranges in CIDR notation). Open ranges
+    such as 0.0.0.0/0 are left to FND-SEC-006. Accounts with defaultAction Allow are not restricted mode and are covered
+    by FND-NET-001; accounts with publicNetworkAccess Disabled ignore ipRules and are covered by FND-NET-001. Skip, with
+    the reason 'private endpoint present', when an approved private endpoint targets the account: defaultAction Deny with
+    no IP rules is a common intentional posture for private-only access (whether private endpoint traffic bypasses networkAcls
+    for Cognitive Services was not confirmed in the sources read).
   confidence: likely
 recommendation: >-
-  If you want restricted mode, list the egress IPs of your build agents and developer networks as
-  ipRules (or subnets as virtualNetworkRules). If you want fully private access, set
-  publicNetworkAccess to Disabled and use a private endpoint instead.
+  If you want restricted mode, list the egress IPs of your build agents and developer networks as ipRules (or subnets as
+  virtualNetworkRules). If you want fully private access, set publicNetworkAccess to Disabled and use a private endpoint
+  instead.
 fix: |
   properties: {
     publicNetworkAccess: 'Enabled'
@@ -50,53 +57,58 @@ fix: |
     }
   }
 sources:
-  - url: https://learn.microsoft.com/azure/foundry/how-to/configure-private-link
-    lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/how-to/configure-private-link.md (ms.date 09/29/2026)
-    note: PNA flag plus the additional setting Enabled from selected IP addresses; Selected networks grants specific IP addresses and virtual networks.
-  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
-    lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
-    note: NetworkRuleSet.defaultAction is used when no ipRules or virtualNetworkRules entry matches (Allow/Deny); IpRule.value IPv4 address or CIDR; bypass None/AzureServices.
-  - url: https://learn.microsoft.com/azure/foundry/agents/concepts/networking-options
-    lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/networking-options.md (ms.date 06/29/2026)
-    note: Inbound public can be optionally restricted to selected IP addresses.
+- url: https://learn.microsoft.com/azure/foundry/how-to/configure-private-link
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-ai-docs/articles/foundry/how-to/configure-private-link.md (ms.date 09/29/2026)
+  note: >-
+    PNA flag plus the additional setting Enabled from selected IP addresses; Selected networks grants specific IP addresses
+    and virtual networks.
+- url: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+  lastVerified: '2026-10-04'
+  verifiedVia: >-
+    refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+  note: >-
+    NetworkRuleSet.defaultAction is used when no ipRules or virtualNetworkRules entry matches (Allow/Deny); IpRule.value
+    IPv4 address or CIDR; bypass None/AzureServices.
+- url: https://learn.microsoft.com/azure/foundry/agents/concepts/networking-options
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/networking-options.md (ms.date 06/29/2026)
+  note: Inbound public can be optionally restricted to selected IP addresses.
 overlap:
   decision: adapt
   coverage: partial
   rationale: >-
-    PSRule Azure.AI.PublicAccess and the policy "Azure AI Services resources should restrict network
-    access" pass any account with defaultAction Deny, even with no allow entries, and say nothing
-    about malformed IP rules. Foundry Doctor adapts the property test and adds the consistency check
-    (restricted but nobody allowed) and rule value validation. Evidence is the pair defaultAction plus
-    non-empty allow list, not the single property.
+    PSRule Azure.AI.PublicAccess and the policy "Azure AI Services resources should restrict network access" pass any account
+    with defaultAction Deny, even with no allow entries, and say nothing about malformed IP rules. Foundry Doctor adapts
+    the property test and adds the consistency check (restricted but nobody allowed) and rule value validation. Evidence
+    is the pair defaultAction plus non-empty allow list, not the single property.
   psrule:
-    - Azure.AI.PublicAccess
+  - Azure.AI.PublicAccess
   azurePolicy:
-    - "037eea7a-bd0a-46c5-9a66-03aea78705d3 (Azure AI Services resources should restrict network access)"
+  - 037eea7a-bd0a-46c5-9a66-03aea78705d3 (Azure AI Services resources should restrict network access)
   defender: []
   advisor: []
   bicepLinter: []
   checkov:
-    - CKV_AZURE_134
+  - CKV_AZURE_134
 implementation:
   owner: native
   package: internal/rules/net
-testability: >-
-  Fully offline with Bicep/ARM fixtures. Live mode reads networkAcls from the account.
+testability: Fully offline with Bicep/ARM fixtures. Live mode reads networkAcls from the account.
 tests:
   positive:
-    - restricted-account-with-empty-ip-and-vnet-rules
-    - ip-rule-value-is-not-ipv4
+  - restricted-account-with-empty-ip-and-vnet-rules
+  - ip-rule-value-is-not-ipv4
   negative:
-    - restricted-account-with-one-ip-rule
-    - restricted-account-with-vnet-rule-only
-    - public-disabled-account-ignores-acls
+  - restricted-account-with-one-ip-rule
+  - restricted-account-with-vnet-rule-only
+  - public-disabled-account-ignores-acls
   skipped:
-    - ip-rules-supplied-by-parameter-array
+  - ip-rules-supplied-by-parameter-array
+  - deny-default-with-approved-private-endpoint-no-ip-rules
 notes: >-
-  Unverified: no primary source states in words that defaultAction Deny with empty rules blocks all
-  public callers; this is derived from the ARM property description and the portal wording, which is
-  why confidence is likely. Overlaps by intent with FND-SEC-006 (firewall rules reject private/open
-  ranges, other agent); keep the split: NET-007 owns presence, SEC-006 owns range quality.
+  Unverified: no primary source states in words that defaultAction Deny with empty rules blocks all public callers; this
+  is derived from the ARM property description and the portal wording, which is why confidence is likely. Overlaps by intent
+  with FND-SEC-006 (firewall rules reject private/open ranges, other agent); keep the split: NET-007 owns presence, SEC-006
+  owns range quality.

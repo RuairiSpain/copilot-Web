@@ -23,10 +23,12 @@ severity:
   test: error
   prod: error
 compatibility:
-  azd: "not version dependent; reads compiled ARM JSON and ARM role assignments (azd 1.36.0-beta.1 clone checked)"
+  azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.Authorization/roleAssignments@2022-04-01 (roleDefinitionId, principalId, principalType, condition, conditionVersion)"
+    - "Microsoft.Authorization/roleAssignments 2022-04-01"
+  preview: false
+  notes: "Not version dependent; reads compiled ARM JSON and ARM role assignments (azd 1.36.0-beta.1 clone checked) Microsoft.Authorization/roleAssignments 2022-04-01: roleDefinitionId, principalId, principalType, condition, conditionVersion."
 evidence:
   description: >-
     Identify application identities: the identity.principalId of Foundry accounts and projects,

@@ -22,12 +22,14 @@ severity:
   test: warning
   prod: warning
 compatibility:
-  azd: "not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked)"
+  azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.Network/virtualNetworks@2026-01-01 (subnets[].properties.networkSecurityGroup, enableDdosProtection, ddosProtectionPlan)"
-    - "Microsoft.Network/publicIPAddresses@2026-01-01 (properties.ddosSettings.protectionMode: VirtualNetworkInherited, Enabled, Disabled)"
-    - "Microsoft.Network/networkSecurityGroups@2026-01-01"
+    - "Microsoft.Network/virtualNetworks 2026-01-01"
+    - "Microsoft.Network/publicIPAddresses 2026-01-01"
+    - "Microsoft.Network/networkSecurityGroups 2026-01-01"
+  preview: false
+  notes: "Not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked) Microsoft.Network/virtualNetworks 2026-01-01: subnets[].properties.networkSecurityGroup, enableDdosProtection, ddosProtectionPlan. Microsoft.Network/publicIPAddresses 2026-01-01: properties.ddosSettings.protectionMode: VirtualNetworkInherited, Enabled, Disabled."
 evidence:
   description: >-
     NSG: for each subnet of a VNet that the design uses for the Foundry agent subnet

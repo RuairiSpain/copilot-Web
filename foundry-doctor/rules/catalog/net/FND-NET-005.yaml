@@ -20,12 +20,14 @@ severity:
   test: error
   prod: error
 compatibility:
-  azd: "not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked)"
+  azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.CognitiveServices/accounts@2026-09-01"
-    - "Microsoft.Network/privateEndpoints@2024-05-01"
-    - "Microsoft.Network/virtualNetworks@2024-05-01"
+    - "Microsoft.CognitiveServices/accounts 2026-09-01"
+    - "Microsoft.Network/privateEndpoints 2024-05-01"
+    - "Microsoft.Network/virtualNetworks 2024-05-01"
+  preview: false
+  notes: "Not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked)"
 evidence:
   description: >-
     Resolve the VNet from the subnet in networkInjections[].subnetArmId and compare its location with

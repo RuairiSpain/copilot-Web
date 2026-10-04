@@ -23,10 +23,12 @@ severity:
   test: info
   prod: warning
 compatibility:
-  azd: n/a (reads compiled ARM JSON or ARM control plane)
+  azd: ""
   extensions: {}
   apiVersions:
-  - Microsoft.Search/searchServices 2025-05-01 (stable) - search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
+    - "Microsoft.Search/searchServices 2025-05-01"
+  preview: false
+  notes: "No azd dependency: reads compiled ARM JSON or ARM control plane Microsoft.Search/searchServices 2025-05-01 / 2025-05-01: stable) - search/resource-manager/Microsoft.Search/Search/stable//search.json."
 evidence:
   description: 'Compiled ARM or live Microsoft.Search/searchServices referenced by a Foundry connection or capability host.
     Compare properties.replicaCount (spec default 1 when unset) with 2 (query SLA) and 3 (query and index SLA), and sku.name

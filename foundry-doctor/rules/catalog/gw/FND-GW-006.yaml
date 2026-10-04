@@ -22,7 +22,9 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.ApiManagement/service/loggers and diagnostics 2025-09-01-preview (loggerType, loggerId, metrics, largeLanguageModel read in spec)"
+    - "Microsoft.ApiManagement/service/loggers and diagnostics 2025-09-01-preview"
+  preview: true
+  notes: "Microsoft.ApiManagement/service/loggers and diagnostics 2025-09-01-preview: loggerType, loggerId, metrics, largeLanguageModel read in spec."
 evidence:
   description: >-
     Trigger: an llm-emit-token-metric element exists in the effective policy of an API (otherwise skipped; the

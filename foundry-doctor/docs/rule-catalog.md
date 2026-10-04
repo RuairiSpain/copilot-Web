@@ -8,14 +8,14 @@
 
 | Status | Rules |
 |---|---|
-| verified | 86 |
-| product-opinion | 22 |
+| verified | 85 |
+| product-opinion | 23 |
 
 | Overlap decision | Rules |
 |---|---|
 | reuse | 1 |
-| wrap | 2 |
-| adapt | 37 |
+| wrap | 1 |
+| adapt | 38 |
 | native | 68 |
 
 ## CFG
@@ -55,8 +55,8 @@
 | FND-DEP-005 | Quota covers requested capacity | 2 | verified | native | warning/error/error | [link](<https://learn.microsoft.com/azure/foundry/openai/how-to/quota>) (2026-10-04) |
 | FND-DEP-006 | No blocking soft-deleted resource/name | 2 | verified | native | error/error/error | [link](<https://learn.microsoft.com/azure/ai-services/recover-purge-resources>) (2026-10-04) |
 | FND-DEP-007 | Globally unique names available | 2 | verified | adapt | error/error/error | [link](<https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json>) (2026-10-04) |
-| FND-DEP-008 | What-if has no unexpected delete/replace | 2 | verified | native | warning/error/error | [link](<https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/deployments/stable/2026-06-01/deployments.json>) (2026-10-04) |
-| FND-DEP-009 | Likely policy denials identified | 2 | verified | wrap | warning/warning/error | [link](<https://github.com/Azure/azure-rest-api-specs/blob/main/specification/policyinsights/resource-manager/Microsoft.PolicyInsights/PolicyInsights/stable/2024-10-01/openapi.json>) (2026-10-04) |
+| FND-DEP-008 | What-if has no unexpected delete | 2 | verified | native | warning/error/error | [link](<https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/deployments/stable/2026-06-01/deployments.json>) (2026-10-04) |
+| FND-DEP-009 | Likely policy denials identified | 2 | verified | adapt | warning/warning/warning | [link](<https://github.com/Azure/azure-rest-api-specs/blob/main/specification/policyinsights/resource-manager/Microsoft.PolicyInsights/PolicyInsights/stable/2024-10-01/openapi.json>) (2026-10-04) |
 | FND-DEP-010 | Locks do not block change | 2 | verified | native | error/error/error | [link](<https://learn.microsoft.com/azure/azure-resource-manager/management/lock-resources>) (2026-10-04) |
 | FND-DEP-011 | Subnet delegation/capacity/use is compatible | 2 | verified | native | error/error/error | [link](<https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks>) (2026-10-04) |
 | FND-DEP-012 | Target region supports selected setup | 2 | verified | adapt | error/error/error | [link](<https://learn.microsoft.com/azure/foundry/agents/concepts/limits-quotas-regions>) (2026-10-04) |
@@ -101,13 +101,13 @@
 | FND-IQ-003 | Vector field type, dimensions and profile | 8 | verified | native | error/error/error | [link](<https://learn.microsoft.com/azure/search/vector-search-how-to-create-index>) (2026-10-04) |
 | FND-IQ-004 | Vector dimensions match embedding deployment metadata | 8 | verified | native | error/error/error | [link](<https://learn.microsoft.com/azure/search/vector-search-how-to-create-index>) (2026-10-04) |
 | FND-IQ-005 | Retrieval mode supported by index and service tier | 8 | verified | native | error/error/error | [link](<https://learn.microsoft.com/azure/search/agentic-retrieval-how-to-set-retrieval-reasoning-effort>) (2026-10-04) |
-| FND-IQ-006 | Chunk overlap and hybrid weights valid | 8 | verified | native | error/error/error | [link](<https://learn.microsoft.com/azure/search/cognitive-search-skill-textsplit>) (2026-10-04) |
-| FND-IQ-007 | Knowledge source type/API and planning model supported | 8 | verified | native | error/error/error | [link](<https://learn.microsoft.com/azure/search/agentic-retrieval-how-to-create-knowledge-base>) (2026-10-04) |
+| FND-IQ-006 | Chunk overlap and hybrid weights valid | 8 | verified | native | warning/warning/warning | [link](<https://learn.microsoft.com/azure/search/cognitive-search-skill-textsplit>) (2026-10-04) |
+| FND-IQ-007 | Knowledge source type/API and planning model supported | 8 | verified | native | warning/warning/warning | [link](<https://learn.microsoft.com/azure/search/agentic-retrieval-how-to-create-knowledge-base>) (2026-10-04) |
 | FND-IQ-008 | Source connection uses managed identity | 8 | verified | adapt | warning/error/error | [link](<https://learn.microsoft.com/azure/search/search-how-to-managed-identities>) (2026-10-04) |
-| FND-IQ-009 | Document-level access control configured when required | 8 | verified | native | warning/error/error | [link](<https://learn.microsoft.com/azure/search/agentic-retrieval-how-to-retrieve>) (2026-10-04) |
+| FND-IQ-009 | Document-level access control configured when required | 8 | product-opinion | native | warning/error/error | [link](<https://learn.microsoft.com/azure/search/agentic-retrieval-how-to-retrieve>) (2026-10-04) |
 | FND-IQ-010 | ADLS Gen2 hierarchical namespace enabled | 8 | verified | native | error/error/error | [link](<https://learn.microsoft.com/azure/search/search-how-to-index-azure-data-lake-storage>) (2026-10-04) |
 | FND-IQ-011 | Refresh schedule valid and supportable | 8 | verified | native | error/error/error | [link](<https://learn.microsoft.com/azure/search/search-howto-schedule-indexers>) (2026-10-04) |
-| FND-IQ-012 | Semantic ranking enabled when used | 8 | verified | native | error/error/error | [link](<https://learn.microsoft.com/azure/search/semantic-how-to-enable-disable>) (2026-10-04) |
+| FND-IQ-012 | Semantic ranking enabled when used | 8 | verified | native | warning/error/error | [link](<https://learn.microsoft.com/azure/search/semantic-how-to-enable-disable>) (2026-10-04) |
 
 ## NET
 

@@ -18,9 +18,12 @@ severity:
   test: error
   prod: error
 compatibility:
-  azd: ">=1.27.1"
+  azd: ">=1.34.2 <=1.36.0-beta.1"
   extensions: {}
-  apiVersions: ["2026-09-01"]
+  apiVersions:
+    - "2026-09-01"
+  preview: true
+  notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from a changelog and was not verified."
 evidence:
   description: >-
     Phase 1, offline. Inputs - the profile allow and deny lists (publisher, model name, or asset-ID fragment); model

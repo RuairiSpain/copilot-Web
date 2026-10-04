@@ -17,12 +17,13 @@ severity:
   test: info
   prod: warning
 compatibility:
-  azd: >-
-    Not verified. azd supports provision preview (azd provision --preview, per extension-framework.md), which routes through
-    the same validation call as other paths; exact azd version not pinned.
+  azd: ""
   extensions: {}
   apiVersions:
-    - Microsoft.Resources/deployments whatIf 2025-04-01 (stable; also 2026-06-01 present in the clone)
+    - "Microsoft.Resources/deployments whatIf 2025-04-01"
+    - "Microsoft.Resources/deployments whatIf 2026-06-01"
+  preview: false
+  notes: "Not verified. azd supports provision preview (azd provision --preview, per extension-framework.md), which routes through the same validation call as other paths; exact azd version not pinned. Microsoft.Resources/deployments whatIf 2025-04-01 / 2026-06-01: stable; also present in the clone."
 evidence:
   description: >-
     Not implemented in this phase. Candidate design: (a) read each deployed resource with ARM GET at the api-version of

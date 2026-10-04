@@ -22,13 +22,13 @@ severity:
   test: info
   prod: warning
 compatibility:
-  azd: n/a (ARM control plane read)
+  azd: ""
   extensions: {}
   apiVersions:
-  - Microsoft.Authorization/policyAssignments 2025-01-01 (stable, properties.enforcementMode Default|DoNotEnforce|Enroll)
-    - resources/resource-manager/Microsoft.Authorization/policy/stable/2025-01-01/policyAssignments.json
-  - Microsoft.PolicyInsights policyStates 2024-10-01 (stable, queryResults / summarize; fetched from main branch
-    openapi.json) - specification/policyinsights/resource-manager/Microsoft.PolicyInsights/PolicyInsights/stable/2024-10-01/openapi.json
+    - "Microsoft.Authorization/policyAssignments 2025-01-01"
+    - "Microsoft.PolicyInsights policyStates 2024-10-01"
+  preview: false
+  notes: "No azd dependency: ARM control plane read Microsoft.Authorization/policyAssignments 2025-01-01 / 2025-01-01: stable, properties.enforcementMode Default|DoNotEnforce|Enroll) - resources/resource-manager/Microsoft.Authorization/policy/stable//policyAssignments.json. Microsoft.PolicyInsights policyStates 2024-10-01 / 2024-10-01: stable, queryResults / summarize; fetched from main branch openapi.json) - specification/policyinsights/resource-manager/Microsoft.PolicyInsights/PolicyInsights/stable//openapi.json."
 evidence:
   description: List policyAssignments effective at the subscription and resource-group scopes; match policyDefinitionId
     against the mapped built-in policy IDs; report unmatched mapped IDs as not covered, enforcementMode DoNotEnforce

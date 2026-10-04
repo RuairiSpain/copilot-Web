@@ -22,8 +22,11 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "2026-08-01-preview (semanticConfigurationName optional on search index knowledge sources since 2026-05-01-preview)"
-    - "2026-04-01 (semanticConfigurationName still required on the knowledge source)"
+    - "2026-08-01-preview"
+    - "2026-05-01-preview"
+    - "2026-04-01"
+  preview: true
+  notes: "API 2026-08-01-preview / 2026-05-01-preview: semanticConfigurationName optional on search index knowledge sources since. API 2026-04-01: semanticConfigurationName still required on the knowledge source."
 evidence:
   description: >-
     Read the index definition. Fail when no field is key=true of type Edm.String; when no string field is

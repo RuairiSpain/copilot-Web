@@ -23,12 +23,16 @@ Record changes as ADRs in `docs/decisions/` when Phase 0 confirms or reverses th
 | Entry-point directory | Section 5: `cmd/foundry`; Appendix A: `cmd/foundry-doctor` | `cmd/foundry-doctor` (matches the binary name and Appendix A). |
 | Catalogue doc name | `docs/rule-catalog.md` (US spelling) | PRD spelling `rule-catalog`. |
 | Public command prefix | `azd foundry`, but Phase 0 must confirm no conflict | Keep the prefix in one place (command layer) until ADR-003. |
+| Output path flag | `--output <path>` and `compare` environments (command surface, section 4) | The azd extension SDK reserves `-o/--output` and `-e/--environment` and refuses to start if they are reused. Use `--out <path>` in extension mode; see ADR-003. |
+| `azd ai agent doctor` | Not mentioned | Microsoft's own `azd ai agent doctor` exists (read-only, overlaps FND-RUN-001, 003, 005). Not a name conflict; documented in ADR-003 and the RUN overlap notes. |
+| What-if titles | FND-DEP-008 "delete/replace" | The what-if ChangeType enum has no Replace value, so the rule is retitled "no unexpected delete". |
 | Repo location | Appendix A assumes a standalone `foundry-doctor/` repo | Subdirectory of the `copilot-Web` monorepo; workflows go in repo-root `.github/workflows/` with path filters. |
 
 ## Phase 0 outputs the harness expects
 
-`cmd/rulecatalog` (subcommands `validate`, `generate-docs`) is created in Phase 0. Until
-it exists, `check-rule-catalog.sh` reports SKIPPED.
+`cmd/rulecatalog` (subcommands `validate`, `generate-docs`, `generate-overlap`) exists since Phase 0.
+`check-rule-catalog.sh` validates the catalogue and fails if either generated document is stale; it reports SKIPPED only
+where the command is absent.
 
 ## Source document
 

@@ -2,10 +2,11 @@ id: FND-SEC-007
 version: 1
 group: SEC
 title: RAI/content filter bound to chat deployments
-description: Chat model deployments and hosted agents should be bound to a valid guardrail (RAI policy). A model
-  deployment without properties.raiPolicyName is assigned Microsoft.DefaultV2 by the platform; the rule fails when
-  raiPolicyName names a policy that is not Microsoft-provided or not declared, and when a hosted agent in azure.yaml
-  has no rai_policy entry or a short name instead of the full ARM resource ID.
+description: >-
+  Chat model deployments and hosted agents should be bound to a valid guardrail (RAI policy). A model deployment without
+  properties.raiPolicyName is assigned Microsoft.DefaultV2 by the platform; the rule fails when raiPolicyName names a policy
+  that is not Microsoft-provided or not declared, and when a hosted agent in azure.yaml has no rai_policy entry or a short
+  name instead of the full ARM resource ID.
 status: verified
 phases:
 - later
@@ -15,7 +16,6 @@ inputs:
 - control-plane
 basis:
 - security
-- waf
 category: must-have
 pillar: security
 severity:
@@ -23,31 +23,48 @@ severity:
   test: error
   prod: error
 compatibility:
-  azd: 1.36.0-beta.1
+  azd: '>=1.36.0-beta.1 <=1.36.0-beta.1'
   extensions:
-    azure.ai.agents: 1.0.0-beta.18
+    azure.ai.agents: '>=1.0.0-beta.18 <=1.0.0-beta.18'
   apiVersions:
-  - Microsoft.CognitiveServices/accounts 2026-09-01 (stable) - cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
-    (DeploymentProperties.raiPolicyName; accounts/raiPolicies)
+  - Microsoft.CognitiveServices/accounts 2026-09-01
+  preview: true
+  notes: >-
+    azd verified at exactly 1.36.0-beta.1. Extension ranges are exactly the versions whose schemas or source were read;
+    widen them in Phase 1 by reading older tags. Microsoft.CognitiveServices/accounts 2026-09-01 / 2026-09-01: stable) -
+    cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable//cognitiveservices.json (DeploymentProperties.raiPolicyName;
+    accounts/raiPolicies.
 evidence:
-  description: 'Bicep/ARM: Microsoft.CognitiveServices/accounts/deployments with properties.raiPolicyName set to
-    a name that is neither a Microsoft-managed policy nor a Microsoft.CognitiveServices/accounts/raiPolicies resource
-    in the scanned deployment or the live account. azure.yaml: a service with host azure.ai.agent and kind hosted
-    that has no policies entry of type rai_policy (docs: the agent then runs without a content safety guardrail),
-    or whose raiPolicyName is not a full ARM resource ID (docs: bare names are rejected by the extension) or does
-    not resolve to a declared raiPolicies resource (docs: a missing policy can fail open with no filtering).'
-  confidence: certain
-recommendation: Set properties.raiPolicyName on each deployment to a policy defined on the account and, for hosted
-  agents, add a policies entry of type rai_policy with the full ARM resource ID in azure.yaml. After deployment,
-  test that the guardrail blocks a known-bad prompt.
-fix: "# azure.yaml\nservices:\n  my-agent:\n    host: azure.ai.agent\n    kind: hosted\n    policies:\n      - type:\
-  \ rai_policy\n        raiPolicyName: ${RAI_POLICY_RESOURCE_ID}  # full ARM resource ID of the raiPolicies resource"
+  description: >-
+    Bicep/ARM: Microsoft.CognitiveServices/accounts/deployments with properties.raiPolicyName set to a name that is neither
+    a Microsoft-managed policy nor a Microsoft.CognitiveServices/accounts/raiPolicies resource in the scanned deployment
+    or the live account. azure.yaml: a service with host azure.ai.agent and kind hosted that has no policies entry of type
+    rai_policy (docs: the agent then runs without a content safety guardrail), or whose raiPolicyName is not a full ARM
+    resource ID (docs: bare names are rejected by the extension) or does not resolve to a declared raiPolicies resource
+    (docs: a missing policy can fail open with no filtering). Confidence is likely, not certain: guardrails-overview.md
+    says an agent with no custom guardrail inherits the model deployment's guardrail, while add-hosted-agent-guardrails.md
+    says an omitted rai_config means no guardrail, so the two Foundry articles conflict. A raiPolicyName that names a policy
+    existing only in the live account (not in the scanned template) is uncertain.
+  confidence: likely
+recommendation: >-
+  Set properties.raiPolicyName on each deployment to a policy defined on the account and, for hosted agents, add a policies
+  entry of type rai_policy with the full ARM resource ID in azure.yaml. After deployment, test that the guardrail blocks
+  a known-bad prompt.
+fix: |-
+  # azure.yaml
+  services:
+    my-agent:
+      host: azure.ai.agent
+      kind: hosted
+      policies:
+        - type: rai_policy
+          raiPolicyName: ${RAI_POLICY_RESOURCE_ID}  # full ARM resource ID of the raiPolicies resource
 sources:
 - url: https://learn.microsoft.com/azure/foundry/guardrails/guardrails-overview
   lastVerified: '2026-10-04'
   verifiedVia: refs/azure-ai-docs/articles/foundry/guardrails/guardrails-overview.md
-  note: '''Default guardrails'': models are assigned Microsoft.DefaultV2 by default; agents inherit the model deployment
-    guardrail.'
+  note: >-
+    'Default guardrails': models are assigned Microsoft.DefaultV2 by default; agents inherit the model deployment guardrail.
 - url: https://learn.microsoft.com/azure/foundry/agents/how-to/add-hosted-agent-guardrails
   lastVerified: '2026-10-04'
   verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/add-hosted-agent-guardrails.md
@@ -56,20 +73,22 @@ sources:
   lastVerified: '2026-10-04'
   verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/azure-yaml-reference.md
   note: '''Responsible AI policies'' policies[].type rai_policy and raiPolicyName.'
-- url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+- url: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+  verifiedVia: >-
+    refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
   note: DeploymentProperties.raiPolicyName; RaiPolicyProperties (basePolicyName, mode, contentFilters).
 overlap:
   decision: native
   coverage: partial
-  rationale: No PSRule, Checkov or Bicep linter rule covers guardrail binding. Azure Policy has [Preview] built-ins
-    (for example af253d37, f3a9c2e0, c1ad46c6, 930f48f9, 595f98a5, 9224c1cc) on the Microsoft.CognitiveServices.Data
-    deployments/agents data-plane alias that audit content-filter settings of a policy, not whether a deployment
-    or agent is bound to one. Foundry Doctor adds cross-file correlation (azure.yaml hosted agent policy to the
-    raiPolicies resource in Bicep), which no existing tool does. The azd azure.ai.agents extension validates ARM
-    ID shape and existence only at deploy time (it has an rai_policy_not_found error code); the doctor catches this
-    in preflight.
+  rationale: >-
+    No PSRule, Checkov or Bicep linter rule covers guardrail binding. Azure Policy has [Preview] built-ins (for example
+    af253d37, f3a9c2e0, c1ad46c6, 930f48f9, 595f98a5, 9224c1cc) on the Microsoft.CognitiveServices.Data deployments/agents
+    data-plane alias that audit content-filter settings of a policy, not whether a deployment or agent is bound to one.
+    Foundry Doctor adds cross-file correlation (azure.yaml hosted agent policy to the raiPolicies resource in Bicep), which
+    no existing tool does. The azd azure.ai.agents extension validates ARM ID shape and existence only at deploy time (it
+    has an rai_policy_not_found error code); the doctor catches this in preflight.
   psrule: []
   azurePolicy:
   - af253d37-136a-42f8-a1fc-30010c083d41
@@ -95,9 +114,15 @@ tests:
   - raiPolicyName references an undeclared policy fails
   skipped:
   - policy defined outside scanned files and no control-plane access is skipped
-  - 'uncertain: Microsoft-managed policy names other than Microsoft.DefaultV2 and Microsoft.Default are not enumerated;
-    treated uncertain'
+  - >-
+    uncertain: Microsoft-managed policy names other than Microsoft.DefaultV2 and Microsoft.Default are not enumerated; treated
+    uncertain
+  uncertain:
+  - raiPolicyName-references-existing-live-policy-not-in-template
 testability: Deterministic for azure.yaml and Bicep; existence in the live account needs control-plane read.
-notes: Whether an omitted raiPolicyName means Microsoft.DefaultV2 versus Microsoft.Default on model deployments
-  is documented only for 'models are assigned Microsoft.DefaultV2' (guardrails-overview). The agent default is documented
-  as inheritance from the model deployment. Preview data-plane Policy definitions use alias Microsoft.CognitiveServices.Data/accounts/deployments/raiPolicy.*.
+notes: >-
+  Whether an omitted raiPolicyName means Microsoft.DefaultV2 versus Microsoft.Default on model deployments is documented
+  only for 'models are assigned Microsoft.DefaultV2' (guardrails-overview). The agent default is documented as inheritance
+  from the model deployment. Preview data-plane Policy definitions use alias Microsoft.CognitiveServices.Data/accounts/deployments/raiPolicy.*.
+  The waf basis was removed after the Phase 0 Azure black belt review because no WAF pillar tag or WARA recommendation is
+  cited here; the WAF mapping is added in Phase 4 when the guidance is verified.

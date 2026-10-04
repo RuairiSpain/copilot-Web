@@ -1,17 +1,22 @@
 id: FND-OPS-001
 version: 1
 group: OPS
-title: "Diagnostic settings to Log Analytics"
+title: Diagnostic settings to Log Analytics
 description: >-
-  Each Foundry-stack resource that emits resource logs (Foundry/AI Services account and project, AI Search,
-  API Management, the Storage blob service used by the project, Cosmos DB account) should have an Azure Monitor
-  diagnostic setting that sends logs to a Log Analytics workspace, using a category group (allLogs or audit) or an
-  explicit list of categories that the resource type supports. Without a diagnostic setting the resource logs are
-  not collected and cannot be queried during an incident.
+  Each Foundry-stack resource that emits resource logs (Foundry/AI Services account and project, AI Search, API Management,
+  the Storage blob service used by the project, Cosmos DB account) should have an Azure Monitor diagnostic setting that
+  sends logs to a Log Analytics workspace, using a category group (allLogs or audit) or an explicit list of categories that
+  the resource type supports. Without a diagnostic setting the resource logs are not collected and cannot be queried during
+  an incident.
 status: verified
-phases: ["4"]
-inputs: ["bicep-arm", "control-plane"]
-basis: ["operations", "waf"]
+phases:
+- '4'
+inputs:
+- bicep-arm
+- control-plane
+basis:
+- operations
+- waf
 category: must-have
 pillar: operations
 severity:
@@ -19,33 +24,39 @@ severity:
   test: warning
   prod: error
 compatibility:
-  azd: ">=1.27.1"
+  azd: '>=1.34.2 <=1.36.0-beta.1'
   extensions: {}
-  apiVersions: ["2021-05-01-preview"]
+  apiVersions:
+  - 2021-05-01-preview
+  preview: true
+  notes: >-
+    azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects
+    beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from
+    a changelog and was not verified.
 evidence:
   description: >-
-    Offline: in the compiled ARM template, for each in-scope resource (Microsoft.CognitiveServices/accounts,
-    Microsoft.CognitiveServices/accounts/projects, Microsoft.Search/searchServices, Microsoft.ApiManagement/service,
-    Microsoft.Storage/storageAccounts/blobServices, Microsoft.DocumentDB/databaseAccounts) find a
-    Microsoft.Insights/diagnosticSettings resource whose scope resolves to it, whose properties.workspaceId resolves
-    to a Microsoft.OperationalInsights/workspaces resource or a non-empty resource ID, and whose properties.logs has
-    at least one enabled entry that uses categoryGroup allLogs or audit, or a category listed for that resource type
-    in the Azure Monitor supported-logs reference (accounts: Audit, RequestResponse, Trace, AzureOpenAIRequestUsage,
-    ManagedNetworkEvent; projects: Audit, Trace; searchServices: OperationLogs; ApiManagement service:
-    GatewayLogs, GatewayLlmLogs, GatewayMCPLogs, WebSocketConnectionLogs, DeveloperPortalAuditLogs; blobServices:
-    StorageRead, StorageWrite, StorageDelete; DatabaseAccounts: DataPlaneRequests, ControlPlaneRequests,
-    QueryRuntimeStatistics, PartitionKeyStatistics, PartitionKeyRUConsumption and the API-specific categories).
-    Report: no setting; setting without a Log Analytics destination; setting with metrics only; a category name not in
-    the supported list for the type; more than five settings on one resource. When the control plane is available,
-    list diagnosticSettings on the deployed resource to cover settings created outside the repository (for example
-    by Azure Policy DeployIfNotExists). Category tables are dated reference data (page date 2026-08-21, Cosmos
-    2026-09-15) and are refreshed with the catalogue, not hard-coded in logic.
+    Offline: in the compiled ARM template, for each in-scope resource (Microsoft.CognitiveServices/accounts, Microsoft.CognitiveServices/accounts/projects,
+    Microsoft.Search/searchServices, Microsoft.ApiManagement/service, Microsoft.Storage/storageAccounts/blobServices, Microsoft.DocumentDB/databaseAccounts)
+    find a Microsoft.Insights/diagnosticSettings resource whose scope resolves to it, whose properties.workspaceId resolves
+    to a Microsoft.OperationalInsights/workspaces resource or a non-empty resource ID, and whose properties.logs has at
+    least one enabled entry that uses categoryGroup allLogs or audit, or a category listed for that resource type in the
+    Azure Monitor supported-logs reference (accounts: Audit, RequestResponse, Trace, AzureOpenAIRequestUsage, ManagedNetworkEvent;
+    projects: Audit, Trace; searchServices: OperationLogs; ApiManagement service: GatewayLogs, GatewayLlmLogs, GatewayMCPLogs,
+    WebSocketConnectionLogs, DeveloperPortalAuditLogs; blobServices: StorageRead, StorageWrite, StorageDelete; DatabaseAccounts:
+    DataPlaneRequests, ControlPlaneRequests, QueryRuntimeStatistics, PartitionKeyStatistics, PartitionKeyRUConsumption and
+    the API-specific categories). Report: no setting; setting without a Log Analytics destination; setting with metrics
+    only; a category name not in the supported list for the type; more than five settings on one resource. When the control
+    plane is available, list diagnosticSettings on the deployed resource to cover settings created outside the repository
+    (for example by Azure Policy DeployIfNotExists). Category tables are dated reference data (page date 2026-08-21, Cosmos
+    2026-09-15) and are refreshed with the catalogue, not hard-coded in logic. Report skipped, with the reason 'policy-managed',
+    when the profile declares that this setting is created after deployment by an Azure Policy DeployIfNotExists assignment
+    (common in landing zones); template-only evidence cannot see those resources.
   confidence: likely
 recommendation: >-
-  Add a Microsoft.Insights/diagnosticSettings resource per resource, scoped to the resource, that sends the audit
-  category group (or allLogs when you need request and response diagnostics) to your Log Analytics workspace. Use
-  audit as a low-cost start because several categories (for example AzureOpenAIRequestUsage and ManagedNetworkEvent
-  on accounts, and all project categories) are marked as having a cost to export in the Azure Monitor reference.
+  Add a Microsoft.Insights/diagnosticSettings resource per resource, scoped to the resource, that sends the audit category
+  group (or allLogs when you need request and response diagnostics) to your Log Analytics workspace. Use audit as a low-cost
+  start because several categories (for example AzureOpenAIRequestUsage and ManagedNetworkEvent on accounts, and all project
+  categories) are marked as having a cost to export in the Azure Monitor reference.
 fix: |
   resource diag 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
     name: 'to-law'
@@ -58,41 +69,50 @@ fix: |
     }
   }
 sources:
-  - url: https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-cognitiveservices-accounts-logs
-    lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-monitor-docs/articles/azure-monitor/reference/supported-logs/microsoft-cognitiveservices-accounts-logs.md
-    note: Categories Audit, AzureOpenAIRequestUsage, ManagedNetworkEvent, RequestResponse, Trace; all land in AzureDiagnostics. Page ms.date 08/21/2026. Companion pages read for projects, searchServices, ApiManagement service, storageAccounts/blobServices and DocumentDB/DatabaseAccounts.
-  - url: https://learn.microsoft.com/azure/azure-monitor/data-collection/diagnostic-settings
-    lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-monitor-docs/articles/azure-monitor/data-collection/diagnostic-settings.md
-    note: Up to five diagnostic settings per resource; category groups allLogs and audit; one destination of each type per setting; Bicep sample with workspaceId, categoryGroup and enabled (apiVersion 2021-05-01-preview). Page ms.date 03/31/2026.
-  - url: https://github.com/Azure/azure-policy/blob/master/built-in-policies/policyDefinitions/Monitoring/DS_LA_cognitiveservices-accounts_DINE.json
-    lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-policy/built-in-policies/policyDefinitions/Monitoring/DS_LA_cognitiveservices-accounts_DINE.json
-    note: Built-in DeployIfNotExists policy 55d1f543-d1b0-4811-9663-d6d0dbc6326d (category group audit or allLogs to Log Analytics); sibling definitions read for Search, APIM, Cosmos and Blob services.
+- url: >-
+    https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-cognitiveservices-accounts-logs
+  lastVerified: '2026-10-04'
+  verifiedVia: >-
+    refs/azure-monitor-docs/articles/azure-monitor/reference/supported-logs/microsoft-cognitiveservices-accounts-logs.md
+  note: >-
+    Categories Audit, AzureOpenAIRequestUsage, ManagedNetworkEvent, RequestResponse, Trace; all land in AzureDiagnostics.
+    Page ms.date 08/21/2026. Companion pages read for projects, searchServices, ApiManagement service, storageAccounts/blobServices
+    and DocumentDB/DatabaseAccounts.
+- url: https://learn.microsoft.com/azure/azure-monitor/data-collection/diagnostic-settings
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-monitor-docs/articles/azure-monitor/data-collection/diagnostic-settings.md
+  note: >-
+    Up to five diagnostic settings per resource; category groups allLogs and audit; one destination of each type per setting;
+    Bicep sample with workspaceId, categoryGroup and enabled (apiVersion 2021-05-01-preview). Page ms.date 03/31/2026.
+- url: >-
+    https://github.com/Azure/azure-policy/blob/master/built-in-policies/policyDefinitions/Monitoring/DS_LA_cognitiveservices-accounts_DINE.json
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-policy/built-in-policies/policyDefinitions/Monitoring/DS_LA_cognitiveservices-accounts_DINE.json
+  note: >-
+    Built-in DeployIfNotExists policy 55d1f543-d1b0-4811-9663-d6d0dbc6326d (category group audit or allLogs to Log Analytics);
+    sibling definitions read for Search, APIM, Cosmos and Blob services.
 overlap:
   decision: adapt
   coverage: partial
   rationale: >-
-    Azure Policy has DeployIfNotExists and AuditIfNotExists definitions per resource type (for example
-    55d1f543-d1b0-4811-9663-d6d0dbc6326d for Foundry/Cognitive Services accounts, 8def4bdd-4362-4ed6-a26f-7bf8f2c58839
-    for Search, 567c93f7-3661-494f-a30f-0a94d9bfebf8 for API Management, 68ba9fc9-71b9-4e6f-9cf5-ecc07722324c for
-    Cosmos DB, b4fe1a3b-0715-4c6c-a5ea-ffc33cf823cb for Blob services, and 1b4d1c4e-934c-4703-944c-27c82c06bebb which
-    audits that any log entry exists for accounts and Search). They evaluate deployed resources after the fact and
-    one type at a time. No PSRule rule for these resource types checks diagnostic settings (PSRule has such rules for
-    other types, for example Azure.KeyVault.Logs). Foundry Doctor reuses the idea and adds a pre-deployment check on the
-    compiled template, correlation across the Foundry stack (account, project, Search, APIM, Storage, Cosmos) to one
-    workspace, and category validation against the supported-logs reference. Defender for Cloud and Advisor
-    recommendations were not verifiable (see fragment).
+    Azure Policy has DeployIfNotExists and AuditIfNotExists definitions per resource type (for example 55d1f543-d1b0-4811-9663-d6d0dbc6326d
+    for Foundry/Cognitive Services accounts, 8def4bdd-4362-4ed6-a26f-7bf8f2c58839 for Search, 567c93f7-3661-494f-a30f-0a94d9bfebf8
+    for API Management, 68ba9fc9-71b9-4e6f-9cf5-ecc07722324c for Cosmos DB, b4fe1a3b-0715-4c6c-a5ea-ffc33cf823cb for Blob
+    services, and 1b4d1c4e-934c-4703-944c-27c82c06bebb which audits that any log entry exists for accounts and Search).
+    They evaluate deployed resources after the fact and one type at a time. No PSRule rule for these resource types checks
+    diagnostic settings (PSRule has such rules for other types, for example Azure.KeyVault.Logs). Foundry Doctor reuses
+    the idea and adds a pre-deployment check on the compiled template, correlation across the Foundry stack (account, project,
+    Search, APIM, Storage, Cosmos) to one workspace, and category validation against the supported-logs reference. Defender
+    for Cloud and Advisor recommendations were not verifiable (see fragment).
   psrule: []
   azurePolicy:
-    - 55d1f543-d1b0-4811-9663-d6d0dbc6326d
-    - 1b4d1c4e-934c-4703-944c-27c82c06bebb
-    - 8def4bdd-4362-4ed6-a26f-7bf8f2c58839
-    - b4330a05-a843-4bc8-bf9a-cacce50c67f4
-    - 567c93f7-3661-494f-a30f-0a94d9bfebf8
-    - 68ba9fc9-71b9-4e6f-9cf5-ecc07722324c
-    - b4fe1a3b-0715-4c6c-a5ea-ffc33cf823cb
+  - 55d1f543-d1b0-4811-9663-d6d0dbc6326d
+  - 1b4d1c4e-934c-4703-944c-27c82c06bebb
+  - 8def4bdd-4362-4ed6-a26f-7bf8f2c58839
+  - b4330a05-a843-4bc8-bf9a-cacce50c67f4
+  - 567c93f7-3661-494f-a30f-0a94d9bfebf8
+  - 68ba9fc9-71b9-4e6f-9cf5-ecc07722324c
+  - b4fe1a3b-0715-4c6c-a5ea-ffc33cf823cb
   defender: []
   advisor: []
   bicepLinter: []
@@ -101,27 +121,30 @@ implementation:
   owner: native
   package: internal/rules/ops
 testability: >-
-  Offline against fixture ARM JSON for each resource type; control-plane listing is a recorded-response test. Category
-  reference data is a versioned table with a test that fails when its date is older than the configured freshness window.
+  Offline against fixture ARM JSON for each resource type; control-plane listing is a recorded-response test. Category reference
+  data is a versioned table with a test that fails when its date is older than the configured freshness window.
 tests:
   positive:
-    - foundry-account-without-diagnostic-setting
-    - diagnostic-setting-with-metrics-only
-    - diagnostic-setting-sends-to-storage-only
-    - category-not-supported-for-resource-type
-    - search-service-without-operationlogs
-    - more-than-five-settings-on-one-resource
+  - foundry-account-without-diagnostic-setting
+  - diagnostic-setting-with-metrics-only
+  - diagnostic-setting-sends-to-storage-only
+  - category-not-supported-for-resource-type
+  - search-service-without-operationlogs
+  - more-than-five-settings-on-one-resource
   negative:
-    - account-audit-category-group-to-log-analytics
-    - project-and-account-allLogs-to-same-workspace
-    - explicit-supported-categories-to-workspace
+  - account-audit-category-group-to-log-analytics
+  - project-and-account-allLogs-to-same-workspace
+  - explicit-supported-categories-to-workspace
   skipped:
-    - resource-declared-as-existing
-    - module-not-compiled
-    - workspace-id-is-unresolved-parameter
-    - control-plane-unavailable-policy-may-deploy-setting
+  - resource-declared-as-existing
+  - module-not-compiled
+  - workspace-id-is-unresolved-parameter
+  - control-plane-unavailable-policy-may-deploy-setting
+  - diagnostic-settings-managed-by-policy
 notes: >-
-  Basis is a Well-Architected style recommendation (operations), not a platform error: The Well-Architected guidance text itself was not read (the source repository is not public); the expectation rests on the Microsoft documentation and built-in policy definitions cited. the sources state which
-  categories exist and the limits, not that a missing setting is invalid. Unverified: the Learn page for the Cosmos
-  list is dated 09/15/2026 while others are 08/21/2026; the table is re-read at catalogue refresh. Whether Foundry
-  projects emit logs independently of the account setting was not established; both are checked separately.
+  Basis is a Well-Architected style recommendation (operations), not a platform error: The Well-Architected guidance text
+  itself was not read (the source repository is not public); the expectation rests on the Microsoft documentation and built-in
+  policy definitions cited. the sources state which categories exist and the limits, not that a missing setting is invalid.
+  Unverified: the Learn page for the Cosmos list is dated 09/15/2026 while others are 08/21/2026; the table is re-read at
+  catalogue refresh. Whether Foundry projects emit logs independently of the account setting was not established; both are
+  checked separately.

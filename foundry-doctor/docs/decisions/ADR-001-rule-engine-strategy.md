@@ -16,21 +16,23 @@ and Checkov (`docs/overlap-analysis.md`, `docs/overlap/*.md`). Result, from the 
 | Decision | Rules | Meaning |
 |---|---|---|
 | native | 68 | No equivalent, or Foundry-specific correlation is the whole value. |
-| adapt | 37 | A lower-level check exists for the same property. We write our own code for the Foundry value: scoping to resources a project uses, cross-file correlation, per-profile severity, one evidence model. |
-| wrap | 2 | Run an existing tool and normalise its output (FND-SEC-014 via the Bicep linter, FND-DEP-009 via the Policy restrictions API). |
-| reuse | 1 | An existing tool already gives equivalent evidence; we map its ID (FND-SEC-005). |
+| adapt | 38 | A lower-level check exists for the same property. We write our own code for the Foundry value: scoping to resources a project uses, cross-file correlation, per-profile severity, one evidence model. |
+| wrap | 1 | Run an existing tool and normalise its output (FND-SEC-014 via the Bicep linter). |
+| reuse | 1 | An existing tool already gives equivalent evidence; we map its ID (FND-SEC-005, owner PSRule). |
 | drop | 0 | |
 
-86 rules are verified against a primary source and 22 are labelled product opinion.
+85 rules are verified against a primary source and 23 are labelled product opinion.
 
 ## Decision
 
-1. **Native Go engine owns pass/fail.** All `native` and `adapt` rules (105 of 108) are Go code in `internal/rules/<group>`.
+1. **Native Go engine owns pass/fail.** All `native` and `adapt` rules (106 of 108) are Go code in `internal/rules/<group>`.
    Their implementation owner in the catalogue is `native`. The catalogue validator enforces this.
 2. **External tools are adapters behind one interface** (`ExternalRuleAdapter`, owned by the consumer in `internal/adapters`).
    They produce normalised `Finding` records with `Adapter` set. Adapters never decide severity; the profile does.
 3. **Only `wrap` and `reuse` rules depend on an external owner.** `wrap` and `reuse` rules need the tool to be present for that
-   rule; when it is not, the rule is reported as skipped, never passed.
+   rule; when it is not, the rule is reported as skipped, never passed. Concretely, FND-SEC-005 (reuse, PSRule) never runs in a
+   Go-only install, and FND-SEC-014 (wrap, Bicep linter) runs whenever the Bicep CLI is present. Calls to Azure APIs such as
+   `checkPolicyRestrictions` (FND-DEP-009, `adapt`) are not adapters: they go through the native Azure client under ADR-006.
 4. **No bundled runtimes.** PowerShell (PSRule), Python (Checkov) and Go (KICS) are detected, not shipped.
    The only required external dependency is the Bicep CLI, and only when Bicep checks are requested (ADR-002).
 5. **Canonical IDs and de-duplication.** Every external finding maps to at most one canonical `FND-*` rule through
@@ -55,7 +57,7 @@ and Checkov (`docs/overlap-analysis.md`, `docs/overlap/*.md`). Result, from the 
 
 ## Consequences
 
-- The MVP engine is Go-only for 105 rules and works offline without PowerShell or Python.
+- The MVP engine is Go-only for 106 rules and works offline without PowerShell or Python.
 - Adapter work in Phase 1 is limited to the optional PSRule adapter and the Bicep diagnostics path.
 - Catalogue metadata is the contract: `overlap.decision`, `implementation.owner` and the mapped external IDs drive
   de-duplication, so they must be kept accurate (CI runs `scripts/claude/check-rule-catalog.sh`).

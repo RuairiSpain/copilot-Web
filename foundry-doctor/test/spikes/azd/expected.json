@@ -9,10 +9,25 @@
       "note": "${AZURE_LOCATION} resolves from .azure/dev/.env"
     },
     "invalid-duplicate-and-unresolved": {
-      "duplicateKeys": [{"path": "services.assistant.name", "occurrences": 2}],
-      "unresolvedEnvRefs": [{"path": "services.assistant.env.EXAMPLE_SETTING", "name": "EXAMPLE_MISSING_VAR"}],
-      "unresolvedUses": [{"path": "services.assistant.uses[0]", "value": "ai-projct"}],
-      "note": "A lossless AST reader must report all three; a decode-to-map reader may silently keep the last duplicate."
+      "duplicateKeys": [
+        {
+          "path": "services.assistant.name",
+          "occurrences": 2
+        }
+      ],
+      "unresolvedEnvRefs": [
+        {
+          "path": "services.assistant.env.EXAMPLE_SETTING",
+          "name": "EXAMPLE_MISSING_VAR"
+        }
+      ],
+      "unresolvedUses": [
+        {
+          "path": "services.assistant.uses[0]",
+          "value": "ai-projct"
+        }
+      ],
+      "note": "A lossless AST reader must report all three. go.yaml.in/yaml/v3 rejects the duplicate key when decoding into a map (without a location) and parses it into a node AST, so the AST route is the one that gives every occurrence and its line; some other YAML libraries keep the last value silently."
     }
   }
 }

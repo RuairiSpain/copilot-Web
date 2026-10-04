@@ -19,11 +19,13 @@ severity:
   test: error
   prod: error
 compatibility:
-  azd: ">=1.27.1"
+  azd: ">=1.34.2 <=1.36.0-beta.1"
   extensions:
-    azure.ai.agents: ">=1.0.0-beta.8"
-    azure.ai.connections: ">=1.0.0-beta.9"
+    azure.ai.agents: ">=1.0.0-beta.18 <=1.0.0-beta.18"
+    azure.ai.connections: ">=1.0.0-beta.9 <=1.0.0-beta.9"
   apiVersions: []
+  preview: true
+  notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from a changelog and was not verified. Extension ranges are exactly the versions whose schemas or source were read; widen them in Phase 1 by reading older tags."
 evidence:
   description: >-
     Structural check, not entropy only: for azure.ai.connection with authType in the secret-bearing set

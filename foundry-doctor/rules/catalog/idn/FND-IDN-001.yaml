@@ -23,12 +23,14 @@ severity:
   test: warning
   prod: error
 compatibility:
-  azd: "not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked)"
+  azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.CognitiveServices/accounts@2026-09-01 (identity.type: None, SystemAssigned, UserAssigned, SystemAssigned, UserAssigned)"
-    - "Microsoft.CognitiveServices/accounts/projects@2026-09-01 (identity, same type)"
-    - "Microsoft.CognitiveServices/accounts/projects/connections@2026-09-01 (ConnectionAuthType incl. ProjectManagedIdentity, AccountManagedIdentity)"
+    - "Microsoft.CognitiveServices/accounts 2026-09-01"
+    - "Microsoft.CognitiveServices/accounts/projects 2026-09-01"
+    - "Microsoft.CognitiveServices/accounts/projects/connections 2026-09-01"
+  preview: false
+  notes: "Not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked) Microsoft.CognitiveServices/accounts 2026-09-01: identity.type: None, SystemAssigned, UserAssigned, SystemAssigned, UserAssigned. Microsoft.CognitiveServices/accounts/projects 2026-09-01: identity, same type. Microsoft.CognitiveServices/accounts/projects/connections 2026-09-01: ConnectionAuthType incl. ProjectManagedIdentity, AccountManagedIdentity."
 evidence:
   description: >-
     For each Microsoft.CognitiveServices/accounts and accounts/projects resource, read identity.type.
