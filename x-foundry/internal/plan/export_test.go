@@ -1,6 +1,8 @@
 package plan_test
 
 import (
+	"bytes"
+	"os"
 	"reflect"
 	"strings"
 )
@@ -18,4 +20,11 @@ func jsonKeys(v any) map[string]bool {
 		}
 	}
 	return out
+}
+
+func jsonReader(b []byte) *bytes.Reader { return bytes.NewReader(b) }
+
+func readFile(path string) (string, error) {
+	b, err := os.ReadFile(path)
+	return string(b), err
 }
