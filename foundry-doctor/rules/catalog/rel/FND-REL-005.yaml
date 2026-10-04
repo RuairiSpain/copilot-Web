@@ -1,6 +1,102 @@
 id: FND-REL-005
 version: 1
 group: REL
-title: "Search sizing within platform limits"
-status: proposed
-phases: ["1"]
+title: Search sizing within platform limits
+description: 'The replica and partition configuration of an Azure AI Search service must be a combination the platform allows:
+  partitionCount one of 1, 2, 3, 4, 6 or 12; replicaCount within 1..12 (1..3 on basic); replicas x partitions within the 36
+  search unit maximum on standard and above; and at most 3 partitions when hostingMode is HighDensity. These are documented
+  platform constraints, so violations are errors in every profile.'
+status: verified
+phases:
+- '1'
+inputs:
+- bicep-arm
+- control-plane
+basis:
+- platform
+category: must-have
+pillar: reliability
+severity:
+  dev: error
+  test: error
+  prod: error
+compatibility:
+  azd: n/a (reads compiled ARM JSON or ARM control plane)
+  extensions: {}
+  apiVersions:
+  - Microsoft.Search/searchServices 2025-05-01 (stable) - search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
+evidence:
+  description: 'Compiled ARM or live Microsoft.Search/searchServices. Read sku.name, properties.replicaCount, properties.partitionCount,
+    properties.hostingMode. Findings (each is a documented constraint): (a) partitionCount not in {1,2,3,4,6,12} (spec and
+    capacity article); (b) replicaCount above 12, or above 3 when sku.name is ''basic'' (spec); (c) replicaCount x partitionCount
+    above 36 on standard SKUs and above (capacity article; the 12x12, 4 replicas x 12 partitions etc. combinations are N/A
+    in its table); (d) hostingMode HighDensity with a SKU other than standard3, or with partitionCount above 3 (spec). Not
+    asserted, reported as uncertain: partitionCount above 1 on basic. The spec says values above 1 are only valid for standard
+    SKUs, but the limits and capacity articles say Basic services created after April 3, 2024 in supported regions can have
+    3 partitions (9 SU), older Basic services 1 partition (3 SU), and the subscription-limits table in the same article lists
+    3 SU for Basic. Service creation date and region are not visible in compiled ARM. Also not asserted: replica/partition
+    values for ''free'' and ''serverless'' (documented as N/A).'
+  confidence: certain
+recommendation: Choose a partitionCount from 1, 2, 3, 4, 6 or 12 and a replicaCount of 12 or fewer (3 or fewer on basic),
+  keep replicas x partitions at or below 36 search units, and use hostingMode HighDensity only with standard3 and at most
+  3 partitions. See the partition and replica combinations table in the capacity planning article.
+fix: "resource search 'Microsoft.Search/searchServices@2025-05-01' = {\n  name: searchName\n  location: location\n  sku: {\
+  \ name: 'standard' }\n  properties: {\n    replicaCount: 3\n    partitionCount: 2   // 6 search units, within the 36 SU\
+  \ limit\n  }\n}"
+sources:
+- url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/rest-api-specs/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
+  note: SearchServiceProperties.replicaCount, partitionCount, hostingMode and Sku.name descriptions.
+- url: https://learn.microsoft.com/azure/search/search-limits-quotas-capacity
+  lastVerified: '2026-10-04'
+  verifiedVia: https://raw.githubusercontent.com/MicrosoftDocs/azure-ai-docs/main/articles/search/search-limits-quotas-capacity.md
+  note: Service limits and SLA replica counts.
+- url: https://learn.microsoft.com/azure/search/search-capacity-planning
+  lastVerified: '2026-10-04'
+  verifiedVia: https://raw.githubusercontent.com/MicrosoftDocs/azure-ai-docs/main/articles/search/search-capacity-planning.md
+  note: Partition and replica combinations, 36 SU maximum, Basic SU limits by creation date.
+- url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.Search.SKU/
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/psrule/docs/en/rules/Azure.Search.SKU.md
+  note: Overlap source (PSRule for Azure rule documentation).
+overlap:
+  decision: native
+  coverage: none
+  rationale: PSRule Azure.Search.SKU only recommends basic or higher over free, and Azure.Search.QuerySLA/IndexSLA check minimum
+    replicas for the SLA, not upper limits or valid combinations. No Azure Policy built-in, Checkov check, Defender recommendation
+    or Bicep linter rule tests partition values or the 36 SU cap. This is a deployment-feasibility preflight check, so it
+    is native.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/rel
+tests:
+  positive:
+  - standard, replicaCount 3, partitionCount 2 passes
+  - standard, replicaCount 12, partitionCount 3 (36 SU) passes
+  - standard3 HighDensity with partitionCount 3 passes
+  negative:
+  - partitionCount 5 fails
+  - replicaCount 13 fails
+  - basic with replicaCount 4 fails
+  - standard replicaCount 4 and partitionCount 12 (48 SU) fails
+  - standard HighDensity fails
+  - standard3 HighDensity with partitionCount 4 fails
+  skipped:
+  - 'replicaCount and partitionCount absent: defaults apply, nothing to check'
+  - 'free or serverless SKU: documented N/A, skipped with reason'
+  uncertain:
+  - 'basic with partitionCount above 1: depends on service creation date and region, reported uncertain'
+  - values supplied by unresolved parameter expressions
+testability: Pure table-driven unit tests over (sku, replicas, partitions, hostingMode); no network.
+notes: 'Extension for a later phase: subscription quota (max services per region, for example 16 for Basic and S1 per the
+  limits article) and index/indexer counts per tier need live data and are not part of this rule. Doc inconsistency to report
+  to the Learn owners: Basic is 3 SU in the subscription table and 9 SU in the capacity article for newer services. SKU letter
+  names (S1/S2/S3) were not mapped to ARM sku.name values because no source read maps them explicitly; the checks above only
+  depend on ''basic'' and ''standard3''.'

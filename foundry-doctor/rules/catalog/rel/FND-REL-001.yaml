@@ -1,6 +1,100 @@
 id: FND-REL-001
 version: 1
 group: REL
-title: "Search replica/SLA posture"
-status: proposed
-phases: ["4"]
+title: Search replica/SLA posture
+description: 'An Azure AI Search service that backs a Foundry project should have enough replicas to qualify for the Azure
+  AI Search SLA: two or more replicas for query workloads, three or more for query and indexing workloads, on a billable tier.
+  The SLA replica counts are documented platform facts; the expectation that a given environment must meet them is a WAF/WARA
+  recommendation, so severity is a warning at most.'
+status: verified
+phases:
+- '4'
+inputs:
+- bicep-arm
+- control-plane
+basis:
+- reliability
+- waf
+- wara
+category: nice-to-have
+pillar: reliability
+severity:
+  dev: info
+  test: info
+  prod: warning
+compatibility:
+  azd: n/a (reads compiled ARM JSON or ARM control plane)
+  extensions: {}
+  apiVersions:
+  - Microsoft.Search/searchServices 2025-05-01 (stable) - search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
+evidence:
+  description: 'Compiled ARM or live Microsoft.Search/searchServices referenced by a Foundry connection or capability host.
+    Compare properties.replicaCount (spec default 1 when unset) with 2 (query SLA) and 3 (query and index SLA), and sku.name
+    with ''free'' (docs: Free services share resources and have no replicas). Finding: replicaCount below 2 on a billable
+    SKU (no query SLA); info-level note when 2 (query SLA only, no index-update SLA). Not evidence: whether the workload indexes
+    at runtime. Replicas assigned to availability zones is a WARA statement (pgVerified false) and is not asserted by this
+    rule.'
+  confidence: certain
+recommendation: Set properties.replicaCount to at least 2 if the application only queries, or at least 3 if it also updates
+  indexes online. Each replica adds search units and cost, so keep dev and test at 1 unless you are testing failover behaviour.
+fix: "resource search 'Microsoft.Search/searchServices@2025-05-01' = {\n  name: searchName\n  location: location\n  sku: {\
+  \ name: 'standard' }\n  properties: {\n    replicaCount: 3\n    partitionCount: 1\n  }\n}"
+sources:
+- url: https://learn.microsoft.com/azure/search/search-limits-quotas-capacity
+  lastVerified: '2026-10-04'
+  verifiedVia: https://raw.githubusercontent.com/MicrosoftDocs/azure-ai-docs/main/articles/search/search-limits-quotas-capacity.md
+  note: Service limits and SLA replica counts.
+- url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/rest-api-specs/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
+  note: SearchServiceProperties.replicaCount, partitionCount, hostingMode and Sku.name descriptions.
+- url: https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/Search/searchServices/recommendations.yaml
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/wara (git show HEAD:azure-resources/Search/searchServices/recommendations.yaml)
+  note: WARA b376281d-bfec-4695-8f90-9a44544fdfa4 (replicas for AZ support) and dff62efe-c3a3-4621-98b3-c877c65cb195 (multi-region);
+    both pgVerified false.
+- url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.Search.QuerySLA/
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/psrule/docs/en/rules/Azure.Search.QuerySLA.md
+  note: Overlap source (PSRule for Azure rule documentation).
+- url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.Search.IndexSLA/
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/psrule/docs/en/rules/Azure.Search.IndexSLA.md
+  note: Overlap source (PSRule for Azure rule documentation).
+overlap:
+  decision: adapt
+  coverage: partial
+  rationale: 'PSRule Azure.Search.QuerySLA (2 replicas) and Azure.Search.IndexSLA (3 replicas), and Checkov CKV_AZURE_209
+    and CKV_AZURE_208, test the same replicaCount thresholds on compiled templates. Foundry Doctor adds: scoping to search
+    services a Foundry project actually uses (connection or capability host), live replicaCount from the control plane, and
+    per-profile severity so dev stays informational. If those are not delivered, downgrade to reuse. Checkov and PSRule treat
+    an unset replicaCount differently from the spec default of 1; the Foundry Doctor rule applies the spec default.'
+  psrule:
+  - Azure.Search.QuerySLA
+  - Azure.Search.IndexSLA
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov:
+  - CKV_AZURE_209
+  - CKV_AZURE_208
+implementation:
+  owner: native
+  package: internal/rules/rel
+tests:
+  positive:
+  - standard SKU with replicaCount 3 passes
+  - standard SKU with replicaCount 2 passes query SLA check and reports index-update note at info
+  negative:
+  - standard SKU with replicaCount 1 reports no query SLA
+  - standard SKU with replicaCount unset (default 1) reports no query SLA
+  skipped:
+  - 'free SKU: SLA does not apply, skipped with reason'
+  - 'search service not referenced by any Foundry connection: out of scope, skipped'
+  - 'no control-plane access in live mode: skipped with the missing capability'
+  uncertain:
+  - 'replicaCount is an unresolved Bicep parameter expression: uncertain, not failed'
+testability: Unit tests on compiled ARM fixtures; live mode tests use recorded control-plane responses.
+notes: 'Basis is waf/wara, not platform: the SLA thresholds are documented, but a lower replica count deploys fine. Free tier
+  statement comes from the limits article. Availability zone placement of replicas is not asserted (WARA text only).'

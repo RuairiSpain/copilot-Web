@@ -1,6 +1,90 @@
 id: FND-REL-006
 version: 1
 group: REL
-title: "Gateway retry/circuit breaker"
-status: proposed
-phases: ["8"]
+title: Gateway retry/circuit breaker
+description: 'An API Management instance fronting Foundry or Azure OpenAI model backends should configure resilience for 429
+  and 5xx responses: a backend circuit breaker rule, and/or a retry policy. Learn recommends circuit breaker rules for Azure
+  OpenAI backends because 429 responses can carry a large Retry-After value. WAF recommendation; the circuitBreaker property
+  exists only in preview API versions.'
+status: verified
+phases:
+- '8'
+inputs:
+- bicep-arm
+- control-plane
+basis:
+- reliability
+- waf
+category: nice-to-have
+pillar: reliability
+severity:
+  dev: info
+  test: info
+  prod: warning
+compatibility:
+  azd: n/a (reads compiled ARM JSON or ARM control plane)
+  extensions: {}
+  apiVersions:
+  - Microsoft.ApiManagement/service/backends properties.circuitBreaker verified in 2025-09-01-preview (openapi.json, also
+    present in 2022-09-01-preview to 2024-10-01-preview definitions); absent from stable 2024-05-01 (apimbackends.json has
+    no circuitBreaker match)
+evidence:
+  description: 'Compiled ARM or live Microsoft.ApiManagement/service/backends whose url points at a Foundry or Azure OpenAI
+    endpoint (or a backend pool containing one). Finding 1: properties.circuitBreaker.rules is absent or empty (Learn: one
+    rule per backend is supported; not supported on the Consumption tier). Secondary evidence, confidence likely: a Microsoft.ApiManagement/service/apis/policies
+    (or operations/policies, products/policies) resource whose XML contains a retry element. Policy XML can be assembled from
+    fragments or named values, so a missing retry element yields uncertain, not fail, when fragments are referenced. Preview-schema
+    caveat: rule is skipped with reason when the template uses a stable API version that does not define circuitBreaker.'
+  confidence: likely
+recommendation: Add a circuit breaker rule to the backend that points at the model endpoint, trip on 429 and 5xx, and let
+  it accept Retry-After. Keep API-level retry for transient errors only, with a bounded count, because API Management circuit
+  breaker rules are approximate across gateway instances.
+fix: "resource backend 'Microsoft.ApiManagement/service/backends@2025-09-01-preview' = {\n  parent: apim\n  name: 'foundry-backend'\n\
+  \  properties: {\n    url: 'https://<foundry-endpoint>/openai'\n    protocol: 'http'\n    circuitBreaker: {\n      rules:\
+  \ [\n        {\n          name: 'trip-on-throttle-and-errors'\n          failureCondition: {\n            count: 3\n   \
+  \         interval: 'PT1M'\n            statusCodeRanges: [ { min: 429, max: 429 }, { min: 500, max: 599 } ]\n         \
+  \ }\n          tripDuration: 'PT1M'\n          acceptRetryAfter: true\n        }\n      ]\n    }\n  }\n}"
+sources:
+- url: https://learn.microsoft.com/azure/api-management/backends
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-docs/articles/api-management/backends.md
+  note: 'Circuit breaker section: one rule per backend, not on Consumption tier, approximate across instances, Azure OpenAI
+    429 Retry-After guidance, Bicep example with API 2023-09-01-preview.'
+- url: https://learn.microsoft.com/azure/api-management/retry-policy
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-docs/articles/api-management/retry-policy.md
+  note: Retry policy reference (ms.date 09/11/2025).
+- url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/preview/2025-09-01-preview/openapi.json
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/rest-api-specs/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/preview/2025-09-01-preview/openapi.json
+  note: BackendCircuitBreaker.rules, CircuitBreakerRule (name, failureCondition, tripDuration, acceptRetryAfter), CircuitBreakerFailureCondition
+    (count, percentage, interval, statusCodeRanges).
+overlap:
+  decision: native
+  coverage: none
+  rationale: No PSRule for Azure rule (Azure.APIM.* has none for circuit breaker or retry), Azure Policy built-in, Checkov
+    check or WARA APIM recommendation covers backend circuit breakers or retry policies. Correlating the backend to a Foundry
+    or Azure OpenAI endpoint is the Foundry-specific value.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/rel
+tests:
+  positive:
+  - Foundry-targeting backend with a circuitBreaker rule passes
+  negative:
+  - Foundry-targeting backend with no circuitBreaker and no retry policy reports missing resilience
+  skipped:
+  - 'backend does not target Foundry or Azure OpenAI: out of scope'
+  - 'template uses stable API version without circuitBreaker: skipped, preview schema needed'
+  - 'Consumption tier: circuit breaker unsupported, skipped'
+  uncertain:
+  - 'policy XML references a policy fragment: retry element cannot be resolved, uncertain'
+testability: Unit tests on compiled ARM fixtures including preview API versions; policy XML tests use inline XML strings.
+notes: 'Phase 8 rule touching a preview schema: property names verified against API 2025-09-01-preview only. Re-verify before
+  release. The Learn example uses 2023-09-01-preview, which contains the same property.'
