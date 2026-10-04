@@ -2,7 +2,7 @@
 
 `XF001`-`XF025` are the numbered rules from the specification's "Required semantic
 validation outside JSON Schema". `XF1xx` codes cover parsing and checks beyond that list.
-Severity is *error* unless marked (w).
+Severity is *error* unless marked (w). Retired codes are not reused.
 
 ## Specification rules
 
@@ -21,15 +21,15 @@ Severity is *error* unless marked (w).
 | XF011 | `chunking.overlap` < `chunking.size` | effective |
 | XF012 | Hybrid weights sum to 1.0 | effective |
 | XF013 | Gateway endpoint paths (and project registrations) are unique | declared + effective |
-| XF014 | Gateway endpoint targets resolve to an agent, runtime, model, Search or knowledge base | effective |
+| XF014 | Gateway endpoint targets resolve to an agent, model, Search or knowledge base | effective |
 | XF015 | Gateway quota, limit and routing (backend) profile references exist | effective |
 | XF016 | Allowed and denied model sets do not overlap; deployments and agents respect them | declared + effective |
 | XF017 | Raw secret values are rejected; only Key Vault references | declared |
 | XF018 | Session-pool or agent-pool settings are rejected | parser |
-| XF019 | Redis is application caching only (no session settings) | parser |
+| XF019 | Retired (Redis is no longer part of the schema) | |
 | XF020 | Foundry IQ and the standard agent setup need Azure AI Search; the resolved Search is shown in the normalised config | normaliser |
 | XF021 | Private mode: no public access, identity enabled, DNS, internal gateway, no external ingress | declared + effective |
-| XF022 | Existing resources cannot carry creation settings; resource IDs must match the component type; registry modes | declared |
+| XF022 | Existing resources cannot carry creation settings; resource IDs must match the component type | declared |
 | XF023 | Region names, data residency, cross-region inheritance (w) | declared |
 | XF024 | Explicit names meet each Azure provider's constraints | declared |
 | XF025 | Destructive changes need approval | **Phase 3** (needs deployed state) |
@@ -44,13 +44,13 @@ Severity is *error* unless marked (w).
 | XF103 | Unsupported `schemaVersion` major |
 | XF104 | A tag in `governance.requiredTags` is missing for a project |
 | XF105 | Network mode `restricted` needs `allowedIps` or an existing VNet |
-| XF106 | Component public access or local auth contradicts the global setting; Redis service/SKU mismatch |
+| XF106 | Component public access or local auth contradicts the global setting |
 | XF107 | A component is disabled but required (storage for sources, ADLS needs hierarchical namespace) |
-| XF108 | Runtime: replicas, registry authentication, CPU/memory combination (w) |
-| XF109 | Event entity rules (parents, provider support) |
+| XF108 | Retired (the `runtime` section was removed) |
+| XF109 | Retired (the `events` section was removed) |
 | XF110 | Pydantic model validation (backstop behind JSON Schema) |
-| XF111 | Gateway: registration needs an enabled gateway, chargeback needs tracking, telemetry sink |
-| XF112 | Agent: prompt agents need a model, hosted agents need a source or runtime |
+| XF111 | Gateway: registration needs an enabled gateway, token tracking and the telemetry sink |
+| XF112 | Agent: prompt agents need a model, hosted agents need a source |
 | XF113 | Governance model policy (allowed/denied models, SKUs) |
 | XF114 | No administrators configured (w) |
 | XF115 | A project widens the allowed models it inherits |
@@ -62,14 +62,14 @@ Severity is *error* unless marked (w).
 | XF122 | Outbound endpoints (MCP, connector, web source, federated issuer) must be https and not loopback or link-local |
 | XF123 | Search sizing: per-SKU replica/partition limits, 36 search units, free tier has no private endpoints |
 | XF124 | Gateway SKU in private mode: Consumption unsupported; BasicV2 cannot reach private backends (w) |
-| XF125 | Azure Cache for Redis can no longer be created; use Azure Managed Redis |
+| XF125 | Retired (the `redis` section was removed) |
 | XF126 | Data residency forbids Global deployment SKUs (implicit deployments become `DataZoneStandard`) |
 | XF127 | Network addressing: VNet settings need private mode; `addressSpace` must be a private range with room for the agent subnet; existing-VNet subnets must belong to the VNet and be supplied for private endpoints and the standard setup |
 | XF128 | Agent service: `cosmos` needs the standard setup; the standard setup needs Storage, Cosmos DB and Search enabled; basic setup in private mode (w) |
-| XF129 | Service tiers: Service Bus Premium and Container Registry Premium for private endpoints; capacity and zone redundancy are Premium only; Basic Service Bus has queues only |
-| XF130 | Identity type: `systemAssigned` creates no user-assigned identity, so name, existing resource and federated credentials are rejected; image pull from the managed registry needs a user-assigned identity (w) |
+| XF129 | Retired (Service Bus and Container Registry are no longer in the schema) |
+| XF130 | Identity type: `systemAssigned` creates no user-assigned identity, so name, existing resource and federated credentials are rejected |
 | XF131 | Cosmos DB: throughput applies to provisioned capacity, not serverless |
-| XF132 | Runtime image has no pinned tag or digest, or uses `latest` (w) |
+| XF132 | Retired (the `runtime` section was removed) |
 
 ## Well-Architected recommendations (XF3xx, warnings)
 

@@ -54,7 +54,6 @@ type holder struct {
 	connectors []config.Connector
 	iq         *config.FoundryIQ
 	search     *config.Search
-	runtime    *config.Runtime
 	evaluation *config.Evaluation
 }
 
@@ -69,7 +68,7 @@ func scopes(cfg *config.XFoundry) []holder {
 	out := []holder{{
 		id: "root", path: root, models: &cfg.Models, agents: cfg.Agents, toolboxes: cfg.Toolboxes,
 		mcps: cfg.Mcps, connectors: cfg.Connectors, iq: cfg.IQ, search: cfg.Search,
-		runtime: cfg.Runtime, evaluation: cfg.Evaluation,
+		evaluation: cfg.Evaluation,
 	}}
 	if h := cfg.Hub; h != nil {
 		out = append(out, holder{
@@ -82,28 +81,8 @@ func scopes(cfg *config.XFoundry) []holder {
 		out = append(out, holder{
 			id: "project:" + p.Name, path: fmt.Sprintf("%s.projects[%s]", root, p.Name), project: p.Name,
 			models: &p.Models, agents: p.Agents, toolboxes: p.Toolboxes, mcps: p.Mcps, connectors: p.Connectors,
-			iq: p.IQ, search: p.Search, runtime: p.Runtime, evaluation: p.Evaluation,
+			iq: p.IQ, search: p.Search, evaluation: p.Evaluation,
 		})
-	}
-	return out
-}
-
-type runtimeRef struct {
-	path    string
-	runtime *config.Runtime
-}
-
-func runtimes(cfg *config.XFoundry) []runtimeRef {
-	var out []runtimeRef
-	for _, h := range scopes(cfg) {
-		if h.runtime != nil {
-			out = append(out, runtimeRef{h.path + ".runtime", h.runtime})
-		}
-		for _, a := range h.agents {
-			if a.Runtime != nil {
-				out = append(out, runtimeRef{fmt.Sprintf("%s.agents[%s].runtime", h.path, a.Name), a.Runtime})
-			}
-		}
 	}
 	return out
 }

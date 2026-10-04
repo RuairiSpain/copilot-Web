@@ -51,9 +51,7 @@ func TestRule2DuplicateNames(t *testing.T) {
 		{"project knowledge bases", "XF002", "projects[fin]", "knowledge base", y(`projects: [{name: fin, iq: {knowledgeBases: [{name: one, sources: [{name: s1, type: web, url: "https://x.example"}]}, {name: one, sources: [{name: s1, type: web, url: "https://x.example"}]}]}}]`)},
 		{"sources", "XF002", "sources", "knowledge source", y(`iq: {knowledgeBases: [{name: one, sources: [{name: s1, type: web, url: "https://x.example"}, {name: s1, type: web, url: "https://x.example"}]}]}`)},
 		{"endpoints", "XF002", "endpoints", "gateway endpoint", y(`gateway: {enabled: true, endpoints: [{name: ep1, path: /a, target: x, targetType: agent}, {name: ep1, path: /b, target: x, targetType: agent}]}`)},
-		{"events", "XF002", "entities", "event entity", y(`events: {enabled: true, entities: [{name: q1, type: queue}, {name: q1, type: queue}]}`)},
 		{"containers", "XF002", "containers", "storage container", y(`storage: {containers: [{name: abc}, {name: abc}]}`)},
-		{"scale rules", "XF002", "scale.rules", "scale rule", y(`runtime: {enabled: true, image: "i:1", scale: {rules: [{name: r1, type: http}, {name: r1, type: http}]}}`)},
 		{"datasets", "XF002", "datasets", "dataset", y(`evaluation: {datasets: [{name: d1, path: p}, {name: d1, path: p}]}`)},
 		{"hub mcps", "XF002", "hub.mcps", "MCP", y("topology: {mode: hub-spoke}\nhub: {name: shared, mcps: [{name: graph, endpoint: \"https://a.example\"}, {name: graph, endpoint: \"https://a.example\"}]}")},
 	})
@@ -84,7 +82,6 @@ func TestRule5UnknownProjects(t *testing.T) {
 		"toolbox":    `toolboxes: [{name: tb, project: nope, tools: [{name: t1, type: function, reference: f}]}]`,
 		"iq":         `iq: {project: nope, knowledgeBases: [{name: kb1, sources: [{name: s1, type: web, url: "https://x.example"}]}]}`,
 		"kb":         `iq: {knowledgeBases: [{name: kb1, project: nope, sources: [{name: s1, type: web, url: "https://x.example"}]}]}`,
-		"runtime":    `runtime: {enabled: true, image: "i:1", project: nope}`,
 		"evaluation": `evaluation: {project: nope}`,
 		"endpoint":   `gateway: {enabled: true, endpoints: [{name: ep1, path: /a, target: x, targetType: agent, project: nope}]}`,
 		"route":      `iq: {knowledgeBases: [{name: kb1, sources: [{name: s1, type: web, url: "https://x.example"}], routing: {routes: [{name: r1, when: {project: nope}, knowledgeBase: kb1}]}}]}`,
@@ -120,14 +117,14 @@ func TestRule17Secrets(t *testing.T) {
 			ExpectCase(t, "XF017", "description", "appears to contain", fmt.Sprintf(`projects: [{name: fin, description: %q}]`, value))
 		})
 	}
-	a := Run(t, `runtime: {enabled: true, image: "i:1", environment: {DB_PASSWORD: hunter2, MAX_TOKENS: 4096, LOG_LEVEL: info}}`)
+	a := Run(t, `agents: [{name: bot, kind: hosted, source: ./bot, environment: {DB_PASSWORD: hunter2, MAX_TOKENS: 4096, LOG_LEVEL: info}}]`)
 	var paths []string
 	for _, d := range a.Diagnostics {
 		if d.Code == "XF017" {
 			paths = append(paths, d.Path)
 		}
 	}
-	if len(paths) != 1 || paths[0] != "x-foundry.runtime.environment.DB_PASSWORD" {
+	if len(paths) != 1 || paths[0] != "x-foundry.agents[0].environment.DB_PASSWORD" {
 		t.Fatalf("paths = %v", paths)
 	}
 	ExpectCase(t, "XF017", "headers.x-api-key", "", `mcps: [{name: graph, endpoint: "https://a.example", headers: {x-api-key: abc, accept: json}}]`)
@@ -137,14 +134,12 @@ func TestRule17Secrets(t *testing.T) {
 		"https://my-vault.vault.azure.net/secrets/search-key",
 		"https://my-vault.vault.azure.net/secrets/search-key/0123456789abcdef0123456789abcdef",
 	} {
-		a := Run(t, fmt.Sprintf(`runtime: {enabled: true, image: "i:1", environment: {SEARCH_API_KEY: %q}}`, ref))
+		a := Run(t, fmt.Sprintf(`agents: [{name: bot, kind: hosted, source: ./bot, environment: {SEARCH_API_KEY: %q}}]`, ref))
 		if Codes(a, "")["XF017"] {
 			t.Fatalf("reference %q rejected:\n%s", ref, Lines(a.Diagnostics))
 		}
 	}
-	ExpectCase(t, "XF017", "secrets.db", "", `runtime: {enabled: true, image: "i:1", secrets: {db: "not a name!"}}`)
 	ExpectCase(t, "XF017", "secretRef", "", `mcps: [{name: graph, endpoint: "https://a.example", authentication: {mode: apiKey, secretRef: "bad value"}}]`)
-	MustOK(t, Run(t, `runtime: {enabled: true, image: "i:1", secrets: {db: db-password}}`))
 	ExpectCase(t, "XF119", "", "", `connectors: [{name: svc, type: api, authentication: {mode: apiKey}}]`)
 }
 
@@ -154,7 +149,6 @@ func TestRule22ExistingResources(t *testing.T) {
 		{"search", "Microsoft.Search/searchServices", "sku: basic", "sku"},
 		{"search", "Microsoft.Search/searchServices", "replicas: 2", "replicas"},
 		{"storage", "Microsoft.Storage/storageAccounts", "sku: Standard_LRS", "sku"},
-		{"redis", "Microsoft.Cache/redis", "capacity: 2", "capacity"},
 		{"keyVault", "Microsoft.KeyVault/vaults", "sku: premium", "sku"},
 		{"cosmos", "Microsoft.DocumentDB/databaseAccounts", "throughput: 4000", "throughput"},
 		{"managedIdentity", "Microsoft.ManagedIdentity/userAssignedIdentities", "tags: {a: b}", "tags"},
@@ -164,8 +158,7 @@ func TestRule22ExistingResources(t *testing.T) {
 		})
 	}
 	for component, typ := range map[string]string{
-		"search": "Microsoft.Search/searchServices", "storage": "Microsoft.Storage/storageAccounts",
-		"redis": "Microsoft.Cache/redisEnterprise", "keyVault": "Microsoft.KeyVault/vaults",
+		"search": "Microsoft.Search/searchServices", "storage": "Microsoft.Storage/storageAccounts", "keyVault": "Microsoft.KeyVault/vaults",
 		"cosmos": "Microsoft.DocumentDB/databaseAccounts", "managedIdentity": "Microsoft.ManagedIdentity/userAssignedIdentities",
 	} {
 		t.Run("valid "+component, func(t *testing.T) {
@@ -177,18 +170,6 @@ func TestRule22ExistingResources(t *testing.T) {
 		t.Fatal("name and existingResourceId must be mutually exclusive")
 	}
 	ExpectCase(t, "XF022", "projects[fin].search", "", fmt.Sprintf(`projects: [{name: fin, search: {existingResourceId: %q}}]`, existing("Microsoft.Storage/storageAccounts")))
-}
-
-func TestRule22Registry(t *testing.T) {
-	runRules(t, []rule{
-		{"managed with server", "XF022", "", "managed registry cannot set", y(`runtime: {enabled: true, image: "i:1", registry: {mode: managed, server: x.azurecr.io}}`)},
-		{"existing needs id", "XF022", "", "requires resourceId", y(`runtime: {enabled: true, image: "i:1", registry: {mode: existing}}`)},
-		{"existing wrong type", "XF022", "", "not a container registry", y(fmt.Sprintf(`runtime: {enabled: true, image: "i:1", registry: {mode: existing, resourceId: "%s/Microsoft.Storage/storageAccounts/x"}}`, arm))},
-		{"external needs server", "XF022", "", "requires server", y(`runtime: {enabled: true, image: "i:1", registry: {mode: external}}`)},
-		{"external name", "XF022", "", "applies only to a managed registry", y(`runtime: {enabled: true, image: "i:1", registry: {mode: external, server: ghcr.io, name: acr12345}}`)},
-		{"external sku", "XF022", "registry.sku", "", y(`runtime: {enabled: true, image: "i:1", registry: {mode: external, server: ghcr.io, sku: Premium}}`)},
-	})
-	MustOK(t, Run(t, fmt.Sprintf(`runtime: {enabled: true, image: "i:1", registry: {mode: existing, resourceId: "%s/Microsoft.ContainerRegistry/registries/acr1"}}`, arm)))
 }
 
 func TestRule23Regions(t *testing.T) {
@@ -226,20 +207,16 @@ func TestRule24ExplicitNames(t *testing.T) {
 		{"storage short", "XF024", "storage.name", "", y(`storage: {name: ab}`)},
 		{"key vault hyphens", "XF024", "keyVault.name", "", y(`keyVault: {name: kv--double}`)},
 		{"search", "XF024", "search.name", "", y(`search: {name: Search1}`)},
-		{"redis", "XF024", "redis.name", "", y(`redis: {name: r--x}`)},
 		{"cosmos", "XF024", "cosmos.name", "", y(`cosmos: {name: Cosmos1}`)},
 		{"apim", "XF024", "gateway.name", "", y(`gateway: {enabled: true, name: 1apim}`)},
-		{"service bus", "XF024", "events.namespace", "", y(`events: {enabled: true, namespace: 1bus-name}`)},
 		{"identity", "XF024", "managedIdentity.name", "", y(`managedIdentity: {name: ab}`)},
-		{"container app", "XF024", "runtime.name", "", y(`runtime: {enabled: true, image: "i:1", name: Upper}`)},
-		{"registry", "XF024", "registry.name", "", y(`runtime: {enabled: true, image: "i:1", registry: {mode: managed, name: reg-1}}`)},
 		{"resource group", "XF024", "defaults.resourceGroup", "", y(`defaults: {resourceGroup: "rg."}`)},
 		{"project resource group", "XF024", "projects[fin].resourceGroup", "", y(`projects: [{name: fin, resourceGroup: "bad!"}]`)},
 		{"source container", "XF024", "container", "", y(`iq: {knowledgeBases: [{name: kb1, sources: [{name: files, type: blob, container: Policies}]}]}`)},
 		{"storage container", "XF024", "containers[a--b]", "", y(`storage: {containers: [{name: a--b}]}`)},
 	})
 	MustOK(t, Run(t, `storage: {name: stfinance01}`, `keyVault: {name: kv-finance}`, `search: {name: srch-finance}`,
-		`redis: {name: redis-finance}`, `managedIdentity: {name: id-finance}`, `defaults: {resourceGroup: rg-finance}`,
+		`managedIdentity: {name: id-finance}`, `defaults: {resourceGroup: rg-finance}`,
 		`cosmos: {name: cosmos-finance}`))
 }
 
@@ -253,19 +230,13 @@ func TestSecurityRules(t *testing.T) {
 
 	ExpectCase(t, "XF021", "security.publicNetworkAccess", "", `security: {network: {mode: private}, roles: {admins: [a]}, publicNetworkAccess: true}`)
 	ExpectCase(t, "XF021", "storage.publicNetworkAccess", "", Private, `storage: {publicNetworkAccess: true}`)
-	ExpectCase(t, "XF106", "redis.publicNetworkAccess", "", Public, `redis: {enabled: true, publicNetworkAccess: true}`)
-	MustOK(t, Run(t, `security: {network: {mode: public}, roles: {admins: [a]}, publicNetworkAccess: true}`, `redis: {enabled: true, publicNetworkAccess: true}`))
 	ExpectCase(t, "XF106", "search.localAuthentication", "", `search: {localAuthentication: true}`)
 	MustOK(t, Run(t, `security: {roles: {admins: [a]}, localAuthentication: true}`, `search: {localAuthentication: true}`))
 	ExpectCase(t, "XF021", "managedIdentity.enabled", "", Private, `managedIdentity: {enabled: false}`)
-	ExpectCase(t, "XF021", "ingress.external", "", Private, `runtime: {enabled: true, image: "i:1", ingress: {external: true}}`)
 	a = Run(t, `security: {network: {mode: private, privateDns: false}, roles: {admins: [a]}}`)
 	if !a.OK() || !Codes(a, diag.Warning)["XF021"] {
 		t.Fatalf("privateDns false should warn:\n%s", Lines(a.Diagnostics))
 	}
-	ExpectCase(t, "XF106", "redis.sku", "", `redis: {enabled: true, service: azure-cache-for-redis, sku: balanced}`)
-	ExpectCase(t, "XF106", "redis.sku", "", `redis: {enabled: true, sku: premium}`)
-	MustOK(t, Run(t, fmt.Sprintf(`redis: {existingResourceId: "%s/Microsoft.Cache/redis/r1"}`, arm)))
 }
 
 func TestHardeningRules(t *testing.T) {
@@ -318,46 +289,6 @@ func TestHardeningRules(t *testing.T) {
 	}
 	OK(t, Run(t, Private, `gateway: {enabled: true, sku: PremiumV2}`, `observability: {}`))
 	OK(t, Run(t, `gateway: {enabled: true, sku: Consumption}`, `observability: {}`, Public))
-
-	ExpectCase(t, "XF125", "redis.service", "", `redis: {enabled: true, service: azure-cache-for-redis, sku: standard}`)
-	if Codes(Run(t, `redis: {enabled: false, service: azure-cache-for-redis}`), "")["XF125"] {
-		t.Fatal("a disabled Redis must not error")
-	}
-}
-
-func TestRuntimeRules(t *testing.T) {
-	ExpectCase(t, "XF108", "scale", "", `runtime: {enabled: true, image: "i:1", scale: {minReplicas: 5, maxReplicas: 2}}`)
-	ExpectCase(t, "XF108", "registry.authentication", "", `runtime: {enabled: true, image: "i:1", registry: {mode: managed, authentication: credentials}}`)
-	odd := Run(t, `runtime: {enabled: true, image: "i:1", resources: {cpu: 1, memory: 3Gi}}`)
-	if !odd.OK() || !Codes(odd, diag.Warning)["XF108"] {
-		t.Fatalf("odd CPU/memory should warn:\n%s", Lines(odd.Diagnostics))
-	}
-	if Codes(Run(t, `runtime: {enabled: false, scale: {minReplicas: 5, maxReplicas: 2}}`), "")["XF108"] {
-		t.Fatal("a disabled runtime is not validated")
-	}
-	for _, image := range []string{"ghcr.io/x/y", "ghcr.io/x/y:latest", "ghcr.io/x/y:"} {
-		a := Run(t, fmt.Sprintf(`runtime: {enabled: true, image: %q}`, image))
-		if !a.OK() || !Codes(a, diag.Warning)["XF132"] {
-			t.Fatalf("%s should warn about a floating tag:\n%s", image, Lines(a.Diagnostics))
-		}
-	}
-	for _, image := range []string{"ghcr.io/x/y:1.2", "localhost:5000/y:1", "ghcr.io/x/y@sha256:abc"} {
-		OK(t, Run(t, fmt.Sprintf(`runtime: {enabled: true, image: %q}`, image)))
-	}
-}
-
-func TestEventRules(t *testing.T) {
-	for name, events := range map[string]string{
-		"queue on grid": `{enabled: true, provider: eventGrid, entities: [{name: q1, type: queue}]}`,
-		"grid sub":      `{enabled: true, entities: [{name: es, type: eventSubscription, parent: t1}]}`,
-		"sub no parent": `{enabled: true, entities: [{name: sub1, type: subscription}]}`,
-		"sub of queue":  `{enabled: true, entities: [{name: q1, type: queue}, {name: sub1, type: subscription, parent: q1}]}`,
-		"queue parent":  `{enabled: true, entities: [{name: q1, type: queue, parent: x}]}`,
-		"event hubs":    `{enabled: true, provider: eventHubs, entities: [{name: t1, type: topic}]}`,
-	} {
-		t.Run(name, func(t *testing.T) { ExpectCase(t, "XF109", "", "", "events: "+events) })
-	}
-	MustOK(t, Run(t, `events: {enabled: true, entities: [{name: t1, type: topic}, {name: sub1, type: subscription, parent: t1}]}`))
 }
 
 func TestCronAndAgentRules(t *testing.T) {
@@ -406,29 +337,11 @@ func TestAgentServiceRules(t *testing.T) {
 	MustOK(t, Run(t, `cosmos: {capacityMode: serverless}`))
 }
 
-func TestServiceTierRequirements(t *testing.T) {
-	ExpectCase(t, "XF129", "events.sku", "Premium", Private, `events: {enabled: true, sku: Standard}`)
-	ExpectCase(t, "XF129", "events.capacity", "Premium", Public, `events: {enabled: true, capacity: 2}`)
-	ExpectCase(t, "XF129", "zoneRedundant", "", Public, `events: {enabled: true, zoneRedundant: true}`)
-	ExpectCase(t, "XF129", "entities", "queues only", Public, `events: {enabled: true, sku: Basic, entities: [{name: t1, type: topic}]}`)
-	ExpectCase(t, "XF129", "events.sku", "serviceBus", `events: {enabled: true, provider: eventGrid, sku: Premium}`)
-	MustOK(t, Run(t, `events: {enabled: true, sku: Premium, capacity: 2, zoneRedundant: true}`))
-	MustOK(t, Run(t, `events: {enabled: true}`)) // Premium is chosen automatically in private mode
-	MustOK(t, Run(t, Public, `events: {enabled: true, sku: Basic, entities: [{name: q1, type: queue}]}`))
-	ExpectCase(t, "XF129", "registry.sku", "Premium", Private, `runtime: {enabled: true, source: ./app, registry: {mode: managed, sku: Standard}}`)
-	MustOK(t, Run(t, `runtime: {enabled: true, source: ./app, registry: {mode: managed, sku: Premium}}`))
-	MustOK(t, Run(t, Public, `runtime: {enabled: true, source: ./app, registry: {mode: managed, sku: Basic}}`))
-}
-
 func TestIdentityTypeRules(t *testing.T) {
 	ExpectCase(t, "XF130", "managedIdentity", "no user-assigned identity", `managedIdentity: {type: systemAssigned, name: id-finance}`)
 	ExpectCase(t, "XF130", "federatedCredentials", "", `managedIdentity: {type: systemAssigned, federatedCredentials: [{name: gh, issuer: "https://token.example", subject: s}]}`)
-	a := Run(t, `managedIdentity: {type: systemAssigned}`, `runtime: {enabled: true, source: ./app}`)
-	if !a.OK() || !Codes(a, diag.Warning)["XF130"] {
-		t.Fatalf("system-assigned with a managed registry should warn:\n%s", Lines(a.Diagnostics))
-	}
 	OK(t, Run(t, `managedIdentity: {type: systemAssigned}`))
-	OK(t, Run(t, `managedIdentity: {type: systemAssignedAndUserAssigned, name: id-finance}`, `runtime: {enabled: true, source: ./app}`))
+	OK(t, Run(t, `managedIdentity: {type: systemAssignedAndUserAssigned, name: id-finance}`))
 }
 
 func TestVNetSettingsNeedPrivateMode(t *testing.T) {

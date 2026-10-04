@@ -65,23 +65,6 @@ func TestPrivateRanges(t *testing.T) {
 	}
 }
 
-func TestFloatingImages(t *testing.T) {
-	for image, want := range map[string]bool{
-		"":                           false,
-		"ghcr.io/x/y":                true,
-		"ghcr.io/x/y:latest":         true,
-		"ghcr.io/x/y:":               true,
-		"ghcr.io/x/y:1.2":            false,
-		"localhost:5000/y":           true,
-		"localhost:5000/y:1":         false,
-		"ghcr.io/x/y@sha256:abcdef0": false,
-	} {
-		if got := floatingImage(image); got != want {
-			t.Errorf("floatingImage(%q) = %v", image, got)
-		}
-	}
-}
-
 func TestPaths(t *testing.T) {
 	if path() != "x-foundry" || path("a", "b[c]") != "x-foundry.a.b[c]" {
 		t.Fatal("path")

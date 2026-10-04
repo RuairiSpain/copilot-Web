@@ -7,7 +7,6 @@ import (
 	"net/url"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/RuairiSpain/copilot-Web/x-foundry/internal/azurenames"
@@ -20,8 +19,7 @@ func Declared(cfg *config.XFoundry) []diag.Diagnostic {
 	rules := []func(*config.XFoundry) []diag.Diagnostic{
 		projectsAndHub, uniqueNames, projectReferences, modelSets, secrets, existingVsCreated,
 		explicitNames, locations, securityRules, ipRules, insecureEndpoints, searchSizing,
-		gatewayNetwork, redisService, runtimeRules, eventRules, cronRules, agentRules,
-		networkAddressing, agentServiceRules, tierRequirements, identityRules,
+		gatewayNetwork, cronRules, agentRules, networkAddressing, agentServiceRules, identityRules,
 	}
 	var out []diag.Diagnostic
 	for _, rule := range rules {
@@ -202,9 +200,6 @@ func uniqueNames(cfg *config.XFoundry) []diag.Diagnostic {
 			check("evaluator", h.path+".evaluation.evaluators", names(h.evaluation.Evaluators))
 		}
 	}
-	for _, r := range runtimes(cfg) {
-		check("scale rule", r.path+".scale.rules", names(r.runtime.Scale.Rules))
-	}
 	if g := cfg.Gateway; g != nil {
 		gp := path("gateway")
 		check("gateway endpoint", gp+".endpoints", names(g.Endpoints))
@@ -228,9 +223,6 @@ func uniqueNames(cfg *config.XFoundry) []diag.Diagnostic {
 	}
 	if cfg.Storage != nil {
 		check("storage container", path("storage", "containers"), names(cfg.Storage.Containers))
-	}
-	if cfg.Events != nil {
-		check("event entity", path("events", "entities"), names(cfg.Events.Entities))
 	}
 	if cfg.ManagedIdentity != nil {
 		check("federated credential", path("managedIdentity", "federatedCredentials"), names(cfg.ManagedIdentity.FederatedCredentials))
@@ -285,9 +277,6 @@ func projectReferences(cfg *config.XFoundry) []diag.Diagnostic {
 				}
 			}
 		}
-		if h.runtime != nil {
-			check(h.runtime.Project, h.path+".runtime.project", owner)
-		}
 		if h.evaluation != nil {
 			check(h.evaluation.Project, h.path+".evaluation.project", owner)
 		}
@@ -340,18 +329,6 @@ func secrets(cfg *config.XFoundry) []diag.Diagnostic {
 	var doc map[string]any
 	_ = json.Unmarshal(b, &doc)
 	out := findRawSecrets(doc)
-	for _, r := range runtimes(cfg) {
-		keys := make([]string, 0, len(r.runtime.Secrets))
-		for k := range r.runtime.Secrets {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		for _, k := range keys {
-			if !IsSecretNameOrReference(r.runtime.Secrets[k]) {
-				out = append(out, diag.Err("XF017", r.path+".secrets."+k, "secret '%s' must be a Key Vault secret name or reference, not a value", k))
-			}
-		}
-	}
 	for _, h := range scopes(cfg) {
 		for _, m := range h.mcps {
 			out = append(out, authChecks(m.Authentication, fmt.Sprintf("%s.mcps[%s]", h.path, m.Name))...)
@@ -387,7 +364,6 @@ type existingKind struct {
 var existingKinds = map[string]existingKind{
 	"search":          {"Microsoft.Search/searchServices", []string{"sku", "replicas", "partitions", "semanticRanking", "localAuthentication", "publicNetworkAccess", "managedIdentity", "tags"}},
 	"storage":         {"Microsoft.Storage/storageAccounts", []string{"sku", "hierarchicalNamespace", "publicNetworkAccess", "localAuthentication", "retentionDays", "tags"}},
-	"redis":           {"Microsoft.Cache/(?:redis|redisEnterprise)", []string{"service", "sku", "capacity", "tlsOnly", "publicNetworkAccess", "persistence", "tags"}},
 	"keyVault":        {"Microsoft.KeyVault/vaults", []string{"sku", "rbacAuthorisation", "softDeleteDays", "purgeProtection", "publicNetworkAccess", "tags"}},
 	"cosmos":          {"Microsoft.DocumentDB/databaseAccounts", []string{"capacityMode", "throughput", "zoneRedundant", "continuousBackup", "publicNetworkAccess", "localAuthentication", "tags"}},
 	"managedIdentity": {"Microsoft.ManagedIdentity/userAssignedIdentities", []string{"tags"}},
@@ -419,17 +395,11 @@ func components(cfg *config.XFoundry) []component {
 	if s := cfg.Storage; s != nil {
 		out = append(out, component{"storage", path("storage"), s.Tracked, s.ExistingResourceID, s.PublicNetworkAccess, true, s.LocalAuthentication, true})
 	}
-	if r := cfg.Redis; r != nil {
-		out = append(out, component{"redis", path("redis"), r.Tracked, r.ExistingResourceID, r.PublicNetworkAccess, true, false, false})
-	}
 	if k := cfg.KeyVault; k != nil {
 		out = append(out, component{"keyVault", path("keyVault"), k.Tracked, k.ExistingResourceID, k.PublicNetworkAccess, true, false, false})
 	}
 	if c := cfg.Cosmos; c != nil {
 		out = append(out, component{"cosmos", path("cosmos"), c.Tracked, c.ExistingResourceID, c.PublicNetworkAccess, true, c.LocalAuthentication, true})
-	}
-	if e := cfg.Events; e != nil {
-		out = append(out, component{"events", path("events"), e.Tracked, "", e.PublicNetworkAccess, true, false, false})
 	}
 	if m := cfg.ManagedIdentity; m != nil {
 		out = append(out, component{"managedIdentity", path("managedIdentity"), m.Tracked, m.ExistingResourceID, false, false, false, false})
@@ -446,40 +416,13 @@ func existingVsCreated(cfg *config.XFoundry) []diag.Diagnostic {
 		kind := existingKinds[c.kind]
 		if !armPattern(kind.armType).MatchString(c.existing) {
 			out = append(out, diag.Err("XF022", c.path+".existingResourceId",
-				"existingResourceId is not a %s resource ID", strings.ReplaceAll(kind.armType, "(?:redis|redisEnterprise)", "redis")))
+				"existingResourceId is not a %s resource ID", kind.armType))
 		}
 		for _, key := range kind.createOnly {
 			if c.tracked.Has(key) {
 				out = append(out, diag.Err("XF022", c.path+"."+key,
 					"'%s' configures an extension-created resource and cannot be combined with existingResourceId", key))
 			}
-		}
-	}
-	registry := armPattern("Microsoft.ContainerRegistry/registries")
-	for _, r := range runtimes(cfg) {
-		reg := r.runtime.Registry
-		where := r.path + ".registry"
-		switch reg.Mode {
-		case "managed":
-			if reg.ResourceID != "" || reg.Server != "" {
-				out = append(out, diag.Err("XF022", where, "a managed registry cannot set resourceId or server; use mode 'existing' or 'external'"))
-			}
-		case "existing":
-			if reg.ResourceID == "" {
-				out = append(out, diag.Err("XF022", where+".resourceId", "registry mode 'existing' requires resourceId"))
-			} else if !registry.MatchString(reg.ResourceID) {
-				out = append(out, diag.Err("XF022", where+".resourceId", "resourceId is not a container registry resource ID"))
-			}
-		case "external":
-			if reg.Server == "" {
-				out = append(out, diag.Err("XF022", where+".server", "registry mode 'external' requires server"))
-			}
-		}
-		if reg.Mode != "managed" && reg.Name != "" {
-			out = append(out, diag.Err("XF022", where+".name", "registry 'name' applies only to a managed registry"))
-		}
-		if reg.Mode != "managed" && reg.SKU != "" {
-			out = append(out, diag.Err("XF022", where+".sku", "registry 'sku' applies only to a managed registry"))
 		}
 	}
 	return out
@@ -508,9 +451,6 @@ func explicitNames(cfg *config.XFoundry) []diag.Diagnostic {
 			check("storage-container", c.Name, path("storage", "containers["+c.Name+"]", "name"))
 		}
 	}
-	if r := cfg.Redis; r != nil {
-		check("redis", r.Name, path("redis", "name"))
-	}
 	if k := cfg.KeyVault; k != nil {
 		check("key-vault", k.Name, path("keyVault", "name"))
 	}
@@ -522,9 +462,6 @@ func explicitNames(cfg *config.XFoundry) []diag.Diagnostic {
 	}
 	if g := cfg.Gateway; g != nil {
 		check("apim", g.Name, path("gateway", "name"))
-	}
-	if e := cfg.Events; e != nil {
-		check("service-bus", e.Namespace, path("events", "namespace"))
 	}
 	check("resource-group", cfg.Defaults.ResourceGroup, path("defaults", "resourceGroup"))
 	if cfg.Hub != nil {
@@ -541,10 +478,6 @@ func explicitNames(cfg *config.XFoundry) []diag.Diagnostic {
 				}
 			}
 		}
-	}
-	for _, r := range runtimes(cfg) {
-		check("container-app", r.runtime.Name, r.path+".name")
-		check("registry", r.runtime.Registry.Name, r.path+".registry.name")
 	}
 	return out
 }
@@ -675,15 +608,6 @@ func securityRules(cfg *config.XFoundry) []diag.Diagnostic {
 	if net.Mode == "private" && !net.PrivateDNS && net.ExistingVnetResourceID == "" {
 		out = append(out, diag.Warn("XF021", path("security", "network", "privateDns"), "privateDns is false: private endpoints will not resolve unless you manage DNS yourself"))
 	}
-	if r := cfg.Redis; r != nil && r.Has("sku") {
-		valid := map[string][]string{
-			"azure-managed-redis":   {"memory-optimised", "balanced", "compute-optimised"},
-			"azure-cache-for-redis": {"basic", "standard", "premium"},
-		}[r.Service]
-		if !contains(valid, r.SKU) {
-			out = append(out, diag.Err("XF106", path("redis", "sku"), "redis sku '%s' is not available for service '%s' (use %s)", r.SKU, r.Service, strings.Join(valid, ", ")))
-		}
-	}
 	return out
 }
 
@@ -802,85 +726,6 @@ func gatewayNetwork(cfg *config.XFoundry) []diag.Diagnostic {
 	return nil
 }
 
-func redisService(cfg *config.XFoundry) []diag.Diagnostic {
-	r := cfg.Redis
-	if r == nil || !r.Enabled || r.ExistingResourceID != "" || r.Service != "azure-cache-for-redis" {
-		return nil
-	}
-	return []diag.Diagnostic{diag.Err("XF125", path("redis", "service"),
-		"Azure Cache for Redis (Basic/Standard/Premium) can no longer be created and retires on 2028-09-30; use service 'azure-managed-redis'")}
-}
-
-// ------------------------------------------------------------------------ runtime
-
-func runtimeRules(cfg *config.XFoundry) []diag.Diagnostic {
-	var out []diag.Diagnostic
-	private := cfg.Security.Network.Mode == "private"
-	for _, r := range runtimes(cfg) {
-		rt := r.runtime
-		if !rt.Enabled {
-			continue
-		}
-		if rt.Scale.MinReplicas > rt.Scale.MaxReplicas {
-			out = append(out, diag.Err("XF108", r.path+".scale", "scale.minReplicas cannot exceed scale.maxReplicas"))
-		}
-		if rt.Resources.Has("memory") {
-			memory, err := strconv.ParseFloat(strings.TrimSuffix(rt.Resources.Memory, "Gi"), 64)
-			if err == nil && memory != rt.Resources.CPU*2 {
-				out = append(out, diag.Warn("XF108", r.path+".resources",
-					"%g CPU with %s memory is not a Consumption profile combination (memory is 2 x CPU)", rt.Resources.CPU, rt.Resources.Memory))
-			}
-		}
-		if private && rt.Ingress.External {
-			out = append(out, diag.Err("XF021", r.path+".ingress.external", "ingress.external cannot be true when network mode is 'private'"))
-		}
-		if rt.Registry.Authentication == "credentials" && rt.Registry.Mode == "managed" {
-			out = append(out, diag.Err("XF108", r.path+".registry.authentication", "a managed registry uses managed identity authentication"))
-		}
-		if floatingImage(rt.Image) {
-			out = append(out, diag.Warn("XF132", r.path+".image", "image '%s' has no pinned tag or digest, or uses 'latest'; pin a version or digest for reproducible deployments", rt.Image))
-		}
-	}
-	return out
-}
-
-func eventRules(cfg *config.XFoundry) []diag.Diagnostic {
-	ev := cfg.Events
-	if ev == nil {
-		return nil
-	}
-	var out []diag.Diagnostic
-	byName := map[string]config.EventEntity{}
-	for _, e := range ev.Entities {
-		byName[e.Name] = e
-	}
-	for _, e := range ev.Entities {
-		where := path("events", "entities["+e.Name+"]")
-		switch e.Type {
-		case "queue", "topic", "subscription":
-			if ev.Provider != "serviceBus" {
-				out = append(out, diag.Err("XF109", where+".type", "entity type '%s' requires provider 'serviceBus'", e.Type))
-			}
-		case "eventSubscription":
-			if ev.Provider != "eventGrid" {
-				out = append(out, diag.Err("XF109", where+".type", "entity type 'eventSubscription' requires provider 'eventGrid'"))
-			}
-		}
-		if e.Type == "subscription" || e.Type == "eventSubscription" {
-			parent, ok := byName[e.Parent]
-			if !ok || (e.Type == "subscription" && parent.Type != "topic") {
-				out = append(out, diag.Err("XF109", where+".parent", "%s '%s' needs 'parent' naming a topic declared in events.entities", e.Type, e.Name))
-			}
-		} else if e.Parent != "" {
-			out = append(out, diag.Err("XF109", where+".parent", "%s '%s' cannot have a parent", e.Type, e.Name))
-		}
-	}
-	if ev.Provider == "eventHubs" && len(ev.Entities) > 0 {
-		out = append(out, diag.Err("XF109", path("events", "entities"), "event entities are not supported for provider 'eventHubs'"))
-	}
-	return out
-}
-
 var cron = regexp.MustCompile(`^\S+(?:\s+\S+){4}$`)
 
 func cronRules(cfg *config.XFoundry) []diag.Diagnostic {
@@ -902,25 +747,15 @@ func agentRules(cfg *config.XFoundry) []diag.Diagnostic {
 	var out []diag.Diagnostic
 	for _, h := range scopes(cfg) {
 		for _, a := range h.agents {
-			if a.Kind == "hosted" && a.Source == "" && a.Runtime == nil {
-				out = append(out, diag.Err("XF112", fmt.Sprintf("%s.agents[%s]", h.path, a.Name), "hosted agent '%s' needs 'source' or 'runtime'", a.Name))
+			if a.Kind == "hosted" && a.Source == "" {
+				out = append(out, diag.Err("XF112", fmt.Sprintf("%s.agents[%s]", h.path, a.Name), "hosted agent '%s' needs 'source'", a.Name))
 			}
 		}
 	}
 	return out
 }
 
-// floatingImage reports an image reference without a pinned tag or digest.
-func floatingImage(image string) bool {
-	if image == "" || strings.Contains(image, "@sha256:") {
-		return false
-	}
-	last := image[strings.LastIndex(image, "/")+1:]
-	tag, hasTag := strings.CutPrefix(last[strings.Index(last+":", ":"):], ":")
-	return !hasTag || tag == "" || tag == "latest"
-}
-
-// ------------------------------------------------------- network, agent service, tiers
+// ------------------------------------------------------- network, agent service, identity
 
 func networkAddressing(cfg *config.XFoundry) []diag.Diagnostic {
 	var out []diag.Diagnostic
@@ -1006,50 +841,6 @@ func agentServiceRules(cfg *config.XFoundry) []diag.Diagnostic {
 	return out
 }
 
-func tierRequirements(cfg *config.XFoundry) []diag.Diagnostic {
-	var out []diag.Diagnostic
-	private := cfg.Security.Network.Mode == "private"
-	if e := cfg.Events; e != nil {
-		where := path("events")
-		if e.SKU != "" && e.Provider != "serviceBus" {
-			out = append(out, diag.Err("XF129", where+".sku", "sku applies to provider 'serviceBus'"))
-		}
-		if e.Enabled && e.Provider == "serviceBus" {
-			effective := e.SKU
-			if effective == "" {
-				effective = map[bool]string{true: "Premium", false: "Standard"}[private]
-			}
-			if private && e.SKU != "" && e.SKU != "Premium" {
-				out = append(out, diag.Err("XF129", where+".sku", "Service Bus private endpoints require the Premium tier"))
-			}
-			if effective != "Premium" {
-				if e.Has("capacity") {
-					out = append(out, diag.Err("XF129", where+".capacity", "capacity (messaging units) applies to the Premium tier"))
-				}
-				if e.ZoneRedundant {
-					out = append(out, diag.Err("XF129", where+".zoneRedundant", "zoneRedundant applies to the Premium tier"))
-				}
-			}
-			if effective == "Basic" {
-				for _, en := range e.Entities {
-					if en.Type == "topic" || en.Type == "subscription" {
-						out = append(out, diag.Err("XF129", where+".entities["+en.Name+"]", "the Basic tier supports queues only"))
-					}
-				}
-			}
-		}
-	}
-	if private {
-		for _, r := range runtimes(cfg) {
-			reg := r.runtime.Registry
-			if r.runtime.Enabled && reg.Mode == "managed" && reg.SKU != "" && reg.SKU != "Premium" {
-				out = append(out, diag.Err("XF129", r.path+".registry.sku", "Container Registry private endpoints require the Premium tier"))
-			}
-		}
-	}
-	return out
-}
-
 func identityRules(cfg *config.XFoundry) []diag.Diagnostic {
 	m := cfg.ManagedIdentity
 	if m == nil || m.Type != "systemAssigned" {
@@ -1062,13 +853,6 @@ func identityRules(cfg *config.XFoundry) []diag.Diagnostic {
 	}
 	if len(m.FederatedCredentials) > 0 {
 		out = append(out, diag.Err("XF130", where+".federatedCredentials", "federated credentials need a user-assigned identity"))
-	}
-	for _, r := range runtimes(cfg) {
-		if r.runtime.Enabled && r.runtime.Registry.Mode == "managed" && r.runtime.Source != "" {
-			out = append(out, diag.Warn("XF130", where+".type",
-				"a system-assigned identity does not exist before the Container App, so it cannot pull from the managed registry on first deploy; use userAssigned or systemAssignedAndUserAssigned"))
-			break
-		}
 	}
 	return out
 }

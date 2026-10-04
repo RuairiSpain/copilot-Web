@@ -13,7 +13,7 @@ import (
 
 // PublishedExamples are copied to schemas/examples.
 var PublishedExamples = []string{
-	"standalone-minimal", "standalone-private", "hub-spoke", "foundry-iq", "hosted-agent-runtime", "apim-ai-gateway",
+	"standalone-minimal", "standalone-private", "hub-spoke", "foundry-iq", "apim-ai-gateway",
 }
 
 func marshal(v any) ([]byte, error) {

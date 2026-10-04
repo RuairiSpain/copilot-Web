@@ -13,7 +13,6 @@ type ScopeResources struct {
 	Connectors     []config.Connector        `json:"connectors,omitempty"`
 	KnowledgeBases []config.KnowledgeBase    `json:"knowledgeBases,omitempty"`
 	Search         *config.Search            `json:"search,omitempty"`
-	Runtime        *config.Runtime           `json:"runtime,omitempty"`
 	Evaluation     *config.Evaluation        `json:"evaluation,omitempty"`
 }
 
@@ -73,8 +72,6 @@ type EffectiveProject struct {
 	Connectors     []config.Connector        `json:"connectors,omitempty"`
 	KnowledgeBases []config.KnowledgeBase    `json:"knowledgeBases,omitempty"`
 	SearchScope    string                    `json:"searchScope,omitempty"`
-	Runtime        *config.Runtime           `json:"runtime,omitempty"`
-	RuntimeScope   string                    `json:"runtimeScope,omitempty"`
 	Evaluation     *config.Evaluation        `json:"evaluation,omitempty"`
 	Gateway        *config.ProjectGateway    `json:"gateway,omitempty"`
 	Origins        map[string]string         `json:"origins,omitempty"`
@@ -110,13 +107,10 @@ type Config struct {
 	Projects            []*EffectiveProject     `json:"projects"`
 	Gateway             *config.Gateway         `json:"gateway,omitempty"`
 	Storage             *config.Storage         `json:"storage,omitempty"`
-	Redis               *config.Redis           `json:"redis,omitempty"`
 	KeyVault            *config.KeyVault        `json:"keyVault,omitempty"`
 	Cosmos              *config.Cosmos          `json:"cosmos,omitempty"`
 	ManagedIdentity     *config.ManagedIdentity `json:"managedIdentity,omitempty"`
 	Observability       *config.Observability   `json:"observability,omitempty"`
-	Events              *config.Events          `json:"events,omitempty"`
-	RegistrySKU         string                  `json:"registrySku,omitempty"`
 	Governance          *config.Governance      `json:"governance,omitempty"`
 	Implicit            []Implicit              `json:"implicit,omitempty"`
 }

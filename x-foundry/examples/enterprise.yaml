@@ -105,12 +105,6 @@ x-foundry:
         - name: hr-agent
           toolboxes:
             - enterprise-search
-  runtime:
-    enabled: true
-    image: ghcr.io/contoso/runtime:1.0
-    scale:
-      minReplicas: 1
-      maxReplicas: 10
   gateway:
     enabled: true
     authentication:
@@ -123,11 +117,6 @@ x-foundry:
         targetType: agent
         allowedGroups:
           - Finance-AI-Users
-    chargeback:
-      dimensions:
-        - user
-        - project
-        - department
     quotas:
       profiles:
         - name: standard-user
@@ -141,13 +130,9 @@ x-foundry:
   cosmos:
     zoneRedundant: true
     continuousBackup: true
-  redis:
-    enabled: true
   keyVault: {}
   observability:
     retentionDays: 90
-  events:
-    enabled: true
   governance:
     requiredTags:
       - environment

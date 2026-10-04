@@ -11,25 +11,6 @@ import (
 
 const gw = root + ".gateway"
 
-func runtimeNames(norm *normalise.Config) map[string]bool {
-	names := map[string]bool{}
-	for _, s := range norm.Scopes {
-		if s.Runtime != nil && s.Runtime.Enabled {
-			def := "runtime"
-			if s.Scope != "root" {
-				def = strings.TrimPrefix(s.Scope, "project:") + "-runtime"
-			}
-			names[firstNonEmpty(s.Runtime.Name, def)] = true
-		}
-		for _, a := range s.Agents {
-			if a.Runtime != nil && a.Runtime.Enabled {
-				names[firstNonEmpty(a.Runtime.Name, a.Name)] = true
-			}
-		}
-	}
-	return names
-}
-
 func searchNames(norm *normalise.Config) map[string]bool {
 	names := map[string]bool{}
 	for _, s := range norm.Scopes {
@@ -111,7 +92,7 @@ func validateGateway(norm *normalise.Config) []diag.Diagnostic {
 			agentOwners[a.Name][owner] = true
 		}
 	}
-	runtimes, searches, models := runtimeNames(norm), searchNames(norm), deploymentNames(norm)
+	searches, models := searchNames(norm), deploymentNames(norm)
 	for _, m := range g.Models.Allowed {
 		models[m] = true
 	}
@@ -136,10 +117,6 @@ func validateGateway(norm *normalise.Config) []diag.Diagnostic {
 				out = append(out, diag.Err("XF014", where, "endpoint target agent '%s' does not exist", e.Target))
 			case len(owners) > 1:
 				out = append(out, diag.Err("XF014", where, "agent '%s' exists in several projects; set endpoint.project", e.Target))
-			}
-		case "runtime":
-			if !runtimes[e.Target] {
-				out = append(out, diag.Err("XF014", where, "endpoint target runtime '%s' does not exist or is not enabled", e.Target))
 			}
 		case "model":
 			if !models[e.Target] {
@@ -191,11 +168,8 @@ func validateGateway(norm *normalise.Config) []diag.Diagnostic {
 		}
 	}
 
-	// Tracking, chargeback and the telemetry sink.
+	// Tracking and the telemetry sink.
 	tracking := g.TokenTracking
-	if g.Chargeback.Enabled && !tracking.Enabled {
-		out = append(out, diag.Err("XF111", gw+".chargeback", "chargeback requires tokenTracking.enabled"))
-	}
 	for _, e := range g.Endpoints {
 		if e.TokenTracking && !tracking.Enabled && e.Has("tokenTracking") {
 			out = append(out, diag.Err("XF111", fmt.Sprintf("%s.endpoints[%s].tokenTracking", gw, e.Name),

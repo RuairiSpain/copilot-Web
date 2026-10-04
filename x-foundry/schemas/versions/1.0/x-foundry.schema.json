@@ -68,17 +68,11 @@
         "iq": {
           "$ref": "#/$defs/foundryIQ"
         },
-        "runtime": {
-          "$ref": "#/$defs/runtime"
-        },
         "gateway": {
           "$ref": "#/$defs/gateway"
         },
         "storage": {
           "$ref": "#/$defs/storage"
-        },
-        "redis": {
-          "$ref": "#/$defs/redis"
         },
         "keyVault": {
           "$ref": "#/$defs/keyVault"
@@ -96,9 +90,6 @@
           "items": {
             "$ref": "#/$defs/connector"
           }
-        },
-        "events": {
-          "$ref": "#/$defs/events"
         },
         "evaluation": {
           "$ref": "#/$defs/evaluation"
@@ -566,9 +557,6 @@
         "search": {
           "$ref": "#/$defs/search"
         },
-        "runtime": {
-          "$ref": "#/$defs/runtime"
-        },
         "gateway": {
           "$ref": "#/$defs/projectGateway"
         },
@@ -748,9 +736,6 @@
           "items": {
             "type": "string"
           }
-        },
-        "runtime": {
-          "$ref": "#/$defs/runtime"
         },
         "environment": {
           "$ref": "#/$defs/environmentVariables"
@@ -1672,294 +1657,6 @@
       },
       "additionalProperties": false
     },
-    "runtime": {
-      "type": "object",
-      "description": "Azure Container Apps runtime configuration. This schema contains no session-pool functionality.",
-      "properties": {
-        "enabled": {
-          "type": "boolean",
-          "default": false
-        },
-        "type": {
-          "type": "string",
-          "enum": [
-            "containerApps"
-          ],
-          "default": "containerApps"
-        },
-        "name": {
-          "$ref": "#/$defs/resourceName"
-        },
-        "project": {
-          "type": "string"
-        },
-        "image": {
-          "type": "string"
-        },
-        "source": {
-          "type": "string",
-          "description": "Source directory used to build the runtime image."
-        },
-        "registry": {
-          "$ref": "#/$defs/containerRegistry"
-        },
-        "ingress": {
-          "$ref": "#/$defs/runtimeIngress"
-        },
-        "scale": {
-          "$ref": "#/$defs/runtimeScale"
-        },
-        "resources": {
-          "$ref": "#/$defs/containerResources"
-        },
-        "environment": {
-          "$ref": "#/$defs/environmentVariables"
-        },
-        "secrets": {
-          "$ref": "#/$defs/secretReferences"
-        },
-        "health": {
-          "$ref": "#/$defs/healthConfiguration"
-        },
-        "managedIdentity": {
-          "type": "boolean",
-          "default": true
-        },
-        "tags": {
-          "$ref": "#/$defs/tags"
-        }
-      },
-      "additionalProperties": false,
-      "allOf": [
-        {
-          "if": {
-            "properties": {
-              "enabled": {
-                "const": true
-              }
-            },
-            "required": [
-              "enabled"
-            ]
-          },
-          "then": {
-            "anyOf": [
-              {
-                "required": [
-                  "image"
-                ]
-              },
-              {
-                "required": [
-                  "source"
-                ]
-              }
-            ]
-          }
-        }
-      ]
-    },
-    "containerRegistry": {
-      "type": "object",
-      "properties": {
-        "mode": {
-          "type": "string",
-          "enum": [
-            "managed",
-            "existing",
-            "external"
-          ],
-          "default": "managed"
-        },
-        "name": {
-          "$ref": "#/$defs/resourceName"
-        },
-        "resourceId": {
-          "type": "string"
-        },
-        "server": {
-          "type": "string",
-          "format": "hostname"
-        },
-        "repository": {
-          "type": "string"
-        },
-        "tag": {
-          "type": "string",
-          "default": "latest"
-        },
-        "authentication": {
-          "type": "string",
-          "enum": [
-            "managedIdentity",
-            "credentials"
-          ],
-          "default": "managedIdentity"
-        },
-        "sku": {
-          "type": "string",
-          "enum": [
-            "Basic",
-            "Standard",
-            "Premium"
-          ],
-          "description": "Registry tier for a managed registry. Private endpoints require Premium, which is selected automatically in private mode; otherwise Standard."
-        }
-      },
-      "additionalProperties": false
-    },
-    "runtimeIngress": {
-      "type": "object",
-      "properties": {
-        "external": {
-          "type": "boolean",
-          "default": false
-        },
-        "targetPort": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 65535,
-          "default": 8000
-        },
-        "transport": {
-          "type": "string",
-          "enum": [
-            "auto",
-            "http",
-            "http2",
-            "tcp"
-          ],
-          "default": "auto"
-        },
-        "allowInsecure": {
-          "type": "boolean",
-          "default": false
-        },
-        "allowedIps": {
-          "type": "array",
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/ipRange"
-          }
-        }
-      },
-      "additionalProperties": false
-    },
-    "runtimeScale": {
-      "type": "object",
-      "properties": {
-        "minReplicas": {
-          "type": "integer",
-          "minimum": 0,
-          "default": 1
-        },
-        "maxReplicas": {
-          "type": "integer",
-          "minimum": 1,
-          "default": 3
-        },
-        "httpConcurrency": {
-          "type": "integer",
-          "minimum": 1,
-          "default": 50
-        },
-        "rules": {
-          "type": "array",
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/scaleRule"
-          }
-        }
-      },
-      "additionalProperties": false
-    },
-    "scaleRule": {
-      "type": "object",
-      "properties": {
-        "name": {
-          "$ref": "#/$defs/resourceName"
-        },
-        "type": {
-          "type": "string",
-          "enum": [
-            "http",
-            "cpu",
-            "memory",
-            "azure-servicebus",
-            "custom"
-          ]
-        },
-        "metadata": {
-          "type": "object",
-          "default": {},
-          "additionalProperties": {
-            "type": "string"
-          }
-        }
-      },
-      "required": [
-        "name",
-        "type"
-      ],
-      "additionalProperties": false
-    },
-    "containerResources": {
-      "type": "object",
-      "properties": {
-        "cpu": {
-          "type": "number",
-          "enum": [
-            0.25,
-            0.5,
-            0.75,
-            1,
-            1.25,
-            1.5,
-            1.75,
-            2,
-            2.25,
-            2.5,
-            2.75,
-            3,
-            3.25,
-            3.5,
-            3.75,
-            4
-          ],
-          "default": 1
-        },
-        "memory": {
-          "type": "string",
-          "pattern": "^[0-9]+(?:\\.[0-9]+)?Gi$",
-          "default": "2Gi"
-        }
-      },
-      "additionalProperties": false
-    },
-    "healthConfiguration": {
-      "type": "object",
-      "properties": {
-        "livenessPath": {
-          "type": "string",
-          "default": "/health/live"
-        },
-        "readinessPath": {
-          "type": "string",
-          "default": "/health/ready"
-        },
-        "startupPath": {
-          "type": "string",
-          "default": "/health/startup"
-        },
-        "port": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 65535,
-          "default": 8000
-        }
-      },
-      "additionalProperties": false
-    },
     "gateway": {
       "type": "object",
       "description": "APIM AI Gateway configuration generated by the custom extension.",
@@ -2015,9 +1712,6 @@
         },
         "tokenTracking": {
           "$ref": "#/$defs/tokenTracking"
-        },
-        "chargeback": {
-          "$ref": "#/$defs/chargeback"
         },
         "quotas": {
           "$ref": "#/$defs/gatewayQuotas"
@@ -2194,13 +1888,12 @@
         },
         "target": {
           "type": "string",
-          "description": "Logical agent, runtime, model or search target."
+          "description": "Logical agent, model, Search or knowledge base target."
         },
         "targetType": {
           "type": "string",
           "enum": [
             "agent",
-            "runtime",
             "model",
             "search",
             "knowledgeBase"
@@ -2450,48 +2143,6 @@
           "minimum": 30,
           "maximum": 730,
           "default": 365
-        }
-      },
-      "additionalProperties": false
-    },
-    "chargeback": {
-      "type": "object",
-      "properties": {
-        "enabled": {
-          "type": "boolean",
-          "default": true
-        },
-        "dimensions": {
-          "type": "array",
-          "default": [
-            "project",
-            "user"
-          ],
-          "uniqueItems": true,
-          "items": {
-            "$ref": "#/$defs/dimension"
-          }
-        },
-        "currency": {
-          "type": "string",
-          "default": "USD",
-          "pattern": "^[A-Z]{3}$"
-        },
-        "export": {
-          "type": "array",
-          "default": [
-            "logAnalytics"
-          ],
-          "uniqueItems": true,
-          "items": {
-            "type": "string",
-            "enum": [
-              "applicationInsights",
-              "logAnalytics",
-              "storage",
-              "eventHub"
-            ]
-          }
         }
       },
       "additionalProperties": false
@@ -2901,8 +2552,7 @@
               "knowledge",
               "documents",
               "evaluations",
-              "telemetry",
-              "runtime"
+              "telemetry"
             ]
           }
         },
@@ -2956,7 +2606,6 @@
             "documents",
             "evaluations",
             "telemetry",
-            "runtime",
             "custom"
           ]
         },
@@ -2974,69 +2623,6 @@
         "name"
       ],
       "additionalProperties": false
-    },
-    "redis": {
-      "type": "object",
-      "description": "Optional cache for application-level caching. It is not used for session pooling.",
-      "properties": {
-        "enabled": {
-          "type": "boolean",
-          "default": false
-        },
-        "name": {
-          "$ref": "#/$defs/resourceName"
-        },
-        "existingResourceId": {
-          "type": "string"
-        },
-        "service": {
-          "type": "string",
-          "enum": [
-            "azure-managed-redis",
-            "azure-cache-for-redis"
-          ],
-          "default": "azure-managed-redis"
-        },
-        "sku": {
-          "type": "string",
-          "enum": [
-            "memory-optimised",
-            "balanced",
-            "compute-optimised",
-            "basic",
-            "standard",
-            "premium"
-          ],
-          "default": "balanced"
-        },
-        "capacity": {
-          "type": "integer",
-          "minimum": 1,
-          "default": 1
-        },
-        "tlsOnly": {
-          "type": "boolean",
-          "default": true
-        },
-        "publicNetworkAccess": {
-          "type": "boolean",
-          "default": false
-        },
-        "persistence": {
-          "type": "boolean",
-          "default": false
-        },
-        "tags": {
-          "$ref": "#/$defs/tags"
-        }
-      },
-      "additionalProperties": false,
-      "not": {
-        "required": [
-          "name",
-          "existingResourceId"
-        ]
-      }
     },
     "keyVault": {
       "type": "object",
@@ -3104,7 +2690,7 @@
             "systemAssignedAndUserAssigned"
           ],
           "default": "userAssigned",
-          "description": "Identity attached to extension-created runtime, gateway and Search resources. Foundry accounts and projects always use a system-assigned identity, which the platform requires."
+          "description": "Identity attached to extension-created gateway and Search resources. Foundry accounts and projects always use a system-assigned identity, which the platform requires."
         },
         "name": {
           "$ref": "#/$defs/resourceName"
@@ -3303,101 +2889,6 @@
           "description": "Key Vault secret reference. Secret material must not be stored in azure.yaml."
         }
       },
-      "additionalProperties": false
-    },
-    "events": {
-      "type": "object",
-      "properties": {
-        "enabled": {
-          "type": "boolean",
-          "default": false
-        },
-        "provider": {
-          "type": "string",
-          "enum": [
-            "serviceBus",
-            "eventGrid",
-            "eventHubs"
-          ],
-          "default": "serviceBus"
-        },
-        "namespace": {
-          "$ref": "#/$defs/resourceName"
-        },
-        "entities": {
-          "type": "array",
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/eventEntity"
-          }
-        },
-        "publicNetworkAccess": {
-          "type": "boolean",
-          "default": false
-        },
-        "tags": {
-          "$ref": "#/$defs/tags"
-        },
-        "sku": {
-          "type": "string",
-          "enum": [
-            "Basic",
-            "Standard",
-            "Premium"
-          ],
-          "description": "Service Bus tier. Private endpoints require Premium, which is selected automatically in private mode. Applies to provider serviceBus."
-        },
-        "capacity": {
-          "type": "integer",
-          "enum": [
-            1,
-            2,
-            4,
-            8,
-            16
-          ],
-          "default": 1,
-          "description": "Premium messaging units."
-        },
-        "zoneRedundant": {
-          "type": "boolean",
-          "default": false
-        }
-      },
-      "additionalProperties": false
-    },
-    "eventEntity": {
-      "type": "object",
-      "properties": {
-        "name": {
-          "$ref": "#/$defs/resourceName"
-        },
-        "type": {
-          "type": "string",
-          "enum": [
-            "queue",
-            "topic",
-            "subscription",
-            "eventSubscription"
-          ]
-        },
-        "parent": {
-          "type": "string"
-        },
-        "maxDeliveryCount": {
-          "type": "integer",
-          "minimum": 1,
-          "default": 10
-        },
-        "deadLettering": {
-          "type": "boolean",
-          "default": true
-        }
-      },
-      "required": [
-        "name",
-        "type"
-      ],
       "additionalProperties": false
     },
     "evaluation": {
@@ -3647,14 +3138,6 @@
           "number",
           "boolean"
         ]
-      }
-    },
-    "secretReferences": {
-      "type": "object",
-      "default": {},
-      "additionalProperties": {
-        "type": "string",
-        "description": "Key Vault secret name or URI. Raw secret values are prohibited."
       }
     },
     "tags": {

@@ -1,7 +1,6 @@
 package graph
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/RuairiSpain/copilot-Web/x-foundry/internal/config"
@@ -10,16 +9,16 @@ import (
 )
 
 // Stages follow the deployment order in the specification (resource group, identity,
-// networking, storage, Redis, Search, Foundry resource, projects, models, ...). They break
+// networking, storage, Search, Foundry resource, projects, models, ...). They break
 // ties only; dependencies always win. Deliberate deviations: MCPs, connectors and
 // knowledge bases come before toolboxes and agents because those reference them; the
-// observability workspace is created early because runtimes and the gateway log to it
+// observability workspace is created early because the gateway logs to it
 // (alerts are the late "Monitoring" step).
 var Stages = map[string]int{
 	"resource-group": 0, "identity": 10, "observability": 10, "network": 20, "private-dns": 22,
-	"storage": 30, "key-vault": 32, "events": 35, "redis": 40, "cosmos": 41, "registry": 45,
+	"storage": 30, "key-vault": 32, "cosmos": 41,
 	"search": 50, "private-endpoint": 60, "foundry-account": 70, "foundry-project": 80,
-	"capability-host": 82, "runtime": 85, "model-deployment": 90, "connector": 95, "mcp": 100,
+	"capability-host": 82, "model-deployment": 90, "connector": 95, "mcp": 100,
 	"knowledge-base": 110, "toolbox": 120, "agent": 130, "evaluation": 150, "gateway": 160,
 	"alerts": 170, "governance": 180,
 }
@@ -27,7 +26,6 @@ var Stages = map[string]int{
 type builder struct {
 	norm                                           *normalise.Config
 	g                                              *Graph
-	runtime                                        map[string]string // runtime node id -> logical name
 	rg, identity, workspace, network, dns, foundry string
 }
 
@@ -100,21 +98,9 @@ func (b *builder) foundations() {
 		b.node(ids.KeyVault, "key-vault", "", false)
 		b.link(ids.KeyVault, b.rg, b.identity)
 	}
-	if e := n.Events; e != nil && e.Enabled {
-		b.node(ids.Events, "events", "", false)
-		b.link(ids.Events, b.rg)
-	}
-	if r := n.Redis; r != nil && r.Enabled {
-		b.node(ids.Redis, "redis", "", r.ExistingResourceID != "")
-		b.link(ids.Redis, b.rg)
-	}
 	if c := n.Cosmos; c != nil && c.Enabled {
 		b.node(ids.Cosmos, "cosmos", "", c.ExistingResourceID != "")
 		b.link(ids.Cosmos, b.rg, b.identity)
-	}
-	if n.HasImplicit("container-registry", "registry") {
-		b.node(ids.Registry, "registry", "", false)
-		b.link(ids.Registry, b.rg, b.identity)
 	}
 	for _, s := range n.Scopes {
 		if s.Search != nil && s.Search.Enabled {
@@ -241,17 +227,6 @@ func (b *builder) projectItems(p *normalise.EffectiveProject) {
 			}
 		}
 	}
-	if p.Runtime != nil && p.Runtime.Enabled {
-		scope := p.RuntimeScope
-		if scope == "" {
-			scope = pscope
-		}
-		def, project := "runtime", ""
-		if scope != ids.RootScope {
-			def, project = p.Name+"-runtime", pnode
-		}
-		b.runtimeNode(scope, p.Runtime, project, firstNonEmpty(p.Runtime.Name, def))
-	}
 	for _, a := range p.Agents {
 		h := host(p, origin("agent", a.Name))
 		id := b.node(target("agent", "agent", a.Name), "agent", h, false)
@@ -270,10 +245,6 @@ func (b *builder) projectItems(p *normalise.EffectiveProject) {
 		}
 		for _, name := range a.KnowledgeBases {
 			b.link(id, target("knowledgeBase", "knowledge-base", name))
-		}
-		if a.Runtime != nil && a.Runtime.Enabled {
-			rt := b.runtimeNode(fmt.Sprintf("agent:%s:%s", h, a.Name), a.Runtime, ids.ProjectNode(h), firstNonEmpty(a.Runtime.Name, a.Name))
-			b.link(id, rt)
 		}
 	}
 	if ev := p.Evaluation; ev != nil && ev.Enabled {
@@ -297,23 +268,6 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func (b *builder) runtimeNode(key string, rt *config.Runtime, projectNode, logical string) string {
-	id := b.node("runtime:"+key, "runtime", key, false)
-	b.runtime[id] = logical
-	b.link(id, b.rg, b.workspace, b.network, b.foundry, projectNode)
-	if rt.ManagedIdentity {
-		b.link(id, b.identity)
-	}
-	if rt.Source != "" && rt.Registry.Mode == "managed" {
-		b.link(id, ids.Registry)
-	}
-	if len(rt.Secrets) > 0 {
-		b.link(id, ids.KeyVault)
-	}
-	b.link(id, ids.Redis)
-	return id
-}
-
 func (b *builder) gateway() {
 	n := b.norm
 	g := n.Gateway
@@ -322,9 +276,6 @@ func (b *builder) gateway() {
 	}
 	id := b.node(ids.Gateway, "gateway", "", false)
 	b.link(id, b.rg, b.identity, b.workspace, b.network)
-	if g.Caching.Enabled {
-		b.link(id, ids.Redis)
-	}
 	for _, e := range g.Endpoints {
 		switch e.TargetType {
 		case "agent":
@@ -368,12 +319,6 @@ func (b *builder) gateway() {
 					b.link(id, ids.SearchNode(s.Scope))
 				}
 			}
-		case "runtime":
-			for rid, logical := range b.runtime {
-				if logical == e.Target {
-					b.link(id, rid)
-				}
-			}
 		}
 	}
 }
@@ -385,7 +330,7 @@ func (b *builder) monitoringAndGovernance() {
 		b.link(alerts, b.workspace)
 		for _, id := range b.g.IDs() {
 			switch b.g.Node(id).Kind {
-			case "runtime", "gateway", "search", "foundry-account":
+			case "gateway", "search", "foundry-account":
 				b.link(alerts, id)
 			}
 		}
@@ -398,7 +343,7 @@ func (b *builder) monitoringAndGovernance() {
 
 // Build constructs the deployment graph from a normalised configuration.
 func Build(norm *normalise.Config) *Graph {
-	b := &builder{norm: norm, g: New(), runtime: map[string]string{}}
+	b := &builder{norm: norm, g: New()}
 	b.foundations()
 	b.projects()
 	b.gateway()

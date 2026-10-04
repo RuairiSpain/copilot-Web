@@ -62,8 +62,8 @@ func TestEveryNodeKindHasAStage(t *testing.T) {
 func TestStageOrderFollowsTheSpecification(t *testing.T) {
 	p := MustOK(t, mustEnterprise(t))
 	for _, pair := range [][2]string{
-		{"resource-group", "identity"}, {"identity", "network"}, {"network", "storage"}, {"storage", "redis"},
-		{"redis", "search:hub"}, {"search:hub", "foundry"}, {"foundry", "foundry-project:hub"},
+		{"resource-group", "identity"}, {"identity", "network"}, {"network", "storage"},
+		{"storage", "search:hub"}, {"search:hub", "foundry"}, {"foundry", "foundry-project:hub"},
 		{"foundry-project:hub", "model-deployment:hub:gpt-5"}, {"gateway", "alerts"}, {"alerts", "governance"},
 	} {
 		if index(p, pair[0]) < 0 || index(p, pair[0]) > index(p, pair[1]) {
@@ -127,27 +127,17 @@ func TestHubItemsAreSharedAndRootItemsAreInstantiatedPerProject(t *testing.T) {
 	exactDeps(t, p, "toolbox:hub:tb", "foundry-project:hub", "mcp:hub:graph")
 }
 
-func TestRuntimeAndAgentRuntimeDependencies(t *testing.T) {
-	p := MustPlan(t, Public, models, `redis: {enabled: true}`,
-		`projects: [{name: fin, runtime: {enabled: true, image: "i:1"}, agents: [{name: bot, kind: hosted, runtime: {enabled: true, source: ./bot, secrets: {db: db-pass}}}]}]`)
-	wantDeps(t, p, "runtime:project:fin", "resource-group", "identity", "observability", "foundry", "foundry-project:project:fin", "redis")
-	wantDeps(t, p, "runtime:agent:project:fin:bot", "registry", "key-vault")
-	wantDeps(t, p, "agent:project:fin:bot", "runtime:agent:project:fin:bot")
-}
-
 func TestGatewayDependsOnEveryEndpointTarget(t *testing.T) {
-	p := MustPlan(t, Public, models, `observability: {}`, `redis: {enabled: true}`, `search: {name: srch-main}`,
-		`runtime: {enabled: true, image: "i:1", name: rt-main}`,
+	p := MustPlan(t, Public, models, `observability: {}`, `search: {name: srch-main}`,
 		`iq: {knowledgeBases: [{name: policies, sources: [{name: files, type: blob, container: policies}]}]}`,
 		`projects: [{name: fin, agents: [{name: bot, instructions: x}]}]`,
-		`gateway: {enabled: true, caching: {enabled: true}, endpoints: [
+		`gateway: {enabled: true, endpoints: [
 			{name: ep1, path: /a, target: bot, targetType: agent},
 			{name: ep2, path: /m, target: gpt-5, targetType: model},
 			{name: ep3, path: /s, target: srch-main, targetType: search},
-			{name: ep4, path: /r, target: rt-main, targetType: runtime},
-			{name: ep5, path: /k, target: policies, targetType: knowledgeBase}]}`)
-	wantDeps(t, p, "gateway", "agent:project:fin:bot", "model-deployment:root:gpt-5", "search:root", "runtime:root",
-		"knowledge-base:project:fin:policies", "redis", "observability")
+			{name: ep4, path: /k, target: policies, targetType: knowledgeBase}]}`)
+	wantDeps(t, p, "gateway", "agent:project:fin:bot", "model-deployment:root:gpt-5", "search:root",
+		"knowledge-base:project:fin:policies", "observability")
 }
 
 func TestAlertsAndGovernance(t *testing.T) {
@@ -168,9 +158,8 @@ func TestExistingResourcesAreMarked(t *testing.T) {
 		fmt.Sprintf(`storage: {existingResourceId: "%s/Microsoft.Storage/storageAccounts/st1"}`, arm),
 		fmt.Sprintf(`search: {existingResourceId: "%s/Microsoft.Search/searchServices/s1"}`, arm),
 		fmt.Sprintf(`cosmos: {existingResourceId: "%s/Microsoft.DocumentDB/databaseAccounts/c1"}`, arm),
-		fmt.Sprintf(`redis: {enabled: true, existingResourceId: "%s/Microsoft.Cache/redis/r1"}`, arm),
 		fmt.Sprintf(`managedIdentity: {existingResourceId: "%s/Microsoft.ManagedIdentity/userAssignedIdentities/id1"}`, arm))
-	for _, id := range []string{"storage", "search:root", "cosmos", "redis", "identity"} {
+	for _, id := range []string{"storage", "search:root", "cosmos", "identity"} {
 		if n, _ := p.Node(id); !n.Existing {
 			t.Fatalf("%s should be marked existing", id)
 		}

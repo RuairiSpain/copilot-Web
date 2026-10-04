@@ -21,10 +21,7 @@ var privateLinkZones = map[string]zoneInfo{
 	"storage":     {"blob", []string{"privatelink.blob.core.windows.net"}},
 	"storage-dfs": {"dfs", []string{"privatelink.dfs.core.windows.net"}},
 	"key-vault":   {"vault", []string{"privatelink.vaultcore.azure.net"}},
-	"redis":       {"redisCache", []string{"privatelink.redis.cache.windows.net"}},
 	"cosmos":      {"Sql", []string{"privatelink.documents.azure.com"}},
-	"events":      {"namespace", []string{"privatelink.servicebus.windows.net"}},
-	"registry":    {"registry", []string{"privatelink.azurecr.io"}},
 }
 
 // Result is the output of Normalise.
@@ -119,7 +116,7 @@ func (n *normaliser) assemble() {
 		p := &cfg.Projects[i]
 		s := &ScopeResources{
 			Scope: ids.ProjectScope(p.Name), Models: p.Models, Agents: p.Agents, Toolboxes: p.Toolboxes,
-			Mcps: p.Mcps, Connectors: p.Connectors, Search: p.Search, Runtime: p.Runtime, Evaluation: p.Evaluation,
+			Mcps: p.Mcps, Connectors: p.Connectors, Search: p.Search, Evaluation: p.Evaluation,
 		}
 		if p.IQ != nil && p.IQ.Enabled {
 			s.KnowledgeBases = append(s.KnowledgeBases, p.IQ.KnowledgeBases...)
@@ -156,11 +153,6 @@ func (n *normaliser) assemble() {
 			}
 			t := target(project)
 			t.KnowledgeBases = append(t.KnowledgeBases, kb)
-		}
-	}
-	if cfg.Runtime != nil {
-		if t := target(cfg.Runtime.Project); t.Runtime == nil {
-			t.Runtime = cfg.Runtime
 		}
 	}
 	if cfg.Evaluation != nil {
@@ -426,12 +418,6 @@ func (n *normaliser) effectiveProject(name string) *EffectiveProject {
 	record("knowledgeBase", o)
 	eff.Origins = origins
 
-	switch {
-	case own.Runtime != nil:
-		eff.Runtime, eff.RuntimeScope = own.Runtime, scopeID
-	case root.Runtime != nil:
-		eff.Runtime, eff.RuntimeScope = root.Runtime, ids.RootScope
-	}
 	eff.Evaluation = own.Evaluation
 	if eff.Evaluation == nil {
 		eff.Evaluation = root.Evaluation
@@ -574,13 +560,6 @@ func (n *normaliser) resolveGateway() *config.Gateway {
 		n.addImplicit("gateway-authentication", "entra", ids.RootScope, "gateway requires Entra authentication")
 	}
 	tracking := &g.TokenTracking
-	if g.Chargeback.Enabled {
-		for _, dim := range g.Chargeback.Dimensions {
-			if !has(tracking.Dimensions, dim) {
-				tracking.Dimensions = append(tracking.Dimensions, dim)
-			}
-		}
-	}
 	if has(tracking.Dimensions, "department") && tracking.DepartmentClaim == "" {
 		tracking.DepartmentClaim = "department"
 	}
@@ -593,48 +572,8 @@ func (n *normaliser) resolveGateway() *config.Gateway {
 	return g
 }
 
-func (n *normaliser) runtimes() []*config.Runtime {
-	var found []*config.Runtime
-	for _, s := range n.scopes {
-		if s.Runtime != nil {
-			found = append(found, s.Runtime)
-		}
-		for i := range s.Agents {
-			if s.Agents[i].Runtime != nil {
-				found = append(found, s.Agents[i].Runtime)
-			}
-		}
-	}
-	for _, r := range found {
-		if !r.Resources.Has("memory") {
-			r.Resources.Memory = fmt.Sprintf("%gGi", r.Resources.CPU*2)
-		}
-	}
-	return found
-}
-
-var skuRank = map[string]int{"Basic": 1, "Standard": 2, "Premium": 3}
-
-// registrySKU is the tier of the managed registry: the highest explicit request, else
-// Premium in private mode (required for private endpoints) and Standard otherwise.
-func (n *normaliser) registrySKU(runtimes []*config.Runtime) string {
-	best := ""
-	for _, r := range runtimes {
-		if r.Enabled && r.Registry.Mode == "managed" && skuRank[r.Registry.SKU] > skuRank[best] {
-			best = r.Registry.SKU
-		}
-	}
-	switch {
-	case best != "":
-		return best
-	case n.cfg.Security.Network.Mode == "private":
-		return "Premium"
-	}
-	return "Standard"
-}
-
 type componentSet struct {
-	storage, keyVault, redis, cosmos, events, registry bool
+	storage, keyVault, cosmos bool
 }
 
 func (n *normaliser) resolveNetwork(c componentSet, searchScopes []string) Network {
@@ -676,8 +615,7 @@ func (n *normaliser) resolveNetwork(c componentSet, searchScopes []string) Netwo
 		component string
 		zoneKey   string
 	}{
-		{c.keyVault, ids.KeyVault, "key-vault"}, {c.redis, ids.Redis, "redis"}, {c.cosmos, ids.Cosmos, "cosmos"},
-		{c.events, ids.Events, "events"}, {c.registry, ids.Registry, "registry"},
+		{c.keyVault, ids.KeyVault, "key-vault"}, {c.cosmos, ids.Cosmos, "cosmos"},
 	} {
 		if e.on {
 			endpoints = append(endpoints, endpoint{e.component, e.zoneKey})
@@ -726,7 +664,6 @@ func (n *normaliser) run() Result {
 		effective = append(effective, n.effectiveProject(name))
 	}
 	n.resolveSearch(effective)
-	runtimes := n.runtimes()
 	n.storage = n.resolveStorage()
 	cosmos := n.resolveCosmos()
 	gateway := n.resolveGateway()
@@ -745,27 +682,15 @@ func (n *normaliser) run() Result {
 			usesSecrets = usesSecrets || (c.Authentication != nil && c.Authentication.SecretRef != "")
 		}
 	}
-	for _, r := range runtimes {
-		usesSecrets = usesSecrets || len(r.Secrets) > 0
-	}
 	keyVault := cfg.KeyVault
 	if keyVault == nil && usesSecrets {
 		keyVault = config.New[config.KeyVault]()
 		n.addImplicit("key-vault", "key-vault", ids.RootScope, "secret references are used")
 	}
 	observability := cfg.Observability
-	anyRuntime := false
-	for _, r := range runtimes {
-		anyRuntime = anyRuntime || r.Enabled
-	}
-	if observability == nil && ((gateway != nil && gateway.Enabled) || anyRuntime) {
+	if observability == nil && gateway != nil && gateway.Enabled {
 		observability = config.New[config.Observability]()
-		n.addImplicit("observability", "observability", ids.RootScope, "gateway or runtime telemetry")
-	}
-
-	events := cfg.Events
-	if events != nil && events.Enabled && events.Provider == "serviceBus" && events.SKU == "" {
-		events.SKU = map[bool]string{true: "Premium", false: "Standard"}[cfg.Security.Network.Mode == "private"]
+		n.addImplicit("observability", "observability", ids.RootScope, "gateway telemetry")
 	}
 
 	scopeSet := map[string]bool{}
@@ -783,22 +708,10 @@ func (n *normaliser) run() Result {
 	}
 	sort.Strings(searchScopes)
 
-	registryNeeded := false
-	for _, r := range runtimes {
-		registryNeeded = registryNeeded || (r.Enabled && r.Source != "" && r.Registry.Mode == "managed")
-	}
-	registrySKU := ""
-	if registryNeeded {
-		n.addImplicit("container-registry", "registry", ids.RootScope, "runtime image is built from source")
-		registrySKU = n.registrySKU(runtimes)
-	}
 	network := n.resolveNetwork(componentSet{
 		storage:  n.storage != nil && n.storage.Enabled,
 		keyVault: keyVault != nil && keyVault.Enabled,
-		redis:    cfg.Redis != nil && cfg.Redis.Enabled,
 		cosmos:   cosmos != nil && cosmos.Enabled,
-		events:   cfg.Events != nil && cfg.Events.Enabled,
-		registry: registryNeeded,
 	}, searchScopes)
 
 	var hubView *HubView
@@ -823,8 +736,8 @@ func (n *normaliser) run() Result {
 		LocalAuthentication: cfg.Security.LocalAuthentication, PurgeProtection: cfg.Security.PurgeProtection,
 		AgentSetup: cfg.ResolvedAgentSetup(), FoundryIdentity: "systemAssigned",
 		Hub: hubView, Scopes: n.scopes, Projects: effective, Gateway: gateway, Storage: n.storage,
-		Redis: cfg.Redis, KeyVault: keyVault, Cosmos: cosmos, ManagedIdentity: identity,
-		Observability: observability, Events: events, RegistrySKU: registrySKU, Governance: cfg.Governance,
+		KeyVault: keyVault, Cosmos: cosmos, ManagedIdentity: identity,
+		Observability: observability, Governance: cfg.Governance,
 		Implicit: n.implicit,
 	}
 	return Result{Config: out, Diagnostics: n.diags}

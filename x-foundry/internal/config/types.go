@@ -40,17 +40,14 @@ type XFoundry struct {
 	Mcps            []Mcp              `json:"mcps,omitempty"`
 	Search          *Search            `json:"search,omitempty"`
 	IQ              *FoundryIQ         `json:"iq,omitempty"`
-	Runtime         *Runtime           `json:"runtime,omitempty"`
 	Gateway         *Gateway           `json:"gateway,omitempty"`
 	Storage         *Storage           `json:"storage,omitempty"`
-	Redis           *Redis             `json:"redis,omitempty"`
 	KeyVault        *KeyVault          `json:"keyVault,omitempty"`
 	Cosmos          *Cosmos            `json:"cosmos,omitempty"`
 	AgentService    AgentService       `json:"agentService"`
 	ManagedIdentity *ManagedIdentity   `json:"managedIdentity,omitempty"`
 	Observability   *Observability     `json:"observability,omitempty"`
 	Connectors      []Connector        `json:"connectors,omitempty"`
-	Events          *Events            `json:"events,omitempty"`
 	Evaluation      *Evaluation        `json:"evaluation,omitempty"`
 	Governance      *Governance        `json:"governance,omitempty"`
 	Tags            Tags               `json:"tags,omitempty"`
@@ -188,81 +185,6 @@ type Connector struct {
 // GetName returns the connector name.
 func (c Connector) GetName() string { return c.Name }
 
-// ------------------------------------------------------------------------ runtime
-
-// ContainerRegistry is the registry a runtime image comes from.
-type ContainerRegistry struct {
-	Mode           string `json:"mode" default:"managed"`
-	Name           string `json:"name,omitempty"`
-	ResourceID     string `json:"resourceId,omitempty"`
-	Server         string `json:"server,omitempty"`
-	Repository     string `json:"repository,omitempty"`
-	Tag            string `json:"tag" default:"latest"`
-	Authentication string `json:"authentication" default:"managedIdentity"`
-	SKU            string `json:"sku,omitempty"`
-}
-
-// RuntimeIngress configures ingress.
-type RuntimeIngress struct {
-	External      bool     `json:"external"`
-	TargetPort    int      `json:"targetPort" default:"8000"`
-	Transport     string   `json:"transport" default:"auto"`
-	AllowInsecure bool     `json:"allowInsecure"`
-	AllowedIPs    []string `json:"allowedIps,omitempty"`
-}
-
-// ScaleRule is a runtime scale rule.
-type ScaleRule struct {
-	Name     string            `json:"name"`
-	Type     string            `json:"type"`
-	Metadata map[string]string `json:"metadata,omitempty"`
-}
-
-// GetName returns the rule name.
-func (r ScaleRule) GetName() string { return r.Name }
-
-// RuntimeScale configures replicas.
-type RuntimeScale struct {
-	MinReplicas     int         `json:"minReplicas" default:"1"`
-	MaxReplicas     int         `json:"maxReplicas" default:"3"`
-	HTTPConcurrency int         `json:"httpConcurrency" default:"50"`
-	Rules           []ScaleRule `json:"rules,omitempty"`
-}
-
-// ContainerResources is CPU and memory.
-type ContainerResources struct {
-	Tracked
-	CPU    float64 `json:"cpu" default:"1"`
-	Memory string  `json:"memory" default:"2Gi"`
-}
-
-// HealthConfiguration describes health probes.
-type HealthConfiguration struct {
-	LivenessPath  string `json:"livenessPath" default:"/health/live"`
-	ReadinessPath string `json:"readinessPath" default:"/health/ready"`
-	StartupPath   string `json:"startupPath" default:"/health/startup"`
-	Port          int    `json:"port" default:"8000"`
-}
-
-// Runtime is an Azure Container Apps runtime. It has no session-pool settings.
-type Runtime struct {
-	Enabled         bool                `json:"enabled"`
-	Type            string              `json:"type" default:"containerApps"`
-	Name            string              `json:"name,omitempty"`
-	Project         string              `json:"project,omitempty"`
-	Image           string              `json:"image,omitempty"`
-	Source          string              `json:"source,omitempty"`
-	Registry        ContainerRegistry   `json:"registry"`
-	Ingress         RuntimeIngress      `json:"ingress"`
-	Scale           RuntimeScale        `json:"scale"`
-	Resources       ContainerResources  `json:"resources"`
-	Environment     map[string]any      `json:"environment,omitempty"`
-	Secrets         map[string]string   `json:"secrets,omitempty"`
-	Health          HealthConfiguration `json:"health"`
-	ManagedIdentity bool                `json:"managedIdentity" default:"true"`
-	Tags            Tags                `json:"tags,omitempty"`
-}
-
 // Agent is a Foundry agent.
 type Agent struct {
 	Name           string         `json:"name"`
@@ -275,7 +197,6 @@ type Agent struct {
 	Toolboxes      []string       `json:"toolboxes,omitempty"`
 	Mcps           []string       `json:"mcps,omitempty"`
 	KnowledgeBases []string       `json:"knowledgeBases,omitempty"`
-	Runtime        *Runtime       `json:"runtime,omitempty"`
 	Environment    map[string]any `json:"environment,omitempty"`
 	Tags           Tags           `json:"tags,omitempty"`
 }
@@ -567,14 +488,6 @@ type TokenTracking struct {
 	RetentionDays           int      `json:"retentionDays" default:"365"`
 }
 
-// Chargeback configures cost allocation.
-type Chargeback struct {
-	Enabled    bool     `json:"enabled" default:"true"`
-	Dimensions []string `json:"dimensions" default:"project,user"`
-	Currency   string   `json:"currency" default:"USD"`
-	Export     []string `json:"export" default:"logAnalytics"`
-}
-
 // QuotaProfile is a token or request quota.
 type QuotaProfile struct {
 	Name            string   `json:"name"`
@@ -683,7 +596,6 @@ type Gateway struct {
 	Models         GatewayModels          `json:"models"`
 	Routing        GatewayRouting         `json:"routing"`
 	TokenTracking  TokenTracking          `json:"tokenTracking"`
-	Chargeback     Chargeback             `json:"chargeback"`
 	Quotas         GatewayQuotas          `json:"quotas"`
 	Limits         GatewayLimits          `json:"limits"`
 	Caching        GatewayCaching         `json:"caching"`
@@ -727,21 +639,6 @@ type Storage struct {
 	LocalAuthentication   bool               `json:"localAuthentication"`
 	RetentionDays         int                `json:"retentionDays" default:"30"`
 	Tags                  Tags               `json:"tags,omitempty"`
-}
-
-// Redis is the application cache.
-type Redis struct {
-	Tracked
-	Enabled             bool   `json:"enabled"`
-	Name                string `json:"name,omitempty"`
-	ExistingResourceID  string `json:"existingResourceId,omitempty"`
-	Service             string `json:"service" default:"azure-managed-redis"`
-	SKU                 string `json:"sku" default:"balanced"`
-	Capacity            int    `json:"capacity" default:"1"`
-	TLSOnly             bool   `json:"tlsOnly" default:"true"`
-	PublicNetworkAccess bool   `json:"publicNetworkAccess"`
-	Persistence         bool   `json:"persistence"`
-	Tags                Tags   `json:"tags,omitempty"`
 }
 
 // KeyVault is the Key Vault.
@@ -813,32 +710,6 @@ type Observability struct {
 	Alerts              bool     `json:"alerts" default:"true"`
 	Export              []string `json:"export,omitempty"`
 	Tags                Tags     `json:"tags,omitempty"`
-}
-
-// EventEntity is a queue, topic or subscription.
-type EventEntity struct {
-	Name             string `json:"name"`
-	Type             string `json:"type"`
-	Parent           string `json:"parent,omitempty"`
-	MaxDeliveryCount int    `json:"maxDeliveryCount" default:"10"`
-	DeadLettering    bool   `json:"deadLettering" default:"true"`
-}
-
-// GetName returns the entity name.
-func (e EventEntity) GetName() string { return e.Name }
-
-// Events configures eventing.
-type Events struct {
-	Tracked
-	Enabled             bool          `json:"enabled"`
-	Provider            string        `json:"provider" default:"serviceBus"`
-	Namespace           string        `json:"namespace,omitempty"`
-	SKU                 string        `json:"sku,omitempty"`
-	Capacity            int           `json:"capacity" default:"1"`
-	ZoneRedundant       bool          `json:"zoneRedundant"`
-	Entities            []EventEntity `json:"entities,omitempty"`
-	PublicNetworkAccess bool          `json:"publicNetworkAccess"`
-	Tags                Tags          `json:"tags,omitempty"`
 }
 
 // EvaluationDataset is an evaluation dataset.
@@ -943,7 +814,6 @@ type Project struct {
 	Mcps          []Mcp              `json:"mcps,omitempty"`
 	IQ            *FoundryIQ         `json:"iq,omitempty"`
 	Search        *Search            `json:"search,omitempty"`
-	Runtime       *Runtime           `json:"runtime,omitempty"`
 	Gateway       *ProjectGateway    `json:"gateway,omitempty"`
 	Connectors    []Connector        `json:"connectors,omitempty"`
 	Evaluation    *Evaluation        `json:"evaluation,omitempty"`

@@ -19,7 +19,7 @@ import (
 func exampleFiles(t *testing.T) []string {
 	t.Helper()
 	files, err := filepath.Glob("../../examples/*.yaml")
-	if err != nil || len(files) < 7 {
+	if err != nil || len(files) < 6 {
 		t.Fatalf("examples: %v %v", files, err)
 	}
 	return files

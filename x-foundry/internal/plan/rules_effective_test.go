@@ -279,7 +279,6 @@ func TestRule14GatewayTargets(t *testing.T) {
 	for _, c := range []struct{ endpoint, message string }{
 		{`{name: ep1, path: /a, target: ghost, targetType: agent}`, "agent 'ghost' does not exist"},
 		{`{name: ep1, path: /a, target: ghost, targetType: agent, project: fin}`, "in project 'fin'"},
-		{`{name: ep1, path: /a, target: ghost, targetType: runtime}`, "runtime 'ghost'"},
 		{`{name: ep1, path: /a, target: ghost, targetType: model}`, "model 'ghost'"},
 		{`{name: ep1, path: /a, target: ghost, targetType: search}`, "search 'ghost'"},
 		{`{name: ep1, path: /a, target: ghost, targetType: knowledgeBase}`, "knowledge base 'ghost'"},
@@ -288,14 +287,12 @@ func TestRule14GatewayTargets(t *testing.T) {
 	}
 	MustOK(t, Run(t,
 		`models: {default: gpt-5, allowed: [gpt-5]}`, `observability: {}`, `search: {name: srch-main}`,
-		`runtime: {enabled: true, image: "i:1", name: rt-main, project: fin}`,
 		`iq: {knowledgeBases: [{name: policies, sources: [{name: files, type: blob, container: policies}]}]}`,
 		`projects: [{name: fin, agents: [{name: bot, instructions: x}]}]`,
 		`gateway: {enabled: true, authentication: {audiences: ["api://gw"]}, endpoints: [`+ep+`,
 			{name: ep2, path: /m, target: gpt-5, targetType: model},
 			{name: ep3, path: /s, target: srch-main, targetType: search},
-			{name: ep4, path: /r, target: rt-main, targetType: runtime},
-			{name: ep5, path: /k, target: policies, targetType: knowledgeBase, project: fin}]}`))
+			{name: ep4, path: /k, target: policies, targetType: knowledgeBase, project: fin}]}`))
 	ExpectCase(t, "XF014", "", "several projects", models, `observability: {}`,
 		`projects: [{name: aa, agents: [{name: bot}]}, {name: bb, agents: [{name: bot}]}]`, `gateway: {enabled: true, endpoints: [`+ep+`]}`)
 	MustOK(t, Run(t, models, `observability: {}`, `agents: [{name: bot}]`, `projects: [{name: aa}, {name: bb}]`, `gateway: {enabled: true, endpoints: [`+ep+`]}`))
@@ -325,10 +322,9 @@ func TestGatewayRegistrationRequiresEnabledGateway(t *testing.T) {
 	}
 }
 
-func TestGatewayTrackingChargebackAndTelemetry(t *testing.T) {
-	ExpectCase(t, "XF111", "", "chargeback requires", gwDoc(`, tokenTracking: {enabled: false}`)...)
-	ExpectCase(t, "XF111", "", "endpoint enables", gwDoc(`, tokenTracking: {enabled: false}, chargeback: {enabled: false}, endpoints: [{name: ep1, path: /a, target: bot, targetType: agent, tokenTracking: true}]`)...)
-	MustOK(t, Run(t, gwDoc(`, tokenTracking: {enabled: false}, chargeback: {enabled: false}`)...))
+func TestGatewayTrackingAndTelemetry(t *testing.T) {
+	ExpectCase(t, "XF111", "", "endpoint enables", gwDoc(`, tokenTracking: {enabled: false}, endpoints: [{name: ep1, path: /a, target: bot, targetType: agent, tokenTracking: true}]`)...)
+	MustOK(t, Run(t, gwDoc(`, tokenTracking: {enabled: false}`)...))
 	noObs := gwDoc("")
 	noObs = append(noObs[:2:2], noObs[3:]...) // drop `observability: {}`
 	MustOK(t, Run(t, noObs...))               // implicit observability
@@ -366,8 +362,8 @@ func TestGatewayDefaultsAreDerived(t *testing.T) {
 	}
 }
 
-func TestGatewayChargebackDimensionsAreTracked(t *testing.T) {
-	p := MustPlan(t, gwDoc(`, chargeback: {dimensions: [project, department]}`)...)
+func TestGatewayDepartmentDimensionNeedsAClaim(t *testing.T) {
+	p := MustPlan(t, gwDoc(`, tokenTracking: {dimensions: [project, department]}`)...)
 	tr := p.Config.Gateway.TokenTracking
 	found := false
 	for _, d := range tr.Dimensions {
@@ -376,7 +372,7 @@ func TestGatewayChargebackDimensionsAreTracked(t *testing.T) {
 	if !found || tr.DepartmentClaim != "department" {
 		t.Fatalf("tracking = %+v", tr)
 	}
-	custom := MustPlan(t, gwDoc(`, tokenTracking: {departmentClaim: dept}, chargeback: {dimensions: [department]}`)...)
+	custom := MustPlan(t, gwDoc(`, tokenTracking: {departmentClaim: dept, dimensions: [department]}`)...)
 	if got := custom.Config.Gateway.TokenTracking.DepartmentClaim; got != "dept" {
 		t.Fatalf("claim = %s", got)
 	}

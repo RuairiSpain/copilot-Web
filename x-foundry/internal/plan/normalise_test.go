@@ -111,7 +111,7 @@ func TestBasicPublicMinimalCreatesAlmostNothing(t *testing.T) {
 	if c.AgentSetup != "basic" {
 		t.Fatal(c.AgentSetup)
 	}
-	if c.Storage != nil || c.Redis != nil || c.Cosmos != nil || c.KeyVault != nil || c.Events != nil || c.Gateway != nil || c.Observability != nil {
+	if c.Storage != nil || c.Cosmos != nil || c.KeyVault != nil || c.Gateway != nil || c.Observability != nil {
 		t.Fatalf("unexpected components: %+v", c)
 	}
 	if got := implicit(c); len(got) != 1 || !got["managed-identity:identity"] {
@@ -209,43 +209,9 @@ func TestConnectorBackedSourcesDoNotNeedStorage(t *testing.T) {
 	}
 }
 
-func TestRuntimeImpliesObservabilityAndRegistry(t *testing.T) {
-	c := cfgOf(t, Private, `runtime: {enabled: true, source: ./app}`)
-	got := implicit(c)
-	if !got["observability:observability"] || !got["container-registry:registry"] {
-		t.Fatalf("implicit = %v", got)
-	}
-	if c.RegistrySKU != "Premium" {
-		t.Fatalf("private mode needs a Premium registry, got %s", c.RegistrySKU)
-	}
-	registry := false
-	for _, pe := range c.Network.PrivateEndpoints {
-		registry = registry || pe.Component == "registry"
-	}
-	if !registry {
-		t.Fatal("registry private endpoint")
-	}
-	image := cfgOf(t, `runtime: {enabled: true, image: "ghcr.io/x/y:1"}`)
-	if implicit(image)["container-registry:registry"] || image.RegistrySKU != "" {
-		t.Fatal("no registry for a prebuilt image")
-	}
-	if got := cfgOf(t, Public, `runtime: {enabled: true, source: ./app}`).RegistrySKU; got != "Standard" {
-		t.Fatalf("public registry = %s", got)
-	}
-	if got := cfgOf(t, Public, `runtime: {enabled: true, source: ./app, registry: {sku: Basic}}`).RegistrySKU; got != "Basic" {
-		t.Fatalf("explicit registry = %s", got)
-	}
-	two := cfgOf(t, Public, `runtime: {enabled: true, source: ./app, registry: {sku: Basic}}`,
-		`projects: [{name: finance, runtime: {enabled: true, source: ./b, registry: {sku: Premium}}}]`)
-	if two.RegistrySKU != "Premium" {
-		t.Fatalf("the highest requested tier wins, got %s", two.RegistrySKU)
-	}
-}
-
 func TestSecretReferencesImplyKeyVault(t *testing.T) {
 	for name, doc := range map[string]string{
 		"mcp":       `mcps: [{name: graph, endpoint: "https://a.example", authentication: {mode: apiKey, secretRef: graph-key}}]`,
-		"runtime":   `runtime: {enabled: true, image: "i:1", secrets: {db: db-password}}`,
 		"connector": `connectors: [{name: svc, type: api, authentication: {mode: apiKey, secretRef: svc-key}}]`,
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -254,7 +220,7 @@ func TestSecretReferencesImplyKeyVault(t *testing.T) {
 			}
 		})
 	}
-	c := cfgOf(t, Public, `keyVault: {sku: premium}`, `runtime: {enabled: true, image: "i:1", secrets: {db: db-password}}`)
+	c := cfgOf(t, Public, `keyVault: {sku: premium}`, `connectors: [{name: svc, type: api, authentication: {mode: apiKey, secretRef: svc-key}}]`)
 	if c.KeyVault.SKU != "premium" || implicit(c)["key-vault:key-vault"] {
 		t.Fatal("an explicit Key Vault is not duplicated")
 	}
@@ -316,37 +282,8 @@ func TestSemanticFieldsFollowCustomIndexFields(t *testing.T) {
 	}
 }
 
-func TestRedisDefaults(t *testing.T) {
-	if got := cfgOf(t, `redis: {enabled: true}`).Redis.SKU; got != "balanced" {
-		t.Fatal(got)
-	}
-}
-
-func TestEventsTierFollowsNetworkMode(t *testing.T) {
-	if got := cfgOf(t, Private, `events: {enabled: true}`).Events.SKU; got != "Premium" {
-		t.Fatalf("private = %s", got)
-	}
-	if got := cfgOf(t, Public, `events: {enabled: true}`).Events.SKU; got != "Standard" {
-		t.Fatalf("public = %s", got)
-	}
-	if got := cfgOf(t, Public, `events: {enabled: true, sku: Basic}`).Events.SKU; got != "Basic" {
-		t.Fatalf("explicit = %s", got)
-	}
-}
-
-func TestContainerMemoryFollowsCPUUnlessSet(t *testing.T) {
-	c := cfgOf(t, `runtime: {enabled: true, image: "i:1", resources: {cpu: 2}}`)
-	if got := c.Scope("root").Runtime.Resources.Memory; got != "4Gi" {
-		t.Fatal(got)
-	}
-	agent := cfgOf(t, models, `agents: [{name: bot, kind: hosted, runtime: {enabled: true, image: "i:1", resources: {cpu: 0.5}}}]`)
-	if got := agent.Scope("root").Agents[0].Runtime.Resources.Memory; got != "1Gi" {
-		t.Fatal(got)
-	}
-}
-
 func TestPrivateModeDerivesPrivateConnectivity(t *testing.T) {
-	c := cfgOf(t, Private, `storage: {hierarchicalNamespace: true}`, `keyVault: {}`, `redis: {enabled: true}`, `events: {enabled: true}`, `search: {replicas: 2}`, `observability: {}`)
+	c := cfgOf(t, Private, `storage: {hierarchicalNamespace: true}`, `keyVault: {}`, `search: {replicas: 2}`, `observability: {}`)
 	n := c.Network
 	if n.Mode != "private" || n.VNet != "create" || !n.PrivateDNS {
 		t.Fatalf("network = %+v", n)
@@ -357,7 +294,7 @@ func TestPrivateModeDerivesPrivateConnectivity(t *testing.T) {
 	}
 	for _, want := range []string{
 		"foundry/account", "search:root/searchService", "storage/blob", "storage/dfs", "key-vault/vault",
-		"redis/redisCache", "events/namespace", "cosmos/Sql",
+		"cosmos/Sql",
 	} {
 		if !got[want] {
 			t.Fatalf("missing private endpoint %s in %v", want, got)
@@ -494,24 +431,14 @@ func TestRootItemsAssignedToAProjectMoveIntoIt(t *testing.T) {
 	c := cfgOf(t, Public, models, `projects: [{name: aa}, {name: bb}]`,
 		`agents: [{name: shared}, {name: only-bb, project: bb}]`,
 		`iq: {project: aa, knowledgeBases: [{name: kb-aa, sources: [{name: s1, type: web, url: "https://x.example"}]}, {name: kb-bb, project: bb, sources: [{name: s1, type: web, url: "https://x.example"}]}]}`,
-		`runtime: {enabled: true, image: "i:1", project: bb}`, `evaluation: {enabled: true, project: aa}`)
+		`evaluation: {enabled: true, project: aa}`)
 	aa, bb := c.Project("aa"), c.Project("bb")
 	same(t, names(aa.Agents), []string{"shared"})
 	same(t, names(bb.Agents), []string{"shared", "only-bb"})
 	same(t, names(aa.KnowledgeBases), []string{"kb-aa"})
 	same(t, names(bb.KnowledgeBases), []string{"kb-bb"})
-	if aa.Runtime != nil || bb.RuntimeScope != "project:bb" || !aa.Evaluation.Enabled || bb.Evaluation != nil {
-		t.Fatal("runtime/evaluation assignment")
-	}
-}
-
-func TestRootRuntimeAppliesToEveryProjectAndProjectRuntimeWins(t *testing.T) {
-	c := cfgOf(t, Public, `projects: [{name: aa}, {name: bb, runtime: {enabled: true, image: "mine:1"}}]`, `runtime: {enabled: true, image: "shared:1"}`)
-	if a := c.Project("aa"); a.Runtime.Image != "shared:1" || a.RuntimeScope != "root" {
-		t.Fatalf("aa = %+v", a.Runtime)
-	}
-	if b := c.Project("bb"); b.Runtime.Image != "mine:1" || b.RuntimeScope != "project:bb" {
-		t.Fatalf("bb = %+v", b.Runtime)
+	if !aa.Evaluation.Enabled || bb.Evaluation != nil {
+		t.Fatal("evaluation assignment")
 	}
 }
 

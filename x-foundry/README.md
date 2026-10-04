@@ -79,7 +79,7 @@ cmd/xfoundry/        command line
 schemas/             x-foundry.schema.json (source of truth, embedded in the binary),
                      generated azure-yaml wrapper, versions/ and examples/
 examples/            standalone-minimal, standalone-private, hub-spoke, foundry-iq,
-                     hosted-agent-runtime, apim-ai-gateway, enterprise
+                     apim-ai-gateway, enterprise
 internal/
   config/            typed model, defaults and explicit-key tracking, deep clone
   parser/            YAML loading, JSON Schema validation, version and session-pool checks
@@ -139,13 +139,10 @@ operations, cost) as warnings that never block. Preview a stricter profile with
 * To use an existing VNet, give `existingVnetResourceId` plus
   `existingPrivateEndpointSubnetResourceId` and, for the standard setup,
   `existingAgentSubnetResourceId`.
-* **Service tiers follow the network mode.** Private endpoints need Service Bus Premium and
-  Container Registry Premium; the normaliser selects them in private mode and rejects an
-  explicit lower tier.
 * **Identity.** Foundry accounts and projects always use a system-assigned identity (the
   platform requires it). `managedIdentity.type` (`userAssigned`, `systemAssigned`,
-  `systemAssignedAndUserAssigned`) controls the identity attached to the runtime, gateway
-  and Search resources you create.
+  `systemAssignedAndUserAssigned`) controls the identity attached to the gateway and
+  Search resources you create.
 * **Model deployments pin their version** (`versionUpgradeOption: NoAutoUpgrade`) so model
   behaviour only changes when your configuration does.
 
@@ -156,9 +153,9 @@ operations, cost) as warnings that never block. Preview a stricter profile with
   setup, storage for blob/ADLS sources and evaluation datasets, Cosmos DB for the standard
   setup, deployments for models named in `models.allowed` and for embedding models, a
   managed identity, a Key Vault when secret references are used, observability for the
-  gateway and runtimes, and the VNet, private DNS and private endpoints for private mode.
-* **Absent means not created** unless something requires it. A missing `redis`, `events` or
-  `governance` section creates nothing.
+  gateway, and the VNet, private DNS and private endpoints for private mode.
+* **Absent means not created** unless something requires it. A missing `keyVault`, `cosmos` or
+  `governance` section creates nothing unless a setting requires it.
 * **Inheritance** (`root < hub < project`, hub only when `inheritHub` is true and the
   matching `hub.inheritance` flag is on). A project item replaces an inherited one with the
   same name; additions merge. `denied` models accumulate. A project `allowed` set replaces
@@ -180,11 +177,11 @@ operations, cost) as warnings that never block. Preview a stricter profile with
 * **Deployment order** follows the PRD, with two deliberate deviations (see
   `internal/graph/builder.go`): MCPs, connectors and knowledge bases come before toolboxes
   and agents because those reference them, and the observability workspace is created early
-  because runtimes and the gateway log to it. Alerts are the late "Monitoring" step.
+  because the gateway logs to it. Alerts are the late "Monitoring" step.
 * **One Foundry resource per configuration.** A project `location` that differs from the
   account location is a warning outside private mode and an error in private mode (the
   VNet and every workspace resource must share a region).
-* **Bare Key Vault secret names** in `secretRef` and `runtime.secrets` are accepted as names
+* **Bare Key Vault secret names** in `secretRef` are accepted as names
   in the extension's Key Vault; a literal value that happens to look like a name cannot be
   told apart. Values that look like keys, tokens or connection strings are rejected anywhere
   in the document.

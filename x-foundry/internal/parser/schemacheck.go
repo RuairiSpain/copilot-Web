@@ -89,8 +89,7 @@ func pointer(parts ...string) string {
 	return "/" + strings.Join(parts, "/")
 }
 
-// FindUnsupportedKeys implements rules 18 and 19: session pools are out of scope and
-// Redis is application caching only.
+// FindUnsupportedKeys implements rule 18: session pools are out of scope.
 func FindUnsupportedKeys(raw any) []diag.Diagnostic {
 	var found []diag.Diagnostic
 	walk(raw, nil, func(parent []string, key string) {
@@ -99,9 +98,6 @@ func FindUnsupportedKeys(raw any) []diag.Diagnostic {
 		case sessionPool.MatchString(key):
 			found = append(found, diag.Err("XF018", path,
 				"'%s' is not supported: session and agent pooling are separate Foundry capabilities and are out of scope for x-foundry", key))
-		case len(parent) > 0 && parent[len(parent)-1] == "redis" && strings.Contains(strings.ToLower(key), "session"):
-			found = append(found, diag.Err("XF019", path,
-				"'%s' is not supported: Redis is used for application caching only, not as a session store", key))
 		}
 	})
 	return found

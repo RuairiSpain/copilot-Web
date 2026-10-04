@@ -50,9 +50,6 @@ x-foundry:
       - knowledge
       - documents
       - evaluations
-  redis:
-    enabled: true
-    sku: balanced
   keyVault:
     enabled: true
   managedIdentity:
@@ -63,15 +60,6 @@ x-foundry:
     throughput: 4000
   observability:
     retentionDays: 90
-  events:
-    enabled: true
-    sku: Premium
-    entities:
-      - name: ingest-events
-        type: topic
-      - name: ingest-worker
-        type: subscription
-        parent: ingest-events
   evaluation:
     enabled: true
   governance:

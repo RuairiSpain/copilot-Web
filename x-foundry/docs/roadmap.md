@@ -108,6 +108,11 @@ No change from the original plan.
   generated).
 - Comments are prefixed (for example `# WAF[Reliability] XF303:`) so they are distinguishable from
   user comments and the command is idempotent.
+- Warns when two environment files target the same resource group (`doctor --compare
+  azure.dev.yaml azure.prod.yaml`, or the files `promote` has just produced). Separate resource
+  groups are the minimum isolation between environments; separate subscriptions are stronger
+  and stay a comment-only recommendation. This is a cross-file check, so it lives in the CLI
+  rather than in the single-file validation rules.
 - Tests: golden files per example, and a check that the annotated copy still parses and validates.
 - Needs only Phase 1 output, so it can be pulled forward if wanted.
 
@@ -126,8 +131,10 @@ does not need deployed state. It is not interactive.
 - The new file is a plain copy with `defaults.environment` set, plus the target profile's
   recommendations as comments (reusing `doctor`).
 - Settings tied to one deployment are left out of the copy, or commented out with a note:
-  names and `namingPrefix`, region, existing resource IDs (VNet, subnets, Search, Storage), IP
-  rules, secret references and budgets. Everything else is copied as is.
+  names and `namingPrefix`, region, `resourceGroup` (at `defaults`, hub and project level, so a
+  promoted file can never point at the source environment's resource group), existing resource
+  IDs (VNet, subnets, Search, Storage), IP rules, secret references and budgets. Everything else
+  is copied as is.
 - Interactive selection of what to carry over is deferred until after the first release.
 - Decision: each environment has its own file (for example `azure.dev.yaml`, `azure.test.yaml`,
   `azure.prod.yaml`). There is no `environments` overlay in the schema, so no schema change or

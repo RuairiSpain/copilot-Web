@@ -191,13 +191,12 @@ func TestFormatsAreAsserted(t *testing.T) {
 	}
 }
 
-func TestSessionPoolAndRedisSessionKeys(t *testing.T) {
+func TestSessionPoolKeys(t *testing.T) {
 	cases := []struct{ name, extra, code, key string }{
 		{"project", "  projects: [{name: ok, sessionPool: {size: 5}}]\n", "XF018", "sessionPool"},
 		{"agent", "  projects: [{name: ok, agents: [{name: bot, sessionPooling: true}]}]\n", "XF018", "sessionPooling"},
-		{"runtime", "  runtime: {enabled: true, image: x, sessionPools: []}\n", "XF018", "sessionPools"},
+		{"gateway", "  gateway: {enabled: true, sessionPools: []}\n", "XF018", "sessionPools"},
 		{"agent pool", "  projects: [{name: ok, agentPool: {}}]\n", "XF018", "agentPool"},
-		{"redis", "  redis: {enabled: true, sessionStore: true}\n", "XF019", "sessionStore"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
