@@ -1,0 +1,208 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ruairispain/copilot-web/foundry-doctor/schemas/config.schema.json",
+  "title": "Foundry Doctor configuration (.foundry-doctor/config.yaml)",
+  "description": "Closed schema: unknown keys are rejected (ADR-007 decision 5, ADR-010). The Go loader in internal/config is authoritative; a parity test keeps this file in step with it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version"],
+  "properties": {
+    "version": {"const": 1},
+    "profile": {"enum": ["dev", "test", "prod", "foundry-dev", "foundry-test", "foundry-prod"]},
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "azureYaml": {"$ref": "#/$defs/relativePath"},
+        "infraPath": {"$ref": "#/$defs/relativePath"},
+        "environment": {"$ref": "#/$defs/name"}
+      }
+    },
+    "rules": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "include": {"$ref": "#/$defs/selectorList"},
+        "exclude": {"$ref": "#/$defs/selectorList"},
+        "packs": {"$ref": "#/$defs/nameList"}
+      }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bicep": {"$ref": "#/$defs/mode"},
+        "azure": {"$ref": "#/$defs/mode"},
+        "runtime": {"$ref": "#/$defs/mode"}
+      }
+    },
+    "policy": {"$ref": "#/$defs/policy"},
+    "environments": {
+      "type": "object",
+      "propertyNames": {"$ref": "#/$defs/name"},
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "policy": {"$ref": "#/$defs/policy"}
+        }
+      }
+    },
+    "adoption": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "baseline": {"$ref": "#/$defs/relativePath"},
+        "suppressions": {"$ref": "#/$defs/relativePath"}
+      }
+    },
+    "outputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "formats": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"enum": ["console", "json", "markdown", "sarif"]}
+        },
+        "directory": {"$ref": "#/$defs/relativePath"}
+      }
+    },
+    "advanced": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "psrule": {"$ref": "#/$defs/tool"},
+        "checkov": {"$ref": "#/$defs/tool"},
+        "bicep": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "executable": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
+            "config": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/relativePath"}]}
+          }
+        },
+        "adapters": {"$ref": "#/$defs/nameList"}
+      }
+    }
+  },
+  "$defs": {
+    "name": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
+    "relativePath": {"type": "string", "minLength": 1, "not": {"pattern": "^(/|\\\\|[A-Za-z]:)"}},
+    "mode": {"enum": ["required", "optional", "disabled"]},
+    "nameList": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/name"}},
+    "selectorList": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^[A-Za-z0-9*][A-Za-z0-9*._-]*$"}
+    },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {"enum": ["auto", "true", "false", true, false]},
+        "config": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/relativePath"}]}
+      }
+    },
+    "resourceId": {"type": "string", "pattern": "^/\\S+$"},
+    "modelId": {"type": "string", "pattern": "^[^\\s/]+/[^\\s/]+(/[^\\s/]+)?$"},
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "resourceScope": {"enum": ["same-resource-group", "same-subscription", "any"]},
+        "allowedExternalScopes": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/resourceId"}},
+        "environments": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "production": {"$ref": "#/$defs/nameList"},
+            "nonProduction": {"$ref": "#/$defs/nameList"},
+            "development": {"$ref": "#/$defs/nameList"}
+          }
+        },
+        "tags": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "required": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["name"],
+                "properties": {
+                  "name": {"type": "string", "minLength": 1},
+                  "format": {"type": "string", "maxLength": 1024, "description": "Regular expression (Go RE2 syntax) for the tag value."}
+                }
+              }
+            },
+            "resourceTypes": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {"type": "string", "pattern": "^[A-Za-z0-9.]+(/[A-Za-z0-9.]+)+$"}
+            }
+          }
+        },
+        "logRetention": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {"minimumDays": {"type": "integer", "minimum": 0}}
+        },
+        "models": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "allow": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/modelId"}},
+            "deny": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/modelId"}}
+          }
+        },
+        "dataResidency": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "scope": {"enum": ["global", "datazone-us", "datazone-eu", "datazone-apac", "geography"]},
+            "regions": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z][a-z0-9]*$"}},
+            "deploymentSkus": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"}}
+          }
+        },
+        "disasterRecovery": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "declared": {"type": "boolean"},
+            "reference": {"type": "string", "minLength": 1}
+          }
+        },
+        "network": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {"publicAccess": {"enum": ["forbidden", "entra-only", "allowed"]}}
+        },
+        "monitoring": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {"publicTelemetry": {"type": "boolean"}}
+        },
+        "managedByAzurePolicy": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"enum": ["private-dns-zone-group", "diagnostic-settings"]}
+        },
+        "knowledge": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {"requireDocumentLevelAccess": {"type": "boolean"}}
+        },
+        "cost": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "devMaxCosmosThroughput": {"type": "integer", "minimum": 0},
+            "productionSizedSkuExemptions": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+          }
+        }
+      }
+    }
+  }
+}

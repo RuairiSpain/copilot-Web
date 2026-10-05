@@ -1,0 +1,80 @@
+# .foundry-doctor/config.yaml (ADR-010). Every key except version is optional.
+# Precedence: flags > environments.<name> > this file > curated profile defaults.
+version: 1
+profile: foundry-prod
+inputs:
+  azureYaml: ./azure.yaml
+  infraPath: ./infra
+  environment: prod
+rules:
+  include: [must-have, nice-to-have]
+  exclude: []
+  packs: [foundry-core]
+validation:
+  bicep: required
+  azure: optional
+  runtime: disabled
+policy:
+  resourceScope: same-resource-group
+  allowedExternalScopes:
+    - /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-shared
+  environments:
+    production: [prod]
+    nonProduction: [test]
+    development: [dev]
+  tags:
+    required:
+      - name: costCenter
+        format: '^CC-[0-9]{4}$'
+      - name: owner
+    resourceTypes:
+      - Microsoft.CognitiveServices/accounts
+  logRetention:
+    minimumDays: 90
+  models:
+    allow:
+      - OpenAI/gpt-4o
+      - OpenAI/gpt-4o-mini/2024-07-18
+    deny:
+      - OpenAI/gpt-35-turbo
+  dataResidency:
+    scope: datazone-eu
+    regions: [swedencentral, francecentral]
+    deploymentSkus: [DataZoneStandard]
+  disasterRecovery:
+    declared: true
+    reference: docs/dr-plan.md
+  network:
+    publicAccess: forbidden
+  monitoring:
+    publicTelemetry: false
+  managedByAzurePolicy: [private-dns-zone-group]
+  knowledge:
+    requireDocumentLevelAccess: true
+  cost:
+    devMaxCosmosThroughput: 1000
+    productionSizedSkuExemptions: []
+environments:
+  dev:
+    policy:
+      network:
+        publicAccess: entra-only
+      logRetention:
+        minimumDays: 30
+adoption:
+  baseline: .foundry-doctor/baseline.yaml
+  suppressions: .foundry-doctor/suppressions.yaml
+outputs:
+  formats: [console, sarif]
+  directory: .foundry-doctor/out
+advanced:
+  psrule:
+    enabled: auto
+    config: null
+  checkov:
+    enabled: false
+    config: null
+  bicep:
+    executable: auto
+    config: null
+  adapters: []
