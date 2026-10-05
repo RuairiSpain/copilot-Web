@@ -108,7 +108,7 @@ func TestCanaryPolicyValueNeverPrinted(t *testing.T) {
 }
 
 func injectionReport() *sdk.Report {
-	hostile := "\x1b[2J\x1b[31mred\x1b]0;pwned\x07 \x00 ‮|\n<img src=x onerror=alert(1)>[x](javascript:alert(1))\r@everyone"
+	hostile := "\x1b[2J\x1b[31mred\x1b]0;pwned\x07 \x00 \u202e|\n<img src=x onerror=alert(1)>[x](javascript:alert(1))\r@everyone"
 	return &sdk.Report{
 		Tool: sdk.ToolInfo{Name: "foundry-doctor\x1b[1m", Version: "1"}, Profile: "p\x1b[0m",
 		EffectivePolicy: map[string]any{"k\x1b[1m": hostile},
@@ -128,7 +128,7 @@ func TestInjectionStripped(t *testing.T) {
 			continue // JSON is the report as is; encoding/json escapes control characters.
 		}
 		out := render(t, rp, injectionReport())
-		for _, bad := range []string{"\x1b", "\x07", "\x00", "‮", "\r"} {
+		for _, bad := range []string{"\x1b", "\x07", "\x00", "\u202e", "\r"} {
 			if strings.Contains(out, bad) {
 				t.Errorf("%s: output contains %q", rp.Format(), bad)
 			}

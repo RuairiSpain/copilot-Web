@@ -178,6 +178,6 @@ func Parse(src []byte, opt Options) (res *Result, err error) {
 	}
 	project(res)
 	checkStructure(res, top)
-	sortIssues(res.Issues)
+	model.SortIssues(res.Issues)
 	return res, nil
 }
