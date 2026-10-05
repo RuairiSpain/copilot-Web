@@ -142,5 +142,6 @@ notes: >-
   the local clones). The 2026-09-01 stable spec has no capability settings; those are in 2026-07-15-preview (see FND-NET-002
   and FND-IDN-002). The waf basis was removed after the Phase 0 Azure black belt review because no WAF pillar tag or WARA
   recommendation is cited here; the WAF mapping is added in Phase 4 when the guidance is verified. A profile that declares
-  a public-by-design posture (Entra-only public access) should downgrade this finding; the profile key is decided in Phase
-  1.
+  a public-by-design posture (Entra-only public access) should downgrade this finding; the profile key is policy.network.publicAccess
+  (ADR-007). Profile key: policy.network.publicAccess (ADR-007); entra-only and allowed lower the severity, they never skip
+  the rule.
