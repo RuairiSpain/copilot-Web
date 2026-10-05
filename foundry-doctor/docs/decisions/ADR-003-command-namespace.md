@@ -80,6 +80,7 @@ The PRD's command surface conflicts in two places:
   The PRD form uses positional arguments, which is compatible.
 
 The PRD text is not changed; this ADR is the record and the command layer follows it in Phase 1.
+**Decision (project owner, 2026-10-05): use `--out <path>`** for every command that writes a file, in the extension and in the standalone binary (see ADR-007).
 
 ## Unverified
 

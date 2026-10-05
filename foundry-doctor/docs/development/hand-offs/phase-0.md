@@ -109,10 +109,12 @@ Rejected the first submission (loader accepted multi-document and empty files, d
 
 ## Deferred issues with rationale
 
-- Whether product-opinion rules ship in the MVP (nine are in the 38).
-- Profile configuration keys (residency regions, model allow/deny lists, required tags, log-retention minimum, DR declaration, public-by-design posture, policy-managed settings): the PRD does not define them. Needs an ADR before the rules that use them are implemented.
+**Resolved by the project owner on 2026-10-05:** (1) the nine product-opinion rules stay in the Phase 1 MVP set; (2) the profile configuration keys are chosen by the implementer and recorded in ADR-007; (3) `--out` replaces `--output` (ADR-003, ADR-007). The items below are the ones still open.
+
+- ~~Whether product-opinion rules ship in the MVP~~: decided, they stay (see above).
+- ~~Profile configuration keys~~: decided in ADR-007.
 - Dependency pins for the Azure SDK at `go 1.25.8` (the core directive is now decided, ADR-005); `golang.org/x/sync` stays on a 0.19.x pin until the core can move to Go 1.26.
-- `--output` flag clash (ADR-003): use `--out`.
+- ~~`--output` flag clash~~: decided, use `--out`.
 - Whether the `azd ai agent doctor` overlap (FND-RUN-001, 003, 005) should be wrapped later; decided `adapt` for now.
 
 ## Compatibility matrix
@@ -134,7 +136,7 @@ The catalogue and its schema, the 38-rule MVP set, ADR-001 to 006, the executabl
 
 1. Merge PR #15 (the harness) and this branch's PR.
 2. Run `foundry-doctor/scripts/install-dev-tools.sh` and make sure CI can reach `vuln.go.dev`; turn on `--strict` in CI once `cmd/foundry-doctor` exists.
-3. Decide the nine product-opinion MVP rules and the profile keys listed above.
+3. (Done 2026-10-05) The nine product-opinion MVP rules stay and the profile keys are in ADR-007.
 4. Phase 1 first tasks: re-run the Bicep spike on 0.48.1 or later; implement the CI check that fails when `foundry` appears in the azd registry or command reference (ADR-003);
    vendor the azd schemas from a tagged release; implement `internal/azureyaml` from the spike; implement the `GOWORK=off` core build and import-boundary check (ADR-005).
 5. Give agent sessions a read-only Azure identity (or none) before Phase 2 work.

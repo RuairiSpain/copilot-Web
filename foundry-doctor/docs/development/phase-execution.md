@@ -23,7 +23,7 @@ Record changes as ADRs in `docs/decisions/` when Phase 0 confirms or reverses th
 | Entry-point directory | Section 5: `cmd/foundry`; Appendix A: `cmd/foundry-doctor` | `cmd/foundry-doctor` (matches the binary name and Appendix A). |
 | Catalogue doc name | `docs/rule-catalog.md` (US spelling) | PRD spelling `rule-catalog`. |
 | Public command prefix | `azd foundry`, but Phase 0 must confirm no conflict | Keep the prefix in one place (command layer) until ADR-003. |
-| Output path flag | `--output <path>` and `compare` environments (command surface, section 4) | The azd extension SDK reserves `-o/--output` and `-e/--environment` and refuses to start if they are reused. Use `--out <path>` in extension mode; see ADR-003. |
+| Output path flag | `--output <path>` and `compare` environments (command surface, section 4) | The azd extension SDK reserves `-o/--output` and `-e/--environment` and refuses to start if they are reused. Decided 2026-10-05: use `--out <path>` everywhere (extension and standalone); see ADR-003 and ADR-007. |
 | `azd ai agent doctor` | Not mentioned | Microsoft's own `azd ai agent doctor` exists (read-only, overlaps FND-RUN-001, 003, 005). Not a name conflict; documented in ADR-003 and the RUN overlap notes. |
 | What-if titles | FND-DEP-008 "delete/replace" | The what-if ChangeType enum has no Replace value, so the rule is retitled "no unexpected delete". |
 | Repo location | Appendix A assumes a standalone `foundry-doctor/` repo | Subdirectory of the `copilot-Web` monorepo; workflows go in repo-root `.github/workflows/` with path filters. |
