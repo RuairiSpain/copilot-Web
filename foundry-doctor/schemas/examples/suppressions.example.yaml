@@ -1,0 +1,17 @@
+version: 1
+suppressions:
+  # Suppress one exact finding.
+  - ruleId: FND-EXAMPLE-001
+    fingerprint: fp1:0123456789abcdef0123456789abcdef
+    reason: Accepted until the network redesign ships.
+    owner: platform-team
+    expires: 2026-12-31
+  # Suppress a rule on one resource.
+  - ruleId: FND-EXAMPLE-002
+    resource:
+      kind: arm-resource
+      type: microsoft.example/widgets
+      name: example-widget
+    reason: Dev-only resource, tracked in the team backlog.
+    owner: dev-lead
+    expires: 2027-03-31

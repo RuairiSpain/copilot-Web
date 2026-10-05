@@ -36,7 +36,7 @@ notes say otherwise. A rule with no decision yet is counted as unresearched.
 | FND-CFG-002 | native | none | - | - | - | - | - | - |
 | FND-CFG-003 | native | partial | - | - | - | - | - | - |
 | FND-CFG-004 | native | none | - | - | - | - | - | - |
-| FND-CFG-005 | adapt | partial | `Azure.Deployment.SecureParameter`, `Azure.Deployment.SecureValue`, `Azure.Deployment.SecretLeak`, `Azure.Deployment.OutputSecretValue` | - | `secure-secrets-in-params`, `secure-parameter-default`, `outputs-should-not-contain-secrets`, `use-secure-value-for-secure-inputs` | `CKV_AZURE_131`, `CKV_SECRET_6` | - | - |
+| FND-CFG-005 | adapt | partial | `Azure.Deployment.SecureParameter`, `Azure.Deployment.SecureValue`, `Azure.Deployment.SecretLeak`, `Azure.Deployment.OutputSecretValue` | - | `secure-secrets-in-params`, `secure-parameter-default`, `outputs-should-not-contain-secrets` | `CKV_AZURE_131`, `CKV_SECRET_6` | - | - |
 | FND-CFG-006 | native | partial | - | - | - | - | - | - |
 | FND-CFG-007 | native | none | - | - | - | - | - | - |
 | FND-CFG-008 | native | none | - | - | - | - | - | - |

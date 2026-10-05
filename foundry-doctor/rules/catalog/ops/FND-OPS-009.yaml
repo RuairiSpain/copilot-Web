@@ -71,6 +71,19 @@ sources:
     lastVerified: "2026-10-04"
     verifiedVia: refs/azure-ai-docs/articles/foundry/concepts/deployments-overview.md
     note: Managed compute deployments (preview) are global only; serverless API supports regional, data zone and global processing.
+  - url: https://github.com/MicrosoftDocs/azure-ai-docs/blob/e8d0ac6f7ebd7fd000e287657ab9beda5bccc1fa/articles/foundry/foundry-models/includes/concepts-deployment-types-content-6.md
+    lastVerified: '2026-10-05'
+    verifiedVia: >-
+      refs/azure-ai-docs @ e8d0ac6f7ebd7fd000e287657ab9beda5bccc1fa
+      articles/foundry/foundry-models/includes/concepts-deployment-types-content-6.md (Data Zone deployments section),
+      concepts-deployment-types-content-4.md, articles/foundry/openai/includes/model-matrix/datazone-standard.md and
+      datazone-provisioned-managed.md.
+    note: >-
+      Region membership of data zones is not published as a list: the article says the US zone is "anywhere within the
+      US", the EU zone follows the Azure EU Data Boundary (may include EFTA countries such as Norway and Switzerland),
+      the APAC zone "covers multiple Asia Pacific regions", and Microsoft can add regions without notice; the
+      per-model matrices list deployment regions (for example eastus, swedencentral, westeurope in one data zone
+      table) without assigning them to a zone. Not verifiable: which regions belong to each data zone or geography.
 overlap:
   decision: adapt
   coverage: partial
@@ -112,10 +125,15 @@ tests:
     - location-is-unresolved-parameter
     - control-plane-unavailable
 notes: >-
-  Platform basis, error in every profile, applies because the sources state the processing scope of each SKU; the rule only
-  runs when the profile declares a requirement, so declaring none is the explicit way to opt out and yields skipped.
-  Unverified - region membership of each data zone and geography (Learn points to the model availability page and says
-  regions can be added without notice); whether DeveloperTier and batch SKUs appear in azure.yaml deployments (the
-  azure.yaml reference lists Standard, GlobalStandard and GlobalBatch only as examples); where Foundry Agent Service, Search
-  or Cosmos DB store or process data for agent threads (the docs read cover model inference only); how spillover
-  deployments (spilloverDeploymentName) interact with residency, which was not documented in the article read.
+  Platform basis, error in every profile, applies because the sources state the processing scope of each SKU; the rule
+  only runs when the profile declares a requirement, so declaring none is the explicit way to opt out and yields
+  skipped. Unverified - region membership of each data zone and geography (Learn points to the model availability page
+  and says regions can be added without notice); whether DeveloperTier and batch SKUs appear in azure.yaml deployments
+  (the azure.yaml reference lists Standard, GlobalStandard and GlobalBatch only as examples); where Foundry Agent
+  Service, Search or Cosmos DB store or process data for agent threads (the docs read cover model inference only); how
+  spillover deployments (spilloverDeploymentName) interact with residency, which was not documented in the article
+  read. Phase 1 fact check (2026-10-05): confirmed that no documented source assigns regions to the US, EU and APAC
+  data zones or to a geography; the model-availability matrices only show where a deployment type is offered. The rule
+  therefore requires policy.dataResidency.regions (ADR-007) and is skipped, naming that key, when scope is set without
+  regions; no region list is hard-coded. The SKU-name-to-scope mapping remains verified from the deployment types
+  article (ms.date 08/06/2026).

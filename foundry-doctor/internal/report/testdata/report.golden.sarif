@@ -1,0 +1,408 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "foundry-doctor",
+          "version": "0.1.0-test",
+          "informationUri": "https://github.com/ruairispain/copilot-web/tree/main/foundry-doctor",
+          "rules": [
+            {
+              "id": "FND-ENV-003",
+              "name": "FND-ENV-003",
+              "shortDescription": {
+                "text": "FND-ENV-003"
+              },
+              "fullDescription": {
+                "text": "FND-ENV-003: Set it."
+              },
+              "help": {
+                "text": "Set it.",
+                "markdown": "Set it."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              },
+              "properties": {
+                "tags": [
+                  "foundry-doctor",
+                  "nice-to-have"
+                ]
+              }
+            },
+            {
+              "id": "FND-NET-001",
+              "name": "FND-NET-001",
+              "shortDescription": {
+                "text": "FND-NET-001"
+              },
+              "fullDescription": {
+                "text": "FND-NET-001: Review the setting."
+              },
+              "help": {
+                "text": "Review the setting.",
+                "markdown": "Review the setting."
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "tags": [
+                  "foundry-doctor",
+                  "nice-to-have",
+                  "product-opinion",
+                  "security"
+                ]
+              }
+            },
+            {
+              "id": "FND-SEC-002",
+              "name": "FND-SEC-002",
+              "shortDescription": {
+                "text": "FND-SEC-002"
+              },
+              "fullDescription": {
+                "text": "FND-SEC-002: Set disableLocalAuth to true."
+              },
+              "help": {
+                "text": "Set disableLocalAuth to true. Fix: disableLocalAuth: true See https://learn.microsoft.com/azure/ai-services/",
+                "markdown": "Set disableLocalAuth to true. Fix: disableLocalAuth: true\n\n[Documentation](https://learn.microsoft.com/azure/ai-services/)"
+              },
+              "helpUri": "https://learn.microsoft.com/azure/ai-services/",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "docs",
+                  "foundry-doctor",
+                  "must-have",
+                  "platform",
+                  "security"
+                ]
+              }
+            },
+            {
+              "id": "FND-SYS-INVALID-AZURE-YAML",
+              "name": "FND-SYS-INVALID-AZURE-YAML",
+              "shortDescription": {
+                "text": "FND-SYS-INVALID-AZURE-YAML"
+              },
+              "fullDescription": {
+                "text": "FND-SYS-INVALID-AZURE-YAML: Fix the YAML."
+              },
+              "help": {
+                "text": "Fix the YAML.",
+                "markdown": "Fix the YAML."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "foundry-doctor"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "originalUriBaseIds": {
+        "%SRCROOT%": {
+          "uri": "./"
+        }
+      },
+      "invocations": [
+        {
+          "executionSuccessful": true,
+          "exitCode": 1,
+          "toolExecutionNotifications": [
+            {
+              "level": "note",
+              "message": {
+                "text": "Skipped FND-IDN-004: profile-key-missing:policy.allowedExternalScopes (missing capability: profile key policy.allowedExternalScopes). Skipped is not passed."
+              },
+              "descriptor": {
+                "id": "FND-IDN-004"
+              },
+              "associatedRule": {
+                "id": "FND-IDN-004"
+              },
+              "properties": {
+                "missingCapability": "profile key policy.allowedExternalScopes",
+                "reason": "profile-key-missing:policy.allowedExternalScopes",
+                "skipped": true
+              }
+            },
+            {
+              "level": "note",
+              "message": {
+                "text": "Skipped FND-IDN-005: profile-key-missing:policy.allowedExternalScopes. Skipped is not passed."
+              },
+              "descriptor": {
+                "id": "FND-IDN-005"
+              },
+              "associatedRule": {
+                "id": "FND-IDN-005"
+              },
+              "properties": {
+                "reason": "profile-key-missing:policy.allowedExternalScopes",
+                "skipped": true
+              }
+            },
+            {
+              "level": "note",
+              "message": {
+                "text": "Skipped FND-NET-009: missing-input (missing capability: compiled ARM template). Skipped is not passed."
+              },
+              "descriptor": {
+                "id": "FND-NET-009"
+              },
+              "associatedRule": {
+                "id": "FND-NET-009"
+              },
+              "properties": {
+                "missingCapability": "compiled ARM template",
+                "reason": "missing-input",
+                "skipped": true
+              }
+            }
+          ]
+        }
+      ],
+      "results": [
+        {
+          "ruleId": "FND-SYS-INVALID-AZURE-YAML",
+          "ruleIndex": 3,
+          "level": "error",
+          "message": {
+            "text": "azure.yaml failed to parse"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "azure.yaml",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1,
+                  "startColumn": 1,
+                  "endLine": 1,
+                  "endColumn": 1
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "foundryDoctor/v1": "fp1:dddddddddddddddddddddddddddddddd",
+            "primaryLocationLineHash": "5f618447b53b6108:1"
+          },
+          "properties": {
+            "basis": [],
+            "confidence": "certain",
+            "profile": "foundry-prod",
+            "ruleVersion": 0,
+            "severity": "error"
+          }
+        },
+        {
+          "ruleId": "FND-SEC-002",
+          "ruleIndex": 2,
+          "level": "error",
+          "message": {
+            "text": "disableLocalAuth is false\nsecond line"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "infra/main.bicep",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 12,
+                  "startColumn": 5,
+                  "endLine": 14,
+                  "endColumn": 2
+                }
+              },
+              "logicalLocations": [
+                {
+                  "name": "aiservices",
+                  "fullyQualifiedName": "Microsoft.CognitiveServices/accounts/aiservices/properties/disableLocalAuth",
+                  "kind": "arm-resource"
+                }
+              ]
+            }
+          ],
+          "partialFingerprints": {
+            "foundryDoctor/v1": "fp1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "primaryLocationLineHash": "cf093d9d087ccca9:1"
+          },
+          "properties": {
+            "adapter": "native",
+            "basis": [
+              "platform",
+              "docs"
+            ],
+            "confidence": "certain",
+            "profile": "foundry-prod",
+            "ruleVersion": 1,
+            "severity": "error"
+          }
+        },
+        {
+          "ruleId": "FND-NET-001",
+          "ruleIndex": 1,
+          "level": "warning",
+          "message": {
+            "text": "Pipe | in text and \u003cb\u003ehtml\u003c/b\u003e and [link](http://evil.example)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "infra/main.bicep",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 40,
+                  "startColumn": 3,
+                  "endLine": 40,
+                  "endColumn": 4
+                }
+              },
+              "logicalLocations": [
+                {
+                  "name": "aiservices",
+                  "fullyQualifiedName": "Microsoft.CognitiveServices/accounts/aiservices",
+                  "kind": "arm-resource"
+                }
+              ]
+            }
+          ],
+          "partialFingerprints": {
+            "foundryDoctor/v1": "fp1:0123456789abcdef0123456789abcdef",
+            "primaryLocationLineHash": "2739eeb25d953c21:1"
+          },
+          "properties": {
+            "basis": [
+              "product-opinion"
+            ],
+            "confidence": "likely",
+            "profile": "foundry-prod",
+            "ruleVersion": 2,
+            "severity": "warning"
+          }
+        },
+        {
+          "ruleId": "FND-SEC-002",
+          "ruleIndex": 2,
+          "level": "error",
+          "message": {
+            "text": "Unicode 日本語 and emoji 😀 and ANSI red"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "infra/other.bicep",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 3,
+                  "startColumn": 1,
+                  "endLine": 3,
+                  "endColumn": 2
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "foundryDoctor/v1": "fp1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "primaryLocationLineHash": "26ac194cac7aee15:1"
+          },
+          "suppressions": [
+            {
+              "kind": "external",
+              "status": "accepted",
+              "justification": "accepted risk",
+              "properties": {
+                "expires": "2027-01-01",
+                "file": ".foundry-doctor/suppressions.yaml",
+                "owner": "team-a",
+                "source": "suppression"
+              }
+            }
+          ],
+          "properties": {
+            "basis": [],
+            "confidence": "certain",
+            "profile": "foundry-prod",
+            "ruleVersion": 1,
+            "severity": "error"
+          }
+        },
+        {
+          "ruleId": "FND-ENV-003",
+          "ruleIndex": 0,
+          "level": "note",
+          "message": {
+            "text": "Key AZURE_LOCATION is unset"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": ".",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1,
+                  "startColumn": 1,
+                  "endLine": 1,
+                  "endColumn": 1
+                }
+              },
+              "logicalLocations": [
+                {
+                  "name": "AZURE_LOCATION",
+                  "fullyQualifiedName": "AZURE_LOCATION",
+                  "kind": "env-key"
+                }
+              ]
+            }
+          ],
+          "partialFingerprints": {
+            "foundryDoctor/v1": "fp1:cccccccccccccccccccccccccccccccc",
+            "primaryLocationLineHash": "dca05bc0b2cd559d:1"
+          },
+          "suppressions": [
+            {
+              "kind": "external",
+              "status": "accepted",
+              "justification": "Matches an entry in the baseline.",
+              "properties": {
+                "source": "baseline"
+              }
+            }
+          ],
+          "properties": {
+            "basis": [],
+            "confidence": "uncertain",
+            "profile": "foundry-prod",
+            "ruleVersion": 1,
+            "severity": "info"
+          }
+        }
+      ],
+      "properties": {
+        "hidden": 4,
+        "profile": "foundry-prod"
+      }
+    }
+  ]
+}

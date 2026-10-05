@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ruairispain/copilot-web/foundry-doctor/schemas/report.schema.json",
+  "title": "Foundry Doctor report",
+  "description": "The JSON report written by `--format json`. Mirrors sdk.Report; schemaVersion changes on any breaking change.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "tool", "profile", "effectivePolicy", "tools", "findings", "skipped", "summary", "exitCode"],
+  "properties": {
+    "schemaVersion": { "const": "1" },
+    "tool": { "$ref": "#/$defs/toolInfo" },
+    "profile": { "type": "string" },
+    "effectivePolicy": { "type": "object" },
+    "tools": { "type": "array", "items": { "$ref": "#/$defs/toolStatus" } },
+    "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } },
+    "skipped": { "type": "array", "items": { "$ref": "#/$defs/skippedCheck" } },
+    "summary": { "$ref": "#/$defs/summary" },
+    "exitCode": { "type": "integer", "minimum": 0, "maximum": 4 }
+  },
+  "$defs": {
+    "toolInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "type": "string" },
+        "version": { "type": "string" }
+      }
+    },
+    "toolStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "state", "required"],
+      "properties": {
+        "name": { "type": "string" },
+        "path": { "type": "string" },
+        "version": { "type": "string" },
+        "state": { "enum": ["available", "missing", "unsupported-version", "disabled", "failed"] },
+        "required": { "type": "boolean" },
+        "detail": { "type": "string" }
+      }
+    },
+    "resourceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "type": "string" },
+        "type": { "type": "string" },
+        "name": { "type": "string" },
+        "id": { "type": "string" },
+        "pointer": { "type": "string" }
+      }
+    },
+    "location": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "file": { "type": "string" },
+        "line": { "type": "integer", "minimum": 0 },
+        "column": { "type": "integer", "minimum": 0 },
+        "endLine": { "type": "integer", "minimum": 0 },
+        "endColumn": { "type": "integer", "minimum": 0 },
+        "pointer": { "type": "string" }
+      }
+    },
+    "suppression": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reason", "expires"],
+      "properties": {
+        "reason": { "type": "string" },
+        "expires": { "type": "string" },
+        "owner": { "type": "string" },
+        "source": { "type": "string" }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ruleId", "ruleVersion", "severity", "category", "profile", "evidence", "recommendation", "confidence", "baselined", "fingerprint"],
+      "properties": {
+        "ruleId": { "type": "string" },
+        "ruleVersion": { "type": "integer" },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "category": { "enum": ["must-have", "nice-to-have", ""] },
+        "pillar": { "type": "string" },
+        "basis": { "type": "array", "items": { "type": "string" } },
+        "profile": { "type": "string" },
+        "resource": { "$ref": "#/$defs/resourceRef" },
+        "location": { "$ref": "#/$defs/location" },
+        "evidence": { "type": "string" },
+        "recommendation": { "type": "string" },
+        "fix": { "type": "string" },
+        "docsUrl": { "type": "string" },
+        "lastVerified": { "type": "string" },
+        "confidence": { "enum": ["certain", "likely", "uncertain"] },
+        "suppressed": { "$ref": "#/$defs/suppression" },
+        "baselined": { "type": "boolean" },
+        "fingerprint": { "type": "string" },
+        "adapter": { "type": "string" },
+        "key": { "type": "string" }
+      }
+    },
+    "skippedCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ruleId", "ruleVersion", "reason"],
+      "properties": {
+        "ruleId": { "type": "string" },
+        "ruleVersion": { "type": "integer" },
+        "reason": { "type": "string" },
+        "detail": { "type": "string" },
+        "missingCapability": { "type": "string" },
+        "resource": { "$ref": "#/$defs/resourceRef" }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["info", "warning", "error", "suppressed", "baselined", "skipped", "passed", "hidden", "skippedByReason"],
+      "properties": {
+        "info": { "type": "integer", "minimum": 0 },
+        "warning": { "type": "integer", "minimum": 0 },
+        "error": { "type": "integer", "minimum": 0 },
+        "suppressed": { "type": "integer", "minimum": 0 },
+        "baselined": { "type": "integer", "minimum": 0 },
+        "skipped": { "type": "integer", "minimum": 0 },
+        "passed": { "type": "integer", "minimum": 0 },
+        "hidden": { "type": "integer", "minimum": 0 },
+        "skippedByReason": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 } }
+      }
+    }
+  }
+}

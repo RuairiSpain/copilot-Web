@@ -38,6 +38,26 @@ sources:
     lastVerified: "2026-10-04"
     verifiedVia: refs/azd-docs/articles/azure-developer-cli/environments-overview.md
     note: Environment layout (.azure/<env>/.env) that the comparison reads.
+  - url: https://github.com/Azure/azure-dev/blob/azure-dev-cli_1.35.0/cli/azd/pkg/environment/local_file_data_store.go
+    lastVerified: '2026-10-05'
+    verifiedVia: >-
+      Azure/azure-dev azure-dev-cli_1.35.0 (170ebb8) cli/azd/pkg/environment/local_file_data_store.go (godotenv.Read
+      of <env root>/.env, godotenv.Marshal on save), environment.go (marshallDotEnv, fixupUnquotedDotenv,
+      AZURE_ENV_NAME and AZURE_RESOURCE_GROUP constants) and azdcontext/azdcontext.go (EnvironmentDirectoryName
+      .azure, DotEnvFileName .env, ConfigFileName config.json, configFile.DefaultEnvironment); git diff to main
+      afe4b2b is empty for pkg/environment. github.com/joho/godotenv v1.5.1 (Go proxy zip, tag commit 3fc4292, MIT)
+      parser.go.
+    note: >-
+      Verified .env grammar (godotenv v1.5.1 as used by azd): KEY=VALUE or KEY: VALUE with an optional leading `export
+      `; key characters letters, digits, `_` and `.` (anything else is a parse error); a line whose first non-space
+      character is `#` is a comment; an unquoted value runs to end of line, is trimmed, and ends at a `#` that follows
+      whitespace; single-quoted values are literal; double-quoted values may span lines, expand `\n` and `\r`,
+      unescape other backslash pairs and expand $VAR and ${VAR} (uppercase names) from earlier keys of the same file
+      (not the process environment); an unterminated quote is a parse error; a later duplicate key overwrites the
+      earlier one; CRLF is normalised. azd writes every value double-quoted with escapes (numeric values unquoted,
+      then re-quoted when a leading zero would be lost) and sorted by key. The default environment is the
+      `defaultEnvironment` string in .azure/config.json (with `version` 1); each environment lives in
+      .azure/<name>/.env and .azure/<name>/config.json.
 overlap:
   decision: native
   coverage: none
@@ -63,4 +83,8 @@ tests:
     - single-environment-visible
 notes: >-
   Product opinion; this rule emits a summary, not pass/fail findings. The "foundry-doctor compare" command name in the
-  fix example is a placeholder for the product command and the public namespace is decided by ADR-003.
+  fix example is a placeholder for the product command and the public namespace is decided by ADR-003. Phase 1 fact
+  check (2026-10-05): azd lists every subdirectory of .azure as an environment, sorted by name, whether or not it
+  holds a .env file (LocalFileDataStore.List), and marks the one named by the defaultEnvironment value of
+  .azure/config.json as default. The compare view should mark the default environment but never treat it as the
+  baseline.

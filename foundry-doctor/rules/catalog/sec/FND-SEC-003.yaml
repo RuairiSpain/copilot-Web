@@ -31,10 +31,13 @@ compatibility:
     stable) - cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable//openapi.json.
 evidence:
   description: >-
-    Compiled ARM or live Microsoft.DocumentDB/databaseAccounts: properties.disableLocalAuth is not true. In scope when the
-    account is referenced by a Foundry connection, or by threadStorageConnections / vectorStoreConnections / storageConnections
-    of a capability host on the Foundry account or project. Connection authType is reported as context only (no breakage
-    is inferred).
+    Compiled ARM or live Microsoft.DocumentDB/databaseAccounts: properties.disableLocalAuth is not true. In scope when
+    the account is referenced by a Foundry connection (category compared case-insensitively against CosmosDb, CosmosDB
+    and AzureCosmosDb, or properties.metadata.ResourceId whose resource type is
+    Microsoft.DocumentDB/databaseAccounts), or by threadStorageConnections / vectorStoreConnections /
+    storageConnections of a capability host on the Foundry account or project (those arrays hold connection names,
+    resolved through the connection), or by capabilitySettings.documentStore of an account or project (preview
+    2026-07-15-preview only). Connection authType is reported as context only (no breakage is inferred).
   confidence: certain
 recommendation: >-
   Set properties.disableLocalAuth to true and grant the Foundry project managed identity a Cosmos DB data-plane role assignment.
@@ -71,6 +74,23 @@ sources:
   lastVerified: '2026-10-04'
   verifiedVia: refs/psrule/docs/en/rules/Azure.Cosmos.NoSQLLocalAuth.md
   note: Overlap source (PSRule for Azure rule documentation).
+- url: https://github.com/MicrosoftDocs/azure-ai-docs/blob/e8d0ac6f7ebd7fd000e287657ab9beda5bccc1fa/articles/foundry/agents/includes/concepts-capability-hosts-content.md
+  lastVerified: '2026-10-05'
+  verifiedVia: >-
+    refs/azure-ai-docs @ e8d0ac6f7ebd7fd000e287657ab9beda5bccc1fa
+    articles/foundry/agents/includes/concepts-capability-hosts-content.md (ms.date 08/21/2026), "Required connection
+    properties"; foundry-samples @ d807d9a0b2e633040d896cd0ddd58c95e14ac6f1
+    infrastructure-setup-bicep/41-standard-agent-setup/modules-standard/ai-project-identity.bicep and
+    add-project-capability-host.bicep.
+  note: >-
+    Legacy (connection) flow, verified: a project or account capability host lists connection NAMES in
+    threadStorageConnections (Cosmos DB), vectorStoreConnections (AI Search), storageConnections (Storage) and
+    aiServicesConnections (Azure OpenAI). A connection ties to the Azure resource through
+    properties.metadata.ResourceId (the full ARM ID, documented as required for Agent Service to resolve the
+    resource); properties.target is the service endpoint URL, not the ID. Connection category strings differ between
+    sources: CognitiveSearch, AzureStorageAccount, and for Cosmos DB the ARM spec enum has CosmosDb, Microsoft samples
+    use CosmosDB (and once CosmosDb) and the Learn article writes AzureCosmosDb; the category is a free string
+    (modelAsString), so compare it case-insensitively and prefer the resource type of metadata.ResourceId.
 overlap:
   decision: adapt
   coverage: partial
@@ -103,7 +123,11 @@ tests:
   - unresolved disableLocalAuth parameter is skipped
 testability: Deterministic on ARM JSON; correlation requires capability host and connection resources in scope.
 notes: >-
-  PSRule limits the rule to the NoSQL API because enforcing RBAC-only is documented there as supported only for NoSQL; the
-  API-kind detection (capabilities / kind) was not independently verified here. The waf basis was removed after the Phase
-  0 Azure black belt review because no WAF pillar tag or WARA recommendation is cited here; the WAF mapping is added in
-  Phase 4 when the guidance is verified.
+  PSRule limits the rule to the NoSQL API because enforcing RBAC-only is documented there as supported only for NoSQL;
+  the API-kind detection (capabilities / kind) was not independently verified here. The waf basis was removed after
+  the Phase 0 Azure black belt review because no WAF pillar tag or WARA recommendation is cited here; the WAF mapping
+  is added in Phase 4 when the guidance is verified. Phase 1 fact check (2026-10-05): the Cosmos-to-Foundry tie is
+  connection.properties.metadata.ResourceId or capabilitySettings.documentStore (preview). Documentation conflict: the
+  capability settings article lists Azure Cosmos DB for NoSQL or Azure AI Search as vectorStore, while the
+  2026-07-15-preview specification restricts vectorStore to Microsoft.Search/searchServices; the rule follows the
+  specification for capabilitySettings and the connection ResourceId otherwise.

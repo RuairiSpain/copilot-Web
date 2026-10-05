@@ -1,0 +1,250 @@
+name: foundry-doctor-offline
+
+# Reusable workflow (PRD section 18 "doctor-offline.yml"): runs the Foundry Doctor offline checks on a project
+# and uploads the SARIF report to GitHub code scanning. No Azure login, no secrets, no pull_request_target.
+#
+# Call it from a workflow in the consuming repository, for example (see foundry-doctor/samples/github/):
+#
+#   permissions: { contents: read, actions: read, security-events: write }
+#   jobs:
+#     doctor:
+#       uses: RuairiSpain/copilot-Web/.github/workflows/foundry-doctor-offline.yml@<tag-or-sha>
+#       with: { path: ".", profile: foundry-prod, fail-on: error, install-mode: release, version: v0.1.0 }
+#
+# The caller must grant the permissions above: a called workflow can only narrow the caller's token, and GitHub
+# rejects the run at start-up when the nested upload job asks for more than the caller allows.
+#
+# Fork pull requests: a pull_request run from a fork (and a Dependabot run) gets a read-only token, so
+# `security-events: write` is not available and the SARIF upload would fail. The upload job is skipped on those runs,
+# a notice says so, and the SARIF is still attached as a workflow artifact. The doctor exit code is still enforced:
+# the doctor job fails on exit 1 (findings at or above fail-on) and on 2, 3 and 4 (could not run, strict skip, internal
+# error), so a fork PR cannot pass by skipping the upload. Not yet proven by a real run (docs/development/ci.md).
+on:
+  workflow_call:
+    inputs:
+      path:
+        description: "Project directory relative to the repository root (the folder that holds azure.yaml)."
+        type: string
+        default: "."
+      profile:
+        description: "Policy profile: dev, test, prod, foundry-dev, foundry-test or foundry-prod."
+        type: string
+        default: "foundry-dev"
+      fail-on:
+        description: "Lowest severity that makes the job fail (doctor --fail-on): info, warning or error."
+        type: string
+        default: "error"
+      install-mode:
+        description: "release: download a published binary and verify it. source: build from source."
+        type: string
+        default: "release"
+      version:
+        description: "Release tag to install in release mode, for example v0.1.0 (the tag foundry-doctor/v0.1.0 is used). Required in release mode."
+        type: string
+        default: ""
+      source-repository:
+        description: "owner/name that holds the release (release mode) or the source (source mode)."
+        type: string
+        default: "RuairiSpain/copilot-Web"
+      source-ref:
+        description: "Git ref to build in source mode. Pin a tag or a full commit SHA, not a branch."
+        type: string
+        default: "main"
+      verify-attestation:
+        description: "Release mode: also run `gh attestation verify` on the downloaded binary."
+        type: boolean
+        default: true
+      runner:
+        description: "Runner label for the doctor job (ubuntu-latest, macos-latest or windows-latest)."
+        type: string
+        default: "ubuntu-latest"
+      upload-sarif:
+        description: "Upload the SARIF to code scanning (skipped on fork and Dependabot pull requests)."
+        type: boolean
+        default: true
+      category:
+        description: "Code scanning category, to keep several projects apart."
+        type: string
+        default: "foundry-doctor"
+      artifact-name:
+        description: "Name of the workflow artifact that holds the SARIF."
+        type: string
+        default: "foundry-doctor-sarif"
+    outputs:
+      exit-code:
+        description: "Exit code of foundry-doctor."
+        value: ${{ jobs.doctor.outputs.exit-code }}
+
+# Least privilege by default. Only the upload job gets security-events: write.
+permissions:
+  contents: read
+
+jobs:
+  doctor:
+    name: foundry-doctor doctor
+    runs-on: ${{ inputs.runner }}
+    permissions:
+      contents: read
+    outputs:
+      exit-code: ${{ steps.run.outputs.exit-code }}
+      sarif-produced: ${{ steps.run.outputs.sarif-produced }}
+      can-upload: ${{ steps.mode.outputs.can-upload }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Validate inputs and decide whether the SARIF may be uploaded
+        id: mode
+        env:
+          IN_PATH: ${{ inputs.path }}
+          IN_PROFILE: ${{ inputs.profile }}
+          IN_FAIL_ON: ${{ inputs.fail-on }}
+          IN_MODE: ${{ inputs.install-mode }}
+          IN_VERSION: ${{ inputs.version }}
+          IN_REPO: ${{ inputs.source-repository }}
+          IN_REF: ${{ inputs.source-ref }}
+          IN_UPLOAD: ${{ inputs.upload-sarif }}
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          THIS_REPO: ${{ github.repository }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          # Inputs reach the shell only through env vars and are validated here, never interpolated into scripts.
+          bad() { echo "::error title=foundry-doctor-offline::$1"; exit 2; }
+          case "$IN_PATH" in ''|/*|*..*|*[!A-Za-z0-9._/-]*) bad "input path must be a relative path without '..' (letters, digits, . _ / -)";; esac
+          case "$IN_PROFILE" in dev|test|prod|foundry-dev|foundry-test|foundry-prod) ;; *) bad "input profile must be dev, test, prod, foundry-dev, foundry-test or foundry-prod";; esac
+          case "$IN_FAIL_ON" in info|warning|error) ;; *) bad "input fail-on must be info, warning or error";; esac
+          case "$IN_MODE" in release|source) ;; *) bad "input install-mode must be release or source";; esac
+          case "$IN_REPO" in */*) ;; *) bad "input source-repository must be owner/name";; esac
+          case "$IN_REPO$IN_REF$IN_VERSION" in *[!A-Za-z0-9._/@+-]*) bad "source-repository, source-ref and version may only contain letters, digits and . _ / @ + -";; esac
+          if [ "$IN_MODE" = release ] && [ -z "$IN_VERSION" ]; then bad "install-mode release needs the version input (for example v0.1.0)"; fi
+
+          can_upload=true
+          if [ "$IN_UPLOAD" != true ]; then
+            can_upload=false; echo "::notice title=SARIF upload disabled::upload-sarif is false; the SARIF is kept as a workflow artifact only."
+          elif [ "$EVENT_NAME" = pull_request ] && [ "$HEAD_REPO" != "$THIS_REPO" ]; then
+            can_upload=false
+            echo "::notice title=SARIF upload skipped (fork pull request)::Workflows triggered by a fork get a read-only token, so code scanning upload is not possible. The exit code is still enforced and the SARIF is attached as a workflow artifact."
+          elif [ "$ACTOR" = "dependabot[bot]" ]; then
+            can_upload=false
+            echo "::notice title=SARIF upload skipped (Dependabot)::Dependabot runs get a read-only token. The exit code is still enforced."
+          fi
+          echo "can-upload=$can_upload" >> "$GITHUB_OUTPUT"
+
+      - name: Check out the project
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check out Foundry Doctor source
+        if: inputs.install-mode == 'source'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.source-repository }}
+          ref: ${{ inputs.source-ref }}
+          path: .foundry-doctor-src
+          persist-credentials: false
+
+      - name: Set up Go for the source build
+        if: inputs.install-mode == 'source'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: .foundry-doctor-src/foundry-doctor/go.mod
+          cache-dependency-path: .foundry-doctor-src/foundry-doctor/go.sum
+
+      - name: Build foundry-doctor from source
+        if: inputs.install-mode == 'source'
+        run: |
+          exe=""; [ "$RUNNER_OS" = Windows ] && exe=".exe"
+          mkdir -p "$RUNNER_TEMP/fd-bin"
+          cd .foundry-doctor-src/foundry-doctor
+          CGO_ENABLED=0 GOWORK=off go build -trimpath -o "$RUNNER_TEMP/fd-bin/foundry-doctor$exe" ./cmd/foundry-doctor
+          echo "$RUNNER_TEMP/fd-bin" >> "$GITHUB_PATH"
+
+      - name: Install foundry-doctor from a release
+        if: inputs.install-mode == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IN_VERSION: ${{ inputs.version }}
+          IN_REPO: ${{ inputs.source-repository }}
+          VERIFY_ATTESTATION: ${{ inputs.verify-attestation }}
+        run: |
+          case "$RUNNER_OS" in Linux) os=linux; ext="";; macOS) os=darwin; ext="";; Windows) os=windows; ext=".exe";; *) echo "::error::unsupported runner OS $RUNNER_OS"; exit 2;; esac
+          case "$RUNNER_ARCH" in X64) arch=amd64;; ARM64) arch=arm64;; *) echo "::error::unsupported runner architecture $RUNNER_ARCH"; exit 2;; esac
+          tag="foundry-doctor/$IN_VERSION"
+          asset="foundry-doctor_${IN_VERSION}_${os}_${arch}${ext}"
+          dir="$RUNNER_TEMP/fd-bin"; mkdir -p "$dir"
+          gh release download "$tag" --repo "$IN_REPO" --dir "$dir" --pattern "$asset" --pattern SHA256SUMS
+          # Verify the checksum from the same release. A mismatch fails the job.
+          ( cd "$dir" && awk -v a="$asset" '$2 == a' SHA256SUMS > expected.sum && [ -s expected.sum ] && { sha256sum -c expected.sum 2>/dev/null || shasum -a 256 -c expected.sum; } )
+          mv "$dir/$asset" "$dir/foundry-doctor$ext"; chmod +x "$dir/foundry-doctor$ext"
+          if [ "$VERIFY_ATTESTATION" = true ]; then
+            gh attestation verify "$dir/foundry-doctor$ext" --repo "$IN_REPO"
+          fi
+          echo "$dir" >> "$GITHUB_PATH"
+
+      - name: Run foundry-doctor doctor
+        id: run
+        env:
+          IN_PATH: ${{ inputs.path }}
+          IN_PROFILE: ${{ inputs.profile }}
+          IN_FAIL_ON: ${{ inputs.fail-on }}
+        run: |
+          out_dir="$RUNNER_TEMP/foundry-doctor-out"; mkdir -p "$out_dir"
+          sarif="$out_dir/foundry-doctor.sarif"
+          foundry-doctor --version || true
+          set +e
+          ( cd "$IN_PATH" && foundry-doctor doctor --profile "$IN_PROFILE" --fail-on "$IN_FAIL_ON" --format sarif --out "$sarif" )
+          rc=$?
+          set -e
+          echo "exit-code=$rc" >> "$GITHUB_OUTPUT"
+          if [ -s "$sarif" ]; then echo "sarif-produced=true" >> "$GITHUB_OUTPUT"; else echo "sarif-produced=false" >> "$GITHUB_OUTPUT"; fi
+          echo "sarif-path=$sarif" >> "$GITHUB_OUTPUT"
+          case "$rc" in
+            0) echo "foundry-doctor: no findings at or above $IN_FAIL_ON" ;;
+            1) echo "::error title=foundry-doctor::findings at or above $IN_FAIL_ON (exit 1)" ;;
+            2) echo "::error title=foundry-doctor::the validation could not run (exit 2)" ;;
+            3) echo "::error title=foundry-doctor::a check was skipped and --strict was set (exit 3)" ;;
+            *) echo "::error title=foundry-doctor::internal error (exit $rc)" ;;
+          esac
+          # Do not fail yet: the artifact and the code scanning upload must still happen. The final step enforces rc.
+
+      - name: Upload SARIF as a workflow artifact
+        if: steps.run.outputs.sarif-produced == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: ${{ runner.temp }}/foundry-doctor-out/foundry-doctor.sarif
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Enforce the doctor exit code
+        env:
+          RC: ${{ steps.run.outputs.exit-code }}
+        run: exit "${RC:-4}"
+
+  upload:
+    name: upload SARIF to code scanning
+    needs: doctor
+    # Run even when the doctor found problems (exit 1), so the alerts are visible. Never on fork or Dependabot PRs.
+    if: ${{ !cancelled() && needs.doctor.outputs.sarif-produced == 'true' && needs.doctor.outputs.can-upload == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read          # needed by upload-sarif on private repositories, and by checkout
+      actions: read           # needed by upload-sarif on private repositories
+      security-events: write  # the only job that holds this
+    steps:
+      - name: Check out the project (upload-sarif uses it to compute missing fingerprints)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download SARIF
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: ${{ runner.temp }}/sarif
+      - name: Upload to code scanning
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: ${{ runner.temp }}/sarif/foundry-doctor.sarif
+          category: ${{ inputs.category }}

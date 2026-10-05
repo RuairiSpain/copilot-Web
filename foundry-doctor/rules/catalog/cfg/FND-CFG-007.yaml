@@ -37,11 +37,17 @@ compatibility:
     them in Phase 1 by reading older tags.
 evidence:
   description: >-
-    Parse each URL-typed field. Values that use environment substitution are not expanded: only the literal portions and
-    the scheme are inspected. Report scheme other than https, and hosts that are IP literals or names in the loopback, link-local,
-    metadata (169.254.169.254, metadata.google.internal, fd00:ec2::254) or RFC 1918 ranges. URLs that are wholly a ${VAR}
-    reference are reported as skipped. Local development URLs (http://localhost:8088) used only by azd ai agent run are
-    not read from azure.yaml and are not flagged.
+    Parse each URL-typed field. Fields are URL-typed by description only: none of the schemas carries `format: uri`
+    for these. The fields are azure.ai.connection target (URL or ARM resource ID), authorizationUrl, tokenUrl and
+    refreshUrl; the target of agent-owned tool connections in azure.ai.agent.json (ToolConnection.target);
+    azure.ai.toolbox endpoint; azure.ai.project endpoint; microsoft.foundry endpoint; and the MCP `server_url` of
+    toolbox tools, which is not declared in any JSON schema (tools items allow additional properties) and is known
+    only from extension source. The only `format: uri` fields are the optional Teams publish metadata
+    developerWebsiteUrl, privacyUrl and termsOfUseUrl. Values that use environment substitution are not expanded: only
+    the literal portions and the scheme are inspected. Report scheme other than https, and hosts that are IP literals
+    or names in the loopback, link-local, metadata (169.254.169.254, metadata.google.internal, fd00:ec2::254) or RFC
+    1918 ranges. URLs that are wholly a ${VAR} reference are reported as skipped. Local development URLs
+    (http://localhost:8088) used only by azd ai agent run are not read from azure.yaml and are not flagged.
   confidence: certain
 recommendation: >-
   Use https endpoints reachable from the service that calls them. For internal servers, publish them on a private endpoint
@@ -64,6 +70,20 @@ sources:
   lastVerified: '2026-10-04'
   verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/azure-yaml-reference.md
   note: Connection target is an endpoint URL or ARM resource ID; examples use https.
+- url: https://github.com/Azure/azure-dev/blob/a64ca8fe04d0bc1b0375c32fed1b76573e2a91ef/cli/azd/extensions/azure.ai.connections/schemas/azure.ai.connection.json
+  lastVerified: '2026-10-05'
+  verifiedVia: >-
+    Azure/azure-dev commit a64ca8f (tags azd-ext-azure-ai-connections_1.0.0-beta.9, -toolboxes_1.0.0-beta.9,
+    -projects_1.0.0-beta.13, -agents_1.0.0-beta.18): azure.ai.connections/schemas/azure.ai.connection.json (target,
+    authorizationUrl, tokenUrl, refreshUrl), azure.ai.toolboxes/schemas/azure.ai.toolbox.json (endpoint, tools),
+    azure.ai.projects/schemas/azure.ai.project.json (endpoint),
+    azure.ai.agents/schemas/{azure.ai.agent,microsoft.foundry,Connection}.json;
+    azure.ai.toolboxes/internal/cmd/service_target.go buildToolEntries (server_url).
+  note: >-
+    Phase 1 fact check. Plain string type with URL wording in the description; `format: uri` appears only on
+    developerWebsiteUrl, privacyUrl and termsOfUseUrl in ActivityPublishConfig. server_url is set from the connection
+    target when a tool names a connection, and may be written literally or as ${VAR} in a tool entry. Values may
+    contain ${VAR}, so URL checks apply after literal-portion inspection only.
 overlap:
   decision: native
   coverage: none
@@ -95,7 +115,10 @@ tests:
   - target-is-env-reference-only
   - target-resolved-only-at-deploy
 notes: >-
-  Product opinion: no primary source states that http targets are rejected or that metadata addresses are blocked. The only
-  platform fact used is that the Agent Service runtime accepts only remote MCP endpoints. Whether the service itself blocks
-  loopback or metadata destinations is undocumented in the clones and is not inferred. Cross-cloud sovereign endpoints are
-  out of scope.
+  Product opinion: no primary source states that http targets are rejected or that metadata addresses are blocked. The
+  only platform fact used is that the Agent Service runtime accepts only remote MCP endpoints. Whether the service
+  itself blocks loopback or metadata destinations is undocumented in the clones and is not inferred. Cross-cloud
+  sovereign endpoints are out of scope. Phase 1 fact check (2026-10-05): the URL-typed field list in the evidence is
+  derived from schema descriptions at extension commit a64ca8f. The earlier description phrase "agent env values that
+  are URLs" is a heuristic, not a schema field; env values are only inspected when they parse as an absolute URL. The
+  status stays product-opinion because no source requires https or forbids loopback or metadata targets.

@@ -1,0 +1,5 @@
+name: none
+services:
+  web:
+    host: appservice
+    project: ./src

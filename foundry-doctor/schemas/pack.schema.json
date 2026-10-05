@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://foundry-doctor.invalid/schemas/pack.schema.json",
+  "title": "Foundry Doctor rule pack (pack-v1)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "id", "version", "rules"],
+  "properties": {
+    "schema": { "const": "pack-v1" },
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "version": { "type": "integer", "minimum": 1 },
+    "description": { "type": "string" },
+    "rules": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^FND-[A-Z]+-[0-9]{3}$" }
+    }
+  }
+}

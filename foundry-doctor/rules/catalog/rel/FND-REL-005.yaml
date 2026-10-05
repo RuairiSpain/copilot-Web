@@ -62,6 +62,15 @@ sources:
   lastVerified: '2026-10-04'
   verifiedVia: refs/psrule/docs/en/rules/Azure.Search.SKU.md
   note: Overlap source (PSRule for Azure rule documentation).
+- url: https://github.com/Azure/azure-rest-api-specs/blob/c415ef063cd4c1833ecceff7f856295115d80c0d/specification/search/resource-manager/Microsoft.Search/Search/preview/2026-09-01-preview/search.json
+  lastVerified: '2026-10-05'
+  verifiedVia: >-
+    refs/rest-api-specs @ c415ef063cd4c1833ecceff7f856295115d80c0d search preview/2026-09-01-preview search.json (Sku,
+    SkuName, partitionCount, replicaCount descriptions identical to 2025-05-01 except the serverless value);
+    refs/azure-ai-docs articles/search/search-manage-azure-cli.md, search-manage-rest.md,
+    search-limits-quotas-capacity.md (ms.date 09/16/2026).
+  note: >-
+    Search SKU names and Basic partition limits compared between the specification and the articles; see notes.
 overlap:
   decision: native
   coverage: none
@@ -98,7 +107,16 @@ tests:
   - values supplied by unresolved parameter expressions
 testability: Pure table-driven unit tests over (sku, replicas, partitions, hostingMode); no network.
 notes: 'Extension for a later phase: subscription quota (max services per region, for example 16 for Basic and S1 per the
-  limits article) and index/indexer counts per tier need live data and are not part of this rule. Doc inconsistency to report
-  to the Learn owners: Basic is 3 SU in the subscription table and 9 SU in the capacity article for newer services. SKU letter
-  names (S1/S2/S3) were not mapped to ARM sku.name values because no source read maps them explicitly; the checks above only
-  depend on ''basic'' and ''standard3''.'
+  limits article) and index/indexer counts per tier need live data and are not part of this rule. Doc inconsistency to
+  report to the Learn owners: Basic is 3 SU in the subscription table and 9 SU in the capacity article for newer
+  services. Phase 1 fact check (2026-10-05): ARM sku.name values per the 2025-05-01 stable specification are free,
+  basic, standard, standard2, standard3, storage_optimized_l1 and storage_optimized_l2 (serverless is added in the
+  2026-03-01-preview and 2026-09-01-preview specifications). Mapping to portal tiers: S1 = standard (azure CLI article
+  returns name standard for --sku Standard), S2 = standard2 and S3 = standard3 (REST articles; S3 HD is standard3 with
+  hostingMode HighDensity), L1 = storage_optimized_l1 and L2 = storage_optimized_l2 (spec text and limits article
+  agree on 1 TB and 2 TB per partition); no single article states the full table, so the S1 and L1/L2 rows are
+  verified by consistency. Basic partitions: the specification (2025-05-01 and both previews) says partitionCount
+  values above 1 are valid only for standard SKUs and replicaCount is at most 3 on basic, while the limits article
+  (ms.date 09/16/2026) lists 3 partitions for Basic, footnoted as new services created after April 3, 2024 (older
+  Basic services: 1 partition, 3 replicas). The conflict is not resolvable from compiled ARM, so basic with
+  partitionCount above 1 stays uncertain. The checks above depend only on basic and standard3.'

@@ -64,6 +64,19 @@ sources:
     lastVerified: "2026-10-04"
     verifiedVia: refs/rest-api-specs/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
     note: SkuName enum and publicNetworkAccess Enabled/Disabled/SecuredByPerimeter.
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/c415ef063cd4c1833ecceff7f856295115d80c0d/specification/search/resource-manager/Microsoft.Search/Search/preview/2026-09-01-preview/search.json
+    lastVerified: '2026-10-05'
+    verifiedVia: >-
+      refs/rest-api-specs @ c415ef063cd4c1833ecceff7f856295115d80c0d search preview/2026-09-01-preview and
+      2026-03-01-preview search.json (SkuName enum).
+    note: >-
+      SkuName enum in both previews is free, basic, standard, standard2, standard3, storage_optimized_l1,
+      storage_optimized_l2, serverless; stable 2025-05-01 has no serverless. Tier-to-name mapping: S1 = standard (az
+      search CLI example shows --sku Standard returns name standard), S2 = standard2 and S3 = standard3 (REST
+      articles; S3 HD is standard3 with hostingMode HighDensity), L1 = storage_optimized_l1 and L2 =
+      storage_optimized_l2 (spec description gives 1 TB and 2 TB per partition, the limits article gives L1 1,024 GB
+      and L2 2,048 GB). No article states the S1/L1 mapping in one table, so it is verified by consistency, not by an
+      explicit statement.
 overlap:
   decision: adapt
   coverage: partial
@@ -100,6 +113,8 @@ tests:
   skipped:
     - search-sku-is-parameter
 notes: >-
-  Serverless Developer appears as a tier column in the limits article, which says private endpoints
-  and IP firewall rules are supported for it, but its SKU name is not in the 2025-05-01 stable ARM
-  enum, so it is never treated as Free. Unverified: Defender for Cloud/Advisor mapping.
+  Serverless Developer appears as a tier column in the limits article, which says private endpoints and IP firewall
+  rules are supported for it, but its SKU name is not in the 2025-05-01 stable ARM enum, so it is never treated as
+  Free. Unverified: Defender for Cloud/Advisor mapping. Phase 1 fact check (2026-10-05): sku.name serverless exists in
+  the 2026-03-01-preview and 2026-09-01-preview specifications and not in the 2025-05-01 stable enum; a serverless
+  value is treated as not free. Tier-to-name mapping is in the sources.
