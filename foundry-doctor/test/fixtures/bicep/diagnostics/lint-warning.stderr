@@ -1,0 +1,2 @@
+{{DIR}}/lint-warning.bicep(1,7) : Warning no-unused-params: Parameter "unusedParam" is declared but never used. [https://aka.ms/bicep/linter-diagnostics#no-unused-params]
+{{DIR}}/lint-warning.bicep(2,5) : Warning no-unused-vars: Variable "unusedVar" is declared but never used. [https://aka.ms/bicep/linter-diagnostics#no-unused-vars]
