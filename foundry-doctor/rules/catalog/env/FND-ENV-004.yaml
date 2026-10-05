@@ -40,15 +40,23 @@ sources:
     note: Environment layout (.azure/<env>/.env) that the comparison reads.
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     Environment comparison is the product's compare command; nothing in PSRule, Policy, Defender or Advisor does it.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/env

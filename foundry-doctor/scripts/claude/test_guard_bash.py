@@ -5,6 +5,8 @@ The blocked commands include the forms a security review used to bypass the firs
 import io
 import json
 import os
+import pathlib
+import shutil
 import subprocess
 import sys
 import unittest
@@ -15,6 +17,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 import guard_bash  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+BASH = shutil.which("bash")
 
 
 def blocked(cmd):
@@ -291,8 +294,13 @@ class HookContractTests(unittest.TestCase):
         self.assertEqual(self.run_hook(json.dumps({"tool_input": {}})).returncode, 0)
 
     def test_wrapper_fails_closed_without_python(self):
-        env = {"PATH": "/nonexistent"}
-        r = subprocess.run(["/bin/bash", os.path.join(HERE, "guard-bash.sh")], input="{}", text=True,
+        if BASH is None:
+            self.skipTest("Bash (Git Bash on Windows) is not installed")
+        # Keep Windows process/runtime variables, but make python3 undiscoverable.
+        env = os.environ.copy()
+        env["PATH"] = "/nonexistent"
+        wrapper = pathlib.Path(HERE, "guard-bash.sh").as_posix()
+        r = subprocess.run([BASH, wrapper], input="{}", text=True,
                            capture_output=True, env=env)
         self.assertEqual(r.returncode, 2, r.stderr)
 

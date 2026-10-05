@@ -22,8 +22,8 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.ApiManagement/service 2025-09-01-preview"
-    - "Microsoft.ApiManagement/service 2024-05-01"
+    - { plane: management, provider: Microsoft.ApiManagement, resourceType: service, version: "2025-09-01-preview" }
+    - { plane: management, provider: Microsoft.ApiManagement, resourceType: service, version: "2024-05-01" }
   preview: true
   notes: "Microsoft.ApiManagement/service 2025-09-01-preview / 2024-05-01: identity.type, userAssignedIdentities read in spec. Policy reference authentication-managed-identity (current)"
 evidence:
@@ -74,18 +74,30 @@ sources:
     verifiedVia: refs/rest-api-specs/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/preview/2025-09-01-preview/openapi.json (ApiManagementServiceIdentity)
 overlap:
   decision: native
+  provisional: true
   coverage: partial
   rationale: >-
     PSRule Azure.APIM.ManagedIdentity only checks that the service has an identity, and the Azure Policy
     "API Management calls to API backends should be authenticated" accepts any credential type including keys
     and does not know which backend is Foundry. Foundry Doctor adds the correlation: policy to Foundry endpoint
     to identity to role assignment, with an explicit api-key header check.
-  psrule: ["Azure.APIM.ManagedIdentity"]
-  azurePolicy: ["c15dcc82-b93c-4dcb-9332-fbf121685b54"]
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: searched-match
+      matches:
+      - 'Azure.APIM.ManagedIdentity'
+    azurePolicy:
+      state: searched-match
+      matches:
+      - 'c15dcc82-b93c-4dcb-9332-fbf121685b54'
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/providers/apim

@@ -48,16 +48,24 @@ sources:
     note: azure.ai.project endpoint connects to an existing project; may contain ${VAR}.
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     PSRule for Azure, Azure Policy and Defender judge a resource on its own; none can tell that a prod environment points at
     a sibling dev environment. The environment tier mapping and cross-file correlation is the value.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/env

@@ -24,7 +24,7 @@ compatibility:
   azd: ''
   extensions: {}
   apiVersions:
-  - Microsoft.DocumentDB/databaseAccounts 2026-03-15
+  - { plane: management, provider: Microsoft.DocumentDB, resourceType: databaseAccounts, version: '2026-03-15' }
   preview: false
   notes: >-
     No azd dependency: reads compiled ARM JSON or ARM control plane Microsoft.DocumentDB/databaseAccounts 2026-03-15 / 2026-03-15:
@@ -73,32 +73,43 @@ sources:
   note: Overlap source (PSRule for Azure rule documentation).
 overlap:
   decision: adapt
+  provisional: true
   coverage: partial
   rationale: >-
     PSRule Azure.Cosmos.NoSQLLocalAuth, Azure Policy 5450f5bd (audit/deny) and dc2d41d1 (modify) and Checkov CKV_AZURE_140
     test the same property. The Foundry value is cross-resource correlation: only Cosmos accounts that a Foundry capability
     host or connection actually uses are in scope, and the finding carries the referencing project. Plus per-profile severity.
     If that correlation is not implemented in a phase, downgrade to reuse of the PSRule mapping.
-  psrule:
-  - Azure.Cosmos.NoSQLLocalAuth
-  azurePolicy:
-  - 5450f5bd-9c72-4390-a9c4-a7aba4edfdd2
-  - dc2d41d1-4ab1-4666-a3e1-3d51c43e0049
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov:
-  - CKV_AZURE_140
+  research:
+    psrule:
+      state: searched-match
+      matches:
+      - Azure.Cosmos.NoSQLLocalAuth
+    azurePolicy:
+      state: searched-match
+      matches:
+      - 5450f5bd-9c72-4390-a9c4-a7aba4edfdd2
+      - dc2d41d1-4ab1-4666-a3e1-3d51c43e0049
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: searched-match
+      matches:
+      - CKV_AZURE_140
 implementation:
   owner: native
   package: internal/rules/sec
 tests:
   positive:
-  - Cosmos referenced by capability host with disableLocalAuth true passes
-  negative:
   - Cosmos referenced by capability host with disableLocalAuth false or absent fails
-  - not-NoSQL API account is out of scope
+  negative:
+  - Cosmos referenced by capability host with disableLocalAuth true passes
   skipped:
+  - not-NoSQL API account is out of scope
   - Cosmos account not referenced by any Foundry resource is skipped with reason out-of-scope
   - unresolved disableLocalAuth parameter is skipped
 testability: Deterministic on ARM JSON; correlation requires capability host and connection resources in scope.

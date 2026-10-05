@@ -26,7 +26,7 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.Search/searchServices 2025-05-01"
+    - { plane: management, provider: Microsoft.Search, resourceType: searchServices, version: "2025-05-01" }
   preview: false
   notes: "No azd dependency: reads compiled ARM JSON or ARM control plane Microsoft.Search/searchServices 2025-05-01 / 2025-05-01: stable) - search/resource-manager/Microsoft.Search/Search/stable//search.json."
 evidence:
@@ -65,32 +65,42 @@ sources:
   note: Overlap source (PSRule for Azure rule documentation).
 overlap:
   decision: adapt
+  provisional: true
   coverage: partial
   rationale: 'PSRule Azure.Search.QuerySLA (2 replicas) and Azure.Search.IndexSLA (3 replicas), and Checkov CKV_AZURE_209
     and CKV_AZURE_208, test the same replicaCount thresholds on compiled templates. Foundry Doctor adds: scoping to search
     services a Foundry project actually uses (connection or capability host), live replicaCount from the control plane, and
     per-profile severity so dev stays informational. If those are not delivered, downgrade to reuse. Checkov and PSRule treat
     an unset replicaCount differently from the spec default of 1; the Foundry Doctor rule applies the spec default.'
-  psrule:
-  - Azure.Search.QuerySLA
-  - Azure.Search.IndexSLA
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov:
-  - CKV_AZURE_209
-  - CKV_AZURE_208
+  research:
+    psrule:
+      state: searched-match
+      matches:
+      - Azure.Search.QuerySLA
+      - Azure.Search.IndexSLA
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: searched-match
+      matches:
+      - CKV_AZURE_209
+      - CKV_AZURE_208
 implementation:
   owner: native
   package: internal/rules/rel
 tests:
   positive:
-  - standard SKU with replicaCount 3 passes
-  - standard SKU with replicaCount 2 passes query SLA check and reports index-update note at info
-  negative:
   - standard SKU with replicaCount 1 reports no query SLA
   - standard SKU with replicaCount unset (default 1) reports no query SLA
+  - standard SKU with replicaCount 2 passes query SLA check and reports index-update note at info
+  negative:
+  - standard SKU with replicaCount 3 passes
   skipped:
   - 'free SKU: SLA does not apply, skipped with reason'
   - 'search service not referenced by any Foundry connection: out of scope, skipped'

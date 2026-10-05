@@ -25,19 +25,22 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.ApiManagement/service/backends properties.circuitBreaker verified in 2025-09-01-preview"
-    - "Microsoft.ApiManagement/service/backends properties.circuitBreaker verified in 2022-09-01-preview"
-    - "Microsoft.ApiManagement/service/backends properties.circuitBreaker verified in 2024-10-01-preview"
-    - "Microsoft.ApiManagement/service/backends properties.circuitBreaker verified in 2024-05-01"
+    - { plane: management, provider: Microsoft.ApiManagement, resourceType: service/backends, version: "2025-09-01-preview" }
   preview: true
-  notes: "No azd dependency: reads compiled ARM JSON or ARM control plane Microsoft.ApiManagement/service/backends properties.circuitBreaker verified in 2025-09-01-preview / 2022-09-01-preview / 2024-10-01-preview / 2024-05-01: openapi.json, also present in to definitions); absent from stable (apimbackends.json has no circuitBreaker match."
+  notes: >-
+    No azd dependency. The catalogue lists only 2025-09-01-preview because that is the API version
+    for which the reviewed primary specification contains properties.circuitBreaker. The reviewed
+    stable 2024-05-01 backend schema does not contain circuitBreaker and is deliberately not listed
+    as compatible. A stable or otherwise unlisted API version is unsupported evidence for this
+    check and produces Skipped; absence of the property in such a schema is never a finding.
 evidence:
   description: 'Compiled ARM or live Microsoft.ApiManagement/service/backends whose url points at a Foundry or Azure OpenAI
     endpoint (or a backend pool containing one). Finding 1: properties.circuitBreaker.rules is absent or empty (Learn: one
     rule per backend is supported; not supported on the Consumption tier). Secondary evidence, confidence likely: a Microsoft.ApiManagement/service/apis/policies
     (or operations/policies, products/policies) resource whose XML contains a retry element. Policy XML can be assembled from
     fragments or named values, so a missing retry element yields uncertain, not fail, when fragments are referenced. Preview-schema
-    caveat: rule is skipped with reason when the template uses a stable API version that does not define circuitBreaker.'
+    caveat: an unlisted API version, including reviewed stable 2024-05-01, is skipped as unsupported;
+    absence of circuitBreaker in that schema is not evidence of a missing configuration.'
   confidence: likely
 recommendation: Add a circuit breaker rule to the backend that points at the model endpoint, trip on 429 and 5xx, and let
   it accept Retry-After. Keep API-level retry for transient errors only, with a bounded count, because API Management circuit
@@ -64,30 +67,42 @@ sources:
     (count, percentage, interval, statusCodeRanges).
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: No PSRule for Azure rule (Azure.APIM.* has none for circuit breaker or retry), Azure Policy built-in, Checkov
     check or WARA APIM recommendation covers backend circuit breakers or retry policies. Correlating the backend to a Foundry
     or Azure OpenAI endpoint is the Foundry-specific value.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/rel
 tests:
   positive:
-  - Foundry-targeting backend with a circuitBreaker rule passes
-  negative:
   - Foundry-targeting backend with no circuitBreaker and no retry policy reports missing resilience
+  negative:
+  - Foundry-targeting backend on 2025-09-01-preview with a circuitBreaker rule produces no finding
   skipped:
   - 'backend does not target Foundry or Azure OpenAI: out of scope'
-  - 'template uses stable API version without circuitBreaker: skipped, preview schema needed'
+  - 'template uses stable 2024-05-01, whose schema has no circuitBreaker: unsupported API version'
+  - 'template uses any unlisted API version: circuitBreaker support was not verified for that version'
   - 'Consumption tier: circuit breaker unsupported, skipped'
   uncertain:
   - 'policy XML references a policy fragment: retry element cannot be resolved, uncertain'
 testability: Unit tests on compiled ARM fixtures including preview API versions; policy XML tests use inline XML strings.
-notes: 'Phase 8 rule touching a preview schema: property names verified against API 2025-09-01-preview only. Re-verify before
-  release. The Learn example uses 2023-09-01-preview, which contains the same property.'
+notes: >-
+  Phase 8 rule touching a preview schema: property names and compatibility are verified only against
+  API 2025-09-01-preview. Re-verify before release. The Learn example uses a different preview
+  version, but an example is not compatibility evidence and that version is not listed. Stable
+  2024-05-01 was checked and lacks circuitBreaker, so it is explicitly unsupported and skipped.

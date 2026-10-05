@@ -21,9 +21,9 @@ compatibility:
   azd: ">=1.34.2 <=1.36.0-beta.1"
   extensions: {}
   apiVersions:
-    - "2025-05-01"
-    - "2024-05-01"
-    - "2026-03-15"
+    - { plane: management, provider: Microsoft.Search, resourceType: searchServices, version: "2025-05-01" }
+    - { plane: management, provider: Microsoft.ApiManagement, resourceType: service, version: "2024-05-01" }
+    - { plane: management, provider: Microsoft.DocumentDB, resourceType: databaseAccounts/throughputSettings, version: "2026-03-15" }
   preview: true
   notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from a changelog and was not verified."
 evidence:
@@ -68,18 +68,26 @@ sources:
     note: Not verified from a primary source file. The search summary described an unauthenticated endpoint https://prices.azure.com/api/retail/prices with a $filter query parameter and an api-version 2023-01-01-preview with case-sensitive filters; none of this is used until confirmed.
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     Advisor cost recommendations describe the deployed state after the fact and Azure Cost Management reports actual spend; neither
     produces a pre-deployment, per-environment estimate from the compiled plan. PSRule, Azure Policy, Checkov and the Bicep
     linter have no cost estimation. The PRD names Advisor cost recommendations as optional, separate deployed-state evidence, so
     no Advisor recommendation ID is mapped.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/cost
@@ -88,11 +96,11 @@ testability: >-
   retrieval date, as the PRD testing strategy states.
 tests:
   positive:
-    - estimate-includes-search-units-and-apim-units
-    - unsupported-resource-listed-in-exclusions
-    - dev-and-prod-fixed-capacity-comparison
+    - supported-search-or-apim-fixed-capacity-is-omitted-from-the-estimate-reports-an-incomplete-estimate-finding
+    - unsupported-resource-is-not-listed-in-exclusions-reports-an-incomplete-estimate-finding
+    - requested-dev-prod-comparison-omits-one-environment-reports-an-incomplete-comparison-finding
   negative:
-    - token-based-deployments-are-excluded-not-priced
+    - estimate-includes-supported-fixed-capacity-and-explicitly-excludes-token-based-deployments
   skipped:
     - price-cache-missing-and-offline
     - meter-not-in-supported-catalogue

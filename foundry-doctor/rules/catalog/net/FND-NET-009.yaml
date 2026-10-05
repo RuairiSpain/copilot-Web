@@ -25,8 +25,8 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.ApiManagement/service 2025-09-01-preview"
-    - "Microsoft.ApiManagement/service 2024-05-01"
+    - { plane: management, provider: Microsoft.ApiManagement, resourceType: service, version: "2025-09-01-preview" }
+    - { plane: management, provider: Microsoft.ApiManagement, resourceType: service, version: "2024-05-01" }
   preview: true
   notes: "Not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked) Microsoft.ApiManagement/service 2025-09-01-preview: sku.name incl. PremiumV2. Microsoft.ApiManagement/service 2024-05-01: stable; no PremiumV2 in enum."
 evidence:
@@ -79,6 +79,7 @@ sources:
     note: SkuType enum Developer, Standard, Premium, Basic, Consumption, Isolated, BasicV2, StandardV2, PremiumV2; VirtualNetworkType None/External/Internal; ApiManagementServiceBaseProperties virtualNetworkConfiguration, privateEndpointConnections.
 overlap:
   decision: adapt
+  provisional: true
   coverage: partial
   rationale: >-
     The built-in policy "API Management service should use a SKU that supports virtual networks"
@@ -87,16 +88,25 @@ overlap:
     access, not tier fit. PSRule has no APIM networking rule in the local clone. Foundry Doctor adapts
     the SKU test to the full documented matrix and ties it to the connectivity the Foundry gateway
     design needs. Evidence is a tier-versus-model comparison.
-  psrule: []
-  azurePolicy:
-    - "73ef9241-5d81-4cd4-b483-8443d1730fe5 (API Management service should use a SKU that supports virtual networks)"
-    - "ef619a2c-cc4d-4d03-b2ba-8c94a834d85b (API Management services should use a virtual network)"
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov:
-    - CKV_AZURE_107
-    - CKV_AZURE_174
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: searched-match
+      matches:
+        - "73ef9241-5d81-4cd4-b483-8443d1730fe5 (API Management service should use a SKU that supports virtual networks)"
+        - "ef619a2c-cc4d-4d03-b2ba-8c94a834d85b (API Management services should use a virtual network)"
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: searched-match
+      matches:
+        - CKV_AZURE_107
+        - CKV_AZURE_174
 implementation:
   owner: native
   package: internal/rules/net

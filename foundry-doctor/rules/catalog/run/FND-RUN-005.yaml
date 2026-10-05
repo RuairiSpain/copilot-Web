@@ -58,6 +58,7 @@ sources:
     note: connections list at <endpoint>/connections?api-version=v1; a per-connection credentials operation exists and must be avoided.
 overlap:
   decision: adapt
+  provisional: true
   coverage: partial
   rationale: >-
     azd ai agent doctor checks remote.agent-status (hosted agent version Active/Creating/Failed), remote.foundry-endpoint
@@ -66,22 +67,29 @@ overlap:
     adapted rather than wrapped so the evidence also works for standalone use without the azd extension and can be
     correlated with RUN-001, RUN-003 and RUN-004. It does not probe tool responsiveness; neither does this rule. No PSRule,
     Policy, Defender or Advisor equivalent was found.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/run
 tests:
   positive:
-    - endpoint reachable, all agent versions Active, all referenced connections listed
-  negative:
     - agent version Failed
     - agent version not found (404)
     - referenced connection name absent from the project
+  negative:
+    - endpoint reachable, all agent versions Active, all referenced connections listed
   skipped:
     - project endpoint not set or not reachable from this vantage point
     - 401 or 403 from the project endpoint

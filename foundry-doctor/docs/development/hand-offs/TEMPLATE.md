@@ -15,5 +15,5 @@
 ## Artefacts for next phase
 ## Exact next-phase prerequisites
 ## Definition of Done audit
-| DoD item | Status (met / unmet / waived by ADR-NNN) | Evidence |
+| DoD item | Status (met / unmet / requirement changed by ADR-NNN) | Current evidence |
 |---|---|---|

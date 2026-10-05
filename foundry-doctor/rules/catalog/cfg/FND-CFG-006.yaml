@@ -43,15 +43,20 @@ fix: |
   # Produce the value
   #   azd env set MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME gpt-5.4-mini
   services:
+    ai-project:
+      host: azure.ai.project
     my-agent:
       host: azure.ai.agent
+      project: src/my-agent
+      uses: [ai-project]
+      kind: hosted
       env:
         MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME: ${MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME}
         LOG_LEVEL: ${LOG_LEVEL:-info}
 sources:
   - url: https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/azure-yaml-reference.md
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/azure-yaml-reference.md (ms.date 09/17/2026)
     note: Variable substitution table; env section; AGENT_<SERVICE>_* values written after deployment; reserved FOUNDRY_ and AGENT_ prefixes.
   - url: https://learn.microsoft.com/azure/foundry/agents/how-to/author-azure-yaml
     lastVerified: "2026-10-04"
@@ -65,19 +70,31 @@ sources:
     lastVerified: "2026-10-04"
     verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.agents/internal/synthesis/synthesizer.go
     note: resolveVars - unresolved reference is an error naming the variable; ${VAR:-default} supported (extension source, not Learn).
+  - url: https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json from azure.ai.agents 1.0.0-beta.18; immutable repository revision unavailable
+    note: Schema evidence for the required project and agent fields used by the fix.
 overlap:
   decision: native
+  provisional: true
   coverage: partial
   rationale: >-
     The extension fails at provision/deploy on some unresolved references and the docs describe empty values
     for others. Correlating each reference with the selected environment and compiled Bicep outputs before
     deploy is Foundry-specific; no PSRule, Policy, Defender, Advisor or Bicep linter rule reads azure.yaml.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/cfg

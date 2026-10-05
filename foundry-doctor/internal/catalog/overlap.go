@@ -11,6 +11,12 @@ import (
 func OverlapMatrix(rules []Rule) string {
 	sorted := append([]Rule(nil), rules...)
 	slices.SortFunc(sorted, func(a, b Rule) int { return strings.Compare(a.ID, b.ID) })
+	structured := false
+	for _, r := range sorted {
+		if r.Overlap.hasStructuredResearch() {
+			structured = true
+		}
+	}
 
 	decisions := []string{"reuse", "wrap", "adapt", "native", "drop"}
 	groups := []string{}
@@ -30,10 +36,15 @@ func OverlapMatrix(rules []Rule) string {
 	b.WriteString("Azure Advisor, the Bicep linter and Checkov. Generated from `rules/catalog/`. The reasoning behind\n")
 	b.WriteString("each decision is in the rule's `overlap.rationale`; per-group research notes, unverified items and\n")
 	b.WriteString("proposed new rules are in `docs/overlap/`.\n\n")
-	b.WriteString("An empty Defender or Advisor cell means \"not verified\", not \"no equivalent\", unless the rule's own\n")
-	b.WriteString("notes say otherwise. A rule with no decision yet is counted as unresearched.\n\n")
+	if structured {
+		b.WriteString("Each tool cell records searched-match, searched-none, or unresearched. A decision is provisional\n")
+		b.WriteString("when marked provisional or when any configured tool remains unresearched.\n\n")
+	} else {
+		b.WriteString("An empty Defender or Advisor cell means \"not verified\", not \"no equivalent\", unless the rule's own\n")
+		b.WriteString("notes say otherwise. A rule with no decision yet is counted as unresearched.\n\n")
+	}
 
-	b.WriteString("## Decisions by group\n\n| Group | reuse | wrap | adapt | native | drop | unresearched | total |\n|---|---|---|---|---|---|---|---|\n")
+	b.WriteString("## Decisions by group\n\n| Group | reuse | wrap | adapt | native | drop | no decision | total |\n|---|---|---|---|---|---|---|---|\n")
 	totals := map[string]int{}
 	cols := append(append([]string(nil), decisions...), "")
 	for _, g := range groups {
@@ -55,11 +66,23 @@ func OverlapMatrix(rules []Rule) string {
 	}
 	fmt.Fprintf(&b, " | %d |\n", all)
 
-	b.WriteString("\n## Per-rule matrix\n\n| Rule | Decision | Coverage | PSRule | Azure Policy | Bicep linter | Checkov | Defender | Advisor |\n|---|---|---|---|---|---|---|---|---|\n")
+	if structured {
+		b.WriteString("\n## Per-rule matrix\n\n| Rule | Decision | Provisional | Coverage | PSRule | Azure Policy | Bicep linter | Checkov | Defender | Advisor |\n|---|---|---|---|---|---|---|---|---|---|\n")
+	} else {
+		b.WriteString("\n## Per-rule matrix\n\n| Rule | Decision | Coverage | PSRule | Azure Policy | Bicep linter | Checkov | Defender | Advisor |\n|---|---|---|---|---|---|---|---|---|\n")
+	}
 	for _, r := range sorted {
 		o := r.Overlap
-		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s | %s | %s | %s |\n", esc(r.ID), esc(dash(o.Decision)), esc(dash(o.Coverage)),
-			ids(o.PSRule), ids(o.AzurePolicy), ids(o.BicepLinter), ids(o.Checkov), ids(o.Defender), ids(o.Advisor))
+		if structured {
+			fmt.Fprintf(&b, "| %s | %s | %t | %s | %s | %s | %s | %s | %s | %s |\n", esc(r.ID), esc(dash(o.Decision)),
+				o.DecisionIsProvisional(), esc(dash(o.Coverage)), researchCell(o.ToolResearch("psrule")),
+				researchCell(o.ToolResearch("azurePolicy")), researchCell(o.ToolResearch("bicepLinter")),
+				researchCell(o.ToolResearch("checkov")), researchCell(o.ToolResearch("defender")),
+				researchCell(o.ToolResearch("advisor")))
+		} else {
+			fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s | %s | %s | %s |\n", esc(r.ID), esc(dash(o.Decision)), esc(dash(o.Coverage)),
+				ids(o.PSRule), ids(o.AzurePolicy), ids(o.BicepLinter), ids(o.Checkov), ids(o.Defender), ids(o.Advisor))
+		}
 	}
 	return b.String()
 }
@@ -80,4 +103,11 @@ func ids(v []string) string {
 		out[i] = "`" + esc(s) + "`"
 	}
 	return strings.Join(out, ", ")
+}
+
+func researchCell(r ToolResearch) string {
+	if r.State != ResearchSearchedMatch {
+		return esc(string(r.State))
+	}
+	return esc(string(r.State)) + ": " + ids(r.Matches)
 }

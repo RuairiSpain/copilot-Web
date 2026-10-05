@@ -23,8 +23,9 @@ Not added, with reasons:
   because it can break the server's start-up; revisit with an integrity pin or a vendored install when the server is
   needed for a release workflow.
 - **Interpreters are opaque to the Bash guard.** See `agent-swarm.md`. The mitigation is the credential the session holds.
-- **GitHub Actions are tag-pinned** (`actions/checkout@v4`, `actions/setup-go@v5`) in `foundry-doctor-ci.yml`, matching the
-  repository's other workflows. The PRD requires immutable SHA pins for release branches; `release.yml` (Phase 1) does that.
-  The workflow has `permissions: contents: read` and no secrets or OIDC.
+- **The current GitHub Actions workflow is tag-pinned** (`actions/checkout@v4`, `actions/setup-go@v5`) in
+  `foundry-doctor-ci.yml`, matching the repository's other workflows. This does not yet satisfy the PRD's immutable-SHA
+  release requirement. `release.yml` is a planned Phase 1 deliverable, not an existing control. The current workflow has
+  `permissions: contents: read` and no secrets or OIDC.
 - **`Bash(git diff *)`, `git log *`, `git status *` stay wildcard allows.** The guard blocks `--output`, `--ext-diff` and
   `git -c` options that run programs or write files.

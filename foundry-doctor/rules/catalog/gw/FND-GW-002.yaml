@@ -23,11 +23,10 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.ApiManagement/service/apis/policies 2025-09-01-preview"
-    - "Microsoft.ApiManagement/service/apis/policies 2024-05-01"
-    - "Policy reference pages llm-token-limit 2026-04-01"
+    - { plane: management, provider: Microsoft.ApiManagement, resourceType: service/apis/policies, version: "2025-09-01-preview" }
+    - { plane: management, provider: Microsoft.ApiManagement, resourceType: service/apis/policies, version: "2024-05-01" }
   preview: true
-  notes: "Policy reference pages llm-token-limit 2026-04-01: llm-emit-token-metric (current."
+  notes: "Removed unclassifiable apiVersions entry \"Policy reference pages llm-token-limit 2026-04-01\": it is a documentation page date, not an API version. The dated policy references document llm-token-limit and llm-emit-token-metric."
 evidence:
   description: >-
     Resolve the effective inbound policy of each API that fronts a model endpoint (global, product, API,
@@ -68,17 +67,25 @@ sources:
     note: AI gateway capability overview (token usage management, monitoring).
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     No PSRule, Azure Policy, Defender or Advisor control inspects AI gateway policies; Checkov and the Bicep
     linter do not parse policy XML. Presence is a product preference, the policy names and attributes are
     verified platform facts.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/providers/apim

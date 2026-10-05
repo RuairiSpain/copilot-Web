@@ -24,7 +24,7 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.Search/searchServices 2025-05-01"
+    - { plane: management, provider: Microsoft.Search, resourceType: searchServices, version: "2025-05-01" }
   preview: false
   notes: "No azd dependency: reads compiled ARM JSON or ARM control plane Microsoft.Search/searchServices 2025-05-01 / 2025-05-01: stable) - search/resource-manager/Microsoft.Search/Search/stable//search.json."
 evidence:
@@ -64,32 +64,40 @@ sources:
   note: Overlap source (PSRule for Azure rule documentation).
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: PSRule Azure.Search.SKU only recommends basic or higher over free, and Azure.Search.QuerySLA/IndexSLA check minimum
     replicas for the SLA, not upper limits or valid combinations. No Azure Policy built-in, Checkov check, Defender recommendation
     or Bicep linter rule tests partition values or the 36 SU cap. This is a deployment-feasibility preflight check, so it
     is native.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/rel
 tests:
   positive:
-  - standard, replicaCount 3, partitionCount 2 passes
-  - standard, replicaCount 12, partitionCount 3 (36 SU) passes
-  - standard3 HighDensity with partitionCount 3 passes
-  negative:
   - partitionCount 5 fails
   - replicaCount 13 fails
   - basic with replicaCount 4 fails
   - standard replicaCount 4 and partitionCount 12 (48 SU) fails
   - standard HighDensity fails
   - standard3 HighDensity with partitionCount 4 fails
+  negative:
+  - standard, replicaCount 3, partitionCount 2 passes
+  - standard, replicaCount 12, partitionCount 3 (36 SU) passes
+  - standard3 HighDensity with partitionCount 3 passes
   skipped:
   - 'replicaCount and partitionCount absent: defaults apply, nothing to check'
   - 'free or serverless SKU: documented N/A, skipped with reason'

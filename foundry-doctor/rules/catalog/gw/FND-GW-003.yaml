@@ -21,8 +21,8 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.ApiManagement/service/backends 2025-09-01-preview"
-    - "Microsoft.ApiManagement/service/backends 2024-05-01"
+    - { plane: management, provider: Microsoft.ApiManagement, resourceType: service/backends, version: "2025-09-01-preview" }
+    - { plane: management, provider: Microsoft.ApiManagement, resourceType: service/backends, version: "2024-05-01" }
   preview: true
   notes: "Microsoft.ApiManagement/service/backends 2025-09-01-preview / 2024-05-01: url, protocol, pool.services[].id, circuitBreaker, credentials read in spec. Policy reference set-backend-service (current)"
 evidence:
@@ -65,17 +65,25 @@ sources:
     verifiedVia: refs/rest-api-specs/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/preview/2025-09-01-preview/openapi.json (BackendContractProperties, BackendPool, BackendPoolItem, ApiContractProperties.serviceUrl)
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     Azure Policy and PSRule APIM rules (HTTPBackend, certificate checks, BackendAuth) assess backend transport
     and authentication, not whether a policy reference resolves to an existing backend. Reference resolution
     between policy XML and backend resources is cross-file correlation.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/providers/apim

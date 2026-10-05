@@ -1,5 +1,8 @@
 # Overlap fragment: REL (FND-REL-001..009)
 
+Research-state semantics are defined in `research-status.md`. Defender and Advisor are unresearched,
+and overlap decisions remain provisional until configured-tool searches and expert reviews complete.
+
 Researched 2026-10-04 against the local clones in `docs/development/phase-0-research-brief.md`, plus raw GitHub
 files for the Azure AI Search articles (`MicrosoftDocs/azure-ai-docs/main/articles/search/`), which are not in the
 clones. Property names and enums come from `Azure/azure-rest-api-specs` (versions in each rule's
@@ -19,10 +22,9 @@ Defender recommendation IDs and Advisor IDs were not available in any clone and 
 | FND-REL-006 | native | none | none | none | none | none | reliability, waf | verified |
 | FND-REL-007 | native | none | none | none | none | 43663217, 9cabded7, dff62efe, 61187af4 (context only) | opinion, reliability, waf, wara | product-opinion |
 | FND-REL-008 | native | none | none | none | none | 0c193899 | reliability, waf, wara | verified |
-| FND-REL-009 | adapt | partial | Azure.APIM.AvailabilityZone, Azure.APIM.MultiRegion | none | none | baf3bfc0, 740f2c1c, af4f88cb | reliability, waf, wara | verified |
+| FND-REL-009 | adapt | partial | Azure.APIM.AvailabilityZone, Azure.APIM.MultiRegion | none | none | baf3bfc0, 740f2c1c, af4f88cb | reliability, waf, wara | product-opinion |
 
-Counts: 8 verified, 1 product-opinion, 0 dropped, 0 proposed. Decisions: adapt 4, native 5, reuse 0, wrap 0, drop 0.
-`go run ./cmd/rulecatalog validate`: "catalogue valid: 108 rules".
+Counts: 7 verified, 2 product-opinion, 0 dropped, 0 proposed. Decisions: adapt 4, native 5, reuse 0, wrap 0, drop 0.
 
 ## Basis and severity
 
@@ -31,6 +33,8 @@ Counts: 8 verified, 1 product-opinion, 0 dropped, 0 proposed. Decisions: adapt 4
   3 partitions) and the Learn capacity article (36 search unit maximum, N/A cells in the combinations table).
 - All other REL rules are WAF/WARA recommendations. Severity is info in dev and test, warning in prod at most
   (REL-007 is info in every profile because it is a question). No REL rule is an error outside REL-005.
+- REL-009 evaluates only against a declared SLA/zone/region resilience objective. It does not infer
+  an objective or assume APIM zone availability in a region.
 - The Search SLA replica counts (2 for query, 3 for query and indexing) are documented Learn facts, but a lower count
   deploys fine, so REL-001 is not platform basis.
 
@@ -66,11 +70,17 @@ noted as related.
 - REL-003: stable Cosmos spec 2026-03-15 exists but only its examples are in the clone; property names were verified in
   2025-10-15. PSRule's claim that `isZoneRedundant` cannot change after creation is not in a primary source read and is
   not used. Region support for zones was not read.
-- REL-006: `circuitBreaker` exists only in preview API versions (verified 2025-09-01-preview; stable 2024-05-01 has none).
-  Phase 8 preview-schema caveat applies. Whether a newer stable APIM version has it was not checked (no newer stable in the clone).
+- REL-006: `circuitBreaker` compatibility is recorded only for 2025-09-01-preview, the reviewed
+  primary specification that contains the property. Reviewed stable 2024-05-01 has no
+  `circuitBreaker`; it and every other unlisted version are unsupported evidence and produce
+  Skipped, never a missing-property finding. The Learn example's different preview version is not
+  used as schema-compatibility evidence. Whether a newer stable APIM version has it was not checked.
 - REL-008: which provisioned SKUs and models support spillover beyond the "global and data zone provisioned deployments"
   recommendation was not read. Per-request header use is invisible to the doctor.
-- REL-009: conflict between the APIM features table (Standard v2: no availability zones) and the zones article
+- REL-009 recommends the least tier and capacity satisfying the declared SLA, throughput, zone and
+  regional objective; it does not prescribe Premium with two units. Premium/multi-region is relevant
+  only for a declared regional-resilience objective, and the cost tradeoff is explicit. There is a
+  conflict between the APIM features table (Standard v2: no availability zones) and the zones article
   (Standard v2 and Premium v2 can enable zone redundancy); StandardV2 is reported uncertain. SLA percentages per tier
   and regional zone availability were not read. `PremiumV2` appears in the 2025-09-01-preview `SkuType` enum only.
 - Defender and Advisor mappings were not researched (no clone content); lists are empty.

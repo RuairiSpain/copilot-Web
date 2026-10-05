@@ -1,5 +1,9 @@
 # Overlap fragment: NET (FND-NET-001..011) and IDN (FND-IDN-001..006)
 
+Research-state semantics are defined in `research-status.md`. Defender/Advisor blanks are
+unresearched unless a verified ID is listed, and decisions with an unresearched configured tool are
+provisional.
+
 Researched 2026-10-04. NET-001 to NET-009 were researched by an earlier agent and re-read here for
 consistency (no changes). NET-010, NET-011 and all IDN rules were researched in this pass.
 Property names and enums come from `Azure/azure-rest-api-specs`; role GUIDs from the Azure built-in
@@ -15,7 +19,7 @@ keys read from the policy definitions.
 | ID | Decision | Coverage | PSRule | Azure Policy built-in (GUID prefix) | Defender (assessment key) | Checkov / Bicep linter | Status |
 |---|---|---|---|---|---|---|---|
 | FND-NET-001 | adapt | partial | Azure.AI.PublicAccess, Azure.AI.PrivateEndpoints | 037eea7a, d6759c02, 47ba1dd7, db630ad5 | - | CKV_AZURE_134 | verified |
-| FND-NET-002 | adapt | partial | Azure.Storage.Firewall, KeyVault.Firewall, Cosmos.PublicAccess, ACR.Firewall | ee980b6d, b2982f36, 797b37f7, 405c5871, 0fdf0491 | - | CKV_AZURE_35, 101, 109, 189 | verified |
+| FND-NET-002 | adapt | partial | Azure.Storage.Firewall, Cosmos.PublicAccess | ee980b6d, b2982f36, 797b37f7 | - | CKV_AZURE_35, 101 | verified |
 | FND-NET-003 | native | partial | none | c4bc6f10, fbc14a67, a63cc0bd, 75973700, ac673a9a | - | none | verified |
 | FND-NET-004 | native | none | none | none | - | none | verified |
 | FND-NET-005 | native | none | none | none | - | none | verified |
@@ -56,8 +60,9 @@ wrap 0, drop 0.
 
 ## Basis choices to review (not dropped)
 
-- FND-IDN-002 is `platform` (error everywhere): the Foundry docs state 403 errors without the roles. It applies only
-  to stores the project uses.
+- FND-IDN-002 is `platform` (error everywhere), but a violation now requires complete effective
+  permission evidence. Built-in GUID presence is only a candidate grant; custom/inherited roles,
+  deny assignments, conditions and groups must be resolved or the result is uncertain.
 - FND-IDN-006 is `security`, not `platform`, because no source read states the https scheme requirement.
 - FND-IDN-005 and FND-NET-011 include product choices inside verified rules (Foundry Owner and Foundry Account Owner
   in the inventory; the agent subnet reported at info). They are called out in each rule's notes.
@@ -80,7 +85,16 @@ wrap 0, drop 0.
   Pipelines, GitLab and Terraform Cloud issuers are not checked beyond non-empty and no wildcard.
 - FND-IDN-005: Defender for Cloud recommendation reference and Advisor equivalents; whether schedule instances are
   readable without a PIM licence.
-- FND-IDN-004: Defender CSPM overprivileged identity recommendations (no Defender reference in the clones).
+- FND-IDN-004: Defender CSPM overprivileged identity recommendations (no Defender reference in the
+  clones). Mere condition presence does not downgrade a broad assignment. An unresolved principal
+  correlation is Uncertain, not Skipped. Partial live inventory caused by missing permission on an
+  ancestor scope is also Uncertain because inherited assignments may be hidden; only total absence
+  of the required role-assignment inventory is Skipped.
+- FND-NET-002 is narrowed to capability-settings Storage, Cosmos DB and Search with public access
+  disabled plus documented endpoint group IDs. It no longer generalises to Key Vault, ACR,
+  Application Insights, or firewall-default equivalence.
+- FND-NET-008 does not treat `publicNetworkAccess: Disabled` alone as a private-link requirement;
+  moving from Free to Basic is an explicit cost/functionality tradeoff.
 - FND-NET-010: Foundry Doctor config key for declaring public telemetry (Phase 4); full DNS zone set for the
   azuremonitor group ID (the Foundry article lists four zones; `private-link-configure.md` not reviewed).
 - FND-NET-011: NSG support or requirements on the agent subnet (delegated to Microsoft.App/environments); the

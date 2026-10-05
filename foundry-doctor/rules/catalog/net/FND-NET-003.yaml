@@ -29,8 +29,8 @@ compatibility:
   azd: ''
   extensions: {}
   apiVersions:
-  - Microsoft.Network/privateEndpoints/privateDnsZoneGroups 2024-05-01
-  - Microsoft.Network/privateDnsZones/virtualNetworkLinks 2024-06-01
+  - { plane: management, provider: Microsoft.Network, resourceType: privateEndpoints/privateDnsZoneGroups, version: '2024-05-01' }
+  - { plane: management, provider: Microsoft.Network, resourceType: privateDnsZones/virtualNetworkLinks, version: '2024-06-01' }
   preview: false
   notes: Not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked)
 evidence:
@@ -96,6 +96,7 @@ sources:
   note: Property names for zone groups and VNet links.
 overlap:
   decision: native
+  provisional: true
   coverage: partial
   rationale: >-
     The built-in "Configure ... to use private DNS zones" policies (Cognitive Services, Search, Cosmos DB, Key Vault, Container
@@ -103,17 +104,25 @@ overlap:
     link, do not know the three-zone Foundry set and do not run before deployment. PSRule has only Azure.PrivateEndpoint.Name
     (naming). No Checkov or Bicep linter rule covers zone groups. Foundry-specific correlation (group ID to required zone
     set to VNet link) is the value, so the check is native and the policies are mapped for reference.
-  psrule: []
-  azurePolicy:
-  - c4bc6f10-cb41-49eb-b000-d5ab82e2a091 (Configure Cognitive Services accounts to use private DNS zones)
-  - fbc14a67-53e4-4932-abcc-2049c6706009 (Configure Azure AI Search services to use private DNS zones)
-  - a63cc0bd-cda4-4178-b705-37dc439d3e0f (Configure CosmosDB accounts to use private DNS zones)
-  - 75973700-529f-4de2-b794-fb9b6781b6b0 (Configure a private DNS Zone ID for blob groupID)
-  - ac673a9a-f77d-4846-b2d8-a57f8e1c01d4 (Configure Azure Key Vaults to use private DNS zones)
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: searched-match
+      matches:
+      - c4bc6f10-cb41-49eb-b000-d5ab82e2a091 (Configure Cognitive Services accounts to use private DNS zones)
+      - fbc14a67-53e4-4932-abcc-2049c6706009 (Configure Azure AI Search services to use private DNS zones)
+      - a63cc0bd-cda4-4178-b705-37dc439d3e0f (Configure CosmosDB accounts to use private DNS zones)
+      - 75973700-529f-4de2-b794-fb9b6781b6b0 (Configure a private DNS Zone ID for blob groupID)
+      - ac673a9a-f77d-4846-b2d8-a57f8e1c01d4 (Configure Azure Key Vaults to use private DNS zones)
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/net

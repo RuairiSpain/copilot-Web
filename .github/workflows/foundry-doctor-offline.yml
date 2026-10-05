@@ -1,0 +1,160 @@
+name: foundry-doctor-offline
+
+# Reusable workflow: runs the Foundry Doctor offline (--local) profile against a
+# repository, enforces the documented exit codes and uploads SARIF to GitHub
+# Code Scanning. Offline only: no Azure credentials, no network calls to Azure.
+#
+# Fork safety: the doctor job has read-only permissions and never receives
+# secrets. SARIF upload runs in a separate job that is skipped for fork pull
+# requests (a fork token cannot hold security-events: write).
+#
+# Exit codes: 0 clean, 1 findings at/above --fail-on, 2 requested validation
+# could not run, 3 skipped under --strict, 4 internal/adapter failure.
+# Any non-zero code fails the job. Skipped is never treated as passed.
+
+on:
+  workflow_call:
+    inputs:
+      profile:
+        description: Doctor profile (dev, test or prod).
+        type: string
+        default: dev
+      fail-on:
+        description: Lowest severity that fails the run (info, low, medium, high, critical).
+        type: string
+        default: high
+      project-path:
+        description: Directory containing azure.yaml, relative to the calling repository root.
+        type: string
+        default: .
+      doctor-source-path:
+        description: Directory of the Foundry Doctor Go module, relative to the repository root.
+        type: string
+        default: foundry-doctor
+      strict:
+        description: Treat skipped validations as failures (exit code 3).
+        type: boolean
+        default: true
+      baseline:
+        description: Optional baseline file, relative to project-path.
+        type: string
+        default: ""
+      suppressions:
+        description: Optional suppressions file, relative to project-path.
+        type: string
+        default: ""
+      upload-sarif:
+        description: Upload SARIF to Code Scanning (skipped automatically for fork PRs).
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+env:
+  GOTOOLCHAIN: local
+
+jobs:
+  doctor:
+    name: Offline doctor
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      exit-code: ${{ steps.run.outputs.exit-code }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: ${{ inputs.doctor-source-path }}/go.mod
+          cache-dependency-path: ${{ inputs.doctor-source-path }}/go.sum
+
+      - name: Build foundry-doctor
+        working-directory: ${{ inputs.doctor-source-path }}
+        run: go build -trimpath -o "$RUNNER_TEMP/foundry-doctor" ./cmd/foundry-doctor
+
+      - name: Run offline doctor
+        id: run
+        shell: bash
+        env:
+          PROFILE: ${{ inputs.profile }}
+          FAIL_ON: ${{ inputs.fail-on }}
+          PROJECT_PATH: ${{ inputs.project-path }}
+          STRICT: ${{ inputs.strict }}
+          BASELINE: ${{ inputs.baseline }}
+          SUPPRESSIONS: ${{ inputs.suppressions }}
+        run: |
+          set -u
+          out="$RUNNER_TEMP/doctor-out"
+          mkdir -p "$out"
+          args=(doctor --local --profile "$PROFILE" --fail-on "$FAIL_ON")
+          [ "$STRICT" = "true" ] && args+=(--strict)
+          [ -n "$BASELINE" ] && args+=(--baseline "$BASELINE")
+          [ -n "$SUPPRESSIONS" ] && args+=(--suppressions "$SUPPRESSIONS")
+          cd "$PROJECT_PATH"
+          set +e
+          "$RUNNER_TEMP/foundry-doctor" "${args[@]}" --format sarif --out "$out/foundry-doctor.sarif"
+          code=$?
+          if [ "$code" -le 1 ]; then
+            "$RUNNER_TEMP/foundry-doctor" "${args[@]}" --format markdown --out "$out/foundry-doctor.md" >/dev/null 2>&1
+          fi
+          set -e
+          echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+          case "$code" in
+            0) echo "::notice::Foundry Doctor: no findings at or above $FAIL_ON." ;;
+            1) echo "::error::Foundry Doctor reported findings at or above $FAIL_ON." ;;
+            2) echo "::error::A requested validation could not run (exit 2). Skipped is not passed." ;;
+            3) echo "::error::Validation skipped under --strict (exit 3)." ;;
+            *) echo "::error::Foundry Doctor internal or adapter failure (exit $code)." ;;
+          esac
+          echo "$code" > "$out/exit-code.txt"
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: foundry-doctor-reports
+          path: ${{ runner.temp }}/doctor-out
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Enforce exit code
+        if: always() && steps.run.outputs.exit-code != '0'
+        shell: bash
+        env:
+          CODE: ${{ steps.run.outputs.exit-code }}
+        run: |
+          exit "${CODE:-4}"
+
+  upload-sarif:
+    name: Upload SARIF
+    needs: doctor
+    # Runs even when the doctor failed on findings (exit 1) so alerts appear.
+    if: >-
+      always() && inputs.upload-sarif &&
+      (needs.doctor.outputs.exit-code == '0' || needs.doctor.outputs.exit-code == '1') &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Download reports
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: foundry-doctor-reports
+          path: reports
+
+      - name: Upload SARIF to Code Scanning
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: reports/foundry-doctor.sarif
+          category: foundry-doctor-offline

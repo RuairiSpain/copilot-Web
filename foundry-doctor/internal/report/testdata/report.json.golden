@@ -1,0 +1,79 @@
+{
+  "schemaVersion": "1",
+  "tool": "foundry-doctor",
+  "toolVersion": "1.0.0",
+  "profile": "default",
+  "exitCode": 1,
+  "summary": {
+    "error": 1,
+    "warning": 1,
+    "info": 0,
+    "suppressed": 1,
+    "baselined": 1,
+    "skipped": 2
+  },
+  "findings": [
+    {
+      "ruleId": "FND-004",
+      "ruleVersion": 0,
+      "severity": "error",
+      "resource": {},
+      "location": {},
+      "suppressed": {
+        "reason": "accepted",
+        "owner": "team"
+      },
+      "fingerprint": "6aab330d4fb02ae4bf6ebbc08bcae4e2"
+    },
+    {
+      "ruleId": "FND-001",
+      "ruleVersion": 0,
+      "severity": "error",
+      "resource": {},
+      "location": {
+        "file": "azure.yaml",
+        "line": 1
+      },
+      "evidence": "line1\nline2\u001b[31m",
+      "fingerprint": "1fa9e96a455ab38b3800ef8810a379ae"
+    },
+    {
+      "ruleId": "FND-002",
+      "ruleVersion": 0,
+      "severity": "warning",
+      "pillar": "security",
+      "resource": {},
+      "location": {
+        "file": "infra/main.bicep",
+        "line": 12,
+        "column": 3
+      },
+      "evidence": "note=plain | `x` \u003cscript\u003e",
+      "recommendation": "Use *managed* identity",
+      "docsUrl": "https://learn.microsoft.com/azure/foundry",
+      "fingerprint": "ae02222094d6c45ef5986f980f956b72"
+    },
+    {
+      "ruleId": "FND-003",
+      "ruleVersion": 0,
+      "severity": "info",
+      "resource": {},
+      "location": {
+        "file": "passwd"
+      },
+      "baselined": true,
+      "fingerprint": "ac388dbaaf160a88f681d7825febf8e1"
+    }
+  ],
+  "skipped": [
+    {
+      "ruleId": "FND-010",
+      "reason": "optional scanner missing"
+    },
+    {
+      "ruleId": "FND-020",
+      "reason": "az not signed in",
+      "required": true
+    }
+  ]
+}

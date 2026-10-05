@@ -24,9 +24,12 @@ compatibility:
   azd: ''
   extensions: {}
   apiVersions:
-  - 2026-08-01-preview
-  - 2026-05-01-preview
-  - '2026-04-01'
+  - { plane: data, service: AzureAISearch, endpointFamily: knowledgesources, version: '2026-08-01-preview' }
+  - { plane: data, service: AzureAISearch, endpointFamily: knowledgebases, version: '2026-08-01-preview' }
+  - { plane: data, service: AzureAISearch, endpointFamily: knowledgesources, version: '2026-05-01-preview' }
+  - { plane: data, service: AzureAISearch, endpointFamily: knowledgebases, version: '2026-05-01-preview' }
+  - { plane: data, service: AzureAISearch, endpointFamily: knowledgesources, version: '2026-04-01' }
+  - { plane: data, service: AzureAISearch, endpointFamily: knowledgebases, version: '2026-04-01' }
   preview: true
   notes: >-
     API 2026-08-01-preview: 12 knowledge source kinds; models table through gpt-5.6-*. API 2026-05-01-preview: models table
@@ -70,16 +73,24 @@ sources:
     (KnowledgeSourceKind enum)
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     No external tool knows Foundry IQ object schemas. The version-to-kind and version-to-model tables are catalogue data
     that must be re-verified on every API release.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/providers/iq

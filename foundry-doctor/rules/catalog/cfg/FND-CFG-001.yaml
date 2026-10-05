@@ -74,18 +74,26 @@ sources:
   note: Prompt-agent required fields, unsupported modelType hosted_agent and targetAgent.
 overlap:
   decision: adapt
+  provisional: true
   coverage: partial
   rationale: >-
     azd publishes the JSON schema and editors validate against it, and the azd Foundry agents extension (azd ai agent doctor,
     check local.azure-yaml) only confirms azure.yaml is present and parseable. Foundry Doctor adds duplicate-key detection,
     offline validation of the nested azure.ai.* extension schemas in CI, and version-awareness against requiredVersions.
     The idea is taken from the schema; the evidence (pointer, keyword, line) is Foundry Doctor's own.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/cfg

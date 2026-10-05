@@ -25,9 +25,9 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.Network/virtualNetworks 2026-01-01"
-    - "Microsoft.Network/publicIPAddresses 2026-01-01"
-    - "Microsoft.Network/networkSecurityGroups 2026-01-01"
+    - { plane: management, provider: Microsoft.Network, resourceType: virtualNetworks, version: "2026-01-01" }
+    - { plane: management, provider: Microsoft.Network, resourceType: publicIPAddresses, version: "2026-01-01" }
+    - { plane: management, provider: Microsoft.Network, resourceType: networkSecurityGroups, version: "2026-01-01" }
   preview: false
   notes: "Not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked) Microsoft.Network/virtualNetworks 2026-01-01: subnets[].properties.networkSecurityGroup, enableDdosProtection, ddosProtectionPlan. Microsoft.Network/publicIPAddresses 2026-01-01: properties.ddosSettings.protectionMode: VirtualNetworkInherited, Enabled, Disabled."
 evidence:
@@ -86,6 +86,7 @@ sources:
     note: Foundry troubleshooting says to check that NSG rules do not block traffic to the private endpoint on port 443; no NSG requirement or exemption for the agent subnet is stated.
 overlap:
   decision: adapt
+  provisional: true
   coverage: partial
   rationale: >-
     NSG presence is already covered: PSRule Azure.VNET.UseNSGs (Security, SE:06), the built-in policy
@@ -98,23 +99,34 @@ overlap:
     lowering the agent subnet to info because its NSG support is not documented, and raising a DDoS
     finding only when the template exposes public IP addresses. If Phase 4 does not deliver that
     scoping, downgrade the decision to reuse and map only the existing IDs.
-  psrule:
-    - Azure.VNET.UseNSGs
-    - Azure.NSG.AnyInboundSource
-  azurePolicy:
-    - "e71308d3-144b-4262-b144-efdc3cc90517 (Subnets should be associated with a Network Security Group)"
-    - "94de2ad3-e0c1-4caf-ad78-5d47bbc83d3d (Virtual networks should be protected by Azure DDoS Protection)"
-    - "a7aca53f-2ed4-4466-a25e-0b45ade68efd (Azure DDoS Protection should be enabled)"
-    - "752154a7-1e0f-45c6-a880-ac75a7e4f648 (Public IP addresses should have resource logs enabled for Azure DDoS Protection)"
-  defender:
-    - "assessment eade5b56-eefd-444f-95c8-23f29e5d93cb (subnets should be associated with a network security group; from policy e71308d3)"
-    - "assessment e3de1cc0-f4dd-3b34-e496-8b5381ba2d70 (Azure DDoS Protection should be enabled; from policy a7aca53f)"
-  advisor: []
-  bicepLinter: []
-  checkov:
-    - CKV_AZURE_9
-    - CKV_AZURE_10
-    - CKV_AZURE_160
+  research:
+    psrule:
+      state: searched-match
+      matches:
+        - Azure.VNET.UseNSGs
+        - Azure.NSG.AnyInboundSource
+    azurePolicy:
+      state: searched-match
+      matches:
+        - "e71308d3-144b-4262-b144-efdc3cc90517 (Subnets should be associated with a Network Security Group)"
+        - "94de2ad3-e0c1-4caf-ad78-5d47bbc83d3d (Virtual networks should be protected by Azure DDoS Protection)"
+        - "a7aca53f-2ed4-4466-a25e-0b45ade68efd (Azure DDoS Protection should be enabled)"
+        - "752154a7-1e0f-45c6-a880-ac75a7e4f648 (Public IP addresses should have resource logs enabled for Azure DDoS Protection)"
+    defender:
+      state: searched-match
+      matches:
+        - "assessment eade5b56-eefd-444f-95c8-23f29e5d93cb (subnets should be associated with a network security group; from policy e71308d3)"
+        - "assessment e3de1cc0-f4dd-3b34-e496-8b5381ba2d70 (Azure DDoS Protection should be enabled; from policy a7aca53f)"
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: searched-match
+      matches:
+        - CKV_AZURE_9
+        - CKV_AZURE_10
+        - CKV_AZURE_160
 implementation:
   owner: native
   package: internal/rules/net

@@ -1,5 +1,8 @@
 # Overlap fragment: IQ (Foundry IQ / Azure AI Search) and GW (APIM AI gateway)
 
+Research-state semantics are defined in `research-status.md`; `-` does not mean searched-no-match
+unless this fragment names the searched catalogue and revision.
+
 Researched 2026-10-04. Versions verified: Search data plane 2026-04-01 (stable) and 2026-08-01-preview
 (also 2026-05-01-preview in the spec); Search management 2025-05-01 and 2026-03-01-preview (spec also has
 2026-09-01-preview); API Management ARM 2024-05-01 and 2025-09-01-preview. All property names below were read

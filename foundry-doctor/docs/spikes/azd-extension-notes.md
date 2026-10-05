@@ -1,6 +1,6 @@
 # azd extension framework notes (Phase 0 spike)
 
-lastVerified: 2026-10-04. Sources: `REFS/azure-dev` = `Azure/azure-dev` @ `afe4b2b4d262bab4c11f4937e7a7942557ab0ecd` (sparse: `cli/azd/docs`, `cli/azd/extensions`, `schemas`; `cli/version.txt` = `1.36.0-beta.1`). Files marked (raw-main) were fetched from `raw.githubusercontent.com/Azure/azure-dev/main/...` on the same date, not from the pinned clone, because `cli/azd/pkg/azdext` and `cli/azd/cmd` are not in the sparse clone. Go proxy facts from `proxy.golang.org`. Anything not stated with a source is marked **unverified**. Decisions: ADR-003, ADR-004.
+lastVerified: 2026-10-04. Sources: `REFS/azure-dev` = `Azure/azure-dev` @ `afe4b2b4d262bab4c11f4937e7a7942557ab0ecd` (sparse: `cli/azd/docs`, `cli/azd/extensions`, `schemas`; `cli/version.txt` = `1.36.0-beta.1`). Files marked (raw-main) were fetched from `raw.githubusercontent.com/Azure/azure-dev/main/...` on the same date, not from the pinned clone, because `cli/azd/pkg/azdext` and `cli/azd/cmd` are not in the sparse clone. Go proxy facts from `proxy.golang.org`. Anything not stated with a source is marked **unverified**. Decisions: ADR-003, ADR-004, ADR-008. This is a research snapshot, not current compatibility certification.
 
 ## 1. Latest released azd and Foundry extension versions
 
@@ -37,10 +37,12 @@ Schema: `cli/azd/extensions/extension.schema.json` (draft-07). Required: `id`, `
 From `docs/extensions/extension-framework.md`, "Invoking Extension Commands":
 
 1. azd starts a gRPC server on a random local port; sets `AZD_SERVER` and `AZD_ACCESS_TOKEN` (JWT carrying extension id and capabilities). Other azd env values are injected into the process environment.
-2. A positive extension exit code is propagated by azd (documented example: 2 for quality gate, 1 for operational failure).
+2. A positive extension exit code is propagated by azd. Foundry Doctor does not inherit another
+   extension's sample classification: it emits 1 for findings and 2 when the requested validation
+   cannot run, per PRD section 7.
 3. Service calls need the declared capability, otherwise "permission denied".
 4. Go SDK entry points: `azdext.Run`, `azdext.NewExtensionRootCommand` (registers `--debug`, `--no-prompt`, `-C/--cwd`, `-e/--environment`, `-o/--output`; exposes `ExtensionContext{Debug, NoPrompt, Cwd, Environment, OutputFormat}`), `azdext.NewAzdClient` (reads `AZD_SERVER`) (`docs/extensions/extension-sdk-reference.md`; `pkg/azdext/extension_command.go`, `pkg/azdext/azd_client.go`, both raw-main).
-5. Reserved flags that extensions must not redeclare: environment (`-e`), cwd, debug, no-prompt, output, help, docs, trace-log-file, trace-log-url (`docs/extensions/extensions-style-guide.md`). Foundry Doctor's own PRD flags (`--profile`, `--format`, `--output <path>`) conflict with `--output`/`-o` semantics: `--output` is the reserved azd output-format flag, while the PRD uses `--output <path>` for a file. **Action for the PRD owner:** rename the report path flag (for example `--out`) in extension mode, or use `RegisterFlagOptions`; this is a concrete finding of this spike.
+5. Reserved flags that extensions must not redeclare: environment (`-e`), cwd, debug, no-prompt, output, help, docs, trace-log-file, trace-log-url (`docs/extensions/extensions-style-guide.md`). Foundry Doctor uses `--out` for a file or directory destination in both extension and standalone modes. `-o/--output` remains azd's output-format flag. This resolves the former PRD conflict (ADR-003 and ADR-007).
 6. Contract channels: stable `azd.extensions.v1` and beta `azd.extensions.v1beta`; `ComposeService`, `CopilotService`, `TelemetryService` are beta-only (`docs/extensions/contract-versioning.md`). Use stable `v1` only.
 
 ## 5. gRPC service surface relevant to Foundry Doctor
@@ -82,9 +84,33 @@ Dependency weight: `azdext` lives in the single Go module `github.com/azure/azur
 - `azd ai agent doctor` (agents 1.0.0-beta.18): local plus remote checks, exit 0/1/2, read-only (`azure-ai-docs/articles/foundry/agents/how-to/agent-doctor.md`; `extensions/azure.ai.agents/internal/cmd/doctor.go`, `internal/cmd/doctor/`). Candidate for the overlap matrix: Foundry Doctor should not duplicate its remote agent-liveness checks; wrap or reference instead. Not evaluated in depth here.
 - `azd ai project`, `azd ai connection`, `azd ai toolbox`, `azd ai skill`, `azd ai routine`, `azd ai inspector` own resource-authoring commands (install-cli-foundry-extensions.md). Foundry Doctor is read-only and must never mutate what these manage.
 
-## 10. Fixtures
+## 10. Fixtures and schema-spike status
 
-`test/spikes/azd/valid-azure-yaml-only/` and `test/spikes/azd/invalid-duplicate-and-unresolved/` with `expected.json`. Every field is from `schemas/v1.0/azure.yaml.json` or the official examples in `extensions/azure.ai.agents/schemas/examples/`. The azd env file is stored as `.azure/dev/env.fixture` because the harness blocks writing `.env`; the loader in tests should map `env.fixture` to the real `.env` name (copy at test time). The fixtures were **not** validated against the JSON schema in this spike (no ajv run; `azure.ai.agents/schemas/README.md` documents an ajv procedure for later).
+`test/spikes/azd/valid-azure-yaml-only/` and `test/spikes/azd/invalid-duplicate-and-unresolved/` with `expected.json`. Every field is from `schemas/v1.0/azure.yaml.json` or the official examples in `extensions/azure.ai.agents/schemas/examples/`. The azd env file is stored as `.azure/dev/env.fixture` because the harness blocks writing `.env`; the loader in tests should map `env.fixture` to the real `.env` name (copy at test time).
+
+The original spike did not run schema validation. It was later augmented by
+`test/spikes/azd/schema_spike_test.go` plus `validate_schema.py`. With `-tags spike`, an absolute
+`AZURE_DEV_DIR`, and Python packages PyYAML and jsonschema/referencing, the test:
+
+1. loads `schemas/v1.0/azure.yaml.json` from that clone;
+2. resolves only `raw.githubusercontent.com/Azure/azure-dev/main/...` references back into the same clone;
+3. requires the valid fixture to pass; and
+4. removes the required agent `project` field and requires that modified fixture to fail.
+
+The harness exits 2 for missing Python dependencies and the Go test records that case as **SKIPPED**.
+The test is build-tagged and is not invoked by `verify-phase.sh`. The current CI workflow is
+configured to run it against exact `Azure/azure-dev` commit `afe4b2b4d262bab4c11f4937e7a7942557ab0ecd` with pinned Python packages,
+alongside the Bicep 0.48.1 spike. No successful run of that CI job is evidenced. The local tagged
+command passed locally on Windows ARM64 with Go 1.26.4 and Python 3.13. Successful current CI evidence
+remains open.
+It structurally validates the pinned extension's embedded ARM assets but does not compile or enumerate
+a newly returned `microsoft.foundry` template, or prove compatibility with another azure-dev revision.
+
+Reproduction:
+
+```sh
+AZURE_DEV_DIR=/absolute/path/to/azure-dev go test -tags spike ./test/spikes/azd/
+```
 
 ## Unverified summary
 
@@ -92,3 +118,5 @@ Dependency weight: `azdext` lives in the single Go module `github.com/azure/azur
 - Minimum azd per framework feature; signing requirements for third-party registries.
 - `pkg/azdext` per-file licence header; binary-size effect of importing the azd module.
 - `Deployment()` service usage; `.azure/config.json` fields.
+- Successful current CI schema-spike result on the current revision; local execution passed, but no
+  successful current CI run is evidenced.

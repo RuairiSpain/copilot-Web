@@ -25,8 +25,8 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.Network/virtualNetworks 2024-05-01"
-    - "Microsoft.CognitiveServices/accounts 2026-09-01"
+    - { plane: management, provider: Microsoft.Network, resourceType: virtualNetworks, version: "2024-05-01" }
+    - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts, version: "2026-09-01" }
   preview: false
   notes: "Not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked) Microsoft.CognitiveServices/accounts 2026-09-01: networkInjections."
 evidence:
@@ -68,17 +68,25 @@ sources:
     note: Says RFC 1918 only and CGNAT 100.64.0.0/10 is not supported; conflicts with the other two articles.
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     No PSRule rule, policy, Checkov check or Bicep linter rule evaluates VNet address plans against the
     Foundry reserved ranges or peer overlap. The check is pure CIDR arithmetic on Foundry-specific
     documented constants, plus peering data that only the live plane provides.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/net

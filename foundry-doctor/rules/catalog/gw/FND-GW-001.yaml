@@ -26,13 +26,13 @@ compatibility:
   azd: ''
   extensions: {}
   apiVersions:
-  - Microsoft.ApiManagement/service/apis/policies 2025-09-01-preview
-  - Microsoft.ApiManagement/service/apis/policies 2024-05-01
-  - Policy reference pages dated 2026-08-18
+  - { plane: management, provider: Microsoft.ApiManagement, resourceType: service/apis/policies, version: '2025-09-01-preview' }
+  - { plane: management, provider: Microsoft.ApiManagement, resourceType: service/apis/policies, version: '2024-05-01' }
   preview: true
   notes: >-
     Microsoft.ApiManagement/service/apis/policies 2025-09-01-preview / 2024-05-01: properties.value, properties.format xml|rawxml|xml-link|rawxml-link
-    read in spec. Policy reference pages dated 2026-08-18: validate-jwt.
+    read in spec. Removed unclassifiable apiVersions entry "Policy reference pages dated 2026-08-18": it is a documentation
+    page date, not an API version. The dated page documents validate-jwt.
 evidence:
   description: >-
     Parse the policy XML of each API that fronts a model endpoint (AI gateway scope: global, product, API or operation,
@@ -90,18 +90,26 @@ sources:
     (PolicyContractProperties)
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     PSRule for Azure has no APIM rule that parses policy XML for token validation (APIM rules cover base policy, CORS, ciphers,
     protocols, backend HTTP, managed identity); Azure Policy covers backend authentication, base-policy inheritance and
     subscriptions only. Checkov covers APIM TLS and network access. Foundry-specific scoping (which APIs front model endpoints)
     and correlation with the managed-identity step are the value.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/providers/apim

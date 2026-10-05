@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -22,8 +23,9 @@ import (
 func TestValidFixtureMatchesAzdSchema(t *testing.T) {
 	clone := os.Getenv("AZURE_DEV_DIR")
 	if clone == "" || !filepath.IsAbs(clone) {
-		t.Skip("AZURE_DEV_DIR (absolute path to an azure-dev clone) not set")
+		spikeDependencyUnavailable(t, "AZURE_DEV_DIR must name an absolute azure-dev clone at "+pinnedAzureDevCommit)
 	}
+	assertPinnedAzureDevCheckout(t, clone)
 	script, err := filepath.Abs("validate_schema.py")
 	if err != nil {
 		t.Fatal(err)
@@ -39,7 +41,7 @@ func TestValidFixtureMatchesAzdSchema(t *testing.T) {
 		if errors.As(err, &ee) {
 			code = ee.ExitCode()
 		} else if err != nil {
-			t.Fatalf("cannot run python3: %v", err)
+			spikeDependencyUnavailable(t, "cannot run required python3 schema dependency: "+err.Error())
 		}
 		return string(out), code
 	}
@@ -47,7 +49,7 @@ func TestValidFixtureMatchesAzdSchema(t *testing.T) {
 	valid := filepath.Join("valid-azure-yaml-only", "azure.yaml")
 	out, code := run(valid)
 	if code == 2 {
-		t.Skipf("python environment not usable: %s", out)
+		spikeDependencyUnavailable(t, "required Python schema environment is not usable: "+out)
 	}
 	if code != 0 {
 		t.Fatalf("valid fixture rejected by the azd schema (exit %d):\n%s", code, out)
@@ -57,7 +59,7 @@ func TestValidFixtureMatchesAzdSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	broken := strings.Replace(string(src), "    project: ./agents/assistant\n", "", 1)
+	broken := regexp.MustCompile(`(?m)^[ \t]+project:[^\r\n]*(?:\r?\n|$)`).ReplaceAllString(string(src), "")
 	if broken == string(src) {
 		t.Fatal("fixture no longer contains the line this test removes")
 	}

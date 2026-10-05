@@ -8,8 +8,8 @@
 
 | Status | Rules |
 |---|---|
-| verified | 85 |
-| product-opinion | 23 |
+| verified | 82 |
+| product-opinion | 26 |
 
 | Overlap decision | Rules |
 |---|---|
@@ -74,7 +74,7 @@ Rules whose phases include 1, including those shared with a later phase. The PRD
 | FND-CFG-005 | No raw secrets in YAML/Bicep/environment blocks | 1 | verified | adapt | warning/error/error | [link](<https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference>) (2026-10-04) |
 | FND-CFG-006 | Every variable has an environment or infrastructure producer | 1 | verified | native | warning/error/error | [link](<https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference>) (2026-10-04) |
 | FND-CFG-007 | Outbound endpoints use HTTPS and reject unsafe local/metadata targets | 1 | product-opinion | native | info/warning/error | [link](<https://learn.microsoft.com/azure/foundry/agents/how-to/tools/model-context-protocol>) (2026-10-04) |
-| FND-CFG-008 | MCP tools use allow lists | later | verified | native | info/warning/warning | [link](<https://learn.microsoft.com/azure/foundry/agents/how-to/tools/model-context-protocol>) (2026-10-04) |
+| FND-CFG-008 | MCP tools use allow lists | later | product-opinion | native | info/warning/warning | [link](<https://learn.microsoft.com/azure/foundry/agents/how-to/tools/model-context-protocol>) (2026-10-04) |
 | FND-CFG-009 | Cron expressions are valid | later | verified | native | error/error/error | [link](<https://learn.microsoft.com/azure/foundry/agents/how-to/use-routines>) (2026-10-04) |
 | FND-CFG-010 | Model versions pinned in stricter profiles | later | product-opinion | native | info/warning/warning | [link](<https://learn.microsoft.com/azure/foundry/openai/how-to/working-with-models>) (2026-10-04) |
 | FND-CFG-011 | Preview/retired fields are version-aware | 1 | verified | native | warning/warning/error | [link](<https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference>) (2026-10-04) |
@@ -135,7 +135,7 @@ Rules whose phases include 1, including those shared with a later phase. The PRD
 | FND-IDN-003 | Role assignments use object IDs and principalType | 1 | verified | native | warning/error/error | [link](<https://learn.microsoft.com/azure/role-based-access-control/role-assignments-template>) (2026-10-04) |
 | FND-IDN-004 | No broad Owner/Contributor for application identities | 1 | verified | native | warning/error/error | [link](<https://learn.microsoft.com/azure/role-based-access-control/role-assignments-steps>) (2026-10-04) |
 | FND-IDN-005 | Standing human admin access reviewed | 2/4 | verified | adapt | info/info/warning | [link](<https://learn.microsoft.com/azure/role-based-access-control/best-practices>) (2026-10-04) |
-| FND-IDN-006 | Federated credentials use HTTPS issuer and specific subject | 1 | verified | adapt | warning/error/error | [link](<https://learn.microsoft.com/entra/workload-id/workload-identity-federation-create-trust-user-assigned-managed-identity>) (2026-10-04) |
+| FND-IDN-006 | Federated credentials use HTTPS issuer and specific subject | 1 | verified | adapt | warning/error/error | [link](<https://openid.net/specs/openid-connect-discovery-1_0.html#IssuerDiscovery>) (2026-10-04) |
 
 ## IQ
 
@@ -175,7 +175,7 @@ Rules whose phases include 1, including those shared with a later phase. The PRD
 | Rule | Title | Phase | Status | Decision | dev/test/prod | Source |
 |---|---|---|---|---|---|---|
 | FND-OPS-001 | Diagnostic settings to Log Analytics | 4 | verified | adapt | info/warning/error | [link](<https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-cognitiveservices-accounts-logs>) (2026-10-04) |
-| FND-OPS-002 | Application Insights connected | 4 | verified | native | info/warning/error | [link](<https://learn.microsoft.com/azure/foundry/observability/how-to/trace-agent-setup>) (2026-10-04) |
+| FND-OPS-002 | Application Insights connected | 4 | product-opinion | native | info/warning/warning | [link](<https://learn.microsoft.com/azure/foundry/observability/how-to/trace-agent-setup>) (2026-10-04) |
 | FND-OPS-003 | Baseline alerts exist | 4 | product-opinion | adapt | info/info/warning | [link](<https://learn.microsoft.com/azure/foundry/how-to/stay-informed-service-health>) (2026-10-04) |
 | FND-OPS-004 | Required tags exist | 1 | product-opinion | adapt | info/warning/warning | [link](<https://learn.microsoft.com/azure/azure-resource-manager/management/tag-resources>) (2026-10-04) |
 | FND-OPS-005 | Resource-name provider constraints | 1 | verified | adapt | error/error/error | [link](<https://learn.microsoft.com/azure/azure-resource-manager/management/resource-name-rules>) (2026-10-04) |
@@ -197,7 +197,7 @@ Rules whose phases include 1, including those shared with a later phase. The PRD
 | FND-REL-006 | Gateway retry/circuit breaker | 8 | verified | native | info/info/warning | [link](<https://learn.microsoft.com/azure/api-management/backends>) (2026-10-04) |
 | FND-REL-007 | Multi-region/DR plan question | 4 | product-opinion | native | info/info/info | [link](<https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency>) (2026-10-04) |
 | FND-REL-008 | Provisioned throughput spillover recommendation | 4 | verified | native | info/info/warning | [link](<https://learn.microsoft.com/azure/foundry/openai/how-to/spillover-traffic-management>) (2026-10-04) |
-| FND-REL-009 | APIM availability tier recommendation | 4/8 | verified | adapt | info/info/warning | [link](<https://learn.microsoft.com/azure/api-management/api-management-features>) (2026-10-04) |
+| FND-REL-009 | APIM availability tier recommendation | 4/8 | product-opinion | adapt | info/info/warning | [link](<https://learn.microsoft.com/azure/api-management/api-management-features>) (2026-10-04) |
 
 ## RUN
 

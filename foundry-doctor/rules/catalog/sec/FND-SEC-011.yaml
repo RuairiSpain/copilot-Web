@@ -26,7 +26,7 @@ compatibility:
   extensions:
     azure.ai.agents: ">=1.0.0-beta.18 <=1.0.0-beta.18"
   apiVersions:
-    - "Microsoft.CognitiveServices/accounts 2026-09-01"
+    - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts, version: "2026-09-01" }
   preview: true
   notes: "azd verified at exactly 1.36.0-beta.1. Extension ranges are exactly the versions whose schemas or source were read; widen them in Phase 1 by reading older tags. Microsoft.CognitiveServices/accounts 2026-09-01 / 2026-09-01: stable) - cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable//cognitiveservices.json (AccountProperties.restrictOutboundNetworkAccess, allowedFqdnList; ManagedNetworkSettings.isolationMode."
 evidence:
@@ -51,29 +51,37 @@ sources:
   note: '''network'' section: isolationMode values and peSubnet/agentSubnet.'
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: No PSRule, Checkov, Bicep linter or Defender rule evaluates Foundry account outbound restriction or
     managed-network isolation, and the reviewed Azure Policy built-ins mention outbound restriction only for SQL
     (SqlEnableOutboundNetworkingRestrictions). Correlating the azure.yaml network block with the ARM properties
     is Foundry-specific, hence native.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/sec
 tests:
   positive:
-  - 'isolationMode AllowOnlyApprovedOutbound reports Info: controlled egress'
-  negative:
   - 'isolationMode Disabled or AllowInternetOutbound reports Info: egress not restricted (never an error)'
+  negative:
+  - 'isolationMode AllowOnlyApprovedOutbound reports no finding'
   skipped:
   - no network block and no ARM account in scope is skipped
-  - 'uncertain: restrictOutboundNetworkAccess true with an empty allowedFqdnList is reported uncertain (effect not
-    verified)'
+  uncertain:
+  - restrictOutboundNetworkAccess true with an empty allowedFqdnList has an unverified effect
 testability: Deterministic on azure.yaml and ARM JSON; always informational.
 notes: Whether restrictOutboundNetworkAccess is honoured for Foundry accounts is not stated in the spec description
   (property has no description); treat as configuration evidence only.

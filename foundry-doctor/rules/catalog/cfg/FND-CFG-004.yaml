@@ -59,30 +59,38 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/azure-yaml-reference.md
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/azure-yaml-reference.md (ms.date 09/17/2026)
     note: Agent fields, container resource bounds, codeConfiguration vs image, voice model fields.
   - url: https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json
-    note: "Prompt agent requires model and instructions; CodeConfiguration requires runtime and entryPoint; registryConnectionId requires hosted and no codeConfiguration."
+    verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json from azure.ai.agents 1.0.0-beta.18; immutable repository revision unavailable
+    note: "Versioned schema evidence: prompt agent requires project, model and instructions; CodeConfiguration requires runtime and entryPoint; registryConnectionId requires hosted and no codeConfiguration."
   - url: https://learn.microsoft.com/azure/foundry/agents/how-to/author-azure-yaml
     lastVerified: "2026-10-04"
     verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/author-azure-yaml.md
     note: Deploy modes (code vs container), prebuilt image.
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     Correlating a prompt agent model to a deployment declared on its project and checking the hosted
     source/image combination is Foundry-specific and spans services. PSRule for Azure checks deployed
     resource properties, not azure.yaml; the JSON schema (FND-CFG-001) only covers per-field shape, not
     the model-to-deployment link or filesystem checks.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/cfg

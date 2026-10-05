@@ -27,7 +27,7 @@ compatibility:
   azd: '>=1.34.2 <=1.36.0-beta.1'
   extensions: {}
   apiVersions:
-  - 2021-05-01-preview
+  - { plane: management, provider: Microsoft.Insights, resourceType: diagnosticSettings, version: '2021-05-01-preview' }
   preview: true
   notes: >-
     azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects
@@ -93,6 +93,7 @@ sources:
     sibling definitions read for Search, APIM, Cosmos and Blob services.
 overlap:
   decision: adapt
+  provisional: true
   coverage: partial
   rationale: >-
     Azure Policy has DeployIfNotExists and AuditIfNotExists definitions per resource type (for example 55d1f543-d1b0-4811-9663-d6d0dbc6326d
@@ -104,19 +105,27 @@ overlap:
     the idea and adds a pre-deployment check on the compiled template, correlation across the Foundry stack (account, project,
     Search, APIM, Storage, Cosmos) to one workspace, and category validation against the supported-logs reference. Defender
     for Cloud and Advisor recommendations were not verifiable (see fragment).
-  psrule: []
-  azurePolicy:
-  - 55d1f543-d1b0-4811-9663-d6d0dbc6326d
-  - 1b4d1c4e-934c-4703-944c-27c82c06bebb
-  - 8def4bdd-4362-4ed6-a26f-7bf8f2c58839
-  - b4330a05-a843-4bc8-bf9a-cacce50c67f4
-  - 567c93f7-3661-494f-a30f-0a94d9bfebf8
-  - 68ba9fc9-71b9-4e6f-9cf5-ecc07722324c
-  - b4fe1a3b-0715-4c6c-a5ea-ffc33cf823cb
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: searched-match
+      matches:
+      - 55d1f543-d1b0-4811-9663-d6d0dbc6326d
+      - 1b4d1c4e-934c-4703-944c-27c82c06bebb
+      - 8def4bdd-4362-4ed6-a26f-7bf8f2c58839
+      - b4330a05-a843-4bc8-bf9a-cacce50c67f4
+      - 567c93f7-3661-494f-a30f-0a94d9bfebf8
+      - 68ba9fc9-71b9-4e6f-9cf5-ecc07722324c
+      - b4fe1a3b-0715-4c6c-a5ea-ffc33cf823cb
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/ops

@@ -27,9 +27,12 @@ compatibility:
   azd: ''
   extensions: {}
   apiVersions:
-  - 2026-08-01-preview
-  - 2026-05-01-preview
-  - '2026-04-01'
+  - { plane: data, service: AzureAISearch, endpointFamily: knowledgebases, version: '2026-08-01-preview' }
+  - { plane: data, service: AzureAISearch, endpointFamily: knowledgesources, version: '2026-08-01-preview' }
+  - { plane: data, service: AzureAISearch, endpointFamily: knowledgebases, version: '2026-05-01-preview' }
+  - { plane: data, service: AzureAISearch, endpointFamily: knowledgesources, version: '2026-05-01-preview' }
+  - { plane: data, service: AzureAISearch, endpointFamily: knowledgebases, version: '2026-04-01' }
+  - { plane: data, service: AzureAISearch, endpointFamily: knowledgesources, version: '2026-04-01' }
   preview: true
   notes: >-
     API 2026-08-01-preview: ingestionPermissionOptions documented for retrieval enforcement. API 2026-05-01-preview: property
@@ -84,16 +87,24 @@ sources:
     enum)
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     No external tool models Foundry IQ permission ingestion or the correlation between a knowledge source, its index permission
     metadata and the agent connection header. Defender for Cloud and Azure Policy have no equivalent control.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/iq

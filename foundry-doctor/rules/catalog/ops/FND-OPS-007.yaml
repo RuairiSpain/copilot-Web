@@ -65,17 +65,25 @@ sources:
     ms.date 09/23/2026.
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     No PSRule, Azure Policy, Defender, Advisor, Bicep linter or Checkov rule examined checks that a repository has a CI/CD
     pipeline for the project; those tools inspect Azure resources or template content. The check needs repository layout
     and azure.yaml, which only Foundry Doctor reads.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/ops

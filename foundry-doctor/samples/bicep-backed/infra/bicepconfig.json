@@ -1,0 +1,11 @@
+{
+  "analyzers": {
+    "core": {
+      "rules": {
+        "no-unused-params": { "level": "warning" },
+        "no-unused-vars": { "level": "warning" },
+        "outputs-should-not-contain-secrets": { "level": "warning" }
+      }
+    }
+  }
+}

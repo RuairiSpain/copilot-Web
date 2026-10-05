@@ -25,7 +25,9 @@ compatibility:
   azd: ''
   extensions: {}
   apiVersions:
-  - Azure AI Search data plane 2026-04-01
+  - { plane: data, service: AzureAISearch, endpointFamily: indexes, operation: get, version: '2026-04-01' }
+  - { plane: data, service: AzureAISearch, endpointFamily: indexes, operation: getStatistics, version: '2026-04-01' }
+  - { plane: data, service: AzureAISearch, endpointFamily: indexers, operation: getStatus, version: '2026-04-01' }
   preview: false
   notes: >-
     No azd dependency: Search data-plane reads; no azd behaviour dependency Azure AI Search data plane 2026-04-01: stable.
@@ -80,31 +82,40 @@ sources:
     tool.
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     PSRule Azure.Search.* rules (IndexSLA, QuerySLA, SKU, ManagedIdentity, Naming) and Azure Policy Search definitions check
     service configuration, not index existence, schema, document count or indexer status. Checkov and the Bicep linter are
     static. azd ai agent doctor has no Search check. Correlating the index an agent connection points to with its live state
     is the Foundry-specific value.
-  psrule:
-  - Azure.Search.IndexSLA
-  - Azure.Search.QuerySLA
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: searched-match
+      matches:
+      - Azure.Search.IndexSLA
+      - Azure.Search.QuerySLA
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/run
 tests:
   positive:
-  - index exists with expected fields, documentCount above zero, indexer status running with lastResult success
-  negative:
   - index returns 404
   - vector field missing dimensions or vectorSearchProfile
   - documentCount is zero long after the last indexer success
   - indexer status error
+  negative:
+  - index exists with expected fields, documentCount above zero, indexer status running with lastResult success
   skipped:
   - search service is private and the vantage point is outside the VNet
   - caller has no Search RBAC role

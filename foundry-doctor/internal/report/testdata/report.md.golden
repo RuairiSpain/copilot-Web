@@ -1,0 +1,27 @@
+# Foundry Doctor report
+
+- Tool version: `1.0.0`
+- Profile: `default`
+- Exit code: 1
+
+## Summary
+
+| Errors | Warnings | Info | Suppressed | Baselined | Skipped |
+|---|---|---|---|---|---|
+| 1 | 1 | 0 | 1 | 1 | 2 |
+
+## Findings
+
+| Severity | Rule | Location | Resource | Evidence | Recommendation | Docs |
+|---|---|---|---|---|---|---|
+| error | `FND-001` | `azure.yaml:1` |  | `line1 line2 [31m` |  |  |
+| warning | `FND-002` | `infra/main.bicep:12:3` |  | ``note=plain ∣ `x` ‹script›`` | Use \*managed\* identity | <https://learn.microsoft.com/azure/foundry> |
+
+## Skipped checks
+
+Skipped is not passed.
+
+| Rule | Required | Reason |
+|---|---|---|
+| `FND-010` | no | optional scanner missing |
+| `FND-020` | yes | az not signed in |

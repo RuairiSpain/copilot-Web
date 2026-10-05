@@ -26,7 +26,8 @@ compatibility:
   azd: '>=1.34.2 <=1.36.0-beta.1'
   extensions: {}
   apiVersions:
-  - '2026-03-01'
+  - { plane: management, provider: Microsoft.OperationalInsights, resourceType: workspaces, version: '2026-03-01' }
+  - { plane: management, provider: Microsoft.OperationalInsights, resourceType: workspaces/tables, version: '2026-03-01' }
   preview: true
   notes: >-
     azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects
@@ -78,6 +79,7 @@ sources:
   note: Foundry trace data retention and sampling follow the Application Insights configuration.
 overlap:
   decision: adapt
+  provisional: true
   coverage: partial
   rationale: >-
     No PSRule rule, Azure Policy built-in or Bicep linter rule checks Log Analytics workspace retention against a declared
@@ -85,13 +87,21 @@ overlap:
     retention of 365 days, which does not apply to workspaces). Foundry Doctor adapts the idea of a retention floor and
     adds the correlation from the Foundry resources and the Application Insights connection to the workspace that actually
     stores their data.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov:
-  - CKV_AZURE_37
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: searched-match
+      matches:
+      - CKV_AZURE_37
 implementation:
   owner: native
   package: internal/rules/ops

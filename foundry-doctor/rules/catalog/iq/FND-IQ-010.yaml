@@ -22,9 +22,9 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Search data plane 2026-04-01"
-    - "Search data plane 2026-08-01-preview"
-    - "Microsoft.Storage/storageAccounts 2025-01-01"
+    - { plane: data, service: AzureAISearch, endpointFamily: knowledgesources, version: "2026-04-01" }
+    - { plane: data, service: AzureAISearch, endpointFamily: knowledgesources, version: "2026-08-01-preview" }
+    - { plane: management, provider: Microsoft.Storage, resourceType: storageAccounts, version: "2025-01-01" }
   preview: true
   notes: "Search data plane 2026-04-01 / 2026-08-01-preview: azureBlobParameters.isADLSGen2. Microsoft.Storage/storageAccounts 2025-01-01: properties.isHnsEnabled read in spec."
 evidence:
@@ -66,17 +66,25 @@ sources:
     verifiedVia: refs/rest-api-specs/specification/search/data-plane/Search/models-service.tsp (AzureBlobKnowledgeSourceParameters.isADLSGen2, "Set to true if connecting to an ADLS Gen2 storage account")
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     PSRule for Azure only uses isHnsEnabled as an internal helper to exclude features (IsHnsStorage in
     Azure.Storage.Rule.ps1); no rule, Azure Policy or Defender control requires hierarchical namespace for a
     Search source. The value is the correlation between the knowledge source and the storage account.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/iq

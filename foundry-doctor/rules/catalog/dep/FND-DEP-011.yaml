@@ -27,7 +27,11 @@ compatibility:
   extensions:
     azure.ai.projects: '>=1.0.0-beta.13 <=1.0.0-beta.13'
   apiVersions:
-  - Microsoft.Network 2025-05-01
+  - { plane: management, provider: Microsoft.Network, resourceType: virtualNetworks, version: '2025-05-01' }
+  - { plane: management, provider: Microsoft.Network, resourceType: virtualNetworks/subnets, version: '2025-05-01' }
+  - { plane: management, provider: Microsoft.Network, resourceType: virtualNetworks/subnets/serviceAssociationLinks, version: '2025-05-01' }
+  - { plane: management, provider: Microsoft.Network, resourceType: virtualNetworks/subnets/resourceNavigationLinks, version: '2025-05-01' }
+  - { plane: management, provider: Microsoft.Network, resourceType: virtualNetworks/usages, version: '2025-05-01' }
   preview: true
   notes: >-
     azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects
@@ -106,18 +110,26 @@ sources:
   note: Microsoft.Network/virtualNetworks/subnets/read, Microsoft.Network/locations/availableDelegations/read.
 overlap:
   decision: native
+  provisional: true
   coverage: partial
   rationale: >-
     PSRule has network rules for VNets and AKS (for example Azure.AKS.CNISubnetSize), but none for the Foundry agent subnet's
     delegation, size, exclusivity or reserved ranges. Azure Policy built-ins that mention subnet delegations were not found
     to cover Microsoft.App/environments. The Foundry-specific contract (delegation target, size, ranges, one Foundry resource
     per subnet) is the value, so it is native.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/dep

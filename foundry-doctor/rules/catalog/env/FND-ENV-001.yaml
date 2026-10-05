@@ -53,16 +53,24 @@ sources:
     note: Tearing down an environment deletes the resource group when the current environment created the Foundry project.
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     Cross-environment comparison of azd environments is azd-specific. PSRule, Policy, Defender and Advisor evaluate one
     deployed resource or template at a time and have no concept of sibling azd environments.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/env

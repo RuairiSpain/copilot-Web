@@ -54,6 +54,7 @@ sources:
   note: azd stores outputs from the entry point as environment values.
 overlap:
   decision: wrap
+  provisional: true
   coverage: full
   rationale: >-
     The Bicep linter rule outputs-should-not-contain-secrets already gives equivalent evidence (and it is a compile-time
@@ -61,23 +62,31 @@ overlap:
     with a stable fingerprint, source location and per-profile severity (the linter default is warning and can be silenced
     with a disable comment, which Foundry Doctor should report as a suppression needing reason and expiry). Checkov has
     no output-secret check in the reviewed clone (only secure-parameter default checks).
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter:
-  - outputs-should-not-contain-secrets
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: searched-match
+      matches:
+      - outputs-should-not-contain-secrets
+    checkov:
+      state: unresearched
 implementation:
   owner: bicep
   package: internal/bicep
 tests:
   positive:
-  - output of resource id passes
-  negative:
   - output using listKeys fails
   - output of secure parameter fails
   - output named accountPassword fails
+  negative:
+  - output of resource id passes
   skipped:
   - Bicep CLI not installed is skipped with the missing capability named
   - '#disable-next-line outputs-should-not-contain-secrets is surfaced as a suppression needing reason and expiry'

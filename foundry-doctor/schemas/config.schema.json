@@ -1,0 +1,191 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ruairispain/copilot-web/foundry-doctor/schemas/config.schema.json",
+  "title": "Foundry Doctor configuration (version 1)",
+  "description": "Unified configuration file. Unknown keys are rejected. The Go validator in internal/config is authoritative; a test keeps this schema's keys in sync with it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version"],
+  "properties": {
+    "version": { "const": 1 },
+    "profile": { "enum": ["foundry-dev", "foundry-test", "foundry-prod"] },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "azureYaml": { "type": "string" },
+        "infraPath": { "type": "string" },
+        "environment": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" }
+      }
+    },
+    "rules": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "include": { "type": "array", "items": { "enum": ["must-have", "nice-to-have"] } },
+        "exclude": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^(must-have|nice-to-have|FND-[A-Z]+-[0-9]{3})$" }
+        },
+        "packs": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bicep": { "$ref": "#/$defs/mode" },
+        "azure": { "$ref": "#/$defs/mode" },
+        "runtime": { "$ref": "#/$defs/mode" }
+      }
+    },
+    "policy": { "$ref": "#/$defs/policy" },
+    "adoption": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "baseline": { "type": "string" },
+        "suppressions": { "type": "string" }
+      }
+    },
+    "outputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "formats": { "type": "array", "items": { "enum": ["console", "json", "markdown", "sarif"] } },
+        "directory": { "type": "string" }
+      }
+    },
+    "advanced": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "psrule": { "$ref": "#/$defs/tool" },
+        "checkov": { "$ref": "#/$defs/tool" },
+        "bicep": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "executable": { "type": "string" },
+            "config": { "type": "string" }
+          }
+        },
+        "adapters": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "environments": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": { "policy": { "$ref": "#/$defs/policy" } }
+      }
+    }
+  },
+  "$defs": {
+    "mode": { "enum": ["required", "optional", "disabled"] },
+    "stringList": { "type": "array", "items": { "type": "string" } },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "enum": ["auto", true, false] },
+        "config": { "type": "string" }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "resourceScope": { "enum": ["same-resource-group", "same-subscription", "any"] },
+        "allowedExternalScopes": { "$ref": "#/$defs/stringList" },
+        "environments": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "production": { "$ref": "#/$defs/stringList" },
+            "nonProduction": { "$ref": "#/$defs/stringList" },
+            "development": { "$ref": "#/$defs/stringList" }
+          }
+        },
+        "tags": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "required": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["name"],
+                "properties": {
+                  "name": { "type": "string", "minLength": 1 },
+                  "format": { "type": "string" }
+                }
+              }
+            },
+            "resourceTypes": { "$ref": "#/$defs/stringList" }
+          }
+        },
+        "logRetention": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "minimumDays": { "type": "integer", "minimum": 0 } }
+        },
+        "models": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "allow": { "$ref": "#/$defs/stringList" },
+            "deny": { "$ref": "#/$defs/stringList" }
+          }
+        },
+        "dataResidency": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "scope": { "enum": ["global", "datazone-us", "datazone-eu", "datazone-apac", "geography"] },
+            "regions": { "$ref": "#/$defs/stringList" },
+            "deploymentSkus": { "$ref": "#/$defs/stringList" }
+          }
+        },
+        "disasterRecovery": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "declared": { "type": "boolean" },
+            "reference": { "type": "string" }
+          }
+        },
+        "network": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "publicAccess": { "enum": ["forbidden", "entra-only", "allowed"] } }
+        },
+        "monitoring": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "publicTelemetry": { "type": "boolean" } }
+        },
+        "managedByAzurePolicy": {
+          "type": "array",
+          "items": { "enum": ["private-dns-zone-group", "diagnostic-settings"] }
+        },
+        "knowledge": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "requireDocumentLevelAccess": { "type": "boolean" } }
+        },
+        "cost": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "devMaxCosmosThroughput": { "type": "integer", "minimum": 0 },
+            "productionSizedSkuExemptions": { "$ref": "#/$defs/stringList" }
+          }
+        }
+      }
+    }
+  }
+}

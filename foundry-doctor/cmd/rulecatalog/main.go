@@ -5,11 +5,13 @@
 //	rulecatalog generate-overlap [--dir rules/catalog] [--out docs/overlap-analysis.md] [--check]
 //
 // Exit codes: 0 ok; 1 the catalogue is invalid or a generated file is stale;
-// 2 usage error or an I/O failure (cannot read the catalogue, cannot write the output).
+// 2 utility/usage error or an I/O failure, including cancellation and writer failures.
 package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -17,6 +19,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/catalog"
 )
@@ -25,7 +28,14 @@ const usage = "usage: rulecatalog validate|generate-docs|generate-overlap [flags
 
 func main() { os.Exit(run(context.Background(), os.Args[1:], os.Stdout, os.Stderr)) }
 
-func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+func run(ctx context.Context, args []string, stdout, stderr io.Writer) (code int) {
+	outWriter, errWriter := &trackingWriter{w: stdout}, &trackingWriter{w: stderr}
+	stdout, stderr = outWriter, errWriter
+	defer func() {
+		if outWriter.err != nil || errWriter.err != nil {
+			code = 2
+		}
+	}()
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, usage)
 		return 2
@@ -65,7 +75,40 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	rules, err := catalog.Load(ctx, os.DirFS(*dir), ".")
+	root, err := repositoryRoot(*dir)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	repo, err := os.OpenRoot(root)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	defer repo.Close()
+	goMod, err := readRootFile(repo, "go.mod")
+	if err != nil || !isFoundryDoctorModule(string(goMod)) {
+		fmt.Fprintln(stderr, "foundry-doctor repository root changed while opening")
+		return 2
+	}
+	catalogueDir, err := confinedName(root, *dir)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	var outputPath string
+	if cmd != "validate" {
+		outputPath, err = confinedName(root, *out)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 2
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	rules, err := catalog.Load(ctx, rootFS{Root: repo}, filepath.ToSlash(catalogueDir))
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		var inv *catalog.InvalidError
@@ -89,7 +132,10 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		doc = catalog.OverlapMatrix(rules)
 	}
 	if *check {
-		cur, err := os.ReadFile(*out)
+		cur, err := readRootFile(repo, outputPath)
+		if err == nil {
+			err = ctx.Err()
+		}
 		switch {
 		case errors.Is(err, fs.ErrNotExist) || err == nil && string(cur) != doc:
 			fmt.Fprintf(stderr, "%s is stale; run: go run ./cmd/rulecatalog %s\n", *out, cmd)
@@ -100,7 +146,11 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	}
-	if err := writeFileAtomic(*out, []byte(doc)); err != nil {
+	if err := ctx.Err(); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	if err := writeRootFileAtomic(repo, outputPath, []byte(doc)); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
@@ -108,26 +158,189 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-// writeFileAtomic writes via a temporary file in the same directory, so a failed write never leaves a truncated output.
-func writeFileAtomic(name string, data []byte) error {
-	d := filepath.Dir(name)
-	if err := os.MkdirAll(d, 0o755); err != nil {
-		return err
+type trackingWriter struct {
+	w   io.Writer
+	err error
+}
+
+func (w *trackingWriter) Write(p []byte) (int, error) {
+	if w.err != nil {
+		return 0, w.err
 	}
-	tmp, err := os.CreateTemp(d, ".rulecatalog-*")
+	n, err := w.w.Write(p)
+	if err == nil && n != len(p) {
+		err = io.ErrShortWrite
+	}
+	w.err = err
+	return n, err
+}
+
+func repositoryRoot(pathHint string) (string, error) {
+	cwd, err := os.Getwd()
 	if err != nil {
+		return "", err
+	}
+	starts := []string{cwd}
+	if filepath.IsAbs(pathHint) {
+		starts = append(starts, pathHint)
+	}
+	for _, start := range starts {
+		if root, err := findRepositoryRoot(start); err == nil {
+			return root, nil
+		}
+	}
+	return "", errors.New("foundry-doctor repository root not found")
+}
+
+func findRepositoryRoot(dir string) (string, error) {
+	for {
+		if info, err := os.Stat(dir); err == nil && !info.IsDir() {
+			dir = filepath.Dir(dir)
+		}
+		mod := filepath.Join(dir, "go.mod")
+		if b, readErr := os.ReadFile(mod); readErr == nil {
+			if isFoundryDoctorModule(string(b)) {
+				return dir, nil
+			}
+		} else if !errors.Is(readErr, fs.ErrNotExist) {
+			return "", readErr
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", fs.ErrNotExist
+		}
+		dir = parent
+	}
+}
+
+func isFoundryDoctorModule(goMod string) bool {
+	const module = "github.com/ruairispain/copilot-web/foundry-doctor"
+	for _, line := range strings.Split(goMod, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "module ") {
+			return strings.TrimSpace(strings.TrimPrefix(line, "module ")) == module
+		}
+	}
+	return false
+}
+
+func confinedName(root, name string) (string, error) {
+	if strings.TrimSpace(name) == "" {
+		return "", errors.New("path must not be empty")
+	}
+	absolute, err := filepath.Abs(name)
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(root, absolute)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("path %q is outside repository root", name)
+	}
+	return rel, nil
+}
+
+func readRootFile(root *os.Root, name string) ([]byte, error) {
+	f, err := root.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(f)
+}
+
+type rootFS struct {
+	*os.Root
+}
+
+func (r rootFS) Open(name string) (fs.File, error) {
+	return r.Root.Open(name)
+}
+
+// writeRootFileAtomic keeps directory creation, temporary-file creation and
+// rename relative to the same rooted directory handle. os.Root rejects any
+// symlink or reparse-point swap that would escape that handle.
+func writeRootFileAtomic(root *os.Root, name string, data []byte) error {
+	return writeRootFileAtomicWithRename(root, name, data, func(oldName, newName string) error {
+		return root.Rename(oldName, newName)
+	})
+}
+
+func writeRootFileAtomicWithRename(root *os.Root, name string, data []byte, rename func(string, string) error) error {
+	d := filepath.Dir(name)
+	if err := mkdirAllRoot(root, d, 0o755); err != nil {
 		return err
 	}
-	defer os.Remove(tmp.Name())
+	var tmp *os.File
+	var tmpName string
+	for range 100 {
+		var nonce [12]byte
+		if _, err := rand.Read(nonce[:]); err != nil {
+			return err
+		}
+		tmpName = filepath.Join(d, ".rulecatalog-"+hex.EncodeToString(nonce[:]))
+		var err error
+		tmp, err = root.OpenFile(tmpName, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, fs.ErrExist) {
+			return err
+		}
+	}
+	if tmp == nil {
+		return errors.New("could not create unique temporary output")
+	}
+	defer root.Remove(tmpName)
 	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Chmod(0o644); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
 		tmp.Close()
 		return err
 	}
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	if err := os.Chmod(tmp.Name(), 0o644); err != nil {
+	if err := rename(tmpName, name); err != nil {
 		return err
 	}
-	return os.Rename(tmp.Name(), name)
+	if dir, err := root.Open(d); err == nil {
+		defer dir.Close()
+		// Some platforms do not support syncing directories. A successful
+		// atomic rename remains valid there.
+		_ = dir.Sync()
+	}
+	return nil
+}
+
+func mkdirAllRoot(root *os.Root, name string, perm fs.FileMode) error {
+	if name == "." || name == "" {
+		return nil
+	}
+	current := ""
+	for _, component := range strings.FieldsFunc(filepath.Clean(name), func(r rune) bool {
+		return r == '/' || r == '\\'
+	}) {
+		current = filepath.Join(current, component)
+		err := root.Mkdir(current, perm)
+		if err == nil {
+			continue
+		}
+		if !errors.Is(err, fs.ErrExist) {
+			return err
+		}
+		info, statErr := root.Stat(current)
+		if statErr != nil {
+			return statErr
+		}
+		if !info.IsDir() {
+			return &fs.PathError{Op: "mkdir", Path: current, Err: errors.New("not a directory")}
+		}
+	}
+	return nil
 }

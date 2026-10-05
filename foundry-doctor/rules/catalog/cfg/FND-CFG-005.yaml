@@ -70,6 +70,7 @@ sources:
     note: Bicep linter rule code secure-secrets-in-params.
 overlap:
   decision: adapt
+  provisional: true
   coverage: partial
   rationale: >-
     Bicep/ARM secrets handling is covered by the Bicep linter (secure-secrets-in-params, secure-parameter-default,
@@ -77,12 +78,32 @@ overlap:
     (Azure.Deployment.SecureParameter, SecureValue, SecretLeak, OutputSecretValue) and Checkov CKV_AZURE_131;
     Foundry Doctor maps those results and does not re-implement them. None of them read azure.yaml, where
     azure.ai.connection credentials and service env live; that part is native Foundry-specific evidence.
-  psrule: [Azure.Deployment.SecureParameter, Azure.Deployment.SecureValue, Azure.Deployment.SecretLeak, Azure.Deployment.OutputSecretValue]
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: [secure-secrets-in-params, secure-parameter-default, outputs-should-not-contain-secrets, use-secure-value-for-secure-inputs]
-  checkov: [CKV_AZURE_131, CKV_SECRET_6]
+  research:
+    psrule:
+      state: searched-match
+      matches:
+      - 'Azure.Deployment.SecureParameter'
+      - 'Azure.Deployment.SecureValue'
+      - 'Azure.Deployment.SecretLeak'
+      - 'Azure.Deployment.OutputSecretValue'
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: searched-match
+      matches:
+      - 'secure-secrets-in-params'
+      - 'secure-parameter-default'
+      - 'outputs-should-not-contain-secrets'
+      - 'use-secure-value-for-secure-inputs'
+    checkov:
+      state: searched-match
+      matches:
+      - 'CKV_AZURE_131'
+      - 'CKV_SECRET_6'
 implementation:
   owner: native
   package: internal/rules/cfg

@@ -1,0 +1,29 @@
+name: good-sample
+requiredVersions:
+  azd: ">= 1.34.2"
+  extensions:
+    azure.ai.projects: "1.0.0-beta.13"
+infra:
+  provider: microsoft.foundry
+services:
+  ai-project:
+    host: azure.ai.project
+    deployments:
+      - name: gpt-4o-mini
+        model:
+          format: OpenAI
+          name: gpt-4o-mini
+          version: "2024-07-18"
+        sku:
+          name: GlobalStandard
+          capacity: 50
+  assistant:
+    host: azure.ai.agent
+    project: ./agents/assistant
+    uses: [ai-project]
+    kind: hosted
+    name: assistant
+    description: Sample hosted agent with a valid configuration.
+    env:
+      LOG_LEVEL: info
+      REGION: ${AZURE_LOCATION}

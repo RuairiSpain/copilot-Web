@@ -23,11 +23,11 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.Storage/storageAccounts 2026-06-01"
-    - "Microsoft.DocumentDB/databaseAccounts 2026-03-15"
-    - "Microsoft.KeyVault/vaults 2026-05-15"
-    - "Microsoft.Search/searchServices 2025-05-01"
-    - "Microsoft.CognitiveServices/accounts 2026-09-01"
+    - { plane: management, provider: Microsoft.Storage, resourceType: storageAccounts, version: "2026-06-01" }
+    - { plane: management, provider: Microsoft.DocumentDB, resourceType: databaseAccounts, version: "2026-03-15" }
+    - { plane: management, provider: Microsoft.KeyVault, resourceType: vaults, version: "2026-05-15" }
+    - { plane: management, provider: Microsoft.Search, resourceType: searchServices, version: "2025-05-01" }
+    - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts, version: "2026-09-01" }
   preview: false
   notes: "No azd dependency: reads compiled ARM JSON or ARM control plane Microsoft.Storage/storageAccounts 2026-06-01 / 2026-06-01: stable) - storage/resource-manager/Microsoft.Storage/stable//openapi.json. Microsoft.DocumentDB/databaseAccounts 2026-03-15 / 2026-03-15: stable) - cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable//openapi.json. Microsoft.KeyVault/vaults 2026-05-15 / 2026-05-15: stable) - keyvault/resource-manager/Microsoft.KeyVault/KeyVault/stable//openapi.json. Microsoft.Search/searchServices 2025-05-01 / 2025-05-01: stable) - search/resource-manager/Microsoft.Search/Search/stable//search.json. Microsoft.CognitiveServices/accounts 2026-09-01 / 2026-09-01: stable) - cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable//cognitiveservices.json."
 evidence:
@@ -65,6 +65,7 @@ sources:
   note: NetworkRuleSet.ipRules / IpRule.
 overlap:
   decision: native
+  provisional: true
   coverage: partial
   rationale: PSRule firewall rules (Azure.Storage.Firewall, Azure.KeyVault.Firewall, Azure.Cosmos.PublicAccess,
     Azure.AI.PublicAccess) and Checkov (CKV_AZURE_35, 109, 99) check defaultAction or public access, not the content
@@ -72,26 +73,35 @@ overlap:
     private ranges in IP rules, so the value is the rule-content check across all Foundry-related resource types
     in one finding. The private-range part is a documented platform constraint for Storage and Cosmos; the open-range
     part is a security recommendation, hence basis security and non-error dev severity.
-  psrule: []
-  azurePolicy:
-  - 12339a85-a25c-4f17-9f82-4766f13f5c4c
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: searched-match
+      matches:
+      - 12339a85-a25c-4f17-9f82-4766f13f5c4c
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/sec
 tests:
   positive:
-  - specific public /32 or /24 passes
-  negative:
   - Storage ipRules 10.0.0.0/24 fails as private range
   - Cosmos ipAddressOrRange 0.0.0.0 fails as all-Azure-datacenters
   - any resource ipRules 0.0.0.0/0 fails as open range
+  negative:
+  - specific public /32 or /24 passes
   skipped:
   - ipRules built from an unresolved parameter is skipped
-  - 'uncertain: private range on Key Vault, Search or Cognitive Services is not evaluated (no verified source)'
+  uncertain:
+  - private range on Key Vault, Search or Cognitive Services is not evaluated because no source was verified
 testability: Deterministic CIDR parsing on ARM JSON; no network access needed.
 notes: 'Mixed basis: private ranges on Storage/Cosmos are platform-documented, open ranges are a security judgement.
   Kept as basis security (non-platform) so dev can be warning; the catalogue schema forces error in every profile

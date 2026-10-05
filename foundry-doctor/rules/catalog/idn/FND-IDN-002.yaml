@@ -28,19 +28,20 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.Authorization/roleAssignments 2022-04-01"
-    - "Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments 2025-10-15"
-    - "Microsoft.CognitiveServices/accounts 2026-07-15-preview"
+    - { plane: management, provider: Microsoft.Authorization, resourceType: roleAssignments, version: "2022-04-01" }
+    - { plane: management, provider: Microsoft.DocumentDB, resourceType: databaseAccounts/sqlRoleAssignments, version: "2025-10-15" }
+    - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts, version: "2026-07-15-preview" }
   preview: true
   notes: "Not version dependent; reads compiled ARM JSON and ARM role assignments (azd 1.36.0-beta.1 clone checked) Microsoft.Authorization/roleAssignments 2022-04-01: roleDefinitionId, principalId, principalType, scope. Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments 2025-10-15: roleDefinitionId, scope, principalId. Microsoft.CognitiveServices/accounts 2026-07-15-preview: properties.capabilitySettings.documentStore, vectorStore, blobStore; CapabilitySettings definition read in cognitiveservices.json."
 evidence:
   description: >-
-    Resolve the project principal: identity.principalId of the project (system-assigned) or the
-    principalId of each identity in identity.userAssignedIdentities. Resolve the stores from the
-    account capability settings (documentStore, vectorStore, blobStore) or the project connections.
-    For each store, require an assignment for that principal whose roleDefinitionId ends with the
-    GUID of a documented role and whose scope is the store, its parent or the container named in the
-    docs. Role GUIDs (Azure built-in roles reference, ms.date 07/01/2026): Search Index Data
+    Resolve the project principal and stores from capability settings or project connections. For
+    each required operation, calculate effective permission rather than testing for a built-in role
+    GUID. Expand assignments at the resource and inherited parent scopes; resolve built-in and
+    custom role definitions; apply Actions, NotActions, DataActions and NotDataActions; and account
+    for applicable deny assignments and assignment conditions. Expand group assignments only when
+    membership is readable. The documented built-in role GUIDs below are candidate role definitions,
+    not proof of access: Search Index Data
     Contributor 8ebe5a00-799e-43f5-93ac-243d3dce84a7; Search Service Contributor
     7ca78c08-252a-4471-8644-bb5ff32d4ba0; Storage Blob Data Contributor
     ba92f5b4-2d11-453d-a403-e96b0029c9fe; Storage Blob Data Owner
@@ -51,11 +52,12 @@ evidence:
     7f951dda-4ed3-4680-a7ca-43fe172d538d; Log Analytics Data Reader
     3b03c2da-16b3-4a49-8834-0f8130efdd3b. The Cosmos DB Built-in Data Contributor role is a Cosmos
     SQL role, so look for a Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments resource for the
-    principal on the database, not an Azure RBAC assignment. Fail when a required data role is
-    missing for a store the project uses (Storage Account Contributor is reported as info only). Emit uncertain in Phase 1 when the scope depends on the
-    project workspace ID (the container names contain it) or the principal is a module output that
-    cannot be resolved; Phase 2 resolves them from live data. Do not fail on a role granted through
-    a group when group membership cannot be read; report skipped with the missing permission.
+    principal on the database, not an Azure RBAC assignment. A known built-in assignment may satisfy
+    the check after scope, conditions and denies are evaluated; an equivalent custom role may also
+    satisfy it. Fail only when the complete effective-permission evidence proves a required action is
+    absent. Emit uncertain when role definitions, inheritance, a condition, deny assignments, group
+    membership, principal identity, or container scope cannot be completely resolved. If Azure
+    access needed to obtain that evidence is unavailable, report skipped with the missing capability.
   confidence: likely
 recommendation: >-
   Assign the project managed identity the documented data roles on each store before agents run:
@@ -100,27 +102,36 @@ sources:
     note: SqlRoleAssignmentResource has roleDefinitionId, scope and principalId.
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
-    No PSRule rule, built-in policy, Checkov check or Bicep linter rule models the Foundry standard
+    No PSRule rule, built-in policy, Checkov check or Bicep linter rule found in the searched
+    catalogues models the Foundry standard
     agent setup role matrix. Policies and PSRule test whether a resource has a managed identity or
     local auth is off, not whether a specific principal holds a specific role on a specific store.
     The value is the correlation of project identity, capability-settings stores and role
     assignments, before deployment. FND-RUN-001 covers effective access at runtime; this rule is the
     template and assignment-inventory view.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/idn
 testability: >-
-  Offline with compiled ARM fixtures (project, capability settings, role assignments, Cosmos SQL role
-  assignments). Phase 2 uses recorded role-assignment list responses. The container-scope cases need a
-  fixture with the workspace ID resolved.
+  Offline fixtures include principals, role assignments, role definitions, parent scopes, deny
+  assignments, conditions, groups and Cosmos SQL assignments. Phase 2 uses recorded effective-access
+  inventory. A template-only result is uncertain unless it proves the complete applicable set.
 tests:
   positive:
     - search-missing-service-contributor
@@ -129,19 +140,25 @@ tests:
     - hosted-agent-acr-without-pull-role
   negative:
     - all-documented-roles-assigned
+    - equivalent-custom-role-grants-required-data-actions
     - store-not-referenced-by-capability-settings
     - roles-granted-at-account-scope-containing-store
   skipped:
-    - principal-is-module-output
-    - group-membership-unreadable
     - live-role-assignments-not-readable
   uncertain:
+    - principal-is-module-output
+    - inherited-role-definition-not-readable
+    - custom-role-actions-not-resolvable
+    - group-membership-unreadable
+    - applicable-deny-assignments-not-readable
+    - conditional-assignment-cannot-be-evaluated
     - container-scope-uses-workspace-id-expression
 notes: >-
   Unverified: the Cosmos DB Built-in Data Contributor SQL role definition GUID (the Azure RBAC
   built-in roles reference does not list Cosmos data-plane roles and no local Cosmos doc was
   available); match it by resolving the sqlRoleDefinitions name, or add it once read from the Cosmos
-  DB RBAC article. Unverified: the Foundry Agent Consumer role GUID eed3b665-ab3a-47b6-8f48-c9382fb1dad6
+  DB RBAC article. Therefore Cosmos effective access remains uncertain until the SQL role definition
+  is resolved. Unverified: the Foundry Agent Consumer role GUID eed3b665-ab3a-47b6-8f48-c9382fb1dad6
   appears only in the Foundry RBAC article, not in the built-in roles reference. Documentation
   inconsistency: the standard agent setup article names the containers
   workspaceId-azureml-blobstore and workspaceId-azureml-agent while the administrator guide names
@@ -150,4 +167,6 @@ notes: >-
   account level for the system-assigned identity while the capability settings article lists only
   data roles; the rule reports a missing Storage Account Contributor as an info note, not a failure,
   until a reviewer confirms it is required. The capability settings property names were read in the
-  2026-07-15-preview spec (preview API; recheck before implementation).
+  2026-07-15-preview spec (preview API; recheck before implementation). Defender and Advisor are
+  unresearched for this rule; empty arrays do not mean searched-no-match. The native decision remains
+  provisional until those catalogues are searched.

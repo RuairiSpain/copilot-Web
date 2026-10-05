@@ -28,8 +28,8 @@ compatibility:
     azure.ai.agents: '>=1.0.0-beta.18 <=1.0.0-beta.18'
     azure.ai.projects: '>=1.0.0-beta.13 <=1.0.0-beta.13'
   apiVersions:
-  - Microsoft.Resources subscriptions 2022-12-01
-  - Microsoft.Resources providers 2025-04-01
+  - { plane: management, provider: Microsoft.Resources, resourceType: subscriptions, version: '2022-12-01' }
+  - { plane: management, provider: Microsoft.Resources, resourceType: providers, version: '2025-04-01' }
   preview: true
   notes: >-
     azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects
@@ -94,6 +94,7 @@ sources:
   note: Microsoft.Resources/subscriptions/locations/read and Microsoft.Resources/subscriptions/providers/read.
 overlap:
   decision: adapt
+  provisional: true
   coverage: partial
   rationale: >-
     PSRule Azure.Resource.AllowedRegions and the Azure Policy built-ins Allowed locations (e56962a6-4747-49cd-b67b-bf8b01975c4c)
@@ -102,12 +103,19 @@ overlap:
     policy side is FND-DEP-009. The Bicep linter no-hardcoded-location is about parameterising location. Foundry Doctor
     takes the idea of a location check and answers it with live provider offerings plus a dated Foundry feature matrix,
     correlated with the project's selected features.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/dep
