@@ -1,0 +1,57 @@
+# Phase 1 tooling facts
+
+Verified 2026-10-05 from public source repositories. docs.github.com, api.github.com and the GitHub release pages are blocked by the egress proxy in the build environment, so the
+documents were read in the repositories behind them. Unverified items are listed at the end.
+
+Sources (shallow clones): `github/docs` @ 2bd66de8cea3 (2026-10-02), `github/codeql-action` @ b6d38e563b1e (2026-10-02),
+`Azure/azure-dev` @ afe4b2b4d262 (2026-10-04), `Azure/bicep` @ 54b020194fd0 (2026-10-05).
+
+## GitHub code scanning SARIF
+
+Source: `content/code-security/reference/code-scanning/sarif-files/sarif-support.md` (github/docs); limits in `data/reusables/code-scanning/sarif-limits.md`.
+
+- Required (an empty string is not accepted): `$schema`, `version` (only `2.1.0`), `runs[]`, `tool.driver.name`, `tool.driver.rules[]`; per rule `id`, `shortDescription.text`,
+  `fullDescription.text`, `help.text`; per result `message.text`, `locations[]`, `partialFingerprints`; per location `physicalLocation.artifactLocation.uri` and
+  `region.startLine`, `startColumn`, `endLine`, `endColumn`. Only the first entry of `locations[]` is used. Other properties are ignored.
+- `shortDescription` and `fullDescription` are limited to 1024 characters. `name` is limited to 255.
+- `partialFingerprints`: only `primaryLocationLineHash` is used. When it is missing, the `upload-sarif` action computes it from the source files
+  (`codeql-action/src/upload-lib.ts`, `checkout_path` input). The raw REST endpoint does not. `ruleId` and file paths must be stable across runs.
+- Paths: relative URIs resolve against the repository root. Files reached through symlinks cannot be displayed. GitHub does not require `uriBaseId`; do not rely on it.
+- Limits: 10 MB per gzip-compressed file; 20 runs per file; 25,000 results per run (the top 5,000 by severity are kept); 25,000 rules per run; 1,000 locations per result (100 kept);
+  20 tags per rule (10 kept).
+- Level: `defaultConfiguration.level` is `note`, `warning` or `error` (default `warning`); a result `level` overrides it. `security-severity` maps: over 9.0 critical, 7.0 to 8.9 high,
+  4.0 to 6.9 medium, 0.1 to 3.9 low. A PR check fails only on `error`, `critical` or `high`.
+- Fork pull requests: the docs do not say uploads are blocked, but workflows from a fork on `pull_request` have read-only permissions, so `security-events: write` is unavailable and the
+  upload fails. Not tested.
+- Action: `github/codeql-action/upload-sarif@v4` (latest tag v4.38.2, runs on node24). Inputs: `sarif_file`, `checkout_path`, `ref`, `sha`, `token`, `category`, `wait-for-processing`, `matrix`.
+  Permissions: `security-events: write` always; `actions: read` and `contents: read` for private repositories. Private repositories also need GitHub Code Security.
+
+## Bicep CLI
+
+- Newest version with release assets for linux-x64, linux-arm64, osx-arm64, osx-x64 and win-x64: **v0.47.16**. The tag v0.48.1 exists but every asset URL returns 404.
+- Linter defaults with no `bicepconfig.json` (`src/Bicep.Core/Analyzers/Linter/LinterRuleBase.cs`): BestPractice, PotentialCodeIssues, Security and Style warn; Portability and
+  ResourceLocationRules are off; DeploymentError is error. `no-hardcoded-env-urls` is a warning from the base config. Observed on 0.47.16: `outputs-should-not-contain-secrets` fires with
+  no config. The doctor therefore does not need to rewrite the user's `bicepconfig.json`.
+- `bicep lint --diagnostics-format sarif` writes SARIF to stdout (checked on 0.24.24 and 0.47.16). Its SARIF has no `level`, no `tool.driver.rules`, no `partialFingerprints`, no `startColumn`
+  or `endLine`, uses absolute `file:///` URIs and `charOffset`. The doctor reads diagnostics, not this SARIF, and writes its own SARIF.
+- `.bicepparam`: `bicep build-params --stdout` prints JSON with `parametersJson`, `templateJson`, `templateSpecId`. `readEnvironmentVariable('X','dflt')` compiles offline; with the variable unset
+  and no default it fails with BCP427. If the variable is set its value is written into `parametersJson` in clear text, even for `@secure()` parameters: the adapter must not pass secrets in
+  the environment. `getSecret` compiles offline to a Key Vault reference and needs no credentials.
+- Earliest versions (from git ancestry, not tested with binaries except 0.24.24): `build --stdout` v0.2.3; `build --diagnostics-format` v0.18.4; `lint` v0.21.1; lint SARIF to stdout v0.24.24.
+- Compiled ARM can be in array form (`resources: [...]`) or in `languageVersion` 2.0 form (`resources` an object keyed by symbolic name). The azd synthetic template compiles to 2.0.
+  The spike's fixture compiles to the array form. **The ARM normaliser must read both.**
+
+## Synthetic infrastructure (ADR-004)
+
+- Template source: `cli/azd/extensions/azure.ai.projects/internal/synthesis/templates/main.bicep` (153 lines) with modules; the `azure.ai.agents` copy is identical in the Bicep names compared.
+  The embedded ARM (`main.arm.json`) was generated by Bicep 0.44.1.
+- `bicep build main.bicep --stdout` on 0.47.16 compiles offline (exit 0, 63,224 bytes), languageVersion 2.0, top-level `Microsoft.Resources/resourceGroups` and a nested
+  `Microsoft.Resources/deployments@2025-04-01`. Resources: `Microsoft.CognitiveServices/accounts@2025-06-01` (AIServices, S0, SystemAssigned, `disableLocalAuth: true`), `accounts/projects`,
+  `accounts/deployments` (copy loop), and conditional `managedNetworks`, role assignments, subnets, ACR, connections, private endpoints, private DNS zones, links and zone groups.
+- Public network access, network ACLs and private endpoints are expressions over parameters derived from azure.yaml; a static compile reports them conditionally. Rendering a specific case needs
+  the synthesizer's parameter values, which were not reproduced. This supports ADR-012 (ARM-dependent rules are skipped for synthetic infrastructure).
+
+## Not verified
+
+Rendered docs.github.com text (Liquid may hide version-specific text); fork-upload behaviour; the Bicep tag mappings other than 0.24.24; what triggers `languageVersion` 2.0; whether v0.48.1 assets will
+appear; a real SARIF upload to GitHub.
