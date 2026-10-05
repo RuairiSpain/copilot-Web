@@ -1,0 +1,19 @@
+name: interp
+services:
+  api:
+    host: containerapp
+    project: src/api
+    env:
+      PLAIN: ${PLAIN_VAR}
+      DEFAULTED: ${DEFAULTED_VAR:-fallback}
+      DASH: ${DASH_VAR-fallback}
+      ASSIGN: ${ASSIGN_VAR:=x}
+      REQUIRED: ${REQUIRED_VAR:?must be set}
+      ESCAPED: $${ESCAPED_VAR}
+      FOUNDRY: ${{project.endpoint}}
+      ESCAPED_FOUNDRY: $${{project.endpoint}}
+      TWO: ${A_VAR}-${B_VAR}
+      NESTED: ${OUTER:-${INNER}}
+      BARE: $NOT_EXPANDED
+      BROKEN: ${
+      NAMELESS: ${}
