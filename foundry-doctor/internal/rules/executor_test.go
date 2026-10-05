@@ -167,7 +167,7 @@ func TestExecuteRuleFailures(t *testing.T) {
 		want  string
 	}{
 		{"panic", mk("FND-SEC-002", func(fakeRule) ([]rules.Result, error) { panic("boom SECRET") }), true, "boom [redacted]"},
-		{"nil map panic", mk("FND-SEC-002", func(fakeRule) ([]rules.Result, error) { var m map[string]int; m["a"] = 1; return nil, nil }), true, "panic"},
+		{"runtime panic", mk("FND-SEC-002", func(fakeRule) ([]rules.Result, error) { var s []int; i := len(s) + 3; _ = s[i]; return nil, nil }), true, "panic"},
 		{"error", mk("FND-SEC-002", func(fakeRule) ([]rules.Result, error) { return nil, errors.New("io failed") }), false, "io failed"},
 		{"rule set severity", mk("FND-SEC-002", func(r fakeRule) ([]rules.Result, error) {
 			return []rules.Result{rules.Fail(sdk.Finding{RuleID: r.id, RuleVersion: 1, Severity: sdk.SeverityError})}, nil
