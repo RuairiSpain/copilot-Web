@@ -24,7 +24,7 @@ SHELLS = {"sh", "bash", "zsh", "dash", "ksh", "ash"}
 INTERPRETERS = SHELLS | {"python", "python3", "node", "perl", "ruby", "php", "pwsh", "powershell"}
 
 # Keywords that can precede a command in a compound statement.
-KEYWORDS = {"{", "}", "!", "then", "do", "else", "elif", "if", "while", "until", "time", "coproc"}
+KEYWORDS = {"{", "}", "!", "then", "do", "else", "elif", "if", "while", "until", "coproc"}
 
 # Wrapper commands that run another command, and the options of each that consume a following argument.
 WRAPPER_ARG_OPTS = {
@@ -34,7 +34,7 @@ WRAPPER_ARG_OPTS = {
     "nohup": set(),
     "builtin": set(),
     "setsid": set(),
-    "time": {"-f", "--format", "-o", "--output"},
+    "time": {"-f", "--format", "-o", "--output"},  # -p takes no argument
     "sudo": {"-u", "--user", "-g", "--group", "-h", "--host", "-C", "--close-from", "-p", "--prompt", "-r", "--role",
              "-t", "--type", "-D", "--chdir", "-R", "--chroot", "-T", "--command-timeout"},
     "doas": {"-u", "-C"},
@@ -57,6 +57,12 @@ AZ_GLOBAL_BOOL_FLAGS = {"--debug", "--verbose", "--only-show-errors", "--help", 
 AZD_GLOBAL_VALUE_FLAGS = {"-C", "--cwd", "-e", "--environment", "-o", "--output", "--trace-log-file", "--trace-log-url"}
 AZD_GLOBAL_BOOL_FLAGS = {"--debug", "--no-prompt", "--help", "-h", "--docs", "--version"}
 
+AZ_READ_GROUPS = {
+    "account", "group", "resource", "graph", "cognitiveservices", "search", "storage", "keyvault", "role", "policy", "provider",
+    "network", "monitor", "apim", "cosmosdb", "ml", "bicep", "lock", "deployment", "tag", "containerapp", "acr", "identity", "ad",
+    "security", "advisor", "consumption", "costmanagement", "vm", "aks", "webapp", "functionapp", "sql", "redis", "servicebus",
+    "eventhubs", "appconfig", "databricks", "synapse", "datafactory", "extension", "feature", "version",
+}
 AZ_READ_VERBS = {
     "show", "list", "get", "query", "version", "exists", "whoami", "list-locations", "list-skus",
     "list-usage", "list-usages", "list-versions", "list-deleted", "check-name", "check-name-availability",
@@ -65,7 +71,8 @@ AZ_ALLOWED_PREFIXES = {("bicep", "build"), ("bicep", "lint"), ("bicep", "version
 SECRET_WORDS = {
     "keys", "secret", "secrets", "credential", "credentials", "get-access-token", "list-keys",
     "list-credentials", "connection-string", "list-connection-strings", "show-connection-string",
-    "regenerate-key", "regenerate-keys",
+    "regenerate-key", "regenerate-keys", "admin-key", "query-key", "appsettings", "app-insights", "publishing-credentials",
+    "token", "access-token", "sas", "generate-sas",
 }
 AZD_ALLOWED_PREFIXES = {
     ("version",), ("show",), ("env", "list"), ("env", "get-value"), ("config", "show"), ("config", "list"),
@@ -92,14 +99,19 @@ class Block(Exception):
 
 
 def _strip_heredocs(script):
-    """Remove heredoc markers and bodies. Returns (script, bodies for shell-fed heredocs)."""
-    out, shell_bodies = [], []
+    """Remove heredoc markers and bodies.
+
+    Returns (script, shell_bodies, expanding_bodies): bodies fed to a shell, and bodies of heredocs with an unquoted
+    delimiter, in which the shell still runs $(...) and backticks.
+    """
+    out, shell_bodies, expanding = [], [], []
     lines = script.split("\n")
     i = 0
     marker = re.compile(r"(?<!<)<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1(?!<)")
     while i < len(lines):
         line = lines[i]
-        delims = [m.group(2) for m in marker.finditer(line)]
+        found = [(m.group(2), m.group(1) == "") for m in marker.finditer(line)]
+        delims = [d for d, _ in found]
         if not delims:
             out.append(line)
             i += 1
@@ -107,7 +119,7 @@ def _strip_heredocs(script):
         stripped = marker.sub("", line)
         out.append(stripped)
         i += 1
-        for d in delims:
+        for d, unquoted in found:
             body = []
             while i < len(lines) and lines[i].strip() != d:
                 body.append(lines[i])
@@ -115,7 +127,9 @@ def _strip_heredocs(script):
             i += 1  # the delimiter line
             if re.match(r"\s*(sudo\s+)?(sh|bash|zsh|dash)\b", stripped):
                 shell_bodies.append("\n".join(body))
-    return "\n".join(out), shell_bodies
+            elif unquoted:
+                expanding.append("\n".join(body))
+    return "\n".join(out), shell_bodies, expanding
 
 
 def _newlines_to_semicolons(s):
@@ -152,6 +166,7 @@ def _substitutions(s):
             found.append(m.group(1))
         s = re.sub(r"\$\(([^()]*)\)", " ", s)
     found += re.findall(r"`([^`]*)`", s)
+    found += re.findall(r"[<>]\(([^()]*)\)", s)  # process substitution
     return found
 
 
@@ -189,9 +204,12 @@ def check(command, depth=0):
     """Raise Block with a reason, or return None if the command is allowed."""
     if depth > MAX_DEPTH:
         raise Block("command nesting is too deep to inspect")
-    script, shell_bodies = _strip_heredocs(command)
+    script, shell_bodies, expanding = _strip_heredocs(command)
     for body in shell_bodies:
         check(body, depth + 1)
+    for body in expanding:
+        for sub_cmd in _substitutions(body):
+            check(sub_cmd, depth + 1)
     script = _newlines_to_semicolons(script)
     for sub in _substitutions(script):
         check(sub, depth + 1)
@@ -214,6 +232,9 @@ def _unwrap(argv, depth):
         base = os.path.basename(head)
         if _is_assignment(head) or head in KEYWORDS:
             argv = argv[1:]
+            continue
+        if head == "function" and len(argv) >= 2:
+            argv = argv[2:]  # "function name" then the body
             continue
         if base in WRAPPER_ARG_OPTS:
             argv = argv[1:]
@@ -245,6 +266,16 @@ def _unwrap(argv, depth):
     return argv
 
 
+def _shell_script_arg(args):
+    """The script text given to a shell with -c, including bundled (-ec, -lc) and glued (-c"cmd") forms, else None."""
+    for i, a in enumerate(args):
+        if re.fullmatch(r"-[A-Za-z]+", a) and "c" in a[1:]:
+            return args[i + 1] if i + 1 < len(args) else ""
+        if a.startswith("-c") and len(a) > 2 and not re.fullmatch(r"-[A-Za-z]+", a):
+            return a[2:]
+    return None
+
+
 def _check_segment(argv, piped, here, depth):
     original = argv
     argv = _unwrap(argv, depth)
@@ -253,14 +284,14 @@ def _check_segment(argv, piped, here, depth):
             raise Block("dumps environment variables, which may hold credentials")
         return
     cmd, args = argv[0], argv[1:]
-    if cmd.startswith("$") or "$(" in cmd or "`" in cmd:
-        raise Block("the command name comes from a variable or substitution and cannot be inspected")
+    if "$" in cmd or "`" in cmd or (any(ch in cmd for ch in "*?") and cmd not in ("[", "[[")):
+        raise Block("the command name contains a variable, substitution or glob and cannot be inspected")
     base = os.path.basename(cmd)
 
     if base in OPAQUE_LAUNCHERS:
         raise Block(f"{base} launches other programs in ways this guard cannot inspect")
 
-    if piped and base in INTERPRETERS and not any(a == "-c" for a in args):
+    if piped and base in INTERPRETERS and _shell_script_arg(args) is None and not any(a == "-c" for a in args):
         operand = next((a for a in args if not a.startswith("-") or a == "-"), None)
         reads_stdin = base in SHELLS and any(re.fullmatch(r"-[A-Za-z]*s[A-Za-z]*", a) for a in args)
         if operand is None or operand == "-" or reads_stdin:
@@ -269,10 +300,9 @@ def _check_segment(argv, piped, here, depth):
     if base in SHELLS:
         for text in here:
             check(text, depth + 1)
-        for i, a in enumerate(args):
-            if a == "-c" and i + 1 < len(args):
-                check(args[i + 1], depth + 1)
-                break
+        script_arg = _shell_script_arg(args)
+        if script_arg is not None:
+            check(script_arg, depth + 1)
     elif base in ("pwsh", "powershell") and any(a.lower() in ("-c", "-command", "-encodedcommand") for a in args):
         raise Block("PowerShell commands cannot be inspected")
     elif base == "eval":
@@ -292,7 +322,7 @@ def _check_segment(argv, piped, here, depth):
         raise Block("prints a GitHub token")
     elif base in ("curl", "wget", "http", "https", "xh"):
         _check_http(base, args)
-    elif base in ENV_DUMPERS or (base in ("env", "set") and not args) or (base == "export" and args[:1] == ["-p"]):
+    elif base in ENV_DUMPERS or base == "compgen" or (base in ("env", "set", "export") and not args) or (base == "export" and args[:1] == ["-p"]):
         raise Block("dumps environment variables, which may hold credentials")
 
     _check_credential_paths(base, args)
@@ -321,7 +351,13 @@ def _command_path(args, value_flags, bool_flags):
     return words, False
 
 
+def _no_expansion(words, what):
+    if any("$" in w or "`" in w for w in words):
+        raise Block(f"a variable or substitution in the {what} command words cannot be inspected")
+
+
 def _check_az(args):
+    _no_expansion([a for a in args if not a.startswith("-")][:6], "az")
     words, unknown_first = _command_path(args, AZ_GLOBAL_VALUE_FLAGS, AZ_GLOBAL_BOOL_FLAGS)
     flags = [a.lower() for a in args if a.startswith("-")]
     if unknown_first:
@@ -342,12 +378,13 @@ def _check_az(args):
         raise Block("this az command can print keys, secrets or tokens")
     if tuple(words[:2]) in AZ_ALLOWED_PREFIXES or tuple(words[:1]) in AZ_ALLOWED_PREFIXES:
         return
-    if words[-1] in AZ_READ_VERBS:
+    if words[0] in AZ_READ_GROUPS and words[-1] in AZ_READ_VERBS:
         return
     raise Block(f"az {' '.join(words)} is not on the read-only allow-list (Foundry Doctor is read-only; ask the user)")
 
 
 def _check_azd(args):
+    _no_expansion([a for a in args if not a.startswith("-")][:6], "azd")
     words, unknown_first = _command_path(args, AZD_GLOBAL_VALUE_FLAGS, AZD_GLOBAL_BOOL_FLAGS)
     if unknown_first:
         raise Block("an azd option before the command word cannot be classified; put options after the command")
@@ -377,6 +414,10 @@ def _check_git(args):
     if i >= len(args):
         return
     sub, rest = args[i], args[i + 1:]
+    if "$" in sub or "`" in sub or (sub == "push" and any("$" in a or "`" in a for a in rest)):
+        raise Block("a variable or substitution in the git subcommand or push arguments cannot be inspected")
+    if sub == "config" and any(a.lower().startswith("alias.") for a in rest):
+        raise Block("git config alias.* can hide a forced push")
     if sub == "push":
         for a in rest:
             if a.startswith("--force") or a in ("--delete", "--mirror", "--prune") or re.fullmatch(r"-[A-Za-z]*[fd][A-Za-z]*", a):
@@ -397,10 +438,24 @@ def _check_git(args):
 
 def _check_http(base, args):
     text = " ".join(args)
+    if any(a in ("-K", "--config") for a in args):
+        raise Block("curl --config can hide the method and URL")
     if not HOST_RE.search(text):
         return
     mutating = False
     for i, a in enumerate(args):
+        bundle = re.fullmatch(r"-[A-Za-z]+", a)
+        if bundle and not a.startswith("--"):
+            letters = a[1:]
+            if "X" in letters:
+                pre, post = letters.split("X", 1)
+                method = post or (args[i + 1] if i + 1 < len(args) else "")
+                if method.upper() not in ("GET", "HEAD"):
+                    mutating = True
+            else:
+                pre = letters
+            if any(ch in pre for ch in "dFT"):
+                mutating = True
         low = a.lower()
         if low in ("-x", "--request", "--method") and i + 1 < len(args) and args[i + 1].upper() not in ("GET", "HEAD"):
             mutating = True
@@ -419,6 +474,9 @@ def _check_http(base, args):
 def _credential_candidates(arg):
     """The argument as written, with ~ and $VARS expanded, plus any glob matches."""
     path = arg.split("=", 1)[1] if arg.startswith("-") and "=" in arg else arg
+    if "=@" in path:                       # curl -F name=@file
+        path = path.split("=@", 1)[1]
+    path = path.lstrip("@<")                # curl -d @file, -F 'name=<file'
     out = {path, os.path.expanduser(os.path.expandvars(path))}
     for p in list(out):
         if any(ch in p for ch in "*?["):
