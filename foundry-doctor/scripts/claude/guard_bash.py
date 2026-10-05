@@ -3,13 +3,15 @@
 expose credentials, or run code piped from the network.
 
 This is a speed bump for an agent that makes mistakes, not a security boundary. A command can
-always be hidden inside a script or an interpreter (python, node) that this guard does not read.
-The real boundaries are the permission rules in .claude/settings.json and the credentials the
-session is given. See docs/development/agent-swarm.md.
+always be hidden inside a script or an interpreter (python, node, awk) that this guard does not read.
+The real boundary is the credential the session holds: run agent sessions with a read-only or no
+Azure identity and keep AZURE_*, GITHUB_TOKEN and login state out of the environment.
+See docs/development/agent-swarm.md.
 
 Contract: reads the hook JSON on stdin. Exit 0 allows. Exit 2 blocks and prints the reason to
-stderr. It fails closed: empty or malformed input, or a command it cannot parse, is blocked.
+stderr. It fails closed: empty or malformed input, or a command it cannot parse or classify, is blocked.
 """
+import glob
 import json
 import os
 import re
@@ -20,8 +22,40 @@ MAX_DEPTH = 4
 
 SHELLS = {"sh", "bash", "zsh", "dash", "ksh", "ash"}
 INTERPRETERS = SHELLS | {"python", "python3", "node", "perl", "ruby", "php", "pwsh", "powershell"}
-# Commands that run another command; the guard looks through them.
-WRAPPERS = {"env", "command", "exec", "nohup", "time", "sudo", "doas", "timeout", "nice", "stdbuf", "xargs", "setsid", "builtin"}
+
+# Keywords that can precede a command in a compound statement.
+KEYWORDS = {"{", "}", "!", "then", "do", "else", "elif", "if", "while", "until", "time", "coproc"}
+
+# Wrapper commands that run another command, and the options of each that consume a following argument.
+WRAPPER_ARG_OPTS = {
+    "env": {"-u", "--unset", "-C", "--chdir", "-S", "--split-string"},
+    "command": set(),
+    "exec": {"-a"},
+    "nohup": set(),
+    "builtin": set(),
+    "setsid": set(),
+    "time": {"-f", "--format", "-o", "--output"},
+    "sudo": {"-u", "--user", "-g", "--group", "-h", "--host", "-C", "--close-from", "-p", "--prompt", "-r", "--role",
+             "-t", "--type", "-D", "--chdir", "-R", "--chroot", "-T", "--command-timeout"},
+    "doas": {"-u", "-C"},
+    "timeout": {"-s", "--signal", "-k", "--kill-after"},
+    "nice": {"-n", "--adjustment"},
+    "stdbuf": {"-i", "-o", "-e", "--input", "--output", "--error"},
+    "xargs": {"-n", "-P", "-I", "-i", "-d", "-L", "-s", "-E", "-a", "--max-args", "--max-procs", "--delimiter",
+              "--max-lines", "--max-chars", "--arg-file", "--replace", "--eof"},
+}
+# Wrappers whose first positional argument is not the command.
+WRAPPER_SKIP_POSITIONAL = {"timeout": 1}
+
+# Commands that launch other commands in ways this guard does not model. They are blocked outright.
+OPAQUE_LAUNCHERS = {"busybox", "su", "flock", "ssh", "watch", "strace", "ltrace", "script", "parallel", "tmux", "screen",
+                    "taskset", "ionice", "chroot", "nsenter", "unshare", "runuser", "at", "batch", "crontab", "systemd-run",
+                    "docker", "podman", "kubectl", "nerdctl"}
+
+AZ_GLOBAL_VALUE_FLAGS = {"--subscription", "--output", "-o", "--query", "--query-expression"}
+AZ_GLOBAL_BOOL_FLAGS = {"--debug", "--verbose", "--only-show-errors", "--help", "-h", "--version"}
+AZD_GLOBAL_VALUE_FLAGS = {"-C", "--cwd", "-e", "--environment", "-o", "--output", "--trace-log-file", "--trace-log-url"}
+AZD_GLOBAL_BOOL_FLAGS = {"--debug", "--no-prompt", "--help", "-h", "--docs", "--version"}
 
 AZ_READ_VERBS = {
     "show", "list", "get", "query", "version", "exists", "whoami", "list-locations", "list-skus",
@@ -40,11 +74,17 @@ AZD_ALLOWED_PREFIXES = {
 
 HOST_RE = re.compile(r"(azure\.com|azure\.net|windows\.net|microsoft\.com|microsoftonline\.com|azurewebsites\.net)", re.I)
 CRED_BASENAME_RE = re.compile(
-    r"^(\.env(\..+)?|.+\.(pem|key|pfx|p12|pkcs12|jks)|id_(rsa|dsa|ecdsa|ed25519)(\..+)?|"
-    r"accessTokens\.json|msal_token_cache\.(json|bin)|azureProfile\.json|service_principal_entries\.json|credentials)$"
+    r"^(\.env(\..+)?|.+\.(pem|key|pfx|p12|pkcs12|jks)|id_(rsa|dsa|ecdsa|ed25519)(\..+)?|\.netrc|_netrc|\.git-credentials|"
+    r"\.npmrc|\.pypirc|accessTokens\.json|msal_token_cache\.(json|bin)|azureProfile\.json|service_principal_entries\.json|"
+    r"credentials|environ)$"
 )
 CRED_OK_BASENAMES = {".env.example", ".env.sample", ".env.template"}
+CRED_DIRS = ["~/.azure", "~/.aws", "~/.config/gh", "~/.kube", "~/.ssh", "~/.docker", "~/.gnupg", "~/.config/gcloud"]
+SECRET_VAR_RE = re.compile(r"\$\{?[A-Za-z_]*(SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|API_?KEY|ACCESS_?KEY|PRIVATE_?KEY)[A-Za-z_]*\}?", re.I)
 PATH_ONLY_CMDS = {"ls", "stat", "file", "test", "[", "[["}
+ENV_DUMPERS = {"printenv", "declare", "typeset"}
+GIT_DANGEROUS_CONFIG = ("core.pager", "core.editor", "core.sshcommand", "core.fsmonitor", "core.hookspath", "credential.helper",
+                        "core.askpass", "diff.external", "gpg.program")
 
 
 class Block(Exception):
@@ -56,7 +96,7 @@ def _strip_heredocs(script):
     out, shell_bodies = [], []
     lines = script.split("\n")
     i = 0
-    marker = re.compile(r"<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
+    marker = re.compile(r"(?<!<)<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1(?!<)")
     while i < len(lines):
         line = lines[i]
         delims = [m.group(2) for m in marker.finditer(line)]
@@ -116,24 +156,32 @@ def _substitutions(s):
 
 
 def _split_segments(script):
-    """Tokenise and split into command segments. Returns a list of (tokens, piped_in)."""
+    """Tokenise and split into command segments: (tokens, piped_in, here_strings)."""
     lex = shlex.shlex(script, posix=True, punctuation_chars=True)
     lex.whitespace_split = True
     lex.commenters = ""
-    segments, cur, piped, next_piped = [], [], False, False
-    for tok in lex:
+    toks = list(lex)
+    segments, cur, here, piped = [], [], [], False
+    i = 0
+    while i < len(toks):
+        tok = toks[i]
+        i += 1
+        if tok == "<<<":
+            if i < len(toks):
+                here.append(toks[i])
+                i += 1
+            continue
         if tok and set(tok) <= set(";&|()") and not set(tok) & set("<>"):
             if cur:
-                segments.append((cur, piped))
-            cur, piped = [], False
-            next_piped = "|" in tok
-            piped = next_piped
+                segments.append((cur, piped, here))
+            cur, here = [], []
+            piped = "|" in tok
             continue
         if tok and ("<" in tok or ">" in tok) and set(tok) <= set("<>&|0123456789"):
             continue  # redirection operator; its target stays as an ordinary argument
         cur.append(tok)
     if cur:
-        segments.append((cur, piped))
+        segments.append((cur, piped, here))
     return segments
 
 
@@ -151,43 +199,66 @@ def check(command, depth=0):
         segments = _split_segments(script)
     except ValueError as e:
         raise Block(f"cannot parse the command ({e}); simplify its quoting") from e
-    for argv, piped in segments:
-        _check_segment(argv, piped, depth)
+    for argv, piped, here in segments:
+        _check_segment(argv, piped, here, depth)
 
 
-def _unwrap(argv):
-    """Drop env assignments and wrapper commands (env, sudo, timeout, xargs ...)."""
+def _is_assignment(tok):
+    return re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", tok) is not None
+
+
+def _unwrap(argv, depth):
+    """Drop env assignments, shell keywords and wrapper commands (with their options). Returns the real argv."""
     while argv:
         head = argv[0]
-        if re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", head):
+        base = os.path.basename(head)
+        if _is_assignment(head) or head in KEYWORDS:
             argv = argv[1:]
             continue
-        if os.path.basename(head) in WRAPPERS:
+        if base in WRAPPER_ARG_OPTS:
             argv = argv[1:]
-            while argv and (argv[0].startswith("-") or re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", argv[0]) or re.match(r"^\d+[smhd]?$", argv[0])):
-                argv = argv[1:]
+            takes_arg = WRAPPER_ARG_OPTS[base]
+            skip_pos = WRAPPER_SKIP_POSITIONAL.get(base, 0)
+            while argv:
+                tok = argv[0]
+                if tok == "--":
+                    argv = argv[1:]
+                    break
+                if tok.startswith("-") and tok != "-":
+                    if base == "env" and tok in ("-S", "--split-string") and len(argv) > 1:
+                        check(argv[1], depth + 1)
+                    if tok.startswith("--split-string="):
+                        check(tok.split("=", 1)[1], depth + 1)
+                    consumed = 2 if (tok in takes_arg and "=" not in tok) else 1
+                    argv = argv[consumed:]
+                    continue
+                if base == "env" and _is_assignment(tok):
+                    argv = argv[1:]
+                    continue
+                if skip_pos > 0:
+                    argv = argv[1:]
+                    skip_pos -= 1
+                    continue
+                break
             continue
         break
     return argv
 
 
-def _words_before_flag(args):
-    words = []
-    for a in args:
-        if a.startswith("-"):
-            break
-        words.append(a)
-    return words
-
-
-def _check_segment(argv, piped, depth):
-    argv = _unwrap(argv)
+def _check_segment(argv, piped, here, depth):
+    original = argv
+    argv = _unwrap(argv, depth)
     if not argv:
+        if original and os.path.basename(original[0]) == "env":
+            raise Block("dumps environment variables, which may hold credentials")
         return
     cmd, args = argv[0], argv[1:]
     if cmd.startswith("$") or "$(" in cmd or "`" in cmd:
         raise Block("the command name comes from a variable or substitution and cannot be inspected")
     base = os.path.basename(cmd)
+
+    if base in OPAQUE_LAUNCHERS:
+        raise Block(f"{base} launches other programs in ways this guard cannot inspect")
 
     if piped and base in INTERPRETERS and not any(a == "-c" for a in args):
         operand = next((a for a in args if not a.startswith("-") or a == "-"), None)
@@ -196,32 +267,65 @@ def _check_segment(argv, piped, depth):
             raise Block(f"piping into {base} with no script file runs unreviewed code from the pipe")
 
     if base in SHELLS:
+        for text in here:
+            check(text, depth + 1)
         for i, a in enumerate(args):
             if a == "-c" and i + 1 < len(args):
                 check(args[i + 1], depth + 1)
                 break
+    elif base in ("pwsh", "powershell") and any(a.lower() in ("-c", "-command", "-encodedcommand") for a in args):
+        raise Block("PowerShell commands cannot be inspected")
     elif base == "eval":
         check(" ".join(args), depth + 1)
     elif base == "find":
         for i, a in enumerate(args):
             if a in ("-exec", "-execdir", "-ok", "-okdir"):
                 end = next((j for j in range(i + 1, len(args)) if args[j] in (";", "+", "\\;")), len(args))
-                _check_segment(args[i + 1:end], False, depth + 1)
+                _check_segment(args[i + 1:end], False, [], depth + 1)
     elif base == "az":
         _check_az(args)
     elif base == "azd":
         _check_azd(args)
     elif base == "git":
         _check_git(args)
+    elif base == "gh" and args[:2] == ["auth", "token"]:
+        raise Block("prints a GitHub token")
     elif base in ("curl", "wget", "http", "https", "xh"):
         _check_http(base, args)
+    elif base in ENV_DUMPERS or (base in ("env", "set") and not args) or (base == "export" and args[:1] == ["-p"]):
+        raise Block("dumps environment variables, which may hold credentials")
 
     _check_credential_paths(base, args)
 
 
+def _command_path(args, value_flags, bool_flags):
+    """Return the positional command words, skipping known global flags (and the values of value flags).
+
+    Stops at the first unknown flag. Returns (words, unknown_first) where unknown_first is true when an
+    unknown flag appeared before any command word, so the real command cannot be determined.
+    """
+    words, i = [], 0
+    while i < len(args):
+        a = args[i]
+        if a.startswith("-"):
+            name = a.split("=", 1)[0]
+            if name in bool_flags:
+                i += 1
+                continue
+            if name in value_flags:
+                i += 1 if "=" in a else 2
+                continue
+            return words, not words
+        words.append(a)
+        i += 1
+    return words, False
+
+
 def _check_az(args):
-    words = _words_before_flag(args)
+    words, unknown_first = _command_path(args, AZ_GLOBAL_VALUE_FLAGS, AZ_GLOBAL_BOOL_FLAGS)
     flags = [a.lower() for a in args if a.startswith("-")]
+    if unknown_first:
+        raise Block("an az option before the command word cannot be classified; put options after the command")
     if not words:
         return  # az --version, az --help
     if words[0] == "rest":
@@ -244,7 +348,9 @@ def _check_az(args):
 
 
 def _check_azd(args):
-    words = _words_before_flag(args)
+    words, unknown_first = _command_path(args, AZD_GLOBAL_VALUE_FLAGS, AZD_GLOBAL_BOOL_FLAGS)
+    if unknown_first:
+        raise Block("an azd option before the command word cannot be classified; put options after the command")
     if not words:
         return
     for n in range(len(words), 0, -1):
@@ -257,7 +363,12 @@ def _check_git(args):
     i = 0
     while i < len(args):
         a = args[i]
-        if a in ("-c", "-C", "--git-dir", "--work-tree", "--namespace", "--exec-path") and i + 1 < len(args):
+        if a in ("-c", "--config-env") and i + 1 < len(args):
+            key = args[i + 1].split("=", 1)[0].lower()
+            if key in GIT_DANGEROUS_CONFIG or key.startswith("alias."):
+                raise Block(f"git -c {key} can run arbitrary programs")
+            i += 2
+        elif a in ("-C", "--git-dir", "--work-tree", "--namespace", "--exec-path") and i + 1 < len(args):
             i += 2
         elif a.startswith("-"):
             i += 1
@@ -278,6 +389,10 @@ def _check_git(args):
         raise Block("git clean -f deletes untracked files")
     elif sub == "filter-branch":
         raise Block("git filter-branch rewrites history")
+    elif sub == "credential":
+        raise Block("git credential prints stored credentials")
+    elif sub in ("diff", "log", "show", "format-patch", "blame") and any(a.startswith("--output") or a == "--ext-diff" for a in rest):
+        raise Block(f"git {sub} --output or --ext-diff writes files or runs programs")
 
 
 def _check_http(base, args):
@@ -289,6 +404,8 @@ def _check_http(base, args):
         low = a.lower()
         if low in ("-x", "--request", "--method") and i + 1 < len(args) and args[i + 1].upper() not in ("GET", "HEAD"):
             mutating = True
+        if low.startswith("-x") and len(a) > 2 and not low.startswith("--") and a[2:].upper() not in ("GET", "HEAD"):
+            mutating = True  # joined short form such as -XDELETE
         if low.startswith(("--request=", "--method=")) and low.split("=", 1)[1].upper() not in ("GET", "HEAD"):
             mutating = True
         if low in ("-d", "--data", "--data-raw", "--data-binary", "--data-urlencode", "-f", "--form", "-t", "--upload-file", "--json", "--post-data", "--post-file", "--body-data"):
@@ -299,24 +416,42 @@ def _check_http(base, args):
         raise Block("a non-GET request to an Azure or Microsoft endpoint")
 
 
+def _credential_candidates(arg):
+    """The argument as written, with ~ and $VARS expanded, plus any glob matches."""
+    path = arg.split("=", 1)[1] if arg.startswith("-") and "=" in arg else arg
+    out = {path, os.path.expanduser(os.path.expandvars(path))}
+    for p in list(out):
+        if any(ch in p for ch in "*?["):
+            out.update(glob.glob(p)[:200])
+    return out
+
+
 def _check_credential_paths(base, args):
     if base in PATH_ONLY_CMDS or (base == "git" and args[:1] == ["check-ignore"]):
         return
-    home_azure = os.path.expanduser("~/.azure")
+    dirs = [os.path.expanduser(d) for d in CRED_DIRS]
     for a in args:
+        if SECRET_VAR_RE.search(a):
+            raise Block("prints a credential held in an environment variable")
         if a.startswith("-") and "=" not in a:
             continue
-        path = a.split("=", 1)[1] if a.startswith("-") else a
-        if not path or path.startswith(("http://", "https://")):
-            continue
-        expanded = os.path.expanduser(path)
-        name = os.path.basename(expanded.rstrip("/"))
-        if name in CRED_OK_BASENAMES:
-            continue
-        if CRED_BASENAME_RE.match(name):
-            raise Block(f"reads or copies a credential file ({name})")
-        if expanded == home_azure or expanded.startswith(home_azure + "/"):
-            raise Block("reads the Azure CLI profile directory")
+        for cand in _credential_candidates(a):
+            if not cand or cand.startswith(("http://", "https://")):
+                continue
+            name = os.path.basename(cand.rstrip("/"))
+            if name in CRED_OK_BASENAMES:
+                continue
+            if CRED_BASENAME_RE.match(name):
+                raise Block(f"reads or copies a credential file ({name})")
+            absolute = os.path.abspath(cand)
+            if any(absolute == d or absolute.startswith(d + "/") for d in dirs):
+                raise Block("reads a credential directory (Azure, AWS, GitHub, kube, ssh, docker or gcloud profile)")
+            if re.match(r"^/proc/[^/]+/environ$", absolute):
+                raise Block("reads process environment variables")
+    # A glob aimed at credential dot-files is blocked even when nothing matches yet.
+    for a in args:
+        if re.search(r"(^|/)\.(env|az|aws|ssh|netrc|git-credentials)[^/ ]*[*?\[]", a) or re.search(r"(^|/)\.e[*?\[]", a):
+            raise Block("a glob that can match credential files")
 
 
 def main():
@@ -333,6 +468,9 @@ def main():
         check(command)
     except Block as e:
         print(f"Blocked by guard_bash.py: {e}. Foundry Doctor is read-only and never exposes credentials; ask the user if this is really intended.", file=sys.stderr)
+        return 2
+    except Exception as e:  # any bug in the guard must not allow the command
+        print(f"Blocked by guard_bash.py: internal error while inspecting the command ({type(e).__name__}); failing closed.", file=sys.stderr)
         return 2
     return 0
 

@@ -30,9 +30,9 @@ jobs:
           go-version-file: foundry-doctor/go.mod
           cache-dependency-path: foundry-doctor/go.sum
       - name: Install tools
+        # Same pinned versions as local development (scripts/install-dev-tools.sh), never @latest.
         run: |
-          go install honnef.co/go/tools/cmd/staticcheck@latest
-          go install golang.org/x/vuln/cmd/govulncheck@latest
+          bash scripts/install-dev-tools.sh
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Acceptance gates
         # govulncheck runs here because the runner can reach vuln.go.dev; verify-phase.sh

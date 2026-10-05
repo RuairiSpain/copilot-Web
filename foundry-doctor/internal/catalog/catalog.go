@@ -80,7 +80,9 @@ type Severity struct {
 //
 // Azd and Extensions hold closed semver ranges (">=1.34.2 <=1.36.0-beta.1"); an empty Azd means the rule does not
 // depend on azd behaviour. APIVersions entries are "<service> <version>" or a bare version. Preview must be true
-// when any API version is a preview version or any extension version is a prerelease. A version outside a closed
+// when any API version is a preview version or any azd or extension version is a prerelease; it means "verified
+// against prerelease tooling", not that the Azure API itself is preview (many rules carry it only because the azd
+// range ends at a prerelease build). A version outside a closed
 // range is reported as skipped (unsupported-version), never evaluated. Prose goes in Notes.
 type Compatibility struct {
 	Azd         string            `yaml:"azd"`
@@ -204,7 +206,10 @@ func Load(ctx context.Context, fsys fs.FS, root string) ([]Rule, error) {
 			bad("%s: unexpected file; the catalogue holds only .yaml rule files", p)
 			return nil
 		}
-		rel := strings.TrimPrefix(strings.TrimPrefix(p, root), "/")
+		rel := p
+		if root != "." {
+			rel = strings.TrimPrefix(p, strings.TrimSuffix(root, "/")+"/")
+		}
 		if strings.Count(rel, "/") != 1 {
 			bad("%s: rule files must be exactly <group>/<ID>.yaml below the catalogue root", p)
 			return nil

@@ -36,6 +36,10 @@ All three fail closed: empty or malformed hook input, a missing `jq` or `python3
 cannot parse blocks the action. Secret scans also cover `.claude/`, `.mcp.json` and the project workflow,
 not only `foundry-doctor/`.
 
+**The primary control is the credential the session holds.** Run agent sessions with a read-only Azure identity, or none,
+and keep `AZURE_*`, `GITHUB_TOKEN` and similar variables and any `az login` or `azd auth` state out of the session
+environment. Any command can be hidden inside `python3`, `node` or `awk`, and no command-text guard can see inside them.
+
 **The guard is a speed bump, not a security boundary.** It cannot see inside scripts or interpreters
 (`python3 script.py`, `node`), so a determined or compromised agent can bypass it. The real boundaries are the
 permission rules in `.claude/settings.json` (exact command forms only, no wildcards on `go test`, `go run` or scripts)

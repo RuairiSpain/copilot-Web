@@ -3,11 +3,14 @@
 package azdspike
 
 import (
+	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestValidFixtureMatchesAzdSchema validates the valid fixture against schemas/v1.0/azure.yaml.json and the
@@ -26,11 +29,14 @@ func TestValidFixtureMatchesAzdSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 	run := func(file string) (string, int) {
-		cmd := exec.Command("python3", script, clone, file)
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, "python3", script, clone, file)
 		cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + os.Getenv("HOME")}
 		out, err := cmd.CombinedOutput()
 		code := 0
-		if ee, ok := err.(*exec.ExitError); ok {
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
 			code = ee.ExitCode()
 		} else if err != nil {
 			t.Fatalf("cannot run python3: %v", err)
