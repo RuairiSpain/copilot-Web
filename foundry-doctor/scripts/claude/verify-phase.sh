@@ -37,6 +37,11 @@ if [ -d cmd/foundry-doctor ]; then gate "go build ./cmd/foundry-doctor" 1 go bui
 else record SKIPPED "go build ./cmd/foundry-doctor" "cmd/foundry-doctor not created yet"; skipped=$((skipped+1)); fi
 gate "check-rule-catalog.sh"   0 bash scripts/claude/check-rule-catalog.sh
 gate "check-no-secrets.sh"     0 bash scripts/claude/check-no-secrets.sh
+if [ -f scripts/ci/check-import-boundary.sh ]; then gate "check-import-boundary.sh" 0 bash scripts/ci/check-import-boundary.sh
+else record SKIPPED "check-import-boundary.sh" "scripts/ci/check-import-boundary.sh not present"; skipped=$((skipped+1)); fi
+ci_syntax() { local f rc=0; for f in scripts/ci/*.sh; do bash -n "$f" || { echo "syntax error in $f"; rc=1; }; done; return $rc; }
+if compgen -G "scripts/ci/*.sh" >/dev/null; then gate "bash -n scripts/ci/*.sh" 0 ci_syntax
+else record SKIPPED "bash -n scripts/ci/*.sh" "no scripts/ci/*.sh present"; skipped=$((skipped+1)); fi
 harness_tests() { python3 -m unittest discover -s scripts/claude 2>&1; }
 gate "harness unit tests"      0 harness_tests
 

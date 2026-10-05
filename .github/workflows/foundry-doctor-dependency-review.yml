@@ -1,0 +1,39 @@
+name: foundry-doctor-dependency-review
+
+# Licence and vulnerability review of dependency changes in pull requests that touch foundry-doctor/ (PRD section 18).
+# Read-only token, no secrets, no pull_request_target: safe for forks. The summary goes to the job summary,
+# not to a PR comment, because commenting needs pull-requests: write, which fork PRs do not get.
+# The action reviews every dependency change in the pull request, not only those under foundry-doctor/; the path filter
+# only decides when the workflow starts. It needs the dependency graph (public repositories have it; private
+# repositories need GitHub Code Security or Advanced Security).
+on:
+  pull_request:
+    paths:
+      - "foundry-doctor/go.mod"
+      - "foundry-doctor/go.sum"
+      - "foundry-doctor/extension/go.mod"
+      - "foundry-doctor/extension/go.sum"
+      - ".github/workflows/foundry-doctor-*.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    name: dependency review
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Dependency review
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: never
+          # KEEP IN SYNC with foundry-doctor/docs/licence-inventory.md: only permissive licences are acceptable
+          # because the binary is redistributed (inventory section 0 and section "Redistribution"). Today the
+          # inventory records MIT, Apache-2.0, BSD-3-Clause and Unlicense. A dependency with any other licence
+          # fails this check until the inventory is updated in the same pull request and the line below is extended.
+          # Dual-licensed entries such as "MIT AND Apache-2.0" are matched by the action as SPDX expressions.
+          allow-licenses: MIT, Apache-2.0, BSD-3-Clause, Unlicense
