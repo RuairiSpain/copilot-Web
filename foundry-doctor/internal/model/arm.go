@@ -61,6 +61,25 @@ func IsARMExpression(s string) bool {
 	return len(s) >= 2 && strings.HasPrefix(s, "[") && strings.HasSuffix(s, "]") && !strings.HasPrefix(s, "[[")
 }
 
+// ResourceMeta carries identity inside the compiled document and the flags rules need to decide how
+// far to trust a finding. The Bicep normaliser fills it; it is zero for hand-built resources.
+type ResourceMeta struct {
+	Pointer     string   // JSON pointer into the compiled document, for example /resources/acct
+	ModuleChain []string // labels of the enclosing module deployments, outermost first
+	Looped      bool     // the resource itself has a top-level copy: the instance count is unknown
+	Conditional bool     // the resource itself has a condition
+	// MayNotDeploy is true when the resource or any enclosing module is conditional.
+	MayNotDeploy bool
+	// MultiInstance is true when the resource or any enclosing module is looped.
+	MultiInstance bool
+	// ConditionValue is a Literal bool only when the condition is a known boolean; Absent when
+	// the resource is not conditional.
+	ConditionValue Value
+	// Confidence is "likely" for resources declared in the entry file (file known, line not) and
+	// "uncertain" inside a module (the module file cannot be proven).
+	Confidence string
+}
+
 // Resource is one resource of the compiled template.
 type Resource struct {
 	Type       string
@@ -71,6 +90,7 @@ type Resource struct {
 	DependsOn  []string
 	Location   Pos // best-effort source position in the Bicep file; zero if unknown
 	File       string
+	Meta       ResourceMeta
 }
 
 // Get reads a dotted path such as "properties.networkAcls.defaultAction". Array items use [n]

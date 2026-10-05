@@ -424,3 +424,22 @@ func TestEscapePointer(t *testing.T) {
 		t.Errorf("got %s", got)
 	}
 }
+
+// TestNormaliseARM_ResourceMetaMatchesInfo checks that the model resources carry the same
+// identity and flags as the parallel Info slice, so rules do not need the bicep package.
+func TestNormaliseARM_ResourceMetaMatchesInfo(t *testing.T) {
+	for _, form := range []string{"foundry", "foundry-v2"} {
+		n := normaliseFixture(t, Options{}, form, "foundry.arm.json")
+		if len(n.Template.Resources) != len(n.Info) || len(n.Info) == 0 {
+			t.Fatalf("%s: resources=%d info=%d", form, len(n.Template.Resources), len(n.Info))
+		}
+		for i, in := range n.Info {
+			m := n.Template.Resources[i].Meta
+			if m.Pointer != in.Pointer || m.Looped != in.Looped || m.Conditional != in.Conditional ||
+				m.MayNotDeploy != in.MayNotDeploy() || m.MultiInstance != in.MultiInstance() ||
+				len(m.ModuleChain) != len(in.ModuleChain) || m.Confidence != string(in.Confidence) {
+				t.Errorf("%s resource %d: meta %+v does not match info %+v", form, i, m, in)
+			}
+		}
+	}
+}

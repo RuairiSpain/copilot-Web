@@ -43,6 +43,19 @@ type ModuleRef struct {
 	Looped, Conditional bool
 }
 
+// meta converts the info to the model type rules consume.
+func (r ResourceInfo) meta() model.ResourceMeta {
+	chain := make([]string, 0, len(r.ModuleChain))
+	for _, m := range r.ModuleChain {
+		chain = append(chain, m.Label)
+	}
+	return model.ResourceMeta{
+		Pointer: r.Pointer, ModuleChain: chain, Looped: r.Looped, Conditional: r.Conditional,
+		MayNotDeploy: r.MayNotDeploy(), MultiInstance: r.MultiInstance(),
+		ConditionValue: r.ConditionValue, Confidence: string(r.Confidence),
+	}
+}
+
 // MayNotDeploy reports whether the resource or any enclosing module is conditional.
 func (r ResourceInfo) MayNotDeploy() bool {
 	if r.Conditional {
@@ -410,6 +423,7 @@ func (w *walker) resource(m map[string]any, symbolic, ptr string, sc *scope, cha
 		Body: body, DependsOn: deps, File: w.opts.File,
 	})
 	w.out.Info = append(w.out.Info, info)
+	w.out.Template.Resources[len(w.out.Template.Resources)-1].Meta = info.meta()
 
 	if isModule {
 		w.module(m, symbolic, name, ptr, sc, chain, depth, info)
