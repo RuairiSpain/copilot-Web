@@ -1,0 +1,51 @@
+id: FND-XXX-000
+version: 1
+title: ""
+description: ""
+status: proposed            # proposed | verified | implemented | deprecated
+phase: 1
+
+inputs: []                  # azure.yaml | bicep-arm | azd-env | azure-control-plane | data-plane
+basis: []                   # platform | security | waf | opinion
+category: must-have         # must-have | nice-to-have
+pillar: null                # security | reliability | cost | operations | performance | null
+
+severity:
+  dev: warning
+  test: error
+  prod: error               # platform-basis rules are error in every profile
+
+compatibility:
+  azd: ""
+  extensions: {}
+  apiVersions: []
+
+evidence:
+  description: ""
+  confidence: certain       # certain | likely | uncertain
+
+recommendation: ""
+fix: ""
+
+sources:
+  - url: ""
+    lastVerified: ""        # YYYY-MM-DD
+
+overlap:
+  decision: native          # reuse | wrap | adapt | native | drop
+  rationale: ""
+  psrule: null
+  azurePolicy: null
+  defender: null
+  advisor: null
+  bicepLinter: null
+  checkov: null
+
+implementation:
+  owner: native
+  package: ""
+
+tests:
+  positive: []
+  negative: []
+  skipped: []
