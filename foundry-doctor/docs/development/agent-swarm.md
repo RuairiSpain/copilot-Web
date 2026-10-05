@@ -28,7 +28,7 @@ Path-scoped rules (`.claude/rules/foundry-doctor-*.md`) load only when matching 
 
 | Event | Script | Effect |
 |---|---|---|
-| PreToolUse Bash | `guard-bash.sh` -> `guard_bash.py` | Tokenises the command and looks through `sh -c`, `eval`, `env`, `sudo`, `xargs`, `find -exec`, `$(...)` and backticks. Allows only read-only `az` and `azd` verbs and `az rest` GET. Blocks force, delete and mirror pushes (all flag and refspec forms), hard resets, mutating requests to Azure endpoints, code piped from the network into an interpreter, commands whose name comes from a variable, and reads of credential files. |
+| PreToolUse Bash | `guard-bash.sh` -> `guard_bash.py` | Tokenises the command and looks through `sh -c`, `eval`, `env`, `sudo`, `xargs`, `find -exec`, `$(...)` and backticks. Allows only read-only `az` and `azd` verbs and `az rest` GET. Allows only read-only `gh` verbs and `gh api` GET. Blocks force, delete and mirror pushes (all flag and refspec forms), hard resets, mutating requests to Azure endpoints, code piped from the network into an interpreter, commands whose name comes from a variable, and reads of credential files. |
 | PostToolUse Edit/Write | `post-edit.sh` | Runs `gofmt -w` on edited Go files; blocks if the file contains secret-shaped content. |
 | Stop | `stop-check.sh` | Blocks ending the turn if the project, the Claude harness or this project's workflow contain secret-shaped content. Runs even when the stop hook is already active. |
 

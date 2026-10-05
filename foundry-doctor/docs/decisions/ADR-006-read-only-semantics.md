@@ -1,6 +1,6 @@
 # ADR-006: What "read-only" means for Azure checks
 
-Status: Proposed (needs the Azure black belt review)
+Status: Accepted (reviewed by the Azure black belt and the security reviewer; enforcement tests land in Phase 2)
 Date: 2026-10-04
 
 ## Context

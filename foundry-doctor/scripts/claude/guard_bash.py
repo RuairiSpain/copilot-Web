@@ -87,7 +87,7 @@ CRED_BASENAME_RE = re.compile(
 )
 CRED_OK_BASENAMES = {".env.example", ".env.sample", ".env.template"}
 CRED_DIRS = ["~/.azure", "~/.aws", "~/.config/gh", "~/.kube", "~/.ssh", "~/.docker", "~/.gnupg", "~/.config/gcloud"]
-SECRET_VAR_RE = re.compile(r"\$\{?[A-Za-z_]*(SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|API_?KEY|ACCESS_?KEY|PRIVATE_?KEY)[A-Za-z_]*\}?", re.I)
+SECRET_VAR_RE = re.compile(r"\$\{?[A-Za-z0-9_]*(SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|API_?KEY|ACCESS_?KEY|PRIVATE_?KEY|_KEY)[A-Za-z0-9_]*\}?", re.I)
 PATH_ONLY_CMDS = {"ls", "stat", "file", "test", "[", "[["}
 ENV_DUMPERS = {"printenv", "declare", "typeset"}
 GIT_DANGEROUS_CONFIG = ("core.pager", "core.editor", "core.sshcommand", "core.fsmonitor", "core.hookspath", "credential.helper",
@@ -318,8 +318,8 @@ def _check_segment(argv, piped, here, depth):
         _check_azd(args)
     elif base == "git":
         _check_git(args)
-    elif base == "gh" and args[:2] == ["auth", "token"]:
-        raise Block("prints a GitHub token")
+    elif base == "gh":
+        _check_gh(args)
     elif base in ("curl", "wget", "http", "https", "xh"):
         _check_http(base, args)
     elif base in ENV_DUMPERS or base == "compgen" or (base in ("env", "set", "export") and not args) or (base == "export" and args[:1] == ["-p"]):
@@ -434,6 +434,35 @@ def _check_git(args):
         raise Block("git credential prints stored credentials")
     elif sub in ("diff", "log", "show", "format-patch", "blame") and any(a.startswith("--output") or a == "--ext-diff" for a in rest):
         raise Block(f"git {sub} --output or --ext-diff writes files or runs programs")
+
+
+GH_READ_VERBS = {"view", "list", "status", "diff", "checks", "search", "get", "show", "watch", "browse"}
+
+
+def _check_gh(args):
+    words = []
+    for a in args:
+        if a.startswith("-"):
+            break
+        words.append(a)
+    if words[:2] == ["auth", "token"] or (words[:2] == ["auth", "status"] and any(a in ("-t", "--show-token") for a in args)):
+        raise Block("prints a GitHub token")
+    if not words:
+        return  # gh --version, gh --help
+    if words[0] == "api":
+        method = "get"
+        for i, a in enumerate(args):
+            if a in ("-X", "--method") and i + 1 < len(args):
+                method = args[i + 1].lower()
+            elif a.startswith("--method=") or (a.startswith("-X") and len(a) > 2):
+                method = a.split("=", 1)[-1].lower() if "=" in a else a[2:].lower()
+        has_fields = any(a in ("-f", "-F", "--field", "--raw-field", "--input") or a.startswith(("--field=", "--raw-field=", "--input=")) for a in args)
+        if method not in ("get", "head") or has_fields:
+            raise Block("gh api is allowed only for GET without fields or input")
+        return
+    if any(w in GH_READ_VERBS for w in words[:3]):
+        return
+    raise Block(f"gh {' '.join(words)} is not on the read-only allow-list (use the GitHub MCP tools, or ask the user)")
 
 
 def _check_http(base, args):

@@ -1,6 +1,6 @@
 # ADR-001: Rule engine strategy
 
-Status: Proposed (needs the Foundry lead and Azure black belt reviews recorded in the Phase 0 hand-off)
+Status: Accepted (reviewed by the Foundry lead and the Azure black belt; see docs/development/hand-offs/phase-0.md)
 Date: 2026-10-04
 
 ## Context

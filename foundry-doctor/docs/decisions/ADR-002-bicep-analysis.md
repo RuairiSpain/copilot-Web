@@ -1,6 +1,6 @@
 # ADR-002: Bicep analysis via the Bicep CLI and ARM JSON
 
-- Status: Accepted (Phase 0 spike)
+- Status: Accepted (Phase 0 spike; reviewed by the Foundry lead, who reproduced the CLI results)
 - Date: 2026-10-04
 - Owner: `internal/bicep`
 - Tested CLI: **Bicep CLI version 0.47.16 (3f73e1a234)**, `linux-x64` standalone binary
@@ -197,7 +197,7 @@ A secondary `JSONRPC` implementation can satisfy the same interface later.
    resource can be matched by name to the `modules` declared in ARM `deployments` names), plus an
    ARM pointer such as `/resources/2` or, with `symbolicNameCodegen`, `/resources/accts`, and
    `Resource` = type + name expression. Line omitted (0). Confidence `likely` when the file is inferred,
-   `possible` when only the ARM pointer is known. Never fabricate lines.
+   `uncertain` when only the ARM pointer is known (the catalogue's confidence values are certain, likely and uncertain). Never fabricate lines.
 3. Loops/conditions: report that the resource is `copy`/`condition` guarded in evidence; rules must
    treat `condition` resources as "may not deploy" and not assert about runtime counts.
 4. Users can still jump from the finding to the compiler diagnostic location when one exists.
@@ -205,6 +205,8 @@ A secondary `JSONRPC` implementation can satisfy the same interface later.
 ## Consequences
 
 - No Bicep parsing code; behaviour follows the pinned compiler (record version in each report).
+- Phase 1 task: re-run the spike on Bicep 0.48.1 or later when a linux-x64 release asset exists (the `v0.48.1` tag exists, but its asset returned HTTP 404 during Phase 0, so the spike ran on 0.47.16), and record the compatibility floor as the lowest version in the CI matrix. The earliest Bicep version that supports `--diagnostics-format sarif`, `--stdout` and `jsonrpc` is unverified.
+- Interface notes for Phase 1 and Phase 6 (Foundry lead review): `ParamsResult` holds the two decoded JSON documents and a nullable `templateSpecId`; `Diagnostic` gets optional `EndLine` and `EndColumn`, filled by a second implementation over `bicep jsonrpc` (the text and SARIF outputs have no end position); a SARIF result with no `level` means `warning`; `build` writes SARIF to stderr and `lint` to stdout, so parsing must be stream-aware and must ignore non-diagnostic stderr lines such as the experimental-features warning. Annotated copies (Phase 6) can place compiler diagnostics reliably but cannot place ARM-derived findings, because no Bicep output maps a resource to source lines; Phase 6 must accept diagnostics-only annotation or a labelled heuristic.
 - The Bicep CLI is a runtime prerequisite for Bicep checks (exit 2 when absent). CI must pin a version
   (0.47.16 here) and run `go test -tags spike` against it to detect output changes.
 - ARM-level findings have no source line in MVP; this is a documented limitation. Revisit when the

@@ -6,7 +6,7 @@ lastVerified: 2026-10-04. Sources: `REFS/azure-dev` = `Azure/azure-dev` @ `afe4b
 
 | Item | Value | Source |
 |---|---|---|
-| Latest azd module tag seen | `v1.34.2` (2026-09-24, tag `cli/azd/v1.34.2`) | `proxy.golang.org/github.com/azure/azure-dev/cli/azd/@v/v1.34.2.info` |
+| Latest azd module tag seen | `v1.35.0` (2026-09-30, tag `cli/azd/v1.35.0`; `v1.34.2` was the latest when this spike ran) | `proxy.golang.org/github.com/azure/azure-dev/cli/azd/@v/v1.35.0.info` |
 | Repo head version | `1.36.0-beta.1` | `cli/version.txt` |
 | `azure.ai.agents` | 1.0.0-beta.18, requires azd `>=1.34.2`, namespace `ai.agent` | `extensions/azure.ai.agents/extension.yaml`, `version.txt` |
 | `azure.ai.projects` | 1.0.0-beta.13, requires azd `>=1.34.2`, namespace `ai.project` | `extensions/azure.ai.projects/extension.yaml`, `version.txt` |

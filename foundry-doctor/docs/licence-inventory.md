@@ -30,7 +30,7 @@ build silently downloads a newer toolchain, which is blocked in this sandbox and
 Consequences and recommendation (needs an ADR):
 
 1. The azd extension SDK (`pkg/azdext`) lives inside the module `github.com/azure/azure-dev/cli/azd`, so any importer
-   inherits `go 1.26.4` and its 152 direct requirements (`go.mod` at tag `cli/azd/v1.35.0`, includes gRPC, mcp-go,
+   inherits `go 1.26.4` and its 152 requirements (92 direct, 60 indirect) (`go.mod` at tag `cli/azd/v1.35.0`, includes gRPC, mcp-go,
    many `arm*` packages). The azd team's own extensions are separate modules with their own `go.mod` at `go 1.26.4`
    (for example `azure.ai.agents`, which requires `github.com/azure/azure-dev/cli/azd v1.34.2`).
 2. Proposed structure: keep the core (`internal/...`, standalone binary) free of `azdext`, and put the azd extension
@@ -55,7 +55,7 @@ Consequences and recommendation (needs an ADR):
 | armresources | v1.2.0 (v1 line, 2023-11-23); **v2.1.0 current** (2025-05-21) | SDK repo 2026-10-02 | MIT | Active repo; use v2 | azcore |
 | armresourcegraph | v0.10.0 (pre-1.0) | 2026-05-26 | MIT | Active but pre-1.0 | azcore |
 | armpolicy | v1.0.0 | 2026-03-19 | MIT | Active | azcore |
-| github.com/Azure/azure-dev/cli/azd (azdext) | v1.35.0 | 2026-09-30 / 2026-10-04 | MIT | Active | 152 direct requires (**not audited transitively**) |
+| github.com/Azure/azure-dev/cli/azd (azdext) | v1.35.0 | 2026-09-30 / 2026-10-04 | MIT | Active | 152 requires (92 direct) (**not audited transitively**) |
 | golang.org/x/sync/errgroup | v0.23.0 | 2026-08-31 / 2026-09-23 | BSD-3-Clause | Active (Go team) | none significant |
 | github.com/owenrumney/go-sarif/v3 | v3.3.1 | 2026-07-29 / 2026-08-31 | Unlicense (public domain dedication) | Active, single maintainer | testify, gojsonschema (licence **Unverified**), uuid |
 | github.com/stretchr/testify | v1.12.1 | 2026-08-17 / 2026-09-24 | MIT | Active | objx, go.yaml.in/yaml/v3 |
@@ -131,12 +131,12 @@ Unlicense), testify (MIT), go-cmp ("Copyright (c) 2017 The Go Authors", BSD-3-Cl
 - Purpose: gRPC client to the azd host (project, environment, prompts, events), extension command scaffolding, MCP helpers.
   106 files in `pkg/azdext` at tag `cli/azd/v1.35.0`; stable contracts in `pkg/azdext/contracts/v1`, beta in a `preview`
   directory and `v1beta` channel (`docs/extensions/contract-versioning.md`).
-- It is not a standalone module: the whole azd module (`go 1.26.4`, 152 direct requirements) comes with it. The extension's
+- It is not a standalone module: the whole azd module (`go 1.26.4`, 152 requirements (92 direct, 60 indirect)) comes with it. The extension's
   own go.mod must be able to build on that Go version. See section 0.
 - Compatibility: the importer declares `requiredAzdVersion` in `extension.yaml`; `azure.ai.agents` shows the pattern
   (`>=1.34.2`).
 - Alternative: no SDK; the extension binary could shell out to `azd env get-values --output json` and `azd` flags. This loses
-  the lifecycle events and `service-target-provider` capability but removes the 152-module dependency. Keep core logic
+  the lifecycle events and `service-target-provider` capability but removes the 152-requirement dependency. Keep core logic
   library-independent (PRD Phase 1 says exactly this).
 - Redistribution: MIT; the binary embeds many transitive licences, so a generated NOTICE (`go-licenses report`) is required.
   Transitive licence audit not done here (**Unverified**).

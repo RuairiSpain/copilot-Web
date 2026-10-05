@@ -54,7 +54,7 @@ Rule: the doctor never needs prompts to produce findings; prompts are optional c
 
 ## Consequences
 
-- One cobra command model, two host adapters (`cmd/foundry` extension, `cmd/foundry-doctor` standalone), as in the PRD package table.
+- One cobra command model, two host adapters: the standalone `cmd/foundry-doctor` in the core module and the azd extension host in its own module (`foundry-doctor/extension/`, ADR-005), because `azdext` requires a newer Go than the core.
 - The extension must declare capabilities `custom-commands` and `metadata` (see notes) and must use `requiredAzdVersion` (>= 1.34.2 recommended; see notes).
 - Exit codes: azd propagates a positive extension exit code (`extension-framework.md`, "Invoking Extension Commands"), so `0` pass, `1` operational failure, `2` gate breach can be preserved under `azd foundry`.
 
