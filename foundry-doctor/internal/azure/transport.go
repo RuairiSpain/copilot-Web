@@ -38,6 +38,7 @@ const (
 	guidRe  = `[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`
 	segRe   = `[A-Za-z0-9._()~-]{1,90}`
 	scopeRe = `/subscriptions/` + guidRe + `(?:/resourceGroups/` + segRe + `)?`
+	idRe    = `/subscriptions/` + guidRe + `/resourceGroups/` + segRe + `/providers/[A-Za-z0-9.]+(?:/` + segRe + `){1,10}`
 )
 
 // AllowedOperation documents one allow-listed request shape.
@@ -58,6 +59,7 @@ type operation struct {
 func newOp(name, method, template, version, capability string) operation {
 	pat := regexp.QuoteMeta(template)
 	pat = strings.ReplaceAll(pat, `\{scope\}`, scopeRe)
+	pat = strings.ReplaceAll(pat, `\{resource\}`, idRe)
 	pat = strings.ReplaceAll(pat, `\{sub\}`, guidRe)
 	pat = strings.ReplaceAll(pat, `\{seg\}`, segRe)
 	pat = strings.ReplaceAll(pat, `\{roledef\}`, `(?:/subscriptions/`+guidRe+`)?/providers/Microsoft\.Authorization/roleDefinitions/`+guidRe)
@@ -98,6 +100,17 @@ func allowList() []operation {
 		newOp("roledefinition.get", g, "{roledef}", "2022-04-01", "Microsoft.Authorization/roleDefinitions/read"),
 		// Learn "List Azure deny assignments": 2018-07-01-preview or later
 		newOp("denyassignments.list", g, "{scope}/providers/Microsoft.Authorization/denyAssignments", "2022-04-01", "Microsoft.Authorization/denyAssignments/read"),
+		// catalogue FND-RUN-001..004
+		newOp("runtime.project.get", g, "/subscriptions/{sub}/resourceGroups/{seg}/providers/Microsoft.CognitiveServices/accounts/{seg}/projects/{seg}", "2026-09-01", "Microsoft.CognitiveServices/accounts/projects/read"),
+		newOp("runtime.project.caphosts", g, "/subscriptions/{sub}/resourceGroups/{seg}/providers/Microsoft.CognitiveServices/accounts/{seg}/projects/{seg}/capabilityHosts", "2026-09-01", "Microsoft.CognitiveServices/accounts/projects/capabilityHosts/read"),
+		newOp("runtime.account.caphosts", g, "/subscriptions/{sub}/resourceGroups/{seg}/providers/Microsoft.CognitiveServices/accounts/{seg}/capabilityHosts", "2026-09-01", "Microsoft.CognitiveServices/accounts/capabilityHosts/read"),
+		newOp("runtime.project.connections", g, "/subscriptions/{sub}/resourceGroups/{seg}/providers/Microsoft.CognitiveServices/accounts/{seg}/projects/{seg}/connections", "2026-09-01", "Microsoft.CognitiveServices/accounts/projects/connections/read"),
+		newOp("runtime.account.connections", g, "/subscriptions/{sub}/resourceGroups/{seg}/providers/Microsoft.CognitiveServices/accounts/{seg}/connections", "2026-09-01", "Microsoft.CognitiveServices/accounts/connections/read"),
+		newOp("runtime.account.deployments", g, "/subscriptions/{sub}/resourceGroups/{seg}/providers/Microsoft.CognitiveServices/accounts/{seg}/deployments", "2026-09-01", "Microsoft.CognitiveServices/accounts/deployments/read"),
+		newOp("runtime.cosmos.sqlroleassignments", g, "/subscriptions/{sub}/resourceGroups/{seg}/providers/Microsoft.DocumentDB/databaseAccounts/{seg}/sqlRoleAssignments", "2025-10-15", "Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments/read"),
+		newOp("runtime.privatedns.links", g, "/subscriptions/{sub}/resourceGroups/{seg}/providers/Microsoft.Network/privateDnsZones/{seg}/virtualNetworkLinks", "2018-09-01", "Microsoft.Network/privateDnsZones/virtualNetworkLinks/read"),
+		newOp("runtime.metrics", g, "{resource}/providers/Microsoft.Insights/metrics", "2024-02-01", "Microsoft.Insights/metrics/read"),
+		newOp("runtime.diagnosticsettings", g, "{resource}/providers/Microsoft.Insights/diagnosticSettings", "2021-05-01-preview", "Microsoft.Insights/diagnosticSettings/read"),
 		// catalogue: FND-DEP-004, FND-DEP-005, FND-DEP-006
 		newOp("models.list", g, "/subscriptions/{sub}/providers/Microsoft.CognitiveServices/locations/{seg}/models", "2026-09-01", "Microsoft.CognitiveServices/locations/models/read"),
 		newOp("usages.list", g, "/subscriptions/{sub}/providers/Microsoft.CognitiveServices/locations/{seg}/usages", "2026-09-01", "Microsoft.CognitiveServices/locations/usages/read"),

@@ -40,6 +40,10 @@ var (
 	_ Policy          = (*Adapter)(nil)
 	_ WhatIf          = (*Adapter)(nil)
 	_ Names           = (*Adapter)(nil)
+	_ RuntimeFoundry  = (*Adapter)(nil)
+	_ RuntimeRBAC     = (*Adapter)(nil)
+	_ RuntimeDNS      = (*Adapter)(nil)
+	_ RuntimeMonitor  = (*Adapter)(nil)
 )
 
 // New builds an Adapter. It performs no network I/O.
@@ -85,7 +89,8 @@ func New(o Options) (*Adapter, error) {
 // Client returns the aggregate wired to this adapter.
 func (a *Adapter) Client() Client {
 	return Client{Context: a, Inventory: a, Permissions: a, Models: a, Policy: a, WhatIf: a, Names: a,
-		Regions: a, Deployments: a, SubnetLinks: a, Evidence: a}
+		Regions: a, Deployments: a, SubnetLinks: a, Evidence: a,
+		Foundry: a, RBAC: a, DNS: a, Monitor: a}
 }
 
 var (

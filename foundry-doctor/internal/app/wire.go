@@ -94,6 +94,7 @@ func NewServices(stderr io.Writer, o Options) Services {
 		ARM:       armLoader{disc: disc, runner: o.BicepRunner},
 		Engine:    engineAdapter{cat: cat, azd: azd},
 		Preflight: preflightEngine{cat: cat, azd: azd, getenv: getenv},
+		Runtime:   runtimeEngine{cat: cat, azd: azd, getenv: getenv},
 		Baseline:  baselineFilter{},
 		Suppress:  suppressFilter{},
 		Reporter:  reportAdapter{},

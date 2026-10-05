@@ -31,6 +31,10 @@ func TestInterfaceSurface(t *testing.T) {
 		"DeploymentHistory":  {reflect.TypeOf((*DeploymentHistory)(nil)).Elem(), []string{"CountDeployments"}},
 		"SubnetLinks":        {reflect.TypeOf((*SubnetLinks)(nil)).Elem(), []string{"SubnetLinks"}},
 		"PermissionEvidence": {reflect.TypeOf((*PermissionEvidence)(nil)).Elem(), []string{"CheckReportedActions", "ReportedPermissions"}},
+		"RuntimeFoundry":     {reflect.TypeOf((*RuntimeFoundry)(nil)).Elem(), []string{"GetProject", "ListAccountCapabilityHosts", "ListAccountConnections", "ListAccountDeployments", "ListProjectCapabilityHosts", "ListProjectConnections"}},
+		"RuntimeRBAC":        {reflect.TypeOf((*RuntimeRBAC)(nil)).Elem(), []string{"ListCosmosSQLRoleAssignments", "ListRoleAssignments"}},
+		"RuntimeDNS":         {reflect.TypeOf((*RuntimeDNS)(nil)).Elem(), []string{"ListPrivateDNSVNetLinks"}},
+		"RuntimeMonitor":     {reflect.TypeOf((*RuntimeMonitor)(nil)).Elem(), []string{"ListDiagnosticSettings", "QueryAccountMetrics", "QueryDiagnosticCounts"}},
 	}
 	ctxType := reflect.TypeOf((*context.Context)(nil)).Elem()
 	for name, c := range ifaces {

@@ -34,6 +34,15 @@ Reader grants the action.
 | Permissions API | GET | {rg or resource}/providers/Microsoft.Authorization/permissions (no subscription scope) | 2022-04-01 | Microsoft.Authorization/permissions/read | verified (FND-DEP-003); evidence only, never proof |
 | Soft-deleted | GET | Cognitive deletedAccounts 2026-09-01; KeyVault deletedVaults 2026-05-15; APIM deletedservices 2024-05-01 | as listed | `<provider>/deleted*/read` | verified |
 | What-if (opt-in) | POST | deployments/foundry-doctor-whatif/whatIf | 2026-06-01 | Microsoft.Resources/deployments/whatIf/action | verified (poll path and `deployments/read` UNVERIFIED) |
+| Runtime project | GET | accounts/{account}/projects/{project} | 2026-09-01 | Microsoft.CognitiveServices/accounts/projects/read | UNVERIFIED |
+| Runtime capability hosts | GET | accounts/{account}/projects/{project}/capabilityHosts; accounts/{account}/capabilityHosts | 2026-09-01 | Microsoft.CognitiveServices/accounts/projects/capabilityHosts/read; Microsoft.CognitiveServices/accounts/capabilityHosts/read | UNVERIFIED |
+| Runtime connections | GET | accounts/{account}/projects/{project}/connections; accounts/{account}/connections | 2026-09-01 | Microsoft.CognitiveServices/accounts/projects/connections/read; Microsoft.CognitiveServices/accounts/connections/read | UNVERIFIED |
+| Runtime deployments | GET | accounts/{account}/deployments | 2026-09-01 | Microsoft.CognitiveServices/accounts/deployments/read | UNVERIFIED |
+| Cosmos SQL role assignments | GET | databaseAccounts/{account}/sqlRoleAssignments | 2025-10-15 | Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments/read | UNVERIFIED |
+| Private DNS VNet links | GET | privateDnsZones/{zone}/virtualNetworkLinks | 2018-09-01 | Microsoft.Network/privateDnsZones/virtualNetworkLinks/read | UNVERIFIED |
+| Azure Monitor metrics | GET | {resource}/providers/Microsoft.Insights/metrics | 2024-02-01 | Microsoft.Insights/metrics/read | UNVERIFIED |
+| Diagnostic settings | GET | {resource}/providers/Microsoft.Insights/diagnosticSettings | 2021-05-01-preview | Microsoft.Insights/diagnosticSettings/read | UNVERIFIED |
+| Log Analytics aggregate counts | POST | `https://api.loganalytics.io/v1/workspaces/{id}/query` (count-only query body) | service endpoint | workspace query permission; exact action UNVERIFIED | UNVERIFIED |
 
 ## Degradation behaviour
 
@@ -46,6 +55,10 @@ Reader grants the action.
 
 - Azure Resource Graph (POST outside the ADR-006 allow-list): inventory uses ARM list only.
 - Log Analytics queries: no interface in `api.go`.
+- Runtime data-plane reads:
+  - Foundry project endpoint metadata only (`/agents`, `/agents/{name}/versions/{version}`, `/connections`)
+  - Search metadata only (`indexes`, `search.stats`, `indexers/search.status`)
+  - No document, prompt, completion, or tool content retrieval is implemented.
 - Policy effects are not resolved (policy definition reads are not allow-listed); assignment parameters are never decoded.
 - Storage and Search expose no soft-delete listing; the adapter returns an empty list without calling Azure.
 - Unverified per ADR-006: whether what-if leaves a deployment record; whether checkPolicyRestrictions honours exemptions (results are `potential-conflict` unless the service reports a `deny` effect; audit/modify/append stay informational).

@@ -1,0 +1,12 @@
+{
+  "name": "knowledge",
+  "fields": [
+    {
+      "name": "contentVector",
+      "type": "Collection(Edm.Single)",
+      "dimensions": 1536,
+      "vectorSearchProfile": "default",
+      "sampleDocument": "DOCUMENT_SENTINEL_TEXT"
+    }
+  ]
+}

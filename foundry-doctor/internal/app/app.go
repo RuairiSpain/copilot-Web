@@ -223,6 +223,7 @@ type Services struct {
 	Reporter    Reporter
 	Explainer   Explainer
 	Preflight   PreflightEngine // optional; preflight reports unavailable when nil
+	Runtime     RuntimeEngine   // optional; runtime reports unavailable when nil
 	Now         func() time.Time
 	Stderr      io.Writer
 	WriteOutput func(path string, data []byte) error // defaults to os.WriteFile

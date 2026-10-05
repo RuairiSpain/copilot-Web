@@ -475,6 +475,10 @@ type Client struct {
 	Deployments DeploymentHistory
 	SubnetLinks SubnetLinks
 	Evidence    PermissionEvidence
+	Foundry     RuntimeFoundry
+	RBAC        RuntimeRBAC
+	DNS         RuntimeDNS
+	Monitor     RuntimeMonitor
 }
 
 // ---------------------------------------------------------------------------
@@ -565,6 +569,125 @@ type PermissionEvidence interface {
 	// DecisionAllowed (Reason ReasonReportedNotProof) when listed, DecisionDenied
 	// (ReasonNoGrantingRole) when absent or excluded by notActions.
 	CheckReportedActions(ctx context.Context, req PermissionRequest) ([]ActionDecision, error)
+}
+
+// ---------------------------------------------------------------------------
+// Runtime management metadata (Phase 3)
+
+// FoundryProject is the management-plane summary of one project.
+type FoundryProject struct {
+	ID                string
+	Name              string
+	AccountID         string
+	PrincipalID       string
+	IdentityType      string
+	ProvisioningState string
+}
+
+// CapabilityHost is the management-plane summary of one capability host.
+type CapabilityHost struct {
+	ID                       string
+	Name                     string
+	ProvisioningState        string
+	AIServiceConnections     []string
+	StorageConnections       []string
+	ThreadStorageConnections []string
+	VectorStoreConnections   []string
+}
+
+// ConnectionTarget is the metadata-only connection target projection.
+type ConnectionTarget struct {
+	ResourceID   string
+	IndexNames   []string
+	IndexerNames []string
+}
+
+// FoundryConnection is the management-plane summary of one project or account connection.
+type FoundryConnection struct {
+	ID       string
+	Name     string
+	Category string
+	AuthType string
+	Error    string
+	Target   ConnectionTarget
+}
+
+// AccountDeployment is the management-plane summary of one account deployment.
+type AccountDeployment struct {
+	Name                 string
+	ProvisioningState    string
+	DynamicThrottling    bool
+	CurrentCapacity      int
+	ProvisionedRateLimit int
+}
+
+// RoleAssignment is the metadata-only RBAC assignment evidence used at runtime.
+type RoleAssignment struct {
+	RoleDefinitionID string
+	PrincipalID      string
+	Scope            string
+	Condition        string
+}
+
+// CosmosSQLRoleAssignment is the metadata-only Cosmos SQL role assignment evidence.
+type CosmosSQLRoleAssignment struct {
+	RoleDefinitionID string
+	PrincipalID      string
+	Scope            string
+}
+
+// PrivateDNSVNetLink is one private DNS virtual network link.
+type PrivateDNSVNetLink struct {
+	Name  string
+	State string
+}
+
+// MetricTotal is the aggregate count/value for one series.
+type MetricTotal struct {
+	Series string
+	Total  float64
+}
+
+// RuntimeDiagnosticSetting is the RUN-007 projection of a diagnostic setting.
+type RuntimeDiagnosticSetting struct {
+	Name        string
+	WorkspaceID string
+	Categories  []string
+	AgeHours    int
+}
+
+// RuntimeLogsResult is the count-only projection of a Log Analytics query.
+type RuntimeLogsResult struct {
+	Table  string
+	Counts map[string]int64
+}
+
+// RuntimeFoundry reads the management metadata used by RUN-001/003/004.
+type RuntimeFoundry interface {
+	GetProject(ctx context.Context, subscriptionID, resourceGroup, account, project string) (FoundryProject, error)
+	ListProjectCapabilityHosts(ctx context.Context, subscriptionID, resourceGroup, account, project string) ([]CapabilityHost, error)
+	ListAccountCapabilityHosts(ctx context.Context, subscriptionID, resourceGroup, account string) ([]CapabilityHost, error)
+	ListProjectConnections(ctx context.Context, subscriptionID, resourceGroup, account, project string) ([]FoundryConnection, error)
+	ListAccountConnections(ctx context.Context, subscriptionID, resourceGroup, account string) ([]FoundryConnection, error)
+	ListAccountDeployments(ctx context.Context, subscriptionID, resourceGroup, account string) ([]AccountDeployment, error)
+}
+
+// RuntimeRBAC reads the metadata-only RBAC evidence used by RUN-001.
+type RuntimeRBAC interface {
+	ListRoleAssignments(ctx context.Context, scope, principalID string) ([]RoleAssignment, error)
+	ListCosmosSQLRoleAssignments(ctx context.Context, accountID, principalID string) ([]CosmosSQLRoleAssignment, error)
+}
+
+// RuntimeDNS reads private DNS metadata used by RUN-002.
+type RuntimeDNS interface {
+	ListPrivateDNSVNetLinks(ctx context.Context, zoneID string) ([]PrivateDNSVNetLink, error)
+}
+
+// RuntimeMonitor reads the aggregate monitor evidence used by RUN-004/007.
+type RuntimeMonitor interface {
+	QueryAccountMetrics(ctx context.Context, accountID, metricName, filterDimension, filterValue, seriesDimension string) ([]MetricTotal, error)
+	ListDiagnosticSettings(ctx context.Context, resourceID string) ([]RuntimeDiagnosticSetting, error)
+	QueryDiagnosticCounts(ctx context.Context, workspaceID, accountName string, hours int) (RuntimeLogsResult, error)
 }
 
 // RegisterAction returns the RBAC action needed to register a resource
