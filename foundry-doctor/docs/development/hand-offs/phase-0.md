@@ -60,7 +60,7 @@ No product CLI exists yet (Phase 1).
 | check-rule-catalog.sh (validate, docs and overlap up to date) | PASS |
 | check-no-secrets.sh | PASS |
 | harness unit tests (Bash guard) | PASS |
-| govulncheck | **SKIPPED**: the vulnerability database (`vuln.go.dev`) is blocked in this sandbox. CI runs it. |
+| govulncheck | **SKIPPED locally**: the vulnerability database (`vuln.go.dev`) is blocked in this sandbox. CI runs it, and its first run **failed** on GO-2026-4602 (Go 1.24.13 standard library, reachable from the catalogue loader). Fixed by moving the core to `go 1.25.8`; CI is the confirmation. |
 | go build ./cmd/foundry-doctor | **SKIPPED**: the product binary does not exist until Phase 1. |
 
 Coverage: `internal/catalog` 91.7%, `cmd/rulecatalog` 90.7%. Tests were mutation-checked: breaking the date parser, the multi-document check, the symlink check, the adapt-owner rule,
@@ -111,7 +111,7 @@ Rejected the first submission (loader accepted multi-document and empty files, d
 
 - Whether product-opinion rules ship in the MVP (nine are in the 38).
 - Profile configuration keys (residency regions, model allow/deny lists, required tags, log-retention minimum, DR declaration, public-by-design posture, policy-managed settings): the PRD does not define them. Needs an ADR before the rules that use them are implemented.
-- Core `go` directive and dependency pins (Go 1.24 versus newer SDKs): decide in Phase 1 with ADR-005.
+- Dependency pins for the Azure SDK at `go 1.25.8` (the core directive is now decided, ADR-005); `golang.org/x/sync` stays on a 0.19.x pin until the core can move to Go 1.26.
 - `--output` flag clash (ADR-003): use `--out`.
 - Whether the `azd ai agent doctor` overlap (FND-RUN-001, 003, 005) should be wrapped later; decided `adapt` for now.
 
@@ -122,7 +122,7 @@ Rejected the first submission (loader accepted multi-document and empty files, d
 | azd | `>=1.34.2 <=1.36.0-beta.1` (azure-dev clone 1.36.0-beta.1; latest tag seen v1.35.0) | `docs/tool-compatibility.md`, `docs/spikes/azd-extension-notes.md` |
 | azure.ai.agents / projects / connections / toolboxes / routines | 1.0.0-beta.18 / beta.13 / beta.9 / beta.9 / beta.8, exactly | azure-dev clone |
 | Bicep CLI | 0.47.16 (MIT) | `docs/decisions/ADR-002-*.md` |
-| Go | 1.24.7 toolchain; core `go 1.24`; `azdext` needs 1.26.4 | ADR-005 |
+| Go | core `go 1.25.8` (set after `govulncheck` in CI found GO-2026-4602 on Go 1.24.13); `azdext` needs 1.26.4 | ADR-005 |
 | PSRule for Azure, Checkov, KICS | see `docs/tool-compatibility.md`; Terrascan is archived and excluded | |
 
 ## Artefacts for next phase
@@ -135,7 +135,7 @@ The catalogue and its schema, the 38-rule MVP set, ADR-001 to 006, the executabl
 1. Merge PR #15 (the harness) and this branch's PR.
 2. Run `foundry-doctor/scripts/install-dev-tools.sh` and make sure CI can reach `vuln.go.dev`; turn on `--strict` in CI once `cmd/foundry-doctor` exists.
 3. Decide the nine product-opinion MVP rules and the profile keys listed above.
-4. Phase 1 first tasks: choose the core `go` directive; re-run the Bicep spike on 0.48.1 or later; implement the CI check that fails when `foundry` appears in the azd registry or command reference (ADR-003);
+4. Phase 1 first tasks: re-run the Bicep spike on 0.48.1 or later; implement the CI check that fails when `foundry` appears in the azd registry or command reference (ADR-003);
    vendor the azd schemas from a tagged release; implement `internal/azureyaml` from the spike; implement the `GOWORK=off` core build and import-boundary check (ADR-005).
 5. Give agent sessions a read-only Azure identity (or none) before Phase 2 work.
 
