@@ -61,6 +61,7 @@ type sarifInvocation struct {
 	ExitCode                   int                 `json:"exitCode"`
 	StartTimeUTC               string              `json:"startTimeUtc,omitempty"`
 	ToolExecutionNotifications []sarifNotification `json:"toolExecutionNotifications"`
+	Properties                 map[string]any      `json:"properties,omitempty"`
 }
 
 type sarifNotification struct {
@@ -252,6 +253,7 @@ func SARIF(w io.Writer, fs []sdk.Finding, run Run) error {
 				ExitCode:                   run.ExitCode,
 				StartTimeUTC:               run.GeneratedAt,
 				ToolExecutionNotifications: notes,
+				Properties:                 readinessProps(run.Readiness),
 			}},
 			Results: results,
 		}},

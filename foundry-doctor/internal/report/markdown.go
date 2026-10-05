@@ -121,6 +121,9 @@ func Markdown(w io.Writer, fs []sdk.Finding, run Run) error {
 			fmt.Fprintf(&b, "| %s | %s | %s |\n", codeSpan(s.RuleID), req, EscapeMarkdown(s.Reason))
 		}
 	}
+	if run.Readiness != nil {
+		run.Readiness.markdown(&b)
+	}
 	_, err := io.WriteString(w, b.String())
 	return err
 }

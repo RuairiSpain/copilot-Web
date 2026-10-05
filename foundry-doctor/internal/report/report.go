@@ -58,6 +58,8 @@ type Run struct {
 	// GeneratedAt is an optional injected timestamp (RFC 3339). Empty means
 	// no timestamp is emitted, keeping output byte-for-byte reproducible.
 	GeneratedAt string
+	// Readiness is the optional deployment readiness summary (preflight).
+	Readiness *Readiness
 }
 
 // Write renders in the given format.

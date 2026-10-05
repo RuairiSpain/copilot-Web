@@ -29,6 +29,7 @@ type jsonReport struct {
 	Summary       jsonSummary   `json:"summary"`
 	Findings      []sdk.Finding `json:"findings"`
 	Skipped       []sdk.Skip    `json:"skipped"`
+	Readiness     *Readiness    `json:"readiness,omitempty"`
 }
 
 // JSON writes the full machine-readable report, including suppressed and
@@ -47,6 +48,7 @@ func JSON(w io.Writer, fs []sdk.Finding, run Run) error {
 		Summary:       jsonSummary{c.Error, c.Warning, c.Info, c.Suppressed, c.Baselined, len(skips)},
 		Findings:      p,
 		Skipped:       skips,
+		Readiness:     run.Readiness,
 	}
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")

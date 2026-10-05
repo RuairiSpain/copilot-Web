@@ -21,6 +21,14 @@ on:
       project-path:
         type: string
         default: .
+      resource-group:
+        description: Target resource group (required so target-bound checks are not skipped under --strict).
+        type: string
+        required: true
+      location:
+        description: Target Azure region name, for example eastus2.
+        type: string
+        required: true
 
 permissions:
   contents: read
@@ -55,10 +63,15 @@ jobs:
         env:
           PROFILE: ${{ inputs.profile }}
           PROJECT_PATH: ${{ inputs.project-path }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          AZURE_RESOURCE_GROUP: ${{ inputs.resource-group }}
+          AZURE_LOCATION: ${{ inputs.location }}
         run: |
           mkdir -p "$RUNNER_TEMP/evidence"
           cd "$PROJECT_PATH"
-          "$RUNNER_TEMP/foundry-doctor" doctor --preflight --profile "$PROFILE" --strict \
+          "$RUNNER_TEMP/foundry-doctor" preflight --what-if --profile "$PROFILE" --strict \
+            --resource-group "$AZURE_RESOURCE_GROUP" --location "$AZURE_LOCATION" \
             --format json --out "$RUNNER_TEMP/evidence/preflight.json"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()

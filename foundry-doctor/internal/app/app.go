@@ -173,6 +173,9 @@ type RunInput struct {
 type RunOutput struct {
 	Findings []sdk.Finding
 	Skipped  []sdk.Skip
+	// Evaluated lists the rule IDs that ran. Optional; the preflight
+	// readiness summary falls back to every FND-DEP rule when it is empty.
+	Evaluated []string
 }
 
 // Engine runs the selected rules.
@@ -195,6 +198,8 @@ type Report struct {
 	Findings    []sdk.Finding
 	Skipped     []sdk.Skip
 	ExitCode    int
+	// Readiness is set by the preflight command only.
+	Readiness *report.Readiness
 }
 
 // Reporter renders a report in console, json, markdown or sarif.
@@ -217,6 +222,7 @@ type Services struct {
 	Suppress    FindingFilter
 	Reporter    Reporter
 	Explainer   Explainer
+	Preflight   PreflightEngine // optional; preflight reports unavailable when nil
 	Now         func() time.Time
 	Stderr      io.Writer
 	WriteOutput func(path string, data []byte) error // defaults to os.WriteFile

@@ -93,6 +93,7 @@ func NewServices(stderr io.Writer, o Options) Services {
 		Config:    configAdapter{getenv: getenv},
 		ARM:       armLoader{disc: disc, runner: o.BicepRunner},
 		Engine:    engineAdapter{cat: cat, azd: azd},
+		Preflight: preflightEngine{cat: cat, azd: azd, getenv: getenv},
 		Baseline:  baselineFilter{},
 		Suppress:  suppressFilter{},
 		Reporter:  reportAdapter{},
@@ -153,8 +154,18 @@ func (l armLoader) Load(ctx context.Context, src Source) (sdk.ARMModel, error) {
 	if err != nil {
 		return nil, unavailablef("cannot read compiled ARM template")
 	}
-	return m, nil
+	return rawModel{Model: m, raw: res.ARM}, nil
 }
+
+// rawModel keeps the compiled ARM JSON next to the model so the preflight
+// what-if can submit it. Outputs and Resources are promoted from the model.
+type rawModel struct {
+	*armmodel.Model
+	raw []byte
+}
+
+// RawTemplate returns the compiled ARM template JSON.
+func (m rawModel) RawTemplate() []byte { return m.raw }
 
 func bicepReason(err error) string {
 	var te *bicep.ToolError
@@ -411,6 +422,7 @@ func (reportAdapter) Render(w io.Writer, format string, r Report) error {
 	}
 	return report.Write(w, f, r.Findings, report.Run{
 		ToolVersion: ToolVersion, Profile: r.Profile, Skipped: r.Skipped, ExitCode: r.ExitCode,
+		Readiness: r.Readiness,
 	})
 }
 

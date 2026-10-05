@@ -1,0 +1,1 @@
+{"properties":{"roleName":"Contributor","permissions":[{"actions":["*"],"notActions":["Microsoft.Authorization/*/Delete","Microsoft.Authorization/*/Write","Microsoft.Authorization/elevateAccess/Action"],"dataActions":[],"notDataActions":[]}]}}
