@@ -1,0 +1,45 @@
+schema: pack-v1
+id: foundry-core
+version: 1
+description: >-
+  The Phase 1 offline rule set: every catalogue rule allocated to phase 1. FND-SEC-014 is delivered by
+  the Bicep compiler diagnostics path, not by a Go rule.
+rules:
+  - FND-CFG-001
+  - FND-CFG-002
+  - FND-CFG-003
+  - FND-CFG-004
+  - FND-CFG-005
+  - FND-CFG-006
+  - FND-CFG-007
+  - FND-CFG-011
+  - FND-CFG-012
+  - FND-COST-002
+  - FND-ENV-001
+  - FND-ENV-002
+  - FND-ENV-003
+  - FND-ENV-004
+  - FND-IDN-001
+  - FND-IDN-002
+  - FND-IDN-003
+  - FND-IDN-004
+  - FND-IDN-006
+  - FND-NET-001
+  - FND-NET-002
+  - FND-NET-003
+  - FND-NET-004
+  - FND-NET-005
+  - FND-NET-007
+  - FND-NET-008
+  - FND-OPS-004
+  - FND-OPS-005
+  - FND-OPS-007
+  - FND-OPS-009
+  - FND-OPS-010
+  - FND-REL-005
+  - FND-SEC-001
+  - FND-SEC-002
+  - FND-SEC-003
+  - FND-SEC-004
+  - FND-SEC-006
+  - FND-SEC-014
