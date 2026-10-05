@@ -33,10 +33,13 @@ compatibility:
     / 2026-09-01-preview: preview, same property names confirmed) - search/resource-manager/Microsoft.Search/Search/preview//search.json.
 evidence:
   description: >-
-    Compiled ARM or live Microsoft.Search/searchServices: properties.disableLocalAuth is not true. Report which sub-state
-    applies: authOptions.apiKeyOnly present, authOptions.aadOrApiKey present (aadAuthFailureMode value included as context),
-    or neither present. The service is in scope when a Foundry connection, capability host vectorStoreConnections entry
-    or azure.yaml resource reference points at it, otherwise it is reported as out of Foundry scope.
+    Compiled ARM or live Microsoft.Search/searchServices: properties.disableLocalAuth is not true. Report which
+    sub-state applies: authOptions.apiKeyOnly present, authOptions.aadOrApiKey present (aadAuthFailureMode value
+    included as context), or neither present. The service is in scope when a Foundry connection (category
+    CognitiveSearch, compared case-insensitively, or properties.metadata.ResourceId equal to the search service ID), a
+    capability host vectorStoreConnections entry (which names a connection, resolved through that connection), the
+    capabilitySettings.vectorStore ARM ID of an account or project (preview 2026-07-15-preview only) or an azure.yaml
+    resource reference points at it, otherwise it is reported as out of Foundry scope.
   confidence: certain
 recommendation: >-
   Set disableLocalAuth to true and remove authOptions, then assign Entra roles (for example index data roles) to the Foundry
@@ -70,6 +73,36 @@ sources:
   lastVerified: '2026-10-04'
   verifiedVia: refs/psrule/docs/en/rules/Azure.AI.DisableLocalAuth.md
   note: Overlap source (PSRule for Azure rule documentation).
+- url: https://github.com/Azure/azure-rest-api-specs/blob/c415ef063cd4c1833ecceff7f856295115d80c0d/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+  lastVerified: '2026-10-05'
+  verifiedVia: >-
+    refs/rest-api-specs @ c415ef063cd4c1833ecceff7f856295115d80c0d (2026-10-03) cognitiveservices stable/2026-09-01
+    and preview/2026-07-15-preview cognitiveservices.json.
+  note: >-
+    ARM spec stable 2026-09-01: CapabilityHostProperties and ProjectCapabilityHostProperties carry
+    aiServicesConnections, vectorStoreConnections, storageConnections, threadStorageConnections (string arrays of
+    connection names), capabilityHostKind, customerSubnet, enablePublicHostingEnvironment; connections are
+    Microsoft.CognitiveServices/accounts/connections and accounts/projects/connections with ConnectionPropertiesV2
+    (authType, category, target "The connection URL to be used", metadata string map). capabilitySettings
+    (documentStore, vectorStore, blobStore, ARM IDs) exist only in preview 2026-07-15-preview (account and project
+    properties); the 2026-09-01 stable spec has no capabilitySettings.
+- url: https://github.com/MicrosoftDocs/azure-ai-docs/blob/e8d0ac6f7ebd7fd000e287657ab9beda5bccc1fa/articles/foundry/agents/includes/concepts-capability-hosts-content.md
+  lastVerified: '2026-10-05'
+  verifiedVia: >-
+    refs/azure-ai-docs @ e8d0ac6f7ebd7fd000e287657ab9beda5bccc1fa
+    articles/foundry/agents/includes/concepts-capability-hosts-content.md (ms.date 08/21/2026), "Required connection
+    properties"; foundry-samples @ d807d9a0b2e633040d896cd0ddd58c95e14ac6f1
+    infrastructure-setup-bicep/41-standard-agent-setup/modules-standard/ai-project-identity.bicep and
+    add-project-capability-host.bicep.
+  note: >-
+    Legacy (connection) flow, verified: a project or account capability host lists connection NAMES in
+    threadStorageConnections (Cosmos DB), vectorStoreConnections (AI Search), storageConnections (Storage) and
+    aiServicesConnections (Azure OpenAI). A connection ties to the Azure resource through
+    properties.metadata.ResourceId (the full ARM ID, documented as required for Agent Service to resolve the
+    resource); properties.target is the service endpoint URL, not the ID. Connection category strings differ between
+    sources: CognitiveSearch, AzureStorageAccount, and for Cosmos DB the ARM spec enum has CosmosDb, Microsoft samples
+    use CosmosDB (and once CosmosDb) and the Learn article writes AzureCosmosDb; the category is a free string
+    (modelAsString), so compare it case-insensitively and prefer the resource type of metadata.ResourceId.
 overlap:
   decision: adapt
   coverage: partial
@@ -106,7 +139,9 @@ tests:
 testability: >-
   Deterministic on ARM JSON; Foundry scoping needs connection resources in the same compiled template or azd environment.
 notes: >-
-  Default behaviour when disableLocalAuth is absent was not read as a primary-source statement; treat absent as not-disabled,
-  matching the built-in policy which flags notEquals true. The waf basis was removed after the Phase 0 Azure black belt
-  review because no WAF pillar tag or WARA recommendation is cited here; the WAF mapping is added in Phase 4 when the guidance
-  is verified.
+  Default behaviour when disableLocalAuth is absent was not read as a primary-source statement; treat absent as
+  not-disabled, matching the built-in policy which flags notEquals true. The waf basis was removed after the Phase 0
+  Azure black belt review because no WAF pillar tag or WARA recommendation is cited here; the WAF mapping is added in
+  Phase 4 when the guidance is verified. Phase 1 fact check (2026-10-05): the Search-to-Foundry tie is
+  connection.properties.metadata.ResourceId (connection flow) or capabilitySettings.vectorStore (preview), both read
+  from the cited specs and Foundry documentation; the connection target is only the endpoint URL.

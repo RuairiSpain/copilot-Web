@@ -28,13 +28,15 @@ compatibility:
   notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from a changelog and was not verified. Extension ranges are exactly the versions whose schemas or source were read; widen them in Phase 1 by reading older tags."
 evidence:
   description: >-
-    Structural check, not entropy only: for azure.ai.connection with authType in the secret-bearing set
-    (ApiKey, CustomKeys, PAT, AccessKey, AccountKey, SAS, UsernamePassword, OAuth2 client secrets), every
-    credentials value must be a ${VAR} or ${{...}} reference; env values whose key name matches secret naming
-    (key, secret, token, password, pwd, connection string) must be references; target URLs must not contain
-    userinfo or sig/sv/token query parameters; .env files must not be tracked by git. A literal that
-    matches a known secret pattern raises confidence to certain; name-only matches are reported as likely.
-    Bicep and ARM findings are mapped from the Bicep linter, PSRule and Checkov results rather than
+    Structural check, not entropy only: for azure.ai.connection with authType in the secret-bearing set (ApiKey,
+    CustomKeys, PAT, AccessKey, AccountKey, SAS, UsernamePassword, ServicePrincipal, OAuth2), every credentials value
+    must be a ${VAR} or ${{...}} reference (the ARM connection specification 2026-09-01 types these credential fields
+    as passwords: key, keys, pat, sas, secretAccessKey, password, securityToken, clientSecret, developerToken,
+    refreshToken; CustomKeys keys are free-form names, so all of its values are treated as secret-bearing); env values
+    whose key name matches secret naming (key, secret, token, password, pwd, connection string) must be references;
+    target URLs must not contain userinfo or sig/sv/token query parameters; .env files must not be tracked by git. A
+    literal that matches a known secret pattern raises confidence to certain; name-only matches are reported as
+    likely. Bicep and ARM findings are mapped from the Bicep linter, PSRule and Checkov results rather than
     re-derived. Findings never include the value.
   confidence: likely
 recommendation: >-
@@ -68,20 +70,50 @@ sources:
     lastVerified: "2026-10-04"
     verifiedVia: refs/azure-docs/articles/azure-resource-manager/bicep/linter-rule-secure-secrets-in-parameters.md
     note: Bicep linter rule code secure-secrets-in-params.
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/c415ef063cd4c1833ecceff7f856295115d80c0d/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    lastVerified: '2026-10-05'
+    verifiedVia: >-
+      refs/rest-api-specs @ c415ef063cd4c1833ecceff7f856295115d80c0d (2026-10-03): definitions ConnectionAuthType,
+      ConnectionPropertiesV2 and the *AuthTypeConnectionProperties classes with their discriminator values.
+    note: >-
+      ConnectionAuthType enum: PAT, ManagedIdentity, UsernamePassword, None, SAS, AccountKey, ServicePrincipal,
+      AccessKey, ApiKey, CustomKeys, OAuth2, AAD, DelegatedSAS, ProjectManagedIdentity, AccountManagedIdentity,
+      UserEntraToken, AgentUserImpersonation, AgenticIdentityToken, AgenticUser. Types with password-formatted
+      credential fields (x-ms-secret): ApiKey(key), AccountKey(key), AccessKey(secretAccessKey), PAT(pat), SAS(sas),
+      UsernamePassword(password, securityToken), ServicePrincipal(clientSecret), OAuth2(clientSecret, developerToken,
+      password, refreshToken); CustomKeys carries a free-form keys dictionary. ManagedIdentity, AAD and None carry no
+      secret; DelegatedSAS and the identity or token types have no credential class in the specification.
+  - url: https://github.com/Azure/bicep/blob/4d4395e327b32da45ae3d961aa464d28e54d26f7/src/Bicep.Core/Analyzers/Linter/Rules/OutputsShouldNotContainSecretsRule.cs
+    lastVerified: '2026-10-05'
+    verifiedVia: >-
+      Azure/bicep @ 4d4395e327b32da45ae3d961aa464d28e54d26f7 (2026-10-02) src/Bicep.Core/Analyzers/Linter/Rules:
+      OutputsShouldNotContainSecretsRule.cs (Code outputs-should-not-contain-secrets),
+      SecretsInParamsMustBeSecureRule.cs (secure-secrets-in-params), SecureParameterDefaultRule.cs
+      (secure-parameter-default), NoHardcodedEnvironmentUrlsRule.cs (no-hardcoded-env-urls),
+      UseSecureValueForSecureInputsRule.cs (use-secure-value-for-secure-inputs); Learn pages linter-rule-*.md in
+      MicrosoftDocs/azure-docs @ eb1e05d (outputs and secure-secrets pages ms.date 10/30/2025,
+      no-hardcoded-environment-urls ms.date 03/12/2026).
+    note: >-
+      Secret-related rule IDs confirmed: outputs-should-not-contain-secrets (secure params, list* functions, outputs
+      named like password), secure-secrets-in-params (parameter names containing password, pwd, secret, accountkey,
+      acctkey without @secure), secure-parameter-default (hard-coded default on a secure parameter).
+      no-hardcoded-env-urls is about cloud-specific endpoints such as https://management.azure.com, not secrets, and
+      is not mapped. use-secure-value-for-secure-inputs only checks properties.osProfile.adminPassword on virtual
+      machines and scale sets, so it is not mapped for Foundry.
 overlap:
   decision: adapt
   coverage: partial
   rationale: >-
     Bicep/ARM secrets handling is covered by the Bicep linter (secure-secrets-in-params, secure-parameter-default,
-    outputs-should-not-contain-secrets, use-secure-value-for-secure-inputs), PSRule for Azure
-    (Azure.Deployment.SecureParameter, SecureValue, SecretLeak, OutputSecretValue) and Checkov CKV_AZURE_131;
-    Foundry Doctor maps those results and does not re-implement them. None of them read azure.yaml, where
-    azure.ai.connection credentials and service env live; that part is native Foundry-specific evidence.
+    outputs-should-not-contain-secrets), PSRule for Azure (Azure.Deployment.SecureParameter, SecureValue, SecretLeak,
+    OutputSecretValue) and Checkov CKV_AZURE_131; Foundry Doctor maps those results and does not re-implement them.
+    None of them read azure.yaml, where azure.ai.connection credentials and service env live; that part is native
+    Foundry-specific evidence.
   psrule: [Azure.Deployment.SecureParameter, Azure.Deployment.SecureValue, Azure.Deployment.SecretLeak, Azure.Deployment.OutputSecretValue]
   azurePolicy: []
   defender: []
   advisor: []
-  bicepLinter: [secure-secrets-in-params, secure-parameter-default, outputs-should-not-contain-secrets, use-secure-value-for-secure-inputs]
+  bicepLinter: [secure-secrets-in-params, secure-parameter-default, outputs-should-not-contain-secrets]
   checkov: [CKV_AZURE_131, CKV_SECRET_6]
 implementation:
   owner: native
@@ -104,10 +136,15 @@ tests:
     - bicep-cli-missing
     - checkov-not-configured
 notes: >-
-  The Learn guidance conflicts in emphasis: the Foundry reference stores connection secrets in the azd
-  environment via ${VAR} (azd env set), while the azd docs say never to keep secrets in a .env file and
-  recommend azd env set-secret (Key Vault reference). The fix example follows the azd secret guidance.
-  The "secret-bearing authType" set is derived from the authType enum in the connection schema; whether
-  each type carries a secret in credentials is not documented and the set is a product decision.
-  CKV_SECRET_6 is mentioned in the Checkov README only as an example of the secrets framework; its exact
-  semantics were not verified.
+  The Learn guidance conflicts in emphasis: the Foundry reference stores connection secrets in the azd environment via
+  ${VAR} (azd env set), while the azd docs say never to keep secrets in a .env file and recommend azd env set-secret
+  (Key Vault reference). The fix example follows the azd secret guidance. Phase 1 fact check (2026-10-05): the
+  secret-bearing authType set now follows the ARM connection specification 2026-09-01 (ServicePrincipal added;
+  ManagedIdentity, AAD and None have no credentials secret; DelegatedSAS and the Entra or agent token types have no
+  credential class in the specification, so they are not treated as secret-bearing). The azd azure.yaml credentials
+  object is untyped (additionalProperties true), so the credential key names above are the ARM field names, not an
+  azure.yaml schema; name-based detection stays likely. The secret literal patterns (token prefixes) are not taken
+  from any cited source and remain Foundry Doctor heuristics; they raise confidence only.
+  use-secure-value-for-secure-inputs was removed from the mapped Bicep linter rules because it only covers VM
+  adminPassword. CKV_SECRET_6 is mentioned in the Checkov README only as an example of the secrets framework; its
+  exact semantics were not verified.

@@ -38,14 +38,17 @@ compatibility:
     2026-07-15-preview: capabilitySettings.
 evidence:
   description: >-
-    Applies only when FND-NET-001 shows the account is private (publicNetworkAccess Disabled) or networkInjections has scenario
-    agent. Resolve the dependents from capabilitySettings (blobStore, documentStore, vectorStore on the account or project)
-    or, for the legacy flow, the capability host connections. Per dependent: Storage publicNetworkAccess Disabled or networkAcls.defaultAction
-    Deny; Cosmos DB publicNetworkAccess Disabled, or ipRules and virtualNetworkRules with isVirtualNetworkFilterEnabled;
-    Search publicNetworkAccess Disabled; Key Vault publicNetworkAccess Disabled or networkAcls.defaultAction Deny. Then
-    require a Microsoft.Network/privateEndpoints resource with the group ID blob (Storage), Sql (Cosmos DB for NoSQL), searchService
-    (Search) or vault (Key Vault). Report each dependent and the failed sub-check. Skip a dependent whose resource ID is
-    a parameter that cannot be resolved.
+    Applies only when FND-NET-001 shows the account is private (publicNetworkAccess Disabled) or networkInjections has
+    scenario agent. Resolve the dependents from capabilitySettings (blobStore, documentStore, vectorStore ARM IDs on
+    the account or project; preview 2026-07-15-preview only) or, for the legacy flow, from the capability host
+    connection names (threadStorageConnections, vectorStoreConnections, storageConnections) resolved to connections
+    whose properties.metadata.ResourceId is the dependent's ARM ID. Per dependent: Storage publicNetworkAccess
+    Disabled or networkAcls.defaultAction Deny; Cosmos DB publicNetworkAccess Disabled, or ipRules and
+    virtualNetworkRules with isVirtualNetworkFilterEnabled; Search publicNetworkAccess Disabled; Key Vault
+    publicNetworkAccess Disabled or networkAcls.defaultAction Deny. Then require a Microsoft.Network/privateEndpoints
+    resource with the group ID blob (Storage), Sql (Cosmos DB for NoSQL), searchService (Search) or vault (Key Vault).
+    Report each dependent and the failed sub-check. Skip a dependent whose resource ID is a parameter that cannot be
+    resolved.
   confidence: certain
 recommendation: >-
   Disable public network access on the Storage, Cosmos DB and AI Search resources that back the agents and give each a private
@@ -99,6 +102,54 @@ sources:
   note: >-
     Property names publicNetworkAccess, networkAcls.defaultAction, isVirtualNetworkFilterEnabled, ipRules, virtualNetworkRules
     read in each spec.
+- url: https://github.com/Azure/azure-rest-api-specs/blob/c415ef063cd4c1833ecceff7f856295115d80c0d/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+  lastVerified: '2026-10-05'
+  verifiedVia: >-
+    refs/rest-api-specs @ c415ef063cd4c1833ecceff7f856295115d80c0d (2026-10-03) cognitiveservices stable/2026-09-01
+    and preview/2026-07-15-preview; cosmos-db DocumentDB/stable/2026-03-15/openapi.json, storage
+    Microsoft.Storage/stable/2026-09-01/openapi.json and search stable/2025-05-01/search.json definitions
+    PublicNetworkAccess.
+  note: >-
+    ARM spec stable 2026-09-01: CapabilityHostProperties and ProjectCapabilityHostProperties carry
+    aiServicesConnections, vectorStoreConnections, storageConnections, threadStorageConnections (string arrays of
+    connection names), capabilityHostKind, customerSubnet, enablePublicHostingEnvironment; connections are
+    Microsoft.CognitiveServices/accounts/connections and accounts/projects/connections with ConnectionPropertiesV2
+    (authType, category, target "The connection URL to be used", metadata string map). capabilitySettings
+    (documentStore, vectorStore, blobStore, ARM IDs) exist only in preview 2026-07-15-preview (account and project
+    properties); the 2026-09-01 stable spec has no capabilitySettings. publicNetworkAccess enum is Enabled, Disabled,
+    SecuredByPerimeter in Cosmos DB 2026-03-15, Storage 2026-09-01 and Search 2025-05-01; Cosmos networkAclBypass enum
+    is None, AzureServices.
+- url: https://github.com/MicrosoftDocs/azure-ai-docs/blob/e8d0ac6f7ebd7fd000e287657ab9beda5bccc1fa/articles/foundry/agents/includes/concepts-capability-hosts-content.md
+  lastVerified: '2026-10-05'
+  verifiedVia: >-
+    refs/azure-ai-docs @ e8d0ac6f7ebd7fd000e287657ab9beda5bccc1fa
+    articles/foundry/agents/includes/concepts-capability-hosts-content.md (ms.date 08/21/2026), "Required connection
+    properties"; foundry-samples @ d807d9a0b2e633040d896cd0ddd58c95e14ac6f1
+    infrastructure-setup-bicep/41-standard-agent-setup/modules-standard/ai-project-identity.bicep and
+    add-project-capability-host.bicep.
+  note: >-
+    Legacy (connection) flow, verified: a project or account capability host lists connection NAMES in
+    threadStorageConnections (Cosmos DB), vectorStoreConnections (AI Search), storageConnections (Storage) and
+    aiServicesConnections (Azure OpenAI). A connection ties to the Azure resource through
+    properties.metadata.ResourceId (the full ARM ID, documented as required for Agent Service to resolve the
+    resource); properties.target is the service endpoint URL, not the ID. Connection category strings differ between
+    sources: CognitiveSearch, AzureStorageAccount, and for Cosmos DB the ARM spec enum has CosmosDb, Microsoft samples
+    use CosmosDB (and once CosmosDb) and the Learn article writes AzureCosmosDb; the category is a free string
+    (modelAsString), so compare it case-insensitively and prefer the resource type of metadata.ResourceId.
+- url: https://github.com/MicrosoftDocs/azure-docs/blob/eb1e05deecc53c7a1a192453a3b8183e45f73c10/articles/private-link/private-endpoint-dns.md
+  lastVerified: '2026-10-05'
+  verifiedVia: >-
+    MicrosoftDocs/azure-docs main @ eb1e05deecc53c7a1a192453a3b8183e45f73c10 (2026-10-04),
+    articles/private-link/private-endpoint-dns.md (ms.date 08/11/2026), fetched from raw.githubusercontent.com on
+    2026-10-05 (path absent from the sparse local clone).
+  note: >-
+    Private endpoint group IDs and zones: Cosmos DB Sql -> privatelink.documents.azure.com (SqlDedicated ->
+    privatelink.sqlx.cosmos.azure.com, MongoDB, Cassandra, Gremlin and Table have their own zones); Storage blob and
+    blob_secondary -> privatelink.blob.core.windows.net, table/table_secondary, queue/queue_secondary, file,
+    web/web_secondary and dfs/dfs_secondary have their own privatelink.<service>.core.windows.net zones; Search
+    searchService -> privatelink.search.windows.net; Key Vault vault -> privatelink.vaultcore.azure.net; Foundry Tools
+    account -> privatelink.cognitiveservices.azure.com, privatelink.openai.azure.com,
+    privatelink.services.ai.azure.com.
 overlap:
   decision: adapt
   coverage: partial
@@ -147,8 +198,12 @@ tests:
   - managed-virtual-network-mode
   - dependent-resource-id-unresolvable-parameter
 notes: >-
-  Unverified: Cosmos DB publicNetworkAccess enum values (only the property name was read); exact storage group IDs beyond
-  blob (the Foundry doc only lists blob); Defender/Advisor IDs. The Foundry doc says the agent state stores are required
-  for the standard setup; platform-managed data resources (networking-options) are an alternative, in which case there are
-  no dependents and the rule is skipped. The waf basis was removed after the Phase 0 Azure black belt review because no
-  WAF pillar tag or WARA recommendation is cited here; the WAF mapping is added in Phase 4 when the guidance is verified.
+  Phase 1 fact check (2026-10-05): Cosmos DB publicNetworkAccess enum values are Enabled, Disabled, SecuredByPerimeter
+  (2026-03-15); the Storage and Search enums are identical. Storage private endpoint group IDs beyond blob are blob,
+  table, queue, file, web, dfs (plus *_secondary), so a Storage dependent needs the group ID for the service the
+  agents use, and the Foundry document only requires blob; the rule keeps blob as the required group for Foundry file
+  storage. Still unverified: Defender/Advisor IDs. The Foundry doc says the agent state stores are required for the
+  standard setup; platform-managed data resources (networking-options) are an alternative, in which case there are no
+  dependents and the rule is skipped. The waf basis was removed after the Phase 0 Azure black belt review because no
+  WAF pillar tag or WARA recommendation is cited here; the WAF mapping is added in Phase 4 when the guidance is
+  verified.

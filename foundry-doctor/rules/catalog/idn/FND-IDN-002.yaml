@@ -35,27 +35,25 @@ compatibility:
   notes: "Not version dependent; reads compiled ARM JSON and ARM role assignments (azd 1.36.0-beta.1 clone checked) Microsoft.Authorization/roleAssignments 2022-04-01: roleDefinitionId, principalId, principalType, scope. Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments 2025-10-15: roleDefinitionId, scope, principalId. Microsoft.CognitiveServices/accounts 2026-07-15-preview: properties.capabilitySettings.documentStore, vectorStore, blobStore; CapabilitySettings definition read in cognitiveservices.json."
 evidence:
   description: >-
-    Resolve the project principal: identity.principalId of the project (system-assigned) or the
-    principalId of each identity in identity.userAssignedIdentities. Resolve the stores from the
-    account capability settings (documentStore, vectorStore, blobStore) or the project connections.
-    For each store, require an assignment for that principal whose roleDefinitionId ends with the
-    GUID of a documented role and whose scope is the store, its parent or the container named in the
-    docs. Role GUIDs (Azure built-in roles reference, ms.date 07/01/2026): Search Index Data
-    Contributor 8ebe5a00-799e-43f5-93ac-243d3dce84a7; Search Service Contributor
-    7ca78c08-252a-4471-8644-bb5ff32d4ba0; Storage Blob Data Contributor
-    ba92f5b4-2d11-453d-a403-e96b0029c9fe; Storage Blob Data Owner
-    b7e6dc6d-f1e8-4753-8033-0f276bb0955b; Storage Account Contributor
-    17d1049b-9a84-46fb-8f53-869881c3d3ab; Cosmos DB Operator
-    230815da-be43-4aae-9cb4-875f7bd000aa; Foundry User 53ca6127-db72-4b80-b1b0-d745d6d5456d;
-    Container Registry Repository Reader b93aa761-3e63-49ed-ac28-beffa264f7ac; AcrPull
-    7f951dda-4ed3-4680-a7ca-43fe172d538d; Log Analytics Data Reader
-    3b03c2da-16b3-4a49-8834-0f8130efdd3b. The Cosmos DB Built-in Data Contributor role is a Cosmos
-    SQL role, so look for a Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments resource for the
-    principal on the database, not an Azure RBAC assignment. Fail when a required data role is
-    missing for a store the project uses (Storage Account Contributor is reported as info only). Emit uncertain in Phase 1 when the scope depends on the
-    project workspace ID (the container names contain it) or the principal is a module output that
-    cannot be resolved; Phase 2 resolves them from live data. Do not fail on a role granted through
-    a group when group membership cannot be read; report skipped with the missing permission.
+    Resolve the project principal: identity.principalId of the project (system-assigned) or the principalId of each
+    identity in identity.userAssignedIdentities. Resolve the stores from the account capability settings
+    (documentStore, vectorStore, blobStore) or the project connections. For each store, require an assignment for that
+    principal whose roleDefinitionId ends with the GUID of a documented role and whose scope is the store, its parent
+    or the container named in the docs. Role GUIDs (Azure built-in roles reference, ms.date 07/01/2026): Search Index
+    Data Contributor 8ebe5a00-799e-43f5-93ac-243d3dce84a7; Search Service Contributor
+    7ca78c08-252a-4471-8644-bb5ff32d4ba0; Storage Blob Data Contributor ba92f5b4-2d11-453d-a403-e96b0029c9fe; Storage
+    Blob Data Owner b7e6dc6d-f1e8-4753-8033-0f276bb0955b; Storage Account Contributor
+    17d1049b-9a84-46fb-8f53-869881c3d3ab; Cosmos DB Operator 230815da-be43-4aae-9cb4-875f7bd000aa; Foundry User
+    53ca6127-db72-4b80-b1b0-d745d6d5456d; Container Registry Repository Reader b93aa761-3e63-49ed-ac28-beffa264f7ac;
+    AcrPull 7f951dda-4ed3-4680-a7ca-43fe172d538d; Log Analytics Data Reader 3b03c2da-16b3-4a49-8834-0f8130efdd3b. The
+    Cosmos DB Built-in Data Contributor role is a Cosmos SQL role, so look for a
+    Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments resource for the principal on the database, not an Azure
+    RBAC assignment; match a roleDefinitionId that ends in /sqlRoleDefinitions/00000000-0000-0000-0000-000000000002
+    (the id used by Microsoft's Foundry samples, see notes) and report that match with likely confidence. Fail when a
+    required data role is missing for a store the project uses (Storage Account Contributor is reported as info only).
+    Emit uncertain in Phase 1 when the scope depends on the project workspace ID (the container names contain it) or
+    the principal is a module output that cannot be resolved; Phase 2 resolves them from live data. Do not fail on a
+    role granted through a group when group membership cannot be read; report skipped with the missing permission.
   confidence: likely
 recommendation: >-
   Assign the project managed identity the documented data roles on each store before agents run:
@@ -98,6 +96,47 @@ sources:
     lastVerified: "2026-10-04"
     verifiedVia: refs/rest-api-specs/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2025-10-15/rbac.json
     note: SqlRoleAssignmentResource has roleDefinitionId, scope and principalId.
+  - url: https://github.com/MicrosoftDocs/azure-docs/blob/eb1e05deecc53c7a1a192453a3b8183e45f73c10/articles/role-based-access-control/built-in-roles.md
+    lastVerified: '2026-10-05'
+    verifiedVia: >-
+      MicrosoftDocs/azure-docs main @ eb1e05deecc53c7a1a192453a3b8183e45f73c10 (2026-10-04),
+      articles/role-based-access-control/built-in-roles.md (ms.date 09/10/2026), fetched from
+      raw.githubusercontent.com on 2026-10-05; each GUID matched against the role-name column of the table. The local
+      clone does not contain this path (sparse checkout), so the file was fetched directly.
+    note: >-
+      Verified GUIDs (name -> id): Search Index Data Contributor 8ebe5a00-799e-43f5-93ac-243d3dce84a7; Search Service
+      Contributor 7ca78c08-252a-4471-8644-bb5ff32d4ba0; Storage Blob Data Contributor
+      ba92f5b4-2d11-453d-a403-e96b0029c9fe; Storage Blob Data Owner b7e6dc6d-f1e8-4753-8033-0f276bb0955b; Storage
+      Account Contributor 17d1049b-9a84-46fb-8f53-869881c3d3ab; Cosmos DB Operator
+      230815da-be43-4aae-9cb4-875f7bd000aa; DocumentDB Account Contributor 5bd9cd88-fe45-4216-938b-f97437e15450;
+      Foundry User 53ca6127-db72-4b80-b1b0-d745d6d5456d; Foundry Owner c883944f-8b7b-4483-af10-35834be79c4a; Foundry
+      Account Owner e47c6f54-e4a2-4754-9501-8e0985b135e1; Container Registry Repository Reader
+      b93aa761-3e63-49ed-ac28-beffa264f7ac; AcrPull 7f951dda-4ed3-4680-a7ca-43fe172d538d; Log Analytics Data Reader
+      3b03c2da-16b3-4a49-8834-0f8130efdd3b. Foundry Agent Consumer is not in this reference.
+  - url: https://github.com/MicrosoftDocs/azure-ai-docs/blob/e8d0ac6f7ebd7fd000e287657ab9beda5bccc1fa/articles/foundry/concepts/rbac-foundry.md
+    lastVerified: '2026-10-05'
+    verifiedVia: >-
+      refs/azure-ai-docs @ e8d0ac6f7ebd7fd000e287657ab9beda5bccc1fa (2026-10-03)
+      articles/foundry/concepts/rbac-foundry.md lines 105-135 and agents/concepts/hosted-agent-permissions.md.
+    note: >-
+      Foundry Agent Consumer role definition ID eed3b665-ab3a-47b6-8f48-c9382fb1dad6 is stated in the Foundry RBAC
+      article ("assigns the Foundry Agent Consumer role (role definition ID ...)"), with az role assignment examples,
+      but the role is absent from the Azure built-in roles reference read above. It is a caller role for agent
+      endpoints, not a data role of the project identity.
+  - url: https://github.com/microsoft-foundry/foundry-samples/blob/d807d9a0b2e633040d896cd0ddd58c95e14ac6f1/infrastructure/infrastructure-setup-bicep/41-standard-agent-setup/modules-standard/cosmos-container-role-assignments.bicep
+    lastVerified: '2026-10-05'
+    verifiedVia: >-
+      microsoft-foundry/foundry-samples @ d807d9a0b2e633040d896cd0ddd58c95e14ac6f1 (2026-10-01, MIT)
+      infrastructure/infrastructure-setup-bicep/41-standard-agent-setup/modules-standard/cosmos-container-role-assignments.bicep;
+      the same id appears in at least five other sample folders; READMEs in infrastructure-setup-terraform name the
+      role "Cosmos DB Built-in Data Contributor".
+    note: >-
+      The Cosmos DB SQL role definition id 00000000-0000-0000-0000-000000000002 is used as
+      resourceId(Microsoft.DocumentDB/databaseAccounts/sqlRoleDefinitions, <account>,
+      00000000-0000-0000-0000-000000000002) with sqlRoleAssignments scope dbs/enterprise_memory (apiVersion
+      2022-05-15). This ties the id to the Foundry role by usage only; the Cosmos DB RBAC article that names the id
+      was not readable (Microsoft Learn blocked, source repo not reachable), so the mapping is corroborated, not
+      primary-verified.
 overlap:
   decision: native
   coverage: none
@@ -138,16 +177,15 @@ tests:
   uncertain:
     - container-scope-uses-workspace-id-expression
 notes: >-
-  Unverified: the Cosmos DB Built-in Data Contributor SQL role definition GUID (the Azure RBAC
-  built-in roles reference does not list Cosmos data-plane roles and no local Cosmos doc was
-  available); match it by resolving the sqlRoleDefinitions name, or add it once read from the Cosmos
-  DB RBAC article. Unverified: the Foundry Agent Consumer role GUID eed3b665-ab3a-47b6-8f48-c9382fb1dad6
-  appears only in the Foundry RBAC article, not in the built-in roles reference. Documentation
-  inconsistency: the standard agent setup article names the containers
-  workspaceId-azureml-blobstore and workspaceId-azureml-agent while the administrator guide names
-  azureml-blobstore and agents-blobstore; the rule accepts a role at storage account scope for either
-  until the container naming is confirmed. The same article lists Storage Account Contributor at
-  account level for the system-assigned identity while the capability settings article lists only
-  data roles; the rule reports a missing Storage Account Contributor as an info note, not a failure,
-  until a reviewer confirms it is required. The capability settings property names were read in the
-  2026-07-15-preview spec (preview API; recheck before implementation).
+  Phase 1 fact check (2026-10-05): all Azure RBAC GUIDs in the evidence were re-matched to role names in the built-in
+  roles reference (ms.date 09/10/2026). The Cosmos DB Built-in Data Contributor SQL role id
+  00000000-0000-0000-0000-000000000002 is corroborated by Microsoft samples only (Cosmos DB RBAC article not
+  readable); accept a sqlRoleDefinitions entry whose roleName is "Cosmos DB Built-in Data Contributor" as an
+  equivalent match. The Foundry Agent Consumer GUID eed3b665-ab3a-47b6-8f48-c9382fb1dad6 is documented in the Foundry
+  RBAC article, not in the built-in roles reference. Documentation inconsistency: the standard agent setup article
+  names the containers workspaceId-azureml-blobstore and workspaceId-azureml-agent while the administrator guide names
+  azureml-blobstore and agents-blobstore; the rule accepts a role at storage account scope for either until the
+  container naming is confirmed. The same article lists Storage Account Contributor at account level for the
+  system-assigned identity while the capability settings article lists only data roles; the rule reports a missing
+  Storage Account Contributor as an info note, not a failure, until a reviewer confirms it is required. The capability
+  settings property names were read in the 2026-07-15-preview spec (preview API; recheck before implementation).
