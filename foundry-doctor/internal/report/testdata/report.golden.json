@@ -1,0 +1,197 @@
+{
+  "schemaVersion": "1",
+  "tool": {
+    "name": "foundry-doctor",
+    "version": "0.1.0-test"
+  },
+  "profile": "foundry-prod",
+  "effectivePolicy": {
+    "allowedExternalScopes": [
+      "rg-shared",
+      "rg-hub"
+    ],
+    "apiToken": "[redacted]",
+    "nested": {
+      "clientSecret": "[redacted]",
+      "retries": 3
+    },
+    "resourceScope": "same-resource-group",
+    "validation": {
+      "azure": "optional",
+      "bicep": "required"
+    }
+  },
+  "tools": [
+    {
+      "name": "bicep",
+      "path": "bicep",
+      "version": "0.47.16",
+      "state": "available",
+      "required": true
+    },
+    {
+      "name": "psrule",
+      "state": "missing",
+      "required": false,
+      "detail": "not installed"
+    }
+  ],
+  "findings": [
+    {
+      "ruleId": "FND-SYS-INVALID-AZURE-YAML",
+      "ruleVersion": 0,
+      "severity": "error",
+      "category": "",
+      "profile": "foundry-prod",
+      "location": {
+        "file": "azure.yaml"
+      },
+      "evidence": "azure.yaml failed to parse",
+      "recommendation": "Fix the YAML.",
+      "confidence": "certain",
+      "baselined": false,
+      "fingerprint": "fp1:dddddddddddddddddddddddddddddddd"
+    },
+    {
+      "ruleId": "FND-SEC-002",
+      "ruleVersion": 1,
+      "severity": "error",
+      "category": "must-have",
+      "pillar": "security",
+      "basis": [
+        "platform",
+        "docs"
+      ],
+      "profile": "foundry-prod",
+      "resource": {
+        "kind": "arm-resource",
+        "type": "Microsoft.CognitiveServices/accounts",
+        "name": "aiservices",
+        "id": "/subscriptions/x/resourceGroups/rg/providers/p/n",
+        "pointer": "/properties/disableLocalAuth"
+      },
+      "location": {
+        "file": "infra/main.bicep",
+        "line": 12,
+        "column": 5,
+        "endLine": 14,
+        "endColumn": 2,
+        "pointer": "/resources/0"
+      },
+      "evidence": "disableLocalAuth is false\nsecond line",
+      "recommendation": "Set disableLocalAuth to true.",
+      "fix": "disableLocalAuth: true",
+      "docsUrl": "https://learn.microsoft.com/azure/ai-services/",
+      "lastVerified": "2026-10-05",
+      "confidence": "certain",
+      "baselined": false,
+      "fingerprint": "fp1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "adapter": "native",
+      "key": "disableLocalAuth"
+    },
+    {
+      "ruleId": "FND-NET-001",
+      "ruleVersion": 2,
+      "severity": "warning",
+      "category": "nice-to-have",
+      "pillar": "security",
+      "basis": [
+        "product-opinion"
+      ],
+      "profile": "foundry-prod",
+      "resource": {
+        "kind": "arm-resource",
+        "type": "Microsoft.CognitiveServices/accounts",
+        "name": "aiservices"
+      },
+      "location": {
+        "file": "infra/main.bicep",
+        "line": 40,
+        "column": 3
+      },
+      "evidence": "Pipe | in text and \u003cb\u003ehtml\u003c/b\u003e and [link](http://evil.example)",
+      "recommendation": "Review the setting.",
+      "confidence": "likely",
+      "baselined": false,
+      "fingerprint": "fp1:0123456789abcdef0123456789abcdef",
+      "key": "second"
+    },
+    {
+      "ruleId": "FND-SEC-002",
+      "ruleVersion": 1,
+      "severity": "error",
+      "category": "must-have",
+      "profile": "foundry-prod",
+      "location": {
+        "file": "infra/other.bicep",
+        "line": 3
+      },
+      "evidence": "Unicode 日本語 and emoji 😀 and ANSI \u001b[31mred\u001b[0m",
+      "recommendation": "Fix it.",
+      "confidence": "certain",
+      "suppressed": {
+        "reason": "accepted risk",
+        "expires": "2027-01-01",
+        "owner": "team-a",
+        "source": ".foundry-doctor/suppressions.yaml"
+      },
+      "baselined": false,
+      "fingerprint": "fp1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    {
+      "ruleId": "FND-ENV-003",
+      "ruleVersion": 1,
+      "severity": "info",
+      "category": "nice-to-have",
+      "profile": "foundry-prod",
+      "resource": {
+        "kind": "env-key",
+        "name": "AZURE_LOCATION"
+      },
+      "evidence": "Key AZURE_LOCATION is unset",
+      "recommendation": "Set it.",
+      "confidence": "uncertain",
+      "baselined": true,
+      "fingerprint": "fp1:cccccccccccccccccccccccccccccccc"
+    }
+  ],
+  "skipped": [
+    {
+      "ruleId": "FND-IDN-004",
+      "ruleVersion": 1,
+      "reason": "profile-key-missing:policy.allowedExternalScopes",
+      "missingCapability": "profile key policy.allowedExternalScopes"
+    },
+    {
+      "ruleId": "FND-IDN-005",
+      "ruleVersion": 3,
+      "reason": "profile-key-missing:policy.allowedExternalScopes"
+    },
+    {
+      "ruleId": "FND-NET-009",
+      "ruleVersion": 1,
+      "reason": "missing-input",
+      "detail": "no compiled ARM",
+      "missingCapability": "compiled ARM template",
+      "resource": {
+        "kind": "project",
+        "name": "demo"
+      }
+    }
+  ],
+  "summary": {
+    "info": 0,
+    "warning": 1,
+    "error": 2,
+    "suppressed": 1,
+    "baselined": 1,
+    "skipped": 3,
+    "passed": 40,
+    "hidden": 4,
+    "skippedByReason": {
+      "missing-input": 1,
+      "profile-key-missing:policy.allowedExternalScopes": 2
+    }
+  },
+  "exitCode": 1
+}
