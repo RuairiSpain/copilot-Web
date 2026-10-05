@@ -1,0 +1,73 @@
+foundry-doctor 0.1.0-test
+Profile: foundry-prod
+Effective policy:
+  allowedExternalScopes = [rg-shared, rg-hub]
+  apiToken = [redacted]
+  nested.clientSecret = [redacted]
+  nested.retries = 3
+  resourceScope = same-resource-group
+  validation.azure = optional
+  validation.bicep = required
+Tools:
+  bicep 0.47.16: available (required)
+  psrule : missing (optional) - not installed
+
+Findings (5)
+  azure.yaml
+    error
+      FND-SYS-INVALID-AZURE-YAML [certain]
+        evidence: azure.yaml failed to parse
+        recommendation: Fix the YAML.
+        fingerprint: fp1:dddddddddddddddddddddddddddddddd
+  infra/main.bicep
+    error
+      FND-SEC-002 @12:5 [certain]
+        resource: Microsoft.CognitiveServices/accounts aiservices /properties/disableLocalAuth
+        evidence: disableLocalAuth is false
+          second line
+        recommendation: Set disableLocalAuth to true.
+        fix: disableLocalAuth: true
+        docs: https://learn.microsoft.com/azure/ai-services/
+        fingerprint: fp1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    warning
+      FND-NET-001 @40:3 [likely]
+        resource: Microsoft.CognitiveServices/accounts aiservices
+        evidence: Pipe | in text and <b>html</b> and [link](http://evil.example)
+        recommendation: Review the setting.
+        fingerprint: fp1:0123456789abcdef0123456789abcdef
+  infra/other.bicep
+    error
+      FND-SEC-002 @3 [certain] [suppressed until 2027-01-01]
+        evidence: Unicode 日本語 and emoji 😀 and ANSI red
+        recommendation: Fix it.
+        suppression reason: accepted risk
+        fingerprint: fp1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  (no file)
+    info
+      FND-ENV-003 [uncertain] [baselined]
+        resource: AZURE_LOCATION
+        evidence: Key AZURE_LOCATION is unset
+        recommendation: Set it.
+        fingerprint: fp1:cccccccccccccccccccccccccccccccc
+
+Skipped checks (3)
+  FND-IDN-004: profile-key-missing:policy.allowedExternalScopes
+    missing capability: profile key policy.allowedExternalScopes
+  FND-IDN-005: profile-key-missing:policy.allowedExternalScopes
+  FND-NET-009: missing-input
+    missing capability: compiled ARM template
+    detail: no compiled ARM
+    resource: demo
+
+Owner summary
+  Errors: 2  Warnings: 1  Info: 0
+  Suppressed: 1  Baselined: 1
+  Skipped: 3  Hidden by --min-severity: 4
+  Top rules:
+    FND-SEC-002: 1 (error)
+    FND-SYS-INVALID-AZURE-YAML: 1 (error)
+    FND-NET-001: 1 (warning)
+  Rules skipped because a profile key is missing:
+    profile-key-missing:policy.allowedExternalScopes: FND-IDN-004, FND-IDN-005
+  Exit code: 1
+  Skipped is not passed: a skipped check was not evaluated and says nothing about the project.
