@@ -30,7 +30,7 @@ Date: 2026-10-05. Reviewers are independent agents that did not author the work 
   `preview` must be true when a prerelease or preview API is involved. A version outside a range means the rule is skipped (`unsupported-version`), never passed.
 - **`adapt` and `native` decisions require owner `native`**; `wrap` and `reuse` require an external owner. Enforced by the validator.
 - **Read-only has a definition** (ADR-006): not "no POST", but "cannot create, modify, delete, start, stop, purge or recover a resource and cannot read secrets or content".
-- **Core and extension are separate Go modules** (ADR-005) because `azdext` needs Go 1.26.4 while the core is `go 1.24`.
+- **Core and extension are separate Go modules** (ADR-005) because `azdext` needs Go 1.26.4 while the core is `go 1.25.8`.
 
 ## Rule catalogue changes
 
