@@ -1,6 +1,6 @@
 # ADR-007: Profile configuration keys
 
-Status: Proposed (the project owner delegated the key choices to the implementer on 2026-10-05; Foundry lead review requested, first draft rejected and revised)
+Status: Accepted (the project owner delegated the key choices to the implementer on 2026-10-05; the Foundry lead rejected the first draft and approved the revision)
 Date: 2026-10-05
 
 ## Context
@@ -16,8 +16,8 @@ requirement or a fact. The PRD does not name the keys, so each rule left them op
 
 1. **All organisation-supplied requirements live under `policy:`**, next to the two keys the PRD defines. They are not CLI flags and not
    rule-pack data, because they differ per organisation and per environment.
-2. **A rule that needs a key and does not find one is `skipped`** with the reason `profile-key-missing:<key>`, listed in the report
-   summary. It is never passed and never failed on the strength of a guessed value (PRD section 2 and `CLAUDE.md`).
+2. **A rule that needs a key and does not find one is `skipped`** with the reason `profile-key-missing:<key>`, naming the key that is missing
+   (for example `policy.dataResidency.regions` when only `scope` is set), listed in the report summary. It is never passed and never failed on the strength of a guessed value (PRD section 2 and `CLAUDE.md`).
 3. **Where a rule already has a baseline of its own, the key only adjusts it.** The baseline is not a guess; it is the rule's documented behaviour.
    The effective value of every key, including baselines, is printed in the report header as "effective policy".
 4. **Environment-specific values** go under `environments.<name>.policy`, which is the "environment-specific configuration" layer of the PRD
