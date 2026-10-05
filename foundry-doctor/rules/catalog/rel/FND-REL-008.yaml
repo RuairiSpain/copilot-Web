@@ -1,0 +1,93 @@
+id: FND-REL-008
+version: 1
+group: REL
+title: Provisioned throughput spillover recommendation
+description: A provisioned-throughput model deployment (sku.name ProvisionedManaged, GlobalProvisionedManaged or DataZoneProvisionedManaged)
+  should set spilloverDeploymentName to a standard deployment of the same model in the same account, or the application should
+  send the x-ms-spillover-deployment header per request. Learn recommends spillover for global and data zone provisioned deployments.
+  Spillover is optional and adds pay-as-you-go cost, so this is a recommendation.
+status: verified
+phases:
+- '4'
+inputs:
+- bicep-arm
+- control-plane
+basis:
+- reliability
+- waf
+- wara
+category: nice-to-have
+pillar: reliability
+severity:
+  dev: info
+  test: info
+  prod: warning
+compatibility:
+  azd: ""
+  extensions: {}
+  apiVersions:
+    - "Microsoft.CognitiveServices/accounts/deployments 2026-05-01"
+    - "Microsoft.CognitiveServices/accounts/deployments 2024-10-01"
+  preview: false
+  notes: "No azd dependency: reads compiled ARM JSON or ARM control plane Microsoft.CognitiveServices/accounts/deployments 2026-05-01 / 2024-10-01: stable) - properties.spilloverDeploymentName in cognitiveservices.json; Learn REST example uses."
+evidence:
+  description: 'Compiled ARM or live Microsoft.CognitiveServices/accounts/deployments. In scope when sku.name is one of the
+    provisioned names read in the Learn article (ProvisionedManaged, GlobalProvisionedManaged, DataZoneProvisionedManaged).
+    Finding: properties.spilloverDeploymentName unset. When set, check (platform-documented precondition, reported as part
+    of this rule) that the named deployment exists in the same account and is a standard deployment of the same model and
+    version. Per-request header use (x-ms-spillover-deployment) is application behaviour and invisible to the doctor, so an
+    unset property is reported at the stated severity with a note that request-level spillover may be in use; confidence is
+    likely.'
+  confidence: likely
+recommendation: Create a standard (pay-as-you-go) deployment of the same model and version in the same account, then set spilloverDeploymentName
+  on the provisioned deployment to its name. Spillover initiates on 429, 500 and 503 (and on 400 for long-context requests)
+  and is billed at standard rates for the overflow; monitor with the IsSpillover split in Azure Monitor.
+fix: "resource ptu 'Microsoft.CognitiveServices/accounts/deployments@2026-05-01' = {\n  parent: foundry\n  name: 'gpt-4o-mini-ptu'\n\
+  \  sku: { name: 'GlobalProvisionedManaged', capacity: 100 }\n  properties: {\n    model: { format: 'OpenAI', name: 'gpt-4o-mini',\
+  \ version: '2024-07-18' }\n    spilloverDeploymentName: 'gpt-4o-mini-standard'\n  }\n  dependsOn: [ standard ]\n}"
+sources:
+- url: https://learn.microsoft.com/azure/foundry/openai/how-to/spillover-traffic-management
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-ai-docs/articles/foundry/openai/how-to/spillover-traffic-management.md and includes/how-to-spillover-traffic-management-1.md,
+    -2.md (ms.date 06/18/2026)
+  note: spilloverDeploymentName property, same-resource standard deployment requirement, trigger status codes, header alternative,
+    cost.
+- url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-05-01/cognitiveservices.json
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-05-01/cognitiveservices.json
+  note: DeploymentProperties.spilloverDeploymentName description.
+- url: https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/CognitiveServices/accounts/recommendations.yaml
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/wara (git show HEAD:azure-resources/CognitiveServices/accounts/recommendations.yaml)
+  note: WARA 0c193899-da60-4a52-b4a0-77d75ac8c5c5 (PAYG instance to manage overflow), pgVerified true.
+overlap:
+  decision: native
+  coverage: none
+  rationale: No PSRule for Azure rule, Azure Policy built-in, Checkov check or Advisor recommendation was found for spilloverDeploymentName.
+    WARA 0c193899 is the matching recommendation but WARA is a query-based recommendation set, not a Foundry Doctor input.
+    Foundry-specific correlation (deployment SKU, same-account standard deployment of the same model) is the value.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/rel
+tests:
+  positive:
+  - provisioned deployment with spilloverDeploymentName naming an existing standard deployment of the same model passes
+  negative:
+  - GlobalProvisionedManaged deployment without spilloverDeploymentName reports missing spillover
+  - spilloverDeploymentName names a deployment that does not exist in the account
+  skipped:
+  - 'standard (non-provisioned) deployment: out of scope'
+  - 'no control-plane access in live mode: skipped with the missing capability'
+  uncertain:
+  - 'unset property while application may use the per-request header: reported with the note'
+  - spilloverDeploymentName is an unresolved expression
+testability: Unit tests on compiled ARM fixtures; live mode tests use recorded deployment list responses.
+notes: The Learn example payload shows spilloverDeploymentName at properties level with an API version of 2024-10-01; the
+  stable spec 2026-05-01 was used for the property description. Whether spillover supports a given provisioned SKU or model
+  beyond the global and data zone recommendation is not asserted.

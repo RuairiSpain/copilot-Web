@@ -1,0 +1,139 @@
+id: FND-COST-001
+version: 1
+group: COST
+title: Budget and alerts exist
+description: >-
+  The subscription or resource group that hosts a test or production Foundry deployment should have an Azure Cost Management
+  budget with at least one enabled notification that reaches a person or an action group. Budgets notify; they do not stop
+  spending or affect resources. Whether a budget is required is a Foundry Doctor recommendation, not a platform rule.
+status: product-opinion
+phases:
+- '2'
+- '7'
+inputs:
+- bicep-arm
+- control-plane
+basis:
+- cost
+- opinion
+category: nice-to-have
+pillar: cost
+severity:
+  dev: info
+  test: info
+  prod: warning
+compatibility:
+  azd: '>=1.34.2 <=1.36.0-beta.1'
+  extensions: {}
+  apiVersions:
+  - '2023-11-01'
+  - '2026-06-01'
+  preview: true
+  notes: >-
+    azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects
+    beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from
+    a changelog and was not verified.
+evidence:
+  description: >-
+    Phase 2, offline - in the compiled ARM template, a Microsoft.Consumption/budgets extension resource at subscription
+    or resource-group scope with properties.category Cost, a positive amount, a timeGrain, a timePeriod.startDate, and a
+    notifications object that contains at least one entry with enabled true, an operator, a threshold (a percentage between
+    0 and 1000 per the specification) and a contact (contactEmails, contactRoles or contactGroups; contactGroups are accepted
+    only at subscription or resource-group scope). Report - no budget resource; budget scope that does not contain the Foundry
+    resource group; no enabled notification; no Forecasted notification (thresholdType Forecasted) as a separate lower-severity
+    finding; more than five notifications (the dictionary allows up to five). Phase 7, control plane - list budgets on the
+    subscription and resource group with the Budgets API and apply the same checks. A budget managed outside the repository
+    is reported as skipped unless the control plane is available. Budget amounts are never judged.
+  confidence: likely
+recommendation: >-
+  Add a Microsoft.Consumption/budgets resource for the subscription or resource group with an actual-cost notification (for
+  example 80 percent) and a forecasted-cost notification, sent to a mailbox or an action group that someone monitors.
+fix: |
+  targetScope = 'subscription'
+
+  resource budget 'Microsoft.Consumption/budgets@2023-11-01' = {
+    name: 'foundry-monthly'
+    properties: {
+      category: 'Cost'
+      amount: 500
+      timeGrain: 'Monthly'
+      timePeriod: { startDate: '2026-11-01T00:00:00Z' }
+      notifications: {
+        actual80: {
+          enabled: true
+          operator: 'GreaterThan'
+          threshold: 80
+          thresholdType: 'Actual'
+          contactEmails: [ 'finops@contoso.example' ]
+        }
+      }
+    }
+  }
+sources:
+- url: >-
+    https://github.com/Azure/azure-rest-api-specs/tree/main/specification/consumption/resource-manager/Microsoft.Consumption/Consumption/stable/2023-11-01
+  lastVerified: '2026-10-04'
+  verifiedVia: >-
+    refs/rest-api-specs/specification/consumption/resource-manager/Microsoft.Consumption/Consumption/stable/2023-11-01/consumption.json
+    (2026-06-01/openapi.json also read, same budget properties)
+  note: >-
+    BudgetProperties required category (enum Cost), amount, timeGrain, timePeriod; notifications up to five; Notification
+    properties enabled, operator (EqualTo, GreaterThan, GreaterThanOrEqualTo), threshold (percent, 0 to 1000), contactEmails,
+    contactRoles, contactGroups (subscription or resource group only), thresholdType (Actual, Forecasted).
+- url: https://learn.microsoft.com/azure/cost-management-billing/costs/quick-create-budget-bicep
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-docs/articles/cost-management-billing/costs/quick-create-budget-bicep.md
+  note: >-
+    Budgets notify only - resources are not affected and consumption is not stopped; supported scopes; start date must be
+    the first of the month. Page ms.date 06/26/2025.
+- url: https://learn.microsoft.com/azure/cost-management-billing/costs/tutorial-acm-create-budgets
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-docs/articles/cost-management-billing/costs/tutorial-acm-create-budgets.md
+  note: >-
+    Subscription and resource-group scopes; action groups supported at those scopes only; evaluation is on actual cost,
+    not amortised cost.
+- url: https://learn.microsoft.com/azure/foundry/concepts/manage-costs
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-ai-docs/articles/foundry/concepts/manage-costs.md
+  note: >-
+    Foundry cost guidance refers to comparing against budgets and alerts for spending anomalies with Cost Management. Page
+    ms.date 08/27/2026.
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    No PSRule rule, Azure Policy built-in, Bicep linter rule or Checkov check was found that requires a Microsoft.Consumption/budgets
+    resource (searched the clones by resource type name and by the word budget). The only PSRule hit for budget is an unrelated
+    Dev Box project limit. Defender for Cloud and Advisor were not verifiable; Advisor cost recommendations are a different
+    signal (see FND-COST-004 and the fragment).
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/cost
+testability: Phase 2 is offline against fixture ARM JSON; phase 7 uses a recorded Budgets API list. No spend data is read.
+tests:
+  positive:
+  - no-budget-in-template
+  - budget-without-enabled-notification
+  - budget-scope-excludes-foundry-resource-group
+  - budget-has-no-forecasted-notification
+  negative:
+  - subscription-budget-with-actual-and-forecasted-notifications
+  - resource-group-budget-with-action-group
+  skipped:
+  - budget-managed-outside-repository
+  - control-plane-unavailable
+  - dev-profile
+notes: >-
+  Product opinion: the platform documentation describes how to create budgets but no source requires one. Unverified - the
+  contact requirement per scope (the specification marks contactEmails required while its description allows an action group
+  at subscription and resource group scope, so the rule accepts either); whether an extension resource budget scoped to
+  a resource group in Bicep needs a module with scope; budget API behaviour for management-group, billing-account and Microsoft
+  Customer Agreement scopes, which are out of scope for this rule. The waf basis was removed after the Phase 0 Azure black
+  belt review because no WAF pillar tag or WARA recommendation is cited here; the WAF mapping is added in Phase 4 when the
+  guidance is verified.

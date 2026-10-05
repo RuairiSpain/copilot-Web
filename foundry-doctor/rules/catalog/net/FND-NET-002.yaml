@@ -1,0 +1,154 @@
+id: FND-NET-002
+version: 1
+group: NET
+title: Dependent services public access/default-deny/private endpoints
+description: >-
+  When a Foundry account is deployed in a private mode (public access disabled, or agent network injection), the services
+  that hold its data must be private too: the Storage, Azure Cosmos DB and Azure AI Search resources referenced by the agent
+  capability settings (or capability host connections), plus a Key Vault, container registry or Application Insights/AMPLS
+  the deployment connects. For each, the rule checks publicNetworkAccess, the firewall default action and that a private
+  endpoint with the correct group ID exists. Foundry does not create these endpoints for you, so a private Foundry in front
+  of public data stores is the usual mistake.
+status: verified
+phases:
+- '1'
+inputs:
+- bicep-arm
+- control-plane
+basis:
+- security
+category: must-have
+pillar: security
+severity:
+  dev: warning
+  test: error
+  prod: error
+compatibility:
+  azd: ''
+  extensions: {}
+  apiVersions:
+  - Microsoft.CognitiveServices/accounts 2026-07-15-preview
+  - Microsoft.Storage/storageAccounts 2026-09-01
+  - Microsoft.DocumentDB/databaseAccounts 2026-03-15
+  - Microsoft.Search/searchServices 2025-05-01
+  - Microsoft.KeyVault/vaults 2026-05-15
+  preview: true
+  notes: >-
+    Not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked) Microsoft.CognitiveServices/accounts
+    2026-07-15-preview: capabilitySettings.
+evidence:
+  description: >-
+    Applies only when FND-NET-001 shows the account is private (publicNetworkAccess Disabled) or networkInjections has scenario
+    agent. Resolve the dependents from capabilitySettings (blobStore, documentStore, vectorStore on the account or project)
+    or, for the legacy flow, the capability host connections. Per dependent: Storage publicNetworkAccess Disabled or networkAcls.defaultAction
+    Deny; Cosmos DB publicNetworkAccess Disabled, or ipRules and virtualNetworkRules with isVirtualNetworkFilterEnabled;
+    Search publicNetworkAccess Disabled; Key Vault publicNetworkAccess Disabled or networkAcls.defaultAction Deny. Then
+    require a Microsoft.Network/privateEndpoints resource with the group ID blob (Storage), Sql (Cosmos DB for NoSQL), searchService
+    (Search) or vault (Key Vault). Report each dependent and the failed sub-check. Skip a dependent whose resource ID is
+    a parameter that cannot be resolved.
+  confidence: certain
+recommendation: >-
+  Disable public network access on the Storage, Cosmos DB and AI Search resources that back the agents and give each a private
+  endpoint in the private endpoint subnet, with its private DNS zone (FND-NET-003). Do not rely on the Foundry template
+  to create them; the Foundry documentation states it does not.
+fix: |
+  resource search 'Microsoft.Search/searchServices@2025-05-01' = {
+    name: searchName
+    location: location
+    sku: { name: 'standard' }
+    properties: { publicNetworkAccess: 'Disabled' }
+  }
+  resource searchPe 'Microsoft.Network/privateEndpoints@2024-05-01' = {
+    name: '${searchName}-pe'
+    location: location
+    properties: {
+      subnet: { id: peSubnetId }
+      privateLinkServiceConnections: [{
+        name: 'search'
+        properties: { privateLinkServiceId: search.id, groupIds: ['searchService'] }
+      }]
+    }
+  }
+sources:
+- url: https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/includes/how-to-virtual-networks-content.md (ms.date 09/28/2026)
+  note: >-
+    Private endpoints to Search, Storage and Cosmos DB are not auto-created; verify step confirms public network access
+    Disabled on each; group IDs per DNS zone table.
+- url: https://learn.microsoft.com/azure/foundry/agents/concepts/networking-options
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/networking-options.md (ms.date 06/29/2026)
+  note: Private endpoints and private DNS zones for the account and each data resource you bring.
+- url: https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup
+  lastVerified: '2026-10-04'
+  verifiedVia: >-
+    refs/azure-ai-docs/articles/foundry/agents/includes/concepts-standard-agent-setup-content.md (ms.date 09/09/2026)
+  note: Standard setup brings Storage, Cosmos DB and AI Search; capability settings reference their resource IDs.
+- url: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/preview/2026-07-15-preview/cognitiveservices.json
+  lastVerified: '2026-10-04'
+  verifiedVia: >-
+    refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/preview/2026-07-15-preview/cognitiveservices.json
+  note: CapabilitySettings documentStore, vectorStore, blobStore (ARM IDs) on account and project.
+- url: >-
+    https://github.com/Azure/azure-rest-api-specs/tree/main/specification/storage/resource-manager/Microsoft.Storage/stable/2026-09-01
+  lastVerified: '2026-10-04'
+  verifiedVia: >-
+    refs/rest-api-specs/specification/{storage,cosmos-db,search,keyvault}/resource-manager (openapi.json / search.json)
+  note: >-
+    Property names publicNetworkAccess, networkAcls.defaultAction, isVirtualNetworkFilterEnabled, ipRules, virtualNetworkRules
+    read in each spec.
+overlap:
+  decision: adapt
+  coverage: partial
+  rationale: >-
+    PSRule (Azure.Storage.Firewall, Azure.KeyVault.Firewall, Azure.Cosmos.PublicAccess, Azure.ACR.Firewall), the per-service
+    built-in policies and Checkov already test each dependent in isolation. PSRule for Azure has no rule for Azure AI Search
+    public access in the local clone. Foundry Doctor adds the correlation none of them can: which stores are the agent's
+    dependents (from capabilitySettings), whether the Foundry side is private, and that the endpoint group ID is the right
+    one. Evidence differs: those tools evaluate any resource; this rule evaluates only resources tied to a private Foundry
+    account and fails on the pair.
+  psrule:
+  - Azure.Storage.Firewall
+  - Azure.KeyVault.Firewall
+  - Azure.Cosmos.PublicAccess
+  - Azure.ACR.Firewall
+  azurePolicy:
+  - ee980b6d-0eca-4501-8d54-f6290fd512c3 (Azure AI Search services should disable public network access)
+  - b2982f36-99f2-4db5-8eff-283140c09693 (Storage accounts should disable public network access)
+  - 797b37f7-06b8-444c-b1ad-fc62867f335a (Azure Cosmos DB should disable public network access)
+  - 405c5871-3e91-4644-8a63-58e19d68ff5b (Azure Key Vault should disable public network access)
+  - 0fdf0491-d080-4575-b627-ad0e843cba0f (Public network access should be disabled for Container registries)
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov:
+  - CKV_AZURE_35
+  - CKV_AZURE_101
+  - CKV_AZURE_109
+  - CKV_AZURE_189
+implementation:
+  owner: native
+  package: internal/rules/net
+testability: >-
+  Offline with fixtures that contain account, dependents and endpoints in one template. Live mode reads each dependent by
+  resource ID. Cross-template endpoints make the endpoint sub-check skipped.
+tests:
+  positive:
+  - private-account-with-public-storage
+  - private-account-with-search-public-and-no-endpoint
+  - cosmos-endpoint-uses-wrong-group-id
+  negative:
+  - all-three-dependents-disabled-with-endpoints
+  - storage-default-deny-with-blob-endpoint
+  skipped:
+  - foundry-account-is-public
+  - managed-virtual-network-mode
+  - dependent-resource-id-unresolvable-parameter
+notes: >-
+  Unverified: Cosmos DB publicNetworkAccess enum values (only the property name was read); exact storage group IDs beyond
+  blob (the Foundry doc only lists blob); Defender/Advisor IDs. The Foundry doc says the agent state stores are required
+  for the standard setup; platform-managed data resources (networking-options) are an alternative, in which case there are
+  no dependents and the rule is skipped. The waf basis was removed after the Phase 0 Azure black belt review because no
+  WAF pillar tag or WARA recommendation is cited here; the WAF mapping is added in Phase 4 when the guidance is verified.

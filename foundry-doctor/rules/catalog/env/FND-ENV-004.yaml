@@ -1,0 +1,66 @@
+id: FND-ENV-004
+version: 1
+group: ENV
+title: "Informational difference summary"
+description: >-
+  Summarise how two or more azd environments of the project differ so that reviewers can see intended and accidental
+  differences before promotion: keys present in only some environments, keys whose values differ, and which differing
+  keys are environment-bound. Informational only; never fails a run.
+status: product-opinion
+phases: ["1"]
+inputs: ["azd-env", "azure.yaml"]
+basis: ["opinion"]
+category: nice-to-have
+pillar: operations
+severity:
+  dev: info
+  test: info
+  prod: info
+compatibility:
+  azd: ">=1.34.2 <=1.36.0-beta.1"
+  extensions: {}
+  apiVersions: []
+  preview: true
+  notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from a changelog and was not verified."
+evidence:
+  description: >-
+    Compute the key-level difference of two or more .azure/<env>/.env files and the azure.yaml after per-environment
+    substitution. Output lists key names with one of: only-in-A, only-in-B, differs, same. Values are not printed;
+    differing values are shown as salted hash fingerprints, and keys that look secret-bearing are shown by name only.
+  confidence: certain
+recommendation: >-
+  Review the summary before promoting a release; use azd env get-values per environment for the details you are
+  entitled to see.
+fix: |
+  foundry-doctor compare --env dev --env prod
+sources:
+  - url: https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azd-docs/articles/azure-developer-cli/environments-overview.md
+    note: Environment layout (.azure/<env>/.env) that the comparison reads.
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    Environment comparison is the product's compare command; nothing in PSRule, Policy, Defender or Advisor does it.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/env
+testability: Offline over local environment files; deterministic ordering and fingerprints keep golden output stable.
+tests:
+  positive:
+    - key-only-in-one-environment
+    - value-differs-between-environments
+  negative:
+    - identical-environments
+  skipped:
+    - single-environment-visible
+notes: >-
+  Product opinion; this rule emits a summary, not pass/fail findings. The "foundry-doctor compare" command name in the
+  fix example is a placeholder for the product command and the public namespace is decided by ADR-003.

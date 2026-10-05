@@ -1,0 +1,79 @@
+id: FND-SEC-011
+version: 1
+group: SEC
+title: Controlled outbound egress informational
+description: 'Informational report on the outbound network posture of a Foundry deployment: managed network isolationMode
+  (Disabled | AllowInternetOutbound | AllowOnlyApprovedOutbound), account restrictOutboundNetworkAccess with allowedFqdnList,
+  and azure.yaml network.isolationMode on the azure.ai.project service. It surfaces whether outbound egress is controlled;
+  it never fails.'
+status: verified
+phases:
+- '4'
+inputs:
+- bicep-arm
+- azure.yaml
+- control-plane
+basis:
+- security
+category: nice-to-have
+pillar: security
+severity:
+  dev: info
+  test: info
+  prod: info
+compatibility:
+  azd: ">=1.36.0-beta.1 <=1.36.0-beta.1"
+  extensions:
+    azure.ai.agents: ">=1.0.0-beta.18 <=1.0.0-beta.18"
+  apiVersions:
+    - "Microsoft.CognitiveServices/accounts 2026-09-01"
+  preview: true
+  notes: "azd verified at exactly 1.36.0-beta.1. Extension ranges are exactly the versions whose schemas or source were read; widen them in Phase 1 by reading older tags. Microsoft.CognitiveServices/accounts 2026-09-01 / 2026-09-01: stable) - cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable//cognitiveservices.json (AccountProperties.restrictOutboundNetworkAccess, allowedFqdnList; ManagedNetworkSettings.isolationMode."
+evidence:
+  description: 'Compiled ARM or live account: properties.restrictOutboundNetworkAccess (boolean) and properties.allowedFqdnList;
+    ManagedNetworkSettings.isolationMode value; azure.yaml services of host azure.ai.project: network.isolationMode
+    (docs: valid only when agentSubnet is omitted; AllowInternetOutbound or AllowOnlyApprovedOutbound) and network.agentSubnet.
+    Outputs one Info line per account summarising the posture; no Fail state.'
+  confidence: likely
+recommendation: If you need to control data exfiltration, set the managed network to AllowOnlyApprovedOutbound or
+  restrict outbound access with an allowed FQDN list, and confirm required dependencies are reachable. Otherwise
+  record the decision.
+fix: "# azure.yaml (azure.ai.project service)\nnetwork:\n  peSubnet:\n    vnet: ${VNET_RESOURCE_ID}\n    name: private-endpoint-subnet\n\
+  \  isolationMode: AllowOnlyApprovedOutbound"
+sources:
+- url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+  note: AccountProperties.restrictOutboundNetworkAccess, allowedFqdnList; definitions IsolationMode and ManagedNetworkSettings.
+- url: https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/azure-yaml-reference.md
+  note: '''network'' section: isolationMode values and peSubnet/agentSubnet.'
+overlap:
+  decision: native
+  coverage: none
+  rationale: No PSRule, Checkov, Bicep linter or Defender rule evaluates Foundry account outbound restriction or
+    managed-network isolation, and the reviewed Azure Policy built-ins mention outbound restriction only for SQL
+    (SqlEnableOutboundNetworkingRestrictions). Correlating the azure.yaml network block with the ARM properties
+    is Foundry-specific, hence native.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/sec
+tests:
+  positive:
+  - 'isolationMode AllowOnlyApprovedOutbound reports Info: controlled egress'
+  negative:
+  - 'isolationMode Disabled or AllowInternetOutbound reports Info: egress not restricted (never an error)'
+  skipped:
+  - no network block and no ARM account in scope is skipped
+  - 'uncertain: restrictOutboundNetworkAccess true with an empty allowedFqdnList is reported uncertain (effect not
+    verified)'
+testability: Deterministic on azure.yaml and ARM JSON; always informational.
+notes: Whether restrictOutboundNetworkAccess is honoured for Foundry accounts is not stated in the spec description
+  (property has no description); treat as configuration evidence only.

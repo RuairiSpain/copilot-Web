@@ -1,0 +1,101 @@
+id: FND-CFG-007
+version: 1
+group: CFG
+title: Outbound endpoints use HTTPS and reject unsafe local/metadata targets
+description: >-
+  Outbound endpoint URLs configured in azure.yaml (azure.ai.connection target, azure.ai.toolbox tools entries and endpoint,
+  azure.ai.project endpoint, MCP server URLs, agent env values that are URLs) should use https. Targets that point at loopback,
+  link-local or cloud-metadata addresses (localhost, 127.0.0.0/8, ::1, 169.254.0.0/16 including 169.254.169.254, and private-network
+  literals) are reported because a hosted agent or toolbox runs remotely and cannot reach a developer machine, and such
+  targets are server-side request forgery risks.
+status: product-opinion
+phases:
+- '1'
+inputs:
+- azure.yaml
+basis:
+- security
+- opinion
+category: must-have
+pillar: security
+severity:
+  dev: info
+  test: warning
+  prod: error
+compatibility:
+  azd: '>=1.34.2 <=1.36.0-beta.1'
+  extensions:
+    azure.ai.agents: '>=1.0.0-beta.18 <=1.0.0-beta.18'
+    azure.ai.connections: '>=1.0.0-beta.9 <=1.0.0-beta.9'
+    azure.ai.toolboxes: '>=1.0.0-beta.9 <=1.0.0-beta.9'
+  apiVersions: []
+  preview: true
+  notes: >-
+    azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects
+    beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from
+    a changelog and was not verified. Extension ranges are exactly the versions whose schemas or source were read; widen
+    them in Phase 1 by reading older tags.
+evidence:
+  description: >-
+    Parse each URL-typed field. Values that use environment substitution are not expanded: only the literal portions and
+    the scheme are inspected. Report scheme other than https, and hosts that are IP literals or names in the loopback, link-local,
+    metadata (169.254.169.254, metadata.google.internal, fd00:ec2::254) or RFC 1918 ranges. URLs that are wholly a ${VAR}
+    reference are reported as skipped. Local development URLs (http://localhost:8088) used only by azd ai agent run are
+    not read from azure.yaml and are not flagged.
+  confidence: certain
+recommendation: >-
+  Use https endpoints reachable from the service that calls them. For internal servers, publish them on a private endpoint
+  or an internal Container Apps ingress and use their private DNS name over https instead of an IP literal. Remove localhost
+  and metadata addresses from deployed configuration.
+fix: |
+  services:
+    github-conn:
+      host: azure.ai.connection
+      category: RemoteTool
+      target: https://api.githubcopilot.com/mcp
+sources:
+- url: https://learn.microsoft.com/azure/foundry/agents/how-to/tools/model-context-protocol
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/tools/model-context-protocol.md
+  note: >-
+    Agent Service runtime only accepts a remote MCP server endpoint; local MCP servers must be self-hosted. Treat tool descriptions
+    and results as untrusted.
+- url: https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/azure-yaml-reference.md
+  note: Connection target is an endpoint URL or ARM resource ID; examples use https.
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    PSRule for Azure HTTPS rules (for example Azure.AppService.UseHTTPS, Azure.APIM.HTTPEndpoint, Azure.AppGw.UseHTTPS)
+    test the transport settings of specific Azure resources, and the Bicep linter no-hardcoded-env-urls tests cloud-specific
+    hostnames; neither inspects Foundry connection or toolbox targets in azure.yaml. No Policy, Defender or Advisor equivalent
+    was found for azure.yaml content.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/cfg
+testability: Fully offline; URL parsing only. No DNS resolution is performed.
+tests:
+  positive:
+  - connection-target-http
+  - mcp-tool-url-localhost
+  - target-metadata-ip-169-254-169-254
+  - target-private-ip-literal
+  negative:
+  - connection-target-https
+  - target-is-arm-resource-id
+  skipped:
+  - target-is-env-reference-only
+  - target-resolved-only-at-deploy
+notes: >-
+  Product opinion: no primary source states that http targets are rejected or that metadata addresses are blocked. The only
+  platform fact used is that the Agent Service runtime accepts only remote MCP endpoints. Whether the service itself blocks
+  loopback or metadata destinations is undocumented in the clones and is not inferred. Cross-cloud sovereign endpoints are
+  out of scope.

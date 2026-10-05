@@ -1,0 +1,112 @@
+id: FND-SEC-002
+version: 1
+group: SEC
+title: AI Search key authentication disabled or RBAC-only
+description: >-
+  An Azure AI Search service used by a Foundry project should not accept admin or query API keys. The rule passes when properties.disableLocalAuth
+  is true. properties.authOptions.aadOrApiKey (keys and Entra both accepted) and authOptions.apiKeyOnly (keys only) are
+  findings; the platform rejects setting disableLocalAuth true together with authOptions.
+status: verified
+phases:
+- '1'
+inputs:
+- bicep-arm
+- control-plane
+basis:
+- security
+category: must-have
+pillar: security
+severity:
+  dev: warning
+  test: error
+  prod: error
+compatibility:
+  azd: ''
+  extensions: {}
+  apiVersions:
+  - Microsoft.Search/searchServices 2025-05-01
+  - Microsoft.Search/searchServices 2026-09-01-preview
+  preview: true
+  notes: >-
+    No azd dependency: reads compiled ARM JSON or ARM control plane Microsoft.Search/searchServices 2025-05-01 / 2025-05-01:
+    stable) - search/resource-manager/Microsoft.Search/Search/stable//search.json. Microsoft.Search/searchServices 2026-09-01-preview
+    / 2026-09-01-preview: preview, same property names confirmed) - search/resource-manager/Microsoft.Search/Search/preview//search.json.
+evidence:
+  description: >-
+    Compiled ARM or live Microsoft.Search/searchServices: properties.disableLocalAuth is not true. Report which sub-state
+    applies: authOptions.apiKeyOnly present, authOptions.aadOrApiKey present (aadAuthFailureMode value included as context),
+    or neither present. The service is in scope when a Foundry connection, capability host vectorStoreConnections entry
+    or azure.yaml resource reference points at it, otherwise it is reported as out of Foundry scope.
+  confidence: certain
+recommendation: >-
+  Set disableLocalAuth to true and remove authOptions, then assign Entra roles (for example index data roles) to the Foundry
+  project identity. If a migration needs keys temporarily, use authOptions.aadOrApiKey with aadAuthFailureMode and track
+  removal with a suppression expiry.
+fix: |-
+  resource search 'Microsoft.Search/searchServices@2025-05-01' = {
+    name: searchName
+    location: location
+    sku: { name: 'standard' }
+    properties: {
+      disableLocalAuth: true
+    }
+  }
+sources:
+- url: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
+  lastVerified: '2026-10-04'
+  verifiedVia: >-
+    refs/rest-api-specs/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
+  note: >-
+    SearchServiceProperties.disableLocalAuth, authOptions (DataPlaneAuthOptions: apiKeyOnly | aadOrApiKey.aadAuthFailureMode);
+    descriptions state the two are mutually exclusive.
+- url: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/preview/2026-09-01-preview/search.json
+  lastVerified: '2026-10-04'
+  verifiedVia: >-
+    refs/rest-api-specs/specification/search/resource-manager/Microsoft.Search/Search/preview/2026-09-01-preview/search.json
+  note: Same property names present in 2026-09-01-preview.
+- url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.AI.DisableLocalAuth/
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/psrule/docs/en/rules/Azure.AI.DisableLocalAuth.md
+  note: Overlap source (PSRule for Azure rule documentation).
+overlap:
+  decision: adapt
+  coverage: partial
+  rationale: >-
+    PSRule for Azure has no Azure Search local-auth rule in the reviewed clone (only IndexSLA, QuerySLA, SKU, ManagedIdentity,
+    Name, Naming), so there is no tool-level duplicate in PSRule. Azure Policy 6300012e (audit/deny), 4eb216f2 (modify)
+    and d45520cb (DINE) test only disableLocalAuth notEquals true. Foundry Doctor adds the authOptions sub-state (aadOrApiKey
+    versus apiKeyOnly), Foundry-scoped applicability through connections and capability hosts, and per-profile severity.
+    Hence adapt rather than reuse.
+  psrule: []
+  azurePolicy:
+  - 6300012e-e9a4-4649-b41f-a85f5c43be91
+  - 4eb216f2-9dba-4979-86e6-5d7e63ce3b75
+  - d45520cb-31ca-44ba-8da2-fcf914608544
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/sec
+tests:
+  positive:
+  - disableLocalAuth true passes
+  - service not referenced by Foundry is reported out of scope, not failed
+  negative:
+  - disableLocalAuth absent and authOptions absent fails
+  - authOptions.aadOrApiKey fails with sub-state aadOrApiKey
+  - authOptions.apiKeyOnly fails with sub-state apiKeyOnly
+  skipped:
+  - disableLocalAuth from unresolved parameter is skipped
+  - >-
+    uncertain: service referenced only through a connection defined outside the scanned files is reported uncertain
+testability: >-
+  Deterministic on ARM JSON; Foundry scoping needs connection resources in the same compiled template or azd environment.
+notes: >-
+  Default behaviour when disableLocalAuth is absent was not read as a primary-source statement; treat absent as not-disabled,
+  matching the built-in policy which flags notEquals true. The waf basis was removed after the Phase 0 Azure black belt
+  review because no WAF pillar tag or WARA recommendation is cited here; the WAF mapping is added in Phase 4 when the guidance
+  is verified.

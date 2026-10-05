@@ -1,0 +1,116 @@
+id: FND-OPS-004
+version: 1
+group: OPS
+title: "Required tags exist"
+description: >-
+  Resources and resource groups in the Foundry stack (Foundry account, project, model deployments, Search, API
+  Management, Storage, Cosmos DB, Application Insights, Log Analytics) should carry the tags that the organisation
+  requires, such as environment, owner and cost centre. The required tag names, optional value formats and the
+  resource types in scope come from the active profile. Tags support cost allocation and incident triage.
+status: product-opinion
+phases: ["1"]
+inputs: ["bicep-arm"]
+basis: ["operations", "waf", "opinion"]
+category: nice-to-have
+pillar: operations
+severity:
+  dev: info
+  test: warning
+  prod: warning
+compatibility:
+  azd: ">=1.34.2 <=1.36.0-beta.1"
+  extensions: {}
+  apiVersions:
+    - "2026-09-01"
+  preview: true
+  notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from a changelog and was not verified."
+evidence:
+  description: >-
+    In the compiled ARM template, for each in-scope resource that supports tags, check that the resolved tags object
+    contains every tag name required by the profile (names compared case-insensitively, because Azure treats tag names
+    as case-insensitive for operations; values are case-sensitive) and, when a format is configured for a tag, that the
+    resolved literal value matches it. Also report a tags object with more than 50 name-value pairs, a tag name longer
+    than 512 characters or a value longer than 256 characters (128 for tag names on storage accounts). Foundry account,
+    project and deployment resources have a tags property in the 2026-09-01 specification. Tags that are only supplied by
+    Azure Policy (modify or inherit effects) or that depend on unresolved parameters are reported as skipped, not as
+    missing. With no required tag configured in the profile the rule is skipped, not passed.
+  confidence: likely
+recommendation: >-
+  Define the required tags once (for example in a Bicep user-defined type), pass them to every resource, and enforce
+  them at runtime with Azure Policy (Require a tag on resources). Foundry Doctor reports where the template omits them.
+fix: |
+  @description('Tags required by the organisation.')
+  param tags requiredTags
+  type requiredTags = { Env: string, CostCode: string }
+
+  resource account 'Microsoft.CognitiveServices/accounts@2026-09-01' = {
+    name: accountName
+    location: location
+    kind: 'AIServices'
+    sku: { name: 'S0' }
+    tags: tags
+  }
+sources:
+  - url: https://learn.microsoft.com/azure/azure-resource-manager/management/tag-resources
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-docs/articles/azure-resource-manager/management/tag-resources.md
+    note: Limits - 50 tag name-value pairs per resource, resource group and subscription; tag name 512 characters, value 256 (storage accounts, name 128); tag names are case-insensitive for operations and values are case-sensitive.
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    note: Account, Project and Deployment definitions extend ProxyResource and define tags.
+  - url: https://learn.microsoft.com/azure/foundry/concepts/manage-costs
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/concepts/manage-costs.md
+    note: Cost analysis can be filtered by deployment tags and user-defined tags; Foundry projects carry an automatic project tag on usage. Page ms.date 08/27/2026.
+  - url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.Resource.RequiredTags/
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/psrule/docs/en/rules/Azure.Resource.RequiredTags.md
+    note: PSRule AZURE_RESOURCE_REQUIRED_TAGS (case-sensitive names) and AZURE_TAG_FORMAT_FOR_<TAG_NAME>; WAF OE:04. Azure.Resource.UseTags (CO:03) only checks that some tag exists.
+overlap:
+  decision: adapt
+  coverage: partial
+  rationale: >-
+    PSRule Azure.Resource.RequiredTags with a configured tag list already gives equivalent evidence for required tag
+    names and formats on any taggable resource, and Azure.Resource.UseTags checks only that a tag exists;
+    Azure.Group.RequiredTags and Azure.Subscription.RequiredTags cover resource groups and subscriptions. Azure Policy
+    built-ins enforce tags at runtime (871b6d14-10aa-478d-b590-94f262ecfa99 require a tag on resources,
+    1e30110a-5ceb-460c-a204-c1c3969c6d62 require a tag and its value, 96670d01-0a4d-4649-9c89-2d3abc0a5025 on resource
+    groups). Foundry Doctor adapts the idea so it runs without the PSRule runtime, takes the required list from the
+    Foundry Doctor profile per environment, scopes it to the Foundry stack, and reports tag-limit violations. It does not
+    redefine the generic check; users who run PSRule can map this ID to Azure.Resource.RequiredTags.
+  psrule: [Azure.Resource.RequiredTags, Azure.Resource.UseTags, Azure.Group.RequiredTags, Azure.Subscription.RequiredTags]
+  azurePolicy:
+    - 871b6d14-10aa-478d-b590-94f262ecfa99
+    - 1e30110a-5ceb-460c-a204-c1c3969c6d62
+    - 96670d01-0a4d-4649-9c89-2d3abc0a5025
+    - 8ce3da23-7156-49e4-b145-24f95f9dcb46
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/ops
+testability: >-
+  Offline against fixture ARM JSON with literal, parameter-derived and union() tag expressions.
+tests:
+  positive:
+    - account-without-required-tag
+    - tag-value-fails-configured-format
+    - tag-name-differs-only-by-case-is-accepted-but-wrong-value-fails
+    - more-than-fifty-tags
+    - storage-account-tag-name-over-128-characters
+  negative:
+    - all-required-tags-present-on-every-in-scope-resource
+    - tags-supplied-through-union-of-common-tags
+  skipped:
+    - no-required-tags-in-profile
+    - tags-depend-on-unresolved-parameter
+    - resource-type-does-not-support-tags
+notes: >-
+  Product opinion: no source says which tags are required; only the limits and the case rules are platform facts.
+  Unverified: which resource types support tags (tag-support.md was not read for each type; the rule skips types
+  that the template shows without a tags property in the schema). The azd convention tags azd-env-name on the resource
+  group and azd-service-name on service resources are documented as azd discovery inputs (tooling-environment-faq.md)
+  and are better covered by a deployment rule; see the proposed new rules in docs/overlap/ops-cost.md.

@@ -1,0 +1,93 @@
+id: FND-CFG-009
+version: 1
+group: CFG
+title: "Cron expressions are valid"
+description: >-
+  Recurring routine triggers must carry a valid 5-field cron expression whose interval is at least
+  five minutes, and a time_zone that is a valid IANA or Windows time zone identifier. The azure.ai.routine
+  schema and the Learn reference name the trigger type and cron key differently (see notes); the rule accepts
+  the documented spellings.
+status: verified
+phases: ["later"]
+inputs: ["azure.yaml"]
+basis: ["platform"]
+category: must-have
+pillar: reliability
+severity:
+  dev: error
+  test: error
+  prod: error
+compatibility:
+  azd: ">=1.34.2 <=1.36.0-beta.1"
+  extensions:
+    azure.ai.routines: ">=1.0.0-beta.8 <=1.0.0-beta.8"
+  apiVersions: []
+  preview: true
+  notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from a changelog and was not verified. Extension ranges are exactly the versions whose schemas or source were read; widen them in Phase 1 by reading older tags."
+evidence:
+  description: >-
+    For triggers of type schedule or recurring, read cron_expression (or cron) and check it has exactly five
+    fields with valid ranges, evaluate the next firings over a week and report an interval below five
+    minutes, and check time_zone against the IANA tz database and the Windows zone list. Expressions
+    containing ${VAR} are skipped.
+  confidence: certain
+recommendation: >-
+  Use a standard five-field cron expression that fires no more often than every five minutes and set
+  time_zone to a valid identifier.
+fix: |
+  services:
+    daily-summary:
+      host: azure.ai.routine
+      uses: [summarizer]
+      triggers:
+        weekday-morning:
+          type: schedule
+          cron_expression: "0 7 * * 1-5"
+          time_zone: UTC
+      action:
+        type: invoke_agent_responses_api
+        agent_name: summarizer
+sources:
+  - url: https://learn.microsoft.com/azure/foundry/agents/how-to/use-routines
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/use-routines.md
+    note: "Schedule trigger: 5-field cron expression, minimum interval five minutes, time_zone IANA or Windows identifier."
+  - url: https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/extensions/azure.ai.routines/schemas/azure.ai.routine.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.routines/schemas/azure.ai.routine.json
+    note: Trigger keys cron_expression, type recurring/timer; cron string only, no format constraint.
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    The azd schemas only type cron as a string. No external tool validates Foundry routine schedules.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/cfg
+testability: Fully offline; deterministic cron evaluation with a fixed reference date in tests.
+tests:
+  positive:
+    - six-field-cron
+    - every-minute-cron
+    - invalid-time-zone
+    - field-out-of-range
+  negative:
+    - weekday-morning-utc
+    - every-five-minutes
+  skipped:
+    - cron-from-env-reference
+    - non-schedule-trigger
+notes: >-
+  Unverified, preview inconsistencies: the Learn trigger table uses type schedule and cron_expression, the azd manifest
+  example on the same page uses key cron, the azd routine schema lists type recurring (and the CLI example uses
+  --trigger recurring), and agents/schemas/Routine.json uses cron under type schedule. Learn marks time_zone required
+  in the REST field table but the azd example says omit it to interpret cron in UTC. Which spellings azd accepts in
+  azure.yaml is not confirmed; the rule accepts all of them and treats a missing time_zone as UTC with an info note.
+  Cron dialect details beyond five fields (names such as MON, the L and # extensions) are not documented and are not
+  assumed; expressions using them are reported uncertain.

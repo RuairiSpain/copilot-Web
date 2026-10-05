@@ -1,0 +1,121 @@
+id: FND-OPS-009
+version: 1
+group: OPS
+title: "Data-residency regions and deployment SKU"
+description: >-
+  When the profile declares a data-residency requirement (global, a data zone of US, EU or APAC, or an Azure geography),
+  every Foundry model deployment must use a deployment SKU whose documented processing scope satisfies it, and the
+  resource regions must be inside the declared allowed regions. Microsoft documents that Global SKUs may process data in
+  any Azure region, Data Zone SKUs only within the data zone, and Standard and Regional Provisioned SKUs within the
+  customer-specified geography; data at rest stays in the designated geography for all types.
+status: verified
+phases: ["1", "2"]
+inputs: ["azure.yaml", "bicep-arm", "azd-env", "control-plane"]
+basis: ["platform", "operations"]
+category: must-have
+pillar: security
+severity:
+  dev: error
+  test: error
+  prod: error
+compatibility:
+  azd: ">=1.34.2 <=1.36.0-beta.1"
+  extensions: {}
+  apiVersions:
+    - "2026-09-01"
+  preview: true
+  notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from a changelog and was not verified."
+evidence:
+  description: >-
+    Evaluated only when the active profile declares a residency requirement; otherwise skipped, never passed. Phase 1,
+    offline - read each model deployment from azure.yaml (services with host azure.ai.project, deployments[].sku.name)
+    and from Microsoft.CognitiveServices/accounts/deployments in the compiled template (sku.name). Map the SKU name to its
+    documented scope - GlobalStandard, GlobalProvisionedManaged and GlobalBatch are global; DataZoneStandard,
+    DataZoneProvisionedManaged and DataZoneBatch are data zone; Standard and ProvisionedManaged are regional (geography);
+    DeveloperTier has no data residency guarantee. Report a deployment whose scope is broader than the declared
+    requirement (for example GlobalStandard when a data zone or geography is required), a DeveloperTier deployment in an
+    environment that declares any requirement, and a deployment account, Search, Storage or Cosmos location (AZURE_LOCATION
+    or resource location) outside the declared allowed regions. A SKU name outside the table is reported as uncertain and
+    not as a violation, because the specification types sku.name as a free string. Phase 2, control plane - confirm the
+    deployed SKU and account location with the deployments API. Foundry Doctor does not hard-code which regions belong to
+    which data zone or geography (Microsoft can add regions to a data zone without notice); the profile supplies the
+    region list.
+  confidence: certain
+recommendation: >-
+  Choose a deployment SKU that matches the residency requirement - Data Zone Standard or Data Zone Provisioned for a data
+  zone, Standard or Regional Provisioned for a geography - in a region that belongs to that zone or geography, and keep the
+  region list in the profile current.
+fix: |
+  # azure.yaml
+  services:
+    ai-project:
+      host: azure.ai.project
+      deployments:
+        - name: chat
+          model: { format: OpenAI, name: gpt-5.4-mini, version: "2026-03-17" }
+          sku: { name: DataZoneStandard, capacity: 10 }
+sources:
+  - url: https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/foundry-models/includes/concepts-deployment-types-content-6.md and concepts-deployment-types-content-2.md and concepts-deployment-types-content-4.md (included by the Learn page)
+    note: SKU names in code GlobalStandard, GlobalProvisionedManaged, GlobalBatch, DataZoneStandard, DataZoneProvisionedManaged, DataZoneBatch, Standard, ProvisionedManaged, DeveloperTier; processing scope per type; data zones US, EU (Azure EU Data Boundary) and APAC; Microsoft can add regions to a data zone without notice. Page ms.date 08/06/2026.
+  - url: https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/azure-yaml-reference.md
+    note: azure.ai.project deployments[] with model.format, model.name, model.version, sku.name and sku.capacity (tokens-per-minute units). Page ms.date 09/17/2026.
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/Deployment.tsp and models.tsp (Sku.name is a string; no enumeration)
+    note: Deployment envelope has sku of type Sku with a free-string name; the SKU value set is documented in Learn, not enumerated in the specification.
+  - url: https://learn.microsoft.com/azure/foundry/concepts/deployments-overview
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/concepts/deployments-overview.md
+    note: Managed compute deployments (preview) are global only; serverless API supports regional, data zone and global processing.
+overlap:
+  decision: adapt
+  coverage: partial
+  rationale: >-
+    Azure Policy can restrict locations (Allowed locations e56962a6-4747-49cd-b67b-bf8b01975c4c, Cosmos DB allowed locations
+    0473574d-2d43-4217-aefe-941fcdf7e684) and Microsoft publishes a custom policy example that denies a deployment SKU by
+    sku.name on Microsoft.CognitiveServices/accounts/deployments; PSRule Azure.Resource.AllowedRegions checks locations
+    against a configured list. None maps deployment SKUs to a residency scope or correlates a declared requirement across
+    the Foundry stack before deployment. Foundry Doctor adapts the allow-list idea and adds the SKU-to-scope mapping, the
+    azure.yaml reading and the preflight. FND-CFG-012 covers the validity of location values and is not duplicated.
+  psrule: [Azure.Resource.AllowedRegions]
+  azurePolicy:
+    - e56962a6-4747-49cd-b67b-bf8b01975c4c
+    - 0473574d-2d43-4217-aefe-941fcdf7e684
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/ops
+testability: >-
+  Phase 1 is offline against fixture azure.yaml and ARM JSON for each SKU in the table plus an unknown SKU. Phase 2 uses
+  recorded deployments responses.
+tests:
+  positive:
+    - global-standard-when-data-zone-required
+    - global-batch-when-geography-required
+    - developer-tier-in-environment-with-residency-requirement
+    - account-location-outside-declared-regions
+    - search-service-in-region-not-allowed
+  negative:
+    - data-zone-standard-with-data-zone-required
+    - standard-in-allowed-geography-region
+    - global-standard-when-no-restriction-declared-is-not-evaluated
+  skipped:
+    - no-residency-declared-in-profile
+    - sku-name-not-in-table
+    - location-is-unresolved-parameter
+    - control-plane-unavailable
+notes: >-
+  Platform basis, error in every profile, applies because the sources state the processing scope of each SKU; the rule only
+  runs when the profile declares a requirement, so declaring none is the explicit way to opt out and yields skipped.
+  Unverified - region membership of each data zone and geography (Learn points to the model availability page and says
+  regions can be added without notice); whether DeveloperTier and batch SKUs appear in azure.yaml deployments (the
+  azure.yaml reference lists Standard, GlobalStandard and GlobalBatch only as examples); where Foundry Agent Service, Search
+  or Cosmos DB store or process data for agent threads (the docs read cover model inference only); how spillover
+  deployments (spilloverDeploymentName) interact with residency, which was not documented in the article read.

@@ -1,0 +1,138 @@
+id: FND-DEP-007
+version: 1
+group: DEP
+title: "Globally unique names available"
+description: >-
+  Names that must be unique across Azure (Foundry custom subdomain, Storage account, Key Vault, AI Search
+  service, API Management service, Cosmos DB account) must be available when planned. A name already held by
+  the resource being redeployed in the same place is not a conflict.
+status: verified
+phases: ["2"]
+inputs: ["bicep-arm", "azd-env", "control-plane"]
+basis: ["platform"]
+category: must-have
+pillar: reliability
+severity:
+  dev: error
+  test: error
+  prod: error
+compatibility:
+  azd: ">=1.34.2 <=1.36.0-beta.1"
+  extensions: {}
+  apiVersions:
+    - "Microsoft.CognitiveServices 2026-09-01"
+    - "Microsoft.Storage 2026-09-01"
+    - "Microsoft.KeyVault 2026-05-15"
+    - "Microsoft.Search 2025-05-01"
+    - "Microsoft.ApiManagement 2024-05-01"
+    - "Microsoft.DocumentDB 2026-03-15"
+  preview: true
+  notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from a changelog and was not verified."
+evidence:
+  description: >-
+    Per-provider availability calls. All POSTs below are request/response checks that create nothing; the
+    Cosmos check is a HEAD. Foundry custom subdomain: POST /subscriptions/{subscriptionId}/providers/Microsoft.CognitiveServices/checkDomainAvailability
+    api-version 2026-09-01, body {subdomainName, type, kind}, response {isSubdomainAvailable, reason, subdomainName}.
+    Storage: POST /subscriptions/{subscriptionId}/providers/Microsoft.Storage/checkNameAvailability api-version 2026-09-01
+    (spec file openapi.json; 2025-01-01 also lists it). Key Vault: POST /subscriptions/{subscriptionId}/providers/Microsoft.KeyVault/checkNameAvailability
+    api-version 2026-05-15, response {nameAvailable, reason (AccountNameInvalid or AlreadyExists), message}. AI Search:
+    POST /subscriptions/{subscriptionId}/providers/Microsoft.Search/checkNameAvailability api-version 2025-05-01. API Management:
+    POST /subscriptions/{subscriptionId}/providers/Microsoft.ApiManagement/checkNameAvailability api-version 2024-05-01. Cosmos DB:
+    HEAD /providers/Microsoft.DocumentDB/databaseAccountNames/{accountName} api-version 2026-03-15 (200 means the name exists,
+    404 means it does not, per the spec responses). Planned names come from the Bicep snapshot; unresolved
+    expressions make the check skipped. Violation (certain): the provider reports the name unavailable and
+    the name does not belong to a resource that already exists at the planned resource id (an existing live
+    resource, found from the resource list or what-if Modify/NoChange/Deploy, is a redeploy and is not a
+    conflict). Local format failures (reason AccountNameInvalid) are reported as invalid names. Role family
+    and whether Reader suffices differ by provider, from the Azure RBAC permission tables: Key Vault
+    (Microsoft.KeyVault/checkNameAvailability/read), Storage (Microsoft.Storage/checknameavailability/read),
+    API Management (Microsoft.ApiManagement/checkNameAvailability/read) and Cosmos DB
+    (Microsoft.DocumentDB/databaseAccountNames/read) are covered by Reader (*/read). Foundry
+    (Microsoft.CognitiveServices/checkDomainAvailability/action) and AI Search
+    (Microsoft.Search/checkNameAvailability/action) are actions, which Reader (*/read) does not grant: those
+    two checks need a role that includes the action, which built-in role provides it was not verified, and
+    without it they are reported skipped with the missing permission, never passed. Container Registry is
+    not covered (path and api-version not verified here). The answer is definitive when the call returns.
+  confidence: certain
+recommendation: >-
+  Add a deterministic unique suffix to globally unique names (for example with the Bicep uniqueString function), keep the
+  Foundry custom subdomain and account naming rules, and avoid reusing a name whose resource was recently
+  deleted (see FND-DEP-006).
+fix: |
+  var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
+  var foundryName = 'aif-${resourceToken}'
+sources:
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    note: "CheckDomainAvailability (POST) with CheckDomainAvailabilityParameter (subdomainName, type, kind) and DomainAvailability (isSubdomainAvailable, reason); CheckSkuAvailability is a different check."
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/keyvault/resource-manager/Microsoft.KeyVault/KeyVault/stable/2026-05-15/openapi.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/keyvault/resource-manager/Microsoft.KeyVault/KeyVault/stable/2026-05-15/openapi.json
+    note: "Vaults_CheckNameAvailability (POST); CheckNameAvailabilityResult (nameAvailable, reason, message); Reason enum AccountNameInvalid, AlreadyExists."
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/storage/resource-manager/Microsoft.Storage/stable/2026-09-01/openapi.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/storage/resource-manager/Microsoft.Storage/stable/2026-09-01/openapi.json
+    note: "StorageAccounts_CheckNameAvailability (POST /subscriptions/{subscriptionId}/providers/Microsoft.Storage/checkNameAvailability); description 'name is valid and is not already in use' seen in the 2025-01-01 file."
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01 (Services_CheckNameAvailability POST)
+    note: "POST /subscriptions/{subscriptionId}/providers/Microsoft.Search/checkNameAvailability."
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/stable/2024-05-01
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/stable/2024-05-01 (ApiManagementService_CheckNameAvailability POST)
+    note: "POST /subscriptions/{subscriptionId}/providers/Microsoft.ApiManagement/checkNameAvailability."
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
+    note: "DatabaseAccounts_CheckNameExists: HEAD /providers/Microsoft.DocumentDB/databaseAccountNames/{accountName}; 200 and 404 responses; name pattern lowercase letters, numbers and hyphen, 3 to 50 characters."
+  - url: https://learn.microsoft.com/azure/foundry/includes/create-project-cli
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/includes/create-project-cli.md (ms.date 08/25/2026) and how-to/create-resource-template.md (ms.date 07/28/2026)
+    note: "--custom-domain must be globally unique, CustomDomainInUse on conflict; aiFoundryName must be globally unique, 2-64 characters, lowercase letters, numbers and hyphens (AccountNameInvalid)."
+  - url: https://learn.microsoft.com/azure/role-based-access-control/permissions/security
+    lastVerified: "2026-10-04"
+    verifiedVia: https://raw.githubusercontent.com/MicrosoftDocs/azure-docs/main/articles/role-based-access-control/permissions/ (security, storage, integration, databases, ai-machine-learning pages)
+    note: "Action names: Microsoft.KeyVault/checkNameAvailability/read, Microsoft.Storage/checknameavailability/read, Microsoft.ApiManagement/checkNameAvailability/read, Microsoft.DocumentDB/databaseAccountNames/read, Microsoft.CognitiveServices/checkDomainAvailability/action, Microsoft.Search/checkNameAvailability/action."
+overlap:
+  decision: adapt
+  coverage: partial
+  rationale: >-
+    PSRule for Azure name rules (Azure.KeyVault.Name, Azure.Storage.Name, Azure.Search.Name, Azure.APIM.Name,
+    Azure.Cosmos.AccountName, Azure.ACR.Name, Azure.AI.FoundryNaming) check static format and convention only,
+    offline; none checks live availability. Foundry Doctor adopts the idea of a name check, adds the live
+    per-provider availability call, and skips cleanly when the caller lacks an action permission. Format
+    failures can be mapped to the PSRule results when PSRule runs.
+  psrule: [Azure.KeyVault.Name, Azure.Storage.Name, Azure.Search.Name, Azure.APIM.Name, Azure.Cosmos.AccountName, Azure.ACR.Name]
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/dep
+testability: >-
+  Offline with recorded availability responses per provider. The redeploy-of-own-resource exclusion is
+  tested with an existing-resource fixture.
+tests:
+  positive:
+    - foundry-custom-subdomain-in-use
+    - storage-account-name-taken
+    - key-vault-name-already-exists
+    - cosmos-account-name-exists
+    - name-invalid-for-provider
+  negative:
+    - all-planned-names-available
+    - name-taken-by-resource-being-redeployed
+  skipped:
+    - no-azure-credential-available
+    - name-is-unresolved-expression
+    - check-action-permission-missing-foundry-or-search
+    - container-registry-check-not-implemented
+notes: >-
+  Cosmos DB's path has no subscription segment in the spec, so the answer is global to the cloud. The Learn
+  statement that a name must be globally unique is sourced for the Foundry account name and custom
+  subdomain only; for other providers the claim rests on the availability API descriptions. The Storage
+  checkNameAvailability description was read in the 2025-01-01 file, the 2026-09-01 file was only confirmed to
+  contain the path.

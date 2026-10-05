@@ -1,0 +1,127 @@
+id: FND-IDN-003
+version: 1
+group: IDN
+title: "Role assignments use object IDs and principalType"
+description: >-
+  Role assignments in the template must target a principal object ID, not an application (client)
+  ID, and must set principalType. The RBAC documentation states that assigning a role to a newly
+  created service principal or managed identity in the same template can fail because of directory
+  replication delay, and that setting principalType to ServicePrincipal (with API version
+  2018-09-01-preview or later; 2022-04-01 is the first stable version) avoids it. The Foundry
+  documentation also shows the object-ID versus client-ID confusion for managed identities
+  (the managed identity object ID must be searched in enterprise applications to find the client ID).
+  The rule checks the role assignment resources in compiled Bicep or ARM JSON.
+status: verified
+phases: ["1"]
+inputs: ["bicep-arm"]
+basis: ["reliability", "security"]
+category: must-have
+pillar: reliability
+severity:
+  dev: warning
+  test: error
+  prod: error
+compatibility:
+  azd: ""
+  extensions: {}
+  apiVersions:
+    - "Microsoft.Authorization/roleAssignments 2022-04-01"
+    - "Microsoft.ManagedIdentity/userAssignedIdentities 2024-11-30"
+  preview: false
+  notes: "Not version dependent; reads compiled ARM JSON (azd 1.36.0-beta.1 clone checked) Microsoft.Authorization/roleAssignments 2022-04-01: principalId, principalType enum User, Group, ServicePrincipal, ForeignGroup, Device, AgentUser, AgentServicePrincipal. Microsoft.ManagedIdentity/userAssignedIdentities 2024-11-30: properties.principalId, properties.clientId."
+evidence:
+  description: >-
+    For every Microsoft.Authorization/roleAssignments resource in the compiled template:
+    (1) principalType must be present. When principalId is the principalId of an identity created in
+    the same template (identity.principalId of a Foundry account or project, a user-assigned
+    identity's properties.principalId, an Azure resource's system-assigned identity), principalType
+    must be ServicePrincipal; a missing or different value is an error. For other principals a
+    missing principalType is a warning. (2) principalId must be an object ID: fail when the
+    expression reads clientId or applicationId of an identity, or a literal that equals a clientId
+    known in the template, or a string that is not a GUID and not a parameter or reference; skip
+    parameters and report them as uncertain with the parameter name. (3) apiVersion must be
+    2022-04-01 or later when principalType is set; the RBAC article states 2018-09-01-preview is the
+    minimum and 2022-04-01 the first stable. For agent identities (principalType values AgentUser and
+    AgentServicePrincipal exist in the 2022-04-01 spec) accept the documented values and emit info
+    that the Foundry docs do not state which value to use. Live mode lists role assignments and
+    reports principals with principalType Unknown or an empty display name as dangling.
+  confidence: certain
+recommendation: >-
+  Pass the object ID of the identity (identity.principalId or the user-assigned identity's
+  properties.principalId), never the client ID, and set principalType explicitly. Use
+  ServicePrincipal for managed identities and service principals created in the same deployment, and
+  use API version 2022-04-01 or later.
+fix: |
+  resource blobRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+    scope: storage
+    name: guid(storage.id, uami.id, 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+    properties: {
+      roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+      principalId: uami.properties.principalId // object ID, not uami.properties.clientId
+      principalType: 'ServicePrincipal'
+    }
+  }
+sources:
+  - url: https://learn.microsoft.com/azure/role-based-access-control/role-assignments-template
+    lastVerified: "2026-10-04"
+    verifiedVia: github.com/MicrosoftDocs/azure-docs articles/role-based-access-control/role-assignments-template.md (ms.date 03/30/2025, sections Get object IDs and New service principal)
+    note: Role assignment needs the object ID; new service principal replication delay; set principalType to ServicePrincipal with apiVersion 2018-09-01-preview or later, 2022-04-01 first stable.
+  - url: https://learn.microsoft.com/azure/role-based-access-control/troubleshooting
+    lastVerified: "2026-10-04"
+    verifiedVia: github.com/MicrosoftDocs/azure-docs articles/role-based-access-control/troubleshooting.md (ms.date 05/06/2026; "Principal does not exist in the directory" and "Identity not found" entries)
+    note: The error text recommends principalType after replication delay; unknown principals appear as Identity not found.
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/authorization/resource-manager/Microsoft.Authorization/Authorization/stable/2022-04-01/authorization-RoleAssignmentsCalls.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/authorization/resource-manager/Microsoft.Authorization/Authorization/stable/2022-04-01/authorization-RoleAssignmentsCalls.json
+    note: RoleAssignmentProperties requires roleDefinitionId and principalId; principalType enum includes AgentUser and AgentServicePrincipal.
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/msi/resource-manager/Microsoft.ManagedIdentity/ManagedIdentity/stable/2024-11-30/ManagedIdentity.json
+    lastVerified: "2026-10-04"
+    verifiedVia: github.com/Azure/azure-rest-api-specs specification/msi/resource-manager/Microsoft.ManagedIdentity/ManagedIdentity/stable/2024-11-30/ManagedIdentity.json
+    note: UserAssignedIdentity properties.principalId and clientId are distinct fields.
+  - url: https://learn.microsoft.com/azure/foundry/agents/how-to/ai-gateway
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/ai-gateway.md (lines near 152; managed identity object ID versus application client ID)
+    note: Documents that the project managed identity object ID must be looked up to obtain the client ID, showing that the two are different values.
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    No PSRule rule, Checkov check or Bicep linter rule inspects Microsoft.Authorization/roleAssignments
+    for principalType or for client versus object ID. The only Azure Policy built-in that reads
+    roleAssignments/principalType is the PIM-only policy, which restricts who may create assignments
+    and does not test the template. The check is a small, deterministic template inspection tied to a
+    documented replication failure, so it is native.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/idn
+testability: >-
+  Offline with compiled ARM fixtures covering literal GUIDs, identity references, clientId
+  references, parameters and old API versions.
+tests:
+  positive:
+    - managed-identity-assignment-without-principal-type
+    - principal-id-reads-client-id
+    - role-assignment-api-version-2020-04-01-preview
+    - principal-type-user-for-same-template-managed-identity
+  negative:
+    - service-principal-type-with-identity-principal-id
+    - user-assignment-with-guid-and-principal-type-user
+  skipped:
+    - principal-id-is-parameter
+    - module-output-principal
+  uncertain:
+    - agent-identity-principal-type-choice
+notes: >-
+  Unverified: whether omitting principalType always fails; the sources say the assignment "can fail
+  in some cases" because of replication delay, so the omission is flagged as a reliability risk, not
+  a certain failure. The 2022-04-01 spec shows a default of User for principalType; the rule does not
+  rely on that default. Unverified: which principalType a template must set for a Foundry agent
+  identity (AgentServicePrincipal exists in the spec; the Foundry articles assign by agentIdentityId
+  through the CLI only). Unverified: how Bicep or ARM evaluates roleAssignment names (guid()) is out of
+  scope; no source was read for it.

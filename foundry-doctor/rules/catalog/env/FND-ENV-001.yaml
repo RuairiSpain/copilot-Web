@@ -1,0 +1,84 @@
+id: FND-ENV-001
+version: 1
+group: ENV
+title: "Environments do not unintentionally share resource groups"
+description: >-
+  Two azd environments of the same project (for example dev and prod) should not resolve to the same resource
+  group. azd documents one resource group per environment for isolation; azure.yaml resourceGroup overrides the
+  name used for provisioning, and a value without an environment-specific component makes every environment
+  target the same group, so tearing down or redeploying one environment affects the other.
+status: verified
+phases: ["1"]
+inputs: ["azure.yaml", "azd-env"]
+basis: ["operations"]
+category: must-have
+pillar: operations
+severity:
+  dev: info
+  test: warning
+  prod: error
+compatibility:
+  azd: ">=1.34.2 <=1.36.0-beta.1"
+  extensions: {}
+  apiVersions: []
+  preview: true
+  notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from a changelog and was not verified."
+evidence:
+  description: >-
+    Collect AZURE_RESOURCE_GROUP (and AZURE_SUBSCRIPTION_ID) from every .azure/<env>/.env visible in the
+    workspace, plus the azure.yaml top-level resourceGroup (and per-service resourceGroup) after substituting
+    each environment's values. Report two environments whose subscription and resource group names are equal
+    (case-insensitive), and report a resourceGroup literal that contains no variable reference when more than one
+    environment exists. Environments that are not locally present are not guessed; the rule is skipped for them.
+  confidence: likely
+recommendation: >-
+  Give each environment its own resource group, for example by including the environment name in the group name
+  (resourceGroup: rg-${AZURE_ENV_NAME}), or record an explicit suppression with a reason and expiry when sharing is
+  intentional.
+fix: |
+  name: my-agent-project
+  resourceGroup: rg-${AZURE_ENV_NAME}
+sources:
+  - url: https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azd-docs/articles/azure-developer-cli/environments-overview.md
+    note: Each environment has its own Azure resource group and configuration; .azure/<env>/.env stores AZURE_RESOURCE_GROUP.
+  - url: https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-dev/schemas/v1.0/azure.yaml.json
+    note: Top-level and service resourceGroup override; supports environment variable substitution.
+  - url: https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/azure-yaml-reference.md
+    note: Tearing down an environment deletes the resource group when the current environment created the Foundry project.
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    Cross-environment comparison of azd environments is azd-specific. PSRule, Policy, Defender and Advisor evaluate one
+    deployed resource or template at a time and have no concept of sibling azd environments.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/env
+testability: >-
+  Offline when the environments' .env files are present (they are normally git-ignored, so CI may see none; then skipped).
+tests:
+  positive:
+    - dev-and-prod-same-resource-group
+    - literal-resourcegroup-with-two-environments
+  negative:
+    - env-name-in-resourcegroup
+    - distinct-subscriptions-same-group-name
+  skipped:
+    - single-environment-visible
+    - env-files-not-in-workspace
+notes: >-
+  Intended sharing (for example a shared model-hosting group) is legitimate, hence the suppression path. The azd
+  source that reads AZURE_RESOURCE_GROUP in preference to the azure.yaml override is not in the clones, so the
+  precedence between them is not asserted; both sources are evaluated.

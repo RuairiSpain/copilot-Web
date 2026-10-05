@@ -1,0 +1,41 @@
+name: foundry-doctor-ci
+
+# GitHub only reads workflows from the repository root, so this file lives here and
+# points at the foundry-doctor/ folder. Offline checks only: no Azure credentials, safe for fork PRs.
+on:
+  pull_request:
+    paths:
+      - "foundry-doctor/**"
+      - ".github/workflows/foundry-doctor-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "foundry-doctor/**"
+      - ".github/workflows/foundry-doctor-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: go build, test and catalogue checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: foundry-doctor
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: foundry-doctor/go.mod
+          cache-dependency-path: foundry-doctor/go.sum
+      - name: Install tools
+        # Same pinned versions as local development (scripts/install-dev-tools.sh), never @latest.
+        run: |
+          bash scripts/install-dev-tools.sh
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Acceptance gates
+        # govulncheck runs here because the runner can reach vuln.go.dev; verify-phase.sh
+        # reports it as skipped only where the database is unreachable.
+        # Add --strict in Phase 1, once cmd/foundry-doctor exists, so a skipped gate fails CI.
+        run: bash scripts/claude/verify-phase.sh

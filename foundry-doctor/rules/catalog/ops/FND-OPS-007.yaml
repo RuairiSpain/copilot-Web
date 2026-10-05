@@ -1,0 +1,100 @@
+id: FND-OPS-007
+version: 1
+group: OPS
+title: CI/CD pipeline exists
+description: >-
+  A project that targets test or production environments should have a CI/CD pipeline definition that provisions and deploys
+  it, instead of relying on developer workstations. For azd projects the documented pipeline definition is azure-dev.yml
+  created by azd pipeline config for GitHub Actions or Azure Pipelines. Whether a pipeline is required is a Foundry Doctor
+  recommendation, not a platform rule.
+status: product-opinion
+phases:
+- '1'
+inputs:
+- azure.yaml
+basis:
+- operations
+- opinion
+category: nice-to-have
+pillar: operations
+severity:
+  dev: info
+  test: warning
+  prod: warning
+compatibility:
+  azd: '>=1.34.2 <=1.36.0-beta.1'
+  extensions:
+    azure.ai.agents: '>=1.0.0-beta.18 <=1.0.0-beta.18'
+  apiVersions: []
+  preview: true
+  notes: >-
+    azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects
+    beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from
+    a changelog and was not verified. Extension ranges are exactly the versions whose schemas or source were read; widen
+    them in Phase 1 by reading older tags.
+evidence:
+  description: >-
+    File-system and azure.yaml evidence only, no pipeline execution. Pass when at least one of the following exists - a
+    file azure-dev.yml (or another workflow file that invokes azd) under .github/workflows; a file azure-dev.yml under .azdo/pipelines
+    or .azuredevops/pipelines; or an azure.yaml top-level pipeline section whose provider is github or azdo (schema enumeration).
+    Report when none exists and the active profile is test or prod. A pipeline definition that exists but does not invoke
+    azd provision, deploy or up is reported as uncertain, because other deployment tools are valid. Other CI systems are
+    not detected and the finding says so.
+  confidence: likely
+recommendation: >-
+  Run azd pipeline config to generate azure-dev.yml and the federated credential for GitHub Actions or Azure Pipelines,
+  and use one pipeline per azd environment.
+fix: |
+  azd pipeline config --provider github
+sources:
+- url: https://learn.microsoft.com/azure/developer/azure-developer-cli/configure-devops-pipeline
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azd-docs/articles/azure-developer-cli/configure-devops-pipeline.md
+  note: >-
+    azd pipeline config; azure-dev.yml in .github/workflows (GitHub Actions) and in .azuredevops/pipelines or .azdo/pipelines
+    (Azure Pipelines). Page ms.date 06/12/2026.
+- url: https://github.com/Azure/azure-dev/blob/main/schemas/v1.0/azure.yaml.json
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-dev/schemas/v1.0/azure.yaml.json
+  note: Top-level pipeline object with provider enumeration github and azdo, variables and secrets lists.
+- url: https://learn.microsoft.com/azure/foundry/agents/how-to/set-up-ci-cd-cli
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/set-up-ci-cd-cli.md
+  note: >-
+    CI/CD for hosted agents with azd pipeline config and one pipeline or branch trigger per environment (preview). Page
+    ms.date 09/23/2026.
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    No PSRule, Azure Policy, Defender, Advisor, Bicep linter or Checkov rule examined checks that a repository has a CI/CD
+    pipeline for the project; those tools inspect Azure resources or template content. The check needs repository layout
+    and azure.yaml, which only Foundry Doctor reads.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/ops
+testability: Offline against fixture repository trees (GitHub workflow, azdo pipeline, none, unrelated workflow).
+tests:
+  positive:
+  - prod-profile-no-pipeline-files
+  - workflow-present-but-never-invokes-azd
+  negative:
+  - github-workflows-azure-dev-yml
+  - azdo-pipelines-azure-dev-yml
+  - azure-yaml-pipeline-section-with-provider
+  skipped:
+  - dev-profile
+  - repository-root-not-available
+  - ci-system-other-than-github-or-azure-pipelines
+notes: >-
+  Product opinion. The azd documentation describes how to create pipelines and where the definition lives; it does not require
+  one. Unverified - whether a pipeline defined outside the repository (for example a central template) satisfies the intent;
+  the Jenkins, GitLab or other providers are not covered by any azd documentation read. The waf basis was removed after
+  the Phase 0 Azure black belt review because no WAF pillar tag or WARA recommendation is cited here; the WAF mapping is
+  added in Phase 4 when the guidance is verified.

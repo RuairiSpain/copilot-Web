@@ -1,0 +1,135 @@
+id: FND-IDN-005
+version: 1
+group: IDN
+title: "Standing human admin access reviewed"
+description: >-
+  Humans (users and groups) who hold a privileged role on the Foundry subscription, resource group,
+  account or project as a permanent active assignment should be reviewed, and just-in-time access
+  through Microsoft Entra Privileged Identity Management (PIM) should be preferred. The RBAC
+  documentation recommends at most three subscription owners, avoiding privileged administrator
+  roles where a job function role works, narrow scopes, groups instead of users, and PIM. The rule
+  produces an inventory of standing privileged human assignments that cover Foundry resources and
+  marks each as permanent active, time-bound or eligible when PIM data is readable. It does not
+  decide who should have access; it makes the review input deterministic.
+status: verified
+phases: ["2", "4"]
+inputs: ["control-plane"]
+basis: ["security"]
+category: nice-to-have
+pillar: security
+severity:
+  dev: info
+  test: info
+  prod: warning
+compatibility:
+  azd: ""
+  extensions: {}
+  apiVersions:
+    - "Microsoft.Authorization/roleAssignments 2022-04-01"
+    - "Microsoft.Authorization/roleAssignmentScheduleInstances 2020-10-01"
+    - "Microsoft.Authorization/roleEligibilityScheduleInstances 2020-10-01"
+  preview: false
+  notes: "Not version dependent; reads ARM role assignments and PIM schedules (azd 1.36.0-beta.1 clone checked) Microsoft.Authorization/roleAssignmentScheduleInstances 2020-10-01: assignmentType Activated Assigned, memberType Inherited, Direct Group, endDateTime."
+evidence:
+  description: >-
+    Phase 2 (live): list role assignments effective at the subscription, resource group, Foundry
+    account and project scopes (including inherited). Keep assignments whose principalType is User
+    or Group and whose roleDefinitionId is Owner, Contributor, User Access Administrator or Role
+    Based Access Control Administrator (privileged administrator roles; GUIDs in FND-IDN-004), plus
+    Foundry Owner (c883944f-8b7b-4483-af10-35834be79c4a) and Foundry Account Owner
+    (e47c6f54-e4a2-4754-9501-8e0985b135e1) as a product choice. Where roleAssignmentScheduleInstances
+    is readable, classify each as eligible, time-bound active (endDateTime present) or permanent
+    active (assignmentType Assigned with no endDateTime); report permanent active ones as the
+    standing access. Also report the number of Owner assignments at subscription scope when it is
+    above 3 or below 2 (the documented guidance of a maximum of 3 owners, and the built-in policy
+    requirement of more than one owner). Phase 4: add a static check on role assignments declared in
+    the template with principalType User or Group and a privileged role, and compare the live
+    inventory to a baseline. Emit skipped with the missing permission when PIM schedules are not
+    readable, and uncertain for group assignments whose members cannot be listed. A tenant without a
+    PIM licence cannot make users eligible, so report that as info, not as a failure.
+  confidence: likely
+recommendation: >-
+  Review each listed assignment. Prefer a job function role over a privileged administrator role,
+  assign roles to groups, use the narrowest scope, and make human admin access eligible or
+  time-bound through PIM where licensed. Keep between two and three subscription owners.
+fix: |
+  // Make an admin group eligible through PIM instead of a permanent assignment (portal, CLI or REST):
+  // Access control (IAM) > Add role assignment > Assignment type: Eligible
+  // Time-bound active assignment through a role assignment schedule request is also acceptable.
+sources:
+  - url: https://learn.microsoft.com/azure/role-based-access-control/best-practices
+    lastVerified: "2026-10-04"
+    verifiedVia: github.com/MicrosoftDocs/azure-docs articles/role-based-access-control/best-practices.md (ms.date 03/30/2025)
+    note: Limit the number of subscription owners to a maximum of 3; limit privileged administrator role assignments; use PIM; assign roles to groups, not users.
+  - url: https://learn.microsoft.com/azure/role-based-access-control/pim-integration
+    lastVerified: "2026-10-04"
+    verifiedVia: github.com/MicrosoftDocs/azure-docs articles/role-based-access-control/pim-integration.md (ms.date 12/12/2024)
+    note: Eligible and time-bound assignment terms; permanent active versus time-bound; eligible assignments cannot be made for service principals or managed identities; PIM licence requirement.
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/authorization/resource-manager/Microsoft.Authorization/Authorization/stable/2020-10-01/RoleAssignmentScheduleInstance.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/authorization/resource-manager/Microsoft.Authorization/Authorization/stable/2020-10-01/RoleAssignmentScheduleInstance.json
+    note: RoleAssignmentScheduleInstanceProperties assignmentType (Activated, Assigned), memberType, endDateTime, principalType.
+  - url: https://learn.microsoft.com/azure/role-based-access-control/role-assignments-steps
+    lastVerified: "2026-10-04"
+    verifiedVia: github.com/MicrosoftDocs/azure-docs articles/role-based-access-control/role-assignments-steps.md (ms.date 10/15/2025)
+    note: Privileged administrator roles table.
+  - url: https://learn.microsoft.com/azure/foundry/concepts/rbac-foundry
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/concepts/rbac-foundry.md (ms.date 09/16/2026)
+    note: Foundry Owner and Foundry Account Owner capabilities; used to justify including them in the inventory as a product choice.
+overlap:
+  decision: adapt
+  coverage: partial
+  rationale: >-
+    Built-in policies already audit subscription owner counts ("A maximum of 3 owners should be
+    designated for your subscription", "There should be more than one owner assigned to your
+    subscription"), guest and blocked accounts with owner permissions, and a deny policy that
+    restricts role assignment creation to PIM. These are Defender for Cloud assessments at
+    subscription level, with no view of which roles cover Foundry resources, no inventory of Foundry
+    account and project scopes, and no PIM state per assignment. PSRule and Checkov do not read live
+    assignments. Foundry Doctor adapts the owner-count idea and adds the Foundry-scope inventory with
+    PIM classification. If Phase 2 cannot read schedule instances, the value shrinks to the
+    inventory and the decision should be reconsidered as wrap of the Defender assessments.
+  psrule: []
+  azurePolicy:
+    - "4f11b553-d42e-4e3a-89be-32ca364cad4c (A maximum of 3 owners should be designated for your subscription)"
+    - "09024ccc-0c5f-475e-9457-b7c0d9ed487b (There should be more than one owner assigned to your subscription)"
+    - "339353f6-2387-4a45-abe4-7f529d121046 (Guest accounts with owner permissions on Azure resources should be removed)"
+    - "0cfea604-3201-4e14-88fc-fae4c427a6c5 (Blocked accounts with owner permissions on Azure resources should be removed)"
+    - "25237d14-4a47-4cb6-bc7c-8bbdd4671f31 (Azure role assignment management should be restricted to Microsoft Entra Privileged Identity Management)"
+  defender:
+    - "assessment 6f90a6d6-d4d6-0794-0ec1-98fa77878c2e (maximum of 3 owners; from policy 4f11b553)"
+    - "assessment 2c79b4af-f830-b61e-92b9-63dfa30f16e4 (more than one owner; from policy 09024ccc)"
+    - "assessment 20606e75-05c4-48c0-9d97-add6daa2109a (guest accounts with owner permissions; from policy 339353f6)"
+    - "assessment 050ac097-3dda-4d24-ab6d-82568e7a50cf (blocked accounts with owner permissions; from policy 0cfea604)"
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/idn
+testability: >-
+  Offline with recorded role-assignment and schedule-instance JSON. The live path needs read access to
+  role assignments and PIM schedules; without it the rule reports skipped with the missing permission.
+tests:
+  positive:
+    - user-owner-permanent-on-resource-group
+    - four-subscription-owners
+    - group-contributor-assigned-permanent-on-account
+  negative:
+    - owner-eligible-through-pim
+    - time-bound-contributor-assignment
+    - no-privileged-human-assignments
+  skipped:
+    - pim-schedules-not-readable
+    - role-assignments-not-readable
+  uncertain:
+    - group-members-unreadable
+notes: >-
+  The 3-owner maximum and the one-owner minimum are documented guidance and policy conditions, not
+  Foundry platform constraints. Unverified: Defender for Cloud recommendation reference text and
+  Advisor equivalents were not in the local sources; Defender assessment keys come from the policy
+  definitions. Unverified: whether the roleAssignmentScheduleInstances API is available without a PIM
+  licence (the RBAC article says users with eligible or time-bound assignments need a valid licence).
+  Foundry Owner and Foundry Account Owner are included as a product choice, not a documented
+  privileged-role list.

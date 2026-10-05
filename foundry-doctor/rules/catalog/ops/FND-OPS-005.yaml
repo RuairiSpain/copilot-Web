@@ -1,0 +1,161 @@
+id: FND-OPS-005
+version: 1
+group: OPS
+title: Resource-name provider constraints
+description: >-
+  Resource names in the Foundry stack must satisfy the length and character rules of their resource provider, otherwise
+  the deployment is rejected. The rule checks the resolved name of each in-scope resource against a dated table taken from
+  the Azure naming-rules reference and, for Foundry resources, from the Microsoft.CognitiveServices specification. Global
+  uniqueness and reserved-word checks are out of scope (they need the control plane).
+status: verified
+phases:
+- '1'
+inputs:
+- bicep-arm
+- azd-env
+basis:
+- platform
+- operations
+category: must-have
+pillar: operations
+severity:
+  dev: error
+  test: error
+  prod: error
+compatibility:
+  azd: '>=1.34.2 <=1.36.0-beta.1'
+  extensions: {}
+  apiVersions:
+  - '2026-09-01'
+  preview: true
+  notes: >-
+    azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects
+    beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from
+    a changelog and was not verified.
+evidence:
+  description: >-
+    Resolve each in-scope resource name from the compiled ARM template (literals, parameter defaults, azd environment values
+    such as AZURE_ENV_NAME, and concatenations whose parts resolve) and compare it with the table. Constraints read from
+    the naming-rules reference (page ms.date 08/05/2026), scope in brackets - Microsoft.CognitiveServices accounts 2-64
+    alphanumerics and hyphens, start and end alphanumeric (resource group); Microsoft.ApiManagement service 1-50 alphanumerics
+    and hyphens, start with a letter, end alphanumeric (global); Microsoft.Storage storageAccounts 3-24 lowercase letters
+    and numbers (global); Microsoft.DocumentDB databaseAccounts 3-44 lowercase letters, numbers and hyphens, start with
+    a lowercase letter or number (global); Microsoft.KeyVault vaults 3-24 alphanumerics and hyphens, start with a letter,
+    end with letter or number, no consecutive hyphens (global); Microsoft.ContainerRegistry registries 5-50 alphanumerics
+    (global); Microsoft.OperationalInsights workspaces 4-63 alphanumerics and hyphens, start and end alphanumeric; Microsoft.Insights
+    components 1-260, none of the characters % & \ ? / or control characters, not ending in space or period; Microsoft.App
+    containerApps 2-32 lowercase letters, numbers and hyphens, start with a letter, end alphanumeric. Microsoft.Search searchServices
+    (not in that table) - 2-60 characters, lowercase letters, digits and dashes, no dash as first two or last character,
+    no consecutive dashes (Azure AI Search portal quickstart). Foundry projects (accounts/projects) - 2-64 characters matching
+    ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ (stable 2026-09-01 specification). For accounts only violations rejected by both the naming-rules
+    reference and the specification pattern are enforced (length outside 2-64, first character not alphanumeric, characters
+    outside letters, digits, underscore, period and hyphen); stricter reference-only rules are listed in notes and not enforced.
+    Report the shortest violated constraint. A name that cannot be resolved but whose parameter has no @minLength/@maxLength
+    is reported as skipped; Bicep compiler diagnostics BCP334 and BCP335 already warn when a parameter-derived length can
+    violate a typed limit and are mapped, not repeated.
+  confidence: certain
+recommendation: >-
+  Choose names that satisfy the provider limits for every environment name azd can produce, constrain name parameters with
+  @minLength and @maxLength, and keep a short resource token for globally scoped resources (Storage 24, Key Vault 24, Cosmos
+  DB 44, APIM 50, Search 60).
+fix: |
+  @minLength(3)
+  @maxLength(24)
+  param storageName string
+
+  resource sa 'Microsoft.Storage/storageAccounts@2024-01-01' = {
+    name: toLower(replace(storageName, '-', ''))
+    location: location
+    sku: { name: 'Standard_LRS' }
+    kind: 'StorageV2'
+  }
+sources:
+- url: https://learn.microsoft.com/azure/azure-resource-manager/management/resource-name-rules
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-docs/articles/azure-resource-manager/management/resource-name-rules.md
+  note: >-
+    Sections Microsoft.ApiManagement, App, CognitiveServices, ContainerRegistry, DocumentDB, Insights, KeyVault, OperationalInsights,
+    Storage read; Microsoft.Search is not in the table. Page ms.date 08/05/2026.
+- url: https://learn.microsoft.com/azure/search/search-create-service-portal
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-ai-docs/articles/search/search-create-service-portal.md
+  note: >-
+    Search service name rules - unique in search.windows.net, 2-60 characters, lowercase letters, digits and dashes, no
+    dash as first two or last character, no consecutive dashes. Page ms.date 07/20/2026.
+- url: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+  lastVerified: '2026-10-04'
+  verifiedVia: >-
+    refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+  note: >-
+    accountName and projectName path parameters - pattern ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$, minLength 2, maxLength 64. deploymentName
+    has no pattern or length in the specification.
+- url: https://learn.microsoft.com/azure/azure-resource-manager/bicep/bicep-core-diagnostics
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-docs/articles/azure-resource-manager/bicep/bicep-core-diagnostics.md
+  note: >-
+    BCP334 and BCP335 warn that a value can be shorter or longer than the target's configured minimum or maximum length.
+overlap:
+  decision: adapt
+  coverage: partial
+  rationale: >-
+    PSRule for Azure has one name rule per resource type that covers most of the table (Azure.Storage.Name, Azure.APIM.Name,
+    Azure.Search.Name, Azure.Cosmos.AccountName, Azure.KeyVault.Name, Azure.ACR.Name, Azure.Log.Name, Azure.AppInsights.Name,
+    Azure.ContainerApp.Name, Azure.Group.Name) and Azure.AI.FoundryNaming states requirements for Foundry accounts but is
+    a convention rule (CAF prefix). None of them covers Foundry projects, and none resolves names from azd environment values.
+    The Bicep linter has no name-constraint rule; compiler diagnostics BCP334 and BCP335 cover only typed length limits.
+    Foundry Doctor adapts the idea: one table-driven rule across the whole Foundry stack, resolving azd environment values,
+    with the table sourced and dated. PSRule documents differ from the Learn table for Log Analytics (3-63 versus 4-63)
+    and Application Insights (1-255 versus 1-260), so the Learn table is the authority here.
+  psrule:
+  - Azure.Storage.Name
+  - Azure.APIM.Name
+  - Azure.Search.Name
+  - Azure.Cosmos.AccountName
+  - Azure.KeyVault.Name
+  - Azure.ACR.Name
+  - Azure.Log.Name
+  - Azure.AppInsights.Name
+  - Azure.ContainerApp.Name
+  - Azure.Group.Name
+  - Azure.AI.FoundryNaming
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter:
+  - BCP334
+  - BCP335
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/ops
+testability: >-
+  Offline against fixture ARM JSON and azd environment values; the table has one test per row plus a freshness test on its
+  recorded date.
+tests:
+  positive:
+  - storage-account-name-with-hyphen-and-25-characters
+  - search-service-name-with-trailing-dash
+  - cosmos-account-name-with-uppercase
+  - key-vault-name-with-consecutive-hyphens
+  - foundry-project-name-starting-with-hyphen
+  - foundry-account-name-single-character
+  - name-built-from-long-azure-env-name
+  negative:
+  - all-names-within-limits
+  - foundry-account-name-with-hyphens-two-to-sixty-four-characters
+  skipped:
+  - name-from-unconstrained-parameter
+  - name-from-uniqueString-without-known-length
+  - resource-type-not-in-table
+notes: >-
+  Platform basis, error in every profile, applies only to violations that every source read rejects, as described in the
+  evidence. Not enforced because the sources disagree or are silent - Foundry account names with underscore or period (the
+  specification pattern allows them, the naming-rules reference says alphanumerics and hyphens, start and end alphanumeric,
+  so trailing hyphen and underscore/period are not checked); model deployment names (no pattern in the specification; a
+  Foundry Models article says deployment names for Hugging Face models cannot contain a dot and are 2 to 64 characters,
+  which was not generalised); case rules (the naming-rules reference says names are case-insensitive unless noted). azd
+  resource-token length is not documented in the sources read, so templates that build names from uniqueString are skipped
+  unless the length is determinable. Spec disagreement (Phase 0 Azure black belt review): the Cosmos DB spec (2026-03-15
+  CheckNameExists) allows names of 3 to 50 characters while Learn says 3 to 44; the rule enforces only violations both sources
+  reject, as for Foundry account names.

@@ -1,19 +1,22 @@
+# One file per rule: foundry-doctor/rules/catalog/<group>/<ID>.yaml. Loaded strictly: unknown fields are errors.
+# Schema source of truth: foundry-doctor/internal/catalog/catalog.go (type Rule).
 id: FND-XXX-000
 version: 1
+group: XXX                  # must equal the group in the id
 title: ""
 description: ""
-status: proposed            # proposed | verified | implemented | deprecated
-phase: 1
+status: proposed            # proposed | verified | product-opinion | implemented | deprecated | dropped
+phases: ["1"]               # "0".."9", "later", "future"
 
-inputs: []                  # azure.yaml | bicep-arm | azd-env | azure-control-plane | data-plane
-basis: []                   # platform | security | waf | opinion
+inputs: []                  # azure.yaml | bicep-arm | azd-env | control-plane | data-plane | network | external-tool
+basis: []                   # platform | security | waf | wara | opinion | reliability | cost | operations
 category: must-have         # must-have | nice-to-have
-pillar: null                # security | reliability | cost | operations | performance | null
+pillar: ""                  # security | reliability | cost | operations | performance | ""
 
-severity:
+severity:                   # info | warning | error. Platform-basis rules must be error in every profile.
   dev: warning
   test: error
-  prod: error               # platform-basis rules are error in every profile
+  prod: error
 
 compatibility:
   azd: ""
@@ -28,24 +31,30 @@ recommendation: ""
 fix: ""
 
 sources:
-  - url: ""
+  - url: ""                 # https URL of the public documentation page
     lastVerified: ""        # YYYY-MM-DD
+    verifiedVia: ""         # file actually read, if different from url (e.g. docs source repo path)
+    note: ""
 
 overlap:
   decision: native          # reuse | wrap | adapt | native | drop
+  coverage: none            # none | partial | full
   rationale: ""
-  psrule: null
-  azurePolicy: null
-  defender: null
-  advisor: null
-  bicepLinter: null
-  checkov: null
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
 
 implementation:
-  owner: native
+  owner: native             # native for native and adapt; psrule | azure-policy | defender | advisor | bicep | checkov | adapter for reuse and wrap
   package: ""
 
+testability: ""
 tests:
-  positive: []
-  negative: []
-  skipped: []
+  positive: []              # inputs that must produce a finding
+  negative: []              # compliant inputs that must not
+  skipped: []               # inputs where the check cannot run, with the reason
+  uncertain: []             # inputs where the result is reported as uncertain
+notes: ""

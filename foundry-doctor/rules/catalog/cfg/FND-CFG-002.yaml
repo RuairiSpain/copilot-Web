@@ -1,0 +1,95 @@
+id: FND-CFG-002
+version: 1
+group: CFG
+title: "Unique service names by kind"
+description: >-
+  Within one azure.yaml, services of the same azure.ai.* kind must resolve to distinct
+  Foundry resource names. For azure.ai.agent the effective name is the name field (reusing a
+  name creates a new version of the existing agent); for azure.ai.connection it is the payload
+  name when present and non-blank, otherwise the service key; for azure.ai.toolbox and
+  azure.ai.routine the service key is the resource name. Two services resolving to the same
+  name in the same project overwrite or re-version each other.
+status: verified
+phases: ["1"]
+inputs: ["azure.yaml"]
+basis: ["operations"]
+category: must-have
+pillar: operations
+severity:
+  dev: warning
+  test: error
+  prod: error
+compatibility:
+  azd: ">=1.34.2 <=1.36.0-beta.1"
+  extensions:
+    azure.ai.agents: ">=1.0.0-beta.18 <=1.0.0-beta.18"
+    azure.ai.connections: ">=1.0.0-beta.9 <=1.0.0-beta.9"
+    azure.ai.toolboxes: ">=1.0.0-beta.9 <=1.0.0-beta.9"
+  apiVersions: []
+  preview: true
+  notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from a changelog and was not verified. Extension ranges are exactly the versions whose schemas or source were read; widen them in Phase 1 by reading older tags."
+evidence:
+  description: >-
+    Resolve each azure.ai.* service to its effective resource name using the documented
+    precedence (agent name field; connection trimmed payload name else service key; toolbox and
+    routine service key), group by host kind and project (via uses), and report any group with
+    more than one service. Names containing unresolved ${VAR} references are compared
+    textually and reported as uncertain.
+  confidence: certain
+recommendation: >-
+  Give each service of the same kind a distinct effective name. If two services are meant to be
+  versions of one agent, keep a single service and let azd create the new version on deploy.
+fix: |
+  services:
+    triage:
+      host: azure.ai.agent
+      name: triage-agent
+    summarizer:
+      host: azure.ai.agent
+      name: summarizer-agent
+sources:
+  - url: https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/azure-yaml-reference.md
+    note: "Agent name: reusing a name creates a new version of the existing agent."
+  - url: https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/extensions/azure.ai.connections/schemas/azure.ai.connection.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.connections/schemas/azure.ai.connection.json
+    note: Connection name precedence (payload name after trimming, else service key).
+  - url: https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/extensions/azure.ai.toolboxes/schemas/azure.ai.toolbox.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.toolboxes/schemas/azure.ai.toolbox.json
+    note: The service key is the toolbox name.
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    No PSRule, Policy, Defender, Advisor or Bicep rule reads azure.yaml. Plain YAML key
+    uniqueness within services is covered by FND-CFG-001; this rule adds Foundry-specific name
+    resolution across kinds (name override fields), which only Foundry Doctor models.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/cfg
+testability: Fully offline from azure.yaml, including $ref file includes.
+tests:
+  positive:
+    - two-agents-same-name-field
+    - connection-payload-name-collides-with-other-service-key
+    - two-routines-resolving-same-name
+  negative:
+    - distinct-agent-names
+    - same-name-different-kinds
+  skipped:
+    - name-is-unresolved-env-reference
+    - service-body-in-missing-ref-file
+notes: >-
+  The consequence for connections (same resolved name updates the same project connection) is
+  inferred from the schema text "azd updates or creates the connection"; only the agent
+  re-versioning behaviour is stated verbatim in the reference. Routine name handling is read from
+  the schema description only.

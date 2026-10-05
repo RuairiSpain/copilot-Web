@@ -1,0 +1,115 @@
+id: FND-GW-005
+version: 1
+group: GW
+title: "Gateway calls Foundry using managed identity"
+description: >-
+  Where an API Management API forwards to a Foundry or Azure OpenAI endpoint, the gateway should authenticate
+  with its managed identity instead of a stored key: the effective inbound policy uses
+  authentication-managed-identity with resource https://cognitiveservices.azure.com, does not set an api-key
+  header, the API Management service has a system-assigned or user-assigned identity, and that identity holds a
+  Cognitive Services role on the Foundry resource.
+status: verified
+phases: ["8"]
+inputs: ["bicep-arm", "control-plane"]
+basis: ["security"]
+category: must-have
+pillar: security
+severity:
+  dev: warning
+  test: error
+  prod: error
+compatibility:
+  azd: ""
+  extensions: {}
+  apiVersions:
+    - "Microsoft.ApiManagement/service 2025-09-01-preview"
+    - "Microsoft.ApiManagement/service 2024-05-01"
+  preview: true
+  notes: "Microsoft.ApiManagement/service 2025-09-01-preview / 2024-05-01: identity.type, userAssignedIdentities read in spec. Policy reference authentication-managed-identity (current)"
+evidence:
+  description: >-
+    For each API whose serviceUrl or routed backend url host ends with openai.azure.com, services.ai.azure.com or
+    cognitiveservices.azure.com: (1) the effective inbound policy contains authentication-managed-identity with
+    resource https://cognitiveservices.azure.com (trailing slash tolerated); when client-id is set it must match a
+    user-assigned identity on the service (otherwise the system-assigned identity must exist); (2) the policy
+    does not contain set-header name="api-key" and no named value or backend credentials header supplies an
+    api-key; (3) service identity.type includes SystemAssigned or UserAssigned; (4) a role assignment at the
+    Foundry account scope (or above) grants the identity Cognitive Services OpenAI User (policy example) or
+    Cognitive Services User (backend note). Evidence names the API, policy element and role only; token
+    variables and headers are never read. Backend-entity managed identity credentials are not evaluated (see
+    notes) and the check is skipped for APIs whose only authentication is a backend entity credential.
+  confidence: likely
+recommendation: >-
+  Enable a managed identity on the API Management service, assign it a Cognitive Services role on the Foundry
+  resource, and add authentication-managed-identity for https://cognitiveservices.azure.com to the inbound policy
+  instead of forwarding an api-key.
+fix: |
+  <inbound>
+    <base />
+    <authentication-managed-identity resource="https://cognitiveservices.azure.com"
+        output-token-variable-name="managed-id-access-token" ignore-error="false" />
+    <set-header name="Authorization" exists-action="override">
+      <value>@("Bearer " + (string)context.Variables["managed-id-access-token"])</value>
+    </set-header>
+  </inbound>
+sources:
+  - url: https://learn.microsoft.com/azure/api-management/api-management-authenticate-authorize-ai-apis
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-docs/articles/api-management/api-management-authenticate-authorize-ai-apis.md
+    note: Managed identity authentication for Azure OpenAI and Foundry model deployments, Cognitive Services OpenAI User role, authentication-managed-identity resource https://cognitiveservices.azure.com, api-key header as the default alternative.
+  - url: https://learn.microsoft.com/azure/api-management/authentication-managed-identity-policy
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-docs/articles/api-management/authentication-managed-identity-policy.md
+    note: Attributes resource, client-id, output-token-variable-name, ignore-error; system-assigned identity when client-id omitted; token forwarded as-is so backends must be trusted.
+  - url: https://learn.microsoft.com/azure/api-management/backends
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-docs/articles/api-management/backends.md
+    note: Backend managed identity authorization credentials in the portal; for Azure OpenAI assign the Cognitive Services User role.
+  - url: https://learn.microsoft.com/azure/api-management/azure-ai-foundry-api
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-docs/articles/api-management/azure-ai-foundry-api.md
+    note: Foundry API import uses the instance system-assigned identity with permissions on the Foundry resource.
+  - url: https://github.com/Azure/azure-rest-api-specs/tree/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/preview/2025-09-01-preview/openapi.json (ApiManagementServiceIdentity)
+overlap:
+  decision: native
+  coverage: partial
+  rationale: >-
+    PSRule Azure.APIM.ManagedIdentity only checks that the service has an identity, and the Azure Policy
+    "API Management calls to API backends should be authenticated" accepts any credential type including keys
+    and does not know which backend is Foundry. Foundry Doctor adds the correlation: policy to Foundry endpoint
+    to identity to role assignment, with an explicit api-key header check.
+  psrule: ["Azure.APIM.ManagedIdentity"]
+  azurePolicy: ["c15dcc82-b93c-4dcb-9332-fbf121685b54"]
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/providers/apim
+testability: >-
+  Offline from compiled ARM (service, policies, role assignments) and policy XML fixtures. Role assignments
+  inherited from a higher scope are only visible with control-plane access; otherwise that leg is skipped.
+tests:
+  positive:
+    - api-key-header-set-to-foundry-backend
+    - no-authentication-policy-for-foundry-backend
+    - apim-without-identity
+    - client-id-not-a-user-assigned-identity
+    - identity-without-role-on-foundry
+  negative:
+    - managed-identity-policy-with-role-assignment
+    - user-assigned-identity-client-id-matches
+  skipped:
+    - backend-entity-credentials-only
+    - role-assignment-scope-not-readable
+    - non-foundry-backend-host
+notes: >-
+  Unverified: the ARM representation of managed-identity authorization credentials on a backend entity. The
+  Learn backends article describes it in the portal, but BackendCredentialsContract in the 2025-09-01-preview
+  specification lists only certificate, certificateIds, query, header and authorization, with no identity member,
+  so the backend-entity path is not evaluated. Role naming differs inside Learn (OpenAI User in the AI
+  authentication article, User in the backends note); either is accepted as a Cognitive Services role and the
+  exact role GUIDs are left to the role-assignment mapping owner.

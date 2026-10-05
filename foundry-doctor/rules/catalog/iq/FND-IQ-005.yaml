@@ -1,0 +1,106 @@
+id: FND-IQ-005
+version: 1
+group: IQ
+title: "Retrieval mode supported by index and service tier"
+description: >-
+  The knowledge base retrieval configuration (retrievalReasoningEffort, outputMode, models) must be
+  supported by the Search API version in use, by the knowledge sources it includes, and by the Search service
+  tier and region; and the index behind an indexed knowledge source must have the semantic configuration
+  that every effort level relies on.
+status: verified
+phases: ["8"]
+inputs: ["data-plane", "control-plane", "bicep-arm"]
+basis: ["platform"]
+category: must-have
+pillar: reliability
+severity:
+  dev: error
+  test: error
+  prod: error
+compatibility:
+  azd: ""
+  extensions: {}
+  apiVersions:
+    - "2026-08-01-preview"
+    - "2026-05-01-preview"
+    - "2026-04-01"
+  preview: true
+  notes: "API 2026-08-01-preview: auto, low, medium, minimal; outputMode. API 2026-05-01-preview: low, medium, outputMode, retrieveDefaults not yet. API 2026-04-01: minimal only; no knowledge base models."
+evidence:
+  description: >-
+    Read the knowledge base, each referenced knowledge source, the Search service resource (sku, location)
+    and the target API version. Fail on each documented incompatibility: retrievalReasoningEffort.kind auto
+    on an API version before 2026-08-01-preview or without a models entry; kind minimal with outputMode other
+    than extractiveData, or with answerSynthesis or a web knowledge source; kind medium on a service whose
+    location is not in the documented medium-effort region list; a models entry (LLM) on 2026-04-01; a web
+    knowledge source without a model; more knowledge sources in the knowledge base than the tier maximum
+    (Free 3, Basic 5 or 10, S1 to L2 10; and the Free/Basic knowledge source and knowledge base counts per
+    service); an LLM configured with a Basic or higher requirement for managed-identity access when the
+    service sku is free. Report an indexed knowledge source whose index has no usable semantic configuration
+    (see FND-IQ-002) as a dependency failure of this rule only by reference.
+  confidence: certain
+recommendation: >-
+  Choose a retrieval reasoning effort and output mode that the target API version, the knowledge sources and
+  the service tier support: use minimal with extractiveData on 2026-04-01, add a model and use the
+  2026-08-01-preview API for auto, and keep knowledge sources within the tier limits.
+fix: |
+  {
+    "name": "my-kb",
+    "knowledgeSources": [ { "name": "hotels-ks" } ],
+    "retrievalReasoningEffort": { "kind": "minimal" },
+    "outputMode": "extractiveData"
+  }
+sources:
+  - url: https://learn.microsoft.com/azure/search/agentic-retrieval-how-to-set-retrieval-reasoning-effort
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/search/agentic-retrieval-how-to-set-retrieval-reasoning-effort.md
+    note: Effort level table (minimal requires extractiveData and excludes answer synthesis and web; auto requires 2026-08-01-preview and a model, earlier versions return 400) and the medium-effort region list; default is low.
+  - url: https://learn.microsoft.com/azure/search/agentic-retrieval-how-to-create-knowledge-base
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/search/agentic-retrieval-how-to-create-knowledge-base.md
+    note: LLM optional in 2026-08-01-preview and unsupported in 2026-04-01 for non-web sources; web source requires an LLM; managed identity for models needs Basic tier or higher.
+  - url: https://learn.microsoft.com/azure/search/search-limits-quotas-capacity
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/search/search-limits-quotas-capacity.md
+    note: Agentic retrieval limits per tier and knowledge source selection per API version and effort.
+  - url: https://github.com/Azure/azure-rest-api-specs/tree/main/specification/search/data-plane/Search
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/search/data-plane/Search/preview/2026-08-01-preview/search.json and stable/2026-04-01/search.json (KnowledgeRetrievalReasoningEffortKind, KnowledgeRetrievalOutputMode, KnowledgeBase properties)
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    The Search tier and region checks in PSRule (Azure.Search.SKU) and Azure Policy (SKU supports private
+    link) concern other constraints. No external tool models knowledge base retrieval settings.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/iq
+testability: >-
+  Offline with knowledge base, knowledge source and Search service JSON fixtures per API version; the tier and
+  region limits are a versioned table in the rule pack and must be re-verified each docs refresh.
+tests:
+  positive:
+    - auto-effort-on-2026-04-01
+    - auto-effort-without-model
+    - minimal-effort-with-answer-synthesis
+    - minimal-effort-with-web-source
+    - medium-effort-in-unsupported-region
+    - llm-configured-on-2026-04-01
+    - knowledge-sources-exceed-free-tier
+  negative:
+    - minimal-extractive-2026-04-01
+    - auto-with-model-2026-08-01-preview
+    - low-effort-default
+  skipped:
+    - search-service-resource-not-readable
+    - api-version-not-pinned
+notes: >-
+  Interpretation of PRD "retrieval mode" as the knowledge base reasoning effort plus output mode; the older
+  agentic API (2025-08-01-preview "knowledge agent") is out of scope. The tier and region tables come from
+  Learn text dated up to 2026-08 and can change; they are data in the rule pack, not code.

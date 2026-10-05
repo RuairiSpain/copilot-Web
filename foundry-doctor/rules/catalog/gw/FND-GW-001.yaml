@@ -1,0 +1,133 @@
+id: FND-GW-001
+version: 1
+group: GW
+title: JWT validates issuer, audience and tenant
+description: >-
+  Inbound policy of an AI gateway API must validate the caller's token with validate-jwt or validate-azure-ad-token such
+  that the issuer, the audience and the tenant are all constrained: validate-jwt needs an audiences list with at least one
+  audience, an issuer source (issuers element or an openid-config endpoint that supplies it), and a tenant restriction (tenant-specific
+  openid-config URL, issuer containing the tenant ID, or a tid required-claim); validate-azure-ad-token needs a tenant-id
+  that is a specific tenant (not organizations or common) and an audience or application ID constraint.
+status: verified
+phases:
+- '8'
+inputs:
+- bicep-arm
+- control-plane
+basis:
+- security
+category: must-have
+pillar: security
+severity:
+  dev: warning
+  test: error
+  prod: error
+compatibility:
+  azd: ''
+  extensions: {}
+  apiVersions:
+  - Microsoft.ApiManagement/service/apis/policies 2025-09-01-preview
+  - Microsoft.ApiManagement/service/apis/policies 2024-05-01
+  - Policy reference pages dated 2026-08-18
+  preview: true
+  notes: >-
+    Microsoft.ApiManagement/service/apis/policies 2025-09-01-preview / 2024-05-01: properties.value, properties.format xml|rawxml|xml-link|rawxml-link
+    read in spec. Policy reference pages dated 2026-08-18: validate-jwt.
+evidence:
+  description: >-
+    Parse the policy XML of each API that fronts a model endpoint (AI gateway scope: global, product, API or operation,
+    resolved with <base /> inheritance). Require a validate-jwt or validate-azure-ad-token element in the inbound section
+    ahead of authentication-managed-identity and set-header. For validate-jwt: audiences must contain at least one audience
+    element; issuers must contain an issuer element or openid-config url must be present; tenant constraint holds when the
+    openid-config url contains a tenant ID or name instead of organizations or common, or when required-claims has a claim
+    named tid (match all) with a value, or an issuer value contains a tenant ID. For validate-azure-ad-token: tenant-id
+    present and not organizations, common or their login.microsoftonline.com URLs, plus audiences or backend-application-ids
+    or client-application-ids. Policy expressions (@(...)) in constrained attributes are reported uncertain. Only structure
+    is reported, not values. Fail when an element is missing. Product opinion (not in the cited policy reference): a failed-validation-httpcode
+    in the 2xx range, or require-signed-tokens set to false, is reported as a warning in the finding text, not as a failure.
+  confidence: likely
+recommendation: >-
+  Validate the token at the gateway before forwarding to the model: pin the tenant (tenant-specific openid-config URL or
+  validate-azure-ad-token tenant-id), list the expected audience, and keep signed-token and expiry requirements at their
+  secure defaults.
+fix: |
+  <inbound>
+    <base />
+    <validate-azure-ad-token tenant-id="{{tenant-id}}">
+      <audiences>
+        <audience>api://foundry-gateway</audience>
+      </audiences>
+      <client-application-ids>
+        <application-id>{{client-app-id}}</application-id>
+      </client-application-ids>
+    </validate-azure-ad-token>
+  </inbound>
+sources:
+- url: https://learn.microsoft.com/azure/api-management/validate-jwt-policy
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-docs/articles/api-management/validate-jwt-policy.md
+  note: >-
+    Attributes (require-signed-tokens default true, require-expiration-time default true, failed-validation-httpcode default
+    401), audiences "At least one audience must be specified", issuers and openid-config elements, required-claims, Entra
+    v2 single-tenant and multi-tenant (organizations) metadata URLs.
+- url: https://learn.microsoft.com/azure/api-management/validate-azure-ad-token-policy
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-docs/articles/api-management/validate-azure-ad-token-policy.md
+  note: >-
+    tenant-id required; organizations and common well-known tenants allow any organizational directory (and personal accounts
+    for common); audiences, backend-application-ids, client-application-ids elements.
+- url: https://learn.microsoft.com/azure/api-management/api-management-authenticate-authorize-ai-apis
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-docs/articles/api-management/api-management-authenticate-authorize-ai-apis.md
+  note: >-
+    Validate the JWT before the policies that authenticate to the model API; validate-azure-ad-token for Entra, validate-jwt
+    otherwise.
+- url: >-
+    https://github.com/Azure/azure-rest-api-specs/tree/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement
+  lastVerified: '2026-10-04'
+  verifiedVia: >-
+    refs/rest-api-specs/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/preview/2025-09-01-preview/openapi.json
+    (PolicyContractProperties)
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    PSRule for Azure has no APIM rule that parses policy XML for token validation (APIM rules cover base policy, CORS, ciphers,
+    protocols, backend HTTP, managed identity); Azure Policy covers backend authentication, base-policy inheritance and
+    subscriptions only. Checkov covers APIM TLS and network access. Foundry-specific scoping (which APIs front model endpoints)
+    and correlation with the managed-identity step are the value.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/providers/apim
+testability: >-
+  Offline from policy XML fixtures (policy elements in compiled ARM; named values are not resolved and are reported uncertain).
+  XML structure parsing only; no token is ever issued or validated.
+tests:
+  positive:
+  - validate-jwt-without-audiences
+  - validate-jwt-no-issuer-source
+  - validate-jwt-multi-tenant-openid-config
+  - validate-azure-ad-token-tenant-organizations
+  - validate-jwt-require-signed-tokens-false
+  - no-token-validation-on-ai-api
+  negative:
+  - validate-azure-ad-token-specific-tenant-with-audience
+  - validate-jwt-single-tenant-openid-config-and-audience
+  - validate-jwt-tid-required-claim
+  skipped:
+  - tenant-id-from-named-value-unresolved
+  - policy-defined-as-xml-link-not-fetched
+  - api-uses-subscription-key-only-by-declaration
+notes: >-
+  Inference flagged: the validate-jwt article lists the multi-tenant (organizations) OpenID configuration URL but does not
+  state that it admits any tenant; that conclusion is stated only for validate-azure-ad-token's organizations tenant, so
+  the validate-jwt multi-tenant case is reported at likely confidence. "Tenant" has no dedicated attribute in validate-jwt;
+  the three accepted ways are product decisions derived from the documented elements. Subscription keys are not a replacement
+  and are not evaluated. Azure Policy d5448c98-e503-4fdd-bcd2-784960c00d04 (APIM policies should inherit parent scope policies
+  using <base />) is context only, not an equivalent, and is no longer a mapped ID.

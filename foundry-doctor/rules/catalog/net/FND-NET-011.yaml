@@ -1,0 +1,147 @@
+id: FND-NET-011
+version: 1
+group: NET
+title: "NSG/DDoS recommendations"
+description: >-
+  Subnets in the virtual network that hosts a private Foundry design should have a network security
+  group (NSG), and a design that exposes public IP addresses should have DDoS protection beyond the
+  default infrastructure protection. These are Well-Architected style recommendations, not Foundry
+  platform requirements. The rule reports subnets without an NSG, with a caveat for the special
+  purpose subnets that do not support one, and reports public IP addresses in the design without
+  DDoS Protection. A fully private design with no public IP address gets no DDoS finding. The
+  Foundry sources read do not state NSG requirements for the agent subnet, so that subnet is
+  reported as a lower-confidence recommendation.
+status: verified
+phases: ["4"]
+inputs: ["bicep-arm", "control-plane"]
+basis: ["waf", "security"]
+category: nice-to-have
+pillar: security
+severity:
+  dev: info
+  test: warning
+  prod: warning
+compatibility:
+  azd: ""
+  extensions: {}
+  apiVersions:
+    - "Microsoft.Network/virtualNetworks 2026-01-01"
+    - "Microsoft.Network/publicIPAddresses 2026-01-01"
+    - "Microsoft.Network/networkSecurityGroups 2026-01-01"
+  preview: false
+  notes: "Not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked) Microsoft.Network/virtualNetworks 2026-01-01: subnets[].properties.networkSecurityGroup, enableDdosProtection, ddosProtectionPlan. Microsoft.Network/publicIPAddresses 2026-01-01: properties.ddosSettings.protectionMode: VirtualNetworkInherited, Enabled, Disabled."
+evidence:
+  description: >-
+    NSG: for each subnet of a VNet that the design uses for the Foundry agent subnet
+    (networkInjections), private endpoints, or other workload subnets in the template, read
+    properties.networkSecurityGroup.id. Report a missing association, except for GatewaySubnet,
+    AzureFirewallSubnet, AzureFirewallManagementSubnet, RouteServerSubnet and subnets delegated to
+    Microsoft.HardwareSecurityModules/dedicatedHSMs, which the PSRule documentation lists as not
+    supporting NSGs. Report the agent subnet at info only, because its NSG support is not stated in
+    the Foundry sources. Also report a custom inbound allow rule whose sourceAddressPrefix is * or
+    Internet on a subnet that holds a Foundry private endpoint. DDoS: list Microsoft.Network/publicIPAddresses
+    (including those created for Application Gateway, Azure Firewall, Bastion or API Management
+    in external mode when they appear in the template). If any exist and neither the VNet has
+    enableDdosProtection true with ddosProtectionPlan set, nor the public IP has
+    ddosSettings.protectionMode Enabled, report the missing DDoS Protection as a recommendation. If
+    the design has no public IP, emit no DDoS finding. Skip subnets or public IPs whose IDs are
+    unresolved parameters, and the DDoS check for resources not deployed in a virtual network
+    (the DDoS article says default infrastructure protection applies to them).
+  confidence: likely
+recommendation: >-
+  Associate an NSG with each subnet that supports one and review inbound allow rules. If the design
+  exposes public IP addresses, enable Azure DDoS Protection (IP Protection on the public IP, or
+  Network Protection on the VNet with a plan). For a fully private design, rely on the default
+  infrastructure protection and do not buy a plan for it.
+fix: |
+  resource nsg 'Microsoft.Network/networkSecurityGroups@2024-05-01' = { name: 'nsg-pe', location: location, properties: { securityRules: [] } }
+  resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' = {
+    name: vnetName
+    location: location
+    properties: {
+      addressSpace: { addressPrefixes: ['10.0.0.0/16'] }
+      subnets: [ { name: 'pe', properties: { addressPrefix: '10.0.1.0/24', networkSecurityGroup: { id: nsg.id } } } ]
+    }
+  }
+sources:
+  - url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.VNET.UseNSGs/
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/psrule/docs/en/rules/Azure.VNET.UseNSGs.md (reviewed 2024-01-02; WAF pillar Security, SE:06 Network controls)
+    note: Each subnet should have an NSG; list of special purpose subnets that do not support NSGs; property properties.networkSecurityGroup.id.
+  - url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.NSG.AnyInboundSource/
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/psrule/docs/en/rules/Azure.NSG.AnyInboundSource.md (reviewed 2024-02-24; WAF pillar Security, SE:06)
+    note: Avoid custom allow rules with any inbound source; suggests DDoS Protection for public IP addresses.
+  - url: https://learn.microsoft.com/azure/ddos-protection/ddos-protection-sku-comparison
+    lastVerified: "2026-10-04"
+    verifiedVia: github.com/MicrosoftDocs/azure-docs articles/ddos-protection/ddos-protection-sku-comparison.md (ms.date 03/17/2026) and ddos-protection-overview.md (ms.date 07/08/2025)
+    note: DDoS IP Protection and Network Protection tiers; infrastructure protection is free for every service with public IPs; Network Protection applies to services deployed in a virtual network; other services use default infrastructure protection.
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/network/resource-manager/Microsoft.Network/Network/stable/2026-01-01/virtualNetwork.json
+    lastVerified: "2026-10-04"
+    verifiedVia: github.com/Azure/azure-rest-api-specs specification/network/resource-manager/Microsoft.Network/Network/stable/2026-01-01/{virtualNetwork.json,common.json}
+    note: VirtualNetworkPropertiesFormat.enableDdosProtection and ddosProtectionPlan; SubnetPropertiesFormat.networkSecurityGroup; DdosSettings.protectionMode enum.
+  - url: https://learn.microsoft.com/azure/foundry/openai/how-to/troubleshoot-errors
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/openai/how-to/troubleshoot-errors.md and refs/azure-ai-docs/articles/foundry/how-to/configure-private-link.md
+    note: Foundry troubleshooting says to check that NSG rules do not block traffic to the private endpoint on port 443; no NSG requirement or exemption for the agent subnet is stated.
+overlap:
+  decision: adapt
+  coverage: partial
+  rationale: >-
+    NSG presence is already covered: PSRule Azure.VNET.UseNSGs (Security, SE:06), the built-in policy
+    "Subnets should be associated with a Network Security Group" (a Defender for Cloud assessment
+    wrapper), and Checkov NSG port checks (CKV_AZURE_9, 10, 160). DDoS is covered by the built-in
+    policies "Virtual networks should be protected by Azure DDoS Protection" and "Azure DDoS
+    Protection should be enabled" (Defender assessment), and PSRule has no DDoS rule. Those tools
+    flag every VNet or public IP regardless of design. Foundry Doctor adapts the recommendation by
+    scoping it to the VNet and subnets of the Foundry design (agent subnet, private endpoint subnets),
+    lowering the agent subnet to info because its NSG support is not documented, and raising a DDoS
+    finding only when the template exposes public IP addresses. If Phase 4 does not deliver that
+    scoping, downgrade the decision to reuse and map only the existing IDs.
+  psrule:
+    - Azure.VNET.UseNSGs
+    - Azure.NSG.AnyInboundSource
+  azurePolicy:
+    - "e71308d3-144b-4262-b144-efdc3cc90517 (Subnets should be associated with a Network Security Group)"
+    - "94de2ad3-e0c1-4caf-ad78-5d47bbc83d3d (Virtual networks should be protected by Azure DDoS Protection)"
+    - "a7aca53f-2ed4-4466-a25e-0b45ade68efd (Azure DDoS Protection should be enabled)"
+    - "752154a7-1e0f-45c6-a880-ac75a7e4f648 (Public IP addresses should have resource logs enabled for Azure DDoS Protection)"
+  defender:
+    - "assessment eade5b56-eefd-444f-95c8-23f29e5d93cb (subnets should be associated with a network security group; from policy e71308d3)"
+    - "assessment e3de1cc0-f4dd-3b34-e496-8b5381ba2d70 (Azure DDoS Protection should be enabled; from policy a7aca53f)"
+  advisor: []
+  bicepLinter: []
+  checkov:
+    - CKV_AZURE_9
+    - CKV_AZURE_10
+    - CKV_AZURE_160
+implementation:
+  owner: native
+  package: internal/rules/net
+testability: >-
+  Offline with compiled ARM fixtures: VNets with and without NSG associations, special purpose
+  subnets, public IPs with and without ddosSettings. No live data is needed.
+tests:
+  positive:
+    - pe-subnet-without-nsg
+    - public-ip-without-ddos-protection
+    - any-source-inbound-allow-on-pe-subnet
+  negative:
+    - all-subnets-have-nsg
+    - gateway-and-firewall-subnets-exempt
+    - fully-private-design-no-public-ip
+    - public-ip-with-ddos-ip-protection
+  skipped:
+    - subnet-id-is-parameter
+    - vnet-defined-outside-template
+  uncertain:
+    - agent-subnet-without-nsg
+notes: >-
+  Basis is the Well-Architected security pillar through PSRule's SE:06 tag; the platform does not
+  require either control for Foundry. Unverified: whether an NSG on the agent subnet
+  (delegated to Microsoft.App/environments) is supported or required, and whether the private
+  endpoint network policy setting (SubnetPropertiesFormat.privateEndpointNetworkPolicies includes
+  NetworkSecurityGroupEnabled in the 2026-01-01 spec) is needed for NSG rules to apply to private
+  endpoints; the virtual-network article that explains it was not in the local sources.
+  Defender assessment keys come from the policy definitions, not from a Defender recommendations
+  reference. DDoS plan pricing is deliberately not stated.

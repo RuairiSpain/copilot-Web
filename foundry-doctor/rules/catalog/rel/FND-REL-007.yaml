@@ -1,0 +1,106 @@
+id: FND-REL-007
+version: 1
+group: REL
+title: Multi-region/DR plan question
+description: >-
+  A question rather than a check: has the team decided on a multi-region or disaster recovery strategy for the Foundry project
+  and its stateful dependencies? Whether a region failover is needed is a business decision (RTO/RPO, cost) that cannot
+  be derived from resource configuration. The rule emits an informational prompt, and records the answer if the project
+  supplies one (for example a declared DR tier in the Foundry Doctor configuration). It never fails a deployment.
+status: product-opinion
+phases:
+- '4'
+inputs:
+- azure.yaml
+- bicep-arm
+basis:
+- opinion
+- reliability
+- waf
+- wara
+category: nice-to-have
+pillar: reliability
+severity:
+  dev: info
+  test: info
+  prod: info
+compatibility:
+  azd: ''
+  extensions: {}
+  apiVersions: []
+  preview: false
+  notes: 'No azd dependency: reads Foundry Doctor configuration and compiled ARM JSON'
+evidence:
+  description: >-
+    No pass/fail evidence exists. Inputs: a DR declaration in Foundry Doctor configuration (name and format decided by the
+    configuration schema, not by this catalogue), and as context only the count of distinct locations among the Foundry
+    account, Cosmos DB (properties.locations), Search and API Management (additionalLocations) resources in compiled ARM.
+    Outputs: 'answered' with the declared strategy (the Foundry article names hot/hot, hot/warm, hot/cold), or 'unanswered'
+    as info. A single-region deployment with a declared single-region decision is a valid answer.
+  confidence: uncertain
+recommendation: >-
+  Decide and record the intended strategy: single region with backup and restore, or multi-region (hot/hot, hot/warm, hot/cold)
+  with the RTO/RPO and cost it implies. For multi-region Foundry the article says you create separate Foundry resources
+  and dependencies in each region, deploy to both from CI/CD, and replicate or rebuild state (Cosmos DB read regions with
+  service-managed failover, a second AI Search service, storage redundancy).
+fix: |-
+  # foundry-doctor configuration (key name as in ADR-007; the schema is defined by the configuration spec)
+  reliability:
+    disasterRecovery:
+      strategy: single-region   # or hot-hot | hot-warm | hot-cold
+      recoveryRegion: northeurope
+      notes: Recover from Cosmos point-in-time backup; rebuild Search index from source
+sources:
+- url: https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency
+  lastVerified: '2026-10-04'
+  verifiedVia: >-
+    refs/azure-ai-docs/articles/foundry/how-to/high-availability-resiliency.md and includes/how-to-high-availability-resiliency-1.md
+    (ms.date 09/21/2026)
+  note: >-
+    Foundry guidance on shared responsibility, delete locks, zone redundancy, recovery configuration and multi-region deployment.
+- url: >-
+    https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/Search/searchServices/recommendations.yaml
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/wara (git show HEAD:azure-resources/Search/searchServices/recommendations.yaml)
+  note: WARA dff62efe (multi-region AI Search), pgVerified false.
+- url: >-
+    https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/DocumentDB/databaseAccounts/recommendations.yaml
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/wara (git show HEAD:azure-resources/DocumentDB/databaseAccounts/recommendations.yaml)
+  note: >-
+    WARA 43663217-a1d3-844b-80ea-571a2ce37c6c (at least two regions) and 9cabded7-a1fc-6e4a-944b-d7dd98ea31a2 (service-managed
+    failover).
+- url: >-
+    https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/CognitiveServices/accounts/recommendations.yaml
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/wara (git show HEAD:azure-resources/CognitiveServices/accounts/recommendations.yaml)
+  note: WARA 61187af4-7d36-4b48-b16e-de78bef143a0 (AOAI in multiple regions), pgVerified false.
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    PSRule has resource-level multi-region checks (for example Azure.APIM.MultiRegion) and WARA has per-resource multi-region
+    recommendations, but none asks whether a DR strategy was chosen across the Foundry project. A deterministic check for
+    'multi-region' would assert a business need that no source states, so this is a prompt recorded as product opinion.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/rel
+tests:
+  positive:
+  - 'declared strategy present: reported as answered at info'
+  negative:
+  - 'no declaration in configuration: reported as unanswered at info, never an error or warning'
+  skipped:
+  - 'quiet or CI profile configured to suppress prompts: skipped with reason'
+  uncertain:
+  - 'declaration present but references a recovery region not found in the template: reported uncertain'
+testability: Unit tests on configuration fixtures; no Azure access.
+notes: >-
+  Product opinion: the Foundry article documents DR options, but not that every project needs them. The configuration key
+  is illustrative and must be decided by the configuration schema owner. Configuration key decided in ADR-007: policy.disasterRecovery.declared.

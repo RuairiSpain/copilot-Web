@@ -1,0 +1,153 @@
+id: FND-DEP-008
+version: 1
+group: DEP
+title: What-if has no unexpected delete
+description: >-
+  An ARM what-if of the compiled deployment against the target scope must not predict a Delete of an existing resource that
+  the change did not intend to remove. Whether a change recreates a resource is not exposed by the what-if result (the changeType
+  enum has no Replace value), so it is not asserted. what-if is the only evidence source that sees live state; it is opt-in
+  because it is a POST that needs the same permissions as the deployment (see notes on read-only).
+status: verified
+phases:
+- '2'
+inputs:
+- bicep-arm
+- azd-env
+- control-plane
+basis:
+- operations
+category: must-have
+pillar: reliability
+severity:
+  dev: warning
+  test: error
+  prod: error
+compatibility:
+  azd: '>=1.34.2 <=1.36.0-beta.1'
+  extensions: {}
+  apiVersions:
+  - Microsoft.Resources deployments 2026-06-01
+  preview: true
+  notes: >-
+    azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects
+    beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from
+    a changelog and was not verified.
+evidence:
+  description: >-
+    One long-running POST per deployment scope, api-version 2026-06-01 (the whatIf operation of the Microsoft.Resources
+    deployments spec): resource group POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Resources/deployments/{deploymentName}/whatIf
+    (Deployments_WhatIf), subscription scope POST /subscriptions/{subscriptionId}/providers/Microsoft.Resources/deployments/{deploymentName}/whatIf,
+    plus management-group and tenant variants. Responses are 200 or 202 (asynchronous, poll the operation). The body is
+    DeploymentWhatIf {location, properties} with properties.whatIfSettings.resultFormat (ResourceIdOnly or FullResourcePayloads;
+    use FullResourcePayloads, the documented default, because ResourceIdOnly can only return Deploy). The result is WhatIfOperationResult
+    {status, properties.changes[], error}; each WhatIfChange has resourceId, resourceType, changeType, before, after, delta
+    and unsupportedReason. changeType enum: Create, Delete, Ignore, Deploy, NoChange, Modify, Unsupported (there is no Replace
+    value; see notes). Violations: (a) changeType Delete on any resource, which occurs for resources absent from the template
+    only in complete deployment mode (azd deploys incrementally, so this fires rarely), when the change was not declared
+    as intended (an explicit allow-list of resource ids or types in the project baseline); (b) changeType Modify is NOT
+    a violation: an incremental redeploy of an existing account, project, search service or similar reports Modify for any
+    property change, and what-if also reports Modify for read-only or no-effect properties. Modify on a stateful Foundry
+    resource type (accounts, projects, search services, storage accounts, Cosmos DB accounts, key vaults, connections) is
+    reported as an informational line only. A property delta that marks a change as recreate is not available from the spec
+    and is therefore not asserted. Uncertain, never passed: changeType Ignore (expansion limits of 500 nested templates,
+    800 resource groups or 5 minutes were reached, so the rest of the plan is unknown), changeType Unsupported, Deploy results,
+    and any resource whose delta involves the reference function (what-if reports a change every time because it cannot
+    resolve it). Role family: Microsoft.Resources/deployments/whatIf/action, documented to have the same permission requirements
+    as the deployment (write access on the resources being deployed and Microsoft.Resources/deployments/*). Reader does
+    NOT suffice. The answer is definitive for a returned Delete and uncertain for Ignore, Unsupported, Deploy and reference()
+    deltas.
+  confidence: likely
+recommendation: >-
+  Review each predicted Delete. If it is intended, record it in the baseline with a reason and expiry; if not, switch the
+  deployment to incremental mode, add the missing resource to the template, or remove the conflicting change. Re-run what-if
+  after fixing.
+fix: |
+  # preview at resource group scope; nothing is deployed
+  az deployment group what-if --resource-group <rg> --template-file main.bicep --parameters main.bicepparam
+sources:
+- url: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/deployments/stable/2026-06-01/deployments.json
+  lastVerified: '2026-10-04'
+  verifiedVia: >-
+    refs/rest-api-specs/specification/resources/resource-manager/Microsoft.Resources/deployments/stable/2026-06-01/deployments.json
+  note: >-
+    Deployments_WhatIf and the subscription, management-group and tenant POST variants (long-running; 200, 202); WhatIfOperationResult,
+    WhatIfChange, ChangeType enum (Create, Delete, Ignore, Deploy, NoChange, Modify, Unsupported), DeploymentWhatIfSettings.resultFormat
+    (ResourceIdOnly, FullResourcePayloads).
+- url: https://learn.microsoft.com/azure/azure-resource-manager/templates/deploy-what-if
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-docs/articles/azure-resource-manager/templates/deploy-what-if.md (ms.date 06/26/2026)
+  note: >-
+    The what-if operation doesn't make any changes to existing resources; limits (500 nested templates, 800 resource groups,
+    5 minutes) set remaining changes to Ignore; reference function limitation; change types incl. NoEffect in the article;
+    ResourceIdOnly returns Deploy; complete-mode deletion.
+- url: https://learn.microsoft.com/azure/azure-resource-manager/templates/deploy-what-if
+  lastVerified: '2026-10-04'
+  verifiedVia: >-
+    https://raw.githubusercontent.com/MicrosoftDocs/azure-docs/main/includes/template-deploy-permissions.md (include, ms.date
+    08/19/2025)
+  note: >-
+    To deploy you need write access on the resources and all operations on Microsoft.Resources/deployments. The what-if
+    operation has the same permission requirements.
+- url: https://learn.microsoft.com/azure/role-based-access-control/permissions/management-and-governance
+  lastVerified: '2026-10-04'
+  verifiedVia: >-
+    https://raw.githubusercontent.com/MicrosoftDocs/azure-docs/main/articles/role-based-access-control/permissions/management-and-governance.md
+  note: >-
+    Microsoft.Resources/deployments/whatIf/action 'Predicts template deployment changes'; deployments/validate/action; deployments/write.
+- url: https://github.com/Azure/azure-dev/blob/main/cli/azd/docs/design/provision-validation.md
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-dev/cli/azd/docs/design/provision-validation.md
+  note: >-
+    azd runs a server-side ARM preflight (ValidatePreflight) before deploy, controlled by provision.preflight; the document
+    does not say it reports deletes.
+overlap:
+  decision: native
+  coverage: partial
+  rationale: >-
+    ARM what-if (and az deployment what-if / azd's preview) already produce the change list; Foundry Doctor does not re-implement
+    that. The added value is classification: delete versus intended, Foundry stateful resource awareness, baseline integration,
+    the uncertain handling of Ignore, Unsupported and reference(), and profile-aware severity. No PSRule, Policy, Defender,
+    Advisor or Checkov rule evaluates what-if output. azd's ValidatePreflight is a different call and was not shown to report
+    deletes.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/dep
+testability: >-
+  Offline with recorded WhatIfOperationResult JSON for each change type, including the Ignore (limit reached) and Unsupported
+  cases and a reference() delta. Live what-if is an opt-in integration test.
+tests:
+  positive:
+  - delete-in-complete-mode-of-resource-not-in-baseline
+  negative:
+  - create-and-modify-only
+  - delete-listed-in-baseline-with-reason-and-expiry
+  - incremental-redeploy-shows-modify-on-stateful-resource-no-finding
+  skipped:
+  - what-if-not-enabled-by-user
+  - caller-lacks-deployments-whatif-action
+  - bicep-cli-missing-cannot-build-template
+  uncertain:
+  - change-type-ignore-expansion-limit-reached
+  - change-type-unsupported
+  - result-format-resource-id-only-returns-deploy
+  - delta-involves-reference-function
+  - noeffect-or-readonly-property-modify-noise
+notes: >-
+  Read-only decision (for the lead and an ADR, product opinion): what-if is an HTTP POST, which the Foundry Doctor principle
+  "never mutates Azure" must not equate with a write. Sourced facts: it does not change existing resources, and it needs
+  the deployment-level permission (deployments/whatIf/action; the Learn text says the same requirements as deploying). Not
+  verified: whether the call writes any deployment record or activity-log entry (the sources read do not say). Recommended
+  handling, as an opinion: classify what-if as a non-mutating, permission-heavy check; run it only on explicit opt-in (never
+  by default), never in the same step as deployment, and report it skipped when the caller lacks the action. Reader callers
+  cannot use it, so the default doctor run must not depend on it. The PRD title says delete/replace but the API has no Replace
+  change type; recreate detection would need property-level delta analysis of immutable properties and is not asserted here
+  (PRD ambiguity). Warning in dev is a product choice, not a platform statement. Corrected after the Phase 0 Azure black
+  belt review: Modify on a stateful resource was a guaranteed false positive on any redeploy and is now informational only;
+  the title no longer promises replace detection (PRD section 20 title "delete/replace" is therefore adjusted; see docs/development/phase-execution.md).

@@ -1,0 +1,153 @@
+id: FND-DEP-011
+version: 1
+group: DEP
+title: Subnet delegation/capacity/use is compatible
+description: >-
+  When a Foundry Agent Service deployment injects into a customer virtual network, the agent subnet must be delegated to
+  Microsoft.App/environments, sized /27 or larger (the Learn portal step) with /24 recommended, use an allowed private address
+  space that does not overlap reserved ranges, not be shared with another Foundry resource, have a name within the documented
+  length, and be in the same region as the Foundry resource.
+status: verified
+phases:
+- '2'
+inputs:
+- azure.yaml
+- bicep-arm
+- control-plane
+basis:
+- platform
+category: must-have
+pillar: reliability
+severity:
+  dev: error
+  test: error
+  prod: error
+compatibility:
+  azd: '>=1.34.2 <=1.36.0-beta.1'
+  extensions:
+    azure.ai.projects: '>=1.0.0-beta.13 <=1.0.0-beta.13'
+  apiVersions:
+  - Microsoft.Network 2025-05-01
+  preview: true
+  notes: >-
+    azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects
+    beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from
+    a changelog and was not verified. Extension ranges are exactly the versions whose schemas or source were read; widen
+    them in Phase 1 by reading older tags.
+evidence:
+  description: >-
+    Read-only GET calls, api-version 2025-05-01 (Microsoft.Network virtualNetwork spec): subnet GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/subnets/{subnetName}
+    (Subnets_Get); its serviceAssociationLinks (ServiceAssociationLinks_List) and resourceNavigationLinks (ResourceNavigationLinks_List)
+    under the same subnet path; and the virtual network GET for location. Subnet properties used: addressPrefix and addressPrefixes,
+    delegations[].properties.serviceName, ipConfigurations, privateEndpoints, serviceAssociationLinks, resourceNavigationLinks.
+    VirtualNetworks_ListUsage (GET .../virtualNetworks/{virtualNetworkName}/usages, fields currentValue, limit, name) gives
+    virtual-network level counts only, not free addresses in a subnet. Subnet ID comes from the Bicep snapshot or the azure.yaml/Bicep
+    network parameters of the Foundry project. Checks: (a) delegations contains serviceName Microsoft.App/environments (a
+    missing delegation is certain; the documented failure text 'Subnet requires any of the following delegation(s) [Microsoft.App/environments]'
+    exists); (b) prefix length at most /27 (the Learn portal step requires /27 or larger; the limitations section recommends
+    /24, so a prefix between /25 and /27 is reported as a warning in the finding text, longer than /27 as a violation);
+    (c) the address range is in 10.0.0.0/8, 172.16.0.0/12 or 192.168.0.0/16 and does not overlap the reserved ranges listed
+    in the Learn article (169.254.0.0/16, 172.30.0.0/16, 172.31.0.0/16, 192.0.2.0/24, 0.0.0.0/8, 127.0.0.0/8, 100.100.0.0/17,
+    100.100.192.0/19, 100.100.224.0/19); a range in 100.64.0.0/10 (RFC 6598) is reported as skipped with the reason 'documentation
+    conflict', exactly as FND-NET-006 does, because the virtual-networks include lists it as supported while the deep-dive
+    article does not; overlap with peered networks is reported only when the peering address spaces are readable; (d) the
+    subnet has no service association link owned by a different Foundry resource (reported as likely, because the Learn
+    text states the exclusivity rule and shows a service association link in the failure text, but the link format is not
+    documented as the exclusivity marker); (e) subnet name at most 63 UTF-8 bytes for Azure Container Apps-backed deployments;
+    (f) the virtual network location equals the Foundry resource location. NSG, firewall and UDR dependency rules are not
+    evaluated. Role family: Microsoft.Network/virtualNetworks/subnets/read and related link reads are covered by Reader
+    (*/read). Reader suffices. The answer is definitive for (a), (b), (c) outside 100.64.0.0/10, (e) and (f) and likely
+    for (d) and free-address capacity, which cannot be computed from the sources read.
+  confidence: likely
+recommendation: >-
+  Use a dedicated subnet of /24 (at least /27) in an allowed private range, delegate it to Microsoft.App/environments, keep
+  it in the same region as the Foundry resource, and give each Foundry resource its own agent subnet.
+fix: |
+  resource agentSubnet 'Microsoft.Network/virtualNetworks/subnets@2025-05-01' = {
+    parent: vnet
+    name: 'agent-subnet'
+    properties: {
+      addressPrefix: '192.168.0.0/24'
+      delegations: [
+        { name: 'Microsoft.App/environments', properties: { serviceName: 'Microsoft.App/environments' } }
+      ]
+    }
+  }
+sources:
+- url: https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks
+  lastVerified: '2026-10-04'
+  verifiedVia: >-
+    refs/azure-ai-docs/articles/foundry/agents/includes/how-to-virtual-networks-content.md (included by agents/how-to/virtual-networks.md,
+    ms.date 06/15/2026; include ms.date 09/28/2026)
+  note: >-
+    Delegation to Microsoft.App/environments; /27 or larger required, /24 recommended; allowed address spaces; reserved
+    ranges; agent subnet cannot be shared; name at most 63 UTF-8 bytes (Container Apps-backed); same region as the VNet;
+    troubleshooting texts for address space, provider registration and delegation.
+- url: https://learn.microsoft.com/azure/foundry/agents/concepts/limits-quotas-regions
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/limits-quotas-regions.md (ms.date 09/07/2026)
+  note: >-
+    Regional support for private networking: Foundry resource and VNet in the same region; Private VNet column of the supported
+    regions table.
+- url: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/network/resource-manager/Microsoft.Network/Network/stable/2025-05-01/virtualNetwork.json
+  lastVerified: '2026-10-04'
+  verifiedVia: >-
+    https://raw.githubusercontent.com/Azure/azure-rest-api-specs/main/specification/network/resource-manager/Microsoft.Network/Network/stable/2025-05-01/virtualNetwork.json
+    (the network spec was not in the local clone)
+  note: >-
+    Subnets_Get, Subnets_List, ResourceNavigationLinks_List, ServiceAssociationLinks_List, VirtualNetworks_ListUsage (GET);
+    AvailableDelegations_List; SubnetPropertiesFormat (addressPrefix, addressPrefixes, delegations, serviceAssociationLinks,
+    resourceNavigationLinks, ipConfigurations, privateEndpoints); Delegation / ServiceDelegationPropertiesFormat.serviceName.
+- url: https://learn.microsoft.com/azure/role-based-access-control/permissions/networking
+  lastVerified: '2026-10-04'
+  verifiedVia: >-
+    https://raw.githubusercontent.com/MicrosoftDocs/azure-docs/main/articles/role-based-access-control/permissions/networking.md
+  note: Microsoft.Network/virtualNetworks/subnets/read, Microsoft.Network/locations/availableDelegations/read.
+overlap:
+  decision: native
+  coverage: partial
+  rationale: >-
+    PSRule has network rules for VNets and AKS (for example Azure.AKS.CNISubnetSize), but none for the Foundry agent subnet's
+    delegation, size, exclusivity or reserved ranges. Azure Policy built-ins that mention subnet delegations were not found
+    to cover Microsoft.App/environments. The Foundry-specific contract (delegation target, size, ranges, one Foundry resource
+    per subnet) is the value, so it is native.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/dep
+testability: >-
+  Offline with recorded subnet, service association link and virtual network JSON. Prefix-length and range-overlap arithmetic
+  is pure logic with table tests.
+tests:
+  positive:
+  - subnet-not-delegated-to-microsoft-app-environments
+  - subnet-prefix-longer-than-slash-27
+  - subnet-in-public-or-reserved-range
+  - subnet-name-longer-than-63-bytes
+  - vnet-region-differs-from-foundry-region
+  - subnet-already-used-by-another-foundry-resource
+  negative:
+  - delegated-slash-24-private-range-same-region
+  skipped:
+  - no-network-injection-configured
+  - no-azure-credential-available
+  - subnet-id-unresolved-expression
+  - cgnat-100-64-subnet-docs-conflict
+  uncertain:
+  - free-address-capacity-not-computable
+  - peered-network-address-spaces-unreadable
+notes: >-
+  Learn conflict: the portal step says /27 or larger is required, while the limitations section says /24 is recommended
+  because of the Container Apps delegation; the rule treats /27 as the hard floor and /24 as advice. The subnet name limit
+  is documented only for Azure Container Apps-backed deployments. Capacity cannot be computed from the sources read (the
+  ListUsage API is virtual-network level), so no free-address claim is made. Applies to the network-secured standard agent
+  only. Canonical IDs: FND-NET-004, FND-NET-005 and FND-NET-006 own delegation, size, name length, region and address-range
+  findings from the offline template. This rule supplies the live subnet evidence for the same facts and additionally owns
+  the service-association-link exclusivity check (d). When both report the same fact for the same subnet, the NET finding
+  is kept and this one is attached as supporting evidence (ADR-001 item 5).

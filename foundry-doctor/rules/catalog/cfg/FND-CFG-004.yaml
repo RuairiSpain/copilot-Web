@@ -1,0 +1,111 @@
+id: FND-CFG-004
+version: 1
+group: CFG
+title: "Prompt model or hosted source/image is valid"
+description: >-
+  A prompt agent (kind prompt) must carry a non-blank model (a model deployment name) and non-blank
+  instructions, and that deployment name should be one the project declares. A hosted agent (kind
+  hosted) must have an agent source (project path that exists, with a Dockerfile for container
+  builds) or a prebuilt image, must not combine codeConfiguration with image-based container
+  configuration, must give codeConfiguration both runtime and entryPoint, and must keep container
+  resources inside the documented range (cpu 0.25 to 4.0, memory 0.5Gi to 8.0Gi). Voice agents
+  require a model unless they use conversationEngine.
+status: verified
+phases: ["1"]
+inputs: ["azure.yaml"]
+basis: ["platform"]
+category: must-have
+pillar: reliability
+severity:
+  dev: error
+  test: error
+  prod: error
+compatibility:
+  azd: ">=1.34.2 <=1.36.0-beta.1"
+  extensions:
+    azure.ai.agents: ">=1.0.0-beta.18 <=1.0.0-beta.18"
+    azure.ai.projects: ">=1.0.0-beta.13 <=1.0.0-beta.13"
+  apiVersions: []
+  preview: true
+  notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from a changelog and was not verified. Extension ranges are exactly the versions whose schemas or source were read; widen them in Phase 1 by reading older tags."
+evidence:
+  description: >-
+    For kind prompt: model and instructions are non-blank strings and model equals the name of a
+    deployment in an azure.ai.project the agent uses (skipped when that project sets endpoint or
+    the deployment comes from a $ref file that cannot be read). For kind hosted: project is present
+    and the directory exists; when no image is set and codeConfiguration is absent, a Dockerfile exists
+    under project; codeConfiguration and image are not both set; codeConfiguration has runtime and
+    entryPoint; cpu and memory parse and fall within the documented bounds.
+  confidence: certain
+recommendation: >-
+  Set model to the name of a deployment declared on the project, provide instructions for prompt agents,
+  and for hosted agents provide either source with a Dockerfile, a codeConfiguration, or a prebuilt image.
+fix: |
+  services:
+    ai-project:
+      host: azure.ai.project
+      deployments:
+        - name: gpt-5.4-mini
+          model: {format: OpenAI, name: gpt-5.4-mini, version: "2026-03-17"}
+          sku: {name: GlobalStandard, capacity: 10}
+    helper:
+      host: azure.ai.agent
+      project: src/helper
+      uses: [ai-project]
+      kind: prompt
+      name: helper
+      model: gpt-5.4-mini
+      instructions: Answer briefly.
+sources:
+  - url: https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/azure-yaml-reference.md
+    note: Agent fields, container resource bounds, codeConfiguration vs image, voice model fields.
+  - url: https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json
+    note: "Prompt agent requires model and instructions; CodeConfiguration requires runtime and entryPoint; registryConnectionId requires hosted and no codeConfiguration."
+  - url: https://learn.microsoft.com/azure/foundry/agents/how-to/author-azure-yaml
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/author-azure-yaml.md
+    note: Deploy modes (code vs container), prebuilt image.
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    Correlating a prompt agent model to a deployment declared on its project and checking the hosted
+    source/image combination is Foundry-specific and spans services. PSRule for Azure checks deployed
+    resource properties, not azure.yaml; the JSON schema (FND-CFG-001) only covers per-field shape, not
+    the model-to-deployment link or filesystem checks.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/cfg
+testability: >-
+  Offline against azure.yaml and the repository file tree. Existing-project and external-ref cases are skipped.
+tests:
+  positive:
+    - prompt-agent-model-not-in-project-deployments
+    - prompt-agent-blank-instructions
+    - hosted-agent-project-dir-missing
+    - hosted-agent-code-configuration-and-image
+    - hosted-agent-cpu-above-4
+    - code-configuration-missing-entrypoint
+  negative:
+    - prompt-agent-model-matches-deployment
+    - hosted-agent-prebuilt-image
+    - hosted-agent-code-deploy
+  skipped:
+    - project-uses-existing-endpoint
+    - deployments-in-ref-file-unreadable
+notes: >-
+  Unverified: whether project is still required when image is set. The v1.0 schema requires project for
+  host azure.ai.agent, while the reference describes image as skipping the Dockerfile build; the rule follows
+  the schema and flags it only when project is absent in both. The generic "project and image together are invalid"
+  statement in the schema applies to host containerapp only and is not applied here. The image reference
+  format is not documented beyond an example and is not validated (no tag-pinning claim is made).

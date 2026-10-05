@@ -1,0 +1,92 @@
+id: FND-SEC-010
+version: 1
+group: SEC
+title: Customer-managed keys informational
+description: Informational summary of whether customer-managed key (CMK) encryption is configured on the Foundry
+  account, AI Search, Cosmos DB and Storage resources of a solution. It never fails; it surfaces the posture so
+  teams with a CMK requirement can see the gaps.
+status: verified
+phases:
+- '4'
+inputs:
+- bicep-arm
+- control-plane
+basis:
+- security
+category: nice-to-have
+pillar: security
+severity:
+  dev: info
+  test: info
+  prod: info
+compatibility:
+  azd: ""
+  extensions: {}
+  apiVersions:
+    - "Microsoft.CognitiveServices/accounts 2026-09-01"
+    - "Microsoft.Search/searchServices 2025-05-01"
+    - "Microsoft.DocumentDB/databaseAccounts 2026-03-15"
+    - "Microsoft.Storage/storageAccounts 2026-06-01"
+  preview: false
+  notes: "No azd dependency: reads compiled ARM JSON or ARM control plane Microsoft.CognitiveServices/accounts 2026-09-01 / 2026-09-01: stable) - cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable//cognitiveservices.json. Microsoft.Search/searchServices 2025-05-01 / 2025-05-01: stable) - search/resource-manager/Microsoft.Search/Search/stable//search.json. Microsoft.DocumentDB/databaseAccounts 2026-03-15 / 2026-03-15: stable) - cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable//openapi.json. Microsoft.Storage/storageAccounts 2026-06-01 / 2026-06-01: stable) - storage/resource-manager/Microsoft.Storage/stable//openapi.json."
+evidence:
+  description: 'Foundry account: encryption.keySource equals Microsoft.KeyVault (alternative Microsoft.CognitiveServices)
+    with encryption.keyVaultProperties. Search: encryptionWithCmk.enforcement (Enabled | Disabled | Unspecified;
+    Unspecified behaves as Disabled per spec). Cosmos DB: keyVaultKeyUri present. Storage: encryption.keySource
+    Microsoft.Keyvault versus Microsoft.Storage (read-only in the response; set through the create parameters).
+    Reported as Info with the per-resource CMK state.'
+  confidence: likely
+recommendation: If your compliance regime requires customer-managed keys, configure them on each resource listed
+  and use a Key Vault with soft delete and purge protection (see FND-SEC-005). Otherwise no action is needed.
+fix: "// Informational. Example for a Search service that enforces CMK compliance reporting:\nproperties: {\n  encryptionWithCmk:\
+  \ { enforcement: 'Enabled' }\n}"
+sources:
+- url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+  note: Encryption.keySource enum (Microsoft.CognitiveServices | Microsoft.KeyVault), keyVaultProperties.
+- url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/rest-api-specs/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
+  note: EncryptionWithCmk.enforcement (SearchEncryptionWithCmk enum).
+- url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/rest-api-specs/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
+  note: keyVaultKeyUri property.
+- url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/storage/resource-manager/Microsoft.Storage/stable/2026-06-01/openapi.json
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/rest-api-specs/specification/storage/resource-manager/Microsoft.Storage/stable/2026-06-01/openapi.json
+  note: Encryption.keySource enum (Microsoft.Storage | Microsoft.Keyvault).
+overlap:
+  decision: adapt
+  coverage: partial
+  rationale: Azure Policy has per-service CMK audits (67121cc7 AI Services, 76a56461 and 356da939 Search, 1f905d99
+    Cosmos DB, 6fac406b Storage) and Checkov has CKV_AZURE_100 for Cosmos DB; PSRule has no CMK rule in the reviewed
+    clone. They are per-resource compliance checks. Foundry Doctor adapts the idea into one informational cross-resource
+    view, deliberately without a fail state, so it is not a duplicate of the Policy enforcement path.
+  psrule: []
+  azurePolicy:
+  - 67121cc7-ff39-4ab8-b7e3-95b84dab487d
+  - 76a56461-9dc0-40f0-82f5-2453283afa2f
+  - 356da939-f20a-4bb9-86f8-5db445b0e354
+  - 1f905d99-2ab7-462c-a6b0-f709acca6c8f
+  - 6fac406b-40ca-413b-bf8e-0bf964659c25
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov:
+  - CKV_AZURE_100
+implementation:
+  owner: native
+  package: internal/rules/sec
+tests:
+  positive:
+  - all resources with CMK reports Info with state cmk
+  negative:
+  - resource with platform-managed keys reports Info with state platform-managed (never an error)
+  skipped:
+  - Storage encryption not present in Bicep skipped for template mode
+  - 'uncertain: Search encryptionWithCmk Unspecified is reported as not enforced, not as failure'
+testability: Deterministic on ARM JSON; the Storage encryption property is read-only in responses so live mode is
+  preferred for Storage.
+notes: Basis is security guidance, not a platform constraint; the rule is Info-only in every profile.

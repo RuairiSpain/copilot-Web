@@ -1,0 +1,81 @@
+id: FND-SEC-009
+version: 1
+group: SEC
+title: Policy coverage and compliance evidence
+description: Evidence report on whether Azure Policy assignments at the subscription or resource group scope cover
+  the built-in definitions that Foundry Doctor maps in SEC-001 to SEC-006 and SEC-010, whether any assignment is
+  in DoNotEnforce mode, and what the current compliance state is. Informational in dev, warning in prod. The expectation
+  that an environment assigns these policies is a product opinion.
+status: product-opinion
+phases:
+- '2'
+- '4'
+inputs:
+- control-plane
+basis:
+- opinion
+- security
+category: nice-to-have
+pillar: security
+severity:
+  dev: info
+  test: info
+  prod: warning
+compatibility:
+  azd: ""
+  extensions: {}
+  apiVersions:
+    - "Microsoft.Authorization/policyAssignments 2025-01-01"
+    - "Microsoft.PolicyInsights policyStates 2024-10-01"
+  preview: false
+  notes: "No azd dependency: ARM control plane read Microsoft.Authorization/policyAssignments 2025-01-01 / 2025-01-01: stable, properties.enforcementMode Default|DoNotEnforce|Enroll) - resources/resource-manager/Microsoft.Authorization/policy/stable//policyAssignments.json. Microsoft.PolicyInsights policyStates 2024-10-01 / 2024-10-01: stable, queryResults / summarize; fetched from main branch openapi.json) - specification/policyinsights/resource-manager/Microsoft.PolicyInsights/PolicyInsights/stable//openapi.json."
+evidence:
+  description: List policyAssignments effective at the subscription and resource-group scopes; match policyDefinitionId
+    against the mapped built-in policy IDs; report unmatched mapped IDs as not covered, enforcementMode DoNotEnforce
+    as not enforced, and non-compliant resource counts from PolicyInsights policyStates summarize for matched assignments.
+    Initiative (policySetDefinition) membership is resolved by reading the set.
+  confidence: likely
+recommendation: Assign the built-in policies that correspond to the Foundry Doctor security rules (for example local-auth,
+  public network access, CMK) at subscription or management-group scope, in Default enforcement mode once existing
+  resources are compliant.
+fix: "resource assign 'Microsoft.Authorization/policyAssignments@2025-01-01' = {\n  name: 'foundry-no-local-auth'\n\
+  \  properties: {\n    policyDefinitionId: tenantResourceId('Microsoft.Authorization/policyDefinitions', '71ef260a-8f18-47b7-abcb-62d0673d94dc')\n\
+  \    enforcementMode: 'Default'\n  }\n}"
+sources:
+- url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Authorization/policy/stable/2025-01-01/policyAssignments.json
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/rest-api-specs/specification/resources/resource-manager/Microsoft.Authorization/policy/stable/2025-01-01/policyAssignments.json
+  note: policyAssignments properties.enforcementMode enum (Default, DoNotEnforce, Enroll).
+- url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/policyinsights/resource-manager/Microsoft.PolicyInsights/PolicyInsights/stable/2024-10-01/openapi.json
+  lastVerified: '2026-10-04'
+  verifiedVia: https://raw.githubusercontent.com/Azure/azure-rest-api-specs/main/specification/policyinsights/resource-manager/Microsoft.PolicyInsights/PolicyInsights/stable/2024-10-01/openapi.json
+  note: policyStates queryResults and summarize paths; PolicyState.complianceState is a free string in the spec.
+overlap:
+  decision: native
+  coverage: none
+  rationale: PSRule Azure.Policy.* rules lint policy assignment descriptors and waiver expiry (not coverage of mapped
+    definitions), and Defender regulatory compliance is a different data set. No tool correlates 'which Foundry
+    Doctor security rules have a backing policy assignment'. Native is the evidence assembly over ARM APIs; whether
+    an environment should be covered is product opinion, so status is product-opinion.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/policy
+tests:
+  positive:
+  - mapped definitions all assigned in Default mode passes
+  negative:
+  - mapped definition not assigned reports a coverage gap
+  - assignment with DoNotEnforce reports not enforced
+  skipped:
+  - no Policy Reader permission is skipped
+  - Bicep-only mode is skipped (assignments live outside the template)
+  - 'uncertain: initiative that cannot be expanded is reported uncertain'
+testability: Deterministic given the ARM reads; Skipped without Policy Reader.
+notes: PolicyState.complianceState values were not enumerated in the spec definition; do not hard-code them without
+  reading the API response schema or docs.

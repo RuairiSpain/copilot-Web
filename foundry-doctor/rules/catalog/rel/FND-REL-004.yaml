@@ -1,0 +1,95 @@
+id: FND-REL-004
+version: 1
+group: REL
+title: Delete locks on stateful services
+description: The Foundry account and the customer-managed state stores it depends on (Cosmos DB, AI Search, Storage) should
+  have a CanNotDelete management lock, directly or inherited from a parent scope. Foundry guidance recommends delete locks
+  on these resources. Locks cover control-plane deletion only, not data-plane operations. WAF/WARA-style recommendation, not
+  a platform constraint.
+status: verified
+phases:
+- '4'
+inputs:
+- bicep-arm
+- control-plane
+basis:
+- reliability
+- waf
+category: nice-to-have
+pillar: reliability
+severity:
+  dev: info
+  test: info
+  prod: warning
+compatibility:
+  azd: ""
+  extensions: {}
+  apiVersions:
+    - "Microsoft.Authorization/locks 2020-05-01"
+  preview: false
+  notes: "No azd dependency: reads compiled ARM JSON or ARM control plane Microsoft.Authorization/locks 2020-05-01 / 2020-05-01: stable) - resources/resource-manager/Microsoft.Authorization/locks/stable//locks.json."
+evidence:
+  description: 'Compiled ARM: a Microsoft.Authorization/locks resource with properties.level ''CanNotDelete'' (or ''ReadOnly'',
+    which is stricter) whose scope or parent is the resource or an enclosing resource group. Live: list locks at the resource,
+    resource group and subscription (requires Microsoft.Authorization/locks/read). Locks inherit down from parent scopes and
+    the most restrictive applies. Finding: none of Microsoft.CognitiveServices/accounts, Microsoft.DocumentDB/databaseAccounts,
+    Microsoft.Search/searchServices, Microsoft.Storage/storageAccounts used by the project is covered. A lock created outside
+    the template (for example by policy or a later pipeline stage) is invisible in compiled ARM, so template-only mode reports
+    uncertain rather than fail.'
+  confidence: likely
+recommendation: Add a CanNotDelete lock on the Foundry account and on each stateful dependency, or on the resource group that
+  contains only that workload. Creating locks needs Microsoft.Authorization/locks/write (Owner or User Access Administrator,
+  not Contributor). Locks do not protect data-plane content such as individual blobs, indexes or threads; combine with least-privilege
+  RBAC and, optionally, the Azure Policy denyAction effect.
+fix: "resource lock 'Microsoft.Authorization/locks@2020-05-01' = {\n  name: 'protect-foundry'\n  scope: foundryAccount\n \
+  \ properties: {\n    level: 'CanNotDelete'\n    notes: 'Foundry account holds projects and connections'\n  }\n}"
+sources:
+- url: https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-ai-docs/articles/foundry/how-to/high-availability-resiliency.md and includes/how-to-high-availability-resiliency-1.md
+    (ms.date 09/21/2026)
+  note: Foundry guidance on shared responsibility, delete locks, zone redundancy, recovery configuration and multi-region
+    deployment.
+- url: https://learn.microsoft.com/azure/azure-resource-manager/management/lock-resources
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-docs/articles/azure-resource-manager/management/lock-resources.md
+  note: Lock inheritance, control-plane-only scope, and permissions required (Microsoft.Authorization/locks/*).
+- url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Authorization/locks/stable/2020-05-01/locks.json
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/rest-api-specs/specification/resources/resource-manager/Microsoft.Authorization/locks/stable/2020-05-01/locks.json
+  note: 'ManagementLockProperties.level enum: NotSpecified, CanNotDelete, ReadOnly.'
+- url: https://github.com/Azure/azure-policy/blob/master/built-in-policies/policyDefinitions/General/ResourceType_denyActionDelete.json
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-policy/built-in-policies/policyDefinitions/General/ResourceType_denyActionDelete.json
+  note: Built-in policy 78460a36-508a-49a4-b2b2-2f5ec564f4bb (denyAction delete); complementary, not equivalent.
+overlap:
+  decision: native
+  coverage: none
+  rationale: No PSRule for Azure rule, Checkov check, Defender recommendation or Bicep linter rule for management locks was
+    found in the clones (PSRule Azure.Resource.* covers tags and regions only). Azure Policy 78460a36 (Do not allow deletion
+    of resource types) blocks deletes by resource type instead of requiring a lock, so it is a different control and is listed
+    as related only. The Foundry-specific value is knowing which resources form the project's state (via connections and capability
+    host) and checking inherited locks.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/rel
+tests:
+  positive:
+  - Foundry account with a CanNotDelete lock resource passes
+  - storage account covered by a resource-group-scope lock passes in live mode
+  negative:
+  - Cosmos account referenced by the capability host with no lock at any scope reports missing delete lock
+  skipped:
+  - 'no Microsoft.Authorization/locks/read permission in live mode: skipped with the missing capability'
+  - 'dependency not used by the project: out of scope'
+  uncertain:
+  - 'template-only mode with no lock resource: uncertain because locks can be applied outside the template'
+testability: Unit tests on compiled ARM fixtures; live mode tests use recorded lock list responses at several scopes.
+notes: The Foundry article names the protection each lock gives; the rule does not claim more than that. The dev profile is
+  informational because locks complicate teardown (azd down) in dev environments.

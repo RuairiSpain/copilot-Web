@@ -1,0 +1,104 @@
+id: FND-RUN-003
+version: 1
+group: RUN
+title: Capability host and project connections healthy
+description: >-
+  The project and its capability host must be provisioned successfully, and the connections the capability host binds
+  (AI services, storage, thread storage and vector store) must exist on the project or be shared to it and report no
+  connection error. The rule reads ARM provisioning state and connection metadata only; connection credentials are never requested.
+status: verified
+phases: ["3"]
+inputs: [control-plane]
+basis: [platform, reliability]
+category: must-have
+pillar: reliability
+severity:
+  dev: error
+  test: error
+  prod: error
+compatibility:
+  azd: ""
+  extensions:
+    azure.ai.agents: ">=1.0.0-beta.18 <=1.0.0-beta.18"
+  apiVersions:
+    - "Microsoft.CognitiveServices accounts/projects projects/capabilityHosts accounts/capabilityHosts projects/connections 2026-09-01"
+  preview: true
+  notes: "No azd dependency: ARM reads; no azd behaviour dependency azure.ai.agents 1.0.0-beta.18: read for overlap only. Extension ranges are exactly the versions whose schemas or source were read; widen them in Phase 1 by reading older tags. Microsoft.CognitiveServices accounts/projects projects/capabilityHosts accounts/capabilityHosts projects/connections 2026-09-01: stable."
+evidence:
+  description: >-
+    Read-only ARM probes, api-version 2026-09-01. GET .../accounts/{a}/projects/{p}: properties.provisioningState must be
+    Succeeded (enum Accepted, Creating, Deleting, Moving, Failed, Succeeded, Canceled, ResolvingDNS). GET
+    .../projects/{p}/capabilityHosts and .../accounts/{a}/capabilityHosts: properties.provisioningState (Succeeded, Failed,
+    Canceled, Creating, Updating, Deleting). Failed or Canceled is Fail; Creating, Updating, Deleting or Accepted is Uncertain
+    (operation in progress), never Pass. GET .../projects/{p}/connections and .../accounts/{a}/connections (never the
+    list-with-credentials operation): every name in capability host aiServicesConnections, storageConnections,
+    threadStorageConnections and vectorStoreConnections must exist; a non-empty ConnectionPropertiesV2.error is Fail
+    (described in the spec as the error message if the connection fails). Required permission: ARM read on the account
+    and project (Reader scope); exact resource provider action names were not verified in the clones. Vantage point: control
+    plane, any network. Metadata read: names, provisioning states, connection category/authType/target. Never credentials,
+    keys, or content.
+  confidence: likely
+recommendation: >-
+  Inspect the failing capability host or project in the Foundry portal or with az rest, correct the underlying cause (for
+  example a missing role or a deleted bound resource), and redeploy the capability host. Recreate any missing connection
+  with the same name the capability host references.
+fix: |-
+  resource capHost 'Microsoft.CognitiveServices/accounts/projects/capabilityHosts@2026-09-01' = {
+    parent: project
+    name: 'default'
+    properties: {
+      capabilityHostKind: 'Agents'
+      storageConnections: [ storageConnection.name ]
+      threadStorageConnections: [ cosmosConnection.name ]
+      vectorStoreConnections: [ searchConnection.name ]
+    }
+  }
+sources:
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    note: CapabilityHostProvisioningState, ProvisioningState, CapabilityHostProperties and ConnectionPropertiesV2.error read from the definitions; paths Projects_Get, ProjectCapabilityHosts_List, project connections.
+  - url: https://learn.microsoft.com/azure/foundry/agents/concepts/capability-hosts
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/capability-hosts.md
+    note: Capability host binding model (referenced by the azd extension README).
+  - url: https://github.com/Azure/azure-dev/blob/main/cli/azd/extensions/azure.ai.agents/internal/cmd/doctor/checks_connections.go
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.agents/internal/cmd/doctor/checks_connections.go
+    note: Overlap source (remote.connections) and README Project storage diagnostics (capability host read at api-version 2025-06-01 in storage_rbac_query.go).
+overlap:
+  decision: native
+  coverage: partial
+  rationale: >-
+    azd ai agent doctor check remote.connections only confirms that connection names configured in azure.yaml exist on the
+    project (name matching); its storage diagnostics read the capability host to resolve storage bindings. Neither reads
+    capability host or project provisioningState nor connection error. Azure Policy and PSRule do not model capability
+    hosts. Correlating the capability host bindings with connection existence and state is Foundry-specific.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/run
+tests:
+  positive:
+    - project and capability host Succeeded, all bound connections exist without error
+  negative:
+    - capability host provisioningState Failed
+    - bound storage connection name missing from project and account connections
+    - connection reports a non-empty error
+  skipped:
+    - caller lacks ARM read on the project
+    - project has no capability host (standard agent setup not used)
+  uncertain:
+    - capability host Creating or Updating
+    - connection shared to the project but account connections unreadable
+testability: Deterministic against recorded ARM responses; live mode needs ARM read on the account and project.
+notes: >-
+  Unverified: whether ConnectionPropertiesV2.error is populated by the service for every unhealthy connection (the spec
+  only says it holds the error message if the connection fails); peRequirement and peStatus (Required/NotRequired/NotApplicable
+  and Inactive/Active/NotApplicable) are deliberately not used as pass/fail because no source says what an Inactive
+  status means for health.

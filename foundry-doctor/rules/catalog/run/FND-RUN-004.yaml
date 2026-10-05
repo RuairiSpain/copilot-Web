@@ -1,0 +1,110 @@
+id: FND-RUN-004
+version: 1
+group: RUN
+title: Model deployment state and throttling signal
+description: >-
+  Every model deployment that a project, agent or gateway route depends on must be in a succeeded provisioning state, and
+  recent Azure Monitor metrics must not show HTTP 429 responses for it. The 429 threshold is a product opinion; the
+  meaning of the deployment state and of the 429 status code is documented.
+status: verified
+phases: ["3"]
+inputs: [control-plane]
+basis: [reliability, opinion]
+category: must-have
+pillar: reliability
+severity:
+  dev: warning
+  test: warning
+  prod: error
+compatibility:
+  azd: ""
+  extensions: {}
+  apiVersions:
+    - "Microsoft.CognitiveServices accounts/deployments 2026-09-01"
+    - "Microsoft.Insights/metrics 2024-02-01"
+  preview: false
+  notes: "No azd dependency: ARM and Azure Monitor reads; no azd behaviour dependency Microsoft.CognitiveServices accounts/deployments 2026-09-01: stable. Microsoft.Insights/metrics 2024-02-01: stable."
+evidence:
+  description: >-
+    Probe 1: GET /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.CognitiveServices/accounts/{a}/deployments?api-version=2026-09-01
+    (Deployments list; one Get per deployment is equivalent). properties.provisioningState Succeeded is healthy; Failed,
+    Canceled or Disabled is Fail; Accepted, Creating, Deleting or Moving is Uncertain. Also report properties.dynamicThrottlingEnabled,
+    properties.currentCapacity and properties.rateLimits (all read-only per the spec) as context. Probe 2: GET
+    /{accountResourceId}/providers/Microsoft.Insights/metrics?api-version=2024-02-01 with metricnames=AzureOpenAIRequests,
+    aggregation=Total, an interval and a bounded timespan (default one hour; product opinion), filtered on the StatusCode
+    and ModelDeploymentName dimensions. A total above the configured threshold (default 0, product opinion) for
+    StatusCode 429 on a deployment is reported as a throttling signal. For provisioned-managed deployments also read
+    AzureOpenAIProvisionedManagedUtilizationV2, where 100 percent or above means calls are throttled. Required permission:
+    ARM read on the account for probe 1 and permission to read Azure Monitor metrics on the account for probe 2 (the
+    built-in role carrying these actions was not verified in the clones). Vantage point: control plane, any network.
+    Metadata read: deployment names, model names and versions, counts. No prompts or completions.
+  confidence: likely
+recommendation: >-
+  For a failed or disabled deployment, review the deployment error in the Foundry portal and recreate it. For 429
+  signals, raise the deployment capacity or quota, spread load across deployments or regions, or add client back-off and retry.
+fix: |-
+  resource gpt 'Microsoft.CognitiveServices/accounts/deployments@2026-09-01' = {
+    parent: account
+    name: 'gpt-4o'
+    sku: { name: 'GlobalStandard', capacity: 100 }
+    properties: {
+      model: { format: 'OpenAI', name: 'gpt-4o', version: '2024-11-20' }
+    }
+  }
+sources:
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    note: DeploymentProvisioningState enum, DeploymentProperties (provisioningState, rateLimits, dynamicThrottlingEnabled, currentCapacity); Deployments_Get path.
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/monitor/resource-manager/Microsoft.Insights/Insights/stable/2024-02-01/metrics.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/monitor/resource-manager/Microsoft.Insights/Insights/stable/2024-02-01/metrics.json
+    note: Metrics_List path /{resourceUri}/providers/Microsoft.Insights/metrics with metricnamespace, timespan, interval, metricnames, aggregation parameters.
+  - url: https://learn.microsoft.com/azure/foundry/openai/monitor-openai-reference
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/openai/includes/monitor-openai-reference-content.md
+    note: AzureOpenAIRequests (request volume and errors), AzureOpenAIProvisionedManagedUtilizationV2, and the dimensions StatusCode and ModelDeploymentName for the namespace.
+  - url: https://learn.microsoft.com/azure/foundry/openai/how-to/latency
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/openai/includes/how-to-latency-content.md
+    note: Check AzureOpenAIRequests for 429 throttling on pay-as-you-go deployments.
+  - url: https://learn.microsoft.com/azure/foundry/foundry-models/how-to/monitor-models
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/foundry-models/includes/how-to-monitor-models-1.md
+    note: Provisioned utilization at or above 100 percent returns 429.
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    No PSRule rule, Azure Policy definition or Checkov check inspects deployment runtime state or 429 metrics; they are
+    static template or configuration checks. Defender for Cloud and Advisor recommendation IDs could not be verified from
+    the clones. azd ai agent doctor removed its model-deployments check as producing false failures (CHANGELOG entry
+    for PR 8394), so there is no Microsoft equivalent to reuse. The doctor's value is correlating the deployments the
+    project actually uses with their runtime signal.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/run
+tests:
+  positive:
+    - all used deployments Succeeded and zero 429 in the window
+  negative:
+    - deployment provisioningState Failed
+    - 429 total above threshold for one deployment
+    - provisioned utilization at 100 percent
+  skipped:
+    - caller cannot read metrics
+    - deployment is not used by the project (out of scope)
+  uncertain:
+    - deployment Creating or Updating
+    - metric returns no data points (no traffic versus delayed ingestion)
+testability: Deterministic against recorded ARM and Metrics responses; live mode needs ARM and Monitor read access.
+notes: >-
+  Unverified: the per-metric dimension list for AzureOpenAIRequests (the docs list StatusCode and ModelDeploymentName
+  for the namespace, and the per-metric include file was not in the clone); metric retention and the exact metric
+  namespace string; the built-in role needed for metric reads. The default window and threshold are product opinion.

@@ -1,0 +1,112 @@
+id: FND-CFG-001
+version: 1
+group: CFG
+title: Valid YAML, duplicate-key detection and compatible azure.ai.* schema
+description: >-
+  azure.yaml must parse as YAML with unique mapping keys and conform to the published azd schema (v1.0) for the azure.ai.*
+  service hosts: azure.ai.project, azure.ai.agent, azure.ai.connection, azure.ai.toolbox, azure.ai.skill, azure.ai.routine
+  (and azure.ai.eval). Constraints checked are those the schema states as required, const, enum, type or "not": top-level
+  name pattern, services with at least one entry, host required on every service, project required on azure.ai.agent, prompt
+  agents requiring model and instructions, azure.ai.project forbidding project/runtime/docker/image/config, and the unsupported
+  voice authoring shapes (modelType hosted_agent, targetAgent). Unknown properties are not errors because the schema allows
+  additional properties. Also reports when the declared requiredVersions are older than the extension versions the schema
+  was verified against.
+status: verified
+phases:
+- '1'
+inputs:
+- azure.yaml
+basis:
+- platform
+category: must-have
+pillar: operations
+severity:
+  dev: error
+  test: error
+  prod: error
+compatibility:
+  azd: '>=1.34.2 <=1.36.0-beta.1'
+  extensions:
+    azure.ai.agents: '>=1.0.0-beta.18 <=1.0.0-beta.18'
+    azure.ai.projects: '>=1.0.0-beta.13 <=1.0.0-beta.13'
+  apiVersions: []
+  preview: true
+  notes: >-
+    azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects
+    beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from
+    a changelog and was not verified. Extension ranges are exactly the versions whose schemas or source were read; widen
+    them in Phase 1 by reading older tags.
+evidence:
+  description: >-
+    Parse azure.yaml with a YAML parser that surfaces duplicate keys (reports key and line of each duplicate), then validate
+    the document against the vendored azd azure.yaml v1.0 JSON schema and the referenced azure.ai.* extension schemas vendored
+    from a tagged release or commit (the upstream azure.yaml.json references the extension schemas at the main branch, which
+    is unpinned). Each violation reports the JSON pointer, schema keyword and source line. No network access is needed once
+    the schemas are vendored.
+  confidence: certain
+recommendation: >-
+  Fix the YAML syntax or the reported schema violation. Add the yaml-language-server schema comment to azure.yaml so the
+  editor flags the same errors, and install azure.ai.agents and azure.ai.projects at the versions declared in requiredVersions.
+fix: |
+  # yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+  name: my-agent-project
+  services:
+    ai-project:
+      host: azure.ai.project
+    my-agent:
+      host: azure.ai.agent
+      project: src/my-agent
+      uses: [ai-project]
+      kind: hosted
+sources:
+- url: https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/azure-yaml-reference.md (ms.date 09/17/2026)
+  note: Host list, extension compatibility, JSON schema validation section.
+- url: https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-dev/schemas/v1.0/azure.yaml.json
+  note: Per-host if/then constraints for azure.ai.agent, azure.ai.project and the other azure.ai.* hosts.
+- url: >-
+    https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json
+  note: Prompt-agent required fields, unsupported modelType hosted_agent and targetAgent.
+overlap:
+  decision: adapt
+  coverage: partial
+  rationale: >-
+    azd publishes the JSON schema and editors validate against it, and the azd Foundry agents extension (azd ai agent doctor,
+    check local.azure-yaml) only confirms azure.yaml is present and parseable. Foundry Doctor adds duplicate-key detection,
+    offline validation of the nested azure.ai.* extension schemas in CI, and version-awareness against requiredVersions.
+    The idea is taken from the schema; the evidence (pointer, keyword, line) is Foundry Doctor's own.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/cfg
+testability: Fully offline. Golden fixtures for each schema constraint; schema files vendored per pinned extension version.
+tests:
+  positive:
+  - duplicate-service-key
+  - unknown-host-missing-host-field
+  - agent-without-project
+  - prompt-agent-missing-model-and-instructions
+  - project-service-with-project-path
+  - voice-modeltype-hosted-agent
+  negative:
+  - minimal-hosted-agent-project
+  - full-example-from-reference
+  - unknown-extra-property-allowed
+  skipped:
+  - schema-version-not-vendored-for-declared-extension
+  - azure-yaml-uses-ref-file-missing
+notes: >-
+  Unverified: how azd core handles duplicate YAML keys (azd core parser source is not in the local clone), so duplicate-key
+  detection is a Foundry Doctor addition based on YAML mapping semantics, reported at the same severity. The azure.ai.*
+  schemas are preview and change between extension betas (azure.ai.agents 1.0.0-beta.18, azure.ai.projects 1.0.0-beta.13
+  in the clone).

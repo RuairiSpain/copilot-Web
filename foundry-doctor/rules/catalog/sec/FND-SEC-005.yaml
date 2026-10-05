@@ -1,0 +1,110 @@
+id: FND-SEC-005
+version: 1
+group: SEC
+title: Key Vault soft delete, purge protection and RBAC
+description: >-
+  A Key Vault referenced by Foundry (for customer-managed keys or connections) should have soft delete on (properties.enableSoftDelete),
+  purge protection on (properties.enablePurgeProtection) and the RBAC permission model (properties.enableRbacAuthorization
+  true).
+status: verified
+phases:
+- later
+inputs:
+- bicep-arm
+- control-plane
+basis:
+- security
+category: nice-to-have
+pillar: security
+severity:
+  dev: info
+  test: warning
+  prod: error
+compatibility:
+  azd: ''
+  extensions: {}
+  apiVersions:
+  - Microsoft.KeyVault/vaults 2026-05-15
+  preview: false
+  notes: >-
+    No azd dependency: reads compiled ARM JSON or ARM control plane Microsoft.KeyVault/vaults 2026-05-15 / 2026-05-15: stable)
+    - keyvault/resource-manager/Microsoft.KeyVault/KeyVault/stable//openapi.json.
+evidence:
+  description: >-
+    Compiled ARM or live Microsoft.KeyVault/vaults. Findings: enableSoftDelete explicitly false (spec: defaults to true
+    when unset and cannot be reverted once true); enablePurgeProtection not true (spec: effective only with soft delete
+    and irreversible); enableRbacAuthorization not true (spec: unset means false, access policies then apply).
+  confidence: certain
+recommendation: >-
+  Set enablePurgeProtection true (irreversible, check retention first) and enableRbacAuthorization true, and keep soft delete
+  on. Move any access policies to Azure RBAC role assignments before switching the permission model.
+fix: |-
+  resource kv 'Microsoft.KeyVault/vaults@2026-05-15' = {
+    name: kvName
+    location: location
+    properties: {
+      tenantId: subscription().tenantId
+      sku: { family: 'A', name: 'standard' }
+      enableSoftDelete: true
+      enablePurgeProtection: true
+      enableRbacAuthorization: true
+    }
+  }
+sources:
+- url: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/keyvault/resource-manager/Microsoft.KeyVault/KeyVault/stable/2026-05-15/openapi.json
+  lastVerified: '2026-10-04'
+  verifiedVia: >-
+    refs/rest-api-specs/specification/keyvault/resource-manager/Microsoft.KeyVault/KeyVault/stable/2026-05-15/openapi.json
+  note: VaultProperties.enableSoftDelete / enablePurgeProtection / enableRbacAuthorization descriptions.
+- url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.KeyVault.SoftDelete/
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/psrule/docs/en/rules/Azure.KeyVault.SoftDelete.md
+  note: Overlap source (PSRule for Azure rule documentation).
+- url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.KeyVault.PurgeProtect/
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/psrule/docs/en/rules/Azure.KeyVault.PurgeProtect.md
+  note: Overlap source (PSRule for Azure rule documentation).
+- url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.KeyVault.RBAC/
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/psrule/docs/en/rules/Azure.KeyVault.RBAC.md
+  note: Overlap source (PSRule for Azure rule documentation).
+overlap:
+  decision: reuse
+  coverage: full
+  rationale: >-
+    PSRule Azure.KeyVault.SoftDelete, PurgeProtect and RBAC, Azure Policy 1e66c121, 0b60c0b2 and 12d4fa5e, and Checkov CKV_AZURE_111,
+    110 and 42 give equivalent evidence on the same three properties. No Foundry-specific semantics were found in a primary
+    source (a Foundry requirement for purge protection on CMK vaults was not verified). Foundry Doctor maps the IDs and
+    only normalises severity per profile. If Foundry-scoped correlation is wanted later, revisit as adapt.
+  psrule:
+  - Azure.KeyVault.SoftDelete
+  - Azure.KeyVault.PurgeProtect
+  - Azure.KeyVault.RBAC
+  azurePolicy:
+  - 1e66c121-a66a-4b1f-9b83-0fd99bf0fc2d
+  - 0b60c0b2-2dc2-4e1c-b5c9-abbed971de53
+  - 12d4fa5e-1f9f-4c21-97a9-b99b3c6611b5
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov:
+  - CKV_AZURE_111
+  - CKV_AZURE_110
+  - CKV_AZURE_42
+implementation:
+  owner: psrule
+  package: internal/rules/sec
+tests:
+  positive:
+  - vault with all three properties true maps to Pass
+  negative:
+  - PSRule Azure.KeyVault.PurgeProtect failure maps to FND-SEC-005 finding
+  - PSRule Azure.KeyVault.RBAC failure maps to FND-SEC-005 finding
+  skipped:
+  - PSRule not installed is skipped with the missing capability named
+testability: 'Delegated: mapping tests only (finding from PSRule result maps to FND-SEC-005 with profile severity).'
+notes: >-
+  Phase is 'later' per PRD section 20. Severity is lower than the other SEC rules because the key-management exposure depends
+  on how the vault is used. The waf basis was removed after the Phase 0 Azure black belt review because no WAF pillar tag
+  or WARA recommendation is cited here; the WAF mapping is added in Phase 4 when the guidance is verified.

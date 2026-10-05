@@ -1,0 +1,105 @@
+id: FND-GW-006
+version: 1
+group: GW
+title: "Telemetry sink exists for token tracking"
+description: >-
+  When token metrics or token logging are intended, a telemetry sink must exist and be wired: an
+  llm-emit-token-metric policy needs an applicationInsights logger, an applicationInsights diagnostic with
+  loggerId and metrics true at the scope of the API, and custom metrics with dimensions enabled on the
+  Application Insights resource; alternatively gateway LLM logs need an Azure Monitor diagnostic setting to a
+  Log Analytics workspace.
+status: verified
+phases: ["8"]
+inputs: ["bicep-arm", "control-plane"]
+basis: ["operations"]
+category: nice-to-have
+pillar: operations
+severity:
+  dev: info
+  test: warning
+  prod: error
+compatibility:
+  azd: ""
+  extensions: {}
+  apiVersions:
+    - "Microsoft.ApiManagement/service/loggers and diagnostics 2025-09-01-preview"
+  preview: true
+  notes: "Microsoft.ApiManagement/service/loggers and diagnostics 2025-09-01-preview: loggerType, loggerId, metrics, largeLanguageModel read in spec."
+evidence:
+  description: >-
+    Trigger: an llm-emit-token-metric element exists in the effective policy of an API (otherwise skipped; the
+    presence of the policy is FND-GW-002). Then require: a Microsoft.ApiManagement/service/loggers resource with
+    loggerType applicationInsights; a diagnostics resource (service scope, or API scope for the API) with
+    properties.loggerId referencing that logger and properties.metrics true; the logger's Application Insights
+    resource (resourceId or credentials instrumentationKey reference) exists in the template or subscription.
+    Alternative sink for token logging: properties.largeLanguageModel (logs enabled) on the diagnostic, or a
+    Microsoft.Insights diagnostic setting on the API Management service sending to a Log Analytics workspace.
+    Custom metrics with dimensions on the Application Insights resource is a portal setting that cannot be read
+    from the metadata read here and is reported uncertain. Instrumentation keys and connection strings are never
+    emitted.
+  confidence: likely
+recommendation: >-
+  Create an Application Insights logger, enable the applicationInsights diagnostic with metrics true on the API
+  scope that has llm-emit-token-metric, and enable custom metrics with dimensions on the Application Insights
+  resource; optionally enable the gateway LLM logs diagnostic setting.
+fix: |
+  resource logger 'Microsoft.ApiManagement/service/loggers@2024-05-01' = {
+    parent: apim
+    name: 'appinsights'
+    properties: { loggerType: 'applicationInsights', resourceId: appInsights.id }
+  }
+  resource diag 'Microsoft.ApiManagement/service/diagnostics@2024-05-01' = {
+    parent: apim
+    name: 'applicationinsights'
+    properties: { loggerId: logger.id, metrics: true }
+  }
+sources:
+  - url: https://learn.microsoft.com/azure/api-management/llm-emit-token-metric-policy
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-docs/articles/api-management/llm-emit-token-metric-policy.md
+    note: Prerequisites - Application Insights integration, Application Insights logging for LLM APIs, custom metrics with dimensions.
+  - url: https://learn.microsoft.com/azure/api-management/api-management-howto-app-insights
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-docs/articles/api-management/api-management-howto-app-insights.md
+    note: >-
+      Emit custom metrics steps: enable custom metrics with dimensions, add metrics true to the applicationInsights diagnostic, and configure the logger at the scope.
+  - url: https://learn.microsoft.com/azure/api-management/api-management-howto-llm-logs
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-docs/articles/api-management/api-management-howto-llm-logs.md
+    note: Diagnostic setting for Logs related to generative AI gateway to a Log Analytics workspace for token usage and optional prompts and completions.
+  - url: https://github.com/Azure/azure-rest-api-specs/tree/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/preview/2025-09-01-preview/openapi.json (LoggerContractProperties.loggerType azureEventHub|applicationInsights|azureMonitor; DiagnosticContractProperties.loggerId, metrics, largeLanguageModel)
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    Azure Policy and PSRule have no APIM diagnostics rule for token metrics; the check correlates a policy
+    with the logger and diagnostic that make it effective, which is Foundry/AI-gateway specific.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/providers/apim
+testability: Offline from compiled ARM (policy, logger, diagnostics); portal-only Application Insights setting is reported uncertain.
+tests:
+  positive:
+    - emit-metric-without-logger
+    - emit-metric-diagnostic-metrics-false
+    - diagnostic-logger-id-not-resolvable
+  negative:
+    - emit-metric-with-logger-and-metrics-true
+    - llm-logs-diagnostic-setting-to-workspace
+  skipped:
+    - no-emit-token-metric-policy
+    - custom-metrics-setting-not-readable
+    - logger-resource-in-another-template
+notes: >-
+  The ARM name of the diagnostic-setting log category "Logs related to generative AI gateway" was not found
+  in the sources read, so the Azure Monitor alternative is matched through DiagnosticContractProperties
+  largeLanguageModel or an unspecified Microsoft.Insights setting and is reported at likely confidence.
+  Unverified: the diagnostic scope precedence between service-level and API-level diagnostics for metrics.

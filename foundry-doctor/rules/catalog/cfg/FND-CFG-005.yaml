@@ -1,0 +1,113 @@
+id: FND-CFG-005
+version: 1
+group: CFG
+title: "No raw secrets in YAML/Bicep/environment blocks"
+description: >-
+  Secret values must not appear as literals in azure.yaml (azure.ai.connection credentials, service env
+  maps, target URLs with embedded credentials or SAS tokens), in Bicep or ARM templates and parameter
+  files (non-secure parameters, hard-coded defaults on secure parameters, secrets in outputs), or in
+  azd environment .env files committed to source control. A value that is a ${VAR} or ${{...}} reference
+  is not a raw secret.
+status: verified
+phases: ["1"]
+inputs: ["azure.yaml", "bicep-arm", "azd-env"]
+basis: ["security"]
+category: must-have
+pillar: security
+severity:
+  dev: warning
+  test: error
+  prod: error
+compatibility:
+  azd: ">=1.34.2 <=1.36.0-beta.1"
+  extensions:
+    azure.ai.agents: ">=1.0.0-beta.18 <=1.0.0-beta.18"
+    azure.ai.connections: ">=1.0.0-beta.9 <=1.0.0-beta.9"
+  apiVersions: []
+  preview: true
+  notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from a changelog and was not verified. Extension ranges are exactly the versions whose schemas or source were read; widen them in Phase 1 by reading older tags."
+evidence:
+  description: >-
+    Structural check, not entropy only: for azure.ai.connection with authType in the secret-bearing set
+    (ApiKey, CustomKeys, PAT, AccessKey, AccountKey, SAS, UsernamePassword, OAuth2 client secrets), every
+    credentials value must be a ${VAR} or ${{...}} reference; env values whose key name matches secret naming
+    (key, secret, token, password, pwd, connection string) must be references; target URLs must not contain
+    userinfo or sig/sv/token query parameters; .env files must not be tracked by git. A literal that
+    matches a known secret pattern raises confidence to certain; name-only matches are reported as likely.
+    Bicep and ARM findings are mapped from the Bicep linter, PSRule and Checkov results rather than
+    re-derived. Findings never include the value.
+  confidence: likely
+recommendation: >-
+  Store the secret in the azd environment as a secret (azd env set-secret) or in Key Vault, and reference it
+  with ${VAR} in azure.yaml. In Bicep, mark secret parameters @secure() with no default and never output them.
+  Prefer Entra ID or managed identity authentication where the target supports it.
+fix: |
+  services:
+    github-conn:
+      host: azure.ai.connection
+      uses: [ai-project]
+      category: RemoteTool
+      target: https://api.githubcopilot.com/mcp
+      authType: CustomKeys
+      credentials:
+        Authorization: ${GITHUB_PAT}   # set with: azd env set-secret GITHUB_PAT
+sources:
+  - url: https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/azure-yaml-reference.md
+    note: "Connection changes apply during azd provision. Store credential values in your azd environment and reference them with ${VAR} instead of putting secrets in azure.yaml."
+  - url: https://learn.microsoft.com/azure/developer/azure-developer-cli/manage-environment-variables
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azd-docs/articles/azure-developer-cli/manage-environment-variables.md
+    note: Never store secrets in an azd .env file.
+  - url: https://learn.microsoft.com/azure/developer/azure-developer-cli/environment-secrets
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azd-docs/articles/azure-developer-cli/environment-secrets.md
+    note: azd env set-secret and Key Vault references.
+  - url: https://learn.microsoft.com/azure/azure-resource-manager/bicep/linter-rule-secure-secrets-in-parameters
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-docs/articles/azure-resource-manager/bicep/linter-rule-secure-secrets-in-parameters.md
+    note: Bicep linter rule code secure-secrets-in-params.
+overlap:
+  decision: adapt
+  coverage: partial
+  rationale: >-
+    Bicep/ARM secrets handling is covered by the Bicep linter (secure-secrets-in-params, secure-parameter-default,
+    outputs-should-not-contain-secrets, use-secure-value-for-secure-inputs), PSRule for Azure
+    (Azure.Deployment.SecureParameter, SecureValue, SecretLeak, OutputSecretValue) and Checkov CKV_AZURE_131;
+    Foundry Doctor maps those results and does not re-implement them. None of them read azure.yaml, where
+    azure.ai.connection credentials and service env live; that part is native Foundry-specific evidence.
+  psrule: [Azure.Deployment.SecureParameter, Azure.Deployment.SecureValue, Azure.Deployment.SecretLeak, Azure.Deployment.OutputSecretValue]
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: [secure-secrets-in-params, secure-parameter-default, outputs-should-not-contain-secrets, use-secure-value-for-secure-inputs]
+  checkov: [CKV_AZURE_131, CKV_SECRET_6]
+implementation:
+  owner: native
+  package: internal/rules/cfg
+testability: >-
+  Offline for azure.yaml and .env tracking; Bicep and ARM findings require the Bicep CLI and external tools
+  and are skipped (not passed) when those are absent.
+tests:
+  positive:
+    - connection-credentials-literal-api-key
+    - service-env-literal-token
+    - target-url-with-sas-signature
+    - target-url-with-userinfo
+    - dotenv-tracked-in-git
+  negative:
+    - credentials-use-env-reference
+    - foundry-server-side-expression-passthrough
+    - managed-identity-connection-no-credentials
+  skipped:
+    - bicep-cli-missing
+    - checkov-not-configured
+notes: >-
+  The Learn guidance conflicts in emphasis: the Foundry reference stores connection secrets in the azd
+  environment via ${VAR} (azd env set), while the azd docs say never to keep secrets in a .env file and
+  recommend azd env set-secret (Key Vault reference). The fix example follows the azd secret guidance.
+  The "secret-bearing authType" set is derived from the authType enum in the connection schema; whether
+  each type carries a secret in credentials is not documented and the set is a product decision.
+  CKV_SECRET_6 is mentioned in the Checkov README only as an example of the secrets framework; its exact
+  semantics were not verified.

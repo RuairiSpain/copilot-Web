@@ -1,0 +1,85 @@
+id: FND-SEC-013
+version: 1
+group: SEC
+title: Gateway tenant validation is robust
+description: Token validation policies on an AI gateway must pin the Microsoft Entra tenant and the accepted client
+  or audience. validate-azure-ad-token with tenant-id of organizations or common accepts tokens from any (or any
+  and personal) directory per the policy reference; omitting both client-application-ids and audiences leaves the
+  token unscoped.
+status: verified
+phases:
+- '8'
+inputs:
+- bicep-arm
+- control-plane
+basis:
+- security
+category: must-have
+pillar: security
+severity:
+  dev: warning
+  test: error
+  prod: error
+compatibility:
+  azd: ""
+  extensions: {}
+  apiVersions: []
+  preview: false
+  notes: "No azd dependency: reads policy XML in compiled ARM or live APIM policy Microsoft.ApiManagement policy XML (validate-azure-ad-token reference, ms.date 08/18/2026) - refs/azure-docs/articles/api-management/validate-azure-ad-token-policy.md"
+evidence:
+  description: 'Policy XML at service, product, API or operation scope: a validate-azure-ad-token element whose
+    tenant-id is organizations, common, or the matching https://login.microsoftonline.com/organizations|common URL,
+    or a validate-jwt element whose issuers or openid-config points at the multi-tenant organizations/common endpoint;
+    or no validate-* element at all on an API that fronts a model backend; or a validate-azure-ad-token that has
+    neither client-application-ids nor audiences. Policy expressions that cannot be resolved produce Skipped.'
+  confidence: likely
+recommendation: Set tenant-id to your tenant ID, add the expected audience and client application IDs, and keep
+  authentication at the API level. If multi-tenant access is intended, enumerate allowed tenants through issuers
+  and claims and record a suppression with reason and expiry.
+fix: "<validate-azure-ad-token tenant-id=\"{{aad-tenant-id}}\">\n  <client-application-ids>\n    <application-id>{{client-app-id}}</application-id>\n\
+  \  </client-application-ids>\n  <audiences>\n    <audience>{{api-audience}}</audience>\n  </audiences>\n</validate-azure-ad-token>"
+sources:
+- url: https://learn.microsoft.com/azure/api-management/validate-azure-ad-token-policy
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-docs/articles/api-management/validate-azure-ad-token-policy.md
+  note: 'tenant-id attribute: organizations / common accept any directory; client-application-ids and audiences.'
+- url: https://learn.microsoft.com/azure/api-management/validate-jwt-policy
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-docs/articles/api-management/validate-jwt-policy.md
+  note: issuers and openid-config multi-tenant endpoint.
+- url: https://learn.microsoft.com/azure/api-management/api-management-authenticate-authorize-ai-apis
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-docs/articles/api-management/api-management-authenticate-authorize-ai-apis.md
+  note: Recommends validate-azure-ad-token to validate audience and claims.
+overlap:
+  decision: native
+  coverage: none
+  rationale: No PSRule Azure.APIM.* rule, Azure Policy built-in in the reviewed APIM folder (which covers named-value
+    secrets, basic auth, TLS and similar), Checkov or Bicep linter check evaluates the content of validate-azure-ad-token
+    / validate-jwt policy XML. The check is policy-XML analysis with Foundry-gateway scoping (APIs fronting model
+    backends), which is Foundry-specific.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/sec
+tests:
+  positive:
+  - tenant-id is a concrete tenant GUID with audiences passes
+  negative:
+  - tenant-id organizations fails
+  - tenant-id common fails
+  - validate-azure-ad-token without client-application-ids and audiences fails
+  - LLM API without any validate-* policy fails
+  skipped:
+  - tenant-id is a policy expression is skipped
+  - policy defined in a fragment not in scope is skipped
+  - 'uncertain: multi-tenant intended through issuers claim list is reported uncertain'
+testability: Deterministic XML analysis of policy documents; no network access.
+notes: 'Phase 8; policy XML is not a versioned ARM property so no API version applies. Whether organizations/common
+  is unacceptable is a security judgement (documented behaviour: accepts any directory), hence basis security and
+  not platform.'

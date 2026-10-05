@@ -1,0 +1,104 @@
+id: FND-REL-003
+version: 1
+group: REL
+title: Cosmos zone redundancy and continuous backup
+description: A Cosmos DB account used by Foundry (Agent Service standard mode state store) should have zone redundancy on
+  its locations and continuous backup with point-in-time restore. Foundry guidance recommends continuous backup before any
+  incident, and zone-redundant configuration. WAF/WARA recommendation, not a platform constraint.
+status: verified
+phases:
+- '4'
+inputs:
+- bicep-arm
+- control-plane
+basis:
+- reliability
+- waf
+- wara
+category: nice-to-have
+pillar: reliability
+severity:
+  dev: info
+  test: info
+  prod: warning
+compatibility:
+  azd: ""
+  extensions: {}
+  apiVersions:
+    - "Microsoft.DocumentDB/databaseAccounts 2025-10-15"
+    - "Microsoft.DocumentDB/databaseAccounts 2026-03-15"
+  preview: false
+  notes: "No azd dependency: reads compiled ARM JSON or ARM control plane Microsoft.DocumentDB/databaseAccounts 2025-10-15 / 2025-10-15 / 2026-03-15: stable) - cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable//cosmos-db.json ( stable exists but only its examples are in the clone."
+evidence:
+  description: 'Compiled ARM or live Microsoft.DocumentDB/databaseAccounts referenced by a Foundry capability host (vectorStoreConnections
+    / threadStorageConnections) or connection. Finding 1: any properties.locations[].isZoneRedundant is not true (spec: flag
+    indicating whether the region is an availability zone region). Finding 2: properties.backupPolicy.type is not ''Continuous''
+    (BackupPolicyType enum: Periodic, Continuous); when Continuous, report properties.backupPolicy.continuousModeProperties.tier
+    as information. Unsupported-region and RU-versus-other-model constraints on zone redundancy are not in a source read here,
+    so a region without zone support yields uncertain, not fail.'
+  confidence: likely
+recommendation: Set isZoneRedundant true on each location in regions that support availability zones, and set backupPolicy.type
+  Continuous (7-day or 30-day tier, per the Foundry guidance) before an incident occurs. Continuous backup adds cost. Also
+  consider a second location with automatic failover enabled (see FND-REL-007).
+fix: "resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2025-10-15' = {\n  name: cosmosName\n  location: location\n \
+  \ properties: {\n    databaseAccountOfferType: 'Standard'\n    locations: [\n      { locationName: location, failoverPriority:\
+  \ 0, isZoneRedundant: true }\n    ]\n    backupPolicy: {\n      type: 'Continuous'\n      continuousModeProperties: { tier:\
+  \ 'Continuous7Days' }\n    }\n  }\n}"
+sources:
+- url: https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-ai-docs/articles/foundry/how-to/high-availability-resiliency.md and includes/how-to-high-availability-resiliency-1.md
+    (ms.date 09/21/2026)
+  note: Foundry guidance on shared responsibility, delete locks, zone redundancy, recovery configuration and multi-region
+    deployment.
+- url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2025-10-15/cosmos-db.json
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/rest-api-specs/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2025-10-15/cosmos-db.json
+  note: Location.isZoneRedundant, BackupPolicyType (Periodic, Continuous), ContinuousModeBackupPolicy.continuousModeProperties.tier.
+    Tier value Continuous7Days taken from the Foundry article CLI example.
+- url: https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/DocumentDB/databaseAccounts/recommendations.yaml
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/wara (git show HEAD:azure-resources/DocumentDB/databaseAccounts/recommendations.yaml)
+  note: WARA 921631f6-ed59-49a5-94c1-f0f3ececa580 (availability zones, pgVerified false), e544520b-8505-7841-9e77-1f1974ee86ec
+    (continuous backup, pgVerified true).
+- url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.Cosmos.AvailabilityZone/
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/psrule/docs/en/rules/Azure.Cosmos.AvailabilityZone.md
+  note: Overlap source (PSRule for Azure rule documentation).
+- url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.Cosmos.ContinuousBackup/
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/psrule/docs/en/rules/Azure.Cosmos.ContinuousBackup.md
+  note: Overlap source (PSRule for Azure rule documentation).
+overlap:
+  decision: adapt
+  coverage: partial
+  rationale: PSRule Azure.Cosmos.AvailabilityZone and Azure.Cosmos.ContinuousBackup cover the same two properties, and WARA
+    has matching recommendations. No Azure Policy built-in or Checkov check was found for either. Foundry Doctor adds scope
+    to Cosmos accounts the Agent Service uses, per-profile severity, and the recovery context from the Foundry article (account
+    naming for restore is a separate opinion not asserted here). Without scoping, this is a reuse of PSRule.
+  psrule:
+  - Azure.Cosmos.AvailabilityZone
+  - Azure.Cosmos.ContinuousBackup
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/rel
+tests:
+  positive:
+  - account with isZoneRedundant true on all locations and Continuous backup passes
+  negative:
+  - location with isZoneRedundant false reports zone redundancy
+  - backupPolicy.type Periodic reports missing continuous backup
+  skipped:
+  - 'Cosmos account not referenced by Foundry: out of scope'
+  - 'no control-plane access in live mode: skipped with the missing capability'
+  uncertain:
+  - 'location in a region without availability zone support: uncertain, not failed'
+  - locations or backupPolicy supplied by an unresolved expression
+testability: Unit tests on compiled ARM fixtures; live mode tests use recorded control-plane responses.
+notes: PSRule's statement that zone redundancy cannot be changed after account creation was not confirmed in a primary source
+  here and is not used in this rule's text.

@@ -1,0 +1,81 @@
+id: FND-CFG-008
+version: 1
+group: CFG
+title: "MCP tools use allow lists"
+description: >-
+  Remote MCP tools configured for an agent should restrict the tools the agent can call with an allow
+  list (allowed_tools) rather than exposing every tool of the server. The default when allowed_tools is
+  omitted is all tools of the MCP server.
+status: verified
+phases: ["later"]
+inputs: ["azure.yaml"]
+basis: ["security"]
+category: nice-to-have
+pillar: security
+severity:
+  dev: info
+  test: warning
+  prod: warning
+compatibility:
+  azd: ">=1.34.2 <=1.36.0-beta.1"
+  extensions:
+    azure.ai.agents: ">=1.0.0-beta.18 <=1.0.0-beta.18"
+    azure.ai.toolboxes: ">=1.0.0-beta.9 <=1.0.0-beta.9"
+  apiVersions: []
+  preview: true
+  notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from a changelog and was not verified. Extension ranges are exactly the versions whose schemas or source were read; widen them in Phase 1 by reading older tags."
+evidence:
+  description: >-
+    For each tool of type mcp in a prompt agent tools list or a toolbox tools list, report the tool when
+    allowed_tools is absent or an empty list. Tool definitions are passed through by the azd schemas
+    (additionalProperties true), so the property is read as written; the rule is skipped for tool types
+    that do not take an allow list and for toolbox endpoint reuse mode where tools are not declared.
+  confidence: likely
+recommendation: >-
+  Add allowed_tools with the exact tool names the agent needs. Tool names are case-sensitive and must
+  match what the MCP server returns from tools/list.
+fix: |
+  tools:
+    - type: mcp
+      connection: github-conn
+      allowed_tools: [search_issues, get_issue]
+sources:
+  - url: https://learn.microsoft.com/azure/foundry/agents/how-to/tools/model-context-protocol
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/tools/model-context-protocol.md
+    note: "Best practices: use an allow list of tools by using allowed_tools; default includes all tools of the MCP server."
+  - url: https://learn.microsoft.com/azure/foundry/agents/how-to/tools/toolbox
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/tools/toolbox.md
+    note: Troubleshooting row - allowed_tools filter, case-sensitive tool names.
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    No PSRule, Policy, Defender, Advisor, Bicep or Checkov rule models Foundry MCP tool configuration.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/cfg
+testability: Offline from azure.yaml. Allow-list accuracy against the live server is not checked (that would be a data-plane check).
+tests:
+  positive:
+    - mcp-tool-without-allowed-tools
+    - mcp-tool-empty-allowed-tools
+  negative:
+    - mcp-tool-with-allowed-tools
+    - non-mcp-tool
+  skipped:
+    - toolbox-endpoint-reuse-mode
+    - tool-defined-in-unreadable-ref-file
+notes: >-
+  Unverified: that azure.yaml toolbox tools[] and prompt-agent tools[] entries accept the allowed_tools key
+  by that spelling. It is documented for the REST/SDK tool definition and the schemas pass unknown tool
+  properties through, but no azure.yaml example with allowed_tools was found in the clones. Severity is a
+  product choice; the source states a best practice, not a platform constraint. Rule stays verified for the
+  best-practice fact and default behaviour only.

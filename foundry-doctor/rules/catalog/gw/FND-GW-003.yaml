@@ -1,0 +1,99 @@
+id: FND-GW-003
+version: 1
+group: GW
+title: "Routes resolve to existing backends"
+description: >-
+  Every set-backend-service policy that uses backend-id, and every backend pool member, must name an
+  existing Microsoft.ApiManagement/service/backends entity in the same API Management service; APIs without
+  a routing policy must have a serviceUrl. For AI gateway routes the backend entity's url should address the
+  Foundry/Azure OpenAI account the project provisions.
+status: verified
+phases: ["8"]
+inputs: ["bicep-arm", "control-plane"]
+basis: ["reliability"]
+category: must-have
+pillar: reliability
+severity:
+  dev: warning
+  test: error
+  prod: error
+compatibility:
+  azd: ""
+  extensions: {}
+  apiVersions:
+    - "Microsoft.ApiManagement/service/backends 2025-09-01-preview"
+    - "Microsoft.ApiManagement/service/backends 2024-05-01"
+  preview: true
+  notes: "Microsoft.ApiManagement/service/backends 2025-09-01-preview / 2024-05-01: url, protocol, pool.services[].id, circuitBreaker, credentials read in spec. Policy reference set-backend-service (current)"
+evidence:
+  description: >-
+    Collect backend entity names from Microsoft.ApiManagement/service/backends resources (ARM or control plane).
+    From policy XML collect set-backend-service backend-id values; a literal value must equal one of the
+    names; a policy expression value is reported uncertain. For backend pools (backends of type Pool) every
+    properties.pool.services[].id must resolve to a backend resource of the same service. For each API without a
+    set-backend-service in effect, require properties.serviceUrl. Foundry correlation (likely confidence): the
+    host of the backend url should be openai.azure.com, services.ai.azure.com or cognitiveservices.azure.com
+    and match an account endpoint present in the project's provisioned resources; mismatch is reported, not
+    failed, when the host cannot be resolved offline.
+  confidence: certain
+recommendation: >-
+  Define the backend entity (or pool) in the same service and reference it by its exact name, or set the
+  API serviceUrl. Keep backend URLs pointing at the Foundry account endpoint the project provisions.
+fix: |
+  resource backend 'Microsoft.ApiManagement/service/backends@2024-05-01' = {
+    parent: apim
+    name: 'foundry-openai'
+    properties: { url: 'https://${foundryName}.openai.azure.com/openai', protocol: 'http' }
+  }
+  // policy
+  <set-backend-service backend-id="foundry-openai" />
+sources:
+  - url: https://learn.microsoft.com/azure/api-management/set-backend-service-policy
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-docs/articles/api-management/set-backend-service-policy.md
+    note: backend-id is the identifier (name) of the backend entity; one of base-url or backend-id is required; linked access is not checked when referencing by backend-id.
+  - url: https://learn.microsoft.com/azure/api-management/backends
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-docs/articles/api-management/backends.md
+    note: Backend entities, reference with set-backend-service, backend pools (up to 30 backends), circuit breaker, automatic detection of a matching backend entity by URL.
+  - url: https://learn.microsoft.com/azure/api-management/azure-ai-foundry-api
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-docs/articles/api-management/azure-ai-foundry-api.md
+    note: Importing a Foundry API configures the backend with system-assigned managed identity; Foundry endpoint patterns.
+  - url: https://github.com/Azure/azure-rest-api-specs/tree/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/preview/2025-09-01-preview/openapi.json (BackendContractProperties, BackendPool, BackendPoolItem, ApiContractProperties.serviceUrl)
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    Azure Policy and PSRule APIM rules (HTTPBackend, certificate checks, BackendAuth) assess backend transport
+    and authentication, not whether a policy reference resolves to an existing backend. Reference resolution
+    between policy XML and backend resources is cross-file correlation.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/providers/apim
+testability: Offline from compiled ARM (backends plus policies); policy XML fixtures.
+tests:
+  positive:
+    - set-backend-service-unknown-backend-id
+    - backend-pool-member-missing
+    - api-without-service-url-or-backend
+  negative:
+    - backend-id-matches-backend-resource
+    - pool-members-all-resolve
+    - api-service-url-only
+  skipped:
+    - backend-id-from-policy-expression
+    - backend-defined-in-another-template
+    - policy-fragment-unresolved
+notes: >-
+  Unverified: what API Management does at save or request time when backend-id names a missing backend is not
+  stated in the sources read, so basis is reliability (reference integrity), not platform. Revision and
+  version-set handling of policies at API scope was not read.

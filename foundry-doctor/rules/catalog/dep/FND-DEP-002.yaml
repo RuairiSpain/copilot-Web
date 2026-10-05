@@ -1,0 +1,122 @@
+id: FND-DEP-002
+version: 1
+group: DEP
+title: Required providers registered
+description: >-
+  The target subscription must be registered for the resource providers a Foundry deployment relies on that ARM will not
+  register by itself. ARM registers providers that the template defines, but a provider that only supplies supporting resources
+  (for example the providers behind a network-secured Agent Service setup) has to be registered manually.
+status: verified
+phases:
+- '2'
+inputs:
+- bicep-arm
+- azure.yaml
+- control-plane
+basis:
+- platform
+category: must-have
+pillar: operations
+severity:
+  dev: error
+  test: error
+  prod: error
+compatibility:
+  azd: '>=1.34.2 <=1.36.0-beta.1'
+  extensions: {}
+  apiVersions:
+  - Microsoft.Resources providers 2025-04-01
+  preview: true
+  notes: >-
+    azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects
+    beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from
+    a changelog and was not verified.
+evidence:
+  description: >-
+    Read-only ARM call, GET /subscriptions/{subscriptionId}/providers/{resourceProviderNamespace} api-version 2025-04-01
+    (Providers_Get), or GET /subscriptions/{subscriptionId}/providers (Providers_List) once for all namespaces. The response
+    field is Provider.registrationState (a string; the spec does not enumerate its values, the Learn article shows Registered
+    and Registering). Required set: (a) namespaces of resource types in the compiled ARM template or Bicep snapshot that
+    are NOT defined as resources in the template (documented: resources defined in the template are registered automatically,
+    supporting resources are not); (b) only when the project is network-secured (the project declares network injection
+    for the agent subnet), the Foundry network-secured agent list from the Learn prerequisites: Microsoft.KeyVault, Microsoft.CognitiveServices,
+    Microsoft.Storage, Microsoft.MachineLearningServices, Microsoft.Search, Microsoft.Network, Microsoft.App, Microsoft.ContainerService,
+    and Microsoft.Bing only when the Bing grounding tool is configured. A finding is raised when a required namespace's
+    registrationState is not Registered and not Registering (a provider in the Registering state is not blocked, per the
+    Learn guidance). Namespaces defined in the template and unregistered are not a finding here; whether the deployer may
+    register them is reported by FND-DEP-003. Role family: Microsoft.Resources/subscriptions/providers/read is included
+    in Reader (*/read). Reader suffices. Registering is a POST needing the /register/action permission (Contributor or Owner)
+    and is never called by Foundry Doctor. The answer is definitive.
+  confidence: certain
+recommendation: >-
+  Register the missing providers once per subscription with a principal that has the <provider>/register/action permission
+  (Contributor or Owner), and wait until the state is Registered, or at least Registering for the regions in use.
+fix: |
+  az provider register --namespace Microsoft.App
+  az provider register --namespace Microsoft.ContainerService
+  az provider show --namespace Microsoft.App --query registrationState
+sources:
+- url: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/resources/stable/2025-04-01/resources.json
+  lastVerified: '2026-10-04'
+  verifiedVia: >-
+    refs/rest-api-specs/specification/resources/resource-manager/Microsoft.Resources/resources/stable/2025-04-01/resources.json
+  note: >-
+    Providers_Get, Providers_List and Providers_Register paths; Provider.registrationState (string, read-only) and resourceTypes[].locations.
+- url: https://learn.microsoft.com/azure/azure-resource-manager/management/resource-providers-and-types
+  lastVerified: '2026-10-04'
+  verifiedVia: >-
+    refs/azure-docs/articles/azure-resource-manager/management/resource-providers-and-types.md (ms.date 02/27/2026)
+  note: >-
+    Template-defined providers are registered automatically; supporting-resource providers are registered manually; /register/action
+    is in Contributor and Owner; do not block on the Registering state.
+- url: https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks
+  lastVerified: '2026-10-04'
+  verifiedVia: >-
+    refs/azure-ai-docs/articles/foundry/agents/includes/how-to-virtual-networks-content.md (included by agents/how-to/virtual-networks.md,
+    ms.date 06/15/2026)
+  note: >-
+    Providers that must be registered for the network-secured agent setup, and the Microsoft.Bing addition. The error text
+    for missing Microsoft.App and Microsoft.ContainerService registration is quoted in the troubleshooting section.
+- url: https://learn.microsoft.com/azure/role-based-access-control/permissions/management-and-governance
+  lastVerified: '2026-10-04'
+  verifiedVia: >-
+    https://raw.githubusercontent.com/MicrosoftDocs/azure-docs/main/articles/role-based-access-control/permissions/management-and-governance.md
+  note: Microsoft.Resources/subscriptions/providers/read and Microsoft.Resources/providers/read action names.
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    No PSRule, Azure Policy, Bicep linter or Checkov rule checks subscription-level provider registration. The Foundry value
+    is correlating the compiled template, the azure.yaml services and the network-secured agent prerequisites with the subscription
+    state. azd's server-side preflight (provision.preflight, ValidatePreflight) may also surface this, but the azd design
+    document read does not list what it checks.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/dep
+testability: >-
+  Offline with recorded provider list responses and a compiled-template fixture. The required-namespace derivation is pure
+  and unit tested.
+tests:
+  positive:
+  - supporting-provider-not-registered-microsoft-app
+  - network-secured-agent-microsoft-containerservice-missing
+  - bing-tool-configured-microsoft-bing-missing
+  negative:
+  - all-required-providers-registered
+  - provider-registering-state-not-blocked
+  - template-defined-provider-unregistered-not-reported-here
+  - project-not-network-secured-microsoft-app-not-required
+  skipped:
+  - no-azure-credential-available
+  - bicep-cli-missing-cannot-derive-template-providers
+notes: >-
+  The registrationState value set is not enumerated in the spec; only Registered and Registering appear in the Learn article,
+  so any other value is treated as "not usable" without naming it. Registration is per subscription and per region progress;
+  this rule does not check regional registration progress.

@@ -1,0 +1,106 @@
+id: FND-NET-006
+version: 1
+group: NET
+title: "Private address space and overlap"
+description: >-
+  The agent subnet must use a supported private address space, and the VNet (and any peered VNet)
+  must not overlap existing networks or the ranges the platform reserves. Documented supported ranges
+  are RFC 1918 (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16); public ranges such as 44.x.x.x are not
+  supported. Documented reserved ranges are 169.254.0.0/16, 172.30.0.0/16, 172.31.0.0/16,
+  192.0.2.0/24, 0.0.0.0/8, 127.0.0.0/8, 100.100.0.0/17, 100.100.192.0/19 and 100.100.224.0/19.
+  The Foundry documentation disagrees about 100.64.0.0/10 (RFC 6598, CGNAT): two articles allow it
+  (excluding the 100.100 ranges), the deep dive says it is not supported. Findings in that range are
+  reported as uncertain and skipped rather than failed until the conflict is resolved.
+status: verified
+phases: ["2"]
+inputs: ["bicep-arm", "control-plane", "network"]
+basis: ["platform"]
+category: must-have
+pillar: reliability
+severity:
+  dev: error
+  test: error
+  prod: error
+compatibility:
+  azd: ""
+  extensions: {}
+  apiVersions:
+    - "Microsoft.Network/virtualNetworks 2024-05-01"
+    - "Microsoft.CognitiveServices/accounts 2026-09-01"
+  preview: false
+  notes: "Not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked) Microsoft.CognitiveServices/accounts 2026-09-01: networkInjections."
+evidence:
+  description: >-
+    Take the agent subnet prefix and the address spaces of its VNet and of every peered VNet (live
+    mode, from virtualNetworkPeerings and remoteAddressSpace). Fail when the agent subnet prefix is
+    not inside one of the three RFC 1918 blocks, when any of those address spaces intersects a
+    reserved range above (CIDR intersection), or when two peered or same-tenant VNets in scope
+    overlap each other. A prefix inside 100.64.0.0/10 outside the 100.100.* exclusions is reported
+    as skipped with the reason "documentation conflict". Overlap with networks not visible to the
+    reader (on-premises) cannot be checked and is stated as a limitation.
+  confidence: likely
+recommendation: >-
+  Put the agent subnet in 10.0.0.0/8, 172.16.0.0/12 (avoiding 172.30.0.0/16 and 172.31.0.0/16) or
+  192.168.0.0/16 and keep the VNet and its peers disjoint from each other and from the reserved
+  ranges. If your IP plan overlaps or you cannot manage ranges, use a Microsoft managed virtual
+  network instead.
+fix: |
+  resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' = {
+    name: vnetName
+    location: location
+    properties: {
+      // avoid 169.254/16, 172.30/16, 172.31/16, 192.0.2/24, 0/8, 127/8 and 100.100.* reserved ranges
+      addressSpace: { addressPrefixes: ['10.20.0.0/16'] }
+    }
+  }
+sources:
+  - url: https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/includes/how-to-virtual-networks-content.md (ms.date 09/28/2026)
+    note: Limitations - RFC 1918 and RFC 6598 (excluding 100.100.0.0/17, 100.100.192.0/19, 100.100.224.0/19); no public ranges; reserved ranges list; no overlap with peered VNets.
+  - url: https://learn.microsoft.com/azure/foundry/agents/concepts/networking-options
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/networking-options.md (ms.date 06/29/2026)
+    note: Bring-your-own virtual network requirements list the same RFC 1918 and RFC 6598 rule; managed virtual network when IP space overlaps.
+  - url: https://learn.microsoft.com/azure/foundry/agents/concepts/agents-networking-deep-dive
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/agents-networking-deep-dive.md (ms.date 09/07/2026)
+    note: Says RFC 1918 only and CGNAT 100.64.0.0/10 is not supported; conflicts with the other two articles.
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    No PSRule rule, policy, Checkov check or Bicep linter rule evaluates VNet address plans against the
+    Foundry reserved ranges or peer overlap. The check is pure CIDR arithmetic on Foundry-specific
+    documented constants, plus peering data that only the live plane provides.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/net
+testability: >-
+  Offline for prefix and reserved-range checks (table-driven CIDR tests). Peer overlap needs the live
+  plane and is skipped offline.
+tests:
+  positive:
+    - agent-subnet-in-public-range-44
+    - vnet-intersects-172-30-reserved
+    - peered-vnets-overlap
+    - subnet-inside-100-100-excluded-range
+  negative:
+    - agent-subnet-in-10-0-0-0-8
+    - vnet-in-192-168-0-0-16-no-peers
+  skipped:
+    - agent-subnet-in-100-64-0-0-10-docs-conflict
+    - on-premises-ranges-unknown
+    - managed-virtual-network-mode
+notes: >-
+  PRD ambiguity and documentation conflicts to resolve with the Foundry owner before implementation:
+  (1) CGNAT support, (2) the deep dive says 172.16.0.0/12 "covers 172.16.x.x through 172.31.x.x" while
+  the limitations reserve 172.30.0.0/16 and 172.31.0.0/16 inside it, (3) the troubleshooting section
+  still quotes a "172 or 192" error. Rule is verified for the unambiguous constants; the conflicting
+  parts are emitted as skipped.

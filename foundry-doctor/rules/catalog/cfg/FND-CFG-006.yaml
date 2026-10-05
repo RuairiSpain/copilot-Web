@@ -1,0 +1,105 @@
+id: FND-CFG-006
+version: 1
+group: CFG
+title: "Every variable has an environment or infrastructure producer"
+description: >-
+  Every ${VAR} reference in azure.yaml (service env, connection target and credentials, project network
+  fields, policies and similar) must have a producer: a value in the selected azd environment
+  (.azure/<env>/.env), an azd-set standard variable (AZURE_ENV_NAME, AZURE_LOCATION, AZURE_SUBSCRIPTION_ID,
+  AZURE_RESOURCE_GROUP), a Bicep output that provisioning writes to the environment, a value written by a
+  previous deploy (AGENT_<SERVICE>_NAME, _VERSION, _ENDPOINT), or an inline default (${VAR:-default}).
+  ${{...}} Foundry server-side expressions and escaped $${VAR} forms are not azd variables.
+status: verified
+phases: ["1"]
+inputs: ["azure.yaml", "azd-env", "bicep-arm"]
+basis: ["operations"]
+category: must-have
+pillar: operations
+severity:
+  dev: warning
+  test: error
+  prod: error
+compatibility:
+  azd: ">=1.34.2 <=1.36.0-beta.1"
+  extensions:
+    azure.ai.agents: ">=1.0.0-beta.18 <=1.0.0-beta.18"
+    azure.ai.projects: ">=1.0.0-beta.13 <=1.0.0-beta.13"
+  apiVersions: []
+  preview: true
+  notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from a changelog and was not verified. Extension ranges are exactly the versions whose schemas or source were read; widen them in Phase 1 by reading older tags."
+evidence:
+  description: >-
+    Extract ${VAR} references (excluding ${{...}}, $${VAR} escapes and references with a :- default) and
+    match each name against: keys in the selected environment .env, the azd standard variables, outputs of
+    the compiled Bicep/ARM main template, and AGENT_<SERVICE>_* names derived from declared agent services.
+    A name with no producer is reported. When no environment is selected or provisioning has not run, outputs
+    that would only exist after provision are reported as uncertain rather than failed. Values are never read
+    into findings.
+  confidence: likely
+recommendation: >-
+  Set the variable in the active azd environment (azd env set), emit it from a Bicep output, give it an inline
+  default, or remove the reference. Do not declare FOUNDRY_ or AGENT_ prefixed names in env.
+fix: |
+  # Produce the value
+  #   azd env set MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME gpt-5.4-mini
+  services:
+    my-agent:
+      host: azure.ai.agent
+      env:
+        MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME: ${MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME}
+        LOG_LEVEL: ${LOG_LEVEL:-info}
+sources:
+  - url: https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/azure-yaml-reference.md
+    note: Variable substitution table; env section; AGENT_<SERVICE>_* values written after deployment; reserved FOUNDRY_ and AGENT_ prefixes.
+  - url: https://learn.microsoft.com/azure/foundry/agents/how-to/author-azure-yaml
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/author-azure-yaml.md
+    note: "Troubleshooting: a ${VAR} value is empty at runtime when it is not set in the active azd environment."
+  - url: https://learn.microsoft.com/azure/developer/azure-developer-cli/manage-environment-variables
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azd-docs/articles/azure-developer-cli/manage-environment-variables.md
+    note: Standard azd environment variables and when they are set.
+  - url: https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/extensions/azure.ai.agents/internal/synthesis/synthesizer.go
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.agents/internal/synthesis/synthesizer.go
+    note: resolveVars - unresolved reference is an error naming the variable; ${VAR:-default} supported (extension source, not Learn).
+overlap:
+  decision: native
+  coverage: partial
+  rationale: >-
+    The extension fails at provision/deploy on some unresolved references and the docs describe empty values
+    for others. Correlating each reference with the selected environment and compiled Bicep outputs before
+    deploy is Foundry-specific; no PSRule, Policy, Defender, Advisor or Bicep linter rule reads azure.yaml.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/cfg
+testability: >-
+  Offline when an environment .env and the compiled Bicep are available; otherwise producer lookup for outputs
+  is skipped with the reason, not passed.
+tests:
+  positive:
+    - reference-missing-from-env-and-outputs
+    - env-declares-foundry-prefixed-variable
+    - agent-endpoint-reference-for-undeclared-service
+  negative:
+    - reference-with-inline-default
+    - reference-produced-by-bicep-output
+    - foundry-server-side-expression-untouched
+    - escaped-dollar-reference
+  skipped:
+    - no-environment-selected
+    - bicep-not-compiled
+notes: >-
+  Unverified: that every Bicep output is written to the azd environment (the azd environments overview
+  shows service outputs in .env but the provisioning-output rule was not read in the clones; azd core source
+  is not present). The producer rule for outputs is therefore a "likely" signal. ${VAR:-default} is verified
+  only from extension source, not from Learn. Normalisation of the service name in AGENT_<SERVICE>_* is described
+  as "normalized" without a specification.

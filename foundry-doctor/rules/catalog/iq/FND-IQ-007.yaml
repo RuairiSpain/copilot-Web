@@ -1,0 +1,110 @@
+id: FND-IQ-007
+version: 1
+group: IQ
+title: Knowledge source type/API and planning model supported
+description: >-
+  Each knowledge source kind must exist in the Search API version the project targets, and the planning model on the knowledge
+  base must be one of the documented Azure OpenAI models for that API version (kind azureOpenAI). Query hints that contain
+  a filter are rejected with HTTP 400 when the planning model is a GPT-4o or GPT-4.1 family model (and effort is not minimal).
+status: verified
+phases:
+- '8'
+inputs:
+- data-plane
+- bicep-arm
+basis:
+- reliability
+category: must-have
+pillar: reliability
+severity:
+  dev: warning
+  test: warning
+  prod: warning
+compatibility:
+  azd: ''
+  extensions: {}
+  apiVersions:
+  - 2026-08-01-preview
+  - 2026-05-01-preview
+  - '2026-04-01'
+  preview: true
+  notes: >-
+    API 2026-08-01-preview: 12 knowledge source kinds; models table through gpt-5.6-*. API 2026-05-01-preview: models table
+    up to gpt-5.4-*. API 2026-04-01: kinds searchIndex, azureBlob, indexedOneLake, web only.
+evidence:
+  description: >-
+    For every knowledge source kind compare against the versioned set read from the API specification: 2026-04-01 allows
+    searchIndex, azureBlob, indexedOneLake, web; 2026-08-01-preview additionally allows indexedSharePoint, indexedSql, remoteSharePoint,
+    workIQ, file, mcpServer, fabricDataAgent, fabricOntology. For every knowledge base models[] entry require kind azureOpenAI
+    and azureOpenAIParameters.modelName in the documented table for the target API version (gpt-4o, gpt-4o-mini, gpt-4.1,
+    gpt-4.1-mini, gpt-4.1-nano, gpt-5, gpt-5-mini, gpt-5-nano for all three preview versions; gpt-5.1, 5.2, 5.4, 5.4-mini,
+    5.4-nano from 2026-05-01-preview; gpt-5.5 and gpt-5.6-sol, -terra, -luna from 2026-08-01-preview only). Fail a stored
+    queryHints filter combined with a gpt-4o or gpt-4.1 family model when retrievalReasoningEffort is not minimal. Report
+    (as part of this rule's evidence, same severity) a model the docs mark deprecated only as a note, not a failure. Name
+    the knowledge source kind and model only, never endpoints or keys.
+  confidence: certain
+recommendation: >-
+  Target the API version that defines the knowledge source kind you use (most non-blob kinds are preview) and deploy a documented
+  planning model for that version; prefer a gpt-5 family model, which also allows stored filter hints.
+fix: |
+  "models": [ { "kind": "azureOpenAI",
+    "azureOpenAIParameters": { "resourceUri": "https://<account>.openai.azure.com",
+      "deploymentId": "gpt-5.4-mini", "modelName": "gpt-5.4-mini" } } ]
+sources:
+- url: https://learn.microsoft.com/azure/search/agentic-retrieval-how-to-create-knowledge-base
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-ai-docs/articles/search/agentic-retrieval-how-to-create-knowledge-base.md
+  note: Supported models table with API versions; GPT-4 family marked deprecated; web source requires an LLM.
+- url: https://learn.microsoft.com/azure/search/agentic-knowledge-source-overview
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-ai-docs/articles/search/agentic-knowledge-source-overview.md
+  note: Supported knowledge sources table (kinds, indexed or remote, preview markers).
+- url: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-search-index
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-ai-docs/articles/search/agentic-knowledge-source-how-to-search-index.md
+  note: HTTP 400 when stored queryHints contain a filter and the model is a GPT-4o or GPT-4.1 family model.
+- url: https://github.com/Azure/azure-rest-api-specs/tree/main/specification/search/data-plane/Search
+  lastVerified: '2026-10-04'
+  verifiedVia: >-
+    refs/rest-api-specs/specification/search/data-plane/Search/preview/2026-08-01-preview/search.json and stable/2026-04-01/search.json
+    (KnowledgeSourceKind enum)
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    No external tool knows Foundry IQ object schemas. The version-to-kind and version-to-model tables are catalogue data
+    that must be re-verified on every API release.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/providers/iq
+testability: >-
+  Offline with versioned knowledge source and knowledge base fixtures; a schema-contract test per API version guards the
+  tables.
+tests:
+  positive:
+  - preview-kind-on-2026-04-01
+  - gpt-5-5-on-2026-05-01-preview
+  - unknown-model-name
+  - model-kind-not-azureOpenAI
+  - stored-filter-hint-with-gpt-4-1
+  negative:
+  - blob-source-gpt-5-4-mini-2026-08-01-preview
+  - web-source-with-documented-model
+  - filter-hint-with-gpt-5-family
+  skipped:
+  - api-version-not-determinable
+  - knowledge-base-without-model
+notes: >-
+  Docs spell the SQL knowledge source "Azure SQL (preview)" while the spec enum value is indexedSql; the spec value is used.
+  The Learn documentation lists model names; whether the service also accepts deployments of other models is not stated,
+  so the check is limited to the documented table. Docs and spec differ on ingestionPermissionOptions value sensitivityLabel
+  (doc text) vs sensitivityLabels (spec enum); see FND-IQ-009. Downgraded after the Phase 0 Foundry lead review: a model
+  absent from the Learn table may still be accepted by the service, so the check warns instead of failing, and it is no
+  longer a platform-basis error. The target Search API version is not an azure.yaml field and must come from the profile
+  or the template.

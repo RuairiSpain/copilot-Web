@@ -1,0 +1,102 @@
+id: FND-REL-002
+version: 1
+group: REL
+title: Storage redundancy posture
+description: A Storage account used by Foundry (project storage, or Agent Service standard-mode thread storage) should use
+  a zone-redundant or geo-redundant SKU. Foundry guidance recommends zone-redundant configuration for the customer-managed
+  state stores and GZRS for the Agent Service storage account. This is a WAF/WARA recommendation, not a platform constraint.
+status: verified
+phases:
+- '4'
+inputs:
+- bicep-arm
+- control-plane
+basis:
+- reliability
+- waf
+- wara
+category: nice-to-have
+pillar: reliability
+severity:
+  dev: info
+  test: info
+  prod: warning
+compatibility:
+  azd: ""
+  extensions: {}
+  apiVersions:
+    - "Microsoft.Storage/storageAccounts 2026-09-01"
+  preview: false
+  notes: "No azd dependency: reads compiled ARM JSON or ARM control plane Microsoft.Storage/storageAccounts 2026-09-01 / 2026-09-01: stable) - storage/resource-manager/Microsoft.Storage/stable//openapi.json (SkuName enum."
+evidence:
+  description: 'Compiled ARM or live Microsoft.Storage/storageAccounts referenced by a Foundry connection, project or capability
+    host (storageConnections / threadStorageConnections). Read sku.name. Zone-redundant or geo-redundant values read in the
+    spec SkuName enum: Standard_ZRS, Premium_ZRS, Standard_GRS, Standard_RAGRS, Standard_GZRS, Standard_RAGZRS (StandardV2_*
+    and PremiumV2_* ZRS, GRS and GZRS variants also exist in the enum; treat unknown values as uncertain). Finding: sku.name
+    is Standard_LRS or Premium_LRS (single-zone). Info in dev and test; warning in prod. Extra note when the account backs
+    Agent Service standard mode and is not GZRS or RAGZRS (Foundry guidance recommends GZRS).'
+  confidence: certain
+recommendation: Use Standard_ZRS at minimum for storage that holds project or agent data, and Standard_GZRS for Agent Service
+  standard-mode storage as recommended by the Foundry resiliency guidance. SKU changes on an existing account are a migration,
+  so decide at design time. Note the Foundry multi-region section says default storage failover with GRS/GZRS is not supported
+  for Foundry projects, so geo-redundancy there protects data recovery, not automatic project failover.
+fix: "resource st 'Microsoft.Storage/storageAccounts@2026-09-01' = {\n  name: storageName\n  location: location\n  kind: 'StorageV2'\n\
+  \  sku: { name: 'Standard_GZRS' }\n}"
+sources:
+- url: https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-ai-docs/articles/foundry/how-to/high-availability-resiliency.md and includes/how-to-high-availability-resiliency-1.md
+    (ms.date 09/21/2026)
+  note: Foundry guidance on shared responsibility, delete locks, zone redundancy, recovery configuration and multi-region
+    deployment.
+- url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/storage/resource-manager/Microsoft.Storage/stable/2026-09-01/openapi.json
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/rest-api-specs/specification/storage/resource-manager/Microsoft.Storage/stable/2026-09-01/openapi.json
+  note: SkuName enum.
+- url: https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/Storage/storageAccounts/recommendations.yaml
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/wara (git show HEAD:azure-resources/Storage/storageAccounts/recommendations.yaml)
+  note: WARA e6c7e1cc-2f47-264d-aa50-1da421314472 (zone or region redundant storage), pgVerified true.
+- url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.Storage.UseReplication/
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/psrule/docs/en/rules/Azure.Storage.UseReplication.md
+  note: Overlap source (PSRule for Azure rule documentation).
+- url: https://github.com/Azure/azure-policy/blob/master/built-in-policies/policyDefinitions/Storage/GeoRedundant_StorageAccounts_Audit.json
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-policy/built-in-policies/policyDefinitions/Storage/GeoRedundant_StorageAccounts_Audit.json
+  note: Built-in policy bf045164-79ba-4215-8f95-f8048dc1780b (audit geo-redundant storage).
+overlap:
+  decision: adapt
+  coverage: partial
+  rationale: PSRule Azure.Storage.UseReplication tests the same sku.name values and WARA e6c7e1cc is the matching recommendation.
+    Azure Policy bf045164 audits geo-redundant only (not ZRS). Foundry Doctor adds scope (only storage accounts a Foundry
+    project or capability host uses), the Agent Service GZRS expectation, and per-profile severity. Without that scoping this
+    is a reuse of PSRule.
+  psrule:
+  - Azure.Storage.UseReplication
+  azurePolicy:
+  - bf045164-79ba-4215-8f95-f8048dc1780b
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/rel
+tests:
+  positive:
+  - Standard_ZRS storage account passes
+  - Standard_GZRS Agent Service storage passes including the GZRS note
+  negative:
+  - Standard_LRS storage account referenced by a project reports single-zone redundancy
+  - Standard_ZRS Agent Service storage reports the GZRS note at info
+  skipped:
+  - 'storage account not referenced by Foundry: out of scope'
+  - 'no control-plane access in live mode: skipped with the missing capability'
+  uncertain:
+  - sku.name is an unresolved parameter expression
+  - 'sku.name is a V2 value not mapped by the rule: uncertain'
+testability: Unit tests on compiled ARM fixtures; live mode tests use recorded control-plane responses.
+notes: 'Spec file 2026-09-01 is the newest stable storage version present in the reference clone. The Foundry article contains
+  two statements that must be reconciled by the reviewer: the Agent Service section recommends GZRS, the multi-region section
+  says Foundry projects do not support default storage account failover with GRS/GZRS variants.'

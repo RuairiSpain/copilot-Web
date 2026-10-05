@@ -1,0 +1,98 @@
+id: FND-IQ-010
+version: 1
+group: IQ
+title: "ADLS Gen2 hierarchical namespace enabled"
+description: >-
+  A knowledge source or Search data source that is declared as Azure Data Lake Storage Gen2 (isADLSGen2 true
+  on an azureBlob knowledge source, or data source type adlsgen2) must point at a storage account that has
+  the hierarchical namespace enabled (isHnsEnabled true). The ADLS Gen2 indexer checks for hierarchical
+  namespace through the Filesystem get-properties API, and ADLS Gen2 is defined as a storage account with
+  hierarchical namespace enabled.
+status: verified
+phases: ["8"]
+inputs: ["bicep-arm", "control-plane", "data-plane"]
+basis: ["platform"]
+category: must-have
+pillar: reliability
+severity:
+  dev: error
+  test: error
+  prod: error
+compatibility:
+  azd: ""
+  extensions: {}
+  apiVersions:
+    - "Search data plane 2026-04-01"
+    - "Search data plane 2026-08-01-preview"
+    - "Microsoft.Storage/storageAccounts 2025-01-01"
+  preview: true
+  notes: "Search data plane 2026-04-01 / 2026-08-01-preview: azureBlobParameters.isADLSGen2. Microsoft.Storage/storageAccounts 2025-01-01: properties.isHnsEnabled read in spec."
+evidence:
+  description: >-
+    Resolve the storage account from the knowledge source connectionString ResourceId= value (or the data
+    source credentials) and read Microsoft.Storage/storageAccounts properties.isHnsEnabled from the Bicep/ARM
+    template or a control-plane GET. Fail when isADLSGen2 is true (or data source type is adlsgen2) and
+    isHnsEnabled is not true. When the knowledge source declares isADLSGen2 false and the account has
+    hierarchical namespace enabled, report an informational note only (not documented as an error). Skip
+    when the connection string is not a ResourceId form, the account is in another subscription that is not
+    readable, or the template parameterises isHnsEnabled without a resolvable value.
+  confidence: certain
+recommendation: >-
+  Enable hierarchical namespace (ADLS Gen2) when creating the storage account, or use a plain Blob knowledge
+  source or blob indexer for accounts without it. Hierarchical namespace must be chosen at account creation
+  for new accounts; migration of an existing account is a separate Storage procedure.
+fix: |
+  resource storage 'Microsoft.Storage/storageAccounts@2025-01-01' = {
+    name: storageName
+    location: location
+    kind: 'StorageV2'
+    sku: { name: 'Standard_LRS' }
+    properties: { isHnsEnabled: true }
+  }
+sources:
+  - url: https://learn.microsoft.com/azure/search/search-how-to-index-azure-data-lake-storage
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/search/search-how-to-index-azure-data-lake-storage.md
+    note: Prerequisite ADLS Gen2 with hierarchical namespace enabled; indexer calls Filesystem Get properties to check hierarchical namespace; use blob indexers when it is not enabled.
+  - url: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-blob
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/search/agentic-knowledge-source-how-to-blob.md
+    note: azureBlobParameters.isADLSGen2; Blob or ADLS Gen2 account; private mode needs blob and dfs shared private links for ADLS Gen2.
+  - url: https://github.com/Azure/azure-rest-api-specs/tree/main/specification/storage/resource-manager/Microsoft.Storage
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/storage/resource-manager/Microsoft.Storage/stable/2025-01-01/storage.json (isHnsEnabled)
+  - url: https://github.com/Azure/azure-rest-api-specs/tree/main/specification/search/data-plane/Search
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/search/data-plane/Search/models-service.tsp (AzureBlobKnowledgeSourceParameters.isADLSGen2, "Set to true if connecting to an ADLS Gen2 storage account")
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    PSRule for Azure only uses isHnsEnabled as an internal helper to exclude features (IsHnsStorage in
+    Azure.Storage.Rule.ps1); no rule, Azure Policy or Defender control requires hierarchical namespace for a
+    Search source. The value is the correlation between the knowledge source and the storage account.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/iq
+testability: Fully offline from compiled ARM plus knowledge source JSON; live check is a single storage account GET.
+tests:
+  positive:
+    - adls-ks-on-account-without-hns
+    - adlsgen2-datasource-on-account-without-hns
+  negative:
+    - adls-ks-on-hns-account
+    - blob-ks-on-non-hns-account
+  skipped:
+    - connection-string-not-resourceid
+    - storage-account-in-unreadable-subscription
+    - hns-value-from-unresolved-parameter
+notes: >-
+  The statement that hierarchical namespace cannot be toggled after account creation is not asserted by any
+  source read here; the recommendation text is deliberately limited. The OneLake source has no HNS concept
+  and is out of scope.

@@ -1,0 +1,82 @@
+id: FND-RUN-008
+version: 1
+group: RUN
+title: Deployed properties versus compiled template drift
+description: >-
+  Placeholder for a future phase. Compare the properties of Foundry resources as deployed in Azure with the ARM JSON
+  compiled from the project Bicep, and report differences on properties that Foundry Doctor rules inspect. Which
+  differences count as drift versus expected service-populated values is a design decision; no primary source defines it.
+status: product-opinion
+phases: ["future"]
+inputs: [bicep-arm, control-plane]
+basis: [opinion]
+category: nice-to-have
+pillar: operations
+severity:
+  dev: info
+  test: info
+  prod: warning
+compatibility:
+  azd: ""
+  extensions: {}
+  apiVersions:
+    - "Microsoft.Resources/deployments whatIf 2025-04-01"
+    - "Microsoft.Resources/deployments whatIf 2026-06-01"
+  preview: false
+  notes: "Not verified. azd supports provision preview (azd provision --preview, per extension-framework.md), which routes through the same validation call as other paths; exact azd version not pinned. Microsoft.Resources/deployments whatIf 2025-04-01 / 2026-06-01: stable; also present in the clone."
+evidence:
+  description: >-
+    Not implemented in this phase. Candidate design: (a) read each deployed resource with ARM GET at the api-version of
+    the compiled template and compare only the property paths that other catalogue rules read; or (b) call the ARM what-if
+    operation (POST .../providers/Microsoft.Resources/deployments/{name}/whatIf, a long-running read-only analysis that
+    needs deployment permissions the doctor may not have). Required permission and noise filtering are unresolved.
+    Vantage point: control plane, any network. Metadata read: resource property values already visible to Reader; no
+    secrets, since secure properties are not returned by GET. Status per evidence: no tested evidence yet, so the rule
+    stays a documented placeholder, labelled product opinion.
+  confidence: uncertain
+recommendation: >-
+  When implemented: redeploy from source control to reconcile drift, or update the Bicep to capture the intentional
+  change. Until then, run azd provision --preview manually before provisioning.
+fix: |-
+  # Manual interim check (read-only preview of the planned change)
+  azd provision --preview
+sources:
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/deployments/stable/2025-04-01/deployments.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/resources/resource-manager/Microsoft.Resources/deployments/stable/2025-04-01/deployments.json
+    note: whatIf POST operations exist at resource group, subscription, management group and tenant scope (path keys read).
+  - url: https://github.com/Azure/azure-dev/blob/main/cli/azd/docs/extensions/extension-framework.md
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-dev/cli/azd/docs/extensions/extension-framework.md
+    note: azd provision --preview is mentioned (lifecycle events are not fired).
+overlap:
+  decision: adapt
+  coverage: partial
+  rationale: >-
+    ARM what-if and azd provision --preview already show the difference between a template and the deployed state at
+    deployment time, but not as a continuous, Foundry-property-scoped drift report and not tied to rule fingerprints.
+    The idea is adapted; no PSRule, Policy, Defender, Advisor, Checkov or Bicep linter equivalent exists for deployed
+    versus compiled comparison.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/run
+tests:
+  positive:
+    - deployed property equals compiled value for every inspected property
+  negative:
+    - deployed publicNetworkAccess differs from the compiled template value
+  skipped:
+    - no compiled ARM JSON available
+    - caller cannot read the deployed resource
+  uncertain:
+    - property is service-populated or defaulted and cannot be compared
+testability: Not testable until the comparison scope is designed (Phase future).
+notes: >-
+  Placeholder. Unverified: what-if noise handling, permission needed to call whatIf, and which Foundry properties are
+  safe to compare. Do not implement before an ADR defines the drift scope.

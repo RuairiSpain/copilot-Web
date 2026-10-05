@@ -1,0 +1,132 @@
+id: FND-RUN-001
+version: 1
+group: RUN
+title: Effective project identity access
+description: >-
+  The Foundry project managed identity (system-assigned or user-assigned) must hold the roles the documented standard
+  agent setup requires on the Azure AI Search, Azure Storage and Azure Cosmos DB resources bound to the project capability
+  host. The rule resolves the bound resource IDs from the capability host connections, reads the project identity principal
+  from the project ARM resource, and lists role assignments for that principal at or above each resource scope. Static
+  phase (2) checks role assignments declared in compiled ARM JSON; live phase (3) checks the effective assignments.
+  Only role assignment metadata is read; no data-plane content is read.
+status: verified
+phases: ["2", "3"]
+inputs: [bicep-arm, control-plane]
+basis: [platform, security]
+category: must-have
+pillar: security
+severity:
+  dev: error
+  test: error
+  prod: error
+compatibility:
+  azd: ""
+  extensions:
+    azure.ai.agents: ">=1.0.0-beta.18 <=1.0.0-beta.18"
+  apiVersions:
+    - "Microsoft.CognitiveServices projects capabilityHosts connections 2026-09-01"
+    - "Microsoft.Authorization/roleAssignments 2022-04-01"
+    - "Microsoft.DocumentDB sqlRoleAssignments 2025-10-15"
+  preview: true
+  notes: "No dependency on azd behaviour. The overlapping check was read in azd extension azure.ai.agents 1.0.0-beta.18 (internal/cmd/doctor/checks_storage_rbac.go); the core azd version was not pinned in the clone. azure.ai.agents 1.0.0-beta.18: read for overlap only. Extension ranges are exactly the versions whose schemas or source were read; widen them in Phase 1 by reading older tags. Microsoft.CognitiveServices projects capabilityHosts connections 2026-09-01: stable. Microsoft.Authorization/roleAssignments 2022-04-01: stable. Microsoft.DocumentDB sqlRoleAssignments 2025-10-15: stable."
+evidence:
+  description: >-
+    Read-only probes. (1) GET project (2026-09-01) for identity.principalId. (2) GET project capabilityHosts (2026-09-01)
+    for storageConnections, threadStorageConnections and vectorStoreConnections, then GET project/account connections
+    (2026-09-01) to resolve target resource IDs (never the list-with-secrets operation). (3) GET
+    /{scope}/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01 with $filter=principalId eq {id}
+    at each bound resource scope (inherited assignments are included by the filter semantics in the spec). (4) For Cosmos
+    DB, GET Microsoft.DocumentDB/databaseAccounts/{account}/sqlRoleAssignments (2025-10-15), because Cosmos data-plane
+    roles are not Azure RBAC assignments. Expected roles come from the Foundry standard agent setup tables (Search Index
+    Data Contributor and Search Service Contributor on Search; Storage Blob Data Contributor and Storage Blob Data Owner
+    on the project containers; Cosmos DB Built-in Data Contributor on the enterprise_memory database; for the
+    system-assigned identity also Cosmos DB Operator and Storage Account Contributor at account level). A missing
+    expected role is a fail. Custom roles, conditions, deny assignments, container-scoped Blob grants and key/SAS/service-principal
+    connections yield Uncertain or Skipped, never Pass. Required permission of the doctor: read of role assignments
+    (Microsoft.Authorization/roleAssignments/read) at the bound resource scopes, and ARM read on the project and Cosmos
+    account. Vantage point: control plane only, any network. Metadata read: IDs, role definition IDs, principal IDs. Never
+    keys, documents, threads or vectors.
+  confidence: likely
+recommendation: >-
+  Assign the project managed identity the roles the Foundry standard agent setup lists on each bound resource, at the
+  narrowest scope that contains the resources. Assign Cosmos DB Built-in Data Contributor with a Cosmos SQL role
+  assignment, not the Access control (IAM) blade.
+fix: |-
+  resource searchIndexData 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+    name: guid(search.id, project.id, '8ebe5a00-799e-43f5-93ac-243d3dce84a7')
+    scope: search
+    properties: {
+      principalId: project.identity.principalId
+      principalType: 'ServicePrincipal'
+      roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '8ebe5a00-799e-43f5-93ac-243d3dce84a7') // Search Index Data Contributor
+    }
+  }
+sources:
+  - url: https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/includes/concepts-standard-agent-setup-content.md
+    note: Phase 4 role table for the project managed identity (Search, Blob containers, Cosmos DB).
+  - url: https://learn.microsoft.com/azure/foundry/concepts/administrator-guide
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/foundry/concepts/administrator-guide.md
+    note: Data-plane role per backing resource; Cosmos role must be assigned with az cosmosdb sql role assignment or Bicep.
+  - url: https://learn.microsoft.com/azure/search/search-security-rbac
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/search/search-security-rbac.md
+    note: Search role GUIDs (Search Service Contributor 7ca78c08-..., Search Index Data Contributor 8ebe5a00-..., Search Index Data Reader 1407120a-...).
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/authorization/resource-manager/Microsoft.Authorization/Authorization/stable/2022-04-01/authorization-RoleAssignmentsCalls.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/authorization/resource-manager/Microsoft.Authorization/Authorization/stable/2022-04-01/authorization-RoleAssignmentsCalls.json
+    note: RoleAssignments_ListForScope; $filter=principalId eq {id} returns assignments at, above or below the scope.
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    note: ProjectCapabilityHosts_List path; CapabilityHostProperties storageConnections, threadStorageConnections, vectorStoreConnections.
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2025-10-15/cosmos-db.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2025-10-15
+    note: databaseAccounts/{accountName}/sqlRoleAssignments and sqlRoleDefinitions paths (found in example files and path keys).
+  - url: https://github.com/Azure/azure-dev/blob/main/cli/azd/extensions/azure.ai.agents/internal/cmd/doctor/checks_storage_rbac.go
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.agents (README.md Project storage diagnostics; internal/project/storage_rbac_query.go)
+    note: Overlap source. Microsoft's own check covers Storage only.
+overlap:
+  decision: adapt
+  coverage: partial
+  rationale: >-
+    azd ai agent doctor (check remote.project-storage-rbac) already evaluates project managed identity permissions for
+    Storage connections bound to the capability host, ARM role assignments with a principalId filter and NotDataActions.
+    It does not cover Azure AI Search or Cosmos DB, does not run outside azd, and does not read compiled Bicep. The idea
+    is adapted (not wrapped, because the extension is an interactive developer tool tied to azure.yaml and the azd environment) and
+    extended to Search and Cosmos with one evidence model for compiled ARM and the live project. No PSRule, Policy, Defender
+    or Advisor equivalent was found for project-identity effective access.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/run
+tests:
+  positive:
+    - project identity holds all expected roles on Search, Storage containers and Cosmos database
+    - role assigned at a parent scope is counted as inherited
+  negative:
+    - Search Service Contributor missing on the bound search service
+    - Cosmos DB Built-in Data Contributor missing from sqlRoleAssignments
+    - Storage Blob Data Owner missing on the agent container
+  skipped:
+    - caller cannot read role assignments (403)
+    - connection uses account key, SAS or service principal
+    - project has no capability host or no bound resources
+  uncertain:
+    - custom role or conditional assignment whose data actions cannot be resolved
+    - container-scoped Blob assignment
+    - assignment listing truncated or unreadable
+testability: Deterministic against recorded ARM JSON fixtures; live mode needs read access to role assignments.
+notes: >-
+  Unverified: exact built-in role action lists (Reader including roleAssignments/read) and the Cosmos built-in role
+  GUIDs were not available in the clones. The expected-role set follows the Foundry docs and may differ for the
+  capability settings flow, where Azure AI Search needs no caller role.

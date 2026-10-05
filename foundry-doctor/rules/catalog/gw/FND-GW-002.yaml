@@ -1,0 +1,107 @@
+id: FND-GW-002
+version: 1
+group: GW
+title: "Verified token-limit/metric policies are present"
+description: >-
+  An API Management API that fronts a model endpoint should apply the AI gateway token governance policies
+  with the verified names llm-token-limit (inbound) and llm-emit-token-metric (inbound), configured
+  validly: counter-key and estimate-prompt-tokens present, at least one of tokens-per-minute or token-quota
+  with token-quota-period, and no more than five dimensions on the metric. The earlier azure-openai-token-limit
+  and azure-openai-emit-token-metric names are not documented in the current policy reference and are not
+  accepted as evidence.
+status: product-opinion
+phases: ["8"]
+inputs: ["bicep-arm", "control-plane"]
+basis: ["opinion", "cost"]
+category: nice-to-have
+pillar: cost
+severity:
+  dev: info
+  test: warning
+  prod: warning
+compatibility:
+  azd: ""
+  extensions: {}
+  apiVersions:
+    - "Microsoft.ApiManagement/service/apis/policies 2025-09-01-preview"
+    - "Microsoft.ApiManagement/service/apis/policies 2024-05-01"
+    - "Policy reference pages llm-token-limit 2026-04-01"
+  preview: true
+  notes: "Policy reference pages llm-token-limit 2026-04-01: llm-emit-token-metric (current."
+evidence:
+  description: >-
+    Resolve the effective inbound policy of each API that fronts a model endpoint (global, product, API,
+    operation scope with <base /> inheritance). Presence: an llm-token-limit element and an llm-emit-token-metric
+    element exist in inbound. Validity of llm-token-limit (documented requirement): counter-key present;
+    estimate-prompt-tokens present; at least one of tokens-per-minute or (token-quota and token-quota-period);
+    token-quota-period in Hourly, Daily, Weekly, Monthly, Yearly. Validity of llm-emit-token-metric: at most five
+    dimension elements, each with a name. Tier: llm-token-limit is not available on the Consumption tier, so
+    report the policy as unsupported when sku.name is Consumption. Missing policy is a product-opinion finding;
+    an invalid or unsupported configured policy is a documented-constraint finding at the same severity.
+  confidence: certain
+recommendation: >-
+  Add llm-token-limit to cap tokens per caller and llm-emit-token-metric to record token consumption in
+  Application Insights, keyed on a caller identity (for example subscription ID or client ID) rather than a
+  shared constant.
+fix: |
+  <inbound>
+    <base />
+    <llm-token-limit counter-key="@(context.Subscription.Id)"
+        tokens-per-minute="5000" estimate-prompt-tokens="false" />
+    <llm-emit-token-metric namespace="llm-metrics">
+      <dimension name="Subscription ID" />
+      <dimension name="API ID" />
+    </llm-emit-token-metric>
+  </inbound>
+sources:
+  - url: https://learn.microsoft.com/azure/api-management/llm-token-limit-policy
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-docs/articles/api-management/llm-token-limit-policy.md
+    note: Policy statement and attributes (counter-key, tokens-per-minute, token-quota, token-quota-period Hourly|Daily|Weekly|Monthly|Yearly, estimate-prompt-tokens required); inbound only; tiers Premium, Developer, Standard, Basic and v2 (Consumption not listed); 429 on rate limit, 403 on quota.
+  - url: https://learn.microsoft.com/azure/api-management/llm-emit-token-metric-policy
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-docs/articles/api-management/llm-emit-token-metric-policy.md
+    note: namespace attribute; dimension name and value; up to five custom dimensions; inbound; all tiers; requires Application Insights integration and custom metrics with dimensions.
+  - url: https://learn.microsoft.com/azure/api-management/genai-gateway-capabilities
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-docs/articles/api-management/genai-gateway-capabilities.md
+    note: AI gateway capability overview (token usage management, monitoring).
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    No PSRule, Azure Policy, Defender or Advisor control inspects AI gateway policies; Checkov and the Bicep
+    linter do not parse policy XML. Presence is a product preference, the policy names and attributes are
+    verified platform facts.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/providers/apim
+testability: >-
+  Offline from policy XML fixtures. Policy fragments referenced with include-fragment are resolved when their
+  definition is in the same template, otherwise reported uncertain.
+tests:
+  positive:
+    - ai-api-without-llm-token-limit
+    - ai-api-without-emit-token-metric
+    - token-limit-without-rate-or-quota
+    - token-limit-missing-estimate-prompt-tokens
+    - emit-metric-six-dimensions
+    - token-limit-on-consumption-tier
+  negative:
+    - both-policies-present-and-valid
+    - policies-inherited-through-base-from-global-scope
+  skipped:
+    - policy-in-unresolved-fragment
+    - api-not-fronting-a-model-endpoint
+notes: >-
+  Unverified: the legacy names azure-openai-token-limit and azure-openai-emit-token-metric are absent from the
+  current Learn policy reference (grep over articles/api-management found only azure-openai-semantic-cache-lookup
+  in the Application Insights dependency list). Whether they are still accepted by the service is not stated, so
+  they are not matched. Prompt-token estimation and streaming behaviour are documented in the policy article and
+  are not evaluated. Requiring the policies is a governance preference.

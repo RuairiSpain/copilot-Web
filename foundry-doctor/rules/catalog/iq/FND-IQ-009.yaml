@@ -1,0 +1,122 @@
+id: FND-IQ-009
+version: 1
+group: IQ
+title: Document-level access control configured when required
+description: >-
+  When a project declares that retrieved content is permission-protected, every indexed knowledge source (blob or ADLS Gen2,
+  OneLake, indexed SharePoint) must set ingestionPermissionOptions, the knowledge source must not also set assetStore, the
+  API version must be 2026-08-01-preview, and the agent's MCP connection must forward the end-user token. Without ingestionPermissionOptions
+  the index holds no permission metadata and the service returns results unfiltered regardless of the user token.
+status: product-opinion
+phases:
+- '8'
+inputs:
+- data-plane
+- bicep-arm
+- azure.yaml
+basis:
+- security
+- opinion
+category: must-have
+pillar: security
+severity:
+  dev: warning
+  test: error
+  prod: error
+compatibility:
+  azd: ''
+  extensions: {}
+  apiVersions:
+  - 2026-08-01-preview
+  - 2026-05-01-preview
+  - '2026-04-01'
+  preview: true
+  notes: >-
+    API 2026-08-01-preview: ingestionPermissionOptions documented for retrieval enforcement. API 2026-05-01-preview: property
+    present in spec. API 2026-04-01: not supported.
+evidence:
+  description: >-
+    Applies only when the project states a document-level access requirement (a declared project setting; the rule is skipped,
+    not passed, when no requirement is declared because the need cannot be inferred from metadata). Then, for each azureBlob,
+    indexedOneLake and indexedSharePoint knowledge source in the knowledge base, fail when ingestionParameters.ingestionPermissionOptions
+    is empty or absent; fail when assetStore is also set; fail when the call API version is 2026-04-01; and fail when the
+    Foundry MCP tool or project connection has no header forwarding for x-ms-query-source-authorization. Values must be
+    in the spec enum userIds, groupIds, rbacScope, sensitivityLabels. Remote sources (remoteSharePoint, fabricDataAgent,
+    fabricOntology, workIQ) enforce permissions at the source and are not assessed. Report names and paths only.
+  confidence: likely
+recommendation: >-
+  Recreate the indexed knowledge source with ingestionPermissionOptions that match your source (for example userIds, groupIds,
+  rbacScope for ADLS Gen2), remove assetStore, call with 2026-08-01-preview, and pass the signed-in user's token in the
+  x-ms-query-source-authorization header from the MCP connection.
+fix: |
+  "ingestionParameters": {
+    "identity": null,
+    "ingestionPermissionOptions": ["userIds", "groupIds", "rbacScope"]
+  }
+sources:
+- url: https://learn.microsoft.com/azure/search/agentic-retrieval-how-to-retrieve
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-ai-docs/articles/search/agentic-retrieval-how-to-retrieve.md
+  note: >-
+    Ingestion-time configuration table, unfiltered results when ingestionPermissionOptions is not set, query-time header
+    x-ms-query-source-authorization with a https://search.azure.com/.default token.
+- url: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-blob
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-ai-docs/articles/search/agentic-knowledge-source-how-to-blob.md
+  note: >-
+    ingestionPermissionOptions requires 2026-08-01-preview; not supported by 2026-04-01; assetStore not supported with permissions.
+- url: https://learn.microsoft.com/azure/search/search-document-level-access-overview
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-ai-docs/articles/search/search-document-level-access-overview.md
+  note: >-
+    Approaches (security filters, ACL/RBAC scopes, sensitivity labels, SharePoint ACLs); ingestionPermissionOptions can't
+    be combined with assetStore.
+- url: https://learn.microsoft.com/azure/foundry/agents/how-to/foundry-iq-connect
+  lastVerified: '2026-10-04'
+  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/foundry-iq-connect.md
+  note: >-
+    Forward the signed-in user's identity token in x-ms-query-source-authorization on the MCP tool connection; without it
+    permission-enabled sources return results unfiltered.
+- url: https://github.com/Azure/azure-rest-api-specs/tree/main/specification/search/data-plane/Search
+  lastVerified: '2026-10-04'
+  verifiedVia: >-
+    refs/rest-api-specs/specification/search/data-plane/Search/preview/2026-08-01-preview/search.json (KnowledgeSourceIngestionPermissionOption
+    enum)
+overlap:
+  decision: native
+  coverage: none
+  rationale: >-
+    No external tool models Foundry IQ permission ingestion or the correlation between a knowledge source, its index permission
+    metadata and the agent connection header. Defender for Cloud and Azure Policy have no equivalent control.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/iq
+testability: >-
+  Offline from knowledge source JSON plus the declared requirement. Whether source documents actually carry ACLs cannot
+  be read metadata-only, so that is out of scope and the rule never passes by inference.
+tests:
+  positive:
+  - requirement-declared-blob-ks-without-permission-options
+  - permission-options-with-asset-store
+  - permission-options-on-2026-04-01
+  - mcp-connection-without-user-token-header
+  negative:
+  - blob-ks-with-userIds-groupIds
+  - remote-sharepoint-source-not-assessed
+  skipped:
+  - no-access-requirement-declared
+  - source-acl-content-not-readable
+  - header-forwarding-configured-outside-repo
+notes: >-
+  "When required" has no platform definition, so the trigger is an explicit project declaration (PRD ambiguity to resolve
+  with an ADR: where the declaration lives, for example an azure.yaml extension setting or a doctor config key). Learn text
+  writes the label option as sensitivityLabel while the data-plane spec enum is sensitivityLabels; the spec is used and
+  the mismatch is listed under Unverified. Relabelled product-opinion after the Phase 0 Foundry lead review: "when required"
+  has no platform definition and no project setting declares the requirement, so the check can only run when the profile
+  states it. A decision on where that declaration lives (profile key) is needed before Phase 8.

@@ -1,0 +1,105 @@
+id: FND-NET-008
+version: 1
+group: NET
+title: "Search SKU supports private endpoints"
+description: >-
+  Azure AI Search private endpoints are not supported on the Free tier; Basic or higher is required.
+  The rule fails when a search service with sku.name free is used where a private connection is
+  required: it has a private endpoint, publicNetworkAccess Disabled, or it is the vectorStore of a
+  private Foundry account. Capability limits on other tiers (for example, indexer private connections
+  and skillsets) are real but tier specific and are reported as informational notes only.
+status: verified
+phases: ["1"]
+inputs: ["bicep-arm", "control-plane"]
+basis: ["platform"]
+category: must-have
+pillar: reliability
+severity:
+  dev: error
+  test: error
+  prod: error
+compatibility:
+  azd: ""
+  extensions: {}
+  apiVersions:
+    - "Microsoft.Search/searchServices 2025-05-01"
+  preview: false
+  notes: "Not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked) Microsoft.Search/searchServices 2025-05-01: sku.name free, basic, standard, standard2, standard3, storage_optimized_l1, storage_optimized_l2."
+evidence:
+  description: >-
+    Read sku.name of each Microsoft.Search/searchServices. Fail when it equals "free" and any of: a
+    Microsoft.Network/privateEndpoints targets it (groupId searchService), properties.publicNetworkAccess
+    is Disabled, or the service is referenced as capabilitySettings.vectorStore of an account or
+    project whose posture is private (FND-NET-001). Case-insensitive comparison of sku.name. Emit
+    info notes (not failures) for documented limits on lower tiers: no private connections for
+    indexers on Free, and none for skillset-enabled indexers on Free and Basic (the SKU article also
+    lists S1, while the limits table says S1 is supported for services created with higher limits
+    after April 3, 2024; the two pages differ, so S1 is not evaluated).
+  confidence: certain
+recommendation: >-
+  Use the Basic tier or higher for any search service that must be reached through a private
+  endpoint. Plan the tier against indexer needs: see the Search limits article for private connection
+  support by tier.
+fix: |
+  resource search 'Microsoft.Search/searchServices@2025-05-01' = {
+    name: searchName
+    location: location
+    sku: { name: 'standard' } // 'free' does not support private endpoints
+    properties: { publicNetworkAccess: 'Disabled' }
+  }
+sources:
+  - url: https://learn.microsoft.com/azure/search/service-create-private-endpoint
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/search/service-create-private-endpoint.md (ms.date 08/05/2026)
+    note: Basic tier or higher; private endpoints aren't supported on the Free tier.
+  - url: https://learn.microsoft.com/azure/search/search-sku-tier
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/search/search-sku-tier.md (ms.date 08/04/2026)
+    note: Private endpoint feature row - inbound not available on Free; outbound indexer limits by tier.
+  - url: https://learn.microsoft.com/azure/search/search-limits-quotas-capacity
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-ai-docs/articles/search/search-limits-quotas-capacity.md (ms.date 09/16/2026)
+    note: Private endpoint indexer support table by tier and maximum private endpoints.
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/rest-api-specs/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
+    note: SkuName enum and publicNetworkAccess Enabled/Disabled/SecuredByPerimeter.
+overlap:
+  decision: adapt
+  coverage: partial
+  rationale: >-
+    The built-in policy "Azure AI Search service should use a SKU that supports private link" has the
+    same trigger (sku.name equals free) and is the canonical Azure-side control; PSRule
+    Azure.Search.SKU flags the Free tier for performance reasons. Foundry Doctor adapts the
+    condition and adds when it applies: only where a private connection is required, including the
+    case where a private Foundry account references the service as its vectorStore, and as a
+    pre-deployment error. Evidence is the same property; the correlation and timing differ.
+  psrule:
+    - Azure.Search.SKU
+  azurePolicy:
+    - "a049bf77-880b-470f-ba6d-9f21c530cf83 (Azure AI Search service should use a SKU that supports private link)"
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/net
+testability: >-
+  Fully offline with fixtures. The vectorStore correlation uses the 2026-07-15-preview capability
+  settings; the older capability host connection flow resolves the search service through the
+  connection target.
+tests:
+  positive:
+    - free-search-with-private-endpoint
+    - free-search-public-disabled
+    - free-search-as-vectorstore-of-private-account
+  negative:
+    - basic-search-with-private-endpoint
+    - free-search-public-and-not-referenced-by-private-foundry
+  skipped:
+    - search-sku-is-parameter
+notes: >-
+  Serverless Developer appears as a tier column in the limits article, which says private endpoints
+  and IP firewall rules are supported for it, but its SKU name is not in the 2025-05-01 stable ARM
+  enum, so it is never treated as Free. Unverified: Defender for Cloud/Advisor mapping.

@@ -1,0 +1,95 @@
+id: FND-RUN-005
+version: 1
+group: RUN
+title: Agent tools/connections respond
+description: >-
+  The deployed agent versions and project connections that an agent depends on should respond as healthy to the project
+  data plane. The rule reads agent version status (Active, Creating, Failed) and connection metadata through the project
+  endpoint. It never invokes a tool, MCP server or model and never requests connection credentials, because no source
+  describes a side-effect-free tool probe. The tool-responsiveness design is a product opinion.
+status: product-opinion
+phases: ["3"]
+inputs: [data-plane, azd-env]
+basis: [opinion]
+category: nice-to-have
+pillar: reliability
+severity:
+  dev: info
+  test: warning
+  prod: warning
+compatibility:
+  azd: ""
+  extensions:
+    azure.ai.agents: ">=1.0.0-beta.18 <=1.0.0-beta.18"
+  apiVersions: []
+  preview: true
+  notes: "No azd dependency: data-plane reads against the project endpoint; azure.yaml service names are read for correlation only azure.ai.agents 1.0.0-beta.18: probe shapes read in source. Extension ranges are exactly the versions whose schemas or source were read; widen them in Phase 1 by reading older tags. Foundry project endpoint agents API api-version v1 (read in azd extension source; no REST spec in the clones)"
+evidence:
+  description: >-
+    Read-only GETs against the project endpoint: GET {projectEndpoint}/agents?api-version=v1&limit=1 (endpoint reachable),
+    GET {projectEndpoint}/agents/{name}/versions/{version}?api-version=v1 (status Active is healthy, Creating is Uncertain,
+    Failed or not found is Fail) and GET {projectEndpoint}/connections?api-version=v1 (names and categories only; the
+    getConnectionWithCredentials operation is never called). Required permission: the azd extension comments that agent
+    list and get are Reader-level operations, and the Foundry docs assign Foundry User on the project to developers who
+    create or edit agents; the exact data action was not verified. Vantage point: the project endpoint must be reachable
+    from the host; when public network access is disabled the check is Skipped outside the VNet. Metadata read: agent
+    names, versions, status, connection names. Never instructions, prompts, threads, tool arguments or secrets.
+  confidence: uncertain
+recommendation: >-
+  Open the failing agent version or connection in the Foundry portal, read its error, and redeploy the agent or recreate
+  the connection. Test tool calls with an explicit, operator-run test; the doctor does not call tools.
+fix: |-
+  # azure.yaml: keep the agent service and the connection names it uses aligned with the project
+  services:
+    support-agent:
+      host: azure.ai.agent
+sources:
+  - url: https://github.com/Azure/azure-dev/blob/main/cli/azd/extensions/azure.ai.agents/internal/cmd/doctor/checks_agent_status.go
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.agents/internal/cmd/doctor/checks_agent_status.go
+    note: GET /agents/{name}/versions/{version}; statuses Active, Creating, Failed; Reader-level comment.
+  - url: https://github.com/Azure/azure-dev/blob/main/cli/azd/extensions/azure.ai.agents/internal/cmd/doctor/checks_foundry_endpoint.go
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.agents/internal/cmd/doctor/checks_foundry_endpoint.go
+    note: GET <endpoint>/agents?api-version=v1&limit=1 reachability probe and HTTP status mapping.
+  - url: https://github.com/Azure/azure-dev/blob/main/cli/azd/extensions/azure.ai.agents/internal/pkg/azure/foundry_projects_client.go
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.agents/internal/pkg/azure/foundry_projects_client.go
+    note: connections list at <endpoint>/connections?api-version=v1; a per-connection credentials operation exists and must be avoided.
+overlap:
+  decision: adapt
+  coverage: partial
+  rationale: >-
+    azd ai agent doctor checks remote.agent-status (hosted agent version Active/Creating/Failed), remote.foundry-endpoint
+    (endpoint reachability and RBAC/auth mapping), remote.connections (configured connection names exist) and
+    local.toolboxes (toolbox MCP endpoint env vars are set). That is the same evidence for azd-managed hosted agents. It is
+    adapted rather than wrapped so the evidence also works for standalone use without the azd extension and can be
+    correlated with RUN-001, RUN-003 and RUN-004. It does not probe tool responsiveness; neither does this rule. No PSRule,
+    Policy, Defender or Advisor equivalent was found.
+  psrule: []
+  azurePolicy: []
+  defender: []
+  advisor: []
+  bicepLinter: []
+  checkov: []
+implementation:
+  owner: native
+  package: internal/rules/run
+tests:
+  positive:
+    - endpoint reachable, all agent versions Active, all referenced connections listed
+  negative:
+    - agent version Failed
+    - agent version not found (404)
+    - referenced connection name absent from the project
+  skipped:
+    - project endpoint not set or not reachable from this vantage point
+    - 401 or 403 from the project endpoint
+  uncertain:
+    - agent version Creating
+    - tool responsiveness requested (not probed by design)
+testability: Deterministic against a fake project endpoint; live mode needs data-plane read access.
+notes: >-
+  Unverified: no REST specification for the project agents API (api-version v1) was in the clones, so paths and statuses
+  are taken from the azd extension source only; no source documents a side-effect-free tool or MCP probe, hence
+  product-opinion. Hosted agents only: prompt agents may expose different status values.
