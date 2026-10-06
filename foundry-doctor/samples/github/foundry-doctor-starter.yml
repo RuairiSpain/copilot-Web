@@ -1,0 +1,29 @@
+# Foundry Doctor: offline validation of a Foundry azd project, with results in GitHub code scanning.
+# Copy this file to .github/workflows/foundry-doctor.yml in your repository and edit the TODO lines.
+# It calls the reusable workflow, needs no Azure credentials and no secrets, and is safe for pull requests from forks
+# (the SARIF upload is skipped there; the exit code is still enforced). See README.md in this folder.
+name: foundry-doctor
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# The reusable workflow can only narrow these. security-events: write is used by its upload job only.
+# actions: read and contents: read are required by code scanning uploads in private repositories.
+permissions:
+  contents: read
+  actions: read
+  security-events: write
+
+jobs:
+  doctor:
+    # TODO: replace @<tag-or-sha> with a release tag or a full commit SHA of the repository that hosts the workflow.
+    uses: RuairiSpain/copilot-Web/.github/workflows/foundry-doctor-offline.yml@<tag-or-sha>
+    with:
+      path: "."                  # TODO: folder that holds azure.yaml
+      profile: foundry-prod      # dev, test, prod, foundry-dev, foundry-test or foundry-prod
+      fail-on: error             # info, warning or error
+      install-mode: release      # or: source (builds from source-ref)
+      version: v0.1.0            # TODO: a published release, tag foundry-doctor/v0.1.0

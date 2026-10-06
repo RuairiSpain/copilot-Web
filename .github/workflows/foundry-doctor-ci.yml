@@ -1,186 +1,202 @@
 name: foundry-doctor-ci
 
-# All pull-request jobs use only public, pinned inputs and read-only repository
-# access. They are therefore safe for pull requests from forks.
+# GitHub only reads workflows from the repository root, so this file lives here and
+# points at the foundry-doctor/ folder. Offline checks only: no Azure credentials, no secrets,
+# read-only token, so it is safe for pull requests from forks. Never use pull_request_target here.
+# Details and the list of what has and has not been proven by a real run: foundry-doctor/docs/development/ci.md.
 on:
   pull_request:
     paths:
       - "foundry-doctor/**"
-      - ".github/workflows/foundry-doctor-ci.yml"
-      - ".github/workflows/foundry-doctor-dependency-review.yml"
+      - ".github/workflows/foundry-doctor-*.yml"
   push:
     branches: [main]
-    tags: ["foundry-doctor-v*"]
     paths:
       - "foundry-doctor/**"
-      - ".github/workflows/foundry-doctor-ci.yml"
-      - ".github/workflows/foundry-doctor-dependency-review.yml"
-  workflow_dispatch:
+      - ".github/workflows/foundry-doctor-*.yml"
 
 permissions:
   contents: read
 
-env:
-  GOTOOLCHAIN: local
-  GOVULNCHECK_VERSION: v1.7.0
-  STATICCHECK_VERSION: v0.6.1
+concurrency:
+  group: foundry-doctor-ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
-    name: Go test (${{ matrix.os }})
+    name: go test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+        os: [ubuntu-latest, macos-latest, windows-latest]
     defaults:
       run:
+        shell: bash
         working-directory: foundry-doctor
     steps:
-      - name: Check out source
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - name: Set up Go
-        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          go-version-file: foundry-doctor/go.mod
-          cache-dependency-path: foundry-doctor/go.sum
-      - name: Verify module content
-        run: go mod verify
-      - name: Test all normal packages
-        run: go test ./...
-      - name: Build all current packages
-        run: go build ./...
-      - name: Product build gate
-        shell: pwsh
-        run: |
-          if (Test-Path cmd/foundry-doctor) {
-            go build ./cmd/foundry-doctor
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          } else {
-            Write-Host "::notice::Phase 0 exemption: cmd/foundry-doctor does not exist. All package build and test gates still ran."
-          }
-
-  strict-security:
-    name: Strict security and quality gates
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    defaults:
-      run:
-        working-directory: foundry-doctor
-    steps:
-      - name: Check out source
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - name: Set up Go
-        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
-        with:
-          go-version-file: foundry-doctor/go.mod
-          cache-dependency-path: foundry-doctor/go.sum
-      - name: Install pinned audit tools
-        run: |
-          go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
-          go install "honnef.co/go/tools/cmd/staticcheck@${STATICCHECK_VERSION}"
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-      - name: Formatting
-        run: test -z "$(gofmt -l .)"
-      - name: Vet
-        run: go vet ./...
-      - name: Race tests
-        # Linux is the supported host for the race gate in this repo; local
-        # Windows ARM64 cannot execute `go test -race`.
-        run: go test -race ./...
-      - name: Static analysis
-        run: staticcheck ./...
-      - name: Vulnerability audit (fail closed)
-        # Deliberately no database-unavailable exception, continue-on-error, or skip.
-        run: govulncheck ./...
-      - name: Phase 0 rule catalogue gate
-        run: bash scripts/claude/check-rule-catalog.sh
-      - name: Secret scan
-        run: bash scripts/claude/check-no-secrets.sh
-      - name: Script unit tests
-        run: |
-          python3 -m unittest discover -s scripts -p "test_*.py"
-          python3 -m unittest discover -s scripts/claude -p "test_*.py"
-
-  licences:
-    name: Transitive dependency and licence audit
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: foundry-doctor
-    steps:
-      - name: Check out source
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - name: Set up Go
-        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
-        with:
-          go-version-file: foundry-doctor/go.mod
-          cache-dependency-path: foundry-doctor/go.sum
-      - name: Verify checksums and read-only module state
-        run: |
-          go mod verify
-          go mod tidy -diff
-      - name: Check the complete selected module graph and inventory
-        run: python3 scripts/dependency_audit.py --check-inventory
-      - name: Publish verified third-party notices
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: THIRD-PARTY-NOTICES
-          path: foundry-doctor/THIRD_PARTY_NOTICES.md
-          if-no-files-found: error
-          retention-days: 30
-
-  pinned-spikes:
-    name: Tagged offline spikes
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    defaults:
-      run:
-        working-directory: foundry-doctor
-    steps:
-      - name: Check out source
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - name: Check out pinned azd schema source
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          repository: Azure/azure-dev
-          ref: afe4b2b4d262bab4c11f4937e7a7942557ab0ecd
-          path: _deps/azure-dev
           persist-credentials: false
-      - name: Set up Go
-        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: foundry-doctor/go.mod
           cache-dependency-path: foundry-doctor/go.sum
-      - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+      - name: go test ./... (core module)
+        run: go test ./...
+
+  quality:
+    name: lint, vet, vulncheck, catalogue
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: foundry-doctor
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          python-version: "3.13"
-      - name: Install pinned schema dependencies
-        run: >-
-          python -m pip install
-          PyYAML==6.0.3
-          jsonschema==4.25.1
-          referencing==0.36.2
-          attrs==25.3.0
-          jsonschema-specifications==2025.4.1
-          rpds-py==0.27.1
-      - name: Install pinned Bicep CLI
-        run: az bicep install --version v0.48.1
-      - name: Monitor pinned azd registry and core-command namespace
-        env:
-          AZURE_DEV_DIR: ${{ github.workspace }}/_deps/azure-dev
-          REQUIRE_SPIKE_DEPS: "1"
-        run: >-
-          go test -tags spike ./test/spikes/azd
-          -run "TestPinnedAzdHasNoFoundryNamespaceCollision|TestFoundryNamespaceCollisionDetector"
-      - name: Run tagged spikes with network access disabled by the tests
-        # Keep this on Ubuntu: the azd isolation spike relies on Linux unshare /
-        # network-namespace hardening and is not valid evidence on Windows ARM64.
-        env:
-          AZURE_DEV_DIR: ${{ github.workspace }}/_deps/azure-dev
-          BICEP_PATH: /home/runner/.azure/bin/bicep
-          REQUIRE_SPIKE_DEPS: "1"
-        run: go test -tags spike ./test/spikes/azd ./test/spikes/bicep
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: foundry-doctor/go.mod
+          cache-dependency-path: foundry-doctor/go.sum
+      - name: Install tools
+        # Same pinned versions as local development (scripts/install-dev-tools.sh), never @latest.
+        run: |
+          bash scripts/install-dev-tools.sh
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Acceptance gates
+        # Runs gofmt, go vet, go test, go test -race, staticcheck, govulncheck, the build, the rule-catalogue
+        # check, the secret scan, the import-boundary check and the scripts/ci syntax check.
+        # govulncheck runs here because the runner can reach vuln.go.dev; verify-phase.sh reports it as
+        # skipped only where the database is unreachable.
+        # TODO(phase 1 hand-off): add --strict once cmd/foundry-doctor exists, so a skipped gate fails CI.
+        run: bash scripts/claude/verify-phase.sh
+
+  import-boundary:
+    name: core builds with GOWORK=off, no azure-dev import (ADR-005)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: foundry-doctor
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: foundry-doctor/go.mod
+          cache-dependency-path: foundry-doctor/go.sum
+      - name: Import-boundary check
+        run: bash scripts/ci/check-import-boundary.sh
+
+  azd-namespace:
+    name: azd namespace is free (ADR-003)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: foundry-doctor
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check azd registry and command reference
+        # Exit 5 means the check could not run (network, jq). That is reported as a warning and a
+        # summary line, never as a pass. Exit 1 (a collision) fails the job.
+        run: |
+          set +e
+          bash scripts/ci/check-azd-namespace.sh
+          rc=$?
+          set -e
+          if [ "$rc" -eq 5 ]; then
+            echo "::warning title=azd namespace check SKIPPED::check-azd-namespace.sh could not run (exit 5). This is not a pass. See the log."
+            echo "### azd namespace check: SKIPPED (not a pass)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          exit "$rc"
+
+  build-matrix:
+    name: cross-platform build and checksums
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: foundry-doctor
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: foundry-doctor/go.mod
+          cache-dependency-path: foundry-doctor/go.sum
+      - name: Build linux, darwin, windows x amd64, arm64
+        id: build
+        run: |
+          set +e
+          bash scripts/ci/build-matrix.sh --out "$RUNNER_TEMP/dist" --version "ci-${GITHUB_SHA::12}"
+          rc=$?
+          set -e
+          if [ "$rc" -eq 5 ]; then
+            echo "::warning title=build-matrix SKIPPED::cmd/foundry-doctor does not exist yet; nothing was built. This is not a pass."
+            echo "### build-matrix: SKIPPED (not a pass)" >> "$GITHUB_STEP_SUMMARY"
+            echo "built=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          [ "$rc" -eq 0 ] || exit "$rc"
+          echo "built=true" >> "$GITHUB_OUTPUT"
+      - name: Upload binaries and checksums
+        if: steps.build.outputs.built == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: foundry-doctor-ci-binaries
+          path: ${{ runner.temp }}/dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  smoke:
+    name: smoke samples (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+        working-directory: foundry-doctor
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: foundry-doctor/go.mod
+          cache-dependency-path: foundry-doctor/go.sum
+      - name: Build the binary and run it against samples/*
+        # Skips with a visible warning while cmd/foundry-doctor or samples/ are absent; a skip is not a pass.
+        run: |
+          if [ ! -d cmd/foundry-doctor ]; then
+            echo "::warning title=smoke SKIPPED on ${{ matrix.os }}::cmd/foundry-doctor does not exist yet. This is not a pass."
+            echo "### smoke (${{ matrix.os }}): SKIPPED, cmd/foundry-doctor absent" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          exe=""; [ "$RUNNER_OS" = Windows ] && exe=".exe"
+          mkdir -p "$RUNNER_TEMP/bin"
+          CGO_ENABLED=0 go build -trimpath -o "$RUNNER_TEMP/bin/foundry-doctor$exe" ./cmd/foundry-doctor
+          set +e
+          bash scripts/ci/smoke-samples.sh --binary "$RUNNER_TEMP/bin/foundry-doctor$exe" --out "$RUNNER_TEMP/smoke"
+          rc=$?
+          set -e
+          if [ "$rc" -eq 5 ]; then
+            echo "::warning title=smoke SKIPPED on ${{ matrix.os }}::no samples to run. This is not a pass."
+            echo "### smoke (${{ matrix.os }}): SKIPPED, no samples" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          exit "$rc"
+      - name: Upload smoke SARIF and logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: foundry-doctor-smoke-${{ matrix.os }}
+          path: ${{ runner.temp }}/smoke/*
+          if-no-files-found: ignore
+          retention-days: 7

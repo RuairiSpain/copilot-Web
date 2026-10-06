@@ -1,4 +1,4 @@
-# ADR-008: Phase 0 evidence and gate contract
+# ADR-013: Phase 0 evidence and gate contract
 
 - Status: Accepted for remediation
 - Date: 2026-10-05

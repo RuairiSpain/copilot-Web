@@ -1,4 +1,4 @@
-# ADR-010: Verified compatibility floors for azd and Bicep
+# ADR-015: Verified compatibility floors for azd and Bicep
 
 Status: Accepted  
 Date: 2026-10-06

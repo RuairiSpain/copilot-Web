@@ -35,16 +35,21 @@ compatibility:
   notes: Not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked)
 evidence:
   description: >-
-    For each Microsoft.Network/privateEndpoints whose privateLinkServiceConnections.groupIds and target type are known,
-    find child privateDnsZoneGroups and read properties.privateDnsZoneConfigs[].properties.privateDnsZoneId. Finding 1:
-    no zone group. Finding 2: zone group lacks one of the expected zone names for the group ID (account needs all three
-    Foundry zones). Finding 3: a referenced Private DNS zone resource in scope has no virtualNetworkLinks entry whose properties.virtualNetwork.id
-    is the endpoint VNet (or a VNet in the same hub-spoke set declared in config). Zones in another subscription or a custom
-    DNS server or private resolver cannot be seen from the template; report those as skipped with the reason, not as passed.
-    Zone group limits from the Private Link docs (at most five zones, one zone per name, one zone group per endpoint) are
-    also checked. Report skipped, with the reason 'policy-managed', when the profile declares that this setting is created
-    after deployment by an Azure Policy DeployIfNotExists assignment (common in landing zones); template-only evidence cannot
-    see those resources.
+    For each Microsoft.Network/privateEndpoints whose privateLinkServiceConnections.groupIds and target type are
+    known, find child privateDnsZoneGroups and read properties.privateDnsZoneConfigs[].properties.privateDnsZoneId.
+    Finding 1: no zone group. Finding 2: zone group lacks one of the expected zone names for the group ID (public
+    cloud: account needs privatelink.cognitiveservices.azure.com, privatelink.openai.azure.com and
+    privatelink.services.ai.azure.com; searchService needs privatelink.search.windows.net; Cosmos DB Sql needs
+    privatelink.documents.azure.com; Storage blob needs privatelink.blob.core.windows.net, with table, queue, file,
+    web and dfs mapping to privatelink.<service>.core.windows.net; vault needs privatelink.vaultcore.azure.net). In
+    sovereign clouds the suffixes differ, so compare only against the table for the declared cloud and skip otherwise.
+    Finding 3: a referenced Private DNS zone resource in scope has no virtualNetworkLinks entry whose
+    properties.virtualNetwork.id is the endpoint VNet (or a VNet in the same hub-spoke set declared in config). Zones
+    in another subscription or a custom DNS server or private resolver cannot be seen from the template; report those
+    as skipped with the reason, not as passed. Zone group limits from the Private Link docs (at most five zones, one
+    zone per name, one zone group per endpoint) are also checked. Report skipped, with the reason 'policy-managed',
+    when the profile declares that this setting is created after deployment by an Azure Policy DeployIfNotExists
+    assignment (common in landing zones); template-only evidence cannot see those resources.
   confidence: likely
 recommendation: >-
   Add a privateDnsZoneGroup to each private endpoint with the documented zones (three for a Foundry account) and link every
@@ -94,6 +99,22 @@ sources:
     raw.githubusercontent.com/Azure/azure-rest-api-specs/main/.../Network/stable/2024-05-01/privateEndpoint.json (PrivateDnsZoneGroupPropertiesFormat.privateDnsZoneConfigs[].properties.privateDnsZoneId)
     and .../privatedns/.../PrivateDns/stable/2024-06-01/privatedns.json (VirtualNetworkLinkProperties)
   note: Property names for zone groups and VNet links.
+- url: https://github.com/MicrosoftDocs/azure-docs/blob/eb1e05deecc53c7a1a192453a3b8183e45f73c10/articles/private-link/private-endpoint-dns.md
+  lastVerified: '2026-10-05'
+  verifiedVia: >-
+    MicrosoftDocs/azure-docs main @ eb1e05deecc53c7a1a192453a3b8183e45f73c10 (2026-10-04),
+    articles/private-link/private-endpoint-dns.md (ms.date 08/11/2026), fetched from raw.githubusercontent.com on
+    2026-10-05 (path absent from the sparse local clone).
+  note: >-
+    Verified public-cloud zone table for group IDs: Foundry Tools account -> privatelink.cognitiveservices.azure.com,
+    privatelink.openai.azure.com, privatelink.services.ai.azure.com (footnote: configure DNS for each endpoint the
+    workload uses); Search searchService -> privatelink.search.windows.net; Cosmos DB Sql ->
+    privatelink.documents.azure.com, SqlDedicated -> privatelink.sqlx.cosmos.azure.com, MongoDB ->
+    privatelink.mongo.cosmos.azure.com, Cassandra -> privatelink.cassandra.cosmos.azure.com, Table ->
+    privatelink.table.cosmos.azure.com; Storage blob -> privatelink.blob.core.windows.net, table, queue, file, web,
+    dfs analogously; Key Vault vault -> privatelink.vaultcore.azure.net. US Government and China tables use different
+    suffixes (for example privatelink.cognitiveservices.azure.us, privatelink.blob.core.usgovcloudapi.net,
+    privatelink.documents.azure.cn).
 overlap:
   decision: native
   provisional: true
@@ -144,8 +165,10 @@ tests:
   - custom-dns-server-declared-in-config
   - dine-policy-manages-dns-zone-group
 notes: >-
-  Unverified: DNS zone names for sovereign clouds were read from the Private Link table only for the services listed there
-  (Foundry Government lists a single cognitiveservices zone); the docs' own statement that DNS zone groups are optional
-  when custom DNS is used is why confidence is likely and basis is reliability, not platform. Zone names containing the
-  Bicep linter hard-coded environment URL pattern are an incidental overlap with no-hardcoded-environment-urls and are not
-  mapped.
+  Unverified: DNS zone names for sovereign clouds were read from the Private Link table only for the services listed
+  there (Foundry Government lists a single cognitiveservices zone); the docs' own statement that DNS zone groups are
+  optional when custom DNS is used is why confidence is likely and basis is reliability, not platform. Zone names
+  containing the Bicep linter hard-coded environment URL pattern are an incidental overlap with
+  no-hardcoded-environment-urls and are not mapped. Phase 1 fact check (2026-10-05): the zone names and group IDs
+  above were read from the Private Link DNS zone table at azure-docs commit eb1e05d (ms.date 08/11/2026); the Foundry
+  virtual-networks article lists the same Search, Cosmos DB Sql and Storage blob zones.

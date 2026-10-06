@@ -9,7 +9,7 @@ in-tree for Phase 0, and states the remaining blocked items plainly.
 
 - `docs/requirements/Foundry_Doctor_Implementation_PRD.md` sections 8, 18, 19, 20 and 22
 - `docs/development/hand-offs/phase-0.md`
-- `docs/decisions/ADR-008-phase-0-evidence-and-gate-contract.md`
+- `docs/decisions/ADR-013-phase-0-evidence-and-gate-contract.md`
 - prior checkpoint findings recorded in the session-state hand-offs
 
 ## Remaining Phase 0 gaps

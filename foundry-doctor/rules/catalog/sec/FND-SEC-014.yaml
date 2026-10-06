@@ -52,6 +52,16 @@ sources:
   lastVerified: '2026-10-04'
   verifiedVia: refs/azd-docs/articles/azure-developer-cli/azd-templates.md
   note: azd stores outputs from the entry point as environment values.
+- url: https://github.com/Azure/bicep/blob/4d4395e327b32da45ae3d961aa464d28e54d26f7/src/Bicep.Core/Analyzers/Linter/Rules/OutputsShouldNotContainSecretsRule.cs
+  lastVerified: '2026-10-05'
+  verifiedVia: >-
+    Azure/bicep @ 4d4395e327b32da45ae3d961aa464d28e54d26f7 (2026-10-02, MIT)
+    src/Bicep.Core/Analyzers/Linter/Rules/OutputsShouldNotContainSecretsRule.cs: Code =
+    "outputs-should-not-contain-secrets", category Security; outputs with the @secure decorator are skipped; an output
+    whose name contains "password" is reported.
+  note: >-
+    Rule ID confirmed in source. The related IDs secure-secrets-in-params and secure-parameter-default are parameter
+    rules and do not replace this one.
 overlap:
   decision: wrap
   provisional: true

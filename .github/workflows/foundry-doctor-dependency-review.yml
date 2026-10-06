@@ -1,36 +1,39 @@
 name: foundry-doctor-dependency-review
 
+# Licence and vulnerability review of dependency changes in pull requests that touch foundry-doctor/ (PRD section 18).
+# Read-only token, no secrets, no pull_request_target: safe for forks. The summary goes to the job summary,
+# not to a PR comment, because commenting needs pull-requests: write, which fork PRs do not get.
+# The action reviews every dependency change in the pull request, not only those under foundry-doctor/; the path filter
+# only decides when the workflow starts. It needs the dependency graph (public repositories have it; private
+# repositories need GitHub Code Security or Advanced Security).
 on:
   pull_request:
     paths:
       - "foundry-doctor/go.mod"
       - "foundry-doctor/go.sum"
-      - "foundry-doctor/scripts/dependency_audit.py"
-      - "foundry-doctor/scripts/install-dev-tools.sh"
-      - "foundry-doctor/docs/licence-inventory.md"
-      - "foundry-doctor/THIRD_PARTY_NOTICES.md"
-      - ".github/workflows/foundry-doctor-ci.yml"
-      - ".github/workflows/foundry-doctor-dependency-review.yml"
+      - "foundry-doctor/extension/go.mod"
+      - "foundry-doctor/extension/go.sum"
+      - ".github/workflows/foundry-doctor-*.yml"
 
 permissions:
   contents: read
 
 jobs:
   dependency-review:
-    name: Dependency review
+    name: dependency review
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     steps:
-      - name: Check out source
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - name: Review dependency changes
-        uses: actions/dependency-review-action@e58c696e52cac8e62d61cc21fda89565d71505d7 # v4.7.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fail-on-severity: moderate
-          license-check: true
-          deny-licenses: >-
-            GPL-2.0-only, GPL-2.0-or-later, GPL-3.0-only, GPL-3.0-or-later,
-            AGPL-1.0-only, AGPL-1.0-or-later, AGPL-3.0-only, AGPL-3.0-or-later,
-            LGPL-2.0-only, LGPL-2.0-or-later, LGPL-2.1-only,
-            LGPL-2.1-or-later, LGPL-3.0-only, LGPL-3.0-or-later
+          persist-credentials: false
+      - name: Dependency review
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
           comment-summary-in-pr: never
+          # KEEP IN SYNC with foundry-doctor/docs/licence-inventory.md: only permissive licences are acceptable
+          # because the binary is redistributed (inventory section 0 and section "Redistribution"). Today the
+          # inventory records MIT, Apache-2.0, BSD-3-Clause and Unlicense. A dependency with any other licence
+          # fails this check until the inventory is updated in the same pull request and the line below is extended.
+          # Dual-licensed entries such as "MIT AND Apache-2.0" are matched by the action as SPDX expressions.
+          allow-licenses: MIT, Apache-2.0, BSD-3-Clause, Unlicense

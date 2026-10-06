@@ -1,4 +1,4 @@
-# ADR-011: Authentication sources stay CLI and environment based
+# ADR-016: Authentication sources stay CLI and environment based
 
 Status: Accepted  
 Date: 2026-10-06

@@ -1,0 +1,17 @@
+version: 1
+generatedBy: foundry-doctor 0.1.0
+entries:
+  - fingerprint: fp1:0123456789abcdef0123456789abcdef
+    ruleId: FND-EXAMPLE-001
+    ruleVersion: 1
+    resource:
+      kind: arm-resource
+      type: microsoft.example/widgets
+      name: example-widget
+    firstSeen: "2026-10-05"
+  - fingerprint: fp1:fedcba9876543210fedcba9876543210
+    ruleId: FND-EXAMPLE-002
+    ruleVersion: 2
+    resource:
+      kind: env-key
+      name: EXAMPLE_SETTING

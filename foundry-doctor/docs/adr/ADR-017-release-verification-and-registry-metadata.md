@@ -1,4 +1,4 @@
-# ADR-012: Release verification and azd registry metadata
+# ADR-017: Release verification and azd registry metadata
 
 Status: Accepted  
 Date: 2026-10-06

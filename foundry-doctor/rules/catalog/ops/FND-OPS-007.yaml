@@ -34,12 +34,13 @@ compatibility:
     them in Phase 1 by reading older tags.
 evidence:
   description: >-
-    File-system and azure.yaml evidence only, no pipeline execution. Pass when at least one of the following exists - a
-    file azure-dev.yml (or another workflow file that invokes azd) under .github/workflows; a file azure-dev.yml under .azdo/pipelines
-    or .azuredevops/pipelines; or an azure.yaml top-level pipeline section whose provider is github or azdo (schema enumeration).
-    Report when none exists and the active profile is test or prod. A pipeline definition that exists but does not invoke
-    azd provision, deploy or up is reported as uncertain, because other deployment tools are valid. Other CI systems are
-    not detected and the finding says so.
+    File-system and azure.yaml evidence only, no pipeline execution. Pass when at least one of the following exists -
+    a file azure-dev.yml or azure-dev.yaml (the names azd writes and detects) or another workflow file that invokes
+    azd under .github/workflows; a file azure-dev.yml or azure-dev.yaml under .azdo/pipelines or
+    .azuredevops/pipelines; or an azure.yaml top-level pipeline section whose provider is github or azdo (schema
+    enumeration). Report when none exists and the active profile is test or prod. A pipeline definition that exists
+    but does not invoke azd provision, deploy or up is reported as uncertain, because other deployment tools are
+    valid. Other CI systems are not detected and the finding says so.
   confidence: likely
 recommendation: >-
   Run azd pipeline config to generate azure-dev.yml and the federated credential for GitHub Actions or Azure Pipelines,
@@ -63,6 +64,20 @@ sources:
   note: >-
     CI/CD for hosted agents with azd pipeline config and one pipeline or branch trigger per environment (preview). Page
     ms.date 09/23/2026.
+- url: https://github.com/Azure/azure-dev/blob/azure-dev-cli_1.35.0/cli/azd/pkg/pipeline/pipeline.go
+  lastVerified: '2026-10-05'
+  verifiedVia: >-
+    Azure/azure-dev azure-dev-cli_1.35.0 (170ebb8) cli/azd/pkg/pipeline/pipeline.go (pipelineFileNames,
+    pipelineProviderFiles, gitHubRoot, azdoRoot, azdoRootAlt), github_provider.go (any .yml/.yaml under
+    .github/workflows counts as a workflow once tracked by git), resources/pipeline/.github/azure-dev.ymlt and
+    .azdo/azure-dev.ymlt templates; schemas/v1.0/azure.yaml.json `pipeline` property; unchanged on main afe4b2b.
+  note: >-
+    Verified paths: GitHub .github/workflows/azure-dev.yml or azure-dev.yaml; Azure DevOps
+    .azdo/pipelines/azure-dev.yml|yaml and .azuredevops/pipelines/azure-dev.yml|yaml (default file name
+    azure-dev.yml). azure.yaml `pipeline` object: provider (enum github, azdo; default github), variables (list of azd
+    environment variable names), secrets (list of names); no other properties are defined. The azure.yaml pipeline
+    section only configures `azd pipeline config`; its presence does not prove a pipeline file exists, so it is
+    accepted as intent evidence only.
 overlap:
   decision: native
   provisional: true
@@ -101,8 +116,11 @@ tests:
   - repository-root-not-available
   - ci-system-other-than-github-or-azure-pipelines
 notes: >-
-  Product opinion. The azd documentation describes how to create pipelines and where the definition lives; it does not require
-  one. Unverified - whether a pipeline defined outside the repository (for example a central template) satisfies the intent;
-  the Jenkins, GitLab or other providers are not covered by any azd documentation read. The waf basis was removed after
-  the Phase 0 Azure black belt review because no WAF pillar tag or WARA recommendation is cited here; the WAF mapping is
-  added in Phase 4 when the guidance is verified.
+  Product opinion. The azd documentation describes how to create pipelines and where the definition lives; it does not
+  require one. Unverified - whether a pipeline defined outside the repository (for example a central template)
+  satisfies the intent; the Jenkins, GitLab or other providers are not covered by any azd documentation read. The waf
+  basis was removed after the Phase 0 Azure black belt review because no WAF pillar tag or WARA recommendation is
+  cited here; the WAF mapping is added in Phase 4 when the guidance is verified. Phase 1 fact check (2026-10-05): file
+  paths and the pipeline section of azure.yaml are verified from azd source and schema (see sources). azd itself
+  detects only the azure-dev.yml and azure-dev.yaml names; any other workflow file is accepted by this rule only when
+  it invokes azd.

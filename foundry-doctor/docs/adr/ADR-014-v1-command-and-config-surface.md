@@ -1,4 +1,4 @@
-# ADR-009: V1 command, naming, and config surface
+# ADR-014: V1 command, naming, and config surface
 
 Status: Accepted  
 Date: 2026-10-06
