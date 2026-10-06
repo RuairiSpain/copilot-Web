@@ -26,6 +26,8 @@ func (a *Adapter) CheckName(ctx context.Context, c NameCheck) (NameResult, error
 		path, body = subPath(c.SubscriptionID, "/providers/Microsoft.KeyVault/checkNameAvailability"), map[string]any{"name": c.Name, "type": "Microsoft.KeyVault/vaults"}
 	case NameStorage:
 		path, body = subPath(c.SubscriptionID, "/providers/Microsoft.Storage/checkNameAvailability"), map[string]any{"name": c.Name, "type": "Microsoft.Storage/storageAccounts"}
+	case NameACR:
+		path, body = subPath(c.SubscriptionID, "/providers/Microsoft.ContainerRegistry/checkNameAvailability"), map[string]any{"name": c.Name, "type": "Microsoft.ContainerRegistry/registries"}
 	case NameAPIM:
 		path, body = subPath(c.SubscriptionID, "/providers/Microsoft.ApiManagement/checkNameAvailability"), map[string]any{"name": c.Name}
 	case NameSearch:
@@ -81,7 +83,7 @@ func (a *Adapter) ListSoftDeleted(ctx context.Context, kind NameKind, subscripti
 		path = "/providers/Microsoft.ApiManagement/deletedservices"
 	case NameFoundry:
 		path = "/providers/Microsoft.CognitiveServices/deletedAccounts"
-	case NameStorage, NameSearch:
+	case NameStorage, NameACR, NameSearch:
 		return []SoftDeleted{}, nil
 	default:
 		return nil, fmt.Errorf("%w: name kind %q", ErrInvalidInput, kind)

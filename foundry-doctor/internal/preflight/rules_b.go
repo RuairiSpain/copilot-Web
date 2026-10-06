@@ -22,11 +22,11 @@ type nameSpec struct {
 var nameSpecs = map[string]nameSpec{
 	"microsoft.keyvault/vaults":              {kind: azure.NameKeyVault, re: regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9-]{1,22}[a-zA-Z0-9]$`), rule: "3-24 characters, letters, digits and hyphens, starting with a letter"},
 	"microsoft.storage/storageaccounts":      {kind: azure.NameStorage, re: regexp.MustCompile(`^[a-z0-9]{3,24}$`), rule: "3-24 lowercase letters and digits"},
+	"microsoft.containerregistry/registries": {kind: azure.NameACR, re: regexp.MustCompile(`^[a-z0-9]{5,50}$`), rule: "5-50 lowercase letters and digits"},
 	"microsoft.apimanagement/service":        {kind: azure.NameAPIM, re: regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9-]{0,49}$`), rule: "1-50 characters, letters, digits and hyphens, starting with a letter"},
 	"microsoft.search/searchservices":        {kind: azure.NameSearch, re: regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,58}[a-z0-9]$`), rule: "2-60 lowercase letters, digits and hyphens"},
 	"microsoft.cognitiveservices/accounts":   {kind: azure.NameFoundry, re: regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9-]{0,62}[a-zA-Z0-9]$`), rule: "2-64 characters, letters, digits and hyphens"},
 	"microsoft.documentdb/databaseaccounts":  {noCheck: "no Cosmos DB name-availability check is implemented"},
-	"microsoft.containerregistry/registries": {noCheck: "no Container Registry name-availability check is implemented"},
 }
 
 // DEP-007: name availability.
@@ -293,7 +293,7 @@ func (e *env) dep010(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 			a.note("a CanNotDelete lock exists but deletions could not be predicted without what-if")
 		}
 	}
-	e.historyNearLimit(ctx, &a, cnd)
+	e.historyNearLimit(ctx, in, &a, cnd)
 	if ctx.Err() != nil {
 		return sdk.Result{}, ctx.Err()
 	}
@@ -308,7 +308,7 @@ const historyMargin = 80
 // historyNearLimit implements FND-DEP-010 case (c): a CanNotDelete lock on the
 // resource group stops automatic deletion of deployment history, and at 800
 // deployments new deployments fail.
-func (e *env) historyNearLimit(ctx context.Context, a *acc, cnd []azure.Lock) {
+func (e *env) historyNearLimit(ctx context.Context, in *sdk.Input, a *acc, cnd []azure.Lock) {
 	rg := strings.ToLower(strings.TrimRight(e.rgScope(), "/"))
 	var lock *azure.Lock
 	for i := range cnd {
@@ -332,15 +332,16 @@ func (e *env) historyNearLimit(ctx context.Context, a *acc, cnd []azure.Lock) {
 		return
 	}
 	limit := azure.DeploymentHistoryLimit
+	margin := policyInt(in, "preflight.deploymentHistoryMargin", historyMargin)
 	switch {
-	case c.Count >= limit-historyMargin:
+	case c.Count >= limit-margin:
 		qual := ""
 		if c.Truncated {
 			qual = " (at least)"
 		}
 		a.add(idFinding("Microsoft.Authorization/locks", lock.ID, fmt.Sprintf("CanNotDelete lock %s on the resource group prevents deployment-history cleanup and the history holds%s %d of %d deployments; new deployments fail at %d", lock.Name, qual, c.Count, limit, limit)))
 	case c.Truncated:
-		a.note("deployment history count was truncated below the 800 limit margin")
+		a.note("deployment history count was truncated below the configured deployment-history margin")
 	}
 }
 
@@ -473,9 +474,14 @@ func (e *env) checkSubnetLinks(ctx context.Context, a *acc, acct sdk.ARMResource
 	}
 	own := ""
 	if !isExpr(acct.Name) && acct.Name != "" && e.rgScope() != "" {
-		own = strings.ToLower(e.rgScope() + "/providers/" + typeAccount + "/" + acct.Name)
+		own = strings.ToLower(strings.TrimRight(e.rgScope(), "/") + "/providers/" + typeAccount + "/" + acct.Name)
 	}
+	unresolvedOwner := own == ""
 	check := func(kind string, links []azure.NetworkLink) {
+		if unresolvedOwner && len(links) > 0 {
+			a.note("subnet link ownership could not be resolved for account %q because its resource ID is not a literal value", acct.Name)
+			return
+		}
 		for _, l := range links {
 			if own != "" && strings.HasPrefix(strings.ToLower(l.Link)+"/", own+"/") {
 				continue

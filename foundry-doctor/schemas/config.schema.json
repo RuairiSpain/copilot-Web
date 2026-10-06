@@ -100,13 +100,31 @@
       "properties": {
         "resourceScope": { "enum": ["same-resource-group", "same-subscription", "any"] },
         "allowedExternalScopes": { "$ref": "#/$defs/stringList" },
+        "identity": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "deploymentPrincipalIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+              }
+            }
+          }
+        },
         "environments": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
             "production": { "$ref": "#/$defs/stringList" },
             "nonProduction": { "$ref": "#/$defs/stringList" },
-            "development": { "$ref": "#/$defs/stringList" }
+            "development": { "$ref": "#/$defs/stringList" },
+            "tiers": {
+              "type": "object",
+              "propertyNames": { "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" },
+              "additionalProperties": { "enum": ["dev", "test", "prod"] }
+            }
           }
         },
         "tags": {
@@ -161,7 +179,12 @@
         "network": {
           "type": "object",
           "additionalProperties": false,
-          "properties": { "publicAccess": { "enum": ["forbidden", "entra-only", "allowed"] } }
+          "properties": {
+            "publicAccess": { "enum": ["forbidden", "entra-only", "allowed"] },
+            "dnsManagedByPolicy": { "type": "boolean" },
+            "centralDns": { "type": "boolean" },
+            "cloud": { "enum": ["public", "usgov", "china"] }
+          }
         },
         "monitoring": {
           "type": "object",
@@ -183,6 +206,14 @@
           "properties": {
             "devMaxCosmosThroughput": { "type": "integer", "minimum": 0 },
             "productionSizedSkuExemptions": { "$ref": "#/$defs/stringList" }
+          }
+        },
+        "preflight": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "deploymentHistoryMargin": { "type": "integer", "minimum": 0 },
+            "regionMatrixStalenessDays": { "type": "integer", "minimum": 1 }
           }
         }
       }

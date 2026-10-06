@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	runtimegw "github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/gateway"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
 
@@ -21,6 +22,8 @@ func Register() []sdk.Rule {
 	return []sdk.Rule{
 		rule{id: "FND-COST-001", fn: eval001},
 		rule{id: "FND-COST-002", fn: eval002},
+		rule{id: "FND-COST-003", fn: eval003},
+		rule{id: "FND-COST-004", fn: eval004},
 	}
 }
 
@@ -213,6 +216,111 @@ func eval002(in *sdk.Input) sdk.Result {
 	}
 	if !hasLimit {
 		o.skip = sdk.SkipMissingPolicyKey("policy.cost.devMaxCosmosThroughput")
+	}
+	return o.result()
+}
+
+func eval003(in *sdk.Input) sdk.Result {
+	snap := runtimegw.BuildSnapshot(in)
+	o := &outcome{}
+	seen := false
+	for _, svc := range snap.Services {
+		for _, api := range svc.APIs {
+			if !svc.AIAPIBacked(api) {
+				continue
+			}
+			seen = true
+			pol, ok := runtimegw.EffectivePolicyForAPI(svc, api)
+			if !ok {
+				o.skip = "api-not-fronting-a-model-endpoint"
+				continue
+			}
+			if pol.External {
+				o.skip = "policy-uses-external-link"
+				continue
+			}
+			limits := runtimegw.FindElements(pol.Inbound, "llm-token-limit")
+			if len(limits) == 0 {
+				o.findings = append(o.findings, sdk.Finding{
+					Resource: sdk.ResourceRef{Type: "Microsoft.ApiManagement/service/apis", Name: api.Name},
+					Location: api.SourceLocation,
+					Evidence: "AI gateway API is missing llm-token-limit in inbound policy",
+				})
+				continue
+			}
+			for _, el := range limits {
+				if !tokenLimitValid(el) {
+					o.findings = append(o.findings, sdk.Finding{
+						Resource: sdk.ResourceRef{Type: "Microsoft.ApiManagement/service/apis", Name: api.Name},
+						Location: api.SourceLocation,
+						Evidence: "llm-token-limit is present but missing required attributes or quota settings",
+					})
+				}
+			}
+		}
+	}
+	if !seen {
+		return sdk.Result{Skipped: &sdk.Skip{Reason: "api-not-fronting-a-model-endpoint"}}
+	}
+	return o.result()
+}
+
+func eval004(in *sdk.Input) sdk.Result {
+	if in == nil || in.ARM == nil {
+		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable}}
+	}
+	o := &outcome{}
+	supported := 0
+	for _, r := range in.ARM.Resources() {
+		switch {
+		case strings.EqualFold(r.Type, typeSearch):
+			if strings.EqualFold(r.SKUName, "free") || strings.EqualFold(r.SKUName, "serverless") {
+				continue
+			}
+			supported++
+			if _, ok := intAt(r.Properties, "replicaCount"); !ok {
+				o.add(r, "fixed-capacity estimate is incomplete because Search replicaCount is unresolved")
+			}
+			if _, ok := intAt(r.Properties, "partitionCount"); !ok {
+				o.add(r, "fixed-capacity estimate is incomplete because Search partitionCount is unresolved")
+			}
+			if _, ok := literalRegion(r.Region); !ok {
+				o.add(r, "fixed-capacity estimate is incomplete because Search region is unresolved")
+			}
+		case strings.EqualFold(r.Type, typeAPIM):
+			if strings.EqualFold(r.SKUName, "Consumption") {
+				continue
+			}
+			supported++
+			if _, ok := skuCapacity(r); !ok {
+				o.add(r, "fixed-capacity estimate is incomplete because API Management sku.capacity is unresolved")
+			}
+			if _, ok := literalRegion(r.Region); !ok {
+				o.add(r, "fixed-capacity estimate is incomplete because API Management region is unresolved")
+			}
+		case strings.HasSuffix(strings.ToLower(r.Type), "/throughputsettings"):
+			supported++
+			if _, ok := cosmosThroughput(r); ok {
+				continue
+			}
+			if max, ok := cosmosAutoscale(r); ok {
+				o.add(r, "fixed-capacity estimate is incomplete because Cosmos autoscale retail meter mapping is UNVERIFIED (maxThroughput="+strconv.Itoa(max)+")")
+				continue
+			}
+			o.add(r, "fixed-capacity estimate is incomplete because Cosmos throughput is unresolved")
+		case strings.EqualFold(r.Type, typeDeployment):
+			switch strings.TrimSpace(r.SKUName) {
+			case "GlobalProvisionedManaged", "DataZoneProvisionedManaged", "ProvisionedManaged":
+				supported++
+				o.add(r, "fixed-capacity estimate is incomplete because PTU retail meter mapping remains UNVERIFIED for generic deployment SKUs")
+			}
+		}
+	}
+	if supported == 0 {
+		return sdk.Result{Skipped: &sdk.Skip{Reason: "no-supported-fixed-capacity-resources"}}
+	}
+	if len(o.findings) == 0 {
+		return sdk.Result{}
 	}
 	return o.result()
 }
@@ -419,4 +527,30 @@ func max(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func tokenLimitValid(el runtimegw.PolicyElement) bool {
+	if strings.TrimSpace(el.Attrs["counter-key"]) == "" || strings.TrimSpace(el.Attrs["estimate-prompt-tokens"]) == "" {
+		return false
+	}
+	if strings.TrimSpace(el.Attrs["tokens-per-minute"]) != "" {
+		return true
+	}
+	if strings.TrimSpace(el.Attrs["token-quota"]) == "" {
+		return false
+	}
+	switch strings.TrimSpace(el.Attrs["token-quota-period"]) {
+	case "Hourly", "Daily", "Weekly", "Monthly", "Yearly":
+		return true
+	default:
+		return false
+	}
+}
+
+func literalRegion(region string) (string, bool) {
+	region = strings.TrimSpace(region)
+	if region == "" || strings.HasPrefix(region, "[") {
+		return "", false
+	}
+	return strings.ToLower(region), true
 }

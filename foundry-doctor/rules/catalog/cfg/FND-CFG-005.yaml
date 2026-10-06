@@ -53,15 +53,15 @@ fix: |
         Authorization: ${GITHUB_PAT}   # set with: azd env set-secret GITHUB_PAT
 sources:
   - url: https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference
-    lastVerified: "2026-10-04"
+    lastVerified: "2026-10-05"
     verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/azure-yaml-reference.md
     note: "Connection changes apply during azd provision. Store credential values in your azd environment and reference them with ${VAR} instead of putting secrets in azure.yaml."
   - url: https://learn.microsoft.com/azure/developer/azure-developer-cli/manage-environment-variables
-    lastVerified: "2026-10-04"
+    lastVerified: "2026-10-05"
     verifiedVia: refs/azd-docs/articles/azure-developer-cli/manage-environment-variables.md
     note: Never store secrets in an azd .env file.
   - url: https://learn.microsoft.com/azure/developer/azure-developer-cli/environment-secrets
-    lastVerified: "2026-10-04"
+    lastVerified: "2026-10-05"
     verifiedVia: refs/azd-docs/articles/azure-developer-cli/environment-secrets.md
     note: azd env set-secret and Key Vault references.
   - url: https://learn.microsoft.com/azure/azure-resource-manager/bicep/linter-rule-secure-secrets-in-parameters

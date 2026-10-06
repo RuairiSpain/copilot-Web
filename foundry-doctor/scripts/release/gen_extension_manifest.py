@@ -16,7 +16,7 @@ import re
 import sys
 from pathlib import Path
 
-EXTENSION_ID = "foundry-doctor"  # TODO publisher prefix undecided; must not be microsoft.foundry
+EXTENSION_ID = "ruairispain.foundry-doctor"
 NAMESPACE = "foundry"
 REQUIRED_AZD = ">=1.34.2"
 SEMVER = re.compile(r"^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$")

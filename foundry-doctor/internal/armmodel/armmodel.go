@@ -110,7 +110,17 @@ func toResource(r bicep.Resource, node map[string]any, bl bicep.Location) sdk.AR
 			res.Properties = props
 		}
 	}
+	if tags, ok := node["tags"].(map[string]any); ok {
+		res.Tags = tags
+	}
 	res.Region = str(node["location"])
+	if zones, ok := node["zones"].([]any); ok {
+		for _, z := range zones {
+			if s, ok := z.(string); ok {
+				res.Zones = append(res.Zones, s)
+			}
+		}
+	}
 	res.Kind = str(node["kind"])
 	if sku, ok := node["sku"].(map[string]any); ok {
 		res.SKU = sku

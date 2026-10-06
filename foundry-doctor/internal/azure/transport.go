@@ -124,9 +124,10 @@ func allowList() []operation {
 		// catalogue: deployments whatIf 2026-06-01 (explicit opt-in only)
 		newOp("whatif.run", p, "{scope}/providers/Microsoft.Resources/deployments/{seg}/whatIf", "2026-06-01", "Microsoft.Resources/deployments/whatIf/action"),
 		newOp("whatif.poll", g, "{scope}/providers/Microsoft.Resources/deployments/{seg}/operationStatuses/{seg}", "2026-06-01", "Microsoft.Resources/deployments/read"),
-		// unverified name-availability versions (ADR-006 allows these POSTs)
+		// provider-level name-availability POSTs (ADR-006 allows these POSTs)
 		newOp("name.keyvault", p, "/subscriptions/{sub}/providers/Microsoft.KeyVault/checkNameAvailability", "2026-05-15", "Microsoft.KeyVault/checkNameAvailability/read"),
 		newOp("name.storage", p, "/subscriptions/{sub}/providers/Microsoft.Storage/checkNameAvailability", "2026-09-01", "Microsoft.Storage/checknameavailability/read"),
+		newOp("name.acr", p, "/subscriptions/{sub}/providers/Microsoft.ContainerRegistry/checkNameAvailability", "2025-11-01", "Microsoft.ContainerRegistry/checkNameAvailability/read"),
 		newOp("name.apim", p, "/subscriptions/{sub}/providers/Microsoft.ApiManagement/checkNameAvailability", "2024-05-01", "Microsoft.ApiManagement/checkNameAvailability/read"),
 		newOp("name.search", p, "/subscriptions/{sub}/providers/Microsoft.Search/checkNameAvailability", "2025-05-01", "Microsoft.Search/checkNameAvailability/action"),
 		newOp("name.foundry", p, "/subscriptions/{sub}/providers/Microsoft.CognitiveServices/checkDomainAvailability", "2026-09-01", "Microsoft.CognitiveServices/checkDomainAvailability/action"),

@@ -36,7 +36,7 @@ evidence:
     and the directory exists; when no image is set and codeConfiguration is absent, a Dockerfile exists
     under project; codeConfiguration and image are not both set; codeConfiguration has runtime and
     entryPoint; cpu and memory parse and fall within the documented bounds.
-  confidence: certain
+  confidence: likely
 recommendation: >-
   Set model to the name of a deployment declared on the project, provide instructions for prompt agents,
   and for hosted agents provide either source with a Dockerfile, a codeConfiguration, or a prebuilt image.
@@ -58,7 +58,7 @@ fix: |
       instructions: Answer briefly.
 sources:
   - url: https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference
-    lastVerified: "2026-10-04"
+    lastVerified: "2026-10-05"
     verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/azure-yaml-reference.md (ms.date 09/17/2026)
     note: Agent fields, container resource bounds, codeConfiguration vs image, voice model fields.
   - url: https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json

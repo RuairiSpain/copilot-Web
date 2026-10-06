@@ -419,6 +419,7 @@ type NameKind string
 const (
 	NameKeyVault NameKind = "keyvault"
 	NameStorage  NameKind = "storage"
+	NameACR      NameKind = "acr"
 	NameAPIM     NameKind = "apim"
 	NameSearch   NameKind = "search"
 	NameFoundry  NameKind = "foundry" // Cognitive Services account domain

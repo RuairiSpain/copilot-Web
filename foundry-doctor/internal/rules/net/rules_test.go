@@ -40,7 +40,7 @@ func pe(name, target, group string) sdk.ARMResource {
 
 func TestAllRulesSkipWithoutARM(t *testing.T) {
 	rules := Register()
-	if len(rules) != 7 {
+	if len(rules) != 11 {
 		t.Fatalf("got %d rules", len(rules))
 	}
 	seen := map[string]bool{}

@@ -23,6 +23,13 @@ func MapPolicy(m map[string]any) sdk.Policy { return mapPolicy(m) }
 // Get implements sdk.Policy.
 func (p mapPolicy) Get(key string) (any, bool) {
 	v, ok := p[key]
+	if !ok {
+		if alt, okAlt := strings.CutPrefix(key, "policy."); okAlt {
+			v, ok = p[alt]
+		} else {
+			v, ok = p["policy."+key]
+		}
+	}
 	return v, ok
 }
 
@@ -46,11 +53,12 @@ type Comparison struct {
 
 // CompareRequest mirrors the compare flags.
 type CompareRequest struct {
-	Dir    string
-	Left   string
-	Right  string
-	Format string
-	Out    string
+	Dir        string
+	Left       string
+	Right      string
+	Format     string
+	Out        string
+	FailOnDiff bool
 }
 
 // CompareSettings diffs two flattened policy maps deterministically.
@@ -87,7 +95,7 @@ func CompareSettings(left, right map[string]any) []Difference {
 
 // Compare resolves two environments offline and prints their policy
 // differences. It never needs Azure credentials. Differences are informational
-// and exit 0; unresolved environments are exit 2.
+// and exit 0 unless FailOnDiff is set; unresolved environments are exit 2.
 func Compare(ctx context.Context, svc Services, req CompareRequest, stdout io.Writer) (int, error) {
 	code, err := compare(ctx, svc, req, stdout)
 	if err != nil {
@@ -139,7 +147,11 @@ func compare(ctx context.Context, svc Services, req CompareRequest, stdout io.Wr
 			fmt.Fprintf(&sb, "  %s: %s -> %s\n", d.Key, render(d.Left, d.Presence == "right-only"), render(d.Right, d.Presence == "left-only"))
 		}
 	}
-	return ExitOK, svc.emit(req.Out, []byte(findings.Redact(sb.String())), stdout)
+	code := ExitOK
+	if req.FailOnDiff && len(cmp.Differences) > 0 {
+		code = ExitFindings
+	}
+	return code, svc.emit(req.Out, []byte(findings.Redact(sb.String())), stdout)
 }
 
 func render(v any, absent bool) string {

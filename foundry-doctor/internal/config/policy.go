@@ -15,6 +15,7 @@ import (
 type Policy struct {
 	ResourceScope         *string          `yaml:"resourceScope,omitempty"`
 	AllowedExternalScopes []string         `yaml:"allowedExternalScopes,omitempty"`
+	Identity              *PolicyIdentity  `yaml:"identity,omitempty"`
 	Environments          *PolicyEnvs      `yaml:"environments,omitempty"`
 	Tags                  *PolicyTags      `yaml:"tags,omitempty"`
 	LogRetention          *PolicyRetention `yaml:"logRetention,omitempty"`
@@ -26,13 +27,20 @@ type Policy struct {
 	ManagedByAzurePolicy  []string         `yaml:"managedByAzurePolicy,omitempty"`
 	Knowledge             *PolicyKnowledge `yaml:"knowledge,omitempty"`
 	Cost                  *PolicyCost      `yaml:"cost,omitempty"`
+	Preflight             *PolicyPreflight `yaml:"preflight,omitempty"`
+}
+
+// PolicyIdentity configures identity-specific policy inputs.
+type PolicyIdentity struct {
+	DeploymentPrincipalIDs []string `yaml:"deploymentPrincipalIds,omitempty"`
 }
 
 // PolicyEnvs classifies environment names.
 type PolicyEnvs struct {
-	Production    []string `yaml:"production,omitempty"`
-	NonProduction []string `yaml:"nonProduction,omitempty"`
-	Development   []string `yaml:"development,omitempty"`
+	Production    []string          `yaml:"production,omitempty"`
+	NonProduction []string          `yaml:"nonProduction,omitempty"`
+	Development   []string          `yaml:"development,omitempty"`
+	Tiers         map[string]string `yaml:"tiers,omitempty"`
 }
 
 // TagRequirement is a required tag with an optional value format regex.
@@ -73,7 +81,10 @@ type PolicyDR struct {
 
 // PolicyNetwork configures the public access stance.
 type PolicyNetwork struct {
-	PublicAccess *string `yaml:"publicAccess,omitempty"`
+	PublicAccess       *string `yaml:"publicAccess,omitempty"`
+	DNSManagedByPolicy *bool   `yaml:"dnsManagedByPolicy,omitempty"`
+	CentralDNS         *bool   `yaml:"centralDns,omitempty"`
+	Cloud              *string `yaml:"cloud,omitempty"`
 }
 
 // PolicyMonitor configures monitoring expectations.
@@ -92,34 +103,47 @@ type PolicyCost struct {
 	ProductionSizedSkuExemptions []string `yaml:"productionSizedSkuExemptions,omitempty"`
 }
 
+// PolicyPreflight configures product-decision thresholds for DEP rules.
+type PolicyPreflight struct {
+	DeploymentHistoryMargin   *int `yaml:"deploymentHistoryMargin,omitempty"`
+	RegionMatrixStalenessDays *int `yaml:"regionMatrixStalenessDays,omitempty"`
+}
+
 // Accepted enum values.
 var (
-	resourceScopes = []string{"same-resource-group", "same-subscription", "any"}
-	publicAccesses = []string{"forbidden", "entra-only", "allowed"}
-	residencyScope = []string{"global", "datazone-us", "datazone-eu", "datazone-apac", "geography"}
-	azurePolicyMgd = []string{"private-dns-zone-group", "diagnostic-settings"}
+	resourceScopes   = []string{"same-resource-group", "same-subscription", "any"}
+	publicAccesses   = []string{"forbidden", "entra-only", "allowed"}
+	cloudKinds       = []string{"public", "usgov", "china"}
+	residencyScope   = []string{"global", "datazone-us", "datazone-eu", "datazone-apac", "geography"}
+	azurePolicyMgd   = []string{"private-dns-zone-group", "diagnostic-settings"}
+	environmentTiers = []string{"dev", "test", "prod"}
 )
 
 // Policy defaults from ADR-007. Only keys with a documented default appear.
 const (
-	DefaultResourceScope = "same-resource-group"
-	DefaultPublicAccess  = "forbidden"
+	DefaultResourceScope             = "same-resource-group"
+	DefaultPublicAccess              = "forbidden"
+	DefaultDeploymentHistoryMargin   = 80
+	DefaultRegionMatrixStalenessDays = 365
 )
 
 // PolicyKeys returns every supported dotted policy key, sorted.
 func PolicyKeys() []string {
 	keys := []string{
 		"resourceScope", "allowedExternalScopes",
-		"environments.production", "environments.nonProduction", "environments.development",
+		"identity.deploymentPrincipalIds",
+		"environments.production", "environments.nonProduction", "environments.development", "environments.tiers",
 		"tags.required", "tags.resourceTypes",
 		"logRetention.minimumDays",
 		"models.allow", "models.deny",
 		"dataResidency.scope", "dataResidency.regions", "dataResidency.deploymentSkus",
 		"disasterRecovery.declared", "disasterRecovery.reference",
-		"network.publicAccess", "monitoring.publicTelemetry",
+		"network.publicAccess", "network.dnsManagedByPolicy", "network.centralDns", "network.cloud",
+		"monitoring.publicTelemetry",
 		"managedByAzurePolicy",
 		"knowledge.requireDocumentLevelAccess",
 		"cost.devMaxCosmosThroughput", "cost.productionSizedSkuExemptions",
+		"preflight.deploymentHistoryMargin", "preflight.regionMatrixStalenessDays",
 	}
 	slices.Sort(keys)
 	return keys
@@ -150,10 +174,20 @@ func (p Policy) flatten() map[string]any {
 	}
 	setS("resourceScope", p.ResourceScope)
 	setL("allowedExternalScopes", p.AllowedExternalScopes)
+	if i := p.Identity; i != nil {
+		setL("identity.deploymentPrincipalIds", i.DeploymentPrincipalIDs)
+	}
 	if e := p.Environments; e != nil {
 		setL("environments.production", e.Production)
 		setL("environments.nonProduction", e.NonProduction)
 		setL("environments.development", e.Development)
+		if e.Tiers != nil {
+			cp := map[string]string{}
+			for k, v := range e.Tiers {
+				cp[k] = v
+			}
+			m["environments.tiers"] = cp
+		}
 	}
 	if t := p.Tags; t != nil {
 		if t.Required != nil {
@@ -179,6 +213,9 @@ func (p Policy) flatten() map[string]any {
 	}
 	if n := p.Network; n != nil {
 		setS("network.publicAccess", n.PublicAccess)
+		setB("network.dnsManagedByPolicy", n.DNSManagedByPolicy)
+		setB("network.centralDns", n.CentralDNS)
+		setS("network.cloud", n.Cloud)
 	}
 	if mo := p.Monitoring; mo != nil {
 		setB("monitoring.publicTelemetry", mo.PublicTelemetry)
@@ -191,10 +228,17 @@ func (p Policy) flatten() map[string]any {
 		setI("cost.devMaxCosmosThroughput", c.DevMaxCosmosThroughput)
 		setL("cost.productionSizedSkuExemptions", c.ProductionSizedSkuExemptions)
 	}
+	if pf := p.Preflight; pf != nil {
+		setI("preflight.deploymentHistoryMargin", pf.DeploymentHistoryMargin)
+		setI("preflight.regionMatrixStalenessDays", pf.RegionMatrixStalenessDays)
+	}
 	return m
 }
 
-var modelRe = regexp.MustCompile(`^[^/\s]+/[^/\s]+(/[^/\s]+)?$`)
+var (
+	modelRe = regexp.MustCompile(`^[^/\s]+/[^/\s]+(/[^/\s]+)?$`)
+	guidRe  = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+)
 
 func (p Policy) validate(prefix string) []error {
 	var probs []error
@@ -220,10 +264,26 @@ func (p Policy) validate(prefix string) []error {
 			add("allowedExternalScopes", "%q must be an Azure resource ID starting with /subscriptions/", s)
 		}
 	}
+	if i := p.Identity; i != nil {
+		nonEmpty("identity.deploymentPrincipalIds", i.DeploymentPrincipalIDs)
+		for _, v := range i.DeploymentPrincipalIDs {
+			if strings.TrimSpace(v) != "" && !guidRe.MatchString(v) {
+				add("identity.deploymentPrincipalIds", "%q must be a GUID principal ID", v)
+			}
+		}
+	}
 	if e := p.Environments; e != nil {
 		nonEmpty("environments.production", e.Production)
 		nonEmpty("environments.nonProduction", e.NonProduction)
 		nonEmpty("environments.development", e.Development)
+		for name, tier := range e.Tiers {
+			if !envNameRe.MatchString(name) {
+				add("environments.tiers", "%q is not a valid environment name", name)
+			}
+			if !slices.Contains(environmentTiers, strings.ToLower(strings.TrimSpace(tier))) {
+				add("environments.tiers", "%q must be one of %s", tier, strings.Join(environmentTiers, ", "))
+			}
+		}
 		seen := map[string]string{}
 		for k, l := range map[string][]string{"production": e.Production, "nonProduction": e.NonProduction, "development": e.Development} {
 			for _, n := range l {
@@ -264,6 +324,7 @@ func (p Policy) validate(prefix string) []error {
 	}
 	if n := p.Network; n != nil {
 		enum("network.publicAccess", n.PublicAccess, publicAccesses)
+		enum("network.cloud", n.Cloud, cloudKinds)
 	}
 	for _, v := range p.ManagedByAzurePolicy {
 		if !slices.Contains(azurePolicyMgd, v) {
@@ -275,6 +336,14 @@ func (p Policy) validate(prefix string) []error {
 			add("cost.devMaxCosmosThroughput", "must be at least 1")
 		}
 		nonEmpty("cost.productionSizedSkuExemptions", c.ProductionSizedSkuExemptions)
+	}
+	if pf := p.Preflight; pf != nil {
+		if pf.DeploymentHistoryMargin != nil && *pf.DeploymentHistoryMargin < 0 {
+			add("preflight.deploymentHistoryMargin", "must be at least 0")
+		}
+		if pf.RegionMatrixStalenessDays != nil && *pf.RegionMatrixStalenessDays < 1 {
+			add("preflight.regionMatrixStalenessDays", "must be at least 1")
+		}
 	}
 	return probs
 }

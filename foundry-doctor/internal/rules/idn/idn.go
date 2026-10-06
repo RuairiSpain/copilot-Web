@@ -50,6 +50,7 @@ func Register() []sdk.Rule {
 		fn{"FND-IDN-001", evalIDN001},
 		fn{"FND-IDN-003", evalIDN003},
 		fn{"FND-IDN-004", evalIDN004},
+		fn{"FND-IDN-005", evalIDN005},
 		fn{"FND-IDN-006", evalIDN006},
 	}
 }

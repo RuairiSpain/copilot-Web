@@ -138,11 +138,15 @@ func Resolve(cfg *Config, flags Flags, env map[string]string) (*Effective, error
 
 	// Policy: defaults < repo < environment.
 	pol := EffectivePolicy{
-		"resourceScope":              DefaultResourceScope,
-		"allowedExternalScopes":      []string{},
-		"network.publicAccess":       DefaultPublicAccess,
-		"monitoring.publicTelemetry": false,
-		"managedByAzurePolicy":       []string{},
+		"resourceScope":                       DefaultResourceScope,
+		"allowedExternalScopes":               []string{},
+		"network.publicAccess":                DefaultPublicAccess,
+		"network.dnsManagedByPolicy":          false,
+		"network.centralDns":                  false,
+		"monitoring.publicTelemetry":          false,
+		"managedByAzurePolicy":                []string{},
+		"preflight.deploymentHistoryMargin":   DefaultDeploymentHistoryMargin,
+		"preflight.regionMatrixStalenessDays": DefaultRegionMatrixStalenessDays,
 	}
 	pols := map[string]string{}
 	for k := range pol {

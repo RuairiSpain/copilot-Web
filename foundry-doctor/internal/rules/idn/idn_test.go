@@ -58,7 +58,7 @@ func run(t *testing.T, id string, in *sdk.Input) sdk.Result {
 }
 
 func TestRegisterIDs(t *testing.T) {
-	want := []string{"FND-IDN-001", "FND-IDN-003", "FND-IDN-004", "FND-IDN-006"}
+	want := []string{"FND-IDN-001", "FND-IDN-003", "FND-IDN-004", "FND-IDN-005", "FND-IDN-006"}
 	got := Register()
 	if len(got) != len(want) {
 		t.Fatalf("got %d rules", len(got))
@@ -172,6 +172,15 @@ func TestRules(t *testing.T) {
 		{name: "004 rbac admin expression condition skips", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(condProps(roleRBACAdmin, "[parameters('c')]"), rg, "")}, skip: SkipUnresolved},
 		{name: "004 rbac admin wrong conditionVersion skips", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(func() props { p := condProps(roleRBACAdmin, restrictiveCond); p["conditionVersion"] = "1.0"; return p }(), rg, "")}, skip: SkipUnresolved},
 		{name: "004 owner ignores condition", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(condProps(roleOwner, restrictiveCond), rg, "")}, findings: 1},
+		// IDN-005
+		{name: "005 user owner rg", rule: "FND-IDN-005", res: []sdk.ARMResource{ra(props{"roleDefinitionId": rdef(roleOwner), "principalType": "User", "principalId": guidA}, rg, "")}, findings: 1, contains: "standing human admin access"},
+		{name: "005 four subscription owners", rule: "FND-IDN-005", res: []sdk.ARMResource{
+			ra(props{"roleDefinitionId": rdef(roleOwner), "principalType": "User", "principalId": guidA}, subsc, ""),
+			ra(props{"roleDefinitionId": rdef(roleOwner), "principalType": "User", "principalId": "aaaaaaaa-2222-3333-4444-555555555555"}, subsc, ""),
+			ra(props{"roleDefinitionId": rdef(roleOwner), "principalType": "Group", "principalId": "bbbbbbbb-2222-3333-4444-555555555555"}, subsc, ""),
+			ra(props{"roleDefinitionId": rdef(roleOwner), "principalType": "Group", "principalId": "cccccccc-2222-3333-4444-555555555555"}, subsc, ""),
+		}, findings: 5},
+		{name: "005 no live inventory skips", rule: "FND-IDN-005", res: nil, skip: sdk.SkipInputUnavailable},
 		// IDN-006
 		{name: "006 github ok", rule: "FND-IDN-006", res: []sdk.ARMResource{fic(githubIssuer, "repo:org/repo:ref:refs/heads/main")}},
 		{name: "006 github env ok", rule: "FND-IDN-006", res: []sdk.ARMResource{fic(githubIssuer+"/", "repo:org/repo:environment:prod")}},
@@ -211,5 +220,23 @@ func TestRules(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+type fakePolicy map[string]any
+
+func (p fakePolicy) Get(k string) (any, bool) { v, ok := p[k]; return v, ok }
+
+func TestIDN004DeploymentIdentityExclusion(t *testing.T) {
+	in := &sdk.Input{
+		ARM: model{
+			{Type: typeAccounts, Name: "acct", Identity: props{"type": "SystemAssigned", "principalId": guidA}},
+			ra(props{"roleDefinitionId": rdef(roleOwner), "principalId": guidA, "principalType": "ServicePrincipal"}, subsc, ""),
+		},
+		Policy: fakePolicy{"identity.deploymentPrincipalIds": []string{guidA}},
+	}
+	out := run(t, "FND-IDN-004", in)
+	if out.Skipped == nil || out.Skipped.Reason != sdk.SkipInputUnavailable {
+		t.Fatalf("want input-unavailable skip after exclusion, got %+v", out)
 	}
 }

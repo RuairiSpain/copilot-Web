@@ -196,7 +196,7 @@ jobs:
       - name: Sign checksums and SBOM (keyless)
         working-directory: dist
         run: |
-          for f in checksums.txt foundry-doctor.spdx.json extension.yaml registry.json; do
+          for f in *.tar.gz *.zip checksums.txt foundry-doctor.spdx.json extension.yaml registry.json; do
             [ -f "$f" ] || continue
             cosign sign-blob --yes --bundle "$f.sigstore.json" "$f"
           done

@@ -311,6 +311,12 @@ type rule struct {
 	eval func(*sdk.Input) sdk.Result
 }
 
+type cfgState struct {
+	fs        []sdk.Finding
+	skips     []string
+	evaluated bool
+}
+
 func (r rule) ID() string { return r.id }
 func (r rule) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 	res := r.eval(in)
@@ -334,6 +340,9 @@ func RegisterWith(p Providers) []sdk.Rule {
 		rule{"FND-CFG-005", evalCFG005},
 		rule{"FND-CFG-006", func(in *sdk.Input) sdk.Result { return evalCFG006(in, p) }},
 		rule{"FND-CFG-007", evalCFG007},
+		rule{"FND-CFG-008", evalCFG008},
+		rule{"FND-CFG-009", evalCFG009},
+		rule{"FND-CFG-010", evalCFG010},
 		rule{"FND-CFG-011", evalCFG011},
 		rule{"FND-CFG-012", func(in *sdk.Input) sdk.Result { return evalCFG012(in, p) }},
 	}

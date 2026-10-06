@@ -135,12 +135,16 @@ func evalCondition(r sdk.ARMResource) (condVerdict, string) {
 func evalIDN004(in *sdk.Input) sdk.Result {
 	var a acc
 	apps := appIdentityResources(in)
+	excluded := configuredDeploymentPrincipals(in)
+	evaluated := false
+	excludedOnly := false
+	missingData := false
 	for _, r := range ofType(in, typeRoleAssign) {
 		def, present, isExpr := strOf(r.Properties, "roleDefinitionId")
 		if !present {
+			missingData = true
 			continue
 		}
-		a.seen = true
 		if isExpr {
 			a.unresolved = true
 			continue
@@ -171,6 +175,10 @@ func evalIDN004(in *sdk.Input) sdk.Result {
 			if v, ok := r.Properties["principalId"].(string); ok && unresolved(v) {
 				pid = v
 			}
+			if pidPresent && excluded[strings.ToLower(strings.TrimSpace(pid))] {
+				excludedOnly = true
+				continue
+			}
 			// A principal that cannot be tied to an application identity may be a
 			// deployment identity; that is uncertain, never a failure.
 			if !pidPresent || classifyPrincipal(pid, apps) != principalApp {
@@ -184,6 +192,7 @@ func evalIDN004(in *sdk.Input) sdk.Result {
 			a.unresolved = true
 			continue
 		}
+		evaluated = true
 		lvl := classifyScope(r.Scope)
 		if lvl == scopeUnknown {
 			a.unresolved = true
@@ -208,5 +217,46 @@ func evalIDN004(in *sdk.Input) sdk.Result {
 			a.add(r, fmt.Sprintf("%s granted to an application identity at resource scope %q%s", name, r.Scope, condNote))
 		}
 	}
-	return a.result()
+	switch {
+	case len(a.fs) > 0:
+		return sdk.Result{Findings: a.fs}
+	case a.unresolved:
+		return skip(SkipUnresolved)
+	case evaluated:
+		return sdk.Result{}
+	case excludedOnly:
+		return skip(sdk.SkipInputUnavailable)
+	case missingData:
+		return skip(sdk.SkipInputUnavailable)
+	default:
+		return sdk.Result{}
+	}
+}
+
+func configuredDeploymentPrincipals(in *sdk.Input) map[string]bool {
+	out := map[string]bool{}
+	if in == nil || in.Policy == nil {
+		return out
+	}
+	v, ok := in.Policy.Get("identity.deploymentPrincipalIds")
+	if !ok {
+		return out
+	}
+	switch ids := v.(type) {
+	case []string:
+		for _, id := range ids {
+			if s := strings.ToLower(strings.TrimSpace(id)); s != "" {
+				out[s] = true
+			}
+		}
+	case []any:
+		for _, id := range ids {
+			if s, ok := id.(string); ok {
+				if s = strings.ToLower(strings.TrimSpace(s)); s != "" {
+					out[s] = true
+				}
+			}
+		}
+	}
+	return out
 }

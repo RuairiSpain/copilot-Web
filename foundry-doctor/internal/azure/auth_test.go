@@ -26,6 +26,7 @@ func azdOut(exp time.Time) []byte {
 }
 
 func TestChainAzdFirstAndCache(t *testing.T) {
+	t.Setenv("AZURE_ACCESS_TOKEN", "")
 	now := time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC)
 	r := &scriptRunner{fn: func(string) ([]byte, error) { return azdOut(now.Add(time.Hour)), nil }}
 	c := newChain(r.run, func() time.Time { return now })
@@ -45,6 +46,7 @@ func TestChainAzdFirstAndCache(t *testing.T) {
 }
 
 func TestChainFallsBackToAz(t *testing.T) {
+	t.Setenv("AZURE_ACCESS_TOKEN", "")
 	r := &scriptRunner{fn: func(name string) ([]byte, error) {
 		if name == "azd" {
 			return nil, errors.New("not logged in; stderr secret-ish")
@@ -61,7 +63,20 @@ func TestChainFallsBackToAz(t *testing.T) {
 	}
 }
 
+func TestChainUsesEnvironmentTokenFirst(t *testing.T) {
+	t.Setenv("AZURE_ACCESS_TOKEN", "env-token")
+	r := &scriptRunner{fn: func(string) ([]byte, error) { return nil, errors.New("should not run") }}
+	tok, err := newChain(r.run, time.Now).Token(context.Background(), scope)
+	if err != nil || tok.Token != "env-token" {
+		t.Fatalf("token=%+v err=%v", tok, err)
+	}
+	if len(r.calls) != 0 {
+		t.Fatalf("unexpected CLI calls: %v", r.calls)
+	}
+}
+
 func TestChainNoCredential(t *testing.T) {
+	t.Setenv("AZURE_ACCESS_TOKEN", "")
 	r := &scriptRunner{fn: func(string) ([]byte, error) { return nil, errors.New("boom-detail") }}
 	_, err := newChain(r.run, time.Now).Token(context.Background(), scope)
 	if !errors.Is(err, ErrNoCredential) || strings.Contains(err.Error(), "boom-detail") {
@@ -75,6 +90,7 @@ func TestChainNoCredential(t *testing.T) {
 }
 
 func TestChainUnknownExpiryNotCached(t *testing.T) {
+	t.Setenv("AZURE_ACCESS_TOKEN", "")
 	r := &scriptRunner{fn: func(string) ([]byte, error) { return []byte(`{"token":"t","expiresOn":"garbage"}`), nil }}
 	c := newChain(r.run, time.Now)
 	for i := 0; i < 2; i++ {
@@ -88,6 +104,7 @@ func TestChainUnknownExpiryNotCached(t *testing.T) {
 }
 
 func TestChainContextCancel(t *testing.T) {
+	t.Setenv("AZURE_ACCESS_TOKEN", "")
 	ctx, cancel := context.WithCancel(context.Background())
 	r := &scriptRunner{fn: func(string) ([]byte, error) { cancel(); return nil, errors.New("x") }}
 	if _, err := newChain(r.run, time.Now).Token(ctx, scope); !errors.Is(err, context.Canceled) {

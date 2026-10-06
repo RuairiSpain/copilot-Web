@@ -361,11 +361,11 @@ func TestNames(t *testing.T) {
 	})
 	t.Run("each kind routes to its provider", func(t *testing.T) {
 		f := newFake(t)
-		for p, body := range map[string]string{"Microsoft.Storage": `{"nameAvailable":true}`, "Microsoft.ApiManagement": `{"nameAvailable":true}`, "Microsoft.Search": `{"isNameAvailable":true}`} {
+		for p, body := range map[string]string{"Microsoft.Storage": `{"nameAvailable":true}`, "Microsoft.ContainerRegistry": `{"nameAvailable":true}`, "Microsoft.ApiManagement": `{"nameAvailable":true}`, "Microsoft.Search": `{"isNameAvailable":true}`} {
 			f.on("POST", testScope+"/providers/"+p+"/checkNameAvailability", reply{status: 200, body: body})
 		}
 		a, _ := newAdapter(t, f)
-		for _, k := range []NameKind{NameStorage, NameAPIM, NameSearch} {
+		for _, k := range []NameKind{NameStorage, NameACR, NameAPIM, NameSearch} {
 			if r, err := a.CheckName(ctx, NameCheck{Kind: k, Name: "abc", SubscriptionID: testSub}); err != nil || !r.Available {
 				t.Errorf("kind %s: %+v, %v", k, r, err)
 			}

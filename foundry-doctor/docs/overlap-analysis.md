@@ -60,10 +60,10 @@ when marked provisional or when any configured tool remains unresearched.
 | FND-DEP-010 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
 | FND-DEP-011 | native | true | partial | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
 | FND-DEP-012 | adapt | true | partial | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
-| FND-ENV-001 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
-| FND-ENV-002 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
-| FND-ENV-003 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
-| FND-ENV-004 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-ENV-001 | native | false | none | searched-none | searched-none | searched-none | searched-none | searched-none | searched-none |
+| FND-ENV-002 | native | false | none | searched-none | searched-none | searched-none | searched-none | searched-none | searched-none |
+| FND-ENV-003 | native | false | none | searched-none | searched-none | searched-none | searched-none | searched-none | searched-none |
+| FND-ENV-004 | native | false | none | searched-none | searched-none | searched-none | searched-none | searched-none | searched-none |
 | FND-GW-001 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
 | FND-GW-002 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
 | FND-GW-003 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |

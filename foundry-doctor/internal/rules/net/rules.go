@@ -10,7 +10,7 @@ import (
 
 // Register returns the Phase 1 NET rules.
 func Register() []sdk.Rule {
-	return []sdk.Rule{net001{}, net002{}, net003{}, net004{}, net005{}, net007{}, net008{}}
+	return []sdk.Rule{net001{}, net002{}, net003{}, net004{}, net005{}, net006{}, net007{}, net008{}, net009{}, net010{}, net011{}}
 }
 
 type net001 struct{}
@@ -18,16 +18,24 @@ type net002 struct{}
 type net003 struct{}
 type net004 struct{}
 type net005 struct{}
+type net006 struct{}
 type net007 struct{}
 type net008 struct{}
+type net009 struct{}
+type net010 struct{}
+type net011 struct{}
 
 func (net001) ID() string { return "FND-NET-001" }
 func (net002) ID() string { return "FND-NET-002" }
 func (net003) ID() string { return "FND-NET-003" }
 func (net004) ID() string { return "FND-NET-004" }
 func (net005) ID() string { return "FND-NET-005" }
+func (net006) ID() string { return "FND-NET-006" }
 func (net007) ID() string { return "FND-NET-007" }
 func (net008) ID() string { return "FND-NET-008" }
+func (net009) ID() string { return "FND-NET-009" }
+func (net010) ID() string { return "FND-NET-010" }
+func (net011) ID() string { return "FND-NET-011" }
 
 // FND-NET-001: Foundry account public access / private endpoint posture.
 func (r net001) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {

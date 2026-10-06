@@ -67,11 +67,11 @@ Rules whose phases include 1, including those shared with a later phase. The PRD
 
 | Rule | Title | Phase | Status | Decision | dev/test/prod | Source |
 |---|---|---|---|---|---|---|
-| FND-CFG-001 | Valid YAML, duplicate-key detection and compatible azure.ai.* schema | 1 | verified | adapt | error/error/error | [link](<https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference>) (2026-10-04) |
+| FND-CFG-001 | Valid YAML, duplicate-key detection and compatible azure.ai.* schema | 1 | verified | adapt | error/error/error | [link](<https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference>) (2026-10-05) |
 | FND-CFG-002 | Unique service names by kind | 1 | verified | native | warning/error/error | [link](<https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference>) (2026-10-04) |
 | FND-CFG-003 | All inter-service references resolve | 1 | verified | native | error/error/error | [link](<https://learn.microsoft.com/azure/foundry/agents/how-to/author-azure-yaml>) (2026-10-04) |
-| FND-CFG-004 | Prompt model or hosted source/image is valid | 1 | verified | native | error/error/error | [link](<https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference>) (2026-10-04) |
-| FND-CFG-005 | No raw secrets in YAML/Bicep/environment blocks | 1 | verified | adapt | warning/error/error | [link](<https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference>) (2026-10-04) |
+| FND-CFG-004 | Prompt model or hosted source/image is valid | 1 | verified | native | error/error/error | [link](<https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference>) (2026-10-05) |
+| FND-CFG-005 | No raw secrets in YAML/Bicep/environment blocks | 1 | verified | adapt | warning/error/error | [link](<https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference>) (2026-10-05) |
 | FND-CFG-006 | Every variable has an environment or infrastructure producer | 1 | verified | native | warning/error/error | [link](<https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference>) (2026-10-04) |
 | FND-CFG-007 | Outbound endpoints use HTTPS and reject unsafe local/metadata targets | 1 | product-opinion | native | info/warning/error | [link](<https://learn.microsoft.com/azure/foundry/agents/how-to/tools/model-context-protocol>) (2026-10-04) |
 | FND-CFG-008 | MCP tools use allow lists | later | product-opinion | native | info/warning/warning | [link](<https://learn.microsoft.com/azure/foundry/agents/how-to/tools/model-context-protocol>) (2026-10-04) |
@@ -110,10 +110,10 @@ Rules whose phases include 1, including those shared with a later phase. The PRD
 
 | Rule | Title | Phase | Status | Decision | dev/test/prod | Source |
 |---|---|---|---|---|---|---|
-| FND-ENV-001 | Environments do not unintentionally share resource groups | 1 | verified | native | info/warning/error | [link](<https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview>) (2026-10-04) |
-| FND-ENV-002 | Environment-bound names/IDs/rules were not copied unchanged | 1 | product-opinion | native | info/warning/warning | [link](<https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview>) (2026-10-04) |
-| FND-ENV-003 | Prod does not reference non-prod resource IDs | 1 | product-opinion | native | info/warning/error | [link](<https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview>) (2026-10-04) |
-| FND-ENV-004 | Informational difference summary | 1 | product-opinion | native | info/info/info | [link](<https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview>) (2026-10-04) |
+| FND-ENV-001 | Environments do not unintentionally share resource groups | 1 | verified | native | info/warning/error | [link](<https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview>) (2026-10-05) |
+| FND-ENV-002 | Environment-bound names/IDs/rules were not copied unchanged | 1 | product-opinion | native | info/warning/warning | [link](<https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview>) (2026-10-05) |
+| FND-ENV-003 | Prod does not reference non-prod resource IDs | 1 | product-opinion | native | info/warning/error | [link](<https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview>) (2026-10-05) |
+| FND-ENV-004 | Informational difference summary | 1 | product-opinion | native | info/info/info | [link](<https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview>) (2026-10-05) |
 
 ## GW
 
@@ -180,7 +180,7 @@ Rules whose phases include 1, including those shared with a later phase. The PRD
 | FND-OPS-004 | Required tags exist | 1 | product-opinion | adapt | info/warning/warning | [link](<https://learn.microsoft.com/azure/azure-resource-manager/management/tag-resources>) (2026-10-04) |
 | FND-OPS-005 | Resource-name provider constraints | 1 | verified | adapt | error/error/error | [link](<https://learn.microsoft.com/azure/azure-resource-manager/management/resource-name-rules>) (2026-10-04) |
 | FND-OPS-006 | Log retention meets policy | 4 | product-opinion | adapt | info/warning/error | [link](<https://learn.microsoft.com/azure/azure-monitor/logs/data-retention-configure>) (2026-10-04) |
-| FND-OPS-007 | CI/CD pipeline exists | 1 | product-opinion | native | info/warning/warning | [link](<https://learn.microsoft.com/azure/developer/azure-developer-cli/configure-devops-pipeline>) (2026-10-04) |
+| FND-OPS-007 | CI/CD pipeline exists | 1 | product-opinion | native | info/warning/warning | [link](<https://learn.microsoft.com/azure/developer/azure-developer-cli/configure-devops-pipeline>) (2026-10-05) |
 | FND-OPS-008 | Evaluations run before promotion | 4 | product-opinion | native | info/warning/warning | [link](<https://learn.microsoft.com/azure/foundry/agents/how-to/set-up-ci-cd-cli>) (2026-10-04) |
 | FND-OPS-009 | Data-residency regions and deployment SKU | 1/2 | verified | adapt | error/error/error | [link](<https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types>) (2026-10-04) |
 | FND-OPS-010 | Model allow/deny lists remain consistent | 1/8 | product-opinion | adapt | warning/error/error | [link](<https://learn.microsoft.com/azure/foundry/how-to/model-deployment-policy>) (2026-10-04) |
@@ -229,4 +229,4 @@ Rules whose phases include 1, including those shared with a later phase. The PRD
 | FND-SEC-011 | Controlled outbound egress informational | 4 | verified | native | info/info/info | [link](<https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json>) (2026-10-04) |
 | FND-SEC-012 | Gateway telemetry avoids raw prompt/completion logging | 8 | verified | native | info/warning/error | [link](<https://learn.microsoft.com/azure/api-management/api-management-howto-llm-logs>) (2026-10-04) |
 | FND-SEC-013 | Gateway tenant validation is robust | 8 | verified | native | warning/error/error | [link](<https://learn.microsoft.com/azure/api-management/validate-azure-ad-token-policy>) (2026-10-04) |
-| FND-SEC-014 | Secrets not emitted as Bicep outputs | 1 | verified | wrap | warning/error/error | [link](<https://learn.microsoft.com/azure/azure-resource-manager/bicep/linter-rule-outputs-should-not-contain-secrets>) (2026-10-04) |
+| FND-SEC-014 | Secrets not emitted as Bicep outputs | 1 | verified | wrap | warning/error/error | [link](<https://learn.microsoft.com/azure/azure-resource-manager/bicep/linter-rule-outputs-should-not-contain-secrets>) (2026-10-05) |

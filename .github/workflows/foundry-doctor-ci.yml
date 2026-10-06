@@ -86,6 +86,8 @@ jobs:
       - name: Vet
         run: go vet ./...
       - name: Race tests
+        # Linux is the supported host for the race gate in this repo; local
+        # Windows ARM64 cannot execute `go test -race`.
         run: go test -race ./...
       - name: Static analysis
         run: staticcheck ./...
@@ -175,6 +177,8 @@ jobs:
           go test -tags spike ./test/spikes/azd
           -run "TestPinnedAzdHasNoFoundryNamespaceCollision|TestFoundryNamespaceCollisionDetector"
       - name: Run tagged spikes with network access disabled by the tests
+        # Keep this on Ubuntu: the azd isolation spike relies on Linux unshare /
+        # network-namespace hardening and is not valid evidence on Windows ARM64.
         env:
           AZURE_DEV_DIR: ${{ github.workspace }}/_deps/azure-dev
           BICEP_PATH: /home/runner/.azure/bin/bicep

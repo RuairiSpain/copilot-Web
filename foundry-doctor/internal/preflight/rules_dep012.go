@@ -165,17 +165,18 @@ func (e *env) dep012(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 	}
 
 	// (3) Documented Foundry Agent Service regional matrix: uncertain only.
-	e.checkRegionMatrix(&a, rs, targetName, target)
+	e.checkRegionMatrix(in, &a, rs, targetName, target)
 	return a.result(), nil
 }
 
-func (e *env) checkRegionMatrix(a *acc, rs []sdk.ARMResource, targetName, target string) {
+func (e *env) checkRegionMatrix(in *sdk.Input, a *acc, rs []sdk.ARMResource, targetName, target string) {
 	accts := byType(rs, typeAccount)
 	if len(accts) == 0 {
 		return
 	}
 	now := e.d.Now()
-	if now.Sub(regionMatrixDate) > regionMatrixStaleAfter {
+	staleAfter := time.Duration(policyInt(in, "preflight.regionMatrixStalenessDays", int(regionMatrixStaleAfter/(24*time.Hour)))) * 24 * time.Hour
+	if now.Sub(regionMatrixDate) > staleAfter {
 		a.skip(sdk.SkipInputUnavailable + ": capability documented Foundry regional support matrix (dated " + regionMatrixDate.Format("2006-01-02") + ") is older than the staleness threshold")
 		return
 	}

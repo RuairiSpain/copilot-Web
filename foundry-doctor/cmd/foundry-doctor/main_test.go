@@ -22,6 +22,19 @@ func project(t *testing.T) string {
 	return dir
 }
 
+func projectWithConfig(t *testing.T, config string) string {
+	t.Helper()
+	dir := project(t)
+	cfgDir := filepath.Join(dir, ".foundry-doctor")
+	if err := os.MkdirAll(cfgDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte(config), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
 func exec(t *testing.T, args ...string) (int, string, string) {
 	t.Helper()
 	var out, errb bytes.Buffer
@@ -143,6 +156,33 @@ func TestCompare(t *testing.T) {
 	}
 	if code, _, _ := exec(t, "compare", "dev"); code != 2 {
 		t.Fatalf("compare with one arg exit=%d, want 2", code)
+	}
+	dir = projectWithConfig(t, `version: 1
+policy:
+  environments:
+    tiers:
+      dev: dev
+      prod: prod
+environments:
+  prod:
+    policy:
+      network:
+        publicAccess: allowed
+`)
+	if code, _, errs := exec(t, "compare", "dev", "prod", "--dir", dir, "--fail-on-diff"); code != 1 {
+		t.Fatalf("compare fail-on-diff exit=%d err=%q", code, errs)
+	}
+}
+
+func TestVersionCommand(t *testing.T) {
+	code, out, errs := exec(t, "version")
+	if code != 0 || errs != "" {
+		t.Fatalf("exit=%d err=%q", code, errs)
+	}
+	for _, want := range []string{"foundry-doctor", ".foundry-doctor/config.yaml", "minimum azd: 1.34.2", "minimum bicep: 0.48.1"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("version output missing %q: %q", want, out)
+		}
 	}
 }
 

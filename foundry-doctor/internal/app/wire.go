@@ -27,15 +27,16 @@ import (
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/rules/env"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/rules/idn"
 	netrules "github.com/ruairispain/copilot-web/foundry-doctor/internal/rules/net"
+	opsrules "github.com/ruairispain/copilot-web/foundry-doctor/internal/rules/ops"
+	relrules "github.com/ruairispain/copilot-web/foundry-doctor/internal/rules/rel"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/rules/sec"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/suppress"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 	ruledata "github.com/ruairispain/copilot-web/foundry-doctor/rules"
 )
 
-// ToolVersion is reported in SARIF/JSON. It is a constant so output stays
-// byte-for-byte reproducible; release builds may override it later.
-const ToolVersion = "0.1.0-dev"
+// ToolVersion is reported in SARIF/JSON. Release builds stamp it with ldflags.
+var ToolVersion = "0.1.0-dev"
 
 // RepoConfigPath is the repo-relative location of the unified config.
 const RepoConfigPath = ".foundry-doctor/config.yaml"
@@ -56,6 +57,8 @@ func builtinRules(in RunInput) (rs []sdk.Rule, cleanup func()) {
 	rs = append(rs, sec.Register()...)
 	rs = append(rs, idn.Register()...)
 	rs = append(rs, netrules.Register()...)
+	rs = append(rs, opsrules.RegisterWith(opsrules.Providers{Root: in.Source.Dir})...)
+	rs = append(rs, relrules.Register()...)
 	rs = append(rs, phase8Rules()...)
 	return rs, closeLayout
 }

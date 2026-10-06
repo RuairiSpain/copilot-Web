@@ -257,6 +257,18 @@ func joinUnique(in []string) string {
 	return strings.Join(u, "; ")
 }
 
+func policyInt(in *sdk.Input, key string, def int) int {
+	if in == nil || in.Policy == nil {
+		return def
+	}
+	if v, ok := in.Policy.Get(key); ok {
+		if n, ok := v.(int); ok {
+			return n
+		}
+	}
+	return def
+}
+
 // --- template helpers ----------------------------------------------------
 
 func isExpr(s string) bool { return strings.HasPrefix(s, "[") && !strings.HasPrefix(s, "[[") }

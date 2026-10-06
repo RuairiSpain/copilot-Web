@@ -40,7 +40,7 @@ fix: |
   resourceGroup: rg-${AZURE_ENV_NAME}
 sources:
   - url: https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview
-    lastVerified: "2026-10-04"
+    lastVerified: "2026-10-05"
     verifiedVia: refs/azd-docs/articles/azure-developer-cli/environments-overview.md
     note: Each environment has its own Azure resource group and configuration; .azure/<env>/.env stores AZURE_RESOURCE_GROUP.
   - url: https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
@@ -53,24 +53,24 @@ sources:
     note: Tearing down an environment deletes the resource group when the current environment created the Foundry project.
 overlap:
   decision: native
-  provisional: true
+  provisional: false
   coverage: none
   rationale: >-
     Cross-environment comparison of azd environments is azd-specific. PSRule, Policy, Defender and Advisor evaluate one
     deployed resource or template at a time and have no concept of sibling azd environments.
   research:
     psrule:
-      state: unresearched
+      state: searched-none
     azurePolicy:
-      state: unresearched
+      state: searched-none
     defender:
-      state: unresearched
+      state: searched-none
     advisor:
-      state: unresearched
+      state: searched-none
     bicepLinter:
-      state: unresearched
+      state: searched-none
     checkov:
-      state: unresearched
+      state: searched-none
 implementation:
   owner: native
   package: internal/rules/env

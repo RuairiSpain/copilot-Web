@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -61,10 +62,11 @@ type chainCredential struct {
 	cache   map[string]AccessToken
 }
 
-// NewDefaultCredential chains the Azure Developer CLI (`azd auth token`) and
-// the Azure CLI (`az account get-access-token`), the credentials a developer is
-// already signed in with. No secret is stored or written; tokens live in
-// memory until shortly before expiry. A nil run uses ExecRunner.
+// NewDefaultCredential checks AZURE_ACCESS_TOKEN first, then chains the Azure
+// Developer CLI (`azd auth token`) and the Azure CLI
+// (`az account get-access-token`), the credentials a developer is already
+// signed in with. No secret is stored or written; tokens live in memory until
+// shortly before expiry. A nil run uses ExecRunner.
 func NewDefaultCredential(run CommandRunner) TokenCredential {
 	return newChain(run, time.Now)
 }
@@ -74,6 +76,16 @@ func newChain(run CommandRunner, now func() time.Time) *chainCredential {
 		run = ExecRunner
 	}
 	return &chainCredential{run: run, now: now, cache: map[string]AccessToken{}, sources: []cliSource{
+		{
+			name: "env",
+			args: func(string) []string { return nil },
+			parse: func([]byte) (AccessToken, error) {
+				if tok := strings.TrimSpace(os.Getenv("AZURE_ACCESS_TOKEN")); tok != "" {
+					return AccessToken{Token: tok}, nil
+				}
+				return AccessToken{}, errors.New("AZURE_ACCESS_TOKEN not set")
+			},
+		},
 		{
 			name: "azd",
 			args: func(scope string) []string {
@@ -131,13 +143,19 @@ func (c *chainCredential) Token(ctx context.Context, scope string) (AccessToken,
 	c.mu.Unlock()
 	var failures []string
 	for _, s := range c.sources {
-		out, err := c.run(ctx, s.name, s.args(scope)...)
-		if ctx.Err() != nil {
-			return AccessToken{}, ctx.Err()
-		}
-		if err != nil {
-			failures = append(failures, s.name+": unavailable or not signed in")
-			continue
+		var (
+			out []byte
+			err error
+		)
+		if s.name != "env" {
+			out, err = c.run(ctx, s.name, s.args(scope)...)
+			if ctx.Err() != nil {
+				return AccessToken{}, ctx.Err()
+			}
+			if err != nil {
+				failures = append(failures, s.name+": unavailable or not signed in")
+				continue
+			}
 		}
 		tok, perr := s.parse(out)
 		if perr != nil {

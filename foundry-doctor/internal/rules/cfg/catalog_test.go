@@ -52,18 +52,16 @@ func TestRegisteredIDsInCatalogue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	phase1 := map[string]bool{}
+	cfgRules := map[string]bool{}
 	for _, r := range rules {
-		for _, p := range r.Phases {
-			if p == "1" {
-				phase1[r.ID] = true
-			}
+		if r.Group == "CFG" {
+			cfgRules[r.ID] = true
 		}
 	}
 	seen := map[string]bool{}
 	for _, r := range Register() {
-		if !phase1[r.ID()] {
-			t.Errorf("%s not a phase 1 catalogue rule", r.ID())
+		if !cfgRules[r.ID()] {
+			t.Errorf("%s not a CFG catalogue rule", r.ID())
 		}
 		if seen[r.ID()] {
 			t.Errorf("duplicate %s", r.ID())

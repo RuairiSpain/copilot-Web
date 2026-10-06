@@ -41,11 +41,11 @@ fix: >-
   output storageId string = stg.id // consumer calls listKeys(storageId, ...) when it needs the key; do not output keys
 sources:
 - url: https://learn.microsoft.com/azure/azure-resource-manager/bicep/linter-rule-outputs-should-not-contain-secrets
-  lastVerified: '2026-10-04'
+  lastVerified: '2026-10-05'
   verifiedVia: refs/azure-docs/articles/azure-resource-manager/bicep/linter-rule-outputs-should-not-contain-secrets.md
   note: Rule code and detection (secure params, list* functions, names containing password).
 - url: https://learn.microsoft.com/azure/azure-resource-manager/bicep/linter
-  lastVerified: '2026-10-04'
+  lastVerified: '2026-10-05'
   verifiedVia: refs/azure-docs/articles/azure-resource-manager/bicep/linter.md
   note: Rule table lists default level warning.
 - url: https://learn.microsoft.com/azure/developer/azure-developer-cli/azd-templates

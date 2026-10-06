@@ -79,3 +79,42 @@ func TestCost002DevSkusAndCosmosLimit(t *testing.T) {
 		t.Fatalf("expected non-dev skip, got %+v err=%v", res, err)
 	}
 }
+
+func TestCost003GatewayTokenLimit(t *testing.T) {
+	r := find(Register(), "FND-COST-003")
+	res, err := r.Evaluate(context.Background(), &sdk.Input{ARM: model{
+		{Type: "Microsoft.ApiManagement/service", Name: "apim"},
+		{Type: "Microsoft.ApiManagement/service/apis", Name: "apim/chat", Properties: map[string]any{"path": "chat", "serviceUrl": "https://acct.openai.azure.com/openai"}},
+		{Type: "Microsoft.ApiManagement/service/apis/policies", Name: "apim/chat/policy", Properties: map[string]any{"format": "xml", "value": `<policies><inbound /></policies>`}},
+	}})
+	if err != nil || len(res.Findings) == 0 {
+		t.Fatalf("expected finding, got %+v err=%v", res, err)
+	}
+
+	res, err = r.Evaluate(context.Background(), &sdk.Input{ARM: model{
+		{Type: "Microsoft.ApiManagement/service", Name: "apim"},
+		{Type: "Microsoft.ApiManagement/service/apis", Name: "apim/chat", Properties: map[string]any{"path": "chat", "serviceUrl": "https://acct.openai.azure.com/openai"}},
+		{Type: "Microsoft.ApiManagement/service/apis/policies", Name: "apim/chat/policy", Properties: map[string]any{"format": "xml", "value": `<policies><inbound><llm-token-limit counter-key="tenant" estimate-prompt-tokens="true" tokens-per-minute="1000" /></inbound></policies>`}},
+	}})
+	if err != nil || len(res.Findings) != 0 || res.Skipped != nil {
+		t.Fatalf("expected pass, got %+v err=%v", res, err)
+	}
+}
+
+func TestCost004EstimateCompleteness(t *testing.T) {
+	r := find(Register(), "FND-COST-004")
+	res, err := r.Evaluate(context.Background(), &sdk.Input{ARM: model{
+		{Type: typeSearch, Name: "search", Region: "eastus", SKUName: "standard"},
+	}})
+	if err != nil || len(res.Findings) == 0 {
+		t.Fatalf("expected incomplete-estimate finding, got %+v err=%v", res, err)
+	}
+
+	res, err = r.Evaluate(context.Background(), &sdk.Input{ARM: model{
+		{Type: typeSearch, Name: "search", Region: "eastus", SKUName: "standard", Properties: map[string]any{"replicaCount": float64(2), "partitionCount": float64(1)}},
+		{Type: typeAPIM, Name: "apim", Region: "eastus", SKUName: "Premium", SKU: map[string]any{"capacity": float64(1)}},
+	}})
+	if err != nil || len(res.Findings) != 0 || res.Skipped != nil {
+		t.Fatalf("expected pass, got %+v err=%v", res, err)
+	}
+}

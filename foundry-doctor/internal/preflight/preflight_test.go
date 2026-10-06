@@ -15,6 +15,13 @@ type fakeARM struct{ rs []sdk.ARMResource }
 
 func (f fakeARM) Resources() []sdk.ARMResource { return f.rs }
 
+type policyMap map[string]any
+
+func (p policyMap) Get(key string) (any, bool) {
+	v, ok := p[key]
+	return v, ok
+}
+
 // fake implements every azure capability from canned data. Restricted
 // identities are modelled by returning *azure.UnavailableError.
 type fake struct {
@@ -136,6 +143,11 @@ func deps(f *fake) Deps {
 func run(t *testing.T, d Deps, id string, rs ...sdk.ARMResource) sdk.Result {
 	t.Helper()
 	in := &sdk.Input{ARM: fakeARM{rs}}
+	return runInput(t, d, id, in)
+}
+
+func runInput(t *testing.T, d Deps, id string, in *sdk.Input) sdk.Result {
+	t.Helper()
 	for _, r := range Rules(d) {
 		if r.ID() == id {
 			res, err := r.Evaluate(context.Background(), in)
@@ -300,7 +312,9 @@ func TestDEP007(t *testing.T) {
 		{"invalid format", res("Microsoft.Storage/storageAccounts", "Bad_Name"), nil, oFail},
 		{"expression", res("Microsoft.Storage/storageAccounts", "[parameters('n')]"), nil, oSkipped},
 		{"cosmos has no check", res("Microsoft.DocumentDB/databaseAccounts", "cosmosfoo"), nil, oSkipped},
-		{"registry has no check", res("Microsoft.ContainerRegistry/registries", "acrfoo"), nil, oSkipped},
+		{"registry available", res("Microsoft.ContainerRegistry/registries", "acrfoo"), nil, oPass},
+		{"registry taken", res("Microsoft.ContainerRegistry/registries", "acrfoo"), map[string]bool{"acrfoo": true}, oFail},
+		{"registry invalid format", res("Microsoft.ContainerRegistry/registries", "acr-name"), nil, oFail},
 		{"unrelated type passes", res("Microsoft.Network/virtualNetworks", "vnet"), nil, oPass},
 	}
 	for _, c := range cases {
@@ -363,6 +377,19 @@ func TestDEP010(t *testing.T) {
 	}
 }
 
+func TestDEP010PolicyMarginOverride(t *testing.T) {
+	lock := azure.Lock{ID: "/l/cnd", Name: "cnd", Scope: "/subscriptions/s/resourceGroups/rg", Level: "CanNotDelete"}
+	f := &fake{locks: []azure.Lock{lock}, deploys: azure.DeploymentCount{Count: 759}}
+	in := &sdk.Input{
+		ARM:    fakeARM{[]sdk.ARMResource{res("Microsoft.Storage/storageAccounts", "stfoo123")}},
+		Policy: policyMap{"preflight.deploymentHistoryMargin": 40},
+	}
+	out := runInput(t, deps(f), "FND-DEP-010", in)
+	if got := classify(out); got != oPass {
+		t.Fatalf("got %s want pass: %+v", got, out)
+	}
+}
+
 func agentAccount(subnet string) sdk.ARMResource {
 	r := res(typeAccount, "acct")
 	r.Properties = map[string]any{"networkInjections": []any{map[string]any{"scenario": "agent", "subnetArmId": subnet}}}
@@ -400,6 +427,49 @@ func TestDEP011(t *testing.T) {
 	out := run(t, deps(&fake{}), "FND-DEP-011", res("Microsoft.Storage/storageAccounts", "s"))
 	if classify(out) != oPass {
 		t.Fatalf("no agent subnet should pass: %+v", out)
+	}
+}
+
+func TestDEP011ExpressionNamedAccountDoesNotSelfFlag(t *testing.T) {
+	sid := "/subscriptions/s/resourceGroups/rg/providers/Microsoft.Network/virtualNetworks/v/subnets/agents"
+	sn := azure.Subnet{ID: sid, Name: "agents", VNetID: "/subscriptions/s/resourceGroups/rg/providers/Microsoft.Network/virtualNetworks/v",
+		AddressPrefixes: []string{"10.0.1.0/24"}, DelegationServices: []string{"Microsoft.App/environments"}}
+	f := &fake{
+		subnet:    sn,
+		resources: []azure.Resource{{ID: sn.VNetID, Location: "eastus"}},
+		links: azure.SubnetLinkSet{
+			ServiceAssociationLinks: []azure.NetworkLink{{
+				Name: "sal", Link: "/subscriptions/s/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/acct-existing/projects/p1", LinkedResourceType: "Microsoft.CognitiveServices/accounts/projects",
+			}},
+		},
+	}
+	r := agentAccount(sid)
+	r.Name = "[parameters('accountName')]"
+	out := run(t, deps(f), "FND-DEP-011", r)
+	if got := classify(out); got != oUncertain {
+		t.Fatalf("got %s want uncertain: %+v", got, out)
+	}
+}
+
+func TestDEP012PolicyStalenessOverride(t *testing.T) {
+	tmpl := res("Microsoft.Storage/storageAccounts", "s")
+	acct := res(typeAccount, "acct")
+	in := &sdk.Input{
+		ARM:    fakeARM{[]sdk.ARMResource{tmpl, acct}},
+		Policy: policyMap{"preflight.regionMatrixStalenessDays": 1},
+	}
+	f := &fake{
+		locations: []azure.LocationInfo{{Name: "eastus", DisplayName: "East US"}},
+		ptypes:    map[string][]azure.ProviderResourceType{"microsoft.storage": {{ResourceType: "storageAccounts", Locations: []string{"eastus"}}}},
+	}
+	d := deps(f)
+	d.Now = func() time.Time { return regionMatrixDate.Add(48 * time.Hour) }
+	out := runInput(t, d, "FND-DEP-012", in)
+	if got := classify(out); got != oSkipped {
+		t.Fatalf("got %s want skipped: %+v", got, out)
+	}
+	if out.Skipped == nil || !strings.Contains(out.Skipped.Reason, "staleness threshold") {
+		t.Fatalf("unexpected skip: %+v", out)
 	}
 }
 

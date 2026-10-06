@@ -31,7 +31,9 @@ evidence:
     (spec file openapi.json; 2025-01-01 also lists it). Key Vault: POST /subscriptions/{subscriptionId}/providers/Microsoft.KeyVault/checkNameAvailability
     api-version 2026-05-15, response {nameAvailable, reason (AccountNameInvalid or AlreadyExists), message}. AI Search:
     POST /subscriptions/{subscriptionId}/providers/Microsoft.Search/checkNameAvailability api-version 2025-05-01. API Management:
-    POST /subscriptions/{subscriptionId}/providers/Microsoft.ApiManagement/checkNameAvailability api-version 2024-05-01. Cosmos DB:
+    POST /subscriptions/{subscriptionId}/providers/Microsoft.ApiManagement/checkNameAvailability api-version 2024-05-01. Container Registry:
+    POST /subscriptions/{subscriptionId}/providers/Microsoft.ContainerRegistry/checkNameAvailability api-version 2025-11-01,
+    body {name, type: Microsoft.ContainerRegistry/registries}. Cosmos DB:
     HEAD /providers/Microsoft.DocumentDB/databaseAccountNames/{accountName} api-version 2026-03-15 (200 means the name exists,
     404 means it does not, per the spec responses). Planned names come from the Bicep snapshot; unresolved
     expressions make the check skipped. Violation (certain): the provider reports the name unavailable and
@@ -40,13 +42,14 @@ evidence:
     conflict). Local format failures (reason AccountNameInvalid) are reported as invalid names. Role family
     and whether Reader suffices differ by provider, from the Azure RBAC permission tables: Key Vault
     (Microsoft.KeyVault/checkNameAvailability/read), Storage (Microsoft.Storage/checknameavailability/read),
-    API Management (Microsoft.ApiManagement/checkNameAvailability/read) and Cosmos DB
+    Container Registry (Microsoft.ContainerRegistry/checkNameAvailability/read), API Management
+    (Microsoft.ApiManagement/checkNameAvailability/read) and Cosmos DB
     (Microsoft.DocumentDB/databaseAccountNames/read) are covered by Reader (*/read). Foundry
     (Microsoft.CognitiveServices/checkDomainAvailability/action) and AI Search
     (Microsoft.Search/checkNameAvailability/action) are actions, which Reader (*/read) does not grant: those
     two checks need a role that includes the action, which built-in role provides it was not verified, and
-    without it they are reported skipped with the missing permission, never passed. Container Registry is
-    not covered (path and api-version not verified here). The answer is definitive when the call returns.
+    without it they are reported skipped with the missing permission, never passed. The answer is definitive
+    when the call returns.
   confidence: certain
 recommendation: >-
   Add a deterministic unique suffix to globally unique names (for example with the Bicep uniqueString function), keep the
@@ -76,6 +79,10 @@ sources:
     lastVerified: "2026-10-04"
     verifiedVia: refs/rest-api-specs/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/stable/2024-05-01 (ApiManagementService_CheckNameAvailability POST)
     note: "POST /subscriptions/{subscriptionId}/providers/Microsoft.ApiManagement/checkNameAvailability."
+  - url: https://learn.microsoft.com/en-us/rest/api/container-registry/registries/check-name-availability?view=rest-container-registry-2025-11-01
+    lastVerified: "2026-10-04"
+    verifiedVia: Microsoft Learn REST reference
+    note: "POST /subscriptions/{subscriptionId}/providers/Microsoft.ContainerRegistry/checkNameAvailability with body {name, type: Microsoft.ContainerRegistry/registries}."
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
     lastVerified: "2026-10-04"
     verifiedVia: refs/rest-api-specs/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
@@ -87,7 +94,7 @@ sources:
   - url: https://learn.microsoft.com/azure/role-based-access-control/permissions/security
     lastVerified: "2026-10-04"
     verifiedVia: https://raw.githubusercontent.com/MicrosoftDocs/azure-docs/main/articles/role-based-access-control/permissions/ (security, storage, integration, databases, ai-machine-learning pages)
-    note: "Action names: Microsoft.KeyVault/checkNameAvailability/read, Microsoft.Storage/checknameavailability/read, Microsoft.ApiManagement/checkNameAvailability/read, Microsoft.DocumentDB/databaseAccountNames/read, Microsoft.CognitiveServices/checkDomainAvailability/action, Microsoft.Search/checkNameAvailability/action."
+    note: "Action names: Microsoft.KeyVault/checkNameAvailability/read, Microsoft.Storage/checknameavailability/read, Microsoft.ContainerRegistry/checkNameAvailability/read, Microsoft.ApiManagement/checkNameAvailability/read, Microsoft.DocumentDB/databaseAccountNames/read, Microsoft.CognitiveServices/checkDomainAvailability/action, Microsoft.Search/checkNameAvailability/action."
 overlap:
   decision: adapt
   provisional: true
@@ -138,7 +145,6 @@ tests:
     - no-azure-credential-available
     - name-is-unresolved-expression
     - check-action-permission-missing-foundry-or-search
-    - container-registry-check-not-implemented
 notes: >-
   Cosmos DB's path has no subscription segment in the spec, so the answer is global to the cloud. The Learn
   statement that a name must be globally unique is sourced for the Foundry account name and custom

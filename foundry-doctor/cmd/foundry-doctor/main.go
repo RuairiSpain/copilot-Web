@@ -21,6 +21,8 @@ import (
 
 const rootUse = "foundry-doctor"
 
+var version = app.ToolVersion
+
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
@@ -55,7 +57,18 @@ func newRoot(ctx context.Context, svc app.Services, exit *int) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
-	root.AddCommand(doctorCmd(ctx, svc, exit), annotateCmd(ctx, svc, exit), explainCmd(ctx, svc, exit), compareCmd(ctx, svc, exit), costCmd(ctx, svc, exit), preflightCmd(ctx, svc, exit), runtimeCmd(ctx, svc, exit), graphCmd(ctx, svc, exit), assessCmd(ctx, svc, exit))
+	root.AddCommand(
+		doctorCmd(ctx, svc, exit),
+		annotateCmd(ctx, svc, exit),
+		explainCmd(ctx, svc, exit),
+		compareCmd(ctx, svc, exit),
+		costCmd(ctx, svc, exit),
+		preflightCmd(ctx, svc, exit),
+		runtimeCmd(ctx, svc, exit),
+		graphCmd(ctx, svc, exit),
+		assessCmd(ctx, svc, exit),
+		versionCmd(exit),
+	)
 	return root
 }
 
@@ -153,6 +166,7 @@ func explainCmd(ctx context.Context, svc app.Services, exit *int) *cobra.Command
 
 func compareCmd(ctx context.Context, svc app.Services, exit *int) *cobra.Command {
 	var format, out, dir string
+	var failOnDiff bool
 	cmd := &cobra.Command{
 		Use:   "compare <left-environment> <right-environment>",
 		Short: "Compare the effective policy of two environments offline",
@@ -162,7 +176,7 @@ func compareCmd(ctx context.Context, svc app.Services, exit *int) *cobra.Command
 		Args:    cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			code, err := app.Compare(cmd.Context(), svc, app.CompareRequest{
-				Dir: dir, Left: args[0], Right: args[1], Format: format, Out: out,
+				Dir: dir, Left: args[0], Right: args[1], Format: format, Out: out, FailOnDiff: failOnDiff,
 			}, cmd.OutOrStdout())
 			return finish(exit, code, err)
 		},
@@ -171,5 +185,21 @@ func compareCmd(ctx context.Context, svc app.Services, exit *int) *cobra.Command
 	f.StringVar(&format, "format", "console", "output format: console or json")
 	f.StringVar(&out, "out", "", "write the comparison to this file instead of stdout")
 	f.StringVar(&dir, "dir", ".", "project directory containing azure.yaml")
+	f.BoolVar(&failOnDiff, "fail-on-diff", false, "exit 1 when any effective-policy difference is found")
 	return cmd
+}
+
+func versionCmd(exit *int) *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Print the Foundry Doctor build and compatibility versions",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			_, err := fmt.Fprintf(cmd.OutOrStdout(),
+				"foundry-doctor %s\nconfig: %s\nminimum azd: 1.34.2\nminimum bicep: %s\n",
+				version, app.RepoConfigPath, "0.48.1",
+			)
+			return finish(exit, app.ExitOK, err)
+		},
+	}
 }

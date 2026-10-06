@@ -192,10 +192,14 @@ type ARMResource struct {
 	Name       string
 	APIVersion string
 	Properties map[string]any
-	Location   Location
+	// Tags is the top-level resource tags object when present.
+	Tags     map[string]any
+	Location Location
 	// Region is the Azure region (the resource "location" value) as written
 	// in the template. It may be an unresolved ARM expression ("[...]").
 	Region string
+	// Zones is the top-level resource zones array when present.
+	Zones []string
 	// Kind is the resource "kind" (for example AIServices); empty when absent.
 	Kind string
 	// SKUName is the resource sku.name when present and literal; empty otherwise.

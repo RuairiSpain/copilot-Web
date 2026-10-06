@@ -39,7 +39,16 @@ func Register() []sdk.Rule {
 		fn{"FND-SEC-002", evalSEC002},
 		fn{"FND-SEC-003", evalSEC003},
 		fn{"FND-SEC-004", evalSEC004},
+		fn{"FND-SEC-005", evalSEC005},
 		fn{"FND-SEC-006", evalSEC006},
+		fn{"FND-SEC-007", evalSEC007},
+		fn{"FND-SEC-008", evalSEC008},
+		fn{"FND-SEC-009", evalSEC009},
+		fn{"FND-SEC-010", evalSEC010},
+		fn{"FND-SEC-011", evalSEC011},
+		fn{"FND-SEC-012", evalSEC012},
+		fn{"FND-SEC-013", evalSEC013},
+		fn{"FND-SEC-014", evalSEC014},
 	}
 }
 

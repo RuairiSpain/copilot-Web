@@ -48,7 +48,7 @@ fix: |
   azd pipeline config --provider github
 sources:
 - url: https://learn.microsoft.com/azure/developer/azure-developer-cli/configure-devops-pipeline
-  lastVerified: '2026-10-04'
+  lastVerified: '2026-10-05'
   verifiedVia: refs/azd-docs/articles/azure-developer-cli/configure-devops-pipeline.md
   note: >-
     azd pipeline config; azure-dev.yml in .github/workflows (GitHub Actions) and in .azuredevops/pipelines or .azdo/pipelines

@@ -38,7 +38,10 @@ def main(argv: list[str] | None = None) -> int:
     a = p.parse_args(argv)
     try:
         if a.registry_file:
-            regs = [json.load(open(f, encoding="utf-8")) for f in a.registry_file]
+            regs = []
+            for f in a.registry_file:
+                with open(f, encoding="utf-8") as fh:
+                    regs.append(json.load(fh))
         else:
             regs = [fetch(BASE + f) for f in FILES]
     except Exception as e:  # network/parse failure is "unable to run", not pass

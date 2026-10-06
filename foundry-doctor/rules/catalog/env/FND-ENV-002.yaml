@@ -40,28 +40,28 @@ fix: |
   AZURE_AI_PROJECT_ENDPOINT=https://prod-account.services.ai.azure.com/api/projects/prod-project
 sources:
   - url: https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview
-    lastVerified: "2026-10-04"
+    lastVerified: "2026-10-05"
     verifiedVia: refs/azd-docs/articles/azure-developer-cli/environments-overview.md
     note: Environment isolation and the contents of .azure/<env>/.env (context only; no source states that copied values are an error).
 overlap:
   decision: native
-  provisional: true
+  provisional: false
   coverage: none
   rationale: >-
     No external tool compares azd environments; the value is the cross-environment correlation.
   research:
     psrule:
-      state: unresearched
+      state: searched-none
     azurePolicy:
-      state: unresearched
+      state: searched-none
     defender:
-      state: unresearched
+      state: searched-none
     advisor:
-      state: unresearched
+      state: searched-none
     bicepLinter:
-      state: unresearched
+      state: searched-none
     checkov:
-      state: unresearched
+      state: searched-none
 implementation:
   owner: native
   package: internal/rules/env

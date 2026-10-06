@@ -62,7 +62,7 @@ func TestInterfaceSurface(t *testing.T) {
 func TestAllowListIsReadOnly(t *testing.T) {
 	allowedPOST := map[string]bool{
 		"policy.checkrestrictions": true, "whatif.run": true, "name.keyvault": true, "name.storage": true,
-		"name.apim": true, "name.search": true, "name.foundry": true,
+		"name.acr": true, "name.apim": true, "name.search": true, "name.foundry": true,
 	}
 	seen := map[string]bool{}
 	for _, o := range AllowedOperations() {

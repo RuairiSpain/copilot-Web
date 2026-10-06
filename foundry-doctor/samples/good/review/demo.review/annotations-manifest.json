@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "1",
+  "tool": "foundry-doctor",
+  "toolVersion": "0.1.0-dev",
+  "profile": "foundry-prod",
+  "reviewDir": "review/demo.review",
+  "summary": {
+    "total": 0,
+    "inline": 0,
+    "manifestOnly": 0
+  },
+  "files": [],
+  "annotations": []
+}

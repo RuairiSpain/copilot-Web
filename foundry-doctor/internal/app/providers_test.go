@@ -103,11 +103,12 @@ func TestEnvStoreMissingInputs(t *testing.T) {
 func TestParseAzdVersion(t *testing.T) {
 	tests := map[string]string{
 		`{"azd":{"version":"1.34.2 (commit abc)"}}`: "1.34.2",
-		`{"version":"1.35.0-beta.1"}`:               "1.35.0-beta.1",
-		`azd version 1.20.3 (commit x)`:             "1.20.3",
-		`{"azd":{}}`:                                "",
-		``:                                          "",
-		`nonsense`:                                  "",
+		"{\n  \"azd\": {\n    \"version\": \"1.34.2\",\n    \"commit\": \"04b2e1810e55c1981a574a84b018e92ba9f08f53\"\n  }\n}\n": "1.34.2",
+		`{"version":"1.35.0-beta.1"}`:   "1.35.0-beta.1",
+		`azd version 1.20.3 (commit x)`: "1.20.3",
+		`{"azd":{}}`:                    "",
+		``:                              "",
+		`nonsense`:                      "",
 	}
 	for in, want := range tests {
 		if got := parseAzdVersion([]byte(in)); got != want {
