@@ -587,6 +587,7 @@ type FoundryProject struct {
 // CapabilityHost is the management-plane summary of one capability host.
 type CapabilityHost struct {
 	ID                       string
+	Type                     string
 	Name                     string
 	ProvisioningState        string
 	AIServiceConnections     []string
@@ -598,6 +599,7 @@ type CapabilityHost struct {
 // ConnectionTarget is the metadata-only connection target projection.
 type ConnectionTarget struct {
 	ResourceID   string
+	Endpoint     string
 	IndexNames   []string
 	IndexerNames []string
 }
@@ -605,6 +607,7 @@ type ConnectionTarget struct {
 // FoundryConnection is the management-plane summary of one project or account connection.
 type FoundryConnection struct {
 	ID       string
+	Type     string
 	Name     string
 	Category string
 	AuthType string
@@ -614,7 +617,10 @@ type FoundryConnection struct {
 
 // AccountDeployment is the management-plane summary of one account deployment.
 type AccountDeployment struct {
+	ID                   string
+	Type                 string
 	Name                 string
+	DeploymentState      string
 	ProvisioningState    string
 	DynamicThrottling    bool
 	CurrentCapacity      int

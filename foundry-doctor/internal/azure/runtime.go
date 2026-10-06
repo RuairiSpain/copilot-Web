@@ -42,11 +42,23 @@ func (a *Adapter) GetProject(ctx context.Context, subscriptionID, resourceGroup,
 }
 
 func (a *Adapter) ListProjectCapabilityHosts(ctx context.Context, subscriptionID, resourceGroup, account, project string) ([]CapabilityHost, error) {
+	if err := requireSub(subscriptionID); err != nil {
+		return nil, err
+	}
+	if !segOnlyRe.MatchString(resourceGroup) || !segOnlyRe.MatchString(account) || !segOnlyRe.MatchString(project) {
+		return nil, fmt.Errorf("%w: project capability host coordinates", ErrInvalidInput)
+	}
 	path := subPath(subscriptionID, "/resourceGroups/"+resourceGroup+"/providers/Microsoft.CognitiveServices/accounts/"+account+"/projects/"+project+"/capabilityHosts")
 	return a.listCapabilityHosts(ctx, path)
 }
 
 func (a *Adapter) ListAccountCapabilityHosts(ctx context.Context, subscriptionID, resourceGroup, account string) ([]CapabilityHost, error) {
+	if err := requireSub(subscriptionID); err != nil {
+		return nil, err
+	}
+	if !segOnlyRe.MatchString(resourceGroup) || !segOnlyRe.MatchString(account) {
+		return nil, fmt.Errorf("%w: account capability host coordinates", ErrInvalidInput)
+	}
 	path := subPath(subscriptionID, "/resourceGroups/"+resourceGroup+"/providers/Microsoft.CognitiveServices/accounts/"+account+"/capabilityHosts")
 	return a.listCapabilityHosts(ctx, path)
 }
@@ -60,6 +72,7 @@ func (a *Adapter) listCapabilityHosts(ctx context.Context, path string) ([]Capab
 	for _, raw := range items {
 		var h struct {
 			ID         string `json:"id"`
+			Type       string `json:"type"`
 			Name       string `json:"name"`
 			Properties struct {
 				ProvisioningState        string   `json:"provisioningState"`
@@ -73,7 +86,7 @@ func (a *Adapter) listCapabilityHosts(ctx context.Context, path string) ([]Capab
 			return nil, fmt.Errorf("azure: decode capability host: %w", err)
 		}
 		out = append(out, CapabilityHost{
-			ID: h.ID, Name: h.Name, ProvisioningState: h.Properties.ProvisioningState,
+			ID: h.ID, Type: h.Type, Name: h.Name, ProvisioningState: h.Properties.ProvisioningState,
 			AIServiceConnections:     sortedUnique(h.Properties.AIServiceConnections),
 			StorageConnections:       sortedUnique(h.Properties.StorageConnections),
 			ThreadStorageConnections: sortedUnique(h.Properties.ThreadStorageConnections),
@@ -84,11 +97,23 @@ func (a *Adapter) listCapabilityHosts(ctx context.Context, path string) ([]Capab
 }
 
 func (a *Adapter) ListProjectConnections(ctx context.Context, subscriptionID, resourceGroup, account, project string) ([]FoundryConnection, error) {
+	if err := requireSub(subscriptionID); err != nil {
+		return nil, err
+	}
+	if !segOnlyRe.MatchString(resourceGroup) || !segOnlyRe.MatchString(account) || !segOnlyRe.MatchString(project) {
+		return nil, fmt.Errorf("%w: project connection coordinates", ErrInvalidInput)
+	}
 	path := subPath(subscriptionID, "/resourceGroups/"+resourceGroup+"/providers/Microsoft.CognitiveServices/accounts/"+account+"/projects/"+project+"/connections")
 	return a.listFoundryConnections(ctx, path)
 }
 
 func (a *Adapter) ListAccountConnections(ctx context.Context, subscriptionID, resourceGroup, account string) ([]FoundryConnection, error) {
+	if err := requireSub(subscriptionID); err != nil {
+		return nil, err
+	}
+	if !segOnlyRe.MatchString(resourceGroup) || !segOnlyRe.MatchString(account) {
+		return nil, fmt.Errorf("%w: account connection coordinates", ErrInvalidInput)
+	}
 	path := subPath(subscriptionID, "/resourceGroups/"+resourceGroup+"/providers/Microsoft.CognitiveServices/accounts/"+account+"/connections")
 	return a.listFoundryConnections(ctx, path)
 }
@@ -102,6 +127,7 @@ func (a *Adapter) listFoundryConnections(ctx context.Context, path string) ([]Fo
 	for _, raw := range items {
 		var c struct {
 			ID         string `json:"id"`
+			Type       string `json:"type"`
 			Name       string `json:"name"`
 			Properties struct {
 				Category string         `json:"category"`
@@ -114,11 +140,16 @@ func (a *Adapter) listFoundryConnections(ctx context.Context, path string) ([]Fo
 		if err := json.Unmarshal(raw, &c); err != nil {
 			return nil, fmt.Errorf("azure: decode connection: %w", err)
 		}
-		target := ConnectionTarget{ResourceID: c.Properties.Target}
+		target := ConnectionTarget{Endpoint: c.Properties.Target}
+		if rid, ok := c.Properties.Metadata["ResourceId"].(string); ok && strings.TrimSpace(rid) != "" {
+			target.ResourceID = rid
+		} else if rid, ok := c.Properties.Metadata["resourceId"].(string); ok && strings.TrimSpace(rid) != "" {
+			target.ResourceID = rid
+		}
 		target.IndexNames = extractStrings(c.Properties.Metadata, "index", "indexName", "indexes")
 		target.IndexerNames = extractStrings(c.Properties.Metadata, "indexer", "indexerName", "indexers")
 		out = append(out, FoundryConnection{
-			ID: c.ID, Name: c.Name, Category: c.Properties.Category, AuthType: c.Properties.AuthType,
+			ID: c.ID, Type: c.Type, Name: c.Name, Category: c.Properties.Category, AuthType: c.Properties.AuthType,
 			Error: c.Properties.Error, Target: target,
 		})
 	}
@@ -152,6 +183,12 @@ func extractStrings(m map[string]any, keys ...string) []string {
 }
 
 func (a *Adapter) ListAccountDeployments(ctx context.Context, subscriptionID, resourceGroup, account string) ([]AccountDeployment, error) {
+	if err := requireSub(subscriptionID); err != nil {
+		return nil, err
+	}
+	if !segOnlyRe.MatchString(resourceGroup) || !segOnlyRe.MatchString(account) {
+		return nil, fmt.Errorf("%w: account deployment coordinates", ErrInvalidInput)
+	}
 	path := subPath(subscriptionID, "/resourceGroups/"+resourceGroup+"/providers/Microsoft.CognitiveServices/accounts/"+account+"/deployments")
 	items, _, err := a.c.list(ctx, path, nil, 0)
 	if err != nil {
@@ -160,11 +197,14 @@ func (a *Adapter) ListAccountDeployments(ctx context.Context, subscriptionID, re
 	out := make([]AccountDeployment, 0, len(items))
 	for _, raw := range items {
 		var d struct {
+			ID   string `json:"id"`
+			Type string `json:"type"`
 			Name string `json:"name"`
 			SKU  struct {
 				Capacity int `json:"capacity"`
 			} `json:"sku"`
 			Properties struct {
+				DeploymentState   string `json:"deploymentState"`
 				ProvisioningState string `json:"provisioningState"`
 				DynamicThrottling bool   `json:"dynamicThrottlingEnabled"`
 				CurrentCapacity   int    `json:"currentCapacity"`
@@ -185,7 +225,7 @@ func (a *Adapter) ListAccountDeployments(ctx context.Context, subscriptionID, re
 			capacity = d.SKU.Capacity
 		}
 		out = append(out, AccountDeployment{
-			Name: d.Name, ProvisioningState: d.Properties.ProvisioningState,
+			ID: d.ID, Type: d.Type, Name: d.Name, DeploymentState: d.Properties.DeploymentState, ProvisioningState: d.Properties.ProvisioningState,
 			DynamicThrottling: d.Properties.DynamicThrottling, CurrentCapacity: capacity, ProvisionedRateLimit: limit,
 		})
 	}

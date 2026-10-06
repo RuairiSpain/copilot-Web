@@ -53,7 +53,7 @@ func newRoot(ctx context.Context, svc app.Services, exit *int) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
-	root.AddCommand(doctorCmd(ctx, svc, exit), explainCmd(ctx, svc, exit), compareCmd(ctx, svc, exit), preflightCmd(ctx, svc, exit), runtimeCmd(ctx, svc, exit))
+	root.AddCommand(doctorCmd(ctx, svc, exit), explainCmd(ctx, svc, exit), compareCmd(ctx, svc, exit), preflightCmd(ctx, svc, exit), runtimeCmd(ctx, svc, exit), graphCmd(ctx, svc, exit), assessCmd(ctx, svc, exit))
 	return root
 }
 

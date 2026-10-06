@@ -1,0 +1,23 @@
+# Foundry Doctor graph (source)
+
+Example source graph for the `samples/bicep-backed/` fixture.
+
+```mermaid
+flowchart LR
+  n1["ai-project"]
+  class n1 local
+  n2["assistant"]
+  class n2 local
+  n3["storageAccountName (OpenAI / gpt-4o-mini / 2024-07-18)"]
+  class n3 local
+  n2 -->|uses| n1
+  n1 ==>|deploys| n3
+classDef azure fill:#dcfce7,stroke:#166534,color:#111827
+classDef baselined fill:#f3e8ff,stroke:#7e22ce,color:#111827
+classDef both fill:#ede9fe,stroke:#6d28d9,color:#111827
+classDef collapsed fill:#e5e7eb,stroke:#374151,color:#111827,stroke-dasharray: 3 3
+classDef external fill:#fef3c7,stroke:#92400e,color:#111827
+classDef local fill:#dbeafe,stroke:#1d4ed8,color:#111827
+classDef missing fill:#fee2e2,stroke:#991b1b,color:#111827,stroke-dasharray: 5 5
+classDef unhealthy fill:#fee2e2,stroke:#991b1b,color:#111827
+```

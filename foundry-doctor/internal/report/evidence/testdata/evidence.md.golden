@@ -1,0 +1,61 @@
+# Foundry Doctor WAF evidence pack
+
+> Audit-oriented output. Passed, failed, suppressed, baselined and skipped evidence remains visible. This is not a certification.
+
+- Profile: `foundry-prod`
+- Decision: Proceed with conditions\.
+
+## FAIL
+
+### Failed control
+
+- Rule: `FND-IDN-001`
+- Pillar: security
+- Mandatory: false
+- finding: identity missing
+
+## WARNING
+
+### Suppressed control
+
+- Rule: `FND-SEC-011`
+- Pillar: security
+- Mandatory: false
+- suppressed: accepted
+
+### Baselined control
+
+- Rule: `FND-NET-010`
+- Pillar: security
+- Mandatory: false
+- baselined: old debt
+
+## UNKNOWN
+
+None.
+
+## QUESTION
+
+### Question control
+
+- Rule: `FND-REL-007`
+- Pillar: reliability
+- Mandatory: false
+
+## SKIPPED
+
+### Skipped control
+
+- Rule: `FND-OPS-002`
+- Pillar: operations
+- Mandatory: false
+- skipped: input\-unavailable
+
+## PASS
+
+### Passed control
+
+- Rule: `FND-OPS-001`
+- Pillar: operations
+- Mandatory: false
+

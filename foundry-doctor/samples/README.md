@@ -9,5 +9,10 @@ secrets or secret-shaped strings.
 | `bad/` | Duplicate `name:` key, unresolved `${EXAMPLE_MISSING_VAR}`, `uses:` typo | Findings (exit 1) |
 | `azure-yaml-only/` | `azure.yaml` with no infra directory | Infra checks reported as skipped, not passed |
 | `bicep-backed/` | `azure.yaml` plus `infra/main.bicep` and a module (Bicep 0.48.1 valid) | Bicep analysed; no findings expected |
+| `assess-dev/` | Dev-profile WAF assessment fixture with local-only evidence | Owner summary emphasises unassessed scope and recommendations |
+| `assess-test/` | Test-profile WAF assessment fixture with invalid YAML and unresolved references | Evidence pack shows failures and skipped controls |
+| `assess-prod/` | Prod-profile WAF assessment fixture with Bicep-backed infrastructure and DR policy declaration | Developer and HTML views show mandatory and costly recommendations |
 
 Each sample's `agents/assistant/` directory holds a `.gitkeep` placeholder.
+
+Phase 5 graph examples live under `samples/graph/`.
