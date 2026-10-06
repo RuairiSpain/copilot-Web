@@ -1,0 +1,2 @@
+::error file=azure.yaml,line=3,col=1,title=FND-CFG-001::services must declare at least one service %25 safe Recommendation: Add a supported service definition.
+::warning file=infra/main.bicep,line=12,col=5,title=BCP057::The name x does not exist :∷ safe

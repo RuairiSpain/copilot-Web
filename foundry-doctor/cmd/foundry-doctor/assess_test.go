@@ -14,7 +14,7 @@ func TestAssessHelp(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("help exit=%d", code)
 	}
-	for _, want := range []string{"--audience", "--evidence-pack", "--format", "--out"} {
+	for _, want := range []string{"--audience", "--evidence-pack", "--format", "--out", "--llm-explain"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %s in %s", want, out)
 		}
@@ -64,5 +64,15 @@ func TestAssessOutFile(t *testing.T) {
 	}
 	if stdout != "" {
 		t.Fatalf("stdout=%q", stdout)
+	}
+}
+
+func TestAssessLLMFallbackIsNonFatal(t *testing.T) {
+	code, out, errs := exec(t, "assess", "waf", "--llm-explain", "--dir", sample("assess-dev"))
+	if code != 0 && code != 1 && code != 2 && code != 3 {
+		t.Fatalf("exit=%d out=%s err=%q", code, out, errs)
+	}
+	if !strings.Contains(out, "LLM advisory unavailable") {
+		t.Fatalf("out=%s", out)
 	}
 }

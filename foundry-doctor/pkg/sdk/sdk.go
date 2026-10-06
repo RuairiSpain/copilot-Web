@@ -200,6 +200,10 @@ type ARMResource struct {
 	Kind string
 	// SKUName is the resource sku.name when present and literal; empty otherwise.
 	SKUName string
+	// SKU is the top-level resource "sku" object (name, capacity, tier, ...).
+	// It preserves unresolved expressions and non-name fields without changing
+	// the meaning of Properties, which remains the ARM "properties" object.
+	SKU map[string]any
 	// Identity is the top-level resource "identity" object (type,
 	// userAssignedIdentities); nil when absent. Values may be unresolved ARM
 	// expressions ("[...]").

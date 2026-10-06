@@ -81,10 +81,13 @@ func TestHelpAndFlags(t *testing.T) {
 			t.Errorf("doctor help must not declare %q", bad)
 		}
 	}
-	for _, cmd := range []string{"explain", "compare"} {
+	for _, cmd := range []string{"annotate", "explain", "compare"} {
 		if c, _, _ := exec(t, cmd, "--help"); c != 0 {
 			t.Errorf("%s --help exit = %d", cmd, c)
 		}
+	}
+	if c, explainHelp, _ := exec(t, "explain", "--help"); c != 0 || !strings.Contains(explainHelp, "--llm-explain") {
+		t.Fatalf("explain help missing llm flags: exit=%d out=%q", c, explainHelp)
 	}
 }
 
@@ -126,6 +129,13 @@ func TestExplainRealCatalogue(t *testing.T) {
 	}
 }
 
+func TestExplainLLMFallbackIsNonFatal(t *testing.T) {
+	code, out, errs := exec(t, "explain", "FND-CFG-001", "--llm-explain", "--audience", "owner")
+	if code != 0 || !strings.Contains(out, "Deterministic rule documentation remains authoritative") {
+		t.Fatalf("exit=%d out=%q err=%q", code, out, errs)
+	}
+}
+
 func TestCompare(t *testing.T) {
 	dir := project(t)
 	if code, _, errs := exec(t, "compare", "dev", "prod", "--dir", dir); code != 0 {
@@ -133,5 +143,22 @@ func TestCompare(t *testing.T) {
 	}
 	if code, _, _ := exec(t, "compare", "dev"); code != 2 {
 		t.Fatalf("compare with one arg exit=%d, want 2", code)
+	}
+}
+
+func TestAnnotate(t *testing.T) {
+	dir := project(t)
+	out := "review\\sample.review"
+	if code, _, errs := exec(t, "annotate", "--out", out, "--dir", dir); code != 0 && code != 1 {
+		t.Fatalf("annotate exit=%d err=%q", code, errs)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "review", "sample.review", "annotations-manifest.json")); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, _ := exec(t, "annotate", "--format", "review", "--dir", dir); code != 2 {
+		t.Fatalf("annotate without out exit=%d, want 2", code)
+	}
+	if code, _, errs := exec(t, "annotate", "--format", "github", "--dir", dir); code != 0 || errs != "" {
+		t.Fatalf("github annotate exit=%d err=%q", code, errs)
 	}
 }

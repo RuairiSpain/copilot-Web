@@ -313,6 +313,11 @@ func parseDate(s string) (time.Time, bool) {
 
 // capacityOf reads a literal requested capacity from the resource.
 func capacityOf(r sdk.ARMResource) (float64, bool) {
+	if r.SKU != nil {
+		if f, ok := r.SKU["capacity"].(float64); ok {
+			return f, true
+		}
+	}
 	if sku := getMap(r.Properties, "sku"); sku != nil {
 		if f, ok := sku["capacity"].(float64); ok {
 			return f, true

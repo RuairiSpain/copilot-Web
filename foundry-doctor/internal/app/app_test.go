@@ -6,10 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/azureyaml"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
 
@@ -316,6 +319,116 @@ func TestDoctorRedactsFindings(t *testing.T) {
 	}
 	if len(captured) != 1 || strings.Contains(captured[0].Evidence, "abcdefgh") {
 		t.Errorf("evidence not redacted: %+v", captured)
+	}
+}
+
+func TestAnnotateGitHubAndSARIF(t *testing.T) {
+	eng := &fakeEngine{out: RunOutput{Findings: []sdk.Finding{{
+		RuleID:         "FND-CFG-001",
+		Severity:       sdk.SeverityError,
+		Location:       sdk.Location{File: "azure.yaml", Line: 1, Column: 1},
+		Evidence:       "bad\nline redacted-marker",
+		Recommendation: "fix %",
+		Fingerprint:    "fp-1",
+	}}}}
+	svc, _ := newSvc(eng)
+	var out bytes.Buffer
+	if code, err := Annotate(context.Background(), svc, AnnotateRequest{Format: "github"}, &out); err != nil || code != ExitFindings {
+		t.Fatalf("github annotate code=%d err=%v", code, err)
+	}
+	if got := out.String(); !strings.Contains(got, "::error file=azure.yaml,line=1,col=1,title=FND-CFG-001::") || strings.Contains(got, "bad\nline") {
+		t.Fatalf("github output=%q", got)
+	}
+	out.Reset()
+	if code, err := Annotate(context.Background(), svc, AnnotateRequest{Format: "sarif"}, &out); err != nil || code != ExitFindings {
+		t.Fatalf("sarif annotate code=%d err=%v", code, err)
+	}
+	if got := out.String(); !strings.Contains(got, "\"ruleId\": \"FND-CFG-001\"") {
+		t.Fatalf("sarif output=%q", got)
+	}
+}
+
+func TestAnnotateRejectsUnsafeNonReviewOut(t *testing.T) {
+	eng := &fakeEngine{out: RunOutput{Findings: []sdk.Finding{{
+		RuleID:      "FND-CFG-001",
+		Severity:    sdk.SeverityError,
+		Location:    sdk.Location{File: "azure.yaml", Line: 1, Column: 1},
+		Evidence:    "bad config",
+		Fingerprint: "fp-1",
+	}}}}
+	svc, _ := newSvc(eng)
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "azure.yaml"), []byte(minimalYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	svc.Project = fakeProject{src: Source{Dir: dir, AzureYAML: []byte(minimalYAML), AzureYAMLAt: "azure.yaml"}}
+	if code, err := Annotate(context.Background(), svc, AnnotateRequest{Format: "github", Out: "..\\bad.txt", Dir: dir}, io.Discard); err == nil || code != ExitUnavailable {
+		t.Fatalf("unsafe github out code=%d err=%v", code, err)
+	}
+	if code, err := Annotate(context.Background(), svc, AnnotateRequest{Format: "sarif", Out: "..\\bad.sarif", Dir: dir}, io.Discard); err == nil || code != ExitUnavailable {
+		t.Fatalf("unsafe sarif out code=%d err=%v", code, err)
+	}
+	if code, err := Annotate(context.Background(), svc, AnnotateRequest{Format: "github", Out: "azure.yaml", Dir: dir}, io.Discard); err == nil || code != ExitUnavailable {
+		t.Fatalf("overlapping github out code=%d err=%v", code, err)
+	}
+}
+
+func TestAnnotateReviewWritesCopy(t *testing.T) {
+	eng := &fakeEngine{out: RunOutput{Findings: []sdk.Finding{{
+		RuleID:      "FND-CFG-001",
+		Severity:    sdk.SeverityError,
+		Location:    sdk.Location{File: "azure.yaml", Line: 1, Column: 1},
+		Evidence:    "bad config",
+		Fingerprint: "fp-1",
+	}}}}
+	svc, _ := newSvc(eng)
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "azure.yaml"), []byte(minimalYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	svc.Project = fakeProject{src: Source{Dir: dir, AzureYAML: []byte(minimalYAML), AzureYAMLAt: "azure.yaml"}}
+	if code, err := Annotate(context.Background(), svc, AnnotateRequest{Format: "review", Out: "review\\demo.review", Dir: dir}, io.Discard); err != nil || code != ExitFindings {
+		t.Fatalf("review annotate code=%d err=%v", code, err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "review", "demo.review", "azure.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "# Foundry Doctor: FND-CFG-001 error") {
+		t.Fatalf("annotated yaml missing comment:\n%s", data)
+	}
+}
+
+func TestResolveBicepEntry(t *testing.T) {
+	doc, err := azureyaml.Parse([]byte("name: demo\ninfra:\n  path: deploy\n  module: main\n"), "azure.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := resolveBicepEntry(Source{InfraPath: "infra"}, doc); !ok || got != "deploy/main.bicep" {
+		t.Fatalf("resolveBicepEntry() = %q, %v", got, ok)
+	}
+
+	layered, err := azureyaml.Parse([]byte("name: demo\ninfra:\n  layers:\n    - path: shared\n"), "azure.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasInfraLayers(layered) {
+		t.Fatal("expected layered infra to be detected")
+	}
+}
+
+func TestAnnotateReviewFailsOnInfraLayersWhenBicepValidationIsNeeded(t *testing.T) {
+	eng := &fakeEngine{}
+	svc, _ := newSvc(eng)
+	svc.ARM = armLoader{}
+	dir := t.TempDir()
+	layeredYAML := []byte("name: demo\ninfra:\n  layers:\n    - path: shared\n")
+	if err := os.WriteFile(filepath.Join(dir, "azure.yaml"), layeredYAML, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	svc.Project = fakeProject{src: Source{Dir: dir, AzureYAML: layeredYAML, AzureYAMLAt: "azure.yaml", InfraPath: "infra"}}
+	if code, err := Annotate(context.Background(), svc, AnnotateRequest{Format: "review", Out: "review\\layered.review", Dir: dir}, io.Discard); err == nil || code != ExitUnavailable {
+		t.Fatalf("layered review code=%d err=%v", code, err)
 	}
 }
 

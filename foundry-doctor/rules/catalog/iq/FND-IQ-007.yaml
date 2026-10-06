@@ -93,7 +93,7 @@ overlap:
       state: unresearched
 implementation:
   owner: native
-  package: internal/providers/iq
+  package: internal/rules/iq
 testability: >-
   Offline with versioned knowledge source and knowledge base fixtures; a schema-contract test per API version guards the
   tables.

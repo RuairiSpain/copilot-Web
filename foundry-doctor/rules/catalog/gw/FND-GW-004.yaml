@@ -81,7 +81,7 @@ overlap:
       state: unresearched
 implementation:
   owner: native
-  package: internal/providers/apim
+  package: internal/rules/gw
 testability: Fully offline from compiled ARM; pure grouping function.
 tests:
   positive:

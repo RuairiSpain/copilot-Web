@@ -100,7 +100,7 @@ overlap:
       state: unresearched
 implementation:
   owner: native
-  package: internal/providers/apim
+  package: internal/rules/gw
 testability: >-
   Offline from compiled ARM (service, policies, role assignments) and policy XML fixtures. Role assignments
   inherited from a higher scope are only visible with control-plane access; otherwise that leg is skipped.

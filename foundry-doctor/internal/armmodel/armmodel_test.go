@@ -18,7 +18,7 @@ const armArray = `{
       "name": "acct",
       "location": "swedencentral",
       "kind": "AIServices",
-      "sku": {"name": "S0"},
+      "sku": {"name": "S0", "capacity": 2},
       "identity": {"type": "SystemAssigned"},
       "properties": {"publicNetworkAccess": "Disabled"}
     },
@@ -63,6 +63,9 @@ func TestFromARMMapsAllFields(t *testing.T) {
 		a.Region != "swedencentral" || a.Kind != "AIServices" || a.SKUName != "S0" || a.Scope != "" {
 		t.Errorf("account mapped wrong: %+v", a)
 	}
+	if got, ok := a.SKU["capacity"].(float64); !ok || got != 2 {
+		t.Errorf("sku = %v", a.SKU)
+	}
 	if a.Identity["type"] != "SystemAssigned" {
 		t.Errorf("identity = %v", a.Identity)
 	}
@@ -83,6 +86,9 @@ func TestFromARMMapsAllFields(t *testing.T) {
 	if ra.SKUName != "" {
 		t.Errorf("non-literal SKU name must be empty, got %q", ra.SKUName)
 	}
+	if got, _ := ra.SKU["name"].(string); got != "[parameters('sku')]" {
+		t.Errorf("sku.name = %q", got)
+	}
 	if ra.Identity["type"] != "UserAssigned" || ra.Identity["userAssignedIdentities"] == nil {
 		t.Errorf("identity = %v", ra.Identity)
 	}
@@ -93,7 +99,7 @@ func TestFromARMMapsAllFields(t *testing.T) {
 	}
 
 	bare := rs[3]
-	if bare.Region != "" || bare.Kind != "" || bare.SKUName != "" || bare.Identity != nil || bare.Scope != "" || bare.Properties != nil {
+	if bare.Region != "" || bare.Kind != "" || bare.SKUName != "" || bare.SKU != nil || bare.Identity != nil || bare.Scope != "" || bare.Properties != nil {
 		t.Errorf("absent fields must be zero values: %+v", bare)
 	}
 }

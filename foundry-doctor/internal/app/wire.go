@@ -23,6 +23,7 @@ import (
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/report"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/rules"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/rules/cfg"
+	costrules "github.com/ruairispain/copilot-web/foundry-doctor/internal/rules/cost"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/rules/env"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/rules/idn"
 	netrules "github.com/ruairispain/copilot-web/foundry-doctor/internal/rules/net"
@@ -50,10 +51,12 @@ func builtinRules(in RunInput) (rs []sdk.Rule, cleanup func()) {
 		p.Layout = layout
 	}
 	rs = append(rs, cfg.RegisterWith(p)...)
+	rs = append(rs, costrules.Register()...)
 	rs = append(rs, env.RegisterWith(store)...)
 	rs = append(rs, sec.Register()...)
 	rs = append(rs, idn.Register()...)
 	rs = append(rs, netrules.Register()...)
+	rs = append(rs, phase8Rules()...)
 	return rs, closeLayout
 }
 
@@ -99,6 +102,8 @@ func NewServices(stderr io.Writer, o Options) Services {
 		Suppress:  suppressFilter{},
 		Reporter:  reportAdapter{},
 		Explainer: lazyExplainer{cat: cat},
+		Narrator:  newNarrator(cat, getenv),
+		Cost:      costEngine{},
 		Now:       time.Now,
 		Stderr:    stderr,
 	}
@@ -454,7 +459,7 @@ func (e engineAdapter) Run(ctx context.Context, in RunInput) (RunOutput, error) 
 	eng := &rules.Engine{Catalog: cat, Registry: reg, Selector: sel, Required: required}
 	rep, err := eng.Run(ctx, &sdk.Input{
 		Profile: in.Profile, Environment: in.Environment, AzdVersion: e.azdVersion(ctx, in),
-		AzureYAML: in.AzureYAML, ARM: in.ARM, Policy: in.Policy,
+		AzureYAML: in.AzureYAML, ARM: withPhase8Snapshot(ctx, in), Policy: in.Policy,
 	})
 	if err != nil {
 		return RunOutput{}, err

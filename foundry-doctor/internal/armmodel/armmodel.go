@@ -113,6 +113,7 @@ func toResource(r bicep.Resource, node map[string]any, bl bicep.Location) sdk.AR
 	res.Region = str(node["location"])
 	res.Kind = str(node["kind"])
 	if sku, ok := node["sku"].(map[string]any); ok {
+		res.SKU = sku
 		if n := str(sku["name"]); n != "" && !strings.HasPrefix(n, "[") {
 			res.SKUName = n
 		}

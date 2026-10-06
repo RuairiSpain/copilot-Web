@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/azureyaml"
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/cost"
+	costreport "github.com/ruairispain/copilot-web/foundry-doctor/internal/cost/report"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/findings"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/report"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
@@ -207,6 +209,11 @@ type Reporter interface {
 	Render(w io.Writer, format string, r Report) error
 }
 
+// CostEngine produces advisory fixed-capacity cost reports.
+type CostEngine interface {
+	Estimate(ctx context.Context, in CostInput) (costreport.Document, error)
+}
+
 // Explainer renders documentation for one rule.
 type Explainer interface {
 	Explain(ctx context.Context, ruleID, format string, w io.Writer) error
@@ -222,8 +229,10 @@ type Services struct {
 	Suppress    FindingFilter
 	Reporter    Reporter
 	Explainer   Explainer
+	Narrator    Narrator
 	Preflight   PreflightEngine // optional; preflight reports unavailable when nil
 	Runtime     RuntimeEngine   // optional; runtime reports unavailable when nil
+	Cost        CostEngine      // optional; nil when cost estimation is unavailable
 	Now         func() time.Time
 	Stderr      io.Writer
 	WriteOutput func(path string, data []byte) error // defaults to os.WriteFile
@@ -245,6 +254,19 @@ type DoctorRequest struct {
 	Strict      bool
 	Format      string
 	Out         string
+}
+
+// CostInput is the advisory estimator input.
+type CostInput struct {
+	Dir           string
+	Profile       string
+	Environment   string
+	Compare       []string
+	Currency      string
+	HoursPerMonth float64
+	Offline       bool
+	PriceCache    string
+	loaded        []cost.Environment
 }
 
 // Validate checks flag values and applies defaults.
@@ -431,19 +453,5 @@ func (s Services) emit(path string, data []byte, stdout io.Writer) error {
 
 // Explain renders rule documentation. Unknown rules are a usage error (2).
 func Explain(ctx context.Context, svc Services, ruleID, format string, stdout io.Writer) (int, error) {
-	if format == "" {
-		format = "console"
-	}
-	if format != "console" && format != "markdown" {
-		err := Usagef("invalid --format %q for explain (want console or markdown)", format)
-		return ExitCodeForError(err), err
-	}
-	if ruleID == "" {
-		err := Usagef("rule ID is required")
-		return ExitCodeForError(err), err
-	}
-	if err := svc.Explainer.Explain(ctx, ruleID, format, stdout); err != nil {
-		return ExitCodeForError(err), err
-	}
-	return ExitOK, nil
+	return ExplainRule(ctx, svc, ExplainRequest{RuleID: ruleID, Format: format}, stdout)
 }

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/assess"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/assess/waf"
@@ -16,6 +17,7 @@ import (
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/azureyaml"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/catalog"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/findings"
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/llm"
 	developerreport "github.com/ruairispain/copilot-web/foundry-doctor/internal/report/developer"
 	evidencereport "github.com/ruairispain/copilot-web/foundry-doctor/internal/report/evidence"
 	htmlreport "github.com/ruairispain/copilot-web/foundry-doctor/internal/report/html"
@@ -45,6 +47,9 @@ type AssessRequest struct {
 	Format       string
 	Out          string
 	EvidencePack bool
+	LLMExplain   bool
+	LLMProvider  string
+	LLMTimeout   time.Duration
 }
 
 // Validate checks flag values and applies defaults.
@@ -79,6 +84,14 @@ func (r *AssessRequest) Validate() error {
 	}
 	if r.Format == "json" && r.Audience != AssessAudienceEvidence {
 		return Usagef("--format json is only supported with --audience evidence")
+	}
+	if r.LLMExplain {
+		if r.Audience == AssessAudienceEvidence {
+			return Usagef("--llm-explain is not supported with --audience evidence")
+		}
+		if r.LLMTimeout != 0 && (r.LLMTimeout < llm.MinimumTimeout || r.LLMTimeout > llm.MaximumTimeout) {
+			return Usagef("--llm-timeout must be between %s and %s", llm.MinimumTimeout, llm.MaximumTimeout)
+		}
 	}
 	return nil
 }
@@ -198,10 +211,39 @@ func assessWAF(ctx context.Context, svc Services, req AssessRequest, stdout io.W
 	if err := renderAssessment(&buf, assessment, req); err != nil {
 		return 0, err
 	}
-	if err := svc.emit(req.Out, buf.Bytes(), stdout); err != nil {
+	output := buf.Bytes()
+	if req.LLMExplain && svc.Narrator != nil {
+		narrative, note, err := assessmentNarrative(ctx, svc, req, assessment)
+		if err != nil {
+			return ExitCodeForError(err), err
+		}
+		output = appendRenderedNarrative(output, req.Format, narrative, note)
+	}
+	if err := svc.emit(req.Out, output, stdout); err != nil {
 		return 0, err
 	}
 	return code, nil
+}
+
+func assessmentNarrative(ctx context.Context, svc Services, req AssessRequest, assessment assess.Assessment) (*llm.Narrative, string, error) {
+	var audience llm.Audience
+	switch req.Audience {
+	case AssessAudienceOwner:
+		audience = llm.AudienceOwner
+	default:
+		audience = llm.AudienceDeveloper
+	}
+	narrative, err := svc.Narrator.ExplainAssessment(ctx, assessment, audience, llm.Options{
+		Provider: req.LLMProvider,
+		Timeout:  req.LLMTimeout,
+	})
+	if err == nil {
+		return &narrative, "", nil
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return nil, "", err
+	}
+	return nil, "LLM advisory unavailable (" + findings.Redact(strings.TrimSpace(err.Error())) + "). Deterministic findings remain authoritative.", nil
 }
 
 func renderAssessment(w io.Writer, a assess.Assessment, req AssessRequest) error {

@@ -88,7 +88,7 @@ overlap:
       state: unresearched
 implementation:
   owner: native
-  package: internal/providers/apim
+  package: internal/rules/gw
 testability: >-
   Offline from policy XML fixtures. Policy fragments referenced with include-fragment are resolved when their
   definition is in the same template, otherwise reported uncertain.

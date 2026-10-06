@@ -10,10 +10,12 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/app"
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/llm"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
 
@@ -53,7 +55,7 @@ func newRoot(ctx context.Context, svc app.Services, exit *int) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
-	root.AddCommand(doctorCmd(ctx, svc, exit), explainCmd(ctx, svc, exit), compareCmd(ctx, svc, exit), preflightCmd(ctx, svc, exit), runtimeCmd(ctx, svc, exit), graphCmd(ctx, svc, exit), assessCmd(ctx, svc, exit))
+	root.AddCommand(doctorCmd(ctx, svc, exit), annotateCmd(ctx, svc, exit), explainCmd(ctx, svc, exit), compareCmd(ctx, svc, exit), costCmd(ctx, svc, exit), preflightCmd(ctx, svc, exit), runtimeCmd(ctx, svc, exit), graphCmd(ctx, svc, exit), assessCmd(ctx, svc, exit))
 	return root
 }
 
@@ -123,18 +125,29 @@ func optSeverity(flag, v string) (sdk.Severity, error) {
 }
 
 func explainCmd(ctx context.Context, svc app.Services, exit *int) *cobra.Command {
-	var format string
+	var (
+		format, llmProvider, audience string
+		llmExplain                    bool
+		llmTimeout                    time.Duration
+	)
 	cmd := &cobra.Command{
 		Use:     "explain <rule-id>",
 		Short:   "Explain a rule: what it checks, why, how to fix it and its sources",
-		Example: "  foundry-doctor explain FND-CFG-001\n  foundry-doctor explain FND-SEC-002 --format markdown",
+		Example: "  foundry-doctor explain FND-CFG-001\n  foundry-doctor explain FND-SEC-002 --format markdown\n  foundry-doctor explain FND-IDN-001 --llm-explain --audience owner",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			code, err := app.Explain(cmd.Context(), svc, args[0], format, cmd.OutOrStdout())
+			code, err := app.ExplainRule(cmd.Context(), svc, app.ExplainRequest{
+				RuleID: args[0], Format: format, LLMExplain: llmExplain,
+				LLMProvider: llmProvider, LLMTimeout: llmTimeout, LLMAudience: llm.Audience(audience),
+			}, cmd.OutOrStdout())
 			return finish(exit, code, err)
 		},
 	}
 	cmd.Flags().StringVar(&format, "format", "console", "output format: console or markdown")
+	cmd.Flags().BoolVar(&llmExplain, "llm-explain", false, "append an advisory generated explanation (explicit opt-in)")
+	cmd.Flags().StringVar(&audience, "audience", string(llm.AudienceDeveloper), "advisory audience when --llm-explain is set: owner or developer")
+	cmd.Flags().StringVar(&llmProvider, "llm-provider", "", "advisory provider override (allow-listed; default azure-openai)")
+	cmd.Flags().DurationVar(&llmTimeout, "llm-timeout", 0, "advisory provider timeout when --llm-explain is set (1s to 30s)")
 	return cmd
 }
 

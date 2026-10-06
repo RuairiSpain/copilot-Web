@@ -86,7 +86,7 @@ overlap:
       state: unresearched
 implementation:
   owner: native
-  package: internal/providers/apim
+  package: internal/rules/gw
 testability: Offline from compiled ARM (backends plus policies); policy XML fixtures.
 tests:
   positive:

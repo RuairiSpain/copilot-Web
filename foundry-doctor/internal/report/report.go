@@ -7,14 +7,13 @@ package report
 import (
 	"fmt"
 	"io"
-	"path"
 	"regexp"
 	"sort"
 	"strings"
 	"unicode"
-	"unicode/utf8"
 
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/findings"
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/location"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
 
@@ -160,41 +159,7 @@ func count(fs []sdk.Finding) counts {
 // traversal are reduced to their final element; control characters are
 // removed. The result is never absolute and never contains "..".
 func SanitizePath(p string) string {
-	// Colons are never valid in a relative artifact URI segment.
-	return strings.ReplaceAll(sanitizePath(p), ":", "_")
-}
-
-func sanitizePath(p string) string {
-	p = strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) || r == utf8.RuneError {
-			return -1
-		}
-		return r
-	}, p)
-	p = strings.ReplaceAll(p, "\\", "/")
-	if p == "" {
-		return ""
-	}
-	unsafe := strings.HasPrefix(p, "/") || (len(p) >= 2 && p[1] == ':') || strings.HasPrefix(p, "~")
-	cleaned := path.Clean(p)
-	if cleaned == ".." || strings.HasPrefix(cleaned, "../") || strings.Contains(cleaned, "/../") {
-		unsafe = true
-	}
-	if unsafe {
-		cleaned = path.Base(cleaned)
-		if cleaned == "." || cleaned == ".." || cleaned == "/" || cleaned == "" {
-			return ""
-		}
-		// A drive-letter remnant such as "C:" is not a usable name.
-		if len(cleaned) >= 2 && cleaned[1] == ':' {
-			cleaned = cleaned[2:]
-		}
-		return cleaned
-	}
-	if cleaned == "." {
-		return ""
-	}
-	return cleaned
+	return location.SanitizePath(p)
 }
 
 // cleanText collapses control characters (including ANSI escapes and
