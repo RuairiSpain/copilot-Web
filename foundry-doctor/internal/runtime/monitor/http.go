@@ -18,5 +18,5 @@ type WorkspaceClient struct {
 
 // Query runs a fixed aggregate-only query against a workspace endpoint.
 func (c WorkspaceClient) Query(ctx context.Context, endpoint string, body any, out any) error {
-	return runtime.DoJSON(ctx, c.HTTP, c.Credential, "https://api.loganalytics.io/.default", http.MethodPost, endpoint, body, out)
+	return runtime.DoJSON(ctx, c.HTTP, c.Credential, "https://api.loganalytics.io/.default", http.MethodPost, endpoint, ".loganalytics.io", body, out)
 }

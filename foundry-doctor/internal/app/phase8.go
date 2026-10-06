@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -35,17 +36,22 @@ func (m iqSnapshotModel) Outputs() []sdk.ARMOutput {
 }
 
 func withPhase8Snapshot(ctx context.Context, in RunInput) sdk.ARMModel {
-	if in.ARM == nil || in.AzureYAML == nil {
-		return in.ARM
-	}
-	connections := runtimeiq.ConnectionsFromAzureYAML(&sdk.Input{AzureYAML: in.AzureYAML})
-	if len(connections) == 0 {
+	if in.Local || in.ARM == nil || in.AzureYAML == nil {
 		return in.ARM
 	}
 	client := runtimeiq.HTTPClient{
 		HTTP:       &http.Client{Timeout: 20 * time.Second},
 		Credential: azure.NewDefaultCredential(nil),
 	}
+	snap := buildPhase8Snapshot(ctx, in, client)
+	if len(snap.Bases) == 0 && len(snap.Sources) == 0 && len(snap.Indexes) == 0 && len(snap.Skillsets) == 0 && len(snap.ProbeIssues) == 0 {
+		return in.ARM
+	}
+	return iqSnapshotModel{ARMModel: in.ARM, snap: snap}
+}
+
+func buildPhase8Snapshot(ctx context.Context, in RunInput, client runtimeiq.Client) runtimeiq.Snapshot {
+	connections := runtimeiq.ConnectionsFromAzureYAML(&sdk.Input{AzureYAML: in.AzureYAML})
 	snap := runtimeiq.Snapshot{
 		Connections: connections,
 		Bases:       map[string]runtimeiq.KnowledgeBase{},
@@ -54,26 +60,42 @@ func withPhase8Snapshot(ctx context.Context, in RunInput) sdk.ARMModel {
 		Skillsets:   map[string]runtimeiq.Skillset{},
 	}
 	for _, conn := range connections {
-		kb, err := client.GetKnowledgeBase(ctx, conn.SearchService, conn.KnowledgeBase)
+		if conn.TargetKind != runtimeiq.ConnectionTargetKnowledgeBaseMCP {
+			continue
+		}
+		apiVersion := conn.APIVersion
+		if apiVersion == "" {
+			snap.ProbeIssues = append(snap.ProbeIssues, "knowledge base MCP connection "+conn.Name+" does not pin api-version")
+			continue
+		}
+		kb, err := client.GetKnowledgeBase(ctx, conn.SearchService, conn.KnowledgeBase, apiVersion)
 		if err != nil {
+			snap.ProbeIssues = append(snap.ProbeIssues, "knowledge base metadata could not be read for connection "+conn.Name)
 			continue
 		}
 		kb.Location = conn.Location
 		for _, sourceName := range kb.KnowledgeSources {
-			source, err := client.GetKnowledgeSource(ctx, conn.SearchService, sourceName)
+			source, err := client.GetKnowledgeSource(ctx, conn.SearchService, sourceName, apiVersion)
 			if err != nil {
+				snap.ProbeIssues = append(snap.ProbeIssues, "knowledge source metadata could not be read for "+conn.Name+"/"+sourceName)
 				continue
 			}
 			source.Location = conn.Location
 			snap.Sources[strings.ToLower(source.Name)] = source
 			if source.SearchIndexName != "" {
-				if idx, err := client.GetIndex(ctx, conn.SearchService, source.SearchIndexName); err == nil {
+				idx, err := client.GetIndex(ctx, conn.SearchService, source.SearchIndexName, apiVersion)
+				if err != nil {
+					snap.ProbeIssues = append(snap.ProbeIssues, "index metadata could not be read for "+conn.Name+"/"+source.SearchIndexName)
+				} else {
 					idx.Location = conn.Location
 					snap.Indexes[strings.ToLower(idx.Name)] = idx
 				}
 			}
 			if source.SkillsetName != "" {
-				if ss, err := client.GetSkillset(ctx, conn.SearchService, source.SkillsetName); err == nil {
+				ss, err := client.GetSkillset(ctx, conn.SearchService, source.SkillsetName, apiVersion)
+				if err != nil {
+					snap.ProbeIssues = append(snap.ProbeIssues, "skillset metadata could not be read for "+conn.Name+"/"+source.SkillsetName)
+				} else {
 					ss.Location = conn.Location
 					snap.Skillsets[strings.ToLower(ss.Name)] = ss
 				}
@@ -87,8 +109,20 @@ func withPhase8Snapshot(ctx context.Context, in RunInput) sdk.ARMModel {
 		}
 		snap.Bases[strings.ToLower(conn.SearchService+"/"+kb.Name)] = kb
 	}
-	if len(snap.Bases) == 0 && len(snap.Sources) == 0 && len(snap.Indexes) == 0 && len(snap.Skillsets) == 0 {
-		return in.ARM
+	slices.Sort(snap.ProbeIssues)
+	snap.ProbeIssues = dedupeStrings(snap.ProbeIssues)
+	return snap
+}
+
+func dedupeStrings(in []string) []string {
+	if len(in) == 0 {
+		return nil
 	}
-	return iqSnapshotModel{ARMModel: in.ARM, snap: snap}
+	out := in[:1]
+	for _, item := range in[1:] {
+		if item != out[len(out)-1] {
+			out = append(out, item)
+		}
+	}
+	return out
 }

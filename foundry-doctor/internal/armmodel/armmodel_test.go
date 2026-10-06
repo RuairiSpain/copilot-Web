@@ -20,7 +20,11 @@ const armArray = `{
       "kind": "AIServices",
       "sku": {"name": "S0", "capacity": 2},
       "identity": {"type": "SystemAssigned"},
-      "properties": {"publicNetworkAccess": "Disabled"}
+      "properties": {
+        "publicNetworkAccess": "Disabled",
+        "workspaceId": "[resourceId('Microsoft.OperationalInsights/workspaces', 'law')]",
+        "nested": {"childId": "[resourceId('Microsoft.Storage/storageAccounts', 'st')]"}
+      }
     },
     {
       "type": "Microsoft.Authorization/roleAssignments",
@@ -31,6 +35,13 @@ const armArray = `{
       "sku": {"name": "[parameters('sku')]"},
       "identity": {"type": "UserAssigned", "userAssignedIdentities": {"[resourceId('x')]": {}}},
       "properties": {"principalType": "ServicePrincipal"}
+    },
+    {
+      "type": "Microsoft.CognitiveServices/accounts/projects",
+      "apiVersion": "2026-07-15-preview",
+      "name": "[format('{0}/{1}', 'acct', 'proj')]",
+      "scope": "[resourceId('Microsoft.CognitiveServices/accounts/projects', 'acct', 'proj')]",
+      "properties": {}
     },
     {
       "type": "Microsoft.Resources/deployments",
@@ -55,8 +66,8 @@ func TestFromARMMapsAllFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	rs := m.Resources()
-	if len(rs) != 4 {
-		t.Fatalf("resources = %d, want 4 (module deployment is structure, not a resource)", len(rs))
+	if len(rs) != 5 {
+		t.Fatalf("resources = %d, want 5 (module deployment is structure, not a resource)", len(rs))
 	}
 	a := rs[0]
 	if a.Type != "Microsoft.CognitiveServices/accounts" || a.Name != "acct" || a.APIVersion != "2025-06-01" ||
@@ -71,6 +82,12 @@ func TestFromARMMapsAllFields(t *testing.T) {
 	}
 	if a.Properties["publicNetworkAccess"] != "Disabled" {
 		t.Errorf("properties = %v", a.Properties)
+	}
+	if got := a.Properties["workspaceId"]; got != "law" {
+		t.Errorf("workspaceId = %v, want law", got)
+	}
+	if nested, _ := a.Properties["nested"].(map[string]any); nested["childId"] != "st" {
+		t.Errorf("nested properties = %v", a.Properties["nested"])
 	}
 	if a.Location.File != "infra/main.bicep" || a.Location.Line != 0 {
 		t.Errorf("location must name the entry file and never fabricate a line: %+v", a.Location)
@@ -93,12 +110,17 @@ func TestFromARMMapsAllFields(t *testing.T) {
 		t.Errorf("identity = %v", ra.Identity)
 	}
 
-	st := rs[2]
+	child := rs[2]
+	if child.Name != "acct/proj" || child.Scope != "acct/proj" {
+		t.Errorf("child refs must normalize to literal paths: %+v", child)
+	}
+
+	st := rs[3]
 	if st.Type != "Microsoft.Storage/storageAccounts" || st.Region != "westeurope" || st.SKUName != "Standard_LRS" {
 		t.Errorf("nested resource mapped wrong: %+v", st)
 	}
 
-	bare := rs[3]
+	bare := rs[4]
 	if bare.Region != "" || bare.Kind != "" || bare.SKUName != "" || bare.SKU != nil || bare.Identity != nil || bare.Scope != "" || bare.Properties != nil {
 		t.Errorf("absent fields must be zero values: %+v", bare)
 	}

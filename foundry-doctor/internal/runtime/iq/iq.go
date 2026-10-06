@@ -26,10 +26,10 @@ const (
 )
 
 type Client interface {
-	GetKnowledgeBase(context.Context, string, string) (KnowledgeBase, error)
-	GetKnowledgeSource(context.Context, string, string) (KnowledgeSource, error)
-	GetIndex(context.Context, string, string) (Index, error)
-	GetSkillset(context.Context, string, string) (Skillset, error)
+	GetKnowledgeBase(context.Context, string, string, string) (KnowledgeBase, error)
+	GetKnowledgeSource(context.Context, string, string, string) (KnowledgeSource, error)
+	GetIndex(context.Context, string, string, string) (Index, error)
+	GetSkillset(context.Context, string, string, string) (Skillset, error)
 }
 
 type HTTPClient struct {
@@ -38,14 +38,18 @@ type HTTPClient struct {
 }
 
 type Connection struct {
-	Name             string
-	Kind             string
-	Endpoint         string
-	SearchService    string
-	KnowledgeBase    string
-	AuthType         string
-	ForwardUserToken bool
-	Location         sdk.Location
+	Name                    string
+	Kind                    string
+	Endpoint                string
+	TargetKind              string
+	SearchService           string
+	KnowledgeBase           string
+	APIVersion              string
+	AuthType                string
+	ForwardSourceAuth       bool
+	SourceAuthUsesUserToken bool
+	ForwardWorkIQAuth       bool
+	Location                sdk.Location
 }
 
 type KnowledgeBase struct {
@@ -85,7 +89,6 @@ type KnowledgeSource struct {
 	BaseFilter                 string
 	FilterFields               []string
 	SecurityField              string
-	ConnectionString           string
 	ResourceIDConnection       string
 	HasSecretConnection        bool
 	AssetStorePresent          bool
@@ -204,11 +207,18 @@ type Snapshot struct {
 	Services    map[string]SearchService
 	Storage     map[string]StorageAccount
 	Deployments map[string]EmbeddingDeployment
+	ProbeIssues []string
 }
 
-func Endpoint(service string) string { return "https://" + service + ".search.windows.net" }
+func Endpoint(service string) (string, error) {
+	if err := rt.ValidateDataPlaneName("search service", service); err != nil {
+		return "", err
+	}
+	return "https://" + service + ".search.windows.net", nil
+}
 
-func (c HTTPClient) GetKnowledgeBase(ctx context.Context, service, name string) (KnowledgeBase, error) {
+func (c HTTPClient) GetKnowledgeBase(ctx context.Context, service, name, apiVersion string) (KnowledgeBase, error) {
+	apiVersion = requestedAPIVersion(apiVersion)
 	var resp struct {
 		Name                     string       `json:"name"`
 		KnowledgeSources         []namedRef   `json:"knowledgeSources"`
@@ -220,12 +230,12 @@ func (c HTTPClient) GetKnowledgeBase(ctx context.Context, service, name string) 
 			Weight float64 `json:"weight"`
 		} `json:"vectorQueries"`
 	}
-	if err := c.get(ctx, service, "knowledgebases", name, apiVersionPreview, &resp); err != nil {
+	if err := c.get(ctx, service, "knowledgebases", name, apiVersion, &resp); err != nil {
 		return KnowledgeBase{}, err
 	}
 	out := KnowledgeBase{
 		Name:                   resp.Name,
-		APIVersion:             apiVersionPreview,
+		APIVersion:             apiVersion,
 		RetrievalReasoningKind: strings.TrimSpace(resp.RetrievalReasoningEffort.Kind),
 		OutputMode:             strings.TrimSpace(resp.OutputMode),
 		AnswerSynthesis:        resp.AnswerSynthesis != nil,
@@ -244,7 +254,8 @@ func (c HTTPClient) GetKnowledgeBase(ctx context.Context, service, name string) 
 	return out, nil
 }
 
-func (c HTTPClient) GetKnowledgeSource(ctx context.Context, service, name string) (KnowledgeSource, error) {
+func (c HTTPClient) GetKnowledgeSource(ctx context.Context, service, name, apiVersion string) (KnowledgeSource, error) {
+	apiVersion = requestedAPIVersion(apiVersion)
 	var resp struct {
 		Name                  string         `json:"name"`
 		Kind                  string         `json:"kind"`
@@ -256,16 +267,17 @@ func (c HTTPClient) GetKnowledgeSource(ctx context.Context, service, name string
 		SkillsetName          string         `json:"skillsetName"`
 		Models                []modelShape   `json:"models"`
 	}
-	if err := c.get(ctx, service, "knowledgesources", name, apiVersionPreview, &resp); err != nil {
+	if err := c.get(ctx, service, "knowledgesources", name, apiVersion, &resp); err != nil {
 		return KnowledgeSource{}, err
 	}
 	out := KnowledgeSource{
 		Name:              resp.Name,
 		Kind:              strings.TrimSpace(resp.Kind),
-		APIVersion:        apiVersionPreview,
+		APIVersion:        apiVersion,
 		AssetStorePresent: resp.AssetStore != nil,
 		SkillsetName:      strings.TrimSpace(resp.SkillsetName),
 	}
+	ingestion := resp.IngestionParameters
 	if m := resp.SearchIndexParameters; len(m) > 0 {
 		out.SearchIndexName = stringAt(m["searchIndexName"])
 		out.SemanticConfigurationName = stringAt(m["semanticConfigurationName"])
@@ -288,20 +300,26 @@ func (c HTTPClient) GetKnowledgeSource(ctx context.Context, service, name string
 		if b, ok := boolAt(resp.AzureBlobParameters["isADLSGen2"]); ok {
 			out.IsADLSGen2 = b
 		}
+		if m, ok := mapAt(resp.AzureBlobParameters, "ingestionParameters"); ok {
+			ingestion = m
+			if _, ok := m["assetStore"]; ok {
+				out.AssetStorePresent = true
+			}
+		}
 	case "indexedSql":
 		parseConnection(&out, resp.IndexedSQLParameters)
 	case "indexedSharePoint":
 		parseConnection(&out, resp.IngestionParameters)
 	}
-	if m := resp.IngestionParameters; len(m) > 0 {
-		if raw, ok := m["ingestionPermissionOptions"].([]any); ok {
+	if len(ingestion) > 0 {
+		if raw, ok := ingestion["ingestionPermissionOptions"].([]any); ok {
 			for _, v := range raw {
 				if s := stringAt(v); s != "" {
 					out.IngestionPermissionOptions = append(out.IngestionPermissionOptions, s)
 				}
 			}
 		}
-		if sched, ok := m["ingestionSchedule"].(map[string]any); ok {
+		if sched, ok := ingestion["ingestionSchedule"].(map[string]any); ok {
 			out.RefreshSchedule = &Schedule{Interval: stringAt(sched["interval"]), StartTime: stringAt(sched["startTime"])}
 		}
 	}
@@ -311,7 +329,8 @@ func (c HTTPClient) GetKnowledgeSource(ctx context.Context, service, name string
 	return out, nil
 }
 
-func (c HTTPClient) GetIndex(ctx context.Context, service, name string) (Index, error) {
+func (c HTTPClient) GetIndex(ctx context.Context, service, name, apiVersion string) (Index, error) {
+	apiVersion = requestedAPIVersion(apiVersion)
 	var resp struct {
 		Name   string `json:"name"`
 		Fields []struct {
@@ -353,10 +372,10 @@ func (c HTTPClient) GetIndex(ctx context.Context, service, name string) (Index, 
 			} `json:"compressions"`
 		} `json:"vectorSearch"`
 	}
-	if err := c.get(ctx, service, "indexes", name, apiVersionPreview, &resp); err != nil {
+	if err := c.get(ctx, service, "indexes", name, apiVersion, &resp); err != nil {
 		return Index{}, err
 	}
-	out := Index{Name: resp.Name, APIVersion: apiVersionPreview, DefaultSemanticConfiguration: strings.TrimSpace(resp.Semantic.DefaultConfiguration)}
+	out := Index{Name: resp.Name, APIVersion: apiVersion, DefaultSemanticConfiguration: strings.TrimSpace(resp.Semantic.DefaultConfiguration)}
 	for _, f := range resp.Fields {
 		out.Fields = append(out.Fields, Field{
 			Name: f.Name, Type: f.Type, Key: f.Key, Searchable: f.Searchable, Retrievable: f.Retrievable,
@@ -395,7 +414,8 @@ func (c HTTPClient) GetIndex(ctx context.Context, service, name string) (Index, 
 	return out, nil
 }
 
-func (c HTTPClient) GetSkillset(ctx context.Context, service, name string) (Skillset, error) {
+func (c HTTPClient) GetSkillset(ctx context.Context, service, name, apiVersion string) (Skillset, error) {
+	apiVersion = requestedAPIVersion(apiVersion)
 	var resp struct {
 		Name   string `json:"name"`
 		Skills []struct {
@@ -410,10 +430,10 @@ func (c HTTPClient) GetSkillset(ctx context.Context, service, name string) (Skil
 			APIKey            string `json:"apiKey"`
 		} `json:"skills"`
 	}
-	if err := c.get(ctx, service, "skillsets", name, apiVersionPreview, &resp); err != nil {
+	if err := c.get(ctx, service, "skillsets", name, apiVersion, &resp); err != nil {
 		return Skillset{}, err
 	}
-	out := Skillset{Name: resp.Name, APIVersion: apiVersionPreview}
+	out := Skillset{Name: resp.Name, APIVersion: apiVersion}
 	for _, s := range resp.Skills {
 		out.Skills = append(out.Skills, Skill{
 			ODataType: s.ODataType, TextSplitMode: s.TextSplitMode, Unit: s.Unit,
@@ -426,8 +446,12 @@ func (c HTTPClient) GetSkillset(ctx context.Context, service, name string) (Skil
 }
 
 func (c HTTPClient) get(ctx context.Context, service, family, name, apiVersion string, out any) error {
-	u := fmt.Sprintf("%s/%s('%s')?api-version=%s", Endpoint(service), family, url.PathEscape(name), apiVersion)
-	return rt.DoJSON(ctx, c.HTTP, c.Credential, scope, http.MethodGet, u, nil, out)
+	base, err := Endpoint(service)
+	if err != nil {
+		return err
+	}
+	u := fmt.Sprintf("%s/%s('%s')?api-version=%s", base, family, url.PathEscape(name), apiVersion)
+	return rt.DoJSON(ctx, c.HTTP, c.Credential, scope, http.MethodGet, u, ".search.windows.net", nil, out)
 }
 
 type namedRef struct {
@@ -464,6 +488,14 @@ func stringAt(v any) string {
 	return strings.TrimSpace(s)
 }
 
+func mapAt(m map[string]any, key string) (map[string]any, bool) {
+	if m == nil {
+		return nil, false
+	}
+	nested, ok := m[key].(map[string]any)
+	return nested, ok
+}
+
 func boolAt(v any) (bool, bool) {
 	b, ok := v.(bool)
 	return b, ok
@@ -477,11 +509,17 @@ func parseConnection(out *KnowledgeSource, m map[string]any) {
 	if conn == "" {
 		return
 	}
-	out.ConnectionString = conn
 	if id := ResourceIDFromConnectionString(conn); id != "" {
 		out.ResourceIDConnection = id
 	}
 	out.HasSecretConnection = ConnectionUsesSecret(conn)
+}
+
+func requestedAPIVersion(apiVersion string) string {
+	if strings.TrimSpace(apiVersion) == "" {
+		return apiVersionPreview
+	}
+	return strings.TrimSpace(apiVersion)
 }
 
 func ResourceIDFromConnectionString(v string) string {
@@ -499,7 +537,7 @@ func ResourceIDFromConnectionString(v string) string {
 
 func ConnectionUsesSecret(v string) bool {
 	s := strings.ToLower(v)
-	for _, marker := range []string{"accountkey=", "sharedaccesssignature=", "clientsecret=", "password=", "pwd=", "sig="} {
+	for _, marker := range []string{"accountkey=", "sharedaccesssignature=", "clientsecret=", "************sig=", "user id=", "userid=", "uid=", "password=", "pwd="} {
 		if strings.Contains(s, marker) {
 			return true
 		}
@@ -507,22 +545,48 @@ func ConnectionUsesSecret(v string) bool {
 	return false
 }
 
+const (
+	ConnectionTargetKnowledgeBaseMCP      = "KnowledgeBaseMCP"
+	ConnectionTargetCognitiveSearchTarget = "CognitiveSearchService"
+)
+
+type ParsedConnectionEndpoint struct {
+	TargetKind    string
+	SearchService string
+	KnowledgeBase string
+	APIVersion    string
+}
+
 var kbPathRe = regexp.MustCompile(`(?i)^/knowledgebases/([^/]+)/mcp/?$`)
 
-func ParseKnowledgeBaseEndpoint(raw string) (service, kb string, ok bool) {
+func ParseConnectionEndpoint(raw string) (ParsedConnectionEndpoint, bool) {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil || !strings.EqualFold(u.Scheme, "https") {
-		return "", "", false
+		return ParsedConnectionEndpoint{}, false
 	}
 	host := strings.ToLower(u.Hostname())
 	if !strings.HasSuffix(host, ".search.windows.net") {
-		return "", "", false
+		return ParsedConnectionEndpoint{}, false
+	}
+	service := strings.TrimSuffix(host, ".search.windows.net")
+	apiVersion := strings.TrimSpace(u.Query().Get("api-version"))
+	switch strings.TrimSpace(u.EscapedPath()) {
+	case "", "/":
+		return ParsedConnectionEndpoint{TargetKind: ConnectionTargetCognitiveSearchTarget, SearchService: service, APIVersion: apiVersion}, true
 	}
 	match := kbPathRe.FindStringSubmatch(u.EscapedPath())
 	if len(match) != 2 {
+		return ParsedConnectionEndpoint{}, false
+	}
+	return ParsedConnectionEndpoint{TargetKind: ConnectionTargetKnowledgeBaseMCP, SearchService: service, KnowledgeBase: match[1], APIVersion: apiVersion}, true
+}
+
+func ParseKnowledgeBaseEndpoint(raw string) (service, kb string, ok bool) {
+	parsed, ok := ParseConnectionEndpoint(raw)
+	if !ok || parsed.TargetKind != ConnectionTargetKnowledgeBaseMCP {
 		return "", "", false
 	}
-	return strings.TrimSuffix(host, ".search.windows.net"), match[1], true
+	return parsed.SearchService, parsed.KnowledgeBase, true
 }
 
 func SearchServicesFromARM(in *sdk.Input) map[string]SearchService {
@@ -614,19 +678,24 @@ func ConnectionsFromAzureYAML(in *sdk.Input) []Connection {
 			continue
 		}
 		target := strNode(val, "target")
-		service, kb, ok := ParseKnowledgeBaseEndpoint(target)
+		parsed, ok := ParseConnectionEndpoint(target)
 		if !ok {
 			continue
 		}
+		forwardSourceAuth, sourceAuthUsesUserToken, forwardWorkIQAuth := connectionAuthHeaders(val)
 		out = append(out, Connection{
-			Name:             key.Value,
-			Kind:             "azure.ai.connection",
-			Endpoint:         target,
-			SearchService:    service,
-			KnowledgeBase:    kb,
-			AuthType:         strNode(val, "authType"),
-			ForwardUserToken: hasForwardUserToken(val),
-			Location:         sdk.Location{File: d.Path(), Line: key.Line, Column: key.Column},
+			Name:                    key.Value,
+			Kind:                    "azure.ai.connection",
+			Endpoint:                target,
+			TargetKind:              parsed.TargetKind,
+			SearchService:           parsed.SearchService,
+			KnowledgeBase:           parsed.KnowledgeBase,
+			APIVersion:              parsed.APIVersion,
+			AuthType:                strNode(val, "authType"),
+			ForwardSourceAuth:       forwardSourceAuth,
+			SourceAuthUsesUserToken: sourceAuthUsesUserToken,
+			ForwardWorkIQAuth:       forwardWorkIQAuth,
+			Location:                sdk.Location{File: d.Path(), Line: key.Line, Column: key.Column},
 		})
 	}
 	slices.SortFunc(out, func(a, b Connection) int { return strings.Compare(a.Name, b.Name) })
@@ -671,34 +740,42 @@ func strNode(n *yaml.Node, key string) string {
 	return strings.TrimSpace(c.Value)
 }
 
-func hasForwardUserToken(n *yaml.Node) bool {
+func connectionAuthHeaders(n *yaml.Node) (forwardSourceAuth, sourceAuthUsesUserToken, forwardWorkIQAuth bool) {
 	for _, key := range []string{"headers", "requestHeaders", "forwardHeaders"} {
 		h := child(n, key)
 		if h == nil {
 			continue
 		}
-		if headerNamed(h, "x-ms-query-source-authorization") || headerNamed(h, "x-ms-query-work-iq-source-authorization") {
-			return true
+		if present, usesUserToken := headerNamed(h, "x-ms-query-source-authorization"); present {
+			forwardSourceAuth = true
+			sourceAuthUsesUserToken = sourceAuthUsesUserToken || usesUserToken
+		}
+		if present, _ := headerNamed(h, "x-ms-query-work-iq-source-authorization"); present {
+			forwardWorkIQAuth = true
 		}
 	}
-	return false
+	return forwardSourceAuth, sourceAuthUsesUserToken, forwardWorkIQAuth
 }
 
-func headerNamed(n *yaml.Node, name string) bool {
+func headerNamed(n *yaml.Node, name string) (present, usesUserToken bool) {
 	switch {
 	case n == nil:
-		return false
+		return false, false
 	case n.Kind == yamlMapping:
 		for i := 0; i+1 < len(n.Content); i += 2 {
 			if strings.EqualFold(n.Content[i].Value, name) {
-				return true
+				return true, scalarUsesUserToken(n.Content[i+1])
 			}
-			if headerNamed(n.Content[i+1], name) {
-				return true
+			if present, usesUserToken := headerNamed(n.Content[i+1], name); present {
+				return true, usesUserToken
 			}
 		}
 	}
-	return false
+	return false, false
+}
+
+func scalarUsesUserToken(n *yaml.Node) bool {
+	return n != nil && n.Kind == yamlScalar && strings.Contains(strings.ToLower(strings.TrimSpace(n.Value)), "user_token")
 }
 
 func nestedString(m map[string]any, path ...string) (string, bool) {

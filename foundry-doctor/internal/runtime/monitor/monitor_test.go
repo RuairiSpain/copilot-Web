@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/azure"
@@ -69,8 +70,15 @@ func TestWorkspaceClientQuery(t *testing.T) {
 			Name string `json:"name"`
 		} `json:"tables"`
 	}
-	c := WorkspaceClient{HTTP: srv.Client(), Credential: staticCred{}}
-	if err := c.Query(context.Background(), srv.URL, map[string]string{"query": "x"}, &out); err != nil {
+	hc := srv.Client()
+	base := hc.Transport
+	hc.Transport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		r.URL.Scheme = "http"
+		r.URL.Host = strings.TrimPrefix(srv.URL, "http://")
+		return base.RoundTrip(r)
+	})
+	c := WorkspaceClient{HTTP: hc, Credential: staticCred{}}
+	if err := c.Query(context.Background(), "https://api.loganalytics.io/v1/workspaces/demo/query", map[string]string{"query": "x"}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if len(out.Tables) != 1 || out.Tables[0].Name != "PrimaryResult" {
@@ -83,3 +91,7 @@ type staticCred struct{}
 func (staticCred) Token(context.Context, string) (azure.AccessToken, error) {
 	return azure.AccessToken{Token: "token"}, nil
 }
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }

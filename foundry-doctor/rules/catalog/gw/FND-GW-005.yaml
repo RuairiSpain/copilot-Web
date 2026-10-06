@@ -1,5 +1,5 @@
 id: FND-GW-005
-version: 1
+version: 3
 group: GW
 title: "Gateway calls Foundry using managed identity"
 description: >-
@@ -35,9 +35,11 @@ evidence:
     does not contain set-header name="api-key" and no named value or backend credentials header supplies an
     api-key; (3) service identity.type includes SystemAssigned or UserAssigned; (4) a role assignment at the
     Foundry account scope (or above) grants the identity Cognitive Services OpenAI User (policy example) or
-    Cognitive Services User (backend note). Evidence names the API, policy element and role only; token
-    variables and headers are never read. Backend-entity managed identity credentials are not evaluated (see
-    notes) and the check is skipped for APIs whose only authentication is a backend entity credential.
+    Cognitive Services User (backend note). When the template only exposes a synthetic target resource id and
+    the role assignment is inherited from a broader scope that cannot be correlated deterministically, the RBAC
+    leg is uncertain instead of failing. Evidence names the API, policy element and role only; token variables
+    and headers are never read. Backend credentials.authorization is treated as header-based authorization, not
+    as managed identity evidence, so it can only contribute failures.
   confidence: likely
 recommendation: >-
   Enable a managed identity on the API Management service, assign it a Cognitive Services role on the Foundry
@@ -103,7 +105,8 @@ implementation:
   package: internal/rules/gw
 testability: >-
   Offline from compiled ARM (service, policies, role assignments) and policy XML fixtures. Role assignments
-  inherited from a higher scope are only visible with control-plane access; otherwise that leg is skipped.
+  inherited from a higher scope only pass when the target resource id can be correlated deterministically;
+  otherwise that leg is uncertain instead of silently passing or hard-failing.
 tests:
   positive:
     - api-key-header-set-to-foundry-backend
@@ -115,13 +118,14 @@ tests:
     - managed-identity-policy-with-role-assignment
     - user-assigned-identity-client-id-matches
   skipped:
-    - backend-entity-credentials-only
     - role-assignment-scope-not-readable
     - non-foundry-backend-host
+  uncertain:
+    - broad-scope-role-assignment-without-qualified-target-id
 notes: >-
-  Unverified: the ARM representation of managed-identity authorization credentials on a backend entity. The
-  Learn backends article describes it in the portal, but BackendCredentialsContract in the 2025-09-01-preview
-  specification lists only certificate, certificateIds, query, header and authorization, with no identity member,
-  so the backend-entity path is not evaluated. Role naming differs inside Learn (OpenAI User in the AI
-  authentication article, User in the backends note); either is accepted as a Cognitive Services role and the
-  exact role GUIDs are left to the role-assignment mapping owner.
+  Verified remediation: API Management backend credentials.authorization configures authorization headers, not
+  managed identity by itself. Only an actual authentication-managed-identity policy counts as pass evidence.
+  Role naming differs inside Learn (OpenAI User in the AI authentication article, User in the backends note);
+  either is accepted as a Cognitive Services role and the exact role GUIDs are left to the role-assignment
+  mapping owner. Full-scope role assignments that cannot be tied to the specific Foundry account from template
+  metadata alone degrade to uncertain.

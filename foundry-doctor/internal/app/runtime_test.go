@@ -40,8 +40,8 @@ func TestRuntime(t *testing.T) {
 		wantOut  string
 	}{
 		{name: "clean", rt: &fakeRuntime{}, wantExit: ExitOK},
-		{name: "restricted identity skip is reported", rt: &fakeRuntime{out: restricted}, wantExit: ExitOK, wantOut: "skipped=1"},
-		{name: "strict skip", rt: &fakeRuntime{out: restricted}, req: RuntimeRequest{DoctorRequest: DoctorRequest{Strict: true}}, wantExit: ExitStrictSkip},
+		{name: "restricted identity skip is reported as unavailable", rt: &fakeRuntime{out: restricted}, wantExit: ExitUnavailable, wantOut: "skipped=1"},
+		{name: "strict required skip still exits unavailable", rt: &fakeRuntime{out: restricted}, req: RuntimeRequest{DoctorRequest: DoctorRequest{Strict: true}}, wantExit: ExitUnavailable},
 		{name: "finding fails", rt: &fakeRuntime{out: RunOutput{Findings: []sdk.Finding{{RuleID: "FND-RUN-001", Severity: sdk.SeverityError, Fingerprint: "x"}}}}, wantExit: ExitFindings},
 		{name: "engine error", rt: &fakeRuntime{err: errors.New("boom")}, wantExit: ExitInternal, wantErr: errors.New("boom")},
 		{name: "nil engine unavailable", nilRT: true, wantExit: ExitUnavailable, wantErr: ErrUnavailable},

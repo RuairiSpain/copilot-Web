@@ -200,8 +200,228 @@ func TestGW005ManagedIdentityAndRBAC(t *testing.T) {
 			},
 		},
 	}})
-	if len(clean.Findings) != 0 || (clean.Skipped != nil && !strings.Contains(clean.Skipped.Reason, "backend-entity")) {
+	if len(clean.Findings) != 0 || clean.Skipped != nil {
 		t.Fatalf("expected clean result, got %+v", clean)
+	}
+}
+
+func TestGW005BackendAuthorizationIsNotManagedIdentity(t *testing.T) {
+	got := mustEval(t, "FND-GW-005", &sdk.Input{ARM: model{
+		res("Microsoft.ApiManagement/service", "apim", map[string]any{
+			"identity": map[string]any{"type": "SystemAssigned", "principalId": "11111111-1111-1111-1111-111111111111"},
+		}),
+		res("Microsoft.ApiManagement/service/apis", "apim/chat", map[string]any{
+			"path": "chat", "serviceUrl": "https://acct.openai.azure.com/openai",
+		}),
+		res("Microsoft.ApiManagement/service/apis/policies", "apim/chat/policy", map[string]any{
+			"format": "xml",
+			"value":  `<policies><inbound><set-backend-service backend-id="foundry" /></inbound></policies>`,
+		}),
+		res("Microsoft.ApiManagement/service/backends", "apim/foundry", map[string]any{
+			"url": "https://acct.openai.azure.com/openai",
+			"credentials": map[string]any{
+				"authorization": map[string]any{"scheme": "Bearer", "parameter": "{{token}}"},
+			},
+		}),
+		res("Microsoft.CognitiveServices/accounts", "acct", nil),
+	}})
+	if len(got.Findings) < 2 {
+		t.Fatalf("expected findings for backend auth credentials, got %+v", got)
+	}
+}
+
+func TestGW005BackendAuthorizationStillFailsAlongsideManagedIdentity(t *testing.T) {
+	got := mustEval(t, "FND-GW-005", &sdk.Input{ARM: model{
+		{
+			Type: "Microsoft.ApiManagement/service",
+			Name: "apim",
+			Identity: map[string]any{
+				"type":        "SystemAssigned",
+				"principalId": "22222222-2222-2222-2222-222222222222",
+			},
+			Properties: map[string]any{},
+		},
+		res("Microsoft.ApiManagement/service/apis", "apim/chat", map[string]any{
+			"path": "chat", "serviceUrl": "https://acct.openai.azure.com/openai",
+		}),
+		res("Microsoft.ApiManagement/service/apis/policies", "apim/chat/policy", map[string]any{
+			"format": "xml",
+			"value":  `<policies><inbound><authentication-managed-identity resource="https://cognitiveservices.azure.com" /><set-backend-service backend-id="foundry" /></inbound></policies>`,
+		}),
+		res("Microsoft.ApiManagement/service/backends", "apim/foundry", map[string]any{
+			"url": "https://acct.openai.azure.com/openai",
+			"credentials": map[string]any{
+				"authorization": map[string]any{"scheme": "Bearer", "parameter": "{{token}}"},
+			},
+		}),
+		res("Microsoft.CognitiveServices/accounts", "acct", nil),
+		{
+			Type:  "Microsoft.Authorization/roleAssignments",
+			Name:  "ra1",
+			Scope: "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/acct",
+			Properties: map[string]any{
+				"principalId":      "22222222-2222-2222-2222-222222222222",
+				"roleDefinitionId": "/providers/Microsoft.Authorization/roleDefinitions/5e0bd9bd-7b93-4f28-af87-19fc36ad61bd",
+			},
+		},
+	}})
+	found := false
+	for _, f := range got.Findings {
+		if strings.Contains(f.Evidence, "backend authorization credentials are header-based") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected backend authorization finding, got %+v", got)
+	}
+}
+
+func TestScopeCoversTargetStrictAncestorOnly(t *testing.T) {
+	tests := []struct {
+		name   string
+		scope  string
+		target string
+		want   bool
+	}{
+		{"exact resource", "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/acct", "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/acct", true},
+		{"subscription ancestor", "/subscriptions/sub", "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/acct", true},
+		{"resource group ancestor", "/subscriptions/sub/resourceGroups/rg", "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/acct", true},
+		{"different subscription", "/subscriptions/other", "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/acct", false},
+		{"sibling resource group", "/subscriptions/sub/resourceGroups/other", "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/acct", false},
+		{"suffix collision", "/providers/Microsoft.CognitiveServices/accounts/acct", "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/acct", false},
+		{"qualified suffix exact resource", "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/acct", "/providers/Microsoft.CognitiveServices/accounts/acct", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := scopeCoversTarget(tt.scope, tt.target); got != tt.want {
+				t.Fatalf("scopeCoversTarget(%q, %q) = %v, want %v", tt.scope, tt.target, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGW005BroadScopeWithoutQualifiedTargetIsUncertain(t *testing.T) {
+	got := mustEval(t, "FND-GW-005", &sdk.Input{ARM: model{
+		{
+			Type: "Microsoft.ApiManagement/service",
+			Name: "apim",
+			Identity: map[string]any{
+				"type":        "SystemAssigned",
+				"principalId": "22222222-2222-2222-2222-222222222222",
+			},
+			Properties: map[string]any{},
+		},
+		res("Microsoft.ApiManagement/service/apis", "apim/chat", map[string]any{
+			"path": "chat", "serviceUrl": "https://acct.openai.azure.com/openai",
+		}),
+		res("Microsoft.ApiManagement/service/apis/policies", "apim/chat/policy", map[string]any{
+			"format": "xml",
+			"value":  `<policies><inbound><authentication-managed-identity resource="https://cognitiveservices.azure.com" /></inbound></policies>`,
+		}),
+		res("Microsoft.CognitiveServices/accounts", "acct", nil),
+		{
+			Type:  "Microsoft.Authorization/roleAssignments",
+			Name:  "ra1",
+			Scope: "/subscriptions/sub/resourceGroups/rg",
+			Properties: map[string]any{
+				"principalId":      "22222222-2222-2222-2222-222222222222",
+				"roleDefinitionId": "/providers/Microsoft.Authorization/roleDefinitions/5e0bd9bd-7b93-4f28-af87-19fc36ad61bd",
+			},
+		},
+	}})
+	if len(got.Findings) != 0 || got.Skipped == nil || !strings.Contains(got.Skipped.Reason, "uncertain:") {
+		t.Fatalf("expected uncertain result, got %+v", got)
+	}
+}
+
+func TestGW005ManagementGroupScopeWithoutQualifiedTargetIsUncertain(t *testing.T) {
+	got := mustEval(t, "FND-GW-005", &sdk.Input{ARM: model{
+		{
+			Type: "Microsoft.ApiManagement/service",
+			Name: "apim",
+			Identity: map[string]any{
+				"type":        "SystemAssigned",
+				"principalId": "22222222-2222-2222-2222-222222222222",
+			},
+			Properties: map[string]any{},
+		},
+		res("Microsoft.ApiManagement/service/apis", "apim/chat", map[string]any{
+			"path": "chat", "serviceUrl": "https://acct.openai.azure.com/openai",
+		}),
+		res("Microsoft.ApiManagement/service/apis/policies", "apim/chat/policy", map[string]any{
+			"format": "xml",
+			"value":  `<policies><inbound><authentication-managed-identity resource="https://cognitiveservices.azure.com" /></inbound></policies>`,
+		}),
+		res("Microsoft.CognitiveServices/accounts", "acct", nil),
+		{
+			Type:  "Microsoft.Authorization/roleAssignments",
+			Name:  "ra1",
+			Scope: "/providers/Microsoft.Management/managementGroups/demo-mg",
+			Properties: map[string]any{
+				"principalId":      "22222222-2222-2222-2222-222222222222",
+				"roleDefinitionId": "/providers/Microsoft.Authorization/roleDefinitions/5e0bd9bd-7b93-4f28-af87-19fc36ad61bd",
+			},
+		},
+	}})
+	if len(got.Findings) != 0 || got.Skipped == nil || !strings.Contains(got.Skipped.Reason, "uncertain:") {
+		t.Fatalf("expected uncertain result, got %+v", got)
+	}
+}
+
+func TestGW005BackendPoolRequiresRoleOnEveryFoundryTarget(t *testing.T) {
+	got := mustEval(t, "FND-GW-005", &sdk.Input{ARM: model{
+		{
+			Type: "Microsoft.ApiManagement/service",
+			Name: "apim",
+			Identity: map[string]any{
+				"type":        "SystemAssigned",
+				"principalId": "22222222-2222-2222-2222-222222222222",
+			},
+			Properties: map[string]any{},
+		},
+		res("Microsoft.ApiManagement/service/apis", "apim/chat", map[string]any{
+			"path": "chat",
+		}),
+		res("Microsoft.ApiManagement/service/apis/policies", "apim/chat/policy", map[string]any{
+			"format": "xml",
+			"value":  `<policies><inbound><authentication-managed-identity resource="https://cognitiveservices.azure.com" /><set-backend-service backend-id="router" /></inbound></policies>`,
+		}),
+		res("Microsoft.ApiManagement/service/backends", "apim/router", map[string]any{
+			"pool": map[string]any{
+				"services": []any{
+					map[string]any{"id": "/providers/Microsoft.ApiManagement/service/apim/backends/foundry-a"},
+					map[string]any{"id": "/providers/Microsoft.ApiManagement/service/apim/backends/foundry-b"},
+				},
+			},
+		}),
+		res("Microsoft.ApiManagement/service/backends", "apim/foundry-a", map[string]any{
+			"url": "https://acct-a.openai.azure.com/openai",
+		}),
+		res("Microsoft.ApiManagement/service/backends", "apim/foundry-b", map[string]any{
+			"url": "https://acct-b.openai.azure.com/openai",
+		}),
+		res("Microsoft.CognitiveServices/accounts", "acct-a", nil),
+		res("Microsoft.CognitiveServices/accounts", "acct-b", nil),
+		{
+			Type:  "Microsoft.Authorization/roleAssignments",
+			Name:  "ra1",
+			Scope: "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/acct-a",
+			Properties: map[string]any{
+				"principalId":      "22222222-2222-2222-2222-222222222222",
+				"roleDefinitionId": "/providers/Microsoft.Authorization/roleDefinitions/5e0bd9bd-7b93-4f28-af87-19fc36ad61bd",
+			},
+		},
+	}})
+	found := false
+	for _, f := range got.Findings {
+		if strings.Contains(f.Evidence, "lacks a Cognitive Services role") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected missing-role finding for uncovered pool target, got %+v", got)
 	}
 }
 

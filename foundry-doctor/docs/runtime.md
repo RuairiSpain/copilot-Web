@@ -47,7 +47,9 @@ problem; it never proves the deployment is healthy end-to-end.
 - **FND-RUN-005** reads only agent/version metadata and project connection
   listings from the Foundry project endpoint.
 - **FND-RUN-006** reads only Search index definitions, statistics, and indexer
-  status; no documents are queried.
+  status; no documents are queried. A failed `lastResult` blocks even when the
+  current indexer status is `running`, and the probe stores only structured
+  status fields (`errorCode`, `itemsFailed`), never `errorMessage` text.
 - **FND-RUN-007** uses diagnostic-setting metadata plus aggregate log counts;
   it does not read raw log lines.
 
@@ -65,8 +67,8 @@ problem; it never proves the deployment is healthy end-to-end.
 
 The exact ARM actions are tracked in
 [permissions-matrix.md](permissions-matrix.md). Runtime data-plane probes use
-Microsoft Entra bearer tokens via `azd auth token` / `az account
-get-access-token`; they do not fall back to keys.
+Microsoft Entra bearer tokens via `AZURE_ACCESS_TOKEN`, then `azd auth token`,
+then `az account get-access-token`; they do not fall back to keys.
 
 Use a dedicated read-only identity where possible. Missing permissions degrade
 to skipped checks that name the exact capability and action.

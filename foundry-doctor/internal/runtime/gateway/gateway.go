@@ -58,12 +58,12 @@ type VersionSet struct {
 }
 
 type Backend struct {
-	Name                 string
-	URL                  string
-	HeaderNames          []string
-	PoolMemberIDs        []string
-	AuthorizationPresent bool
-	SourceLocation       sdk.Location
+	Name                            string
+	URL                             string
+	HeaderNames                     []string
+	PoolMemberIDs                   []string
+	AuthorizationCredentialsPresent bool
+	SourceLocation                  sdk.Location
 }
 
 type Logger struct {
@@ -215,7 +215,7 @@ func BuildSnapshot(in *sdk.Input) Snapshot {
 				}
 			}
 			if _, ok := nestedMap(r.Properties, "credentials", "authorization"); ok {
-				b.AuthorizationPresent = true
+				b.AuthorizationCredentialsPresent = true
 			}
 			if pool, ok := nestedMap(r.Properties, "pool"); ok {
 				if members, ok := pool["services"].([]any); ok {
@@ -484,7 +484,31 @@ func (s *Service) AIAPIBacked(api *API) bool {
 		if backendID == "" {
 			continue
 		}
-		if b, ok := s.Backends[backendID]; ok && APIMHostLikely(HostFromURL(b.URL)) {
+		if backendAIBacked(s, backendID, map[string]bool{}) {
+			return true
+		}
+	}
+	return false
+}
+
+func backendAIBacked(s *Service, id string, seen map[string]bool) bool {
+	id = strings.ToLower(strings.TrimSpace(id))
+	if s == nil || id == "" || seen[id] {
+		return false
+	}
+	seen[id] = true
+	backend, ok := s.Backends[id]
+	if !ok {
+		backend, ok = s.Backends[lastSegment(id)]
+	}
+	if !ok {
+		return false
+	}
+	if APIMHostLikely(HostFromURL(backend.URL)) {
+		return true
+	}
+	for _, member := range backend.PoolMemberIDs {
+		if backendAIBacked(s, member, seen) {
 			return true
 		}
 	}
@@ -564,7 +588,10 @@ func policyScope(typ, name string) string {
 	case "microsoft.apimanagement/service/apis/policies", "microsoft.apimanagement/service/apis/diagnostics":
 		return "api:" + strings.ToLower(parts[1])
 	case "microsoft.apimanagement/service/apis/operations/policies":
-		return "operation:" + strings.ToLower(parts[1]) + "/" + strings.ToLower(parts[3])
+		if len(parts) < 4 {
+			return strings.ToLower(name)
+		}
+		return "operation:" + strings.ToLower(parts[1]) + "/" + strings.ToLower(parts[2])
 	default:
 		return strings.ToLower(name)
 	}

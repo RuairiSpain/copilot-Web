@@ -101,13 +101,13 @@ func FromTemplate(t *bicep.Template, raw []byte, opt Options) (*Model, error) {
 
 func toResource(r bicep.Resource, node map[string]any, bl bicep.Location) sdk.ARMResource {
 	res := sdk.ARMResource{
-		Type: r.Type, Name: r.Name, APIVersion: r.APIVersion,
+		Type: r.Type, Name: normalizeLiteralRef(r.Name), APIVersion: r.APIVersion,
 		Location: sdk.Location{File: bl.File},
 	}
 	if p := bytes.TrimSpace(r.Properties); len(p) > 0 && string(p) != "null" {
 		var props map[string]any
 		if json.Unmarshal(p, &props) == nil {
-			res.Properties = props
+			res.Properties = normalizeValue(props).(map[string]any)
 		}
 	}
 	if tags, ok := node["tags"].(map[string]any); ok {
@@ -131,8 +131,115 @@ func toResource(r bicep.Resource, node map[string]any, bl bicep.Location) sdk.AR
 	if id, ok := node["identity"].(map[string]any); ok {
 		res.Identity = id
 	}
-	res.Scope = str(node["scope"])
+	res.Scope = normalizeLiteralRef(str(node["scope"]))
 	return res
+}
+
+func normalizeLiteralRef(s string) string {
+	if out, ok := normalizeFormatExpr(s); ok {
+		return out
+	}
+	if out, ok := normalizeResourceIDExpr(s); ok {
+		return out
+	}
+	return s
+}
+
+func normalizeValue(v any) any {
+	switch x := v.(type) {
+	case string:
+		return normalizeLiteralRef(x)
+	case map[string]any:
+		out := make(map[string]any, len(x))
+		for k, v := range x {
+			out[k] = normalizeValue(v)
+		}
+		return out
+	case []any:
+		out := make([]any, len(x))
+		for i, v := range x {
+			out[i] = normalizeValue(v)
+		}
+		return out
+	default:
+		return v
+	}
+}
+
+func normalizeFormatExpr(s string) (string, bool) {
+	body, ok := trimExprCall(s, "format")
+	if !ok {
+		return "", false
+	}
+	args, ok := splitLiteralArgs(body)
+	if !ok || len(args) < 1 {
+		return "", false
+	}
+	format := args[0]
+	for _, ch := range format {
+		if !(ch == '/' || (ch >= '0' && ch <= '9') || ch == '{' || ch == '}') {
+			return "", false
+		}
+	}
+	out := format
+	for i, arg := range args[1:] {
+		out = strings.ReplaceAll(out, "{"+strconv.Itoa(i)+"}", arg)
+	}
+	if strings.Contains(out, "{") || strings.Contains(out, "}") {
+		return "", false
+	}
+	return out, true
+}
+
+func normalizeResourceIDExpr(s string) (string, bool) {
+	body, ok := trimExprCall(s, "resourceId")
+	if !ok {
+		return "", false
+	}
+	args, ok := splitLiteralArgs(body)
+	if !ok || len(args) < 2 {
+		return "", false
+	}
+	return strings.Join(args[1:], "/"), true
+}
+
+func trimExprCall(s, fn string) (string, bool) {
+	if !strings.HasPrefix(s, "["+fn+"(") || !strings.HasSuffix(s, ")]") {
+		return "", false
+	}
+	return strings.TrimSuffix(strings.TrimPrefix(s, "["+fn+"("), ")]"), true
+}
+
+func splitLiteralArgs(s string) ([]string, bool) {
+	var out []string
+	for i := 0; i < len(s); {
+		for i < len(s) && (s[i] == ' ' || s[i] == ',') {
+			i++
+		}
+		if i >= len(s) {
+			break
+		}
+		if s[i] != '\'' {
+			return nil, false
+		}
+		i++
+		start := i
+		for i < len(s) && s[i] != '\'' {
+			i++
+		}
+		if i >= len(s) {
+			return nil, false
+		}
+		out = append(out, s[start:i])
+		i++
+		for i < len(s) && s[i] == ' ' {
+			i++
+		}
+		if i < len(s) && s[i] != ',' {
+			return nil, false
+		}
+	}
+	return out, len(out) > 0
 }
 
 func str(v any) string {

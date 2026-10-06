@@ -22,7 +22,11 @@ func sample(name string) string { return filepath.Join("..", "..", "samples", na
 type e2eReport struct {
 	ExitCode int `json:"exitCode"`
 	Findings []struct {
-		RuleID string `json:"ruleId"`
+		RuleID   string `json:"ruleId"`
+		Severity string `json:"severity"`
+		Location struct {
+			File string `json:"file"`
+		} `json:"location"`
 	} `json:"findings"`
 	Skipped []struct {
 		RuleID string `json:"ruleId"`
@@ -52,6 +56,32 @@ func ids(r e2eReport) []string {
 	}
 	slices.Sort(s)
 	return s
+}
+
+func copyTree(t *testing.T, src string) string {
+	t.Helper()
+	dst := t.TempDir()
+	if err := filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if info.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(target, data, 0o644)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return dst
 }
 
 // noBicep forces the "bicep CLI missing" path regardless of the host.
@@ -150,6 +180,48 @@ func TestSamplesEndToEnd(t *testing.T) {
 		for _, s := range r.Skipped {
 			if s.RuleID == "FND-SEC-004" && s.Reason == "input-unavailable" {
 				t.Error("SEC-004 should have evaluated against the ARM model")
+			}
+		}
+	})
+	t.Run("good-private ARM JSON fallback has no error or warning findings", func(t *testing.T) {
+		dir := copyTree(t, sample("good-private"))
+		if err := os.Remove(filepath.Join(dir, "infra", "main.bicep")); err != nil {
+			t.Fatal(err)
+		}
+		code, r, stderr := runJSON(t, noBicep(&errb), "doctor", "--local", "--dir", dir)
+		if code != 0 {
+			t.Fatalf("exit=%d stderr=%s", code, stderr)
+		}
+		for _, f := range r.Findings {
+			if f.Severity == "error" || f.Severity == "warning" {
+				t.Fatalf("unexpected %s finding %s at %s", f.Severity, f.RuleID, f.Location.File)
+			}
+		}
+	})
+	t.Run("bad-private ARM JSON fallback reports targeted findings", func(t *testing.T) {
+		dir := copyTree(t, sample("bad-private"))
+		if err := os.Remove(filepath.Join(dir, "infra", "main.bicep")); err != nil {
+			t.Fatal(err)
+		}
+		code, r, stderr := runJSON(t, noBicep(&errb), "doctor", "--local", "--dir", dir)
+		if code != 1 {
+			t.Fatalf("exit=%d stderr=%s findings=%v", code, stderr, ids(r))
+		}
+		want := map[string]string{
+			"FND-REL-001": "infra/main.json",
+			"FND-SEC-001": "infra/main.json",
+			"FND-SEC-004": "infra/main.json",
+		}
+		for ruleID, file := range want {
+			found := false
+			for _, f := range r.Findings {
+				if f.RuleID == ruleID && f.Location.File == file {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Fatalf("missing %s at %s in %+v", ruleID, file, r.Findings)
 			}
 		}
 	})

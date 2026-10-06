@@ -251,7 +251,6 @@ func eval005(in *sdk.Input) sdk.Result {
 			idents := runtimegw.FindElements(pol.Inbound, "authentication-managed-identity")
 			var mi bool
 			targets := foundryTargets(snap, svc, api)
-			backendAuthOnly := false
 			for _, el := range idents {
 				res := strings.TrimSuffix(strings.TrimSpace(el.Attrs["resource"]), "/")
 				if res != "https://cognitiveservices.azure.com" {
@@ -262,29 +261,34 @@ func eval005(in *sdk.Input) sdk.Result {
 					if !hasUserAssignedID(svc.IdentityType) || !clientIDMatchesServiceIdentity(snap, svc, clientID) {
 						a.add(api.SourceLocation, "Microsoft.ApiManagement/service/apis", api.Name, "authentication-managed-identity client-id does not match a user-assigned identity on the APIM service")
 					}
-					if !hasCognitiveRole(snap, principalForClientID(snap, svc, clientID), targets) {
+					switch cognitiveRoleCoverage(snap, principalForClientID(snap, svc, clientID), targets) {
+					case roleMissing:
 						a.add(api.SourceLocation, "Microsoft.ApiManagement/service/apis", api.Name, "user-assigned identity used by authentication-managed-identity lacks a Cognitive Services role on the Foundry resource")
+					case roleUncertain:
+						a.note = append(a.note, "user-assigned identity role coverage could not be proven from template-scoped RBAC metadata alone")
 					}
 				} else if !hasSystemAssignedID(svc.IdentityType) {
 					a.add(api.SourceLocation, "Microsoft.ApiManagement/service/apis", api.Name, "authentication-managed-identity requires a system-assigned identity when client-id is omitted")
-				} else if !hasCognitiveRole(snap, svc.PrincipalID, targets) {
-					a.add(api.SourceLocation, "Microsoft.ApiManagement/service/apis", api.Name, "API Management system-assigned identity lacks a Cognitive Services role on the Foundry resource")
+				} else {
+					switch cognitiveRoleCoverage(snap, svc.PrincipalID, targets) {
+					case roleMissing:
+						a.add(api.SourceLocation, "Microsoft.ApiManagement/service/apis", api.Name, "API Management system-assigned identity lacks a Cognitive Services role on the Foundry resource")
+					case roleUncertain:
+						a.note = append(a.note, "system-assigned identity role coverage could not be proven from template-scoped RBAC metadata alone")
+					}
 				}
 				mi = true
 			}
 			for _, backend := range backendsForAPI(svc, pol) {
-				if backend.AuthorizationPresent {
-					backendAuthOnly = true
-				}
 				if hasAPIKeyHeader(backend.HeaderNames) {
 					a.add(api.SourceLocation, "Microsoft.ApiManagement/service/backends", backend.Name, "backend credentials supply an api-key header instead of using managed identity")
 				}
+				if backend.AuthorizationCredentialsPresent {
+					a.add(api.SourceLocation, "Microsoft.ApiManagement/service/backends", backend.Name, "backend authorization credentials are header-based and do not prove managed identity authentication")
+				}
 			}
-			if !mi && !backendAuthOnly {
+			if !mi {
 				a.add(api.SourceLocation, "Microsoft.ApiManagement/service/apis", api.Name, "AI gateway API does not authenticate to Foundry with authentication-managed-identity")
-			}
-			if !mi && backendAuthOnly {
-				a.skip = append(a.skip, "backend-entity-managed-identity-credentials-not-verifiable")
 			}
 			for _, el := range runtimegw.FindElements(pol.Inbound, "set-header") {
 				if strings.EqualFold(strings.TrimSpace(el.Attrs["name"]), "api-key") {
@@ -533,6 +537,7 @@ func foundryTargets(snap runtimegw.Snapshot, svc *runtimegw.Service, api *runtim
 
 func targetHosts(svc *runtimegw.Service, api *runtimegw.API) []string {
 	var out []string
+	seenBackends := map[string]bool{}
 	if host := hostLabel(runtimegw.HostFromURL(api.ServiceURL)); host != "" {
 		out = append(out, host)
 	}
@@ -545,11 +550,7 @@ func targetHosts(svc *runtimegw.Service, api *runtimegw.API) []string {
 			out = append(out, host)
 		}
 		if id := strings.ToLower(strings.TrimSpace(el.Attrs["backend-id"])); id != "" {
-			if backend, ok := svc.Backends[id]; ok {
-				if host := hostLabel(runtimegw.HostFromURL(backend.URL)); host != "" {
-					out = append(out, host)
-				}
-			}
+			out = append(out, backendHosts(svc, id, seenBackends)...)
 		}
 	}
 	return unique(out)
@@ -560,15 +561,10 @@ func backendsForAPI(svc *runtimegw.Service, pol runtimegw.EffectivePolicy) []run
 	seen := map[string]bool{}
 	for _, el := range runtimegw.FindElements(pol.Inbound, "set-backend-service") {
 		id := strings.ToLower(strings.TrimSpace(el.Attrs["backend-id"]))
-		if id == "" || seen[id] {
+		if id == "" {
 			continue
 		}
-		backend, ok := svc.Backends[id]
-		if !ok {
-			continue
-		}
-		seen[id] = true
-		out = append(out, backend)
+		out = append(out, collectBackends(svc, id, seen)...)
 	}
 	return out
 }
@@ -582,25 +578,53 @@ func hasAPIKeyHeader(names []string) bool {
 	return false
 }
 
-func hasCognitiveRole(snap runtimegw.Snapshot, principalID string, targets []runtimegw.FoundryAccount) bool {
+type roleCoverage int
+
+const (
+	roleMissing roleCoverage = iota
+	roleCovered
+	roleUncertain
+)
+
+func cognitiveRoleCoverage(snap runtimegw.Snapshot, principalID string, targets []runtimegw.FoundryAccount) roleCoverage {
 	principalID = strings.ToLower(strings.TrimSpace(principalID))
 	if principalID == "" || len(targets) == 0 {
-		return false
+		return roleMissing
 	}
-	for _, ra := range snap.RoleAssignments {
-		if !strings.EqualFold(strings.TrimSpace(ra.PrincipalID), principalID) || strings.TrimSpace(ra.Condition) != "" {
-			continue
-		}
-		if !isCognitiveRole(ra.RoleDefinitionID) {
-			continue
-		}
-		for _, target := range targets {
-			if scopeCoversTarget(ra.Scope, target.ResourceID) {
-				return true
+	overallUncertain := false
+	for _, target := range targets {
+		targetCoverage := roleMissing
+		for _, ra := range snap.RoleAssignments {
+			if !strings.EqualFold(strings.TrimSpace(ra.PrincipalID), principalID) {
+				continue
+			}
+			if !isCognitiveRole(ra.RoleDefinitionID) {
+				continue
+			}
+			if strings.TrimSpace(ra.Condition) != "" {
+				targetCoverage = roleUncertain
+				continue
+			}
+			switch {
+			case scopeCoversTarget(ra.Scope, target.ResourceID):
+				targetCoverage = roleCovered
+			case scopeCoverageUncertain(ra.Scope, target.ResourceID):
+				if targetCoverage != roleCovered {
+					targetCoverage = roleUncertain
+				}
 			}
 		}
+		if targetCoverage == roleMissing {
+			return roleMissing
+		}
+		if targetCoverage == roleUncertain {
+			overallUncertain = true
+		}
 	}
-	return false
+	if overallUncertain {
+		return roleUncertain
+	}
+	return roleCovered
 }
 
 func isCognitiveRole(roleDefinitionID string) bool {
@@ -615,10 +639,60 @@ func scopeCoversTarget(scope, target string) bool {
 	if scope == "" || target == "" {
 		return false
 	}
-	if strings.HasSuffix(scope, target) || strings.HasSuffix(target, scope) {
-		return true
+	return target == scope || strings.HasPrefix(target, scope+"/") || targetHasQualifiedSuffix(scope, target)
+}
+
+func scopeCoverageUncertain(scope, target string) bool {
+	scope = strings.ToLower(strings.TrimRight(strings.TrimSpace(scope), "/"))
+	target = strings.ToLower(strings.TrimRight(strings.TrimSpace(target), "/"))
+	if scope == "" || target == "" || !strings.HasPrefix(target, "/providers/") {
+		return false
 	}
-	return strings.Contains(scope, "/subscriptions/") && !strings.Contains(scope, "/providers/microsoft.cognitiveservices/accounts/")
+	if strings.HasPrefix(scope, "/providers/microsoft.management/managementgroups/") {
+		return !targetHasQualifiedSuffix(scope, target)
+	}
+	if !strings.HasPrefix(scope, "/subscriptions/") {
+		return false
+	}
+	if strings.Contains(scope, "/providers/") {
+		return false
+	}
+	return true
+}
+
+func targetHasQualifiedSuffix(scope, target string) bool {
+	return strings.HasPrefix(target, "/providers/") &&
+		strings.HasSuffix(scope, target)
+}
+
+func backendHosts(svc *runtimegw.Service, id string, seen map[string]bool) []string {
+	var out []string
+	for _, backend := range collectBackends(svc, id, seen) {
+		if host := hostLabel(runtimegw.HostFromURL(backend.URL)); host != "" {
+			out = append(out, host)
+		}
+	}
+	return out
+}
+
+func collectBackends(svc *runtimegw.Service, id string, seen map[string]bool) []runtimegw.Backend {
+	id = strings.ToLower(strings.TrimSpace(id))
+	if id == "" || seen[id] {
+		return nil
+	}
+	seen[id] = true
+	backend, ok := svc.Backends[id]
+	if !ok {
+		backend, ok = svc.Backends[lastSegment(id)]
+	}
+	if !ok {
+		return nil
+	}
+	out := []runtimegw.Backend{backend}
+	for _, member := range backend.PoolMemberIDs {
+		out = append(out, collectBackends(svc, member, seen)...)
+	}
+	return out
 }
 
 func hostLabel(host string) string {

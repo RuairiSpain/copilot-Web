@@ -125,6 +125,13 @@ func TestIsAllowedNegatives(t *testing.T) {
 	}
 }
 
+func TestIsAllowedRuntimeDiagnosticSettings(t *testing.T) {
+	resourceID := testRG + "/providers/Microsoft.CognitiveServices/accounts/demoacct"
+	if !IsAllowed("GET", resourceID+"/providers/Microsoft.Insights/diagnosticSettings") {
+		t.Fatal("runtime diagnostic settings path must be allow-listed")
+	}
+}
+
 func TestDoRejectsDisallowedBeforeNetwork(t *testing.T) {
 	f := newFake(t)
 	a, _ := newAdapter(t, f)

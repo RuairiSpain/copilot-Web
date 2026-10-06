@@ -200,6 +200,54 @@ func TestIQ005KnowledgeBaseReasoningAndLimits(t *testing.T) {
 	if len(clean.Findings) != 0 || clean.Skipped != nil {
 		t.Fatalf("expected pass, got %+v", clean)
 	}
+
+	uncertain := mustEval(t, "FND-IQ-005", inputFor(runtimeiq.Snapshot{
+		Bases: map[string]runtimeiq.KnowledgeBase{
+			"svc/kb": {Name: "kb", APIVersion: "2026-08-01-preview", RetrievalReasoningKind: "medium", KnowledgeSources: []string{"a", "b", "c", "d", "e", "f"}},
+		},
+		Services: map[string]runtimeiq.SearchService{
+			"svc": {Name: "svc", SKU: "basic", Location: "moonbase"},
+		},
+	}))
+	if uncertain.Skipped == nil || !strings.Contains(uncertain.Skipped.Reason, "undocumented region") || !strings.Contains(uncertain.Skipped.Reason, "creation date") {
+		t.Fatalf("expected uncertain result, got %+v", uncertain)
+	}
+
+	fail := mustEval(t, "FND-IQ-005", inputFor(runtimeiq.Snapshot{
+		Bases: map[string]runtimeiq.KnowledgeBase{
+			"svc/kb": {Name: "kb", APIVersion: "2026-08-01-preview", KnowledgeSources: []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"}},
+		},
+		Services: map[string]runtimeiq.SearchService{
+			"svc": {Name: "svc", SKU: "basic", Location: "eastus"},
+		},
+	}))
+	if len(fail.Findings) != 1 {
+		t.Fatalf("expected hard limit finding, got %+v", fail)
+	}
+
+	webMissingModel := mustEval(t, "FND-IQ-005", inputFor(runtimeiq.Snapshot{
+		Bases: map[string]runtimeiq.KnowledgeBase{
+			"svc/kb": {Name: "kb", APIVersion: "2026-08-01-preview", UsesWebKnowledgeSource: true},
+		},
+		Services: map[string]runtimeiq.SearchService{
+			"svc": {Name: "svc", SKU: "basic", Location: "eastus"},
+		},
+	}))
+	if len(webMissingModel.Findings) != 1 || !strings.Contains(webMissingModel.Findings[0].Evidence, "web knowledge sources require at least one model") {
+		t.Fatalf("expected web-model finding, got %+v", webMissingModel)
+	}
+
+	freeTierModel := mustEval(t, "FND-IQ-005", inputFor(runtimeiq.Snapshot{
+		Bases: map[string]runtimeiq.KnowledgeBase{
+			"svc/kb": {Name: "kb", APIVersion: "2026-08-01-preview", Models: []runtimeiq.ModelRef{{Kind: "azureOpenAI"}}},
+		},
+		Services: map[string]runtimeiq.SearchService{
+			"svc": {Name: "svc", SKU: "free", Location: "eastus"},
+		},
+	}))
+	if len(freeTierModel.Findings) != 1 || !strings.Contains(freeTierModel.Findings[0].Evidence, "Basic tier or higher") {
+		t.Fatalf("expected free-tier model finding, got %+v", freeTierModel)
+	}
 }
 
 func TestIQ006ChunkingAndVectorWeights(t *testing.T) {
@@ -267,7 +315,6 @@ func TestIQ008ManagedIdentityOnly(t *testing.T) {
 				Name:                 "blob",
 				APIVersion:           "2026-08-01-preview",
 				HasSecretConnection:  true,
-				ConnectionString:     "AccountKey=supersecret;Endpoint=https://example",
 				ResourceIDConnection: "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.Storage/storageAccounts/docs",
 			},
 		},
@@ -315,7 +362,7 @@ func TestIQ009DocumentAccessRequirement(t *testing.T) {
 			Sources: map[string]runtimeiq.KnowledgeSource{
 				"s1": {Name: "s1", Kind: "azureBlob", APIVersion: "2026-04-01"},
 			},
-			Connections: []runtimeiq.Connection{{Name: "iq", AuthType: "ProjectManagedIdentity", ForwardUserToken: false}},
+			Connections: []runtimeiq.Connection{{Name: "iq", AuthType: "ProjectManagedIdentity", ForwardSourceAuth: false}},
 		}},
 	}
 	got := mustEval(t, "FND-IQ-009", in)
@@ -329,11 +376,76 @@ func TestIQ009DocumentAccessRequirement(t *testing.T) {
 				"s1": {Name: "s1", Kind: "azureBlob", APIVersion: "2026-08-01-preview", IngestionPermissionOptions: []string{"userIds"}},
 				"s2": {Name: "s2", Kind: "remoteSharePoint", APIVersion: "2026-08-01-preview"},
 			},
-			Connections: []runtimeiq.Connection{{Name: "iq", AuthType: "ProjectManagedIdentity", ForwardUserToken: true}},
+			Connections: []runtimeiq.Connection{{Name: "iq", AuthType: "ProjectManagedIdentity", ForwardSourceAuth: true, SourceAuthUsesUserToken: true}},
 		}},
 	})
 	if len(clean.Findings) != 0 || clean.Skipped != nil {
 		t.Fatalf("expected pass, got %+v", clean)
+	}
+
+	workIQHeaderOnly := mustEval(t, "FND-IQ-009", &sdk.Input{
+		Policy: policy{"knowledge.requireDocumentLevelAccess": true},
+		ARM: snapshotModel{snap: runtimeiq.Snapshot{
+			Sources: map[string]runtimeiq.KnowledgeSource{
+				"s1": {Name: "s1", Kind: "azureBlob", APIVersion: "2026-08-01-preview", IngestionPermissionOptions: []string{"userIds"}},
+			},
+			Connections: []runtimeiq.Connection{{Name: "iq", AuthType: "ProjectManagedIdentity", ForwardWorkIQAuth: true}},
+		}},
+	})
+	if len(workIQHeaderOnly.Findings) != 1 || !strings.Contains(workIQHeaderOnly.Findings[0].Evidence, "x-ms-query-source-authorization") {
+		t.Fatalf("expected source-auth finding, got %+v", workIQHeaderOnly)
+	}
+
+	serviceRoot := mustEval(t, "FND-IQ-009", &sdk.Input{
+		Policy: policy{"knowledge.requireDocumentLevelAccess": true},
+		ARM: snapshotModel{snap: runtimeiq.Snapshot{
+			Sources: map[string]runtimeiq.KnowledgeSource{
+				"s1": {Name: "s1", Kind: "azureBlob", APIVersion: "2026-08-01-preview", IngestionPermissionOptions: []string{"userIds"}},
+			},
+			Connections: []runtimeiq.Connection{{Name: "search", TargetKind: runtimeiq.ConnectionTargetCognitiveSearchTarget, AuthType: "ApiKey"}},
+		}},
+	})
+	if len(serviceRoot.Findings) != 0 || serviceRoot.Skipped != nil {
+		t.Fatalf("expected service-root connection to be ignored by IQ-009, got %+v", serviceRoot)
+	}
+
+	badVersion := mustEval(t, "FND-IQ-009", &sdk.Input{
+		Policy: policy{"knowledge.requireDocumentLevelAccess": true},
+		ARM: snapshotModel{snap: runtimeiq.Snapshot{
+			Sources: map[string]runtimeiq.KnowledgeSource{
+				"s1": {Name: "s1", Kind: "azureBlob", APIVersion: "2026-05-01-preview", IngestionPermissionOptions: []string{"userIds"}},
+			},
+			Connections: []runtimeiq.Connection{{Name: "iq", ForwardSourceAuth: true, SourceAuthUsesUserToken: true}},
+		}},
+	})
+	if len(badVersion.Findings) != 1 || !strings.Contains(badVersion.Findings[0].Evidence, "2026-08-01-preview") {
+		t.Fatalf("expected preview-version finding, got %+v", badVersion)
+	}
+
+	badOption := mustEval(t, "FND-IQ-009", &sdk.Input{
+		Policy: policy{"knowledge.requireDocumentLevelAccess": true},
+		ARM: snapshotModel{snap: runtimeiq.Snapshot{
+			Sources: map[string]runtimeiq.KnowledgeSource{
+				"s1": {Name: "s1", Kind: "azureBlob", APIVersion: "2026-08-01-preview", IngestionPermissionOptions: []string{"ownerIds"}},
+			},
+			Connections: []runtimeiq.Connection{{Name: "iq", ForwardSourceAuth: true, SourceAuthUsesUserToken: true}},
+		}},
+	})
+	if len(badOption.Findings) != 1 || !strings.Contains(badOption.Findings[0].Evidence, "documented values") {
+		t.Fatalf("expected enum finding, got %+v", badOption)
+	}
+
+	missingUserToken := mustEval(t, "FND-IQ-009", &sdk.Input{
+		Policy: policy{"knowledge.requireDocumentLevelAccess": true},
+		ARM: snapshotModel{snap: runtimeiq.Snapshot{
+			Sources: map[string]runtimeiq.KnowledgeSource{
+				"s1": {Name: "s1", Kind: "azureBlob", APIVersion: "2026-08-01-preview", IngestionPermissionOptions: []string{"userIds"}},
+			},
+			Connections: []runtimeiq.Connection{{Name: "iq", ForwardSourceAuth: true}},
+		}},
+	})
+	if len(missingUserToken.Findings) != 1 || !strings.Contains(missingUserToken.Findings[0].Evidence, "signed-in user token") {
+		t.Fatalf("expected user-token finding, got %+v", missingUserToken)
 	}
 }
 
@@ -404,6 +516,14 @@ func TestIQ012SemanticCapacityAndVersion(t *testing.T) {
 	}))
 	if len(clean.Findings) != 0 || clean.Skipped != nil {
 		t.Fatalf("expected pass, got %+v", clean)
+	}
+
+	probeFailure := mustEval(t, "FND-IQ-012", inputFor(runtimeiq.Snapshot{
+		Services:    map[string]runtimeiq.SearchService{"svc": {Name: "svc", APIVersion: "2026-03-01-preview"}},
+		ProbeIssues: []string{"knowledge base metadata could not be read for connection iq"},
+	}))
+	if probeFailure.Skipped == nil || !strings.Contains(probeFailure.Skipped.Reason, "knowledge base metadata could not be read") {
+		t.Fatalf("expected probe failure skip, got %+v", probeFailure)
 	}
 }
 

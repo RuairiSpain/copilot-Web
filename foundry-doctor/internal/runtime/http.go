@@ -22,10 +22,19 @@ const (
 
 // DoJSON performs a bounded read-only HTTP request with OAuth auth and 429/5xx
 // retry semantics. It never returns response bodies in errors.
-func DoJSON(ctx context.Context, hc *http.Client, cred azure.TokenCredential, scope, method, rawURL string, body any, out any) error {
+func DoJSON(ctx context.Context, hc *http.Client, cred azure.TokenCredential, scope, method, rawURL, expectedHostSuffix string, body any, out any) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("parse url: %w", err)
+	}
+	if !hostMatchesSuffix(u.Hostname(), expectedHostSuffix) {
+		return fmt.Errorf("unexpected host %q", u.Hostname())
+	}
 	if hc == nil {
 		hc = &http.Client{Timeout: 30 * time.Second}
 	}
+	client := *hc
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	var payload []byte
 	if body != nil {
 		var err error
@@ -49,7 +58,7 @@ func DoJSON(ctx context.Context, hc *http.Client, cred azure.TokenCredential, sc
 		if payload != nil {
 			req.Header.Set("Content-Type", "application/json")
 		}
-		resp, err := hc.Do(req)
+		resp, err := client.Do(req)
 		if err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()

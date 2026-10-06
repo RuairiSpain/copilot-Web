@@ -141,6 +141,9 @@ func runtimeRun(ctx context.Context, svc Services, req RuntimeRequest, stdout io
 		}
 		return strings.Compare(a.Reason, b.Reason)
 	})
+	for i := range skips {
+		skips[i].Required = true
+	}
 	code := ExitCode(Outcome{Findings: shown, Skips: skips, FailOn: req.FailOn, Strict: req.Strict})
 	var buf bytes.Buffer
 	readyIDs := out.Evaluated

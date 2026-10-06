@@ -99,13 +99,16 @@ func snapshot(in *sdk.Input) (runtimeiq.Snapshot, bool) {
 			mergeSnapshot(&s, ps)
 		}
 	}
-	if len(s.Bases) == 0 && len(s.Sources) == 0 && len(s.Indexes) == 0 && len(s.Skillsets) == 0 {
+	if len(s.Connections) == 0 && len(s.Bases) == 0 && len(s.Sources) == 0 && len(s.Indexes) == 0 && len(s.Skillsets) == 0 && len(s.Services) == 0 && len(s.Storage) == 0 && len(s.Deployments) == 0 && len(s.ProbeIssues) == 0 {
 		return s, false
 	}
 	return s, true
 }
 
 func mergeSnapshot(dst *runtimeiq.Snapshot, src runtimeiq.Snapshot) {
+	if len(src.Connections) > 0 {
+		dst.Connections = append(dst.Connections[:0], src.Connections...)
+	}
 	for k, v := range src.Bases {
 		dst.Bases[strings.ToLower(k)] = v
 	}
@@ -118,33 +121,33 @@ func mergeSnapshot(dst *runtimeiq.Snapshot, src runtimeiq.Snapshot) {
 	for k, v := range src.Skillsets {
 		dst.Skillsets[strings.ToLower(k)] = v
 	}
-	if len(src.Services) > 0 {
-		if dst.Services == nil {
-			dst.Services = map[string]runtimeiq.SearchService{}
-		}
-		for k, v := range src.Services {
-			dst.Services[strings.ToLower(k)] = v
-		}
+	for k, v := range src.Services {
+		dst.Services[strings.ToLower(k)] = v
 	}
-	if len(src.Storage) > 0 {
-		for k, v := range src.Storage {
-			dst.Storage[strings.ToLower(k)] = v
-		}
+	for k, v := range src.Storage {
+		dst.Storage[strings.ToLower(k)] = v
 	}
-	if len(src.Deployments) > 0 {
-		for k, v := range src.Deployments {
-			dst.Deployments[strings.ToLower(k)] = v
-		}
+	for k, v := range src.Deployments {
+		dst.Deployments[strings.ToLower(k)] = v
 	}
-	if len(src.Connections) > 0 {
-		dst.Connections = append(dst.Connections, src.Connections...)
+	dst.ProbeIssues = append(dst.ProbeIssues, src.ProbeIssues...)
+}
+
+func snapshotOrProbeSkip(in *sdk.Input) (runtimeiq.Snapshot, sdk.Result, bool) {
+	snap, ok := snapshot(in)
+	if !ok {
+		return snap, skipUnavailable(), true
 	}
+	if len(snap.ProbeIssues) > 0 {
+		return snap, sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable + ": " + strings.Join(unique(snap.ProbeIssues), "; ")}}, true
+	}
+	return snap, sdk.Result{}, false
 }
 
 func eval001(in *sdk.Input) sdk.Result {
-	snap, ok := snapshot(in)
-	if !ok {
-		return skipUnavailable()
+	snap, res, stop := snapshotOrProbeSkip(in)
+	if stop {
+		return res
 	}
 	a := &acc{}
 	seen := false
@@ -181,9 +184,9 @@ func eval001(in *sdk.Input) sdk.Result {
 }
 
 func eval002(in *sdk.Input) sdk.Result {
-	snap, ok := snapshot(in)
-	if !ok {
-		return skipUnavailable()
+	snap, res, stop := snapshotOrProbeSkip(in)
+	if stop {
+		return res
 	}
 	a := &acc{}
 	seen := false
@@ -229,9 +232,9 @@ func eval002(in *sdk.Input) sdk.Result {
 }
 
 func eval003(in *sdk.Input) sdk.Result {
-	snap, ok := snapshot(in)
-	if !ok {
-		return skipUnavailable()
+	snap, res, stop := snapshotOrProbeSkip(in)
+	if stop {
+		return res
 	}
 	a := &acc{}
 	seen := false
@@ -282,9 +285,9 @@ func eval003(in *sdk.Input) sdk.Result {
 }
 
 func eval004(in *sdk.Input) sdk.Result {
-	snap, ok := snapshot(in)
-	if !ok {
-		return skipUnavailable()
+	snap, res, stop := snapshotOrProbeSkip(in)
+	if stop {
+		return res
 	}
 	a := &acc{}
 	seen := false
@@ -338,9 +341,9 @@ func eval004(in *sdk.Input) sdk.Result {
 }
 
 func eval005(in *sdk.Input) sdk.Result {
-	snap, ok := snapshot(in)
-	if !ok {
-		return skipUnavailable()
+	snap, res, stop := snapshotOrProbeSkip(in)
+	if stop {
+		return res
 	}
 	a := &acc{}
 	if len(snap.Bases) == 0 {
@@ -358,6 +361,12 @@ func eval005(in *sdk.Input) sdk.Result {
 			a.notes = append(a.notes, "knowledge base "+kb.Name+" uses an unsupported or unknown API version "+version)
 			continue
 		}
+		if kb.UsesWebKnowledgeSource && len(kb.Models) == 0 {
+			a.add(svc.SourceLocation, "AzureAISearch/knowledgebases", kb.Name, "knowledge bases that use web knowledge sources require at least one model")
+		}
+		if len(kb.Models) > 0 && strings.EqualFold(svc.SKU, "free") {
+			a.add(svc.SourceLocation, "Microsoft.Search/searchServices", svc.Name, "knowledge base models require the Basic tier or higher on the Search service")
+		}
 		switch strings.ToLower(kb.RetrievalReasoningKind) {
 		case "auto":
 			if version != "2026-08-01-preview" || len(kb.Models) == 0 {
@@ -370,24 +379,29 @@ func eval005(in *sdk.Input) sdk.Result {
 		case "medium":
 			if svc.Location == "" {
 				a.skips = append(a.skips, "search-service-resource-not-readable")
-			} else if !supportedMediumRegion(svc.Location) {
+			} else if supported, ok := supportedMediumRegion(svc.Location); !ok {
+				a.notes = append(a.notes, "search service "+svc.Name+" is in an undocumented region for medium retrieval reasoning")
+			} else if !supported {
 				a.add(svc.SourceLocation, "Microsoft.Search/searchServices", svc.Name, "medium retrieval reasoning is not supported in this Search service region")
 			}
 		}
 		if version == "2026-04-01" && len(kb.Models) > 0 {
 			a.add(svc.SourceLocation, "AzureAISearch/knowledgebases", kb.Name, "knowledge base models are not supported by API version 2026-04-01")
 		}
-		if len(kb.KnowledgeSources) > tierKnowledgeSourceLimit(svc.SKU) {
+		switch compareKnowledgeSourceLimit(svc.SKU, len(kb.KnowledgeSources)) {
+		case "fail":
 			a.add(svc.SourceLocation, "Microsoft.Search/searchServices", svc.Name, "knowledge base exceeds the documented knowledge source limit for the Search service tier")
+		case "uncertain":
+			a.notes = append(a.notes, "search service "+svc.Name+" is Basic tier and knowledge source counts above five depend on the service creation date")
 		}
 	}
 	return a.result()
 }
 
 func eval006(in *sdk.Input) sdk.Result {
-	snap, ok := snapshot(in)
-	if !ok {
-		return skipUnavailable()
+	snap, res, stop := snapshotOrProbeSkip(in)
+	if stop {
+		return res
 	}
 	a := &acc{}
 	seenSkill := false
@@ -421,9 +435,9 @@ func eval006(in *sdk.Input) sdk.Result {
 }
 
 func eval007(in *sdk.Input) sdk.Result {
-	snap, ok := snapshot(in)
-	if !ok {
-		return skipUnavailable()
+	snap, res, stop := snapshotOrProbeSkip(in)
+	if stop {
+		return res
 	}
 	a := &acc{}
 	if len(snap.Bases) == 0 && len(snap.Sources) == 0 {
@@ -466,9 +480,9 @@ func eval007(in *sdk.Input) sdk.Result {
 }
 
 func eval008(in *sdk.Input) sdk.Result {
-	snap, ok := snapshot(in)
-	if !ok {
-		return skipUnavailable()
+	snap, res, stop := snapshotOrProbeSkip(in)
+	if stop {
+		return res
 	}
 	a := &acc{}
 	seen := false
@@ -505,6 +519,9 @@ func eval008(in *sdk.Input) sdk.Result {
 		}
 	}
 	for _, conn := range snap.Connections {
+		if conn.TargetKind != "" && conn.TargetKind != runtimeiq.ConnectionTargetKnowledgeBaseMCP {
+			continue
+		}
 		seen = true
 		if !strings.EqualFold(conn.AuthType, "ProjectManagedIdentity") {
 			a.add(conn.Location, "azure.yaml", conn.Name, "knowledge base MCP connection should use authType ProjectManagedIdentity")
@@ -517,9 +534,9 @@ func eval008(in *sdk.Input) sdk.Result {
 }
 
 func eval009(in *sdk.Input) sdk.Result {
-	snap, ok := snapshot(in)
-	if !ok {
-		return skipUnavailable()
+	snap, res, stop := snapshotOrProbeSkip(in)
+	if stop {
+		return res
 	}
 	req, declared := boolPolicy(in, "knowledge.requireDocumentLevelAccess")
 	if !declared || !req {
@@ -532,28 +549,33 @@ func eval009(in *sdk.Input) sdk.Result {
 		}
 		if len(source.IngestionPermissionOptions) == 0 {
 			a.add(locOf(source), "AzureAISearch/knowledgesources", source.Name, "permission-protected knowledge source must set ingestionPermissionOptions")
+		} else if !validPermissionOptions(source.IngestionPermissionOptions) {
+			a.add(locOf(source), "AzureAISearch/knowledgesources", source.Name, "ingestionPermissionOptions must use only documented values: userIds, groupIds, rbacScope, sensitivityLabels")
 		}
 		if source.AssetStorePresent {
 			a.add(locOf(source), "AzureAISearch/knowledgesources", source.Name, "permission-enabled knowledge source cannot also set assetStore")
 		}
-		if source.APIVersion == "2026-04-01" {
+		if source.APIVersion != "2026-08-01-preview" {
 			a.add(locOf(source), "AzureAISearch/knowledgesources", source.Name, "ingestionPermissionOptions require API version 2026-08-01-preview")
 		} else if !knownKnowledgeSourceVersion(source.APIVersion) {
 			a.notes = append(a.notes, "knowledge source "+source.Name+" uses an unsupported or unknown API version "+source.APIVersion)
 		}
 	}
 	for _, conn := range snap.Connections {
-		if !conn.ForwardUserToken {
-			a.add(conn.Location, "azure.yaml", conn.Name, "permission-enabled Foundry IQ connections must forward x-ms-query-source-authorization")
+		if conn.TargetKind != "" && conn.TargetKind != runtimeiq.ConnectionTargetKnowledgeBaseMCP {
+			continue
+		}
+		if !conn.ForwardSourceAuth || !conn.SourceAuthUsesUserToken {
+			a.add(conn.Location, "azure.yaml", conn.Name, "permission-enabled Foundry IQ connections must forward x-ms-query-source-authorization with the signed-in user token")
 		}
 	}
 	return a.result()
 }
 
 func eval010(in *sdk.Input) sdk.Result {
-	snap, ok := snapshot(in)
-	if !ok {
-		return skipUnavailable()
+	snap, res, stop := snapshotOrProbeSkip(in)
+	if stop {
+		return res
 	}
 	a := &acc{}
 	seen := false
@@ -582,9 +604,9 @@ func eval010(in *sdk.Input) sdk.Result {
 }
 
 func eval011(in *sdk.Input) sdk.Result {
-	snap, ok := snapshot(in)
-	if !ok {
-		return skipUnavailable()
+	snap, res, stop := snapshotOrProbeSkip(in)
+	if stop {
+		return res
 	}
 	a := &acc{}
 	seen := false
@@ -616,9 +638,9 @@ func eval011(in *sdk.Input) sdk.Result {
 }
 
 func eval012(in *sdk.Input) sdk.Result {
-	snap, ok := snapshot(in)
-	if !ok {
-		return skipUnavailable()
+	snap, res, stop := snapshotOrProbeSkip(in)
+	if stop {
+		return res
 	}
 	if len(snap.Services) == 0 {
 		return sdk.Result{Skipped: &sdk.Skip{Reason: "service-not-in-template-or-subscription"}}
@@ -783,24 +805,36 @@ func hostLabel(uri string) string {
 	return ""
 }
 
-func supportedMediumRegion(region string) bool {
+func supportedMediumRegion(region string) (supported, ok bool) {
 	switch strings.ToLower(strings.TrimSpace(region)) {
-	case "eastus", "westus3", "westeurope", "swedencentral":
-		return true
+	case "eastus2", "eastus", "southcentralus", "westus3", "westus2", "westus", "germanywestcentral", "northeurope", "switzerlandnorth", "swedencentral", "spaincentral", "uksouth", "koreacentral", "japaneast", "southeastasia":
+		return true, true
+	case "":
+		return false, false
 	default:
-		return false
+		return false, false
 	}
 }
 
-func tierKnowledgeSourceLimit(sku string) int {
+func compareKnowledgeSourceLimit(sku string, count int) string {
 	switch strings.ToLower(strings.TrimSpace(sku)) {
 	case "free":
-		return 3
+		if count > 3 {
+			return "fail"
+		}
 	case "basic":
-		return 5
+		switch {
+		case count > 10:
+			return "fail"
+		case count > 5:
+			return "uncertain"
+		}
 	default:
-		return 10
+		if count > 10 {
+			return "fail"
+		}
 	}
+	return ""
 }
 
 func supportedKnowledgeSource(version, kind string) (bool, bool) {
@@ -886,6 +920,21 @@ func permissionIndexedSource(kind string) bool {
 	default:
 		return false
 	}
+}
+
+func validPermissionOptions(options []string) bool {
+	valid := map[string]bool{
+		"userids":           true,
+		"groupids":          true,
+		"rbacscope":         true,
+		"sensitivitylabels": true,
+	}
+	for _, option := range options {
+		if !valid[strings.ToLower(strings.TrimSpace(option))] {
+			return false
+		}
+	}
+	return true
 }
 
 func storageFromConnection(s runtimeiq.Snapshot, resourceID string) runtimeiq.StorageAccount {

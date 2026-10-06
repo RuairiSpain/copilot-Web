@@ -104,6 +104,13 @@ Expected result:
 BICEP_PATH=/absolute/path/to/bicep foundry-doctor assess waf --dir samples/assess-prod --audience owner
 ```
 
+PowerShell equivalent:
+
+```powershell
+$env:BICEP_PATH = 'C:\path\to\bicep.exe'
+foundry-doctor assess waf --dir samples/assess-prod --audience owner
+```
+
 Expected result:
 
 - owner-oriented WAF summary
@@ -128,13 +135,20 @@ foundry-doctor annotate --dir samples/good --format review --out review/demo.rev
 
 Expected result:
 
-- review artefacts written under `review/demo`
+- review artefacts written under `review/demo.review`
 - suitable for code-review-style walkthroughs
 
 ### 8. Cost
 
 ```bash
 BICEP_PATH=/absolute/path/to/bicep foundry-doctor cost --dir samples/cost-fixed --offline
+```
+
+PowerShell equivalent:
+
+```powershell
+$env:BICEP_PATH = 'C:\path\to\bicep.exe'
+foundry-doctor cost --dir samples/cost-fixed --offline
 ```
 
 Expected result:
@@ -185,4 +199,6 @@ Expected result:
 
 This runbook reflects the verified V1 command surface. The documented offline
 commands above were exercised in this workspace; Azure-backed `preflight` and
-`runtime` remain prerequisite-dependent and were not executed here.
+`runtime` were verified here only for honest unavailable/skip behavior when
+prerequisites are absent. Fully credentialed live-Azure runs remain
+prerequisite-dependent.

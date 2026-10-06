@@ -38,8 +38,8 @@ func TestPreflight(t *testing.T) {
 		wantOut  string
 	}{
 		{name: "clean", pf: &fakePreflight{}, wantExit: ExitOK},
-		{name: "restricted identity skip is reported", pf: &fakePreflight{out: restricted}, wantExit: ExitOK, wantOut: "skipped=1"},
-		{name: "strict skip", pf: &fakePreflight{out: restricted}, req: PreflightRequest{DoctorRequest: DoctorRequest{Strict: true}}, wantExit: ExitStrictSkip},
+		{name: "restricted identity skip is reported as unavailable", pf: &fakePreflight{out: restricted}, wantExit: ExitUnavailable, wantOut: "skipped=1"},
+		{name: "strict required skip still exits unavailable", pf: &fakePreflight{out: restricted}, req: PreflightRequest{DoctorRequest: DoctorRequest{Strict: true}}, wantExit: ExitUnavailable},
 		{name: "finding fails", pf: &fakePreflight{out: RunOutput{Findings: []sdk.Finding{{RuleID: "FND-DEP-001", Severity: sdk.SeverityError, Fingerprint: "x"}}}}, wantExit: ExitFindings},
 		{name: "engine error", pf: &fakePreflight{err: errors.New("boom")}, wantExit: ExitInternal, wantErr: errors.New("boom")},
 		{name: "nil engine unavailable", nilPF: true, wantExit: ExitUnavailable, wantErr: ErrUnavailable},

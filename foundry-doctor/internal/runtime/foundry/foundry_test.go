@@ -22,10 +22,30 @@ func (staticCred) Token(context.Context, string) (azure.AccessToken, error) {
 }
 
 func TestEndpoint(t *testing.T) {
-	got := Endpoint("acct", "proj")
+	got, err := Endpoint("acct", "proj")
+	if err != nil {
+		t.Fatal(err)
+	}
 	want := "https://acct.services.ai.azure.com/api/projects/proj"
 	if got != want {
 		t.Fatalf("Endpoint() = %q, want %q", got, want)
+	}
+}
+
+func TestEndpointRejectsHostileNames(t *testing.T) {
+	for _, tc := range []struct {
+		account string
+		project string
+	}{
+		{account: "x.evil.com#", project: "proj"},
+		{account: "acct", project: ".."},
+		{account: "acct:443", project: "proj"},
+		{account: "Upper", project: "proj"},
+		{account: "acct", project: "münchen"},
+	} {
+		if _, err := Endpoint(tc.account, tc.project); err == nil {
+			t.Fatalf("accepted account=%q project=%q", tc.account, tc.project)
+		}
 	}
 }
 
@@ -34,11 +54,11 @@ func TestHTTPClientReadsMetadataOnly(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
-		case strings.HasPrefix(r.URL.Path, "/agents/support-agent/versions/v2"):
+		case strings.HasSuffix(r.URL.Path, "/agents/support-agent/versions/v2"):
 			fmt.Fprint(w, mustRead(t, filepath.Join(dir, "agent_version.json")))
-		case strings.HasPrefix(r.URL.Path, "/agents"):
+		case strings.HasSuffix(r.URL.Path, "/agents"):
 			fmt.Fprint(w, mustRead(t, filepath.Join(dir, "agents.json")))
-		case strings.HasPrefix(r.URL.Path, "/connections"):
+		case strings.HasSuffix(r.URL.Path, "/connections"):
 			fmt.Fprint(w, mustRead(t, filepath.Join(dir, "connections.json")))
 		default:
 			http.NotFound(w, r)
@@ -46,32 +66,43 @@ func TestHTTPClientReadsMetadataOnly(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := HTTPClient{HTTP: srv.Client(), Credential: staticCred{}}
-	agents, err := c.ListAgents(context.Background(), srv.URL)
+	hc := srv.Client()
+	base := hc.Transport
+	hc.Transport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		r.URL.Scheme = "http"
+		r.URL.Host = strings.TrimPrefix(srv.URL, "http://")
+		return base.RoundTrip(r)
+	})
+	c := HTTPClient{HTTP: hc, Credential: staticCred{}}
+	endpoint, err := Endpoint("acct", "proj")
+	if err != nil {
+		t.Fatal(err)
+	}
+	agents, err := c.ListAgents(context.Background(), endpoint)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(agents) != 1 || agents[0].Name != "support-agent" || strings.Contains(fmt.Sprint(agents), "PROMPT_SENTINEL_TEXT") {
 		t.Fatalf("agents = %+v", agents)
 	}
-	version, err := c.GetAgentVersion(context.Background(), srv.URL, "support-agent", "v2")
+	version, err := c.GetAgentVersion(context.Background(), endpoint, "support-agent", "v2")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if version.Status != "Failed" || strings.Contains(fmt.Sprint(version), "COMPLETION_SENTINEL_TEXT") {
 		t.Fatalf("version = %+v", version)
 	}
-	conns, err := c.ListConnections(context.Background(), srv.URL)
+	conns, err := c.ListConnections(context.Background(), endpoint)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(conns) != 1 || conns[0].Name != "search-conn" || strings.Contains(fmt.Sprint(conns), "DOCUMENT_SENTINEL_TEXT") {
 		t.Fatalf("connections = %+v", conns)
 	}
-	if err := c.Ping(context.Background(), srv.URL); err != nil {
+	if err := c.Ping(context.Background(), endpoint); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.GetAgentVersion(context.Background(), srv.URL, "support-agent", ""); err == nil {
+	if _, err := c.GetAgentVersion(context.Background(), endpoint, "support-agent", ""); err == nil {
 		t.Fatal("expected missing version error")
 	}
 }
@@ -102,3 +133,7 @@ func mustRead(t *testing.T, path string) string {
 	}
 	return string(b)
 }
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }

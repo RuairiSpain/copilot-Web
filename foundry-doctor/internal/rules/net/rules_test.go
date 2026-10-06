@@ -262,6 +262,13 @@ func TestDeterministicAndNoSecrets(t *testing.T) {
 	}
 }
 
+func TestZoneNameOfResourceIDExpression(t *testing.T) {
+	got := zoneNameOf("[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.search.windows.net')]")
+	if got != "privatelink.search.windows.net" {
+		t.Fatalf("zoneNameOf() = %q", got)
+	}
+}
+
 type fakePolicy map[string]any
 
 func (p fakePolicy) Get(k string) (any, bool) { v, ok := p[k]; return v, ok }

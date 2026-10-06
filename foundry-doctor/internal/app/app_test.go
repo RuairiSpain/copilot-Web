@@ -417,6 +417,39 @@ func TestResolveBicepEntry(t *testing.T) {
 	}
 }
 
+func TestArmLoaderFallsBackToCompiledARMJSON(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "infra"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "azure.yaml"), []byte("name: demo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	arm := []byte(`{"$schema":"https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#","contentVersion":"1.0.0.0","resources":[]}`)
+	if err := os.WriteFile(filepath.Join(dir, "infra", "main.json"), arm, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := (armLoader{}).Load(context.Background(), Source{
+		Dir:         dir,
+		AzureYAML:   []byte("name: demo\n"),
+		AzureYAMLAt: "azure.yaml",
+		InfraPath:   "infra",
+	})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got == nil {
+		t.Fatal("Load() returned nil model")
+	}
+	raw, ok := got.(rawModel)
+	if !ok {
+		t.Fatalf("Load() type = %T, want rawModel", got)
+	}
+	if !strings.Contains(string(raw.raw), `"resources":[]`) {
+		t.Fatalf("raw ARM did not come from fallback JSON: %s", string(raw.raw))
+	}
+}
+
 func TestAnnotateReviewFailsOnInfraLayersWhenBicepValidationIsNeeded(t *testing.T) {
 	eng := &fakeEngine{}
 	svc, _ := newSvc(eng)

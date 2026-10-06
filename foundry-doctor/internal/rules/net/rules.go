@@ -225,11 +225,41 @@ func detectCloud(in *sdk.Input) string {
 	return ""
 }
 func zoneNameOf(id string) string {
+	if name, ok := literalResourceIDName(id); ok {
+		return lc(name)
+	}
 	i := strings.LastIndex(id, "/")
 	if i >= 0 {
 		return lc(strings.Trim(id[i+1:], "')]"))
 	}
 	return lc(id)
+}
+
+func literalResourceIDName(id string) (string, bool) {
+	if !strings.HasPrefix(id, "[resourceId(") || !strings.HasSuffix(id, ")]") {
+		return "", false
+	}
+	var parts []string
+	for i := 0; i < len(id); {
+		if id[i] != '\'' {
+			i++
+			continue
+		}
+		i++
+		start := i
+		for i < len(id) && id[i] != '\'' {
+			i++
+		}
+		if i >= len(id) {
+			return "", false
+		}
+		parts = append(parts, id[start:i])
+		i++
+	}
+	if len(parts) < 2 {
+		return "", false
+	}
+	return parts[len(parts)-1], true
 }
 
 // FND-NET-003: private DNS zone groups and VNet links.

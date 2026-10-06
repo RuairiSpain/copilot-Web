@@ -1,0 +1,797 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.48.1.52935",
+      "templateHash": "9187019325578466569"
+    }
+  },
+  "variables": {
+    "tags": {
+      "env": "prod",
+      "owner": "platform"
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.OperationalInsights/workspaces",
+      "apiVersion": "2023-09-01",
+      "name": "fdgoodsafelaw",
+      "location": "swedencentral",
+      "tags": "[variables('tags')]",
+      "properties": {
+        "retentionInDays": 30
+      }
+    },
+    {
+      "type": "Microsoft.Network/virtualNetworks",
+      "apiVersion": "2023-11-01",
+      "name": "fdgoodsafe-vnet",
+      "location": "swedencentral",
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "10.20.0.0/16"
+          ]
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Network/virtualNetworks/subnets",
+      "apiVersion": "2023-11-01",
+      "name": "[format('{0}/{1}', 'fdgoodsafe-vnet', 'agents')]",
+      "properties": {
+        "addressPrefix": "10.20.0.0/24",
+        "delegations": [
+          {
+            "name": "agent-delegation",
+            "properties": {
+              "serviceName": "Microsoft.App/environments"
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', 'fdgoodsafe-vnet')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/virtualNetworks/subnets",
+      "apiVersion": "2023-11-01",
+      "name": "[format('{0}/{1}', 'fdgoodsafe-vnet', 'private-endpoints')]",
+      "properties": {
+        "addressPrefix": "10.20.1.0/24",
+        "privateEndpointNetworkPolicies": "Disabled"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', 'fdgoodsafe-vnet')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Search/searchServices",
+      "apiVersion": "2025-05-01",
+      "name": "fdgoodsafesrch",
+      "location": "swedencentral",
+      "sku": {
+        "name": "standard"
+      },
+      "tags": "[variables('tags')]",
+      "properties": {
+        "disableLocalAuth": true,
+        "publicNetworkAccess": "Disabled",
+        "replicaCount": 2,
+        "partitionCount": 1
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2023-01-01",
+      "name": "fdgoodsafestore",
+      "location": "swedencentral",
+      "sku": {
+        "name": "Standard_GZRS"
+      },
+      "kind": "StorageV2",
+      "tags": "[variables('tags')]",
+      "properties": {
+        "allowBlobPublicAccess": false,
+        "allowSharedKeyAccess": false,
+        "minimumTlsVersion": "TLS1_2",
+        "publicNetworkAccess": "Disabled",
+        "supportsHttpsTrafficOnly": true
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/blobServices",
+      "apiVersion": "2023-01-01",
+      "name": "[format('{0}/{1}', 'fdgoodsafestore', 'default')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', 'fdgoodsafestore')]"
+      ]
+    },
+    {
+      "type": "Microsoft.DocumentDB/databaseAccounts",
+      "apiVersion": "2025-05-01-preview",
+      "name": "fdgoodsafecosmos",
+      "location": "swedencentral",
+      "kind": "GlobalDocumentDB",
+      "tags": "[variables('tags')]",
+      "properties": {
+        "databaseAccountOfferType": "Standard",
+        "disableLocalAuth": true,
+        "locations": [
+          {
+            "locationName": "swedencentral",
+            "failoverPriority": 0,
+            "isZoneRedundant": true
+          }
+        ],
+        "backupPolicy": {
+          "type": "Continuous"
+        },
+        "publicNetworkAccess": "Disabled"
+      }
+    },
+    {
+      "type": "Microsoft.CognitiveServices/accounts",
+      "apiVersion": "2026-07-15-preview",
+      "name": "fdgoodsafe-acct",
+      "location": "swedencentral",
+      "kind": "AIServices",
+      "tags": "[variables('tags')]",
+      "sku": {
+        "name": "S0"
+      },
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "allowProjectManagement": true,
+        "customSubDomainName": "fdgoodsafe-acct",
+        "disableLocalAuth": true,
+        "publicNetworkAccess": "Disabled",
+        "networkInjections": [
+          {
+            "scenario": "agent",
+            "subnetArmId": "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'fdgoodsafe-vnet', 'agents')]",
+            "useMicrosoftManagedNetwork": false
+          }
+        ],
+        "capabilitySettings": {
+          "documentStore": "[resourceId('Microsoft.DocumentDB/databaseAccounts', 'fdgoodsafecosmos')]",
+          "vectorStore": "[resourceId('Microsoft.Search/searchServices', 'fdgoodsafesrch')]",
+          "blobStore": "[resourceId('Microsoft.Storage/storageAccounts', 'fdgoodsafestore')]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'fdgoodsafe-vnet', 'agents')]",
+        "[resourceId('Microsoft.DocumentDB/databaseAccounts', 'fdgoodsafecosmos')]",
+        "[resourceId('Microsoft.Search/searchServices', 'fdgoodsafesrch')]",
+        "[resourceId('Microsoft.Storage/storageAccounts', 'fdgoodsafestore')]"
+      ]
+    },
+    {
+      "type": "Microsoft.CognitiveServices/accounts/projects",
+      "apiVersion": "2026-07-15-preview",
+      "name": "[format('{0}/{1}', 'fdgoodsafe-acct', 'fdgoodsafe-project')]",
+      "location": "swedencentral",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "displayName": "fdgoodsafe-project"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', 'fdgoodsafe-acct')]"
+      ]
+    },
+    {
+      "type": "Microsoft.CognitiveServices/accounts/deployments",
+      "apiVersion": "2026-09-01",
+      "name": "[format('{0}/{1}', 'fdgoodsafe-acct', 'chat')]",
+      "sku": {
+        "name": "GlobalStandard",
+        "capacity": 10
+      },
+      "properties": {
+        "model": {
+          "format": "OpenAI",
+          "name": "gpt-4.1-mini",
+          "version": "2026-03-17"
+        },
+        "versionUpgradeOption": "NoAutoUpgrade"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', 'fdgoodsafe-acct')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints",
+      "apiVersion": "2023-11-01",
+      "name": "fdgoodsafe-foundry-pe",
+      "location": "swedencentral",
+      "properties": {
+        "subnet": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'fdgoodsafe-vnet', 'private-endpoints')]"
+        },
+        "privateLinkServiceConnections": [
+          {
+            "name": "foundry-account",
+            "properties": {
+              "privateLinkServiceId": "[resourceId('Microsoft.CognitiveServices/accounts', 'fdgoodsafe-acct')]",
+              "groupIds": [
+                "account"
+              ]
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', 'fdgoodsafe-acct')]",
+        "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'fdgoodsafe-vnet', 'private-endpoints')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints",
+      "apiVersion": "2023-11-01",
+      "name": "fdgoodsafe-search-pe",
+      "location": "swedencentral",
+      "properties": {
+        "subnet": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'fdgoodsafe-vnet', 'private-endpoints')]"
+        },
+        "privateLinkServiceConnections": [
+          {
+            "name": "search",
+            "properties": {
+              "privateLinkServiceId": "[resourceId('Microsoft.Search/searchServices', 'fdgoodsafesrch')]",
+              "groupIds": [
+                "searchService"
+              ]
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'fdgoodsafe-vnet', 'private-endpoints')]",
+        "[resourceId('Microsoft.Search/searchServices', 'fdgoodsafesrch')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints",
+      "apiVersion": "2023-11-01",
+      "name": "fdgoodsafe-storage-pe",
+      "location": "swedencentral",
+      "properties": {
+        "subnet": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'fdgoodsafe-vnet', 'private-endpoints')]"
+        },
+        "privateLinkServiceConnections": [
+          {
+            "name": "blob",
+            "properties": {
+              "privateLinkServiceId": "[resourceId('Microsoft.Storage/storageAccounts', 'fdgoodsafestore')]",
+              "groupIds": [
+                "blob"
+              ]
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'fdgoodsafe-vnet', 'private-endpoints')]",
+        "[resourceId('Microsoft.Storage/storageAccounts', 'fdgoodsafestore')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints",
+      "apiVersion": "2023-11-01",
+      "name": "fdgoodsafe-cosmos-pe",
+      "location": "swedencentral",
+      "properties": {
+        "subnet": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'fdgoodsafe-vnet', 'private-endpoints')]"
+        },
+        "privateLinkServiceConnections": [
+          {
+            "name": "sql",
+            "properties": {
+              "privateLinkServiceId": "[resourceId('Microsoft.DocumentDB/databaseAccounts', 'fdgoodsafecosmos')]",
+              "groupIds": [
+                "Sql"
+              ]
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.DocumentDB/databaseAccounts', 'fdgoodsafecosmos')]",
+        "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'fdgoodsafe-vnet', 'private-endpoints')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones",
+      "apiVersion": "2020-06-01",
+      "name": "privatelink.search.windows.net",
+      "location": "global"
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones",
+      "apiVersion": "2020-06-01",
+      "name": "privatelink.blob.core.windows.net",
+      "location": "global"
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones",
+      "apiVersion": "2020-06-01",
+      "name": "privatelink.services.ai.azure.com",
+      "location": "global"
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones",
+      "apiVersion": "2020-06-01",
+      "name": "privatelink.cognitiveservices.azure.com",
+      "location": "global"
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones",
+      "apiVersion": "2020-06-01",
+      "name": "privatelink.openai.azure.com",
+      "location": "global"
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones",
+      "apiVersion": "2020-06-01",
+      "name": "privatelink.documents.azure.com",
+      "location": "global"
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2020-06-01",
+      "name": "[format('{0}/{1}', 'privatelink.search.windows.net', 'fdgoodsafe-search-link')]",
+      "location": "global",
+      "properties": {
+        "registrationEnabled": false,
+        "virtualNetwork": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks', 'fdgoodsafe-vnet')]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.search.windows.net')]",
+        "[resourceId('Microsoft.Network/virtualNetworks', 'fdgoodsafe-vnet')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2020-06-01",
+      "name": "[format('{0}/{1}', 'privatelink.blob.core.windows.net', 'fdgoodsafe-blob-link')]",
+      "location": "global",
+      "properties": {
+        "registrationEnabled": false,
+        "virtualNetwork": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks', 'fdgoodsafe-vnet')]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.blob.core.windows.net')]",
+        "[resourceId('Microsoft.Network/virtualNetworks', 'fdgoodsafe-vnet')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2020-06-01",
+      "name": "[format('{0}/{1}', 'privatelink.services.ai.azure.com', 'fdgoodsafe-account-link')]",
+      "location": "global",
+      "properties": {
+        "registrationEnabled": false,
+        "virtualNetwork": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks', 'fdgoodsafe-vnet')]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.services.ai.azure.com')]",
+        "[resourceId('Microsoft.Network/virtualNetworks', 'fdgoodsafe-vnet')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2020-06-01",
+      "name": "[format('{0}/{1}', 'privatelink.cognitiveservices.azure.com', 'fdgoodsafe-cognitive-link')]",
+      "location": "global",
+      "properties": {
+        "registrationEnabled": false,
+        "virtualNetwork": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks', 'fdgoodsafe-vnet')]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.cognitiveservices.azure.com')]",
+        "[resourceId('Microsoft.Network/virtualNetworks', 'fdgoodsafe-vnet')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2020-06-01",
+      "name": "[format('{0}/{1}', 'privatelink.openai.azure.com', 'fdgoodsafe-openai-link')]",
+      "location": "global",
+      "properties": {
+        "registrationEnabled": false,
+        "virtualNetwork": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks', 'fdgoodsafe-vnet')]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.openai.azure.com')]",
+        "[resourceId('Microsoft.Network/virtualNetworks', 'fdgoodsafe-vnet')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2020-06-01",
+      "name": "[format('{0}/{1}', 'privatelink.documents.azure.com', 'fdgoodsafe-cosmos-link')]",
+      "location": "global",
+      "properties": {
+        "registrationEnabled": false,
+        "virtualNetwork": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks', 'fdgoodsafe-vnet')]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.documents.azure.com')]",
+        "[resourceId('Microsoft.Network/virtualNetworks', 'fdgoodsafe-vnet')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+      "apiVersion": "2023-11-01",
+      "name": "[format('{0}/{1}', 'fdgoodsafe-search-pe', 'default')]",
+      "properties": {
+        "privateDnsZoneConfigs": [
+          {
+            "name": "search-zone",
+            "properties": {
+              "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.search.windows.net')]"
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateEndpoints', 'fdgoodsafe-search-pe')]",
+        "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.search.windows.net')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+      "apiVersion": "2023-11-01",
+      "name": "[format('{0}/{1}', 'fdgoodsafe-storage-pe', 'default')]",
+      "properties": {
+        "privateDnsZoneConfigs": [
+          {
+            "name": "blob-zone",
+            "properties": {
+              "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.blob.core.windows.net')]"
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.blob.core.windows.net')]",
+        "[resourceId('Microsoft.Network/privateEndpoints', 'fdgoodsafe-storage-pe')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+      "apiVersion": "2023-11-01",
+      "name": "[format('{0}/{1}', 'fdgoodsafe-foundry-pe', 'default')]",
+      "properties": {
+        "privateDnsZoneConfigs": [
+          {
+            "name": "foundry-zone",
+            "properties": {
+              "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.services.ai.azure.com')]"
+            }
+          },
+          {
+            "name": "cognitive-zone",
+            "properties": {
+              "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.cognitiveservices.azure.com')]"
+            }
+          },
+          {
+            "name": "openai-zone",
+            "properties": {
+              "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.openai.azure.com')]"
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateEndpoints', 'fdgoodsafe-foundry-pe')]",
+        "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.services.ai.azure.com')]",
+        "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.cognitiveservices.azure.com')]",
+        "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.openai.azure.com')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+      "apiVersion": "2023-11-01",
+      "name": "[format('{0}/{1}', 'fdgoodsafe-cosmos-pe', 'default')]",
+      "properties": {
+        "privateDnsZoneConfigs": [
+          {
+            "name": "cosmos-zone",
+            "properties": {
+              "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.documents.azure.com')]"
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateEndpoints', 'fdgoodsafe-cosmos-pe')]",
+        "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.documents.azure.com')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "scope": "[resourceId('Microsoft.CognitiveServices/accounts', 'fdgoodsafe-acct')]",
+      "name": "fdgoodsafe-acct-diag",
+      "properties": {
+        "workspaceId": "[resourceId('Microsoft.OperationalInsights/workspaces', 'fdgoodsafelaw')]",
+        "logs": [
+          {
+            "categoryGroup": "audit",
+            "enabled": true
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', 'fdgoodsafe-acct')]",
+        "[resourceId('Microsoft.OperationalInsights/workspaces', 'fdgoodsafelaw')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "scope": "[resourceId('Microsoft.CognitiveServices/accounts/projects', 'fdgoodsafe-acct', 'fdgoodsafe-project')]",
+      "name": "fdgoodsafe-project-diag",
+      "properties": {
+        "workspaceId": "[resourceId('Microsoft.OperationalInsights/workspaces', 'fdgoodsafelaw')]",
+        "logs": [
+          {
+            "categoryGroup": "audit",
+            "enabled": true
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts/projects', 'fdgoodsafe-acct', 'fdgoodsafe-project')]",
+        "[resourceId('Microsoft.OperationalInsights/workspaces', 'fdgoodsafelaw')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "scope": "[resourceId('Microsoft.Search/searchServices', 'fdgoodsafesrch')]",
+      "name": "fdgoodsafesrch-diag",
+      "properties": {
+        "workspaceId": "[resourceId('Microsoft.OperationalInsights/workspaces', 'fdgoodsafelaw')]",
+        "logs": [
+          {
+            "category": "OperationLogs",
+            "enabled": true
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Search/searchServices', 'fdgoodsafesrch')]",
+        "[resourceId('Microsoft.OperationalInsights/workspaces', 'fdgoodsafelaw')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "scope": "[resourceId('Microsoft.Storage/storageAccounts/blobServices', 'fdgoodsafestore', 'default')]",
+      "name": "fdgoodsafestore-blob-diag",
+      "properties": {
+        "workspaceId": "[resourceId('Microsoft.OperationalInsights/workspaces', 'fdgoodsafelaw')]",
+        "logs": [
+          {
+            "category": "StorageRead",
+            "enabled": true
+          },
+          {
+            "category": "StorageWrite",
+            "enabled": true
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts/blobServices', 'fdgoodsafestore', 'default')]",
+        "[resourceId('Microsoft.OperationalInsights/workspaces', 'fdgoodsafelaw')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "scope": "[resourceId('Microsoft.DocumentDB/databaseAccounts', 'fdgoodsafecosmos')]",
+      "name": "fdgoodsafecosmos-diag",
+      "properties": {
+        "workspaceId": "[resourceId('Microsoft.OperationalInsights/workspaces', 'fdgoodsafelaw')]",
+        "logs": [
+          {
+            "category": "DataPlaneRequests",
+            "enabled": true
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.DocumentDB/databaseAccounts', 'fdgoodsafecosmos')]",
+        "[resourceId('Microsoft.OperationalInsights/workspaces', 'fdgoodsafelaw')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.Storage/storageAccounts', 'fdgoodsafestore')]",
+      "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', 'fdgoodsafestore'), resourceId('Microsoft.CognitiveServices/accounts', 'fdgoodsafe-acct'), 'Storage Blob Data Contributor')]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')]",
+        "principalId": "[reference(resourceId('Microsoft.CognitiveServices/accounts', 'fdgoodsafe-acct'), '2026-07-15-preview', 'full').identity.principalId]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', 'fdgoodsafe-acct')]",
+        "[resourceId('Microsoft.Storage/storageAccounts', 'fdgoodsafestore')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.Search/searchServices', 'fdgoodsafesrch')]",
+      "name": "[guid(resourceId('Microsoft.Search/searchServices', 'fdgoodsafesrch'), resourceId('Microsoft.CognitiveServices/accounts', 'fdgoodsafe-acct'), 'Search Index Data Contributor')]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '8ebe5a00-799e-43f5-93ac-243d3dce84a7')]",
+        "principalId": "[reference(resourceId('Microsoft.CognitiveServices/accounts', 'fdgoodsafe-acct'), '2026-07-15-preview', 'full').identity.principalId]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', 'fdgoodsafe-acct')]",
+        "[resourceId('Microsoft.Search/searchServices', 'fdgoodsafesrch')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.DocumentDB/databaseAccounts', 'fdgoodsafecosmos')]",
+      "name": "[guid(resourceId('Microsoft.DocumentDB/databaseAccounts', 'fdgoodsafecosmos'), resourceId('Microsoft.CognitiveServices/accounts', 'fdgoodsafe-acct'), 'Cosmos DB Operator')]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '230815da-be43-4aae-9cb4-875f7bd000aa')]",
+        "principalId": "[reference(resourceId('Microsoft.CognitiveServices/accounts', 'fdgoodsafe-acct'), '2026-07-15-preview', 'full').identity.principalId]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', 'fdgoodsafe-acct')]",
+        "[resourceId('Microsoft.DocumentDB/databaseAccounts', 'fdgoodsafecosmos')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/actionGroups",
+      "apiVersion": "2023-01-01",
+      "name": "fdgoodsafe-ops",
+      "location": "global",
+      "properties": {
+        "enabled": true,
+        "groupShortName": "fdops",
+        "emailReceivers": [
+          {
+            "name": "platform",
+            "emailAddress": "platform@example.com"
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Insights/activityLogAlerts",
+      "apiVersion": "2023-01-01-preview",
+      "name": "fdgoodsafe-servicehealth",
+      "location": "global",
+      "properties": {
+        "enabled": true,
+        "scopes": [
+          "[subscription().id]"
+        ],
+        "condition": {
+          "allOf": [
+            {
+              "field": "category",
+              "equals": "ServiceHealth"
+            }
+          ]
+        },
+        "actions": {
+          "actionGroups": [
+            {
+              "actionGroupId": "[resourceId('Microsoft.Insights/actionGroups', 'fdgoodsafe-ops')]"
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Insights/actionGroups', 'fdgoodsafe-ops')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/metricAlerts",
+      "apiVersion": "2024-03-01-preview",
+      "name": "fdgoodsafe-model-availability",
+      "location": "global",
+      "properties": {
+        "severity": 2,
+        "enabled": true,
+        "scopes": [
+          "[resourceId('Microsoft.CognitiveServices/accounts', 'fdgoodsafe-acct')]"
+        ],
+        "evaluationFrequency": "PT5M",
+        "windowSize": "PT15M",
+        "criteria": {
+          "odata.type": "Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria",
+          "allOf": [
+            {
+              "name": "availability",
+              "metricName": "ModelAvailabilityRate",
+              "operator": "LessThan",
+              "threshold": 99,
+              "timeAggregation": "Average",
+              "criterionType": "StaticThresholdCriterion"
+            }
+          ]
+        },
+        "actions": [
+          {
+            "actionGroupId": "[resourceId('Microsoft.Insights/actionGroups', 'fdgoodsafe-ops')]"
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', 'fdgoodsafe-acct')]",
+        "[resourceId('Microsoft.Insights/actionGroups', 'fdgoodsafe-ops')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Consumption/budgets",
+      "apiVersion": "2023-11-01",
+      "name": "fdgoodsafe-monthly",
+      "properties": {
+        "category": "Cost",
+        "amount": 500,
+        "timeGrain": "Monthly",
+        "timePeriod": {
+          "startDate": "2026-11-01T00:00:00Z"
+        },
+        "notifications": {
+          "actual80": {
+            "enabled": true,
+            "operator": "GreaterThan",
+            "threshold": 80,
+            "thresholdType": "Actual",
+            "contactEmails": [
+              "finops@example.com"
+            ]
+          },
+          "forecast100": {
+            "enabled": true,
+            "operator": "GreaterThan",
+            "threshold": 100,
+            "thresholdType": "Forecasted",
+            "contactEmails": [
+              "finops@example.com"
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

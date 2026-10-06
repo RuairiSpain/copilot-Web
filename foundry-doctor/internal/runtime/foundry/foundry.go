@@ -57,7 +57,7 @@ func (c HTTPClient) Ping(ctx context.Context, endpoint string) error {
 	var resp struct {
 		Data []any `json:"data"`
 	}
-	return runtime.DoJSON(ctx, c.HTTP, c.Credential, scope, http.MethodGet, u, nil, &resp)
+	return runtime.DoJSON(ctx, c.HTTP, c.Credential, scope, http.MethodGet, u, ".services.ai.azure.com", nil, &resp)
 }
 
 func (c HTTPClient) ListAgents(ctx context.Context, endpoint string) ([]Agent, error) {
@@ -68,7 +68,7 @@ func (c HTTPClient) ListAgents(ctx context.Context, endpoint string) ([]Agent, e
 			LatestVersion string `json:"latestVersion"`
 		} `json:"data"`
 	}
-	if err := runtime.DoJSON(ctx, c.HTTP, c.Credential, scope, http.MethodGet, u, nil, &resp); err != nil {
+	if err := runtime.DoJSON(ctx, c.HTTP, c.Credential, scope, http.MethodGet, u, ".services.ai.azure.com", nil, &resp); err != nil {
 		return nil, err
 	}
 	out := make([]Agent, 0, len(resp.Data))
@@ -89,7 +89,7 @@ func (c HTTPClient) GetAgentVersion(ctx context.Context, endpoint, name, version
 		Version string `json:"version"`
 		Status  string `json:"status"`
 	}
-	if err := runtime.DoJSON(ctx, c.HTTP, c.Credential, scope, http.MethodGet, u, nil, &resp); err != nil {
+	if err := runtime.DoJSON(ctx, c.HTTP, c.Credential, scope, http.MethodGet, u, ".services.ai.azure.com", nil, &resp); err != nil {
 		return AgentVersion{}, err
 	}
 	return AgentVersion{Name: resp.Name, Version: resp.Version, Status: resp.Status}, nil
@@ -103,7 +103,7 @@ func (c HTTPClient) ListConnections(ctx context.Context, endpoint string) ([]Con
 			Category string `json:"category"`
 		} `json:"data"`
 	}
-	if err := runtime.DoJSON(ctx, c.HTTP, c.Credential, scope, http.MethodGet, u, nil, &resp); err != nil {
+	if err := runtime.DoJSON(ctx, c.HTTP, c.Credential, scope, http.MethodGet, u, ".services.ai.azure.com", nil, &resp); err != nil {
 		return nil, err
 	}
 	out := make([]Connection, 0, len(resp.Data))
@@ -114,8 +114,14 @@ func (c HTTPClient) ListConnections(ctx context.Context, endpoint string) ([]Con
 }
 
 // Endpoint derives the standard public-cloud project endpoint.
-func Endpoint(account, project string) string {
-	return fmt.Sprintf("https://%s.services.ai.azure.com/api/projects/%s", account, project)
+func Endpoint(account, project string) (string, error) {
+	if err := runtime.ValidateDataPlaneName("foundry account", account); err != nil {
+		return "", err
+	}
+	if err := runtime.ValidateDataPlaneName("foundry project", project); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("https://%s.services.ai.azure.com/api/projects/%s", account, project), nil
 }
 
 // Probe is a scheduler probe wrapper.

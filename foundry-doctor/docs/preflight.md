@@ -32,10 +32,12 @@ failing check look ready.
   likely, not certain).
 - **FND-DEP-012** checks the target location against the subscription's
   locations and every template resource type against the provider's
-  locations (both certain), then compares the Foundry regions with a dated
-  copy of the Learn supported-regions table (2026-09-07). A mismatch with that
-  table is only ever `uncertain`; once the copy is over a year old it is
-  skipped instead.
+  locations (both certain), then compares only the documented Foundry Agent
+  Service columns this implementation can map deterministically (Responses API,
+  Agents, private VNet) with a dated copy of the Learn supported-regions table
+  (2026-09-07). Tool-by-region and Bing-region claims are intentionally out of
+  scope here. A mismatch with the supported-regions table is only ever
+  `uncertain`; once the copy is over a year old it is skipped instead.
 
 ## Outcomes
 

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -200,5 +201,76 @@ func TestAnnotate(t *testing.T) {
 	}
 	if code, _, errs := exec(t, "annotate", "--format", "github", "--dir", dir); code != 0 || errs != "" {
 		t.Fatalf("github annotate exit=%d err=%q", code, errs)
+	}
+	if code, out, errs := exec(t, "annotate", "--format", "sarif", "--dir", dir); code != 0 && code != 1 {
+		t.Fatalf("sarif annotate exit=%d err=%q", code, errs)
+	} else {
+		var v map[string]any
+		if err := json.Unmarshal([]byte(out), &v); err != nil {
+			t.Fatalf("invalid sarif json: %v\n%s", err, out)
+		}
+		if v["version"] != "2.1.0" {
+			t.Fatalf("sarif version = %v", v["version"])
+		}
+	}
+}
+
+func TestGraphSourceFormats(t *testing.T) {
+	for _, format := range []string{"mermaid", "json", "markdown", "dot", "html"} {
+		t.Run(format, func(t *testing.T) {
+			code, out, errs := exec(t, "graph", "--source", "--dir", sample("good"), "--format", format)
+			if code != 0 {
+				t.Fatalf("exit=%d err=%q", code, errs)
+			}
+			if strings.TrimSpace(out) == "" {
+				t.Fatal("graph output is empty")
+			}
+			if format == "json" {
+				var v map[string]any
+				if err := json.Unmarshal([]byte(out), &v); err != nil {
+					t.Fatalf("invalid json: %v\n%s", err, out)
+				}
+			}
+		})
+	}
+}
+
+func TestCostOfflineFormats(t *testing.T) {
+	for _, format := range []string{"console", "json", "markdown"} {
+		t.Run(format, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), "cost-fixed")
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			files := map[string]string{
+				"azure.yaml":                        minimalAzureYAML,
+				filepath.Join("infra", "main.json"): `{"$schema":"https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#","contentVersion":"1.0.0.0","resources":[]}`,
+			}
+			for rel, body := range files {
+				dst := filepath.Join(dir, rel)
+				if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(dst, []byte(body), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var out, errb bytes.Buffer
+			code := run(context.Background(), []string{
+				"cost", "--dir", dir, "--offline", "--format", format,
+			}, &out, &errb, noBicep(&errb))
+			if code != 0 {
+				t.Fatalf("exit=%d err=%q", code, errb.String())
+			}
+			if strings.TrimSpace(out.String()) == "" {
+				t.Fatal("cost output is empty")
+			}
+			if format == "json" {
+				var v map[string]any
+				if err := json.Unmarshal(out.Bytes(), &v); err != nil {
+					t.Fatalf("invalid json: %v\n%s", err, out.String())
+				}
+			}
+		})
 	}
 }

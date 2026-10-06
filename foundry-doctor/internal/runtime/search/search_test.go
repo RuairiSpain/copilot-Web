@@ -101,12 +101,16 @@ func TestLatestSuccess(t *testing.T) {
 	if !latestSuccess("error", "", nil).IsZero() {
 		t.Fatal("expected zero time")
 	}
-	if got := endpoint("svc"); got != "https://svc.search.windows.net" {
+	got, err := endpoint("svc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "https://svc.search.windows.net" {
 		t.Fatalf("endpoint = %q", got)
 	}
 }
 
-func TestHTTPClientIndexerErrorCodeFallback(t *testing.T) {
+func TestHTTPClientIgnoresFreeTextIndexerErrors(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"status":"running","lastResult":{"status":"failed","itemsFailed":2,"errorMessage":"details"}}`)
@@ -125,8 +129,16 @@ func TestHTTPClientIndexerErrorCodeFallback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status.SafeErrorCode != "search-indexer-error" || status.LastSuccessAgo != 0 {
+	if status.SafeErrorCode != "" || status.LastSuccessAgo != 0 {
 		t.Fatalf("status = %+v", status)
+	}
+}
+
+func TestEndpointRejectsHostileServiceNames(t *testing.T) {
+	for _, name := range []string{"x.evil.com#", "..", "@", "svc:443", "Upper", "münchen"} {
+		if _, err := endpoint(name); err == nil {
+			t.Fatalf("service %q accepted", name)
+		}
 	}
 }
 

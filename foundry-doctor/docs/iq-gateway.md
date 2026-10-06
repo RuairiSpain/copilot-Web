@@ -41,7 +41,12 @@ the expected repository shape for IQ MCP connections and APIM-backed projects.
 
 ## Unverified
 
-- The sample header-forwarding shape is intentionally marked **UNVERIFIED**.
-  `FND-IQ-009` verifies the documented
-  `x-ms-query-source-authorization` header only. Any alternate header naming
-  seen in experiments stays documentation-only until backed by primary docs.
+- `azure.ai.connection` targets can point either at a knowledge-base MCP
+  endpoint (`https://{search}.search.windows.net/knowledgebases/{kb}/mcp`) or
+  at a Cognitive Search service root (`https://{search}.search.windows.net`).
+  Only the MCP target participates in the live knowledge-base snapshot reads.
+- `FND-IQ-009` verifies the documented
+  `x-ms-query-source-authorization` header for indexed and remote-SharePoint
+  retrieval paths only. `x-ms-query-work-iq-source-authorization` is treated
+  as Work IQ-specific and never counts as pass evidence for the indexed-source
+  checks until Microsoft Learn documents that use.

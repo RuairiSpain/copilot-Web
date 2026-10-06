@@ -1,5 +1,5 @@
 id: FND-IQ-005
-version: 1
+version: 2
 group: IQ
 title: "Retrieval mode supported by index and service tier"
 description: >-
@@ -34,11 +34,12 @@ evidence:
     Read the knowledge base, each referenced knowledge source, the Search service resource (sku, location)
     and the target API version. Fail on each documented incompatibility: retrievalReasoningEffort.kind auto
     on an API version before 2026-08-01-preview or without a models entry; kind minimal with outputMode other
-    than extractiveData, or with answerSynthesis or a web knowledge source; kind medium on a service whose
-    location is not in the documented medium-effort region list; a models entry (LLM) on 2026-04-01; a web
-    knowledge source without a model; more knowledge sources in the knowledge base than the tier maximum
-    (Free 3, Basic 5 or 10, S1 to L2 10; and the Free/Basic knowledge source and knowledge base counts per
-    service); an LLM configured with a Basic or higher requirement for managed-identity access when the
+    than extractiveData, or with answerSynthesis or a web knowledge source; kind medium only when the service
+    location is in the documented medium-effort region list, otherwise report uncertainty because the documentation
+    is a positive allow-list; a models entry (LLM) on 2026-04-01; a web knowledge source without a model; more
+    knowledge sources in the knowledge base than the tier maximum (Free 3, Basic 5 or 10 depending on service
+    age, S1 to L2 10). Basic counts of 6 through 10 are uncertain until service creation evidence is available;
+    Basic counts above 10 fail. An LLM configured with a Basic or higher requirement for managed-identity access when the
     service sku is free. Report an indexed knowledge source whose index has no usable semantic configuration
     (see FND-IQ-002) as a dependency failure of this rule only by reference.
   confidence: certain
@@ -101,7 +102,7 @@ tests:
     - auto-effort-without-model
     - minimal-effort-with-answer-synthesis
     - minimal-effort-with-web-source
-    - medium-effort-in-unsupported-region
+    - basic-tier-exceeds-ten-knowledge-sources
     - llm-configured-on-2026-04-01
     - knowledge-sources-exceed-free-tier
   negative:
@@ -111,7 +112,11 @@ tests:
   skipped:
     - search-service-resource-not-readable
     - api-version-not-pinned
+  uncertain:
+    - medium-effort-region-not-in-documented-allow-list
+    - basic-tier-six-to-ten-knowledge-sources-without-service-age
 notes: >-
   Interpretation of PRD "retrieval mode" as the knowledge base reasoning effort plus output mode; the older
   agentic API (2025-08-01-preview "knowledge agent") is out of scope. The tier and region tables come from
-  Learn text dated up to 2026-08 and can change; they are data in the rule pack, not code.
+  Learn text dated up to 2026-08 and can change; they are data in the rule pack, not code. Current code has
+  no deterministic service-age signal for Basic-tier services, so 6-10 knowledge sources stay uncertain.

@@ -69,16 +69,16 @@ func TestRuntimeSkippedStrictAndValidation(t *testing.T) {
 	t.Setenv("FOUNDRY_DOCTOR_ENVIRONMENT", "")
 	t.Setenv("AZURE_ENV_NAME", "")
 	var out, errb bytes.Buffer
-	if code := run(context.Background(), []string{"runtime", "--dir", sample("good")}, &out, &errb, runtimeSvc(&recordingRuntime{out: skip})); code != 0 {
-		t.Fatalf("exit %d: %s", code, errb.String())
+	if code := run(context.Background(), []string{"runtime", "--dir", sample("good")}, &out, &errb, runtimeSvc(&recordingRuntime{out: skip})); code != app.ExitUnavailable {
+		t.Fatalf("exit %d, want %d: %s", code, app.ExitUnavailable, errb.String())
 	}
 	if !strings.Contains(out.String(), "skipped") {
 		t.Errorf("readiness summary missing: %s", out.String())
 	}
 	out.Reset()
 	errb.Reset()
-	if code := run(context.Background(), []string{"runtime", "--strict", "--dir", sample("good")}, &out, &errb, runtimeSvc(&recordingRuntime{out: skip})); code != app.ExitStrictSkip {
-		t.Fatalf("strict exit = %d, want %d", code, app.ExitStrictSkip)
+	if code := run(context.Background(), []string{"runtime", "--strict", "--dir", sample("good")}, &out, &errb, runtimeSvc(&recordingRuntime{out: skip})); code != app.ExitUnavailable {
+		t.Fatalf("strict exit = %d, want %d", code, app.ExitUnavailable)
 	}
 	if code := run(context.Background(), []string{"runtime", "--vantage", "bad", "--dir", sample("good")}, &out, &errb, runtimeSvc(&recordingRuntime{})); code != app.ExitUnavailable {
 		t.Fatalf("bad vantage exit = %d, want %d", code, app.ExitUnavailable)

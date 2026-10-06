@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/armmodel"
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/azureyaml"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/baseline"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/bicep"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/catalog"
@@ -127,43 +128,77 @@ func (l armLoader) Load(ctx context.Context, src Source) (sdk.ARMModel, error) {
 	if src.Dir == "" {
 		return nil, unavailablef("no project directory")
 	}
-	infra := src.InfraPath
-	if infra == "" {
-		infra = project.DefaultInfraPath
+	entry := path.Join(defaultInfraPath(src.InfraPath), "main.bicep")
+	if doc, err := azureyaml.Parse(src.AzureYAML, src.AzureYAMLAt); err == nil {
+		if resolved, ok := resolveBicepEntry(src, doc); ok {
+			entry = resolved
+		}
 	}
-	entry := path.Join(infra, "main.bicep")
 	root, err := os.OpenRoot(src.Dir)
 	if err != nil {
 		return nil, unavailablef("cannot open project directory")
 	}
 	fi, err := root.Stat(entry)
+	if err == nil && fi.Mode().IsRegular() {
+		_ = root.Close()
+		tool, err := bicep.Discover(ctx, l.disc)
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			return nil, unavailablef("%s", bicepReason(err))
+		}
+		comp := bicep.Compiler{Tool: tool, Runner: l.runner, Root: src.Dir}
+		res, err := comp.Compile(ctx, filepath.Join(src.Dir, filepath.FromSlash(entry)))
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			return nil, unavailablef("%s", bicepReason(err))
+		}
+		if !res.OK {
+			return nil, unavailablef("%s failed to compile (%d diagnostics)", entry, len(res.Diagnostics))
+		}
+		m, err := armmodel.FromARM(res.ARM, armmodel.Options{Entry: entry})
+		if err != nil {
+			return nil, unavailablef("cannot read compiled ARM template")
+		}
+		return rawModel{Model: m, raw: res.ARM}, nil
+	}
+	jsonEntry := strings.TrimSuffix(entry, ".bicep") + ".json"
+	data, err := readRegularFile(root, jsonEntry)
 	_ = root.Close()
-	if err != nil || !fi.Mode().IsRegular() {
-		return nil, unavailablef("%s not found", entry)
-	}
-	tool, err := bicep.Discover(ctx, l.disc)
 	if err != nil {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
-		return nil, unavailablef("%s", bicepReason(err))
+		return nil, unavailablef("%s or %s not found", entry, jsonEntry)
 	}
-	comp := bicep.Compiler{Tool: tool, Runner: l.runner, Root: src.Dir}
-	res, err := comp.Compile(ctx, filepath.Join(src.Dir, filepath.FromSlash(entry)))
+	m, err := armmodel.FromARM(data, armmodel.Options{Entry: jsonEntry})
 	if err != nil {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
-		return nil, unavailablef("%s", bicepReason(err))
+		return nil, unavailablef("cannot read ARM JSON template %s", jsonEntry)
 	}
-	if !res.OK {
-		return nil, unavailablef("%s failed to compile (%d diagnostics)", entry, len(res.Diagnostics))
+	return rawModel{Model: m, raw: data}, nil
+}
+
+func defaultInfraPath(infra string) string {
+	if infra == "" {
+		return project.DefaultInfraPath
 	}
-	m, err := armmodel.FromARM(res.ARM, armmodel.Options{Entry: entry})
+	return infra
+}
+
+func readRegularFile(root *os.Root, rel string) ([]byte, error) {
+	fi, err := root.Stat(rel)
 	if err != nil {
-		return nil, unavailablef("cannot read compiled ARM template")
+		return nil, err
 	}
-	return rawModel{Model: m, raw: res.ARM}, nil
+	if !fi.Mode().IsRegular() {
+		return nil, os.ErrNotExist
+	}
+	f, err := root.Open(rel)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(f)
 }
 
 // rawModel keeps the compiled ARM JSON next to the model so the preflight

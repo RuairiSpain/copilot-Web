@@ -408,13 +408,27 @@ func TestRun006AdditionalBranches(t *testing.T) {
 	}
 	found := false
 	for _, f := range res.Findings {
-		if strings.Contains(f.Evidence, "error state") {
+		if strings.Contains(f.Evidence, "last result failed") {
 			found = true
 			break
 		}
 	}
 	if len(res.Findings) == 0 || !found {
-		t.Fatalf("expected indexer error finding, got %+v", res)
+		t.Fatalf("expected indexer last-result failure finding, got %+v", res)
+	}
+
+	d = baseDeps()
+	d.SearchData = fakeSearch{
+		index:  searchprobe.Index{Name: "knowledge", Fields: []searchprobe.Field{{Name: "v", Type: "Collection(Edm.Single)", Dimensions: 1536, VectorSearchProfile: "p"}}},
+		stats:  searchprobe.Stats{DocumentCount: 3},
+		status: searchprobe.IndexerStatus{Status: "running", LastResultStatus: "failed", ItemsFailed: 2, SafeErrorCode: "IndexerExecutionFailure"},
+	}
+	res, err = evalRule(t, "FND-RUN-006", d, baseInput())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Findings) != 1 || !strings.Contains(res.Findings[0].Evidence, "last result failed") || !strings.Contains(res.Findings[0].Evidence, "IndexerExecutionFailure") || !strings.Contains(res.Findings[0].Evidence, "itemsFailed=2") {
+		t.Fatalf("expected structured last-result failure, got %+v", res)
 	}
 }
 

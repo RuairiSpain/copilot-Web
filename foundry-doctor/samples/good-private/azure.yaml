@@ -1,0 +1,30 @@
+name: good-private-sample
+requiredVersions:
+  azd: ">= 1.34.2"
+infra:
+  provider: bicep
+  path: infra
+  module: main
+pipeline:
+  provider: github
+services:
+  ai-project:
+    host: azure.ai.project
+    deployments:
+      - name: chat
+        model:
+          format: OpenAI
+          name: gpt-4.1-mini
+          version: "2026-03-17"
+        sku:
+          name: GlobalStandard
+          capacity: 10
+  assistant:
+    host: azure.ai.agent
+    project: ./agents/assistant
+    uses:
+      - ai-project
+    kind: hosted
+    name: assistant
+    env:
+      AZURE_AI_PROJECT_ENDPOINT: ${AZURE_AI_PROJECT_ENDPOINT}

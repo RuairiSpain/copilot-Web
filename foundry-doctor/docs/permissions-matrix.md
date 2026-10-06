@@ -34,9 +34,9 @@ Reader grants the action.
 | Permissions API | GET | {rg or resource}/providers/Microsoft.Authorization/permissions (no subscription scope) | 2022-04-01 | Microsoft.Authorization/permissions/read | verified (FND-DEP-003); evidence only, never proof |
 | Soft-deleted | GET | Cognitive deletedAccounts 2026-09-01; KeyVault deletedVaults 2026-05-15; APIM deletedservices 2024-05-01 | as listed | `<provider>/deleted*/read` | verified |
 | What-if (opt-in) | POST | deployments/foundry-doctor-whatif/whatIf | 2026-06-01 | Microsoft.Resources/deployments/whatIf/action | verified (poll path and `deployments/read` UNVERIFIED) |
-| Runtime project | GET | accounts/{account}/projects/{project} | 2026-09-01 | Microsoft.CognitiveServices/accounts/projects/read | UNVERIFIED (Microsoft Learn did not expose 2026-09-01 project-management pages at verification time; code keeps fail-closed behavior and treats unavailable access as skipped.) |
-| Runtime capability hosts | GET | accounts/{account}/projects/{project}/capabilityHosts; accounts/{account}/capabilityHosts | 2026-09-01 | Microsoft.CognitiveServices/accounts/projects/capabilityHosts/read; Microsoft.CognitiveServices/accounts/capabilityHosts/read | UNVERIFIED (no public Microsoft Learn page found for 2026-09-01 capability-host endpoints; adapter failures degrade to unavailable.) |
-| Runtime connections | GET | accounts/{account}/projects/{project}/connections; accounts/{account}/connections | 2026-09-01 | Microsoft.CognitiveServices/accounts/projects/connections/read; Microsoft.CognitiveServices/accounts/connections/read | UNVERIFIED (no public Microsoft Learn page found for 2026-09-01 connection-list endpoints; adapter failures degrade to unavailable.) |
+| Runtime project | GET | accounts/{account}/projects/{project} | 2026-09-01 | Microsoft.CognitiveServices/accounts/projects/read | UNVERIFIED (public Microsoft Learn REST pages exist for the accountmanagement 2025-06-01 project surface, but the exact 2026-09-01 data-plane version used by the adapter remains unverified; code keeps fail-closed behavior and treats unavailable access as skipped.) |
+| Runtime capability hosts | GET | accounts/{account}/projects/{project}/capabilityHosts; accounts/{account}/capabilityHosts | 2026-09-01 | Microsoft.CognitiveServices/accounts/projects/capabilityHosts/read; Microsoft.CognitiveServices/accounts/capabilityHosts/read | UNVERIFIED (public Microsoft Learn REST pages exist for the 2025-06-01 capability-host project surface, but the exact 2026-09-01 data-plane version used by the adapter remains unverified; adapter failures degrade to unavailable.) |
+| Runtime connections | GET | accounts/{account}/projects/{project}/connections; accounts/{account}/connections | 2026-09-01 | Microsoft.CognitiveServices/accounts/projects/connections/read; Microsoft.CognitiveServices/accounts/connections/read | UNVERIFIED (public Microsoft Learn REST pages exist for the 2025-06-01 connection-list project surface, but the exact 2026-09-01 data-plane version used by the adapter remains unverified; adapter failures degrade to unavailable.) |
 | Runtime deployments | GET | accounts/{account}/deployments | 2026-09-01 | Microsoft.CognitiveServices/accounts/deployments/read | UNVERIFIED (Learn documents account deployments for older API versions, not 2026-09-01; code therefore remains fail-closed on probe errors.) |
 | Cosmos SQL role assignments | GET | databaseAccounts/{account}/sqlRoleAssignments | 2025-10-15 | Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments/read | UNVERIFIED (Microsoft Learn currently redirects the REST page to 2026-03-15, so the exact 2025-10-15 Learn surface is not independently confirmable from Learn; code remains read-only and fail-closed.) |
 | Private DNS VNet links | GET | privateDnsZones/{zone}/virtualNetworkLinks | 2018-09-01 | Microsoft.Network/privateDnsZones/virtualNetworkLinks/read | UNVERIFIED |
@@ -68,8 +68,9 @@ Reader grants the action.
 
 ## Dependencies
 
-No new Go modules. Credentials come from `azd auth token`, then
-`az account get-access-token`, held in memory only (`internal/azure/auth.go`).
+No new Go modules. Credentials come from `AZURE_ACCESS_TOKEN`, then
+`azd auth token`, then `az account get-access-token`, held in memory only
+(`internal/azure/auth.go`).
 The Azure SDK/azidentity is not used, so the licence inventory and
 THIRD_PARTY_NOTICES are unchanged. Adopting azidentity would need an ADR and a
 `scripts/dependency_audit.py` run.

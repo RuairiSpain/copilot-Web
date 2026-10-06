@@ -55,10 +55,21 @@ type HTTPClient struct {
 
 const scope = "https://search.azure.com/.default"
 
-func endpoint(service string) string { return "https://" + service + ".search.windows.net" }
+const hostSuffix = ".search.windows.net"
+
+func endpoint(service string) (string, error) {
+	if err := runtime.ValidateDataPlaneName("search service", service); err != nil {
+		return "", err
+	}
+	return "https://" + service + hostSuffix, nil
+}
 
 func (c HTTPClient) GetIndex(ctx context.Context, service, index string) (Index, error) {
-	u := endpoint(service) + "/indexes('" + url.PathEscape(index) + "')?api-version=2026-04-01"
+	base, err := endpoint(service)
+	if err != nil {
+		return Index{}, err
+	}
+	u := base + "/indexes('" + url.PathEscape(index) + "')?api-version=2026-04-01"
 	var resp struct {
 		Name   string `json:"name"`
 		Fields []struct {
@@ -68,7 +79,7 @@ func (c HTTPClient) GetIndex(ctx context.Context, service, index string) (Index,
 			VectorSearchProfile string `json:"vectorSearchProfile"`
 		} `json:"fields"`
 	}
-	if err := runtime.DoJSON(ctx, c.HTTP, c.Credential, scope, http.MethodGet, u, nil, &resp); err != nil {
+	if err := runtime.DoJSON(ctx, c.HTTP, c.Credential, scope, http.MethodGet, u, hostSuffix, nil, &resp); err != nil {
 		return Index{}, err
 	}
 	out := Index{Name: resp.Name}
@@ -79,40 +90,43 @@ func (c HTTPClient) GetIndex(ctx context.Context, service, index string) (Index,
 }
 
 func (c HTTPClient) GetIndexStatistics(ctx context.Context, service, index string) (Stats, error) {
-	u := endpoint(service) + "/indexes('" + url.PathEscape(index) + "')/search.stats?api-version=2026-04-01"
+	base, err := endpoint(service)
+	if err != nil {
+		return Stats{}, err
+	}
+	u := base + "/indexes('" + url.PathEscape(index) + "')/search.stats?api-version=2026-04-01"
 	var resp struct {
 		DocumentCount int64 `json:"documentCount"`
 		StorageSize   int64 `json:"storageSize"`
 		VectorSize    int64 `json:"vectorIndexSize"`
 	}
-	if err := runtime.DoJSON(ctx, c.HTTP, c.Credential, scope, http.MethodGet, u, nil, &resp); err != nil {
+	if err := runtime.DoJSON(ctx, c.HTTP, c.Credential, scope, http.MethodGet, u, hostSuffix, nil, &resp); err != nil {
 		return Stats{}, err
 	}
 	return Stats{DocumentCount: resp.DocumentCount, StorageSize: resp.StorageSize, VectorSize: resp.VectorSize}, nil
 }
 
 func (c HTTPClient) GetIndexerStatus(ctx context.Context, service, indexer string) (IndexerStatus, error) {
-	u := endpoint(service) + "/indexers('" + url.PathEscape(indexer) + "')/search.status?api-version=2026-04-01"
+	base, err := endpoint(service)
+	if err != nil {
+		return IndexerStatus{}, err
+	}
+	u := base + "/indexers('" + url.PathEscape(indexer) + "')/search.status?api-version=2026-04-01"
 	var resp struct {
 		Status     string `json:"status"`
 		LastResult struct {
-			Status       string `json:"status"`
-			ItemsFailed  int64  `json:"itemsFailed"`
-			ErrorMessage string `json:"errorMessage"`
-			ErrorCode    string `json:"errorCode"`
-			EndTime      string `json:"endTime"`
+			Status      string `json:"status"`
+			ItemsFailed int64  `json:"itemsFailed"`
+			ErrorCode   string `json:"errorCode"`
+			EndTime     string `json:"endTime"`
 		} `json:"lastResult"`
 		ExecutionHistory []struct {
 			Status  string `json:"status"`
 			EndTime string `json:"endTime"`
 		} `json:"executionHistory"`
 	}
-	if err := runtime.DoJSON(ctx, c.HTTP, c.Credential, scope, http.MethodGet, u, nil, &resp); err != nil {
+	if err := runtime.DoJSON(ctx, c.HTTP, c.Credential, scope, http.MethodGet, u, hostSuffix, nil, &resp); err != nil {
 		return IndexerStatus{}, err
-	}
-	code := resp.LastResult.ErrorCode
-	if code == "" && resp.LastResult.ErrorMessage != "" {
-		code = "search-indexer-error"
 	}
 	lastSuccessAgo := int64(0)
 	if ts := latestSuccess(resp.LastResult.Status, resp.LastResult.EndTime, resp.ExecutionHistory); !ts.IsZero() {
@@ -122,7 +136,7 @@ func (c HTTPClient) GetIndexerStatus(ctx context.Context, service, indexer strin
 		Status:           resp.Status,
 		LastResultStatus: resp.LastResult.Status,
 		ItemsFailed:      resp.LastResult.ItemsFailed,
-		SafeErrorCode:    strings.TrimSpace(code),
+		SafeErrorCode:    strings.TrimSpace(resp.LastResult.ErrorCode),
 		LastSuccessAgo:   lastSuccessAgo,
 	}, nil
 }

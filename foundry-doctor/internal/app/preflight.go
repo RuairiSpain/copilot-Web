@@ -147,6 +147,9 @@ func preflightRun(ctx context.Context, svc Services, req PreflightRequest, stdou
 		}
 		return strings.Compare(a.Reason, b.Reason)
 	})
+	for i := range skips {
+		skips[i].Required = true
+	}
 	code := ExitCode(Outcome{Findings: shown, Skips: skips, FailOn: req.FailOn, Strict: req.Strict})
 	var buf bytes.Buffer
 	// Readiness is computed from the raw rule outcomes, before baseline,

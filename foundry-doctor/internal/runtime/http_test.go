@@ -46,7 +46,7 @@ func TestDoJSONRetryAndUnavailable(t *testing.T) {
 		var got struct {
 			OK bool `json:"ok"`
 		}
-		if err := DoJSON(context.Background(), srv.Client(), cred{}, "scope", http.MethodGet, srv.URL, nil, &got); err != nil {
+		if err := DoJSON(context.Background(), srv.Client(), cred{}, "scope", http.MethodGet, srv.URL, "", nil, &got); err != nil {
 			t.Fatal(err)
 		}
 		if !got.OK || calls.Load() != 2 {
@@ -59,7 +59,7 @@ func TestDoJSONRetryAndUnavailable(t *testing.T) {
 			w.WriteHeader(http.StatusForbidden)
 		}))
 		defer srv.Close()
-		err := DoJSON(context.Background(), srv.Client(), cred{}, "scope", http.MethodGet, srv.URL+"?sig=x", nil, nil)
+		err := DoJSON(context.Background(), srv.Client(), cred{}, "scope", http.MethodGet, srv.URL+"?sig=x", "", nil, nil)
 		var un *azure.UnavailableError
 		if !errors.As(err, &un) || un == nil {
 			t.Fatalf("err = %v", err)
@@ -74,7 +74,7 @@ func TestDoJSONRetryAndUnavailable(t *testing.T) {
 			w.WriteHeader(http.StatusUnauthorized)
 		}))
 		defer srv.Close()
-		err := DoJSON(context.Background(), srv.Client(), cred{}, "scope", http.MethodGet, srv.URL, nil, nil)
+		err := DoJSON(context.Background(), srv.Client(), cred{}, "scope", http.MethodGet, srv.URL, "", nil, nil)
 		var un *azure.UnavailableError
 		if !errors.As(err, &un) {
 			t.Fatalf("err = %v", err)
@@ -95,7 +95,7 @@ func TestRetryAfterAndSafeURL(t *testing.T) {
 
 func TestDoJSONAdditionalBranches(t *testing.T) {
 	t.Run("token failure", func(t *testing.T) {
-		err := DoJSON(context.Background(), nil, errCred{}, "scope", http.MethodGet, "https://example.com", nil, nil)
+		err := DoJSON(context.Background(), nil, errCred{}, "scope", http.MethodGet, "https://example.com", "", nil, nil)
 		if err == nil || err.Error() != "token boom" {
 			t.Fatalf("err = %v", err)
 		}
@@ -116,7 +116,7 @@ func TestDoJSONAdditionalBranches(t *testing.T) {
 		var got struct {
 			OK bool `json:"ok"`
 		}
-		if err := DoJSON(context.Background(), hc, cred{}, "scope", http.MethodGet, "https://example.com", nil, &got); err != nil {
+		if err := DoJSON(context.Background(), hc, cred{}, "scope", http.MethodGet, "https://example.com", "", nil, &got); err != nil {
 			t.Fatal(err)
 		}
 		if !got.OK || calls.Load() != 3 {
@@ -129,7 +129,7 @@ func TestDoJSONAdditionalBranches(t *testing.T) {
 			w.WriteHeader(http.StatusNoContent)
 		}))
 		defer srv.Close()
-		if err := DoJSON(context.Background(), srv.Client(), cred{}, "scope", http.MethodGet, srv.URL, map[string]string{"x": "y"}, nil); err != nil {
+		if err := DoJSON(context.Background(), srv.Client(), cred{}, "scope", http.MethodGet, srv.URL, "", map[string]string{"x": "y"}, nil); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -140,7 +140,7 @@ func TestDoJSONAdditionalBranches(t *testing.T) {
 		}))
 		defer srv.Close()
 		var got map[string]any
-		if err := DoJSON(context.Background(), srv.Client(), cred{}, "scope", http.MethodGet, srv.URL, nil, &got); err == nil || !strings.Contains(err.Error(), "decode response") {
+		if err := DoJSON(context.Background(), srv.Client(), cred{}, "scope", http.MethodGet, srv.URL, "", nil, &got); err == nil || !strings.Contains(err.Error(), "decode response") {
 			t.Fatalf("err = %v", err)
 		}
 	})
@@ -150,7 +150,7 @@ func TestDoJSONAdditionalBranches(t *testing.T) {
 			http.NotFound(w, r)
 		}))
 		defer srv.Close()
-		if err := DoJSON(context.Background(), srv.Client(), cred{}, "scope", http.MethodGet, srv.URL, nil, nil); err == nil || err.Error() != "http 404" {
+		if err := DoJSON(context.Background(), srv.Client(), cred{}, "scope", http.MethodGet, srv.URL, "", nil, nil); err == nil || err.Error() != "http 404" {
 			t.Fatalf("err = %v", err)
 		}
 	})
@@ -161,8 +161,41 @@ func TestDoJSONAdditionalBranches(t *testing.T) {
 			_, _ = w.Write(make([]byte, maxResponseBytes+1))
 		}))
 		defer srv.Close()
-		if err := DoJSON(context.Background(), srv.Client(), cred{}, "scope", http.MethodGet, srv.URL, nil, nil); err == nil || !strings.Contains(err.Error(), "response exceeds") {
+		if err := DoJSON(context.Background(), srv.Client(), cred{}, "scope", http.MethodGet, srv.URL, "", nil, nil); err == nil || !strings.Contains(err.Error(), "response exceeds") {
 			t.Fatalf("err = %v", err)
+		}
+	})
+}
+
+func TestDoJSONHostValidationAndRedirects(t *testing.T) {
+	t.Run("rejects unexpected host suffix", func(t *testing.T) {
+		err := DoJSON(context.Background(), nil, cred{}, "scope", http.MethodGet, "https://example.com", ".search.windows.net", nil, nil)
+		if err == nil || !strings.Contains(err.Error(), "unexpected host") {
+			t.Fatalf("err = %v", err)
+		}
+	})
+
+	t.Run("does not follow redirects", func(t *testing.T) {
+		var redirected atomic.Int32
+		dst := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			redirected.Add(1)
+			t.Fatal("redirect target must not be called")
+		}))
+		defer dst.Close()
+		src := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if got := r.Header.Get("Authorization"); got != "Bearer token" {
+				t.Fatalf("authorization = %q", got)
+			}
+			http.Redirect(w, r, dst.URL, http.StatusFound)
+		}))
+		defer src.Close()
+
+		err := DoJSON(context.Background(), src.Client(), cred{}, "scope", http.MethodGet, src.URL, "", nil, nil)
+		if err == nil || err.Error() != "http 302" {
+			t.Fatalf("err = %v", err)
+		}
+		if redirected.Load() != 0 {
+			t.Fatalf("redirected calls = %d", redirected.Load())
 		}
 	})
 }

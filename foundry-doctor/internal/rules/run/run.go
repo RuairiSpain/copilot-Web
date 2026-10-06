@@ -270,7 +270,7 @@ func (e *env) deployments(ctx context.Context) ([]azure.AccountDeployment, error
 
 func (e *env) correlator(in *sdk.Input) runtime.Correlator { return runtime.NewCorrelator(in) }
 
-func (e *env) projectEndpoint() string {
+func (e *env) projectEndpoint() (string, error) {
 	return foundrydp.Endpoint(e.d.Target.Account, e.d.Target.Project)
 }
 
@@ -594,7 +594,10 @@ func (e *env) run005(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 	if e.d.ProjectData == nil {
 		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable + ": Foundry project data plane is not available"}}, nil
 	}
-	endpoint := e.projectEndpoint()
+	endpoint, err := e.projectEndpoint()
+	if err != nil {
+		return sdk.Result{Skipped: &sdk.Skip{Reason: azureReason(err)}}, nil
+	}
 	if err := e.d.ProjectData.Ping(ctx, endpoint); err != nil {
 		return sdk.Result{Skipped: &sdk.Skip{Reason: azureReason(err)}}, nil
 	}
@@ -698,17 +701,20 @@ func (e *env) run006(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 				if err != nil {
 					return sdk.Result{}, err
 				}
+				lastResult := strings.ToLower(st.LastResultStatus)
+				switch lastResult {
+				case "failed", "error":
+					a.add(rc, formatIndexerFailure(indexer, st))
+				case "transientfailure":
+					a.note("search indexer " + indexer + " reports transient failure")
+				case "inprogress":
+					a.note("search indexer " + indexer + " is still in progress")
+					zeroDocsUncertain = true
+				}
 				switch strings.ToLower(st.Status) {
 				case "error":
-					a.add(rc, "search indexer "+indexer+" is in error state")
-				case "running":
-					if strings.EqualFold(st.LastResultStatus, "transientFailure") {
-						a.note("search indexer " + indexer + " reports transient failure")
-					}
-				default:
-					if strings.EqualFold(st.LastResultStatus, "inProgress") {
-						a.note("search indexer " + indexer + " is still in progress")
-						zeroDocsUncertain = true
+					if lastResult != "failed" && lastResult != "error" {
+						a.add(rc, "search indexer "+indexer+" is in error state")
 					}
 				}
 				if zeroDocs && st.LastSuccessAgo > 0 && st.LastSuccessAgo < 2 {
@@ -728,6 +734,17 @@ func (e *env) run006(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable + ": project has no Search connection with index metadata"}}, nil
 	}
 	return a.result(), nil
+}
+
+func formatIndexerFailure(indexer string, st searchprobe.IndexerStatus) string {
+	parts := []string{"search indexer " + indexer + " last result failed"}
+	if st.SafeErrorCode != "" {
+		parts = append(parts, "errorCode="+st.SafeErrorCode)
+	}
+	if st.ItemsFailed > 0 {
+		parts = append(parts, fmt.Sprintf("itemsFailed=%d", st.ItemsFailed))
+	}
+	return strings.Join(parts, " ")
 }
 
 func (e *env) run007(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
