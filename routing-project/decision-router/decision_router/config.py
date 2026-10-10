@@ -41,6 +41,7 @@ class Settings:
     default_mode: str | None = None
     state_max_chars: int = 24_000
     decision_timeout_seconds: float = 10.0
+    decision_max_attempts: int = 3
     request_timeout_seconds: float = 60.0
     total_timeout_seconds: float = 90.0
     attempts_per_model: int = 2
@@ -64,6 +65,7 @@ class Settings:
             default_mode=os.getenv("ROUTER_DEFAULT_MODE") or None,
             state_max_chars=int(os.getenv("ROUTER_STATE_MAX_CHARS", "24000")),
             decision_timeout_seconds=float(os.getenv("ROUTER_DECISION_TIMEOUT_SECONDS", "10")),
+            decision_max_attempts=int(os.getenv("ROUTER_DECISION_MAX_ATTEMPTS", "3")),
             request_timeout_seconds=float(os.getenv("ROUTER_REQUEST_TIMEOUT_SECONDS", "60")),
             total_timeout_seconds=float(os.getenv("ROUTER_TOTAL_TIMEOUT_SECONDS", "90")),
             attempts_per_model=int(os.getenv("ROUTER_ATTEMPTS_PER_MODEL", "2")),
@@ -79,6 +81,8 @@ class Settings:
             raise ValueError(f"ROUTER_DEFAULT_MODE must be one of {ROUTING_MODES}")
         if self.state_max_chars < 1000:
             raise ValueError("ROUTER_STATE_MAX_CHARS must be at least 1000")
+        if self.decision_max_attempts < 1:
+            raise ValueError("ROUTER_DECISION_MAX_ATTEMPTS must be at least 1")
         if self.attempts_per_model < 1:
             raise ValueError("ROUTER_ATTEMPTS_PER_MODEL must be at least 1")
         for name in ("decision_timeout_seconds", "request_timeout_seconds", "total_timeout_seconds"):

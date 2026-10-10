@@ -80,7 +80,8 @@ async def run_row(row: dict[str, Any], *, pipeline: RouterPipeline, router: Chat
             routed = await pipeline.route(forwarded, mode, f"cmp-{row.get('id')}")
             d = routed.decision
             record["decision1"] = {"candidates": d.candidates, "ranking": d.ranking, "probabilities": d.probabilities,
-                                   "confidence": d.confidence, "latency_ms": d.latency_ms, "skipped": d.skipped}
+                                   "confidence": d.confidence, "latency_ms": d.latency_ms, "skipped": d.skipped,
+                                   "usage": d.usage}
             if decide_only:
                 pipeline.record_route_only(routed, forwarded)
             else:

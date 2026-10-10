@@ -36,6 +36,8 @@ with `default_mode` in the catalog or `ROUTER_DEFAULT_MODE`, and also accepts a
 
 ```http
 POST https://<resource>.services.ai.azure.com/providers/microsoft/v1/systemone
+Content-Type: application/json
+Accept: application/json
 api-key: <key>            or   Authorization: Bearer <Entra token, scope cognitiveservices.azure.com>
 
 {"model": "microsoft-decision-1",
@@ -46,28 +48,41 @@ api-key: <key>            or   Authorization: Bearer <Entra token, scope cogniti
    "criteria": {"gpt-5-nano": "Trivial, single-step work ... Price rank 1 of 6 in the pool (1 is cheapest).",
                 "gpt-5-mini": "...", "deepseek-v4-flash": "..."}}}}
 
-200 {"answers": {"route": {"type": "choice", "choice": "gpt-5-mini",
+200 {"model": "microsoft-decision-1", "usage": {"prompt_tokens": 412, ...},
+     "answers": {"route": {"type": "choice", "choice": "gpt-5-mini",
                            "probabilities": {"gpt-5-nano": 0.21, "gpt-5-mini": 0.64, "deepseek-v4-flash": 0.15},
                            "confidence": 0.81}}}
 ```
 
-A response is rejected if the answer type is `refusal`, if the probabilities do not cover
-exactly the offered models or do not sum to 1, or if `choice` is not an offered model. A
-`choice` question needs 2–255 options; when stage 1 leaves a single model, Decision-1 is not
-called.
+`model` in the request is the **deployment name**; `model` in the response is the underlying
+model (for example `microsoft-decision-1`). Both are logged, with the response's token usage
+and the Decision-1 cost (list price $0.042 per million input tokens; output is not billed).
 
-**Source of this contract.** Microsoft's announcement and catalog pages could not be
-reached from the environment this was written in. The shape above comes from the
-`ElBruno.AI.Decisions` Foundry client (github.com/elbruno/ElBruno.AI.Decisions, commit
-bc94ed9, 9 October 2026), which reports a live smoke test against Foundry. Check it against
-the catalog entry before production use; the request is built in
-`decision_router/decision1.py:build_request` and parsed in `parse_answer`.
+How the answer is used:
+
+- The ranking starts with Decision-1's `choice` (its selected option), followed by the other
+  candidates in descending probability; ties go to the cheaper model.
+- Probabilities that sum to 1 within 0.01 are renormalised. A larger gap, a missing or extra
+  option, a `choice` that was not offered, or a `refusal` answer rejects the response.
+- A `choice` question needs at least two options. When stage 1 leaves a single model,
+  Decision-1 is not called.
+- `confidence` is optional and only logged.
+
+**Sources.** Route, request body, authentication, deployment-name semantics, error codes and
+pricing are from Microsoft's documentation ("Deploy and use Microsoft-Decision-1 in Microsoft
+Foundry", and the Foundry blog post of 9 October 2026). Microsoft publishes no sample response:
+the docs say only that a choice answer contains "the selected option and a probability for
+every option", plus the model name and token usage. The field names `probabilities` and
+`confidence` come from the `ElBruno.AI.Decisions` Foundry client (commit bc94ed9), which was
+smoke-tested against Foundry. Confirm them with one live call; they are read in
+`decision_router/decision1.py:parse_answer`.
 
 ## Failure handling
 
 | Event | Behaviour |
 |---|---|
-| Decision-1 error, timeout, refusal or malformed answer | 502 (504 on timeout), `code: decision_unavailable`. No model is called. |
+| Decision-1 returns 408, 429, 5xx or a network error | Retried with exponential backoff, honouring `retry-after-ms` / `retry-after`, up to `ROUTER_DECISION_MAX_ATTEMPTS` attempts inside `ROUTER_DECISION_TIMEOUT_SECONDS` |
+| Decision-1 still failing, or 400/401/403/404/422, refusal or malformed answer | `code: decision_unavailable`, status 503 for throttling, 504 for timeout, otherwise 502. No model is called. |
 | Model returns 408, 429, 5xx or a network error | Retry the same model (`ROUTER_ATTEMPTS_PER_MODEL`, default 2), honouring `retry-after-ms` / `retry-after` up to `ROUTER_MAX_RETRY_AFTER_SECONDS`; then the next ranked model |
 | Model returns 404 (deployment missing) | Next ranked model, no retry |
 | Model returns another 4xx (bad request, content filter, auth) | Passed through to the client unchanged; no fallback, because another model would get the same request |
@@ -80,7 +95,8 @@ the catalog entry before production use; the request is built in
 One JSON line per request, to the `decision_router.decisions` logger and, when
 `ROUTER_DECISION_LOG_PATH` is set, to that file (written off the event loop):
 `request_id`, `routing_mode`, `catalog_sha256`, `candidates`, `decision` (`ranking`,
-`probabilities`, `choice`, `confidence`, `latency_ms`, `skipped`), `served_model`,
+`probabilities`, `choice`, `confidence`, `latency_ms`, `skipped`, `attempts`,
+`response_model`, `usage`, `cost`), `served_model`,
 `provider_model`, `fallback_used`, `attempts`, `usage`, `cost`, `total_latency_ms`,
 `outcome`. Message text is not logged unless `ROUTER_LOG_PROMPTS=true`; a SHA-256 of the
 messages is logged instead.
@@ -138,7 +154,8 @@ What the report does and does not show:
 | `ROUTER_DEPLOYMENT_MAP` | `{}` | JSON, model name → deployment name |
 | `ROUTER_CATALOG_PATH` / `ROUTER_PRICING_PATH` | `config/...` | Catalog and price table |
 | `ROUTER_STATE_MAX_CHARS` | `24000` | Size of the conversation text sent to Decision-1 |
-| `ROUTER_DECISION_TIMEOUT_SECONDS` | `10` | Decision-1 call timeout |
+| `ROUTER_DECISION_TIMEOUT_SECONDS` | `10` | Time budget for the Decision-1 call, retries included |
+| `ROUTER_DECISION_MAX_ATTEMPTS` | `3` | Decision-1 attempts on 408, 429, 5xx and network errors |
 | `ROUTER_REQUEST_TIMEOUT_SECONDS` | `60` | Per model call |
 | `ROUTER_TOTAL_TIMEOUT_SECONDS` | `90` | Whole request, across fallbacks |
 | `ROUTER_ATTEMPTS_PER_MODEL` | `2` | Attempts per model before the next ranked one |

@@ -70,7 +70,8 @@ async def main(args: argparse.Namespace) -> int:
     pipeline = RouterPipeline(
         settings, catalog,
         Decision1Client(settings.resolved_decision1_url or "", settings.decision1_deployment, decision_auth,
-                        timeout_seconds=settings.decision_timeout_seconds, http=http),
+                        timeout_seconds=settings.decision_timeout_seconds,
+                        max_attempts=settings.decision_max_attempts, http=http),
         chat, Telemetry(settings.decision_log_path, settings.log_prompts), prices,
     )
 

@@ -10,5 +10,5 @@
     "o4-mini": {"input_per_million": null, "cached_input_per_million": null, "output_per_million": null},
     "gpt-5.6-terra": {"input_per_million": null, "cached_input_per_million": null, "output_per_million": null}
   },
-  "decision1": {"input_per_million": null}
+  "decision1": {"input_per_million": 0.042, "_source": "Microsoft list price, US and EU DataZone, October 2026; output is not billed"}
 }

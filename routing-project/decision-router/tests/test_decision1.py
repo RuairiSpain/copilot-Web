@@ -35,6 +35,7 @@ def test_parse_valid_answer():
     (answer(type="score"), "invalid_response"),
     (answer(probabilities={"gpt-5.5": 0.5, "o4-mini": 0.5}), "invalid_response"),
     (answer(probabilities={"gpt-5.5": 0.5, "o4-mini": 0.5, "gpt-5.6-terra": 0.5}), "invalid_response"),
+    (answer(probabilities={"gpt-5.5": 0.2, "o4-mini": 0.5, "gpt-5.6-terra": 0.32}), "invalid_response"),
     (answer(probabilities={"gpt-5.5": 0.2, "o4-mini": 0.5, "gpt-5.6-terra": 0.3, "gpt-5-nano": 0.0}), "invalid_response"),
     (answer(choice="gpt-5-nano"), "invalid_response"),
     (answer(probabilities={"gpt-5.5": True, "o4-mini": 0.5, "gpt-5.6-terra": 0.5}), "invalid_response"),
@@ -43,6 +44,18 @@ def test_invalid_answers_are_rejected(body, code):
     with pytest.raises(DecisionError) as error:
         parse_answer(body, OPTIONS)
     assert error.value.code == code
+
+
+def test_probabilities_rounded_in_transit_are_renormalised():
+    _, probabilities, _ = parse_answer(answer(probabilities={"gpt-5.5": 0.333, "o4-mini": 0.334, "gpt-5.6-terra": 0.331}),
+                                       OPTIONS)
+    assert abs(sum(probabilities.values()) - 1) < 1e-12
+
+
+def test_selected_option_leads_the_ranking(catalog):
+    candidates = catalog.candidates("quality")
+    probabilities = {"gpt-5.5": 0.4, "o4-mini": 0.4, "gpt-5.6-terra": 0.2}
+    assert rank(probabilities, candidates, choice="o4-mini") == ["o4-mini", "gpt-5.5", "gpt-5.6-terra"]
 
 
 def test_rank_orders_by_probability_then_price(catalog):

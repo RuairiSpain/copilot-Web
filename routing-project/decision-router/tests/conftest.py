@@ -55,7 +55,7 @@ def make_pipeline(settings: Settings, catalog: Catalog, fake: FakeFoundry, tmp_p
 
         pipe = RouterPipeline(
             s, catalog,
-            Decision1Client(s.resolved_decision1_url, s.decision1_deployment, auth, http=http),
+            Decision1Client(s.resolved_decision1_url, s.decision1_deployment, auth, http=http, sleep=no_sleep),
             ChatClient(s.resolved_chat_url, auth, http=http),
             Telemetry(s.decision_log_path), PriceTable(s.pricing_path), sleep=no_sleep,
         )

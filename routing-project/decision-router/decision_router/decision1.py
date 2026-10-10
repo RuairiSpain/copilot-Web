@@ -7,13 +7,23 @@ Request and response follow the Foundry SystemOne route:
      "questions": {"route": {"type": "choice", "instructions": "...",
                              "criteria": {"<model>": "<description>", ...}}}}
 
-    {"answers": {"route": {"type": "choice", "choice": "<model>",
+    {"model": "microsoft-decision-1", "usage": {...},
+     "answers": {"route": {"type": "choice", "choice": "<model>",
                            "probabilities": {"<model>": 0.7, ...}, "confidence": 0.9}}}
+
+Microsoft's documentation (Foundry "Deploy and use Microsoft-Decision-1", October 2026) gives
+the route, request body, authentication, and that the answer carries "the selected option
+and a probability for every option", the underlying model name and token usage. It publishes
+no sample response, so the `probabilities` and `confidence` field names follow the
+ElBruno.AI.Decisions Foundry client, which was smoke-tested live; `confidence` is optional here.
 """
 from __future__ import annotations
 
+import asyncio
 import math
+import random
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -24,7 +34,10 @@ from .catalog import ModelEntry
 
 QUESTION_NAME = "route"
 MAX_CHOICE_OPTIONS = 255
-PROBABILITY_TOLERANCE = 1e-4
+# Probabilities that sum to 1 within this tolerance are renormalised (rounding in transit);
+# a larger gap means the answer is malformed.
+PROBABILITY_TOLERANCE = 0.01
+RETRYABLE_STATUS = (408, 429, 500, 502, 503, 504)
 
 
 class DecisionError(RuntimeError):
@@ -44,6 +57,10 @@ class Decision:
     latency_ms: float
     skipped: bool = False
     request: dict[str, Any] = field(default_factory=dict)
+    # From the response: the underlying model name (not the deployment name) and token usage.
+    response_model: str | None = None
+    usage: dict[str, Any] | None = None
+    attempts: int = 0
 
 
 def _text(content: Any) -> str:
@@ -157,8 +174,10 @@ def parse_answer(body: Any, options: list[str]) -> tuple[str, dict[str, float], 
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not 0 <= value <= 1:
             raise DecisionError("invalid_response", f"invalid probability for {key!r}")
         probabilities[key] = float(value)
-    if abs(sum(probabilities.values()) - 1.0) > PROBABILITY_TOLERANCE:
-        raise DecisionError("invalid_response", "probabilities do not sum to 1")
+    total = sum(probabilities.values())
+    if abs(total - 1.0) > PROBABILITY_TOLERANCE:
+        raise DecisionError("invalid_response", f"probabilities sum to {total:.4f}, not 1")
+    probabilities = {key: value / total for key, value in probabilities.items()}
     choice = answer.get("choice")
     if choice not in probabilities:
         raise DecisionError("invalid_response", "choice is not one of the offered models")
@@ -168,21 +187,72 @@ def parse_answer(body: Any, options: list[str]) -> tuple[str, dict[str, float], 
     return choice, probabilities, None if confidence is None else float(confidence)
 
 
-def rank(probabilities: dict[str, float], candidates: list[ModelEntry]) -> list[str]:
-    """Highest probability first; ties go to the cheaper model."""
+def rank(probabilities: dict[str, float], candidates: list[ModelEntry], choice: str | None = None) -> list[str]:
+    """Decision-1's selected option first, then the rest by probability; ties go to the cheaper model."""
     tier = {m.name: m.tier for m in candidates}
-    return sorted(probabilities, key=lambda name: (-probabilities[name], tier[name]))
+    ordered = sorted(probabilities, key=lambda name: (-probabilities[name], tier[name]))
+    if choice in probabilities:
+        ordered.remove(choice)
+        ordered.insert(0, choice)
+    return ordered
+
+
+def _retry_after(response: httpx.Response) -> float | None:
+    for header, scale in (("retry-after-ms", 1000.0), ("retry-after", 1.0)):
+        value = response.headers.get(header)
+        if value:
+            try:
+                return float(value) / scale
+            except ValueError:
+                return None
+    return None
 
 
 class Decision1Client:
     def __init__(self, url: str, deployment: str, auth: FoundryAuth, *, timeout_seconds: float = 10.0,
-                 http: httpx.AsyncClient | None = None):
+                 max_attempts: int = 3, http: httpx.AsyncClient | None = None,
+                 sleep: Callable[[float], Awaitable[None]] = asyncio.sleep):
         self.url = url
         self.deployment = deployment
         self.auth = auth
         self.timeout_seconds = timeout_seconds
+        self.max_attempts = max_attempts
         self._http = http or httpx.AsyncClient()
         self._owns_http = http is None
+        self._sleep = sleep
+
+    async def _post(self, request: dict[str, Any], started: float) -> tuple[httpx.Response, int]:
+        """POST with retries on 408/429/5xx and network errors, all inside timeout_seconds."""
+        deadline = started + self.timeout_seconds
+        for attempt in range(1, self.max_attempts + 1):
+            remaining = deadline - time.perf_counter()
+            if remaining <= 0:
+                raise DecisionError("timeout", "Decision-1 timed out")
+            retry_after, last_status = None, None
+            try:
+                headers = {**await self.auth.headers(), "Accept": "application/json"}
+                response = await self._http.post(self.url, json=request, headers=headers, timeout=remaining)
+            except httpx.TimeoutException as exc:
+                if attempt == self.max_attempts:
+                    raise DecisionError("timeout", "Decision-1 timed out") from exc
+            except httpx.HTTPError as exc:
+                if attempt == self.max_attempts:
+                    raise DecisionError("unreachable", f"Decision-1 request failed: {type(exc).__name__}") from exc
+            else:
+                if response.status_code < 400:
+                    return response, attempt
+                if response.status_code not in RETRYABLE_STATUS or attempt == self.max_attempts:
+                    raise DecisionError("http_error", f"Decision-1 returned HTTP {response.status_code}",
+                                        status_code=response.status_code)
+                retry_after, last_status = _retry_after(response), response.status_code
+            delay = retry_after if retry_after is not None else 0.2 * 2 ** (attempt - 1) * (0.75 + random.random() / 2)
+            if delay >= deadline - time.perf_counter():
+                if last_status is not None:
+                    raise DecisionError("http_error", f"Decision-1 returned HTTP {last_status}; retry would exceed "
+                                        "the decision timeout", status_code=last_status)
+                raise DecisionError("timeout", "Decision-1 timed out")
+            await self._sleep(delay)
+        raise DecisionError("timeout", "Decision-1 timed out")  # pragma: no cover - loop always returns or raises
 
     async def decide(self, state: str, instructions: str, criteria: dict[str, str],
                      candidates: list[ModelEntry]) -> Decision:
@@ -194,25 +264,17 @@ class Decision1Client:
         if len(names) > MAX_CHOICE_OPTIONS:
             raise DecisionError("too_many_options", f"Decision-1 accepts at most {MAX_CHOICE_OPTIONS} options")
         request = build_request(self.deployment, state, instructions, criteria)
-        try:
-            response = await self._http.post(
-                self.url, json=request, headers=await self.auth.headers(), timeout=self.timeout_seconds,
-            )
-        except httpx.TimeoutException as exc:
-            raise DecisionError("timeout", "Decision-1 timed out") from exc
-        except httpx.HTTPError as exc:
-            raise DecisionError("unreachable", f"Decision-1 request failed: {type(exc).__name__}") from exc
-        if response.status_code >= 400:
-            raise DecisionError("http_error", f"Decision-1 returned HTTP {response.status_code}",
-                                status_code=response.status_code)
+        response, attempts = await self._post(request, started)
         try:
             body = response.json()
         except ValueError as exc:
             raise DecisionError("invalid_response", "Decision-1 response is not JSON") from exc
         choice, probabilities, confidence = parse_answer(body, names)
-        ranking = rank(probabilities, candidates)
-        return Decision(names, ranking, probabilities, choice, confidence,
-                        round((time.perf_counter() - started) * 1000, 3), request=request)
+        usage = body.get("usage")
+        return Decision(names, rank(probabilities, candidates, choice), probabilities, choice, confidence,
+                        round((time.perf_counter() - started) * 1000, 3), request=request,
+                        response_model=body.get("model") if isinstance(body.get("model"), str) else None,
+                        usage=usage if isinstance(usage, dict) else None, attempts=attempts)
 
     async def close(self) -> None:
         if self._owns_http:

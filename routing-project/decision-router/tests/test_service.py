@@ -131,7 +131,7 @@ def test_retry_after_is_honoured_up_to_the_cap(make_pipeline, settings, fake):
 
 
 def test_decision1_failure_returns_an_error_and_calls_no_model(make_pipeline, settings, fake, tmp_path):
-    fake.decision_responses.append(httpx.Response(503, json={"error": "down"}))
+    fake.decision_responses.append(httpx.Response(401, json={"error": "unauthorized"}))
     with client_for(make_pipeline, settings) as client:
         response = client.post("/v1/chat/completions", json={"messages": [{"role": "user", "content": "x"}]})
     assert response.status_code == 502
@@ -139,6 +139,45 @@ def test_decision1_failure_returns_an_error_and_calls_no_model(make_pipeline, se
     assert not chat_calls(fake)
     log = json.loads((tmp_path / "decisions.jsonl").read_text().splitlines()[-1])
     assert log["outcome"] == "decision_failed" and log["error_code"] == "http_error"
+
+
+def test_decision1_throttling_is_retried_then_succeeds(make_pipeline, settings, fake, tmp_path):
+    fake.decision_responses.append(httpx.Response(429, headers={"retry-after-ms": "200"}, json={}))
+    fake.decision_responses.append(ranked(["gpt-5.5", "o4-mini"]))
+    pipe = make_pipeline()
+    with TestClient(create_app(settings, pipeline=pipe)) as client:
+        response = client.post("/v1/chat/completions", json={"messages": [{"role": "user", "content": "x"}]})
+    assert response.status_code == 200 and response.json()["model"] == "gpt-5.5"
+    assert pipe.sleeps == [0.2]
+    decision = json.loads((tmp_path / "decisions.jsonl").read_text().splitlines()[-1])["decision"]
+    assert decision["attempts"] == 2
+
+
+def test_decision1_throttling_that_persists_returns_503(make_pipeline, settings, fake):
+    for _ in range(3):
+        fake.decision_responses.append(httpx.Response(429, json={}))
+    with client_for(make_pipeline, settings) as client:
+        response = client.post("/v1/chat/completions", json={"messages": [{"role": "user", "content": "x"}]})
+    assert response.status_code == 503 and response.json()["error"]["code"] == "decision_unavailable"
+    assert not chat_calls(fake)
+
+
+def test_decision1_retry_after_beyond_the_budget_reports_the_429(make_pipeline, settings, fake):
+    fake.decision_responses.append(httpx.Response(429, headers={"retry-after": "60"}, json={}))
+    with client_for(make_pipeline, settings) as client:
+        response = client.post("/v1/chat/completions", json={"messages": [{"role": "user", "content": "x"}]})
+    assert response.status_code == 503
+
+
+def test_decision1_usage_model_and_cost_are_logged(make_pipeline, settings, fake, tmp_path):
+    with client_for(make_pipeline, settings) as client:
+        client.post("/v1/route", json={"messages": [{"role": "user", "content": "hello there"}]})
+    decision = json.loads((tmp_path / "decisions.jsonl").read_text().splitlines()[-1])["decision"]
+    assert decision["response_model"] == "microsoft-decision-1"
+    tokens = decision["usage"]["prompt_tokens"]
+    assert decision["cost"]["amount"] == round(tokens * 0.042 / 1_000_000, 10)
+    sent = next(r for r in fake.requests if r["path"].endswith("/systemone"))
+    assert sent["headers"]["accept"] == "application/json" and sent["headers"]["api-key"] == "test-key"
 
 
 def test_streaming_is_passed_through(make_pipeline, settings, fake):

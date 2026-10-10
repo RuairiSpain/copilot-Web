@@ -62,6 +62,10 @@ class Telemetry:
         if decision.get("ranking"):
             self.decisions.labels(mode, decision["ranking"][0]).inc()
             self.decision_latency.labels(mode).observe(decision.get("latency_ms") or 0.0)
+            decision_usage = decision.get("usage") or {}
+            decision_tokens = decision_usage.get("prompt_tokens", decision_usage.get("input_tokens"))
+            if isinstance(decision_tokens, int):
+                self.tokens.labels("decision-1", "prompt_tokens").inc(decision_tokens)
         if event.get("served_model"):
             self.served.labels(mode, event["served_model"], str(bool(event.get("fallback_used"))).lower()).inc()
             usage = event.get("usage") or {}

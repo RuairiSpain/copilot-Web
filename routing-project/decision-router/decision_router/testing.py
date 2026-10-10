@@ -64,9 +64,13 @@ class FakeFoundry:
         total = sum(raw.values())
         probabilities = {o: v / total for o, v in raw.items()}
         choice = max(probabilities, key=probabilities.get)
-        return httpx.Response(200, json={"answers": {"route": {
-            "type": "choice", "choice": choice, "probabilities": probabilities, "confidence": probabilities[choice],
-        }}})
+        tokens = (len(body["state"]) + len(json.dumps(question))) // 4
+        return httpx.Response(200, json={
+            "model": "microsoft-decision-1",
+            "usage": {"prompt_tokens": tokens, "total_tokens": tokens},
+            "answers": {"route": {"type": "choice", "choice": choice, "probabilities": probabilities,
+                                  "confidence": probabilities[choice]}},
+        })
 
     def _chat(self, request: httpx.Request, body: dict[str, Any]) -> httpx.Response:
         deployment = body.get("model", "")

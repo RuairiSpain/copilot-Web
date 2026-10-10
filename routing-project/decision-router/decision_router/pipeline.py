@@ -156,7 +156,7 @@ class RouterPipeline:
             event.update(outcome="decision_failed", error_code=exc.code,
                          total_latency_ms=round((self._clock() - started) * 1000, 3))
             self.telemetry.record(event, body)
-            status = 504 if exc.code == "timeout" else 502
+            status = 504 if exc.code == "timeout" else 503 if exc.status_code == 429 else 502
             raise RoutingError(status, "decision_unavailable", f"Decision-1 failed: {exc}") from exc
         event["decision"] = {
             "deployment": self.decision.deployment,
@@ -166,6 +166,10 @@ class RouterPipeline:
             "confidence": decision.confidence,
             "latency_ms": decision.latency_ms,
             "skipped": decision.skipped,
+            "attempts": decision.attempts,
+            "response_model": decision.response_model,
+            "usage": decision.usage,
+            "cost": self.prices.decision_cost(decision.usage),
         }
         return Routed(request_id, mode, candidates, decision, started, event)
 
