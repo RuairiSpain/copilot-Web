@@ -8,9 +8,13 @@ and returns the same output, but makes its choice with **Microsoft-Decision-1**:
 2. **Stage 2 (Decision-1).** The conversation, the routing instructions and the candidates
    with their descriptions go to Decision-1 as one `choice` question. Its probabilities give
    a ranked list of models.
-3. **Log.** The candidates, probabilities and ranking are written to the decision log.
-4. **Generate.** The top-ranked model answers the request. If that call fails, the next model
-   in the ranking is tried; every model tried is a stage-1 candidate.
+3. **Select.** The model with the highest probability is called first. If its probability is
+   below `ROUTER_LOW_CONFIDENCE_THRESHOLD` (default 0.5), the second-ranked model is called
+   first and the top model second.
+4. **Log.** The candidates, probabilities, ranking and execution order are written to the
+   decision log.
+5. **Generate.** The first model in that order answers the request. If that call fails, the
+   next model in the order is tried; every model tried is a stage-1 candidate.
 
 There is no other router behind Decision-1. If it cannot answer, the request fails.
 
@@ -18,7 +22,7 @@ There is no other router behind Decision-1. If it cannot answer, the request fai
 |---|---|
 | `decision-router/` | The service, the comparison harness, tests and deployment manifests |
 | `dataset-v31/` | 40,000 prompts used to compare this router with Foundry Model Router |
-| `docs/` | Architecture and the Decision-1 request/response contract |
+| `docs/` | Architecture, the Decision-1 contract, and the option-order testing guide |
 
 ## Quick start
 
@@ -39,14 +43,17 @@ curl -s localhost:5001/v1/chat/completions -H 'content-type: application/json' -
 
 The response body is the chosen model's chat completion, unchanged. Its `model` field names
 the model that answered, as with Model Router. Routing details are in the
-`x-router-ranking` and `x-router-served-model` headers and in the decision log.
+`x-router-ranking`, `x-router-low-confidence` and `x-router-served-model` headers and in the
+decision log.
 
 ## Comparing with Foundry Model Router
 
 `decision-router/scripts/compare_with_model_router.py` sends each dataset prompt to this
 router and to a Model Router deployment, with the same body and the same model
 deployments, and reports how often they choose the same model. It also reports latency,
-cost and which models each side picked in each mode. See `docs/ARCHITECTURE.md`.
+cost and which models each side picked in each mode. With `--shuffle-options` it also measures
+whether Decision-1's answer depends on the order the models are listed in
+(`docs/OPTION_ORDER_TESTING.md`). See `docs/ARCHITECTURE.md`.
 
 ## What changed from v4
 

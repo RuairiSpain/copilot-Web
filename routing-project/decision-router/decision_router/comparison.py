@@ -15,12 +15,64 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-from .catalog import Catalog
+from .catalog import Catalog, ModelEntry
+from .decision1 import Decision, DecisionError, build_state, execution_order
 from .foundry import ChatClient
-from .pipeline import ProviderError, RouterPipeline, RoutingError
+from .pipeline import ProviderError, Routed, RouterPipeline, RoutingError
 from .pricing import PriceTable
 
 PREFERENCE_TO_MODE = {"cheap": "cost", "medium": "balanced", "high": "balanced", "extra_high": "quality"}
+THRESHOLD_SWEEP = (0.3, 0.4, 0.5, 0.6, 0.7, 0.8)
+
+
+def shuffled_orders(names: list[str], repeats: int, key: str) -> list[list[str]]:
+    """`repeats` reorderings of `names`, reproducible from `key`, each different from the original order."""
+    rng = random.Random(key)
+    orders = []
+    for _ in range(repeats):
+        order = list(names)
+        rng.shuffle(order)
+        if order == names and len(names) > 1:
+            order = order[1:] + order[:1]  # never resend the original order: it would measure nothing
+        orders.append(order)
+    return orders
+
+
+async def option_order_test(pipeline: RouterPipeline, routed: Routed, body: dict[str, Any], repeats: int,
+                            key: str) -> list[dict[str, Any]]:
+    """Ask Decision-1 the same question again with the options in a different order.
+
+    The state, instructions and option descriptions are identical to the original call; only the
+    order of the keys in `criteria` changes. A position-insensitive model returns the same ranking.
+    """
+    base: Decision = routed.decision
+    if base.skipped:
+        return []
+    by_name: dict[str, ModelEntry] = {m.name: m for m in routed.candidates}
+    criteria = pipeline.catalog.criteria(routed.candidates)
+    state = build_state(body, pipeline.settings.state_max_chars)
+    instructions = pipeline.catalog.modes[routed.mode].instructions
+    results = []
+    for order in shuffled_orders(base.candidates, repeats, key):
+        try:
+            shuffled = await pipeline.decision.decide(state, instructions, {n: criteria[n] for n in order},
+                                                      [by_name[n] for n in order])
+        except DecisionError as exc:
+            results.append({"order": order, "error": exc.code})
+            continue
+        shuffled_first, _ = execution_order(shuffled.ranking, shuffled.probabilities,
+                                            pipeline.settings.low_confidence_threshold)
+        results.append({
+            "order": order,
+            "ranking": shuffled.ranking,
+            "probabilities": shuffled.probabilities,
+            "top1_changed": shuffled.ranking[0] != base.ranking[0],
+            "served_first_changed": shuffled_first[0] != routed.order[0],
+            "ranking_changed": shuffled.ranking != base.ranking,
+            "max_probability_shift": round(max(abs(shuffled.probabilities[n] - base.probabilities[n])
+                                               for n in base.candidates), 6),
+        })
+    return results
 
 
 def load_rows(paths: list[Path]) -> list[dict[str, Any]]:
@@ -64,7 +116,7 @@ def _message_text(parsed: Any) -> str | None:
 async def run_row(row: dict[str, Any], *, pipeline: RouterPipeline, router: ChatClient,
                   router_deployments: dict[str, str], catalog: Catalog, prices: PriceTable,
                   max_output_tokens: int | None, max_tokens_param: str, decide_only: bool,
-                  store_outputs: bool, timeout: float) -> dict[str, Any]:
+                  store_outputs: bool, timeout: float, shuffle_repeats: int = 0, seed: int = 0) -> dict[str, Any]:
     mode = PREFERENCE_TO_MODE[row["quality_preference"]]
     body = build_body(row["prompt"], max_output_tokens, max_tokens_param)
     record: dict[str, Any] = {
@@ -80,8 +132,13 @@ async def run_row(row: dict[str, Any], *, pipeline: RouterPipeline, router: Chat
             routed = await pipeline.route(forwarded, mode, f"cmp-{row.get('id')}")
             d = routed.decision
             record["decision1"] = {"candidates": d.candidates, "ranking": d.ranking, "probabilities": d.probabilities,
+                                   "execution_order": routed.order, "low_confidence": routed.low_confidence,
+                                   "top_probability": d.probabilities[d.ranking[0]],
                                    "confidence": d.confidence, "latency_ms": d.latency_ms, "skipped": d.skipped,
                                    "usage": d.usage}
+            if shuffle_repeats:
+                record["option_order"] = await option_order_test(pipeline, routed, forwarded, shuffle_repeats,
+                                                                 f"{seed}:{row.get('id')}")
             if decide_only:
                 pipeline.record_route_only(routed, forwarded)
             else:
@@ -89,7 +146,7 @@ async def run_row(row: dict[str, Any], *, pipeline: RouterPipeline, router: Chat
                 completion = await pipeline.complete(routed, forwarded)
                 parsed = json.loads(completion.content)
                 out.update(served_model=completion.served.name, provider_model=parsed.get("model"),
-                           fallback_used=completion.served.name != d.ranking[0],
+                           fallback_used=completion.served.name != routed.order[0],
                            latency_ms=round((time.perf_counter() - t0) * 1000 + d.latency_ms, 3),
                            usage=parsed.get("usage"), cost=prices.cost(completion.served.name, parsed.get("usage")))
                 if store_outputs:
@@ -162,7 +219,8 @@ def summarize(records: list[dict[str, Any]]) -> dict[str, Any]:
     unmapped = Counter(r["router"]["provider_model"] for r in routed if not r["router"].get("served_model"))
 
     def top1(r: dict[str, Any]) -> str:
-        return r["decision1"]["ranking"][0]
+        """The model our pipeline calls first (after the low-confidence rule)."""
+        return (r["decision1"].get("execution_order") or r["decision1"]["ranking"])[0]
 
     by_mode: dict[str, Any] = {}
     for mode in sorted({r["routing_mode"] for r in records}):
@@ -218,9 +276,57 @@ def summarize(records: list[dict[str, Any]]) -> dict[str, Any]:
             "router_total_p95": _percentile([r["router"]["latency_ms"] for r in routed], .95),
         },
         "cost": {"ours": cost_total("ours"), "router": cost_total("router")},
+        "low_confidence": _low_confidence_summary(decided, both),
+        "option_order": _option_order_summary(records),
         "by_mode": by_mode,
         "by_task": by_task,
     }
+
+
+def _low_confidence_summary(decided: list[dict[str, Any]], both: list[dict[str, Any]]) -> dict[str, Any]:
+    """How often the low-confidence rule fired, and what other thresholds would have done."""
+    scored = [r for r in decided if not r["decision1"]["skipped"]]
+    compared = [r for r in both if not r["decision1"]["skipped"]]
+    sweep = []
+    for threshold in THRESHOLD_SWEEP:
+        def first(r: dict[str, Any], t: float = threshold) -> str:
+            return execution_order(r["decision1"]["ranking"], r["decision1"]["probabilities"], t)[0][0]
+        sweep.append({
+            "threshold": threshold,
+            "fired_rate": _rate(sum(r["decision1"]["top_probability"] < threshold for r in scored), len(scored)),
+            "agreement_with_router": _rate(sum(first(r) == r["router"]["served_model"] for r in compared),
+                                           len(compared)),
+        })
+    no_rule = _rate(sum(r["decision1"]["ranking"][0] == r["router"]["served_model"] for r in compared), len(compared))
+    return {
+        "fired_rate": _rate(sum(bool(r["decision1"].get("low_confidence")) for r in scored), len(scored)),
+        "top_probability_p50": _percentile([r["decision1"]["top_probability"] for r in scored], .5),
+        "agreement_with_router_without_rule": no_rule,
+        "threshold_sweep": sweep,
+    }
+
+
+def _option_order_summary(records: list[dict[str, Any]]) -> dict[str, Any] | None:
+    tested = [r for r in records if r.get("option_order")]
+    if not tested:
+        return None
+    calls = [c for r in tested for c in r["option_order"] if "error" not in c]
+
+    def rates(items: list[dict[str, Any]]) -> dict[str, Any]:
+        return {
+            "calls": len(items),
+            "top1_flip_rate": _rate(sum(c["top1_changed"] for c in items), len(items)),
+            "served_first_flip_rate": _rate(sum(c["served_first_changed"] for c in items), len(items)),
+            "ranking_change_rate": _rate(sum(c["ranking_changed"] for c in items), len(items)),
+            "mean_max_probability_shift": round(sum(c["max_probability_shift"] for c in items) / len(items), 6)
+            if items else None,
+        }
+
+    by_mode = {mode: rates([c for r in tested if r["routing_mode"] == mode for c in r["option_order"]
+                            if "error" not in c])
+               for mode in sorted({r["routing_mode"] for r in tested})}
+    errors = Counter(c["error"] for r in tested for c in r["option_order"] if "error" in c)
+    return {"prompts": len(tested), **rates(calls), "errors": dict(errors), "by_mode": by_mode}
 
 
 def _counts(counts: dict[str, int]) -> str:
@@ -237,7 +343,7 @@ def render_markdown(summary: dict[str, Any], meta: dict[str, Any]) -> str:
         "| Measure | Value |",
         "|---|---|",
         f"| Rows compared (both arms answered, router model in pool) | {summary['compared']} |",
-        f"| Same model chosen (Decision-1 top-1 = Model Router) | {summary['agreement_top1']} |",
+        f"| Same model chosen (our first call = Model Router) | {summary['agreement_top1']} |",
         f"| Model Router's model in Decision-1 top-2 | {summary['router_in_decision1_top2']} |",
         f"| Model Router chose outside the mode's stage-1 set | {summary['router_outside_stage1']} |",
         f"| Our fallback rate | {summary['ours_fallback_rate']} |",
@@ -250,12 +356,42 @@ def render_markdown(summary: dict[str, Any], meta: dict[str, Any]) -> str:
         "",
         "## By routing mode",
         "",
-        "| Mode | n | Agreement | Decision-1 top-1 | Model Router |",
+        "| Mode | n | Agreement | Our first call | Model Router |",
         "|---|---|---|---|---|",
     ]
     for mode, item in summary["by_mode"].items():
         lines.append(f"| {mode} | {item['n']} | {item['agreement_top1']} | {_counts(item['decision1_top1'])} | "
                      f"{_counts(item['router_served'])} |")
+    low = summary["low_confidence"]
+    lines += [
+        "",
+        "## Low-confidence rule",
+        "",
+        f"Fired on {low['fired_rate']} of decisions (top probability below the configured threshold). "
+        f"Median top probability: {low['top_probability_p50']}. Agreement with Model Router without the rule: "
+        f"{low['agreement_with_router_without_rule']}.",
+        "",
+        "| Threshold | Share of decisions where it fires | Agreement with Model Router |",
+        "|---|---|---|",
+    ]
+    lines += [f"| {s['threshold']} | {s['fired_rate']} | {s['agreement_with_router']} |" for s in low["threshold_sweep"]]
+    order = summary.get("option_order")
+    if order:
+        lines += [
+            "",
+            "## Option-order test",
+            "",
+            f"{order['prompts']} prompts, {order['calls']} reshuffled Decision-1 calls.",
+            "",
+            "| Mode | Calls | Top-1 flips | First-call flips | Ranking changed | Mean max probability shift |",
+            "|---|---|---|---|---|---|",
+            f"| all | {order['calls']} | {order['top1_flip_rate']} | {order['served_first_flip_rate']} | "
+            f"{order['ranking_change_rate']} | {order['mean_max_probability_shift']} |",
+        ]
+        lines += [f"| {mode} | {m['calls']} | {m['top1_flip_rate']} | {m['served_first_flip_rate']} | "
+                  f"{m['ranking_change_rate']} | {m['mean_max_probability_shift']} |" for mode, m in order["by_mode"].items()]
+        if order["errors"]:
+            lines.append(f"\nReshuffled calls that failed: {order['errors']}.")
     if summary["router_unmapped_models"]:
         lines += ["", "**Model Router returned models that are not in the catalog:** "
                   f"{summary['router_unmapped_models']}. Add them as aliases, or align the pool with the router's "

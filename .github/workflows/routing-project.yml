@@ -31,7 +31,7 @@ jobs:
       - run: pytest -q
 
       # Exercises the comparison harness end to end against the in-memory fake.
-      - run: python scripts/compare_with_model_router.py --dry-run --sample 64 --output-dir /tmp/dry-run
+      - run: python scripts/compare_with_model_router.py --dry-run --sample 64 --shuffle-options --output-dir /tmp/dry-run
 
   image:
     runs-on: ubuntu-latest

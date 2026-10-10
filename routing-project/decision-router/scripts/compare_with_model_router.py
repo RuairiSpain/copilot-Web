@@ -84,6 +84,7 @@ async def main(args: argparse.Namespace) -> int:
             pipeline=pipeline, router=chat, router_deployments=router_deployments, catalog=catalog, prices=prices,
             max_output_tokens=args.max_output_tokens, max_tokens_param=args.max_tokens_param,
             decide_only=args.decide_only, store_outputs=not args.no_outputs, timeout=settings.request_timeout_seconds,
+            shuffle_repeats=args.shuffle_options, seed=args.seed,
         )
     finally:
         await pipeline.close()
@@ -91,7 +92,8 @@ async def main(args: argparse.Namespace) -> int:
 
     summary = summarize(records)
     meta = {"data": [str(p) for p in paths], "sample": args.sample, "seed": args.seed, "dry_run": args.dry_run,
-            "decide_only": args.decide_only, "catalog_sha256": catalog.fingerprint,
+            "decide_only": args.decide_only, "shuffle_options": args.shuffle_options,
+            "low_confidence_threshold": settings.low_confidence_threshold, "catalog_sha256": catalog.fingerprint,
             "router_deployments": router_deployments, "decision1_deployment": settings.decision1_deployment}
     (output_dir / "report.json").write_text(json.dumps({"meta": meta, "summary": summary}, indent=2) + "\n")
     (output_dir / "report.md").write_text(render_markdown(summary, meta))
@@ -111,6 +113,10 @@ if __name__ == "__main__":
                         help="reasoning models reject max_tokens; some non-OpenAI models reject max_completion_tokens")
     parser.add_argument("--decide-only", action="store_true",
                         help="stop our arm after Decision-1 (Model Router still generates: it has no route-only call)")
+    parser.add_argument("--shuffle-options", type=int, nargs="?", const=1, default=0, metavar="N",
+                        help="option-order test: re-ask Decision-1 N more times per prompt (default 1) with the "
+                             "options in a different order, and report how often the ranking changes. "
+                             "See docs/OPTION_ORDER_TESTING.md")
     parser.add_argument("--no-outputs", action="store_true", help="do not store response text")
     parser.add_argument("--dry-run", action="store_true", help="use the in-memory fake instead of Foundry")
     parser.add_argument("--output-dir", type=Path, default=Path("eval/comparison"))

@@ -30,8 +30,11 @@ class _Chunks(httpx.AsyncByteStream):
 
 
 class FakeFoundry:
-    def __init__(self, pool: list[str], router_deployments: dict[str, list[str]] | None = None):
+    def __init__(self, pool: list[str], router_deployments: dict[str, list[str]] | None = None,
+                 position_bias: float = 0.0):
         self.pool = pool
+        # > 0 makes the fake Decision-1 favour whichever option is listed first, to exercise the option-order test.
+        self.position_bias = position_bias
         # Model Router deployment name -> models it may route to.
         self.router_deployments = router_deployments or {}
         self.failures: dict[str, deque] = defaultdict(deque)
@@ -61,6 +64,8 @@ class FakeFoundry:
         question = body["questions"]["route"]
         options = list(question["criteria"])
         raw = {o: _score(body["state"], o) ** 3 for o in options}
+        if self.position_bias:
+            raw[options[0]] *= 1 + self.position_bias
         total = sum(raw.values())
         probabilities = {o: v / total for o, v in raw.items()}
         choice = max(probabilities, key=probabilities.get)

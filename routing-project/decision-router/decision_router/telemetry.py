@@ -26,6 +26,8 @@ class Telemetry:
                                  ["mode", "model"], registry=self.registry)
         self.served = Counter("router_served", "Model that produced the response",
                               ["mode", "model", "fallback"], registry=self.registry)
+        self.low_confidence = Counter("router_low_confidence", "Decisions where the second-ranked model went first",
+                                      ["mode"], registry=self.registry)
         self.decision_latency = Histogram("router_decision_latency_ms", "Decision-1 latency",
                                           ["mode"], buckets=_LATENCY_BUCKETS_MS, registry=self.registry)
         self.total_latency = Histogram("router_total_latency_ms", "End-to-end latency",
@@ -61,6 +63,8 @@ class Telemetry:
         decision = event.get("decision") or {}
         if decision.get("ranking"):
             self.decisions.labels(mode, decision["ranking"][0]).inc()
+            if decision.get("low_confidence"):
+                self.low_confidence.labels(mode).inc()
             self.decision_latency.labels(mode).observe(decision.get("latency_ms") or 0.0)
             decision_usage = decision.get("usage") or {}
             decision_tokens = decision_usage.get("prompt_tokens", decision_usage.get("input_tokens"))

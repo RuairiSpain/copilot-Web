@@ -42,6 +42,7 @@ def _routing_headers(routed: Routed, served: str | None = None) -> dict[str, str
         "x-request-id": routed.request_id,
         "x-router-mode": routed.mode,
         "x-router-ranking": ",".join(routed.decision.ranking),
+        "x-router-low-confidence": str(routed.low_confidence).lower(),
     }
     if served:
         headers["x-router-served-model"] = served
@@ -112,6 +113,8 @@ def create_app(settings: Settings | None = None, *, pipeline: RouterPipeline | N
                 "routing_mode": mode,
                 "candidates": [m.name for m in routed.candidates],
                 "ranking": [{"model": name, "probability": decision.probabilities[name]} for name in decision.ranking],
+                "execution_order": routed.order,
+                "low_confidence": routed.low_confidence,
                 "decision": {"choice": decision.choice, "confidence": decision.confidence,
                              "latency_ms": decision.latency_ms, "skipped": decision.skipped},
             },

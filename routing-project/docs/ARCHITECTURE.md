@@ -11,11 +11,15 @@ stage 2   Decision-1 "choice" question        state = rendered conversation
    │      criteria = candidates + descriptions + price rank
    │      ranking = probabilities, highest first (ties → cheaper model)
    ▼
-log       decision log line                   candidates, probabilities, ranking, attempts, usage, cost
+select    execution order                     highest probability first; if that probability is
+   │                                          below ROUTER_LOW_CONFIDENCE_THRESHOLD, the second-
+   │                                          ranked model goes first and the top model second
+   ▼
+log       decision log line                   candidates, probabilities, ranking, execution order, usage, cost
    │
    ▼
-generate  POST {endpoint}/openai/v1/chat/completions, model = top-ranked deployment
-          on failure, next model in the ranking (stage-1 candidates only)
+generate  POST {endpoint}/openai/v1/chat/completions, model = first model in the execution order
+          on failure, the next model in that order (stage-1 candidates only)
 ```
 
 ## Input and output
@@ -60,8 +64,9 @@ and the Decision-1 cost (list price $0.042 per million input tokens; output is n
 
 How the answer is used:
 
-- The ranking starts with Decision-1's `choice` (its selected option), followed by the other
-  candidates in descending probability; ties go to the cheaper model.
+- The ranking is the candidates in descending probability; ties go to the cheaper model. It
+  does not depend on the order the options were sent in. Decision-1's `choice` is logged; with
+  calibrated probabilities it is the top-ranked model.
 - Probabilities that sum to 1 within 0.01 are renormalised. A larger gap, a missing or extra
   option, a `choice` that was not offered, or a `refusal` answer rejects the response.
 - A `choice` question needs at least two options. When stage 1 leaves a single model,
@@ -76,6 +81,35 @@ every option", plus the model name and token usage. The field names `probabiliti
 `confidence` come from the `ElBruno.AI.Decisions` Foundry client (commit bc94ed9), which was
 smoke-tested against Foundry. Confirm them with one live call; they are read in
 `decision_router/decision1.py:parse_answer`.
+
+## Selecting the model: the low-confidence rule
+
+The model called first is the one with the highest probability. When that probability is
+below `ROUTER_LOW_CONFIDENCE_THRESHOLD` (default `0.5`), the second-ranked model is called
+first instead, and the top model moves to second place, so it is still tried if the second
+model fails. The rest of the order is unchanged.
+
+| Probabilities | Threshold | Execution order | `low_confidence` |
+|---|---|---|---|
+| gpt-5.5 0.70, o4-mini 0.20, terra 0.10 | 0.5 | gpt-5.5, o4-mini, terra | false |
+| gpt-5.5 0.45, o4-mini 0.35, terra 0.20 | 0.5 | o4-mini, gpt-5.5, terra | true |
+| gpt-5.5 0.45, o4-mini 0.35, terra 0.20 | 0 (off) | gpt-5.5, o4-mini, terra | false |
+
+Notes:
+
+- The rule uses the top model's probability from `probabilities`, not the optional
+  `confidence` field.
+- It does not apply when stage 1 leaves a single model.
+- `0.5` is a starting value, not a validated one. Microsoft's guidance is to choose thresholds
+  per task on your own data. The comparison report includes a threshold sweep (below) for
+  that purpose.
+- With six candidates a top probability of 0.45 can still be a clear lead; with two it is
+  nearly a coin toss. If one threshold does not suit every mode, that is visible in the
+  report's per-mode figures.
+
+The response carries `x-router-low-confidence: true|false`, and `/v1/route` returns both
+`ranking` (by probability) and `execution_order`. The decision log records `ranking`,
+`execution_order`, `top_probability`, `low_confidence` and the threshold in force.
 
 ## Failure handling
 
@@ -95,6 +129,7 @@ smoke-tested against Foundry. Confirm them with one live call; they are read in
 One JSON line per request, to the `decision_router.decisions` logger and, when
 `ROUTER_DECISION_LOG_PATH` is set, to that file (written off the event loop):
 `request_id`, `routing_mode`, `catalog_sha256`, `candidates`, `decision` (`ranking`,
+`execution_order`, `top_probability`, `low_confidence`, `low_confidence_threshold`,
 `probabilities`, `choice`, `confidence`, `latency_ms`, `skipped`, `attempts`,
 `response_model`, `usage`, `cost`), `served_model`,
 `provider_model`, `fallback_used`, `attempts`, `usage`, `cost`, `total_latency_ms`,
@@ -123,8 +158,9 @@ Outputs in `--output-dir`:
 - `results.jsonl`: per prompt, the Decision-1 candidates, probabilities and ranking, the
   model each arm served, latency, usage, cost and the response text.
 - `decision_log.jsonl`: the service's own decision log for the run.
-- `report.json` and `report.md`: agreement (top-1, and Model Router's choice within
-  Decision-1's top 2), how often Model Router chose a model outside the mode's stage-1 set,
+- `report.json` and `report.md`: agreement (our first call, and Model Router's choice within
+  Decision-1's top 2), a low-confidence section (how often the rule fired, and what fire
+  rate and agreement thresholds from 0.3 to 0.8 would have given), how often Model Router chose a model outside the mode's stage-1 set,
   model mix per mode, latency percentiles, cost totals, and agreement with the dataset's
   policy labels.
 
@@ -137,6 +173,8 @@ What the report does and does not show:
   them is a reference point only.
 - If Model Router returns models that are not in the catalog, the report lists them and
   leaves those rows out. Add them as `aliases`, or align the router's model subset.
+- `--shuffle-options [N]` re-asks Decision-1 with the options reordered and reports how often
+  the decision changes. See `docs/OPTION_ORDER_TESTING.md`.
 - `--decide-only` stops our arm after Decision-1. Model Router has no route-only call, so it
   still generates.
 - `--dry-run` uses an in-memory fake for both arms. It checks the harness, not either router.
@@ -156,6 +194,7 @@ What the report does and does not show:
 | `ROUTER_STATE_MAX_CHARS` | `24000` | Size of the conversation text sent to Decision-1 |
 | `ROUTER_DECISION_TIMEOUT_SECONDS` | `10` | Time budget for the Decision-1 call, retries included |
 | `ROUTER_DECISION_MAX_ATTEMPTS` | `3` | Decision-1 attempts on 408, 429, 5xx and network errors |
+| `ROUTER_LOW_CONFIDENCE_THRESHOLD` | `0.5` | Below this top probability, call the second-ranked model first; `0` turns the rule off |
 | `ROUTER_REQUEST_TIMEOUT_SECONDS` | `60` | Per model call |
 | `ROUTER_TOTAL_TIMEOUT_SECONDS` | `90` | Whole request, across fallbacks |
 | `ROUTER_ATTEMPTS_PER_MODEL` | `2` | Attempts per model before the next ranked one |

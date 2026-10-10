@@ -187,14 +187,22 @@ def parse_answer(body: Any, options: list[str]) -> tuple[str, dict[str, float], 
     return choice, probabilities, None if confidence is None else float(confidence)
 
 
-def rank(probabilities: dict[str, float], candidates: list[ModelEntry], choice: str | None = None) -> list[str]:
-    """Decision-1's selected option first, then the rest by probability; ties go to the cheaper model."""
+def rank(probabilities: dict[str, float], candidates: list[ModelEntry]) -> list[str]:
+    """Highest probability first; ties go to the cheaper model. Independent of the order options were sent in."""
     tier = {m.name: m.tier for m in candidates}
-    ordered = sorted(probabilities, key=lambda name: (-probabilities[name], tier[name]))
-    if choice in probabilities:
-        ordered.remove(choice)
-        ordered.insert(0, choice)
-    return ordered
+    return sorted(probabilities, key=lambda name: (-probabilities[name], tier[name]))
+
+
+def execution_order(ranking: list[str], probabilities: dict[str, float], threshold: float) -> tuple[list[str], bool]:
+    """The order in which models are called.
+
+    Normally the probability ranking. When the top model's probability is below `threshold`,
+    the second-ranked model is called first and the top model moves to second place, so it
+    is still tried if the second fails. A threshold of 0 turns the rule off.
+    """
+    if threshold > 0 and len(ranking) >= 2 and probabilities[ranking[0]] < threshold:
+        return [ranking[1], ranking[0], *ranking[2:]], True
+    return list(ranking), False
 
 
 def _retry_after(response: httpx.Response) -> float | None:
@@ -271,7 +279,7 @@ class Decision1Client:
             raise DecisionError("invalid_response", "Decision-1 response is not JSON") from exc
         choice, probabilities, confidence = parse_answer(body, names)
         usage = body.get("usage")
-        return Decision(names, rank(probabilities, candidates, choice), probabilities, choice, confidence,
+        return Decision(names, rank(probabilities, candidates), probabilities, choice, confidence,
                         round((time.perf_counter() - started) * 1000, 3), request=request,
                         response_model=body.get("model") if isinstance(body.get("model"), str) else None,
                         usage=usage if isinstance(usage, dict) else None, attempts=attempts)

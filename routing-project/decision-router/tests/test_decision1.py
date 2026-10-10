@@ -3,7 +3,14 @@ import asyncio
 import httpx
 import pytest
 
-from decision_router.decision1 import DecisionError, build_request, build_state, parse_answer, rank
+from decision_router.decision1 import (
+    DecisionError,
+    build_request,
+    build_state,
+    execution_order,
+    parse_answer,
+    rank,
+)
 
 OPTIONS = ["gpt-5.5", "o4-mini", "gpt-5.6-terra"]
 
@@ -52,10 +59,24 @@ def test_probabilities_rounded_in_transit_are_renormalised():
     assert abs(sum(probabilities.values()) - 1) < 1e-12
 
 
-def test_selected_option_leads_the_ranking(catalog):
-    candidates = catalog.candidates("quality")
-    probabilities = {"gpt-5.5": 0.4, "o4-mini": 0.4, "gpt-5.6-terra": 0.2}
-    assert rank(probabilities, candidates, choice="o4-mini") == ["o4-mini", "gpt-5.5", "gpt-5.6-terra"]
+def test_ranking_ignores_the_order_options_were_sent_in(catalog):
+    probabilities = {"gpt-5.6-terra": 0.2, "o4-mini": 0.5, "gpt-5.5": 0.3}
+    assert rank(probabilities, catalog.candidates("quality")) == ["o4-mini", "gpt-5.5", "gpt-5.6-terra"]
+    assert rank(probabilities, list(reversed(catalog.candidates("quality")))) == ["o4-mini", "gpt-5.5", "gpt-5.6-terra"]
+
+
+def test_confident_top_model_is_called_first():
+    order, low = execution_order(["a", "b", "c"], {"a": 0.7, "b": 0.2, "c": 0.1}, 0.5)
+    assert order == ["a", "b", "c"] and low is False
+
+
+def test_low_confidence_calls_the_second_model_first_and_keeps_the_top_as_backup():
+    order, low = execution_order(["a", "b", "c"], {"a": 0.45, "b": 0.35, "c": 0.2}, 0.5)
+    assert order == ["b", "a", "c"] and low is True
+
+
+def test_threshold_zero_disables_the_rule():
+    assert execution_order(["a", "b"], {"a": 0.3, "b": 0.7 - 0.0001}, 0.0) == (["a", "b"], False)
 
 
 def test_rank_orders_by_probability_then_price(catalog):

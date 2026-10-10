@@ -1,6 +1,8 @@
-"""Stage 1 filter -> Decision-1 ranking -> decision log -> call the top-ranked model.
+"""Stage 1 filter -> Decision-1 ranking -> decision log -> call the selected model.
 
-If the top model's call fails, the next model in Decision-1's ranking is tried. Every
+The model called first is the one with the highest probability, unless that probability is
+below ROUTER_LOW_CONFIDENCE_THRESHOLD; then the second-ranked model is called first and the
+top model second. If a call fails, the next model in that order is tried. Every
 model tried is inside the stage-1 set, so the routing mode is never exceeded. If
 Decision-1 itself fails, the request fails: there is no other router behind it.
 """
@@ -17,7 +19,7 @@ import httpx
 
 from .catalog import Catalog, CatalogError, ModelEntry
 from .config import ROUTING_MODES, Settings
-from .decision1 import Decision, Decision1Client, DecisionError, build_state
+from .decision1 import Decision, Decision1Client, DecisionError, build_state, execution_order
 from .foundry import ChatClient
 from .pricing import PriceTable
 from .telemetry import Telemetry
@@ -80,6 +82,9 @@ class Routed:
     decision: Decision
     started: float
     event: dict[str, Any] = field(default_factory=dict)
+    # Models in the order they will be called (see execution_order).
+    order: list[str] = field(default_factory=list)
+    low_confidence: bool = False
 
 
 @dataclass
@@ -158,9 +163,15 @@ class RouterPipeline:
             self.telemetry.record(event, body)
             status = 504 if exc.code == "timeout" else 503 if exc.status_code == 429 else 502
             raise RoutingError(status, "decision_unavailable", f"Decision-1 failed: {exc}") from exc
+        order, low_confidence = execution_order(decision.ranking, decision.probabilities,
+                                                0.0 if decision.skipped else self.settings.low_confidence_threshold)
         event["decision"] = {
             "deployment": self.decision.deployment,
             "ranking": decision.ranking,
+            "execution_order": order,
+            "top_probability": decision.probabilities[decision.ranking[0]],
+            "low_confidence": low_confidence,
+            "low_confidence_threshold": self.settings.low_confidence_threshold,
             "probabilities": decision.probabilities,
             "choice": decision.choice,
             "confidence": decision.confidence,
@@ -171,7 +182,7 @@ class RouterPipeline:
             "usage": decision.usage,
             "cost": self.prices.decision_cost(decision.usage),
         }
-        return Routed(request_id, mode, candidates, decision, started, event)
+        return Routed(request_id, mode, candidates, decision, started, event, order, low_confidence)
 
     def record_route_only(self, routed: Routed, body: dict[str, Any]) -> None:
         routed.event.update(outcome="routed", total_latency_ms=round((self._clock() - routed.started) * 1000, 3))
@@ -183,7 +194,7 @@ class RouterPipeline:
         settings = self.settings
         deadline = routed.started + settings.total_timeout_seconds
         attempts: list[dict[str, Any]] = []
-        for name in routed.decision.ranking:
+        for name in routed.order:
             entry = self.catalog.by_name[name]
             for attempt in range(1, settings.attempts_per_model + 1):
                 remaining = deadline - self._clock()
@@ -242,7 +253,7 @@ class RouterPipeline:
             served_model=served.name if served else None,
             served_deployment=served.deployment if served else None,
             provider_model=provider_model,
-            fallback_used=bool(served and served.name != routed.decision.ranking[0]),
+            fallback_used=bool(served and served.name != routed.order[0]),
             attempts=attempts,
             usage=usage,
             cost=self.prices.cost(served.name, usage) if served else None,

@@ -68,6 +68,50 @@ def test_default_mode_comes_from_the_catalog(make_pipeline, settings):
     assert body["routing_mode"] == "balanced"
 
 
+def test_low_confidence_top_model_is_skipped_for_the_second(make_pipeline, settings, fake, tmp_path):
+    answer = ranked(["gpt-5.5", "o4-mini"])
+    answer["answers"]["route"]["probabilities"] = {
+        "gpt-5-nano": 0.05, "gpt-5-mini": 0.05, "deepseek-v4-flash": 0.1,
+        "gpt-5.5": 0.35, "o4-mini": 0.3, "gpt-5.6-terra": 0.15,
+    }
+    fake.decision_responses.append(answer)
+    with client_for(make_pipeline, settings) as client:
+        response = client.post("/v1/chat/completions", json={"messages": [{"role": "user", "content": "x"}]})
+    assert response.json()["model"] == "o4-mini"
+    assert response.headers["x-router-low-confidence"] == "true"
+    assert response.headers["x-router-ranking"].startswith("gpt-5.5,o4-mini")
+    line = json.loads((tmp_path / "decisions.jsonl").read_text().splitlines()[-1])
+    assert line["decision"]["low_confidence"] is True and line["decision"]["top_probability"] == 0.35
+    assert line["decision"]["execution_order"][:2] == ["o4-mini", "gpt-5.5"]
+    assert line["fallback_used"] is False
+
+
+def test_low_confidence_second_model_failing_falls_back_to_the_top_model(make_pipeline, settings, fake):
+    answer = ranked(["gpt-5.5", "o4-mini"])
+    answer["answers"]["route"]["probabilities"] = {
+        "gpt-5-nano": 0.05, "gpt-5-mini": 0.05, "deepseek-v4-flash": 0.1,
+        "gpt-5.5": 0.35, "o4-mini": 0.3, "gpt-5.6-terra": 0.15,
+    }
+    fake.decision_responses.append(answer)
+    fake.fail("o4-mini", 500, 500)
+    with client_for(make_pipeline, settings) as client:
+        response = client.post("/v1/chat/completions", json={"messages": [{"role": "user", "content": "x"}]})
+    assert response.json()["model"] == "gpt-5.5"
+
+
+def test_low_confidence_rule_can_be_turned_off(make_pipeline, settings, fake):
+    answer = ranked(["gpt-5.5", "o4-mini"])
+    answer["answers"]["route"]["probabilities"] = {
+        "gpt-5-nano": 0.05, "gpt-5-mini": 0.05, "deepseek-v4-flash": 0.1,
+        "gpt-5.5": 0.35, "o4-mini": 0.3, "gpt-5.6-terra": 0.15,
+    }
+    fake.decision_responses.append(answer)
+    with client_for(make_pipeline, settings, low_confidence_threshold=0.0) as client:
+        response = client.post("/v1/chat/completions", json={"messages": [{"role": "user", "content": "x"}]})
+    assert response.json()["model"] == "gpt-5.5"
+    assert response.headers["x-router-low-confidence"] == "false"
+
+
 def test_failed_top_model_falls_back_to_next_ranked(make_pipeline, settings, fake):
     fake.decision_responses.append(ranked(["gpt-5.5", "o4-mini"]))
     fake.fail("gpt-5.5", 503, 503)
