@@ -1,5 +1,8 @@
 # Overlap fragment: OPS and COST
 
+Research-state semantics are defined in `research-status.md`. Defender and Advisor are unresearched
+here, not searched-no-match, so affected decisions are provisional.
+
 Phase 0 research, verified 2026-10-04 against the local clones in `refs/` (Learn source repositories and GitHub specifications,
 because learn.microsoft.com and prices.azure.com are blocked). Test scenario convention used in the catalogue files:
 `positive` = the rule reports a violation, `negative` = compliant input with no finding, `skipped` = the rule cannot run and says why.
@@ -20,7 +23,7 @@ azure.ai.agents extension 1.0.0-beta.18 (clone), evaluation article minimum 0.1.
 | ID | Decision | Coverage | Mapped external IDs | Status |
 |---|---|---|---|---|
 | FND-OPS-001 | adapt | partial | Policy 55d1f543-d1b0-4811-9663-d6d0dbc6326d, 1b4d1c4e-934c-4703-944c-27c82c06bebb, 8def4bdd-4362-4ed6-a26f-7bf8f2c58839, b4330a05-a843-4bc8-bf9a-cacce50c67f4, 567c93f7-3661-494f-a30f-0a94d9bfebf8, 68ba9fc9-71b9-4e6f-9cf5-ecc07722324c, b4fe1a3b-0715-4c6c-a5ea-ffc33cf823cb (no PSRule rule for these types) | verified |
-| FND-OPS-002 | native | none | related: PSRule Azure.AppInsights.Workspace, Policy d550e854-df1a-4de9-bf44-cd894b39a95e | verified |
+| FND-OPS-002 | native (provisional) | none | related resource-only controls: PSRule Azure.AppInsights.Workspace, Policy d550e854-df1a-4de9-bf44-cd894b39a95e | product-opinion |
 | FND-OPS-003 | adapt | partial | PSRule Azure.Monitor.ServiceHealth; Policy 98903777-a9f6-47f5-90a9-acaf62ab01a8, b954148f-4c11-4c38-8221-be76711e194a | product-opinion |
 | FND-OPS-004 | adapt | partial | PSRule Azure.Resource.RequiredTags, Azure.Resource.UseTags, Azure.Group.RequiredTags, Azure.Subscription.RequiredTags; Policy 871b6d14-10aa-478d-b590-94f262ecfa99, 1e30110a-5ceb-460c-a204-c1c3969c6d62, 96670d01-0a4d-4649-9c89-2d3abc0a5025, 8ce3da23-7156-49e4-b145-24f95f9dcb46 | product-opinion |
 | FND-OPS-005 | adapt | partial | PSRule Azure.Storage.Name, Azure.APIM.Name, Azure.Search.Name, Azure.Cosmos.AccountName, Azure.KeyVault.Name, Azure.ACR.Name, Azure.Log.Name, Azure.AppInsights.Name, Azure.ContainerApp.Name, Azure.Group.Name, Azure.AI.FoundryNaming; Bicep BCP334, BCP335 | verified |
@@ -34,7 +37,7 @@ azure.ai.agents extension 1.0.0-beta.18 (clone), evaluation article minimum 0.1.
 | FND-COST-003 | native | none | references the APIM `llm-token-limit` policy only | product-opinion |
 | FND-COST-004 | native | none | none (Advisor cost recommendations are separate deployed-state evidence) | product-opinion |
 
-Counts: 14 rules. Status: verified 4 (OPS-001, 002, 005, 009), product-opinion 10 (OPS-003, 004, 006, 007, 008, 010; COST-001 to 004),
+Counts: 14 rules. Status: verified 3 (OPS-001, 005, 009), product-opinion 11 (OPS-002, 003, 004, 006, 007, 008, 010; COST-001 to 004),
 proposed 0, dropped 0. Decisions: native 7 (OPS-002, 007, 008; COST-001 to 004), adapt 7 (OPS-001, 003, 004, 005, 006, 009, 010),
 reuse 0, wrap 0, drop 0. Implementation owner is `native` for all 14. No rule is `reuse` because the Foundry Doctor engine must run
 offline without PSRule, Azure Policy or Defender being installed or assigned.
@@ -54,7 +57,11 @@ opinion basis) with graduated severities.
 - FND-COST-001 to 003: budget, "production-sized" and gateway token limits are cost recommendations; property and attribute facts are
   sourced. FND-COST-004 is informational only and its price source is unverified.
 
-Rules kept `verified` while basis includes `waf`: FND-OPS-001 and FND-OPS-002. The Well-Architected guidance text could not be read
+FND-OPS-002 is product-opinion: it runs only when an explicit observability or server-tracing
+requirement exists. Production status alone does not imply the requirement, and absence of an
+AppInsights connection is not a production error. Application Insights/Log Analytics ingestion,
+sampling and retention create a cost tradeoff. FND-OPS-001 remains `verified` while its basis includes
+`waf`. The Well-Architected guidance text could not be read
 (MicrosoftDocs/well-architected is not public). The expectation rests on Microsoft documentation and built-in policy definitions,
 and the files say so.
 
@@ -81,8 +88,10 @@ No rule was changed to `dropped`.
   Azure Monitor supported-logs page, the REST specification and the Foundry standard agent setup article.
 - OPS-001: whether Foundry projects emit logs independently of the account setting; the Cosmos supported-logs page is dated
   2026-09-15, the others 2026-08-21.
-- OPS-002: the ARM property that carries the Application Insights resource ID for category AppInsights (`target` versus `metadata`);
-  whether `AppInsights` is accepted as an azure.yaml `azure.ai.connection` category (the reference lists categories only as examples).
+- OPS-002: ARM and azure.yaml wiring was removed from the rule. When an explicit observability or
+  server-tracing requirement exists, it inventories only deployed project connection categories
+  through the control plane; target/metadata/auth wiring remains externally blocked and is not
+  remediation evidence. With no requirement the result is Skipped, not a production finding.
 - OPS-003: activity log alert condition layout for a stable API version (only a preview ServiceHealth example read) and scheduled query
   rule property names.
 - OPS-004: which resource types support tags (tag-support.md not read per type); PSRule says tag names are case-sensitive while the Learn

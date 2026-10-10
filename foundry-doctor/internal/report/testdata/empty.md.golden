@@ -1,0 +1,21 @@
+# Foundry Doctor report
+
+- Tool version: 
+- Profile: 
+- Exit code: 0
+
+## Summary
+
+| Errors | Warnings | Info | Suppressed | Baselined | Skipped |
+|---|---|---|---|---|---|
+| 0 | 0 | 0 | 0 | 0 | 0 |
+
+## Findings
+
+No active findings.
+
+## Skipped checks
+
+Skipped is not passed.
+
+None.

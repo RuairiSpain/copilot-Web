@@ -7,7 +7,7 @@
         "bash": "node .github/hooks/shunt/guard.mjs",
         "powershell": "node .github/hooks/shunt/guard.mjs",
         "cwd": ".",
-        "timeoutSec": 10
+        "timeoutSec": 30
       }
     ]
   }

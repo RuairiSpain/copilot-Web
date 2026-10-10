@@ -53,32 +53,41 @@ sources:
   note: Recommends validate-azure-ad-token to validate audience and claims.
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: No PSRule Azure.APIM.* rule, Azure Policy built-in in the reviewed APIM folder (which covers named-value
     secrets, basic auth, TLS and similar), Checkov or Bicep linter check evaluates the content of validate-azure-ad-token
     / validate-jwt policy XML. The check is policy-XML analysis with Foundry-gateway scoping (APIs fronting model
     backends), which is Foundry-specific.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/sec
 tests:
   positive:
-  - tenant-id is a concrete tenant GUID with audiences passes
-  negative:
   - tenant-id organizations fails
   - tenant-id common fails
   - validate-azure-ad-token without client-application-ids and audiences fails
   - LLM API without any validate-* policy fails
+  negative:
+  - tenant-id is a concrete tenant GUID with audiences passes
   skipped:
   - tenant-id is a policy expression is skipped
   - policy defined in a fragment not in scope is skipped
-  - 'uncertain: multi-tenant intended through issuers claim list is reported uncertain'
+  uncertain:
+  - multi-tenant intent is expressed through an issuers claim list
 testability: Deterministic XML analysis of policy documents; no network access.
 notes: 'Phase 8; policy XML is not a versioned ARM property so no API version applies. Whether organizations/common
   is unacceptable is a security judgement (documented behaviour: accepts any directory), hence basis security and

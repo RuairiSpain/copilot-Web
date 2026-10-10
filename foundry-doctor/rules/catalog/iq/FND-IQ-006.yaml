@@ -24,8 +24,10 @@ compatibility:
   azd: ''
   extensions: {}
   apiVersions:
-  - '2026-04-01'
-  - 2026-08-01-preview
+  - { plane: data, service: AzureAISearch, endpointFamily: skillsets, version: '2026-04-01' }
+  - { plane: data, service: AzureAISearch, endpointFamily: indexes, version: '2026-04-01' }
+  - { plane: data, service: AzureAISearch, endpointFamily: skillsets, version: '2026-08-01-preview' }
+  - { plane: data, service: AzureAISearch, endpointFamily: indexes, version: '2026-08-01-preview' }
   preview: true
 evidence:
   description: >-
@@ -65,14 +67,22 @@ sources:
     than zero) and models-service.tsp (SplitSkill)
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: No lower-level tool validates skillset chunking parameters or vector query weights.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/iq

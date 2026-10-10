@@ -1,5 +1,8 @@
 # Overlap fragment: RUN (FND-RUN-001..008)
 
+Research-state semantics are defined in `research-status.md`; Defender and Advisor are unresearched
+and decisions are provisional.
+
 Researched 2026-10-04 against the local clones listed in `docs/development/phase-0-research-brief.md`, plus a few raw
 GitHub files (Azure SDK for Go azquery source). ARM property names and enums come from
 `Azure/azure-rest-api-specs` (Cognitive Services 2026-09-01 stable, Monitor metrics 2024-02-01, Authorization 2022-04-01,

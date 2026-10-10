@@ -1,124 +1,130 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/ruairispain/copilot-web/foundry-doctor/schemas/config.schema.json",
-  "title": "Foundry Doctor configuration (.foundry-doctor/config.yaml)",
-  "description": "Closed schema: unknown keys are rejected (ADR-007 decision 5, ADR-010). The Go loader in internal/config is authoritative; a parity test keeps this file in step with it.",
+  "title": "Foundry Doctor configuration (version 1)",
+  "description": "Unified configuration file. Unknown keys are rejected. The Go validator in internal/config is authoritative; a test keeps this schema's keys in sync with it.",
   "type": "object",
   "additionalProperties": false,
   "required": ["version"],
   "properties": {
-    "version": {"const": 1},
-    "profile": {"enum": ["dev", "test", "prod", "foundry-dev", "foundry-test", "foundry-prod"]},
+    "version": { "const": 1 },
+    "profile": { "enum": ["foundry-dev", "foundry-test", "foundry-prod"] },
     "inputs": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "azureYaml": {"$ref": "#/$defs/relativePath"},
-        "infraPath": {"$ref": "#/$defs/relativePath"},
-        "environment": {"$ref": "#/$defs/name"}
+        "azureYaml": { "type": "string" },
+        "infraPath": { "type": "string" },
+        "environment": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" }
       }
     },
     "rules": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "include": {"$ref": "#/$defs/selectorList"},
-        "exclude": {"$ref": "#/$defs/selectorList"},
-        "packs": {"$ref": "#/$defs/nameList"}
+        "include": { "type": "array", "items": { "enum": ["must-have", "nice-to-have"] } },
+        "exclude": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^(must-have|nice-to-have|FND-[A-Z]+-[0-9]{3})$" }
+        },
+        "packs": { "type": "array", "items": { "type": "string", "minLength": 1 } }
       }
     },
     "validation": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "bicep": {"$ref": "#/$defs/mode"},
-        "azure": {"$ref": "#/$defs/mode"},
-        "runtime": {"$ref": "#/$defs/mode"}
+        "bicep": { "$ref": "#/$defs/mode" },
+        "azure": { "$ref": "#/$defs/mode" },
+        "runtime": { "$ref": "#/$defs/mode" }
       }
     },
-    "policy": {"$ref": "#/$defs/policy"},
-    "environments": {
-      "type": "object",
-      "propertyNames": {"$ref": "#/$defs/name"},
-      "additionalProperties": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "policy": {"$ref": "#/$defs/policy"}
-        }
-      }
-    },
+    "policy": { "$ref": "#/$defs/policy" },
     "adoption": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "baseline": {"$ref": "#/$defs/relativePath"},
-        "suppressions": {"$ref": "#/$defs/relativePath"}
+        "baseline": { "type": "string" },
+        "suppressions": { "type": "string" }
       }
     },
     "outputs": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "formats": {
-          "type": "array",
-          "uniqueItems": true,
-          "items": {"enum": ["console", "json", "markdown", "sarif"]}
-        },
-        "directory": {"$ref": "#/$defs/relativePath"}
+        "formats": { "type": "array", "items": { "enum": ["console", "json", "markdown", "sarif"] } },
+        "directory": { "type": "string" }
       }
     },
     "advanced": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "psrule": {"$ref": "#/$defs/tool"},
-        "checkov": {"$ref": "#/$defs/tool"},
+        "psrule": { "$ref": "#/$defs/tool" },
+        "checkov": { "$ref": "#/$defs/tool" },
         "bicep": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "executable": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
-            "config": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/relativePath"}]}
+            "executable": { "type": "string" },
+            "config": { "type": "string" }
           }
         },
-        "adapters": {"$ref": "#/$defs/nameList"}
+        "adapters": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "environments": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": { "policy": { "$ref": "#/$defs/policy" } }
       }
     }
   },
   "$defs": {
-    "name": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
-    "relativePath": {"type": "string", "minLength": 1, "not": {"pattern": "^(/|\\\\|[A-Za-z]:)"}},
-    "mode": {"enum": ["required", "optional", "disabled"]},
-    "nameList": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/name"}},
-    "selectorList": {
-      "type": "array",
-      "uniqueItems": true,
-      "items": {"type": "string", "pattern": "^[A-Za-z0-9*][A-Za-z0-9*._-]*$"}
-    },
+    "mode": { "enum": ["required", "optional", "disabled"] },
+    "stringList": { "type": "array", "items": { "type": "string" } },
     "tool": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "enabled": {"enum": ["auto", "true", "false", true, false]},
-        "config": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/relativePath"}]}
+        "enabled": { "enum": ["auto", true, false] },
+        "config": { "type": "string" }
       }
     },
-    "resourceId": {"type": "string", "pattern": "^/\\S+$"},
-    "modelId": {"type": "string", "pattern": "^[^\\s/]+/[^\\s/]+(/[^\\s/]+)?$"},
     "policy": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "resourceScope": {"enum": ["same-resource-group", "same-subscription", "any"]},
-        "allowedExternalScopes": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/resourceId"}},
+        "resourceScope": { "enum": ["same-resource-group", "same-subscription", "any"] },
+        "allowedExternalScopes": { "$ref": "#/$defs/stringList" },
+        "identity": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "deploymentPrincipalIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+              }
+            }
+          }
+        },
         "environments": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "production": {"$ref": "#/$defs/nameList"},
-            "nonProduction": {"$ref": "#/$defs/nameList"},
-            "development": {"$ref": "#/$defs/nameList"}
+            "production": { "$ref": "#/$defs/stringList" },
+            "nonProduction": { "$ref": "#/$defs/stringList" },
+            "development": { "$ref": "#/$defs/stringList" },
+            "tiers": {
+              "type": "object",
+              "propertyNames": { "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" },
+              "additionalProperties": { "enum": ["dev", "test", "prod"] }
+            }
           }
         },
         "tags": {
@@ -132,74 +138,82 @@
                 "additionalProperties": false,
                 "required": ["name"],
                 "properties": {
-                  "name": {"type": "string", "minLength": 1},
-                  "format": {"type": "string", "maxLength": 1024, "description": "Regular expression (Go RE2 syntax) for the tag value."}
+                  "name": { "type": "string", "minLength": 1 },
+                  "format": { "type": "string" }
                 }
               }
             },
-            "resourceTypes": {
-              "type": "array",
-              "uniqueItems": true,
-              "items": {"type": "string", "pattern": "^[A-Za-z0-9.]+(/[A-Za-z0-9.]+)+$"}
-            }
+            "resourceTypes": { "$ref": "#/$defs/stringList" }
           }
         },
         "logRetention": {
           "type": "object",
           "additionalProperties": false,
-          "properties": {"minimumDays": {"type": "integer", "minimum": 0}}
+          "properties": { "minimumDays": { "type": "integer", "minimum": 0 } }
         },
         "models": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "allow": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/modelId"}},
-            "deny": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/modelId"}}
+            "allow": { "$ref": "#/$defs/stringList" },
+            "deny": { "$ref": "#/$defs/stringList" }
           }
         },
         "dataResidency": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "scope": {"enum": ["global", "datazone-us", "datazone-eu", "datazone-apac", "geography"]},
-            "regions": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z][a-z0-9]*$"}},
-            "deploymentSkus": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"}}
+            "scope": { "enum": ["global", "datazone-us", "datazone-eu", "datazone-apac", "geography"] },
+            "regions": { "$ref": "#/$defs/stringList" },
+            "deploymentSkus": { "$ref": "#/$defs/stringList" }
           }
         },
         "disasterRecovery": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "declared": {"type": "boolean"},
-            "reference": {"type": "string", "minLength": 1}
+            "declared": { "type": "boolean" },
+            "reference": { "type": "string" }
           }
         },
         "network": {
           "type": "object",
           "additionalProperties": false,
-          "properties": {"publicAccess": {"enum": ["forbidden", "entra-only", "allowed"]}}
+          "properties": {
+            "publicAccess": { "enum": ["forbidden", "entra-only", "allowed"] },
+            "dnsManagedByPolicy": { "type": "boolean" },
+            "centralDns": { "type": "boolean" },
+            "cloud": { "enum": ["public", "usgov", "china"] }
+          }
         },
         "monitoring": {
           "type": "object",
           "additionalProperties": false,
-          "properties": {"publicTelemetry": {"type": "boolean"}}
+          "properties": { "publicTelemetry": { "type": "boolean" } }
         },
         "managedByAzurePolicy": {
           "type": "array",
-          "uniqueItems": true,
-          "items": {"enum": ["private-dns-zone-group", "diagnostic-settings"]}
+          "items": { "enum": ["private-dns-zone-group", "diagnostic-settings"] }
         },
         "knowledge": {
           "type": "object",
           "additionalProperties": false,
-          "properties": {"requireDocumentLevelAccess": {"type": "boolean"}}
+          "properties": { "requireDocumentLevelAccess": { "type": "boolean" } }
         },
         "cost": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "devMaxCosmosThroughput": {"type": "integer", "minimum": 0},
-            "productionSizedSkuExemptions": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+            "devMaxCosmosThroughput": { "type": "integer", "minimum": 0 },
+            "productionSizedSkuExemptions": { "$ref": "#/$defs/stringList" }
+          }
+        },
+        "preflight": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "deploymentHistoryMargin": { "type": "integer", "minimum": 0 },
+            "regionMatrixStalenessDays": { "type": "integer", "minimum": 1 }
           }
         }
       }

@@ -26,10 +26,10 @@ compatibility:
   azd: '>=1.34.2 <=1.36.0-beta.1'
   extensions: {}
   apiVersions:
-  - '2026-09-01'
-  - '2025-05-01'
-  - '2024-05-01'
-  - '2026-03-15'
+  - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts/deployments, version: '2026-09-01' }
+  - { plane: management, provider: Microsoft.Search, resourceType: searchServices, version: '2025-05-01' }
+  - { plane: management, provider: Microsoft.ApiManagement, resourceType: service, version: '2024-05-01' }
+  - { plane: management, provider: Microsoft.DocumentDB, resourceType: databaseAccounts/throughputSettings, version: '2026-03-15' }
   preview: true
   notes: >-
     azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects
@@ -101,18 +101,26 @@ sources:
     are both supported.
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     No PSRule, Azure Policy, Checkov or Bicep linter rule was found that flags oversized SKUs in non-production environments.
     PSRule Azure.Search.SKU points the other way (it warns against the Free tier for demanding workloads) and is a performance
     rule, so it is not mapped as equivalent. The value is the environment-aware correlation between the azd environment
     classification and the SKUs in azure.yaml and Bicep.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/cost

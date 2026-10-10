@@ -24,7 +24,7 @@ compatibility:
   azd: ''
   extensions: {}
   apiVersions:
-  - Microsoft.CognitiveServices/accounts 2026-09-01
+  - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts, version: '2026-09-01' }
   preview: false
   notes: >-
     No azd dependency: reads compiled ARM JSON or ARM control plane; no azd behaviour dependency Microsoft.CognitiveServices/accounts
@@ -63,6 +63,7 @@ sources:
   note: Overlap source (PSRule for Azure rule documentation).
 overlap:
   decision: adapt
+  provisional: true
   coverage: partial
   rationale: >-
     PSRule Azure.AI.DisableLocalAuth, Azure Policy 71ef260a and Checkov CKV_AZURE_236 all test the same property, so the
@@ -71,27 +72,37 @@ overlap:
     ARM and the live account, with the same fingerprint; (3) per-profile severity (warning in dev, error in test and prod)
     and baseline/suppression handling. Without those, this should be reused as a PSRule/Policy mapping. Do not copy PSRule
     logic.
-  psrule:
-  - Azure.AI.DisableLocalAuth
-  azurePolicy:
-  - 71ef260a-8f18-47b7-abcb-62d0673d94dc
-  - 14de9e63-1b31-492e-a5a3-c3f7fd57f555
-  - 55eff01b-f2bd-4c32-9203-db285f709d30
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov:
-  - CKV_AZURE_236
+  research:
+    psrule:
+      state: searched-match
+      matches:
+      - Azure.AI.DisableLocalAuth
+    azurePolicy:
+      state: searched-match
+      matches:
+      - 71ef260a-8f18-47b7-abcb-62d0673d94dc
+      - 14de9e63-1b31-492e-a5a3-c3f7fd57f555
+      - 55eff01b-f2bd-4c32-9203-db285f709d30
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: searched-match
+      matches:
+      - CKV_AZURE_236
 implementation:
   owner: native
   package: internal/rules/sec
 tests:
   positive:
-  - account with projects and disableLocalAuth true passes
-  - live account reports disableLocalAuth true
-  negative:
   - disableLocalAuth false or absent on an account with projects fails
   - hosting account in prod profile reports error
+  negative:
+  - account with projects and disableLocalAuth true passes
+  - live account reports disableLocalAuth true
   skipped:
   - disableLocalAuth driven by an unresolved parameter is skipped with reason
   - no Reader permission in live mode is skipped

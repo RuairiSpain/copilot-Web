@@ -24,8 +24,8 @@ compatibility:
   azd: ''
   extensions: {}
   apiVersions:
-  - Microsoft.Search/searchServices 2025-05-01
-  - Microsoft.Search/searchServices 2026-09-01-preview
+  - { plane: management, provider: Microsoft.Search, resourceType: searchServices, version: '2025-05-01' }
+  - { plane: management, provider: Microsoft.Search, resourceType: searchServices, version: '2026-09-01-preview' }
   preview: true
   notes: >-
     No azd dependency: reads compiled ARM JSON or ARM control plane Microsoft.Search/searchServices 2025-05-01 / 2025-05-01:
@@ -105,6 +105,7 @@ sources:
     (modelAsString), so compare it case-insensitively and prefer the resource type of metadata.ResourceId.
 overlap:
   decision: adapt
+  provisional: true
   coverage: partial
   rationale: >-
     PSRule for Azure has no Azure Search local-auth rule in the reviewed clone (only IndexSLA, QuerySLA, SKU, ManagedIdentity,
@@ -112,30 +113,38 @@ overlap:
     and d45520cb (DINE) test only disableLocalAuth notEquals true. Foundry Doctor adds the authOptions sub-state (aadOrApiKey
     versus apiKeyOnly), Foundry-scoped applicability through connections and capability hosts, and per-profile severity.
     Hence adapt rather than reuse.
-  psrule: []
-  azurePolicy:
-  - 6300012e-e9a4-4649-b41f-a85f5c43be91
-  - 4eb216f2-9dba-4979-86e6-5d7e63ce3b75
-  - d45520cb-31ca-44ba-8da2-fcf914608544
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: searched-match
+      matches:
+      - 6300012e-e9a4-4649-b41f-a85f5c43be91
+      - 4eb216f2-9dba-4979-86e6-5d7e63ce3b75
+      - d45520cb-31ca-44ba-8da2-fcf914608544
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/sec
 tests:
   positive:
-  - disableLocalAuth true passes
-  - service not referenced by Foundry is reported out of scope, not failed
-  negative:
   - disableLocalAuth absent and authOptions absent fails
   - authOptions.aadOrApiKey fails with sub-state aadOrApiKey
   - authOptions.apiKeyOnly fails with sub-state apiKeyOnly
+  negative:
+  - disableLocalAuth true passes
   skipped:
   - disableLocalAuth from unresolved parameter is skipped
-  - >-
-    uncertain: service referenced only through a connection defined outside the scanned files is reported uncertain
+  - service not referenced by Foundry is reported out of scope
+  uncertain:
+  - service referenced only through a connection defined outside the scanned files
 testability: >-
   Deterministic on ARM JSON; Foundry scoping needs connection resources in the same compiled template or azd environment.
 notes: >-

@@ -65,17 +65,25 @@ sources:
     Deployment requires name, model {format, name, version} and sku; additionalProperties false (no upgrade policy field).
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     PSRule for Azure has no Foundry model-version rule (its AI rules are DisableLocalAuth, FoundryNaming, ManagedIdentity,
     PrivateEndpoints, PublicAccess). Retirement awareness is runtime/API data and belongs to the later lifecycle rules;
     this rule is the static configuration half.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/cfg

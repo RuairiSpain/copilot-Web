@@ -38,15 +38,12 @@ compatibility:
     them in Phase 1 by reading older tags.
 evidence:
   description: >-
-    Parse azure.yaml with a YAML parser that surfaces duplicate keys (reports key and line of each duplicate), then
-    validate the document against the vendored azd azure.yaml v1.0 JSON schema (azd tag azure-dev-cli_1.35.0, commit
-    170ebb858071da353cc9bf8657a377bff268ba36) and the referenced azure.ai.* extension schemas vendored from the
-    extension release commit a64ca8fe04d0bc1b0375c32fed1b76573e2a91ef (tags azd-ext-azure-ai-agents_1.0.0-beta.18,
-    -connections_1.0.0-beta.9, -toolboxes_1.0.0-beta.9, -projects_1.0.0-beta.13). The upstream azure.yaml.json and its
-    $id reference every extension schema at the unpinned raw.githubusercontent.com main URL, so the vendoring step
-    must rewrite those $ref and $id values to the pinned local copies. Each violation reports the JSON pointer, schema
-    keyword and source line. No network access is needed once the schemas are vendored.
-  confidence: certain
+    Parse azure.yaml with a YAML parser that surfaces duplicate keys (reports key and line of each duplicate), then validate
+    the document against the vendored azd azure.yaml v1.0 JSON schema and the referenced azure.ai.* extension schemas vendored
+    from a tagged release or commit (the upstream azure.yaml.json references the extension schemas at the main branch, which
+    is unpinned). Each violation reports the JSON pointer, schema keyword and source line. No network access is needed once
+    the schemas are vendored.
+  confidence: likely
 recommendation: >-
   Fix the YAML syntax or the reported schema violation. Add the yaml-language-server schema comment to azure.yaml so the
   editor flags the same errors, and install azure.ai.agents and azure.ai.projects at the versions declared in requiredVersions.
@@ -63,7 +60,7 @@ fix: |
       kind: hosted
 sources:
 - url: https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference
-  lastVerified: '2026-10-04'
+  lastVerified: '2026-10-05'
   verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/azure-yaml-reference.md (ms.date 09/17/2026)
   note: Host list, extension compatibility, JSON schema validation section.
 - url: https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
@@ -75,56 +72,28 @@ sources:
   lastVerified: '2026-10-04'
   verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json
   note: Prompt-agent required fields, unsupported modelType hosted_agent and targetAgent.
-- url: https://github.com/Azure/azure-dev/blob/azure-dev-cli_1.35.0/schemas/v1.0/azure.yaml.json
-  lastVerified: '2026-10-05'
-  verifiedVia: >-
-    Azure/azure-dev tag azure-dev-cli_1.35.0 = commit 170ebb858071da353cc9bf8657a377bff268ba36 (2026-09-30), read with
-    git show in refs/azure-dev; git diff 170ebb8 afe4b2b (main, 2026-10-04) is empty for schemas/ and for the
-    azure.ai.agents schemas. Licence: repository LICENSE is MIT, Copyright 2022 Microsoft Corporation; the schema
-    files carry no per-file header.
-  note: >-
-    Release tag to vendor the root schema from. Hosts with a per-host $ref: azure.ai.agent, azure.ai.project,
-    azure.ai.connection, azure.ai.toolbox, azure.ai.skill, azure.ai.routine, azure.ai.eval and microsoft.foundry; the
-    `config` property is deprecated for azure.ai.agent. schemas/alpha/azure.yaml.json also exists and is not the v1.0
-    contract.
-- url: https://github.com/Azure/azure-dev/blob/a64ca8fe04d0bc1b0375c32fed1b76573e2a91ef/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json
-  lastVerified: '2026-10-05'
-  verifiedVia: >-
-    Azure/azure-dev commit a64ca8fe04d0bc1b0375c32fed1b76573e2a91ef (2026-09-30), the single commit carried by tags
-    azd-ext-azure-ai-agents_1.0.0-beta.18, azd-ext-azure-ai-connections_1.0.0-beta.9,
-    azd-ext-azure-ai-projects_1.0.0-beta.13 and azd-ext-azure-ai-toolboxes_1.0.0-beta.9 (git ls-remote --tags);
-    azure.ai.skills and azure.ai.routines beta.8 tags point at the same commit.
-  note: >-
-    Extension schemas exist in the repo:
-    cli/azd/extensions/azure.ai.agents/schemas/{azure.ai.agent,microsoft.foundry,Agent,Connection,Deployment,FileRef,Routine,Skill,Toolbox}.json,
-    azure.ai.connections/schemas/azure.ai.connection.json, azure.ai.toolboxes/schemas/azure.ai.toolbox.json,
-    azure.ai.projects/schemas/azure.ai.project.json, plus azure.ai.skills, azure.ai.routines and azure.ai.evaluations
-    schemas. azure.ai.evaluations has no release at this commit (its only tag
-    azd-ext-azure-ai-evaluations_1.0.0-beta.1 is commit c77aa335, 2026-09-18, and azure.ai.eval.json differs by 47
-    lines), so vendor the file from a64ca8f and record that it is unreleased.
-- url: https://github.com/Azure/azure-dev/blob/azure-dev-cli_1.35.0/cli/azd/pkg/project/project.go
-  lastVerified: '2026-10-05'
-  verifiedVia: >-
-    Azure/azure-dev azure-dev-cli_1.35.0 cli/azd/pkg/project/project.go (Parse imports github.com/braydonk/yaml);
-    github.com/braydonk/yaml v0.9.0 (Go proxy zip, commit d2c6b14, 2025-02-10) decode.go: newDecoder sets uniqueKeys
-    true and reports `mapping key ... already defined at line N`.
-  note: >-
-    azd core already rejects duplicate mapping keys in azure.yaml at load, so duplicate-key detection is not only a
-    Foundry Doctor addition; the error text and line come from the YAML library.
 overlap:
   decision: adapt
+  provisional: true
   coverage: partial
   rationale: >-
     azd publishes the JSON schema and editors validate against it, and the azd Foundry agents extension (azd ai agent doctor,
     check local.azure-yaml) only confirms azure.yaml is present and parseable. Foundry Doctor adds duplicate-key detection,
     offline validation of the nested azure.ai.* extension schemas in CI, and version-awareness against requiredVersions.
     The idea is taken from the schema; the evidence (pointer, keyword, line) is Foundry Doctor's own.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/cfg
@@ -145,9 +114,7 @@ tests:
   - schema-version-not-vendored-for-declared-extension
   - azure-yaml-uses-ref-file-missing
 notes: >-
-  Phase 1 fact check (2026-10-05): azd core parses azure.yaml with github.com/braydonk/yaml v0.9.0, whose decoder
-  enables unique-key checking, so a duplicate mapping key fails `azd` itself; Foundry Doctor reports it earlier and
-  with the key and both lines. Vendoring: root schema from azure-dev-cli_1.35.0, extension schemas from commit a64ca8f
-  (see sources); rewrite the main-branch $ref/$id URLs. The azure.ai.evaluations schema is not released at that
-  commit. The azure.ai.* schemas are preview and change between extension betas (azure.ai.agents 1.0.0-beta.18,
-  azure.ai.projects 1.0.0-beta.13 in the clone).
+  Unverified: how azd core handles duplicate YAML keys (azd core parser source is not in the local clone), so duplicate-key
+  detection is a Foundry Doctor addition based on YAML mapping semantics, reported at the same severity. The azure.ai.*
+  schemas are preview and change between extension betas (azure.ai.agents 1.0.0-beta.18, azure.ai.projects 1.0.0-beta.13
+  in the clone).

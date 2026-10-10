@@ -1,0 +1,208 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.48.1.52935",
+      "templateHash": "18367085386746937186"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Deployment location"
+      }
+    },
+    "deployExtra": {
+      "type": "bool",
+      "defaultValue": true
+    },
+    "accountNames": {
+      "type": "array",
+      "defaultValue": [
+        "acctone",
+        "accttwo"
+      ]
+    },
+    "adminPassword": {
+      "type": "securestring",
+      "defaultValue": "[newGuid()]"
+    }
+  },
+  "variables": {
+    "prefix": "fdspike"
+  },
+  "resources": [
+    {
+      "condition": "[parameters('deployExtra')]",
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2023-01-01",
+      "name": "[format('{0}extra', variables('prefix'))]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "Standard_LRS"
+      },
+      "kind": "StorageV2"
+    },
+    {
+      "copy": {
+        "name": "accts",
+        "count": "[length(parameters('accountNames'))]"
+      },
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2023-01-01",
+      "name": "[format('{0}{1}{2}', variables('prefix'), parameters('accountNames')[copyIndex()], copyIndex())]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "Standard_GRS"
+      },
+      "kind": "StorageV2"
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/blobServices",
+      "apiVersion": "2023-01-01",
+      "name": "[format('{0}/{1}', format('{0}extra', variables('prefix')), 'default')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', format('{0}extra', variables('prefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "single",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "name": {
+            "value": "[format('{0}mod', variables('prefix'))]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.48.1.52935",
+              "templateHash": "17962670691518476011"
+            }
+          },
+          "parameters": {
+            "name": {
+              "type": "string"
+            },
+            "location": {
+              "type": "string"
+            },
+            "sku": {
+              "type": "string",
+              "defaultValue": "Standard_LRS"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Storage/storageAccounts",
+              "apiVersion": "2023-01-01",
+              "name": "[parameters('name')]",
+              "location": "[parameters('location')]",
+              "sku": {
+                "name": "[parameters('sku')]"
+              },
+              "kind": "StorageV2"
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Storage/storageAccounts', parameters('name'))]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "copy": {
+        "name": "many",
+        "count": "[length(parameters('accountNames'))]"
+      },
+      "condition": "[parameters('deployExtra')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "[format('many-{0}', parameters('accountNames')[copyIndex()])]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "name": {
+            "value": "[format('{0}m{1}', variables('prefix'), parameters('accountNames')[copyIndex()])]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.48.1.52935",
+              "templateHash": "17962670691518476011"
+            }
+          },
+          "parameters": {
+            "name": {
+              "type": "string"
+            },
+            "location": {
+              "type": "string"
+            },
+            "sku": {
+              "type": "string",
+              "defaultValue": "Standard_LRS"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Storage/storageAccounts",
+              "apiVersion": "2023-01-01",
+              "name": "[parameters('name')]",
+              "location": "[parameters('location')]",
+              "sku": {
+                "name": "[parameters('sku')]"
+              },
+              "kind": "StorageV2"
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Storage/storageAccounts', parameters('name'))]"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "extraId": {
+      "type": "string",
+      "value": "[if(parameters('deployExtra'), resourceId('Microsoft.Storage/storageAccounts', format('{0}extra', variables('prefix'))), '')]"
+    },
+    "moduleId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'single'), '2025-04-01').outputs.id.value]"
+    }
+  }
+}

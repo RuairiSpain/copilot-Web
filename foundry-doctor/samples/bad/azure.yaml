@@ -1,0 +1,16 @@
+name: bad-sample
+name: bad-sample-duplicate
+requiredVersions:
+  azd: ">= 1.34.2"
+infra:
+  provider: microsoft.foundry
+services:
+  ai-project:
+    host: azure.ai.project
+  assistant:
+    host: azure.ai.agent
+    project: ./agents/assistant
+    uses: [ai-projct]
+    kind: hosted
+    env:
+      TARGET: ${EXAMPLE_MISSING_VAR}

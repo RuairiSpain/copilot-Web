@@ -26,7 +26,7 @@ compatibility:
   azd: '>=1.34.2 <=1.36.0-beta.1'
   extensions: {}
   apiVersions:
-  - Microsoft.Resources deployments 2026-06-01
+  - { plane: management, provider: Microsoft.Resources, resourceType: deployments, operation: whatIf, version: '2026-06-01' }
   preview: true
   notes: >-
     azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects
@@ -103,6 +103,7 @@ sources:
     does not say it reports deletes.
 overlap:
   decision: native
+  provisional: true
   coverage: partial
   rationale: >-
     ARM what-if (and az deployment what-if / azd's preview) already produce the change list; Foundry Doctor does not re-implement
@@ -110,12 +111,19 @@ overlap:
     the uncertain handling of Ignore, Unsupported and reference(), and profile-aware severity. No PSRule, Policy, Defender,
     Advisor or Checkov rule evaluates what-if output. azd's ValidatePreflight is a different call and was not shown to report
     deletes.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/dep

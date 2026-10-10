@@ -27,7 +27,7 @@ compatibility:
   azd: ''
   extensions: {}
   apiVersions:
-  - Microsoft.CognitiveServices/accounts 2026-09-01
+  - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts, version: '2026-09-01' }
   preview: false
   notes: >-
     Not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked) Microsoft.CognitiveServices/accounts
@@ -77,21 +77,32 @@ sources:
   note: Inbound public can be optionally restricted to selected IP addresses.
 overlap:
   decision: adapt
+  provisional: true
   coverage: partial
   rationale: >-
     PSRule Azure.AI.PublicAccess and the policy "Azure AI Services resources should restrict network access" pass any account
     with defaultAction Deny, even with no allow entries, and say nothing about malformed IP rules. Foundry Doctor adapts
     the property test and adds the consistency check (restricted but nobody allowed) and rule value validation. Evidence
     is the pair defaultAction plus non-empty allow list, not the single property.
-  psrule:
-  - Azure.AI.PublicAccess
-  azurePolicy:
-  - 037eea7a-bd0a-46c5-9a66-03aea78705d3 (Azure AI Services resources should restrict network access)
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov:
-  - CKV_AZURE_134
+  research:
+    psrule:
+      state: searched-match
+      matches:
+      - Azure.AI.PublicAccess
+    azurePolicy:
+      state: searched-match
+      matches:
+      - 037eea7a-bd0a-46c5-9a66-03aea78705d3 (Azure AI Services resources should restrict network access)
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: searched-match
+      matches:
+      - CKV_AZURE_134
 implementation:
   owner: native
   package: internal/rules/net

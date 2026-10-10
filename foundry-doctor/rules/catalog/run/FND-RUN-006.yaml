@@ -1,12 +1,12 @@
 id: FND-RUN-006
-version: 1
+version: 2
 group: RUN
 title: Search index/documents/vector/indexer health
 description: >-
   For each Azure AI Search index that a Foundry project connection, agent tool or knowledge source references, the index
   must exist, expose the expected schema (including vector fields with dimensions and a vector search profile), contain
-  at least one document, and any indexer that feeds it must not be in an error state. Only data-plane metadata is read:
-  index definition, index statistics and indexer status. Documents are never queried or returned.
+  at least one document, and any indexer that feeds it must not be in an error state or have a failed lastResult. Only
+  data-plane metadata is read: index definition, index statistics and indexer status. Documents are never queried or returned.
 status: verified
 phases:
 - '3'
@@ -25,7 +25,9 @@ compatibility:
   azd: ''
   extensions: {}
   apiVersions:
-  - Azure AI Search data plane 2026-04-01
+  - { plane: data, service: AzureAISearch, endpointFamily: indexes, operation: get, version: '2026-04-01' }
+  - { plane: data, service: AzureAISearch, endpointFamily: indexes, operation: getStatistics, version: '2026-04-01' }
+  - { plane: data, service: AzureAISearch, endpointFamily: indexers, operation: getStatus, version: '2026-04-01' }
   preview: false
   notes: >-
     No azd dependency: Search data-plane reads; no azd behaviour dependency Azure AI Search data plane 2026-04-01: stable.
@@ -36,9 +38,9 @@ evidence:
     SearchField with dimensions (2 to 4096) and vectorSearchProfile. (2) GET /indexes('{index}')/search.stats returns documentCount,
     storageSize and vectorIndexSize; documentCount of 0 is Fail for an index the agent is meant to retrieve from, but the
     spec states statistics are collected periodically and may not be current, so a zero count on a recently changed index
-    is Uncertain. (3) GET /indexers('{indexer}')/search.status: status unknown, error or running; lastResult.status transientFailure
-    is Warn-class evidence, error is Fail; itemsFailed and errorMessage are reported as counts and a short service error
-    string only. Required permission (Search RBAC): Search Service Contributor for object definitions and indexer status
+    is Uncertain. (3) GET /indexers('{indexer}')/search.status: status unknown, error or running; a failed lastResult is
+    Fail even when the current status is running, transientFailure is Warn-class evidence, and the finding keeps only
+    structured status fields (errorCode and itemsFailed), never errorMessage free text. Required permission (Search RBAC): Search Service Contributor for object definitions and indexer status
     (the docs state it manages indexes, indexers and other objects and that Search Index Data Reader cannot read object
     definitions); the role needed for search.stats alone is not stated per operation. Without RBAC the doctor is Skipped;
     admin keys are never retrieved. Vantage point: when the search service has public network access disabled or only private
@@ -80,31 +82,41 @@ sources:
     tool.
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     PSRule Azure.Search.* rules (IndexSLA, QuerySLA, SKU, ManagedIdentity, Naming) and Azure Policy Search definitions check
     service configuration, not index existence, schema, document count or indexer status. Checkov and the Bicep linter are
     static. azd ai agent doctor has no Search check. Correlating the index an agent connection points to with its live state
     is the Foundry-specific value.
-  psrule:
-  - Azure.Search.IndexSLA
-  - Azure.Search.QuerySLA
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: searched-match
+      matches:
+      - Azure.Search.IndexSLA
+      - Azure.Search.QuerySLA
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/run
 tests:
   positive:
-  - index exists with expected fields, documentCount above zero, indexer status running with lastResult success
-  negative:
   - index returns 404
   - vector field missing dimensions or vectorSearchProfile
   - documentCount is zero long after the last indexer success
   - indexer status error
+  - indexer lastResult failed while status remains running
+  negative:
+  - index exists with expected fields, documentCount above zero, indexer status running with lastResult success
   skipped:
   - search service is private and the vantage point is outside the VNet
   - caller has no Search RBAC role
@@ -117,6 +129,5 @@ notes: >-
   Unverified: which Search role covers search.stats and docs/$count individually (the RBAC table groups them under object
   management and querying); that documentCount 0 always means an unhealthy agent index (it is a product judgement for indexes
   the agent depends on). The expected-schema source (which fields an agent index must have) is user-supplied configuration,
-  not a platform fact. Implementation constraints (security review): indexer and index error strings can contain document
-  keys or content snippets, so store only the error code and counts by default; if a message is kept, run it through the
-  redactor and truncate it. See ADR-006 item 8.
+  not a platform fact. Security review remediation: indexer errorMessage is not ingested at all because it can contain
+  document keys or content snippets; only structured status, counts, and errorCode are retained. See ADR-006 item 8.

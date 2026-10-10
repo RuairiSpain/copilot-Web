@@ -26,10 +26,11 @@ compatibility:
   azd: '>=1.34.2 <=1.36.0-beta.1'
   extensions: {}
   apiVersions:
-  - '2018-03-01'
-  - '2026-01-01'
-  - '2020-10-01'
-  - '2026-03-01'
+  - { plane: management, provider: Microsoft.Insights, resourceType: metricAlerts, version: '2018-03-01' }
+  - { plane: management, provider: Microsoft.Insights, resourceType: metricAlerts, version: '2026-01-01' }
+  - { plane: management, provider: Microsoft.Insights, resourceType: activityLogAlerts, version: '2026-01-01' }
+  - { plane: management, provider: Microsoft.Insights, resourceType: activityLogAlerts, version: '2020-10-01' }
+  - { plane: management, provider: Microsoft.Insights, resourceType: scheduledQueryRules, version: '2026-03-01' }
   preview: true
   notes: >-
     azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects
@@ -99,6 +100,7 @@ sources:
     (preview).
 overlap:
   decision: adapt
+  provisional: true
   coverage: partial
   rationale: >-
     PSRule Azure.Monitor.ServiceHealth and the Azure Policy definition 98903777-a9f6-47f5-90a9-acaf62ab01a8 (configure subscriptions
@@ -107,15 +109,24 @@ overlap:
     c5447c04-a4d7-4ba8-a263-c9ee321a6858) cover administrative, security and policy operations, not Foundry metrics. None
     checks Foundry model-deployment metric alerts. Foundry Doctor adapts the idea and adds the Foundry-specific metric set
     and the link between alert scope and the Foundry account.
-  psrule:
-  - Azure.Monitor.ServiceHealth
-  azurePolicy:
-  - 98903777-a9f6-47f5-90a9-acaf62ab01a8
-  - b954148f-4c11-4c38-8221-be76711e194a
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: searched-match
+      matches:
+      - Azure.Monitor.ServiceHealth
+    azurePolicy:
+      state: searched-match
+      matches:
+      - 98903777-a9f6-47f5-90a9-acaf62ab01a8
+      - b954148f-4c11-4c38-8221-be76711e194a
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/ops

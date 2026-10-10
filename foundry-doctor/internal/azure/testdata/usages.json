@@ -1,0 +1,1 @@
+{"value":[{"name":{"value":"OpenAI.Standard.gpt-4o","localizedValue":"Tokens Per Minute"},"currentValue":20,"limit":30,"unit":"Count"},{"name":{"value":"OpenAI.GlobalStandard.gpt-4o"},"currentValue":0,"limit":100,"unit":"Count"}]}

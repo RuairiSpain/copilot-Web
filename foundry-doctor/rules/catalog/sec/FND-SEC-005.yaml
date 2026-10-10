@@ -24,7 +24,7 @@ compatibility:
   azd: ''
   extensions: {}
   apiVersions:
-  - Microsoft.KeyVault/vaults 2026-05-15
+  - { plane: management, provider: Microsoft.KeyVault, resourceType: vaults, version: '2026-05-15' }
   preview: false
   notes: >-
     No azd dependency: reads compiled ARM JSON or ARM control plane Microsoft.KeyVault/vaults 2026-05-15 / 2026-05-15: stable)
@@ -71,36 +71,47 @@ sources:
   note: Overlap source (PSRule for Azure rule documentation).
 overlap:
   decision: reuse
+  provisional: true
   coverage: full
   rationale: >-
     PSRule Azure.KeyVault.SoftDelete, PurgeProtect and RBAC, Azure Policy 1e66c121, 0b60c0b2 and 12d4fa5e, and Checkov CKV_AZURE_111,
     110 and 42 give equivalent evidence on the same three properties. No Foundry-specific semantics were found in a primary
     source (a Foundry requirement for purge protection on CMK vaults was not verified). Foundry Doctor maps the IDs and
     only normalises severity per profile. If Foundry-scoped correlation is wanted later, revisit as adapt.
-  psrule:
-  - Azure.KeyVault.SoftDelete
-  - Azure.KeyVault.PurgeProtect
-  - Azure.KeyVault.RBAC
-  azurePolicy:
-  - 1e66c121-a66a-4b1f-9b83-0fd99bf0fc2d
-  - 0b60c0b2-2dc2-4e1c-b5c9-abbed971de53
-  - 12d4fa5e-1f9f-4c21-97a9-b99b3c6611b5
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov:
-  - CKV_AZURE_111
-  - CKV_AZURE_110
-  - CKV_AZURE_42
+  research:
+    psrule:
+      state: searched-match
+      matches:
+      - Azure.KeyVault.SoftDelete
+      - Azure.KeyVault.PurgeProtect
+      - Azure.KeyVault.RBAC
+    azurePolicy:
+      state: searched-match
+      matches:
+      - 1e66c121-a66a-4b1f-9b83-0fd99bf0fc2d
+      - 0b60c0b2-2dc2-4e1c-b5c9-abbed971de53
+      - 12d4fa5e-1f9f-4c21-97a9-b99b3c6611b5
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: searched-match
+      matches:
+      - CKV_AZURE_111
+      - CKV_AZURE_110
+      - CKV_AZURE_42
 implementation:
   owner: psrule
   package: internal/rules/sec
 tests:
   positive:
-  - vault with all three properties true maps to Pass
-  negative:
   - PSRule Azure.KeyVault.PurgeProtect failure maps to FND-SEC-005 finding
   - PSRule Azure.KeyVault.RBAC failure maps to FND-SEC-005 finding
+  negative:
+  - vault with all three properties true maps to Pass
   skipped:
   - PSRule not installed is skipped with the missing capability named
 testability: 'Delegated: mapping tests only (finding from PSRule result maps to FND-SEC-005 with profile severity).'

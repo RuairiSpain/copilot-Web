@@ -1,0 +1,11 @@
+{
+  "data": [
+    {
+      "name": "search-conn",
+      "category": "AzureAISearch",
+      "documents": [
+        "DOCUMENT_SENTINEL_TEXT"
+      ]
+    }
+  ]
+}

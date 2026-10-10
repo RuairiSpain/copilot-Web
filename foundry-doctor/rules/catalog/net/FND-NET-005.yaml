@@ -23,9 +23,9 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.CognitiveServices/accounts 2026-09-01"
-    - "Microsoft.Network/privateEndpoints 2024-05-01"
-    - "Microsoft.Network/virtualNetworks 2024-05-01"
+    - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts, version: "2026-09-01" }
+    - { plane: management, provider: Microsoft.Network, resourceType: privateEndpoints, version: "2024-05-01" }
+    - { plane: management, provider: Microsoft.Network, resourceType: virtualNetworks, version: "2024-05-01" }
   preview: false
   notes: "Not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked)"
 evidence:
@@ -64,18 +64,26 @@ sources:
     note: The private endpoint must be deployed in the same region and subscription as the virtual network; the private-link resource can be in a different region.
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     No PSRule rule, Azure Policy built-in, Checkov check or Bicep linter rule compares the location of
     the Foundry account, its agent VNet and its private endpoints. Azure.Resource.AllowedRegions only
     compares against a configured list. The comparison across the account, subnet and endpoint is
     Foundry specific.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/net
@@ -87,10 +95,10 @@ tests:
     - account-and-agent-vnet-in-different-regions
     - private-endpoint-region-differs-from-its-vnet
     - private-endpoint-subscription-differs-from-vnet
+    - cosmos-in-other-region-reports-info-only
   negative:
     - all-resources-same-region
     - foundry-endpoint-in-peered-hub-vnet-same-region
-    - cosmos-in-other-region-reports-info-only
   skipped:
     - location-is-unresolved-parameter
     - managed-virtual-network-mode

@@ -1,83 +1,103 @@
 //go:build spike
 
 // Package bicepspike runs the ADR-002 Bicep CLI spike against the fixtures in
-// this directory. It is skipped unless built with -tags spike and BICEP_PATH
-// points at a bicep executable. It never parses Bicep source; it only runs the
-// compiler and inspects ARM JSON and diagnostics.
+// this directory. It only runs when built with -tags spike and BICEP_PATH
+// points at the pinned bicep executable. It never parses Bicep source; it only
+// runs the compiler and inspects ARM JSON and diagnostics.
 //
 //	BICEP_PATH=/path/to/bicep go test -tags spike ./test/spikes/bicep/...
 package bicepspike
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"regexp"
+	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 )
 
-func bicep(t *testing.T, args ...string) (stdout, stderr string, exit int) {
+func bicep(t *testing.T, args ...string) commandResult {
 	t.Helper()
 	path := os.Getenv("BICEP_PATH")
 	if path == "" {
-		t.Skip("BICEP_PATH not set")
+		t.Fatalf("BICEP_PATH is required for the opt-in spike (missing required CLI is exit code 2)")
 	}
 	if !filepath.IsAbs(path) {
 		t.Fatalf("BICEP_PATH must be an absolute path, got %q", path)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, path, args...)
-	// Minimal environment: the compiler needs no Azure credentials, so none are passed through.
-	cmd.Env = []string{"HOME=" + os.Getenv("HOME"), "PATH=" + os.Getenv("PATH"), "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1"}
-	var o, e bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &o, &e
-	err := cmd.Run()
-	var ee *exec.ExitError
-	switch {
-	case err == nil:
-	case errors.As(err, &ee):
-		exit = ee.ExitCode()
-	default:
-		t.Fatalf("cannot run bicep: %v", err)
+	// Every compile/lint operation is an offline validation. This prevents an
+	// external module reference added to a fixture from silently reaching a registry.
+	if len(args) > 0 && args[0] != "--version" {
+		args = append(args, "--no-restore")
 	}
-	return o.String(), e.String(), exit
+	// Use the same bounded runner exercised by the ordinary process tests.
+	// The explicit environment does not pass Azure credentials or proxies.
+	home := t.TempDir()
+	env := []string{
+		"HOME=" + home,
+		"PATH=" + os.Getenv("PATH"),
+		"DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1",
+	}
+	if runtime.GOOS == "windows" {
+		env = append(env,
+			"SystemRoot="+os.Getenv("SystemRoot"),
+			"USERPROFILE="+home,
+			"DOTNET_BUNDLE_EXTRACT_BASE_DIR="+filepath.Join(home, ".net"),
+		)
+	}
+	return (commandRunner{
+		executable: path,
+		env:        env,
+		timeout:    60 * time.Second,
+		maxOutput:  maxSpikeOutput,
+	}).run(context.Background(), args...)
 }
 
-var diagRe = regexp.MustCompile(`(?m)^(.+)\((\d+),(\d+)\) : (Error|Warning|Info) ([A-Za-z0-9-]+): `)
+func commandFailure(t *testing.T, operation string, result commandResult) {
+	t.Helper()
+	t.Fatalf("%s failed (exit %d); stderr: %s; stdout: %s",
+		operation,
+		result.exitCode,
+		safeCompilerSummary(result.stderr, maxLogSummary),
+		safeCompilerSummary(result.stdout, maxLogSummary))
+}
 
 func TestVersion(t *testing.T) {
-	out, _, code := bicep(t, "--version")
-	if code != 0 || !strings.Contains(out, "Bicep CLI version") {
-		t.Fatalf("unexpected version output %q (exit %d)", out, code)
+	result := bicep(t, "--version")
+	if result.exitCode != 0 || result.stdoutTruncated {
+		commandFailure(t, "Bicep version detection", result)
 	}
-	t.Log(strings.TrimSpace(out))
+	version, err := parseBicepVersion(string(result.stdout))
+	if err != nil || version != (semVersion{major: 0, minor: 48, patch: 1}) {
+		t.Fatalf("spike requires official Bicep CLI 0.48.1; output: %s",
+			safeCompilerSummary(result.stdout, maxLogSummary))
+	}
+	t.Log(safeCompilerSummary(result.stdout, maxLogSummary))
 }
 
 func TestBuildMainARMShape(t *testing.T) {
-	out, _, code := bicep(t, "build", "main.bicep", "--stdout")
-	if code != 0 {
-		t.Fatalf("exit %d", code)
+	result := bicep(t, "build", "main.bicep", "--stdout")
+	if result.exitCode != 0 {
+		commandFailure(t, "build main.bicep", result)
 	}
-	var arm map[string]any
-	if err := json.Unmarshal([]byte(out), &arm); err != nil {
-		t.Fatal(err)
+	arm, err := parseARMResult(result.stdout, result.stdoutTruncated)
+	if err != nil {
+		t.Fatalf("build main.bicep protocol failure: %v; output: %s",
+			err, safeCompilerSummary(result.stdout, maxLogSummary))
 	}
 	res, ok := arm["resources"].([]any)
 	if !ok {
-		t.Fatalf("ARM output has no resources array: %v", arm["resources"])
+		t.Fatal("ARM output has no resources array")
 	}
 	var sawCond, sawCopy, sawModule bool
 	for _, r := range res {
 		m, ok := r.(map[string]any)
 		if !ok {
-			t.Fatalf("resource is not an object: %v", r)
+			t.Fatal("ARM resource is not an object")
 		}
 		if _, ok := m["condition"]; ok {
 			sawCond = true
@@ -100,20 +120,24 @@ func TestBuildMainARMShape(t *testing.T) {
 	if _, ok := arm["languageVersion"]; ok {
 		t.Error("default output should use the array resource form (no languageVersion)")
 	}
-	if strings.Contains(out, "sourceMap") {
+	if strings.Contains(string(result.stdout), "sourceMap") {
 		t.Error("ARM output unexpectedly carries a source map")
 	}
 }
 
 func TestSymbolicNameCodegenNeedsExperimentalFlag(t *testing.T) {
 	// Without bicepconfig experimental flags resources are an array (no symbolic names).
-	out, _, _ := bicep(t, "build", "main.bicep", "--stdout")
-	var arm struct {
-		Resources json.RawMessage `json:"resources"`
+	result := bicep(t, "build", "main.bicep", "--stdout")
+	if result.exitCode != 0 {
+		commandFailure(t, "build main.bicep", result)
 	}
-	_ = json.Unmarshal([]byte(out), &arm)
-	if !bytes.HasPrefix(bytes.TrimSpace(arm.Resources), []byte("[")) {
-		t.Errorf("expected resources array, got %.20s", arm.Resources)
+	arm, err := parseARMResult(result.stdout, result.stdoutTruncated)
+	if err != nil {
+		t.Fatalf("ARM protocol failure: %v; output: %s", err,
+			safeCompilerSummary(result.stdout, maxLogSummary))
+	}
+	if _, ok := arm["resources"].([]any); !ok {
+		t.Error("expected resources array")
 	}
 }
 
@@ -122,89 +146,96 @@ func TestDiagnostics(t *testing.T) {
 		file string
 		exit int
 		code string
-		line string
+		line int
 	}{
-		{"error.bicep", 1, "BCP057", "11"},
-		{"error.bicep", 1, "BCP037", "8"},
-		{"lint-warning.bicep", 0, "no-unused-params", "1"},
-		{"lint-warning.bicep", 0, "no-unused-vars", "2"},
-		{"secure-output.bicep", 0, "outputs-should-not-contain-secrets", "8"},
-		{"secure-output.bicep", 0, "outputs-should-not-contain-secrets", "11"},
+		{"error.bicep", 1, "BCP057", 11},
+		{"error.bicep", 1, "BCP037", 8},
+		{"lint-warning.bicep", 0, "no-unused-params", 1},
+		{"lint-warning.bicep", 0, "no-unused-vars", 2},
+		{"secure-output.bicep", 0, "outputs-should-not-contain-secrets", 8},
+		{"secure-output.bicep", 0, "outputs-should-not-contain-secrets", 11},
 	}
 	for _, c := range cases {
-		t.Run(c.file+"/"+c.code+":"+c.line, func(t *testing.T) {
-			_, stderr, code := bicep(t, "build", c.file, "--stdout")
-			if code != c.exit {
-				t.Errorf("exit = %d, want %d", code, c.exit)
+		t.Run(c.file+"/"+c.code+":"+strconv.Itoa(c.line), func(t *testing.T) {
+			result := bicep(t, "build", c.file, "--stdout", "--diagnostics-format", "sarif")
+			if result.exitCode != c.exit {
+				commandFailure(t, "build diagnostics", result)
+			}
+			findings, err := parseSARIFResult(result.stderr, result.stderrTruncated)
+			if err != nil {
+				t.Fatalf("SARIF protocol failure: %v; diagnostics: %s", err,
+					safeCompilerSummary(result.stderr, maxLogSummary))
 			}
 			found := false
-			for _, m := range diagRe.FindAllStringSubmatch(stderr, -1) {
-				if m[5] == c.code && m[2] == c.line {
+			for _, finding := range findings {
+				if finding.RuleID == c.code && finding.Line == c.line &&
+					finding.Confidence == "exact" {
 					found = true
 				}
 			}
 			if !found {
-				t.Errorf("no %s at line %s in:\n%s", c.code, c.line, stderr)
+				t.Errorf("no %s at proven line %d in %d normalized findings",
+					c.code, c.line, len(findings))
 			}
 		})
 	}
 }
 
 func TestLintSARIF(t *testing.T) {
-	out, _, code := bicep(t, "lint", "error.bicep", "--diagnostics-format", "sarif")
-	if code != 1 {
-		t.Errorf("exit = %d, want 1", code)
+	result := bicep(t, "lint", "error.bicep", "--diagnostics-format", "sarif")
+	if result.exitCode != 1 {
+		commandFailure(t, "lint error.bicep", result)
 	}
-	var s struct {
-		Runs []struct {
-			Results []struct {
-				RuleID    string `json:"ruleId"`
-				Level     string `json:"level"`
-				Locations []struct {
-					Physical struct {
-						Region struct {
-							StartLine  int `json:"startLine"`
-							CharOffset int `json:"charOffset"`
-						} `json:"region"`
-					} `json:"physicalLocation"`
-				} `json:"locations"`
-			} `json:"results"`
-		} `json:"runs"`
+	findings, err := parseSARIFResult(result.stdout, result.stdoutTruncated)
+	if err != nil {
+		t.Fatalf("SARIF protocol failure: %v; diagnostics: %s", err,
+			safeCompilerSummary(result.stdout, maxLogSummary))
 	}
-	if err := json.Unmarshal([]byte(out), &s); err != nil {
-		t.Fatalf("SARIF not on stdout for lint: %v", err)
-	}
-	if len(s.Runs) != 1 || len(s.Runs[0].Results) < 2 {
-		t.Fatalf("unexpected SARIF: %s", out)
-	}
-	for _, r := range s.Runs[0].Results {
-		if r.RuleID != "BCP057" {
+	found := false
+	for _, finding := range findings {
+		if finding.RuleID != "BCP057" {
 			continue
 		}
-		if len(r.Locations) == 0 || r.Level != "error" || r.Locations[0].Physical.Region.StartLine != 11 {
-			t.Errorf("BCP057 = %+v", r)
+		if finding.Severity != "error" || finding.Line != 11 || finding.Confidence != "exact" {
+			t.Errorf("BCP057 metadata = severity %q, line %d, confidence %q",
+				finding.Severity, finding.Line, finding.Confidence)
 		}
+		found = true
+	}
+	if !found {
+		t.Errorf("BCP057 not found in %d normalized findings", len(findings))
 	}
 }
 
 func TestBuildStdoutWithSARIFSplitsStreams(t *testing.T) {
-	out, errOut, _ := bicep(t, "build", "secure-output.bicep", "--stdout", "--diagnostics-format", "sarif")
-	if !json.Valid([]byte(out)) || !strings.Contains(out, "deploymentTemplate.json") {
-		t.Error("expected ARM JSON on stdout")
+	result := bicep(t, "build", "secure-output.bicep", "--stdout", "--diagnostics-format", "sarif")
+	if result.exitCode != 0 {
+		commandFailure(t, "build secure-output.bicep", result)
 	}
-	if !strings.Contains(errOut, `"version": "2.1.0"`) {
-		t.Error("expected SARIF on stderr")
+	if _, err := parseARMResult(result.stdout, result.stdoutTruncated); err != nil {
+		t.Fatalf("ARM protocol failure: %v; output: %s", err,
+			safeCompilerSummary(result.stdout, maxLogSummary))
+	}
+	findings, err := parseSARIFResult(result.stderr, result.stderrTruncated)
+	if err != nil || len(findings) == 0 {
+		t.Fatalf("SARIF protocol failure: %v; diagnostics: %s", err,
+			safeCompilerSummary(result.stderr, maxLogSummary))
 	}
 }
 
 func TestBuildParams(t *testing.T) {
-	out, _, code := bicep(t, "build-params", "main.bicepparam", "--stdout")
-	if code != 0 {
-		t.Fatalf("exit %d", code)
+	result := bicep(t, "build-params", "main.bicepparam", "--stdout")
+	if result.exitCode != 0 {
+		commandFailure(t, "build-params main.bicepparam", result)
+	}
+	if result.stdoutTruncated {
+		t.Fatalf("build-params protocol failure: output truncated; output: %s",
+			safeCompilerSummary(result.stdout, maxLogSummary))
 	}
 	var r map[string]string
-	if err := json.Unmarshal([]byte(out), &r); err != nil {
-		t.Fatal(err)
+	if err := json.Unmarshal(result.stdout, &r); err != nil {
+		t.Fatalf("build-params protocol failure: %v; output: %s", err,
+			safeCompilerSummary(result.stdout, maxLogSummary))
 	}
 	for _, k := range []string{"parametersJson", "templateJson"} {
 		if r[k] == "" {

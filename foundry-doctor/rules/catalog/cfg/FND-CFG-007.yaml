@@ -86,18 +86,26 @@ sources:
     contain ${VAR}, so URL checks apply after literal-portion inspection only.
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     PSRule for Azure HTTPS rules (for example Azure.AppService.UseHTTPS, Azure.APIM.HTTPEndpoint, Azure.AppGw.UseHTTPS)
     test the transport settings of specific Azure resources, and the Bicep linter no-hardcoded-env-urls tests cloud-specific
     hostnames; neither inspects Foundry connection or toolbox targets in azure.yaml. No Policy, Defender or Advisor equivalent
     was found for azure.yaml content.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/cfg

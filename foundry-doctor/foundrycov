@@ -1,0 +1,22 @@
+mode: set
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/foundry/foundry.go:55.70,61.2 3 1
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/foundry/foundry.go:63.87,71.104 3 1
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/foundry/foundry.go:71.104,73.3 1 0
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/foundry/foundry.go:74.2,75.30 2 1
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/foundry/foundry.go:75.30,77.3 1 1
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/foundry/foundry.go:78.2,78.17 1 1
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/foundry/foundry.go:81.112,83.13 2 1
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/foundry/foundry.go:83.13,85.3 1 1
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/foundry/foundry.go:86.2,92.104 3 1
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/foundry/foundry.go:92.104,94.3 1 0
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/foundry/foundry.go:95.2,95.87 1 1
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/foundry/foundry.go:98.97,106.104 3 1
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/foundry/foundry.go:106.104,108.3 1 0
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/foundry/foundry.go:109.2,110.30 2 1
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/foundry/foundry.go:110.30,112.3 1 1
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/foundry/foundry.go:113.2,113.17 1 1
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/foundry/foundry.go:117.47,119.2 1 1
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/foundry/foundry.go:129.65,129.85 1 0
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/foundry/foundry.go:130.65,130.88 1 0
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/foundry/foundry.go:131.65,131.87 1 0
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/foundry/foundry.go:132.65,132.90 1 0

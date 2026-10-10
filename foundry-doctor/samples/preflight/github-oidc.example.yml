@@ -1,0 +1,36 @@
+# Sample caller for foundry-doctor preflight using OIDC. No secrets.
+# Copy to your repository, replace the placeholders, and store the three IDs as
+# variables (not secrets) on a protected GitHub environment.
+name: foundry-doctor-preflight-sample
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    environment: <environment-name>
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4 # pin to a full commit SHA in real use
+        with:
+          persist-credentials: false
+      - uses: azure/login@v3 # pin to a full commit SHA in real use
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Run preflight
+        env:
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          foundry-doctor preflight --what-if --strict \
+            --resource-group <resource-group> --location <location> \
+            --approved-scope /subscriptions/<subscription-id>/resourceGroups/<shared-network-rg> \
+            --format json --out preflight.json

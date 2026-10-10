@@ -23,10 +23,10 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.CognitiveServices/accounts 2026-09-01"
-    - "Microsoft.Search/searchServices 2025-05-01"
-    - "Microsoft.DocumentDB/databaseAccounts 2026-03-15"
-    - "Microsoft.Storage/storageAccounts 2026-06-01"
+    - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts, version: "2026-09-01" }
+    - { plane: management, provider: Microsoft.Search, resourceType: searchServices, version: "2025-05-01" }
+    - { plane: management, provider: Microsoft.DocumentDB, resourceType: databaseAccounts, version: "2026-03-15" }
+    - { plane: management, provider: Microsoft.Storage, resourceType: storageAccounts, version: "2026-06-01" }
   preview: false
   notes: "No azd dependency: reads compiled ARM JSON or ARM control plane Microsoft.CognitiveServices/accounts 2026-09-01 / 2026-09-01: stable) - cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable//cognitiveservices.json. Microsoft.Search/searchServices 2025-05-01 / 2025-05-01: stable) - search/resource-manager/Microsoft.Search/Search/stable//search.json. Microsoft.DocumentDB/databaseAccounts 2026-03-15 / 2026-03-15: stable) - cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable//openapi.json. Microsoft.Storage/storageAccounts 2026-06-01 / 2026-06-01: stable) - storage/resource-manager/Microsoft.Storage/stable//openapi.json."
 evidence:
@@ -59,34 +59,46 @@ sources:
   note: Encryption.keySource enum (Microsoft.Storage | Microsoft.Keyvault).
 overlap:
   decision: adapt
+  provisional: true
   coverage: partial
   rationale: Azure Policy has per-service CMK audits (67121cc7 AI Services, 76a56461 and 356da939 Search, 1f905d99
     Cosmos DB, 6fac406b Storage) and Checkov has CKV_AZURE_100 for Cosmos DB; PSRule has no CMK rule in the reviewed
     clone. They are per-resource compliance checks. Foundry Doctor adapts the idea into one informational cross-resource
     view, deliberately without a fail state, so it is not a duplicate of the Policy enforcement path.
-  psrule: []
-  azurePolicy:
-  - 67121cc7-ff39-4ab8-b7e3-95b84dab487d
-  - 76a56461-9dc0-40f0-82f5-2453283afa2f
-  - 356da939-f20a-4bb9-86f8-5db445b0e354
-  - 1f905d99-2ab7-462c-a6b0-f709acca6c8f
-  - 6fac406b-40ca-413b-bf8e-0bf964659c25
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov:
-  - CKV_AZURE_100
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: searched-match
+      matches:
+      - 67121cc7-ff39-4ab8-b7e3-95b84dab487d
+      - 76a56461-9dc0-40f0-82f5-2453283afa2f
+      - 356da939-f20a-4bb9-86f8-5db445b0e354
+      - 1f905d99-2ab7-462c-a6b0-f709acca6c8f
+      - 6fac406b-40ca-413b-bf8e-0bf964659c25
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: searched-match
+      matches:
+      - CKV_AZURE_100
 implementation:
   owner: native
   package: internal/rules/sec
 tests:
   positive:
+  - resource with platform-managed keys reports Info with state platform-managed (never an error)
   - all resources with CMK reports Info with state cmk
   negative:
-  - resource with platform-managed keys reports Info with state platform-managed (never an error)
+  - no in-scope resources produces no finding
   skipped:
   - Storage encryption not present in Bicep skipped for template mode
-  - 'uncertain: Search encryptionWithCmk Unspecified is reported as not enforced, not as failure'
+  uncertain:
+  - Search encryptionWithCmk is Unspecified
 testability: Deterministic on ARM JSON; the Storage encryption property is read-only in responses so live mode is
   preferred for Storage.
 notes: Basis is security guidance, not a platform constraint; the rule is Info-only in every profile.

@@ -29,10 +29,10 @@ compatibility:
   azd: ''
   extensions: {}
   apiVersions:
-  - Microsoft.Insights/privateLinkScopes 2021-09-01
-  - Microsoft.Insights/privateLinkScopes 2023-06-01-preview
-  - Microsoft.Insights/components 2020-02-02
-  - Microsoft.OperationalInsights/workspaces 2026-03-01
+  - { plane: management, provider: Microsoft.Insights, resourceType: privateLinkScopes, version: '2021-09-01' }
+  - { plane: management, provider: Microsoft.Insights, resourceType: privateLinkScopes, version: '2023-06-01-preview' }
+  - { plane: management, provider: Microsoft.Insights, resourceType: components, version: '2020-02-02' }
+  - { plane: management, provider: Microsoft.OperationalInsights, resourceType: workspaces, version: '2026-03-01' }
   preview: true
   notes: >-
     Not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked) Microsoft.Insights/privateLinkScopes
@@ -118,6 +118,7 @@ sources:
     Disabled, SecuredByPerimeter.
 overlap:
   decision: adapt
+  provisional: true
   coverage: partial
   rationale: >-
     Built-in policies already audit pieces: the AMPLS should use private link (private endpoints exist), the AMPLS should
@@ -128,25 +129,33 @@ overlap:
     it asks for an explicit decision tied to the Foundry connection, checks that scope membership and public-access settings
     agree, and runs before deployment. Evidence is the correlation of connection, component, scope and endpoint, not one
     property.
-  psrule: []
-  azurePolicy:
-  - 0fc55270-f8bf-4feb-b7b8-5e7e7eacc6a6 (Azure Monitor Private Link Scope should use private link)
-  - >-
-    a499fed8-bcc8-4195-b154-641f14743757 (Azure Monitor Private Link Scope should block access to non private link resources)
-  - >-
-    bec5db8e-c4e3-40f9-a545-e0bd00065c82 (Configure Azure Monitor Private Link Scope to block access to non private link
-    resources)
-  - e8185402-357b-4768-8058-f620bc0ae6b5 (Configure Azure Monitor Private Link Scopes with private endpoints)
-  - 437914ee-c176-4fff-8986-7e05eb971365 (Configure Azure Monitor Private Link Scope to use private DNS zones)
-  - >-
-    1bc02227-0cb6-4e11-8f53-eb0b22eab7e8 (Application Insights components should block log ingestion and querying from public
-    networks)
-  - >-
-    6c53d030-cc64-46f0-906d-2bc061cd1334 (Log Analytics workspaces should block log ingestion and querying from public networks)
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: searched-match
+      matches:
+      - 0fc55270-f8bf-4feb-b7b8-5e7e7eacc6a6 (Azure Monitor Private Link Scope should use private link)
+      - >-
+        a499fed8-bcc8-4195-b154-641f14743757 (Azure Monitor Private Link Scope should block access to non private link resources)
+      - >-
+        bec5db8e-c4e3-40f9-a545-e0bd00065c82 (Configure Azure Monitor Private Link Scope to block access to non private link
+        resources)
+      - e8185402-357b-4768-8058-f620bc0ae6b5 (Configure Azure Monitor Private Link Scopes with private endpoints)
+      - 437914ee-c176-4fff-8986-7e05eb971365 (Configure Azure Monitor Private Link Scope to use private DNS zones)
+      - >-
+        1bc02227-0cb6-4e11-8f53-eb0b22eab7e8 (Application Insights components should block log ingestion and querying from public
+        networks)
+      - >-
+        6c53d030-cc64-46f0-906d-2bc061cd1334 (Log Analytics workspaces should block log ingestion and querying from public networks)
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/net

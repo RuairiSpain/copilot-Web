@@ -24,7 +24,7 @@ Rules whose phases include 1, including those shared with a later phase. The PRD
 | Rule | Title | Phases | Status | Decision |
 |---|---|---|---|---|
 | FND-CFG-002 | Seed | 1 | proposed | - |
-| FND-SEC-001 | Local auth \| disabled | 1/2 | verified | adapt |
+| FND-SEC-001 | Local auth &#124; disabled | 1/2 | verified | adapt |
 
 ## CFG
 
@@ -37,4 +37,4 @@ Rules whose phases include 1, including those shared with a later phase. The PRD
 
 | Rule | Title | Phase | Status | Decision | dev/test/prod | Source |
 |---|---|---|---|---|---|---|
-| FND-SEC-001 | Local auth \| disabled | 1/2 | verified | adapt | warning/error/error | [link](<https://example.com/a(b)%7Cc>) (2026-10-04) |
+| FND-SEC-001 | Local auth &#124; disabled | 1/2 | verified | adapt | warning/error/error | [link](<https://example.com/a(b)%7Cc>) (2026-10-04) |

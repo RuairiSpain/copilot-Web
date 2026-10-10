@@ -26,8 +26,8 @@ compatibility:
   azd: '>=1.34.2 <=1.36.0-beta.1'
   extensions: {}
   apiVersions:
-  - '2023-11-01'
-  - '2026-06-01'
+  - { plane: management, provider: Microsoft.Consumption, resourceType: budgets, version: '2023-11-01' }
+  - { plane: management, provider: Microsoft.Consumption, resourceType: budgets, version: '2026-06-01' }
   preview: true
   notes: >-
     azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects
@@ -100,18 +100,26 @@ sources:
     ms.date 08/27/2026.
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     No PSRule rule, Azure Policy built-in, Bicep linter rule or Checkov check was found that requires a Microsoft.Consumption/budgets
     resource (searched the clones by resource type name and by the word budget). The only PSRule hit for budget is an unrelated
     Dev Box project limit. Defender for Cloud and Advisor were not verifiable; Advisor cost recommendations are a different
     signal (see FND-COST-004 and the fragment).
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/cost

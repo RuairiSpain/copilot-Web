@@ -1,0 +1,82 @@
+name: foundry-doctor-preflight
+
+# Manual / protected-branch Azure preflight. OIDC federated credentials only;
+# no client secrets. The protected environment gates access and holds the
+# non-secret identifiers (AZURE_CLIENT_ID, AZURE_TENANT_ID,
+# AZURE_SUBSCRIPTION_ID) as environment variables. Never runs on pull requests.
+# The doctor is read-only: preflight + what-if only, nothing is deployed.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Protected GitHub environment to use.
+        type: environment
+        required: true
+      profile:
+        description: Doctor profile.
+        type: choice
+        options: [dev, test, prod]
+        default: test
+      project-path:
+        type: string
+        default: .
+      resource-group:
+        description: Target resource group (required so target-bound checks are not skipped under --strict).
+        type: string
+        required: true
+      location:
+        description: Target Azure region name, for example eastus2.
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+      id-token: write   # OIDC token exchange; no secrets stored
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: foundry-doctor/go.mod
+          cache-dependency-path: foundry-doctor/go.sum
+      - name: Azure login (OIDC)
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Build foundry-doctor
+        working-directory: foundry-doctor
+        run: go build -trimpath -o "$RUNNER_TEMP/foundry-doctor" ./cmd/foundry-doctor
+      - name: Run preflight
+        shell: bash
+        env:
+          PROFILE: ${{ inputs.profile }}
+          PROJECT_PATH: ${{ inputs.project-path }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          AZURE_RESOURCE_GROUP: ${{ inputs.resource-group }}
+          AZURE_LOCATION: ${{ inputs.location }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/evidence"
+          cd "$PROJECT_PATH"
+          "$RUNNER_TEMP/foundry-doctor" preflight --what-if --profile "$PROFILE" --strict \
+            --resource-group "$AZURE_RESOURCE_GROUP" --location "$AZURE_LOCATION" \
+            --format json --out "$RUNNER_TEMP/evidence/preflight.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: foundry-doctor-preflight-evidence
+          path: ${{ runner.temp }}/evidence
+          if-no-files-found: warn
+          retention-days: 14

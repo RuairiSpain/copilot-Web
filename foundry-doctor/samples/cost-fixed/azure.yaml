@@ -1,0 +1,16 @@
+name: cost-fixed-sample
+requiredVersions:
+  azd: ">= 1.34.2"
+infra:
+  provider: bicep
+  path: infra
+  module: main
+services:
+  ai-project:
+    host: azure.ai.project
+  assistant:
+    host: azure.ai.agent
+    project: ./agents/assistant
+    uses: [ai-project]
+    kind: hosted
+    name: assistant

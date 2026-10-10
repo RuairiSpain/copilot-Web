@@ -1,0 +1,1 @@
+{"value":[{"actions":["*"],"notActions":["Microsoft.Authorization/*/Delete","Microsoft.Authorization/*/Write"],"dataActions":[],"notDataActions":[]}]}

@@ -1,16 +1,13 @@
-// Package rules embeds the rule catalogue and the rule packs so the binary needs no files at run time.
-// The directory layout is rules/catalog/<group>/<ID>.yaml and rules/packs/<pack>.yaml.
-package rules
+// Package ruledata embeds the rule catalogue (rules/catalog) into the binary so
+// the CLI works without the source tree. It contains data only.
+package ruledata
 
 import "embed"
 
-// FS holds the embedded catalogue and packs. Use the roots CatalogRoot and PacksRoot.
+// FS holds the catalogue under the "catalog" directory.
 //
-//go:embed catalog packs
+//go:embed catalog
 var FS embed.FS
 
-// Roots of the embedded trees inside FS.
-const (
-	CatalogRoot = "catalog"
-	PacksRoot   = "packs"
-)
+// Root is the catalogue root inside FS.
+const Root = "catalog"

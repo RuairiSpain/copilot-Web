@@ -21,7 +21,7 @@ compatibility:
   azd: ">=1.34.2 <=1.36.0-beta.1"
   extensions: {}
   apiVersions:
-    - "2022-12-01"
+    - { plane: management, provider: Microsoft.Resources, resourceType: subscriptions, version: "2022-12-01" }
   preview: true
   notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from a changelog and was not verified."
 evidence:
@@ -49,6 +49,7 @@ sources:
     note: AZURE_LOCATION is the Azure region where resources are deployed, set during first provisioning.
 overlap:
   decision: adapt
+  provisional: true
   coverage: partial
   rationale: >-
     Azure Policy Allowed locations (e56962a6-4747-49cd-b67b-bf8b01975c4c) and PSRule Azure.Resource.AllowedRegions
@@ -56,12 +57,29 @@ overlap:
     template sets location; none validates that a value is a real location for the subscription, nor reads
     AZURE_LOCATION from the azd environment. Foundry Doctor reuses the allow-list idea only as a
     separate organisational control and adds validity and cross-file consistency.
-  psrule: [Azure.Resource.AllowedRegions, Azure.Template.ResourceLocation, Azure.Template.UseLocationParameter]
-  azurePolicy: [e56962a6-4747-49cd-b67b-bf8b01975c4c, e765b5de-1225-4ba3-bd56-1ac6695af988]
-  defender: []
-  advisor: []
-  bicepLinter: [no-hardcoded-location, explicit-values-for-loc-params]
-  checkov: []
+  research:
+    psrule:
+      state: searched-match
+      matches:
+      - 'Azure.Resource.AllowedRegions'
+      - 'Azure.Template.ResourceLocation'
+      - 'Azure.Template.UseLocationParameter'
+    azurePolicy:
+      state: searched-match
+      matches:
+      - 'e56962a6-4747-49cd-b67b-bf8b01975c4c'
+      - 'e765b5de-1225-4ba3-bd56-1ac6695af988'
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: searched-match
+      matches:
+      - 'no-hardcoded-location'
+      - 'explicit-values-for-loc-params'
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/cfg

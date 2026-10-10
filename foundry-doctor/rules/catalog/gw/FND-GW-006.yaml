@@ -22,7 +22,8 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.ApiManagement/service/loggers and diagnostics 2025-09-01-preview"
+    - { plane: management, provider: Microsoft.ApiManagement, resourceType: service/loggers, version: "2025-09-01-preview" }
+    - { plane: management, provider: Microsoft.ApiManagement, resourceType: service/diagnostics, version: "2025-09-01-preview" }
   preview: true
   notes: "Microsoft.ApiManagement/service/loggers and diagnostics 2025-09-01-preview: loggerType, loggerId, metrics, largeLanguageModel read in spec."
 evidence:
@@ -72,19 +73,27 @@ sources:
     verifiedVia: refs/rest-api-specs/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/preview/2025-09-01-preview/openapi.json (LoggerContractProperties.loggerType azureEventHub|applicationInsights|azureMonitor; DiagnosticContractProperties.loggerId, metrics, largeLanguageModel)
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     Azure Policy and PSRule have no APIM diagnostics rule for token metrics; the check correlates a policy
     with the logger and diagnostic that make it effective, which is Foundry/AI-gateway specific.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
-  package: internal/providers/apim
+  package: internal/rules/gw
 testability: Offline from compiled ARM (policy, logger, diagnostics); portal-only Application Insights setting is reported uncertain.
 tests:
   positive:

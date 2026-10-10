@@ -1,0 +1,169 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "foundry-doctor",
+          "version": "1.0.0",
+          "rules": [
+            {
+              "id": "FND-001"
+            },
+            {
+              "id": "FND-002",
+              "helpUri": "https://learn.microsoft.com/azure/foundry",
+              "properties": {
+                "pillar": "security"
+              }
+            },
+            {
+              "id": "FND-003"
+            },
+            {
+              "id": "FND-004"
+            },
+            {
+              "id": "FND-010"
+            },
+            {
+              "id": "FND-020"
+            }
+          ]
+        }
+      },
+      "invocations": [
+        {
+          "executionSuccessful": true,
+          "exitCode": 1,
+          "toolExecutionNotifications": [
+            {
+              "level": "note",
+              "message": {
+                "text": "Check skipped (not passed): optional scanner missing"
+              },
+              "descriptor": {
+                "id": "FND-010"
+              },
+              "properties": {
+                "required": false,
+                "skipped": true
+              }
+            },
+            {
+              "level": "warning",
+              "message": {
+                "text": "Check skipped (not passed): az not signed in"
+              },
+              "descriptor": {
+                "id": "FND-020"
+              },
+              "properties": {
+                "required": true,
+                "skipped": true
+              }
+            }
+          ]
+        }
+      ],
+      "results": [
+        {
+          "ruleId": "FND-004",
+          "ruleIndex": 3,
+          "level": "error",
+          "message": {
+            "text": "Finding FND-004"
+          },
+          "partialFingerprints": {
+            "foundryDoctorFingerprint/v1": "6aab330d4fb02ae4bf6ebbc08bcae4e2"
+          },
+          "baselineState": "new",
+          "suppressions": [
+            {
+              "kind": "external",
+              "status": "accepted",
+              "justification": "accepted"
+            }
+          ]
+        },
+        {
+          "ruleId": "FND-001",
+          "ruleIndex": 0,
+          "level": "error",
+          "message": {
+            "text": "line1 line2 [31m"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "azure.yaml",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "foundryDoctorFingerprint/v1": "1fa9e96a455ab38b3800ef8810a379ae"
+          },
+          "baselineState": "new"
+        },
+        {
+          "ruleId": "FND-002",
+          "ruleIndex": 1,
+          "level": "warning",
+          "message": {
+            "text": "note=plain | `x` \u003cscript\u003e"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "infra/main.bicep",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 12,
+                  "startColumn": 3
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "foundryDoctorFingerprint/v1": "ae02222094d6c45ef5986f980f956b72"
+          },
+          "baselineState": "new",
+          "properties": {
+            "recommendation": "Use *managed* identity"
+          }
+        },
+        {
+          "ruleId": "FND-003",
+          "ruleIndex": 2,
+          "level": "note",
+          "message": {
+            "text": "Finding FND-003"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "passwd",
+                  "uriBaseId": "%SRCROOT%"
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "foundryDoctorFingerprint/v1": "ac388dbaaf160a88f681d7825febf8e1"
+          },
+          "baselineState": "unchanged"
+        }
+      ]
+    }
+  ]
+}

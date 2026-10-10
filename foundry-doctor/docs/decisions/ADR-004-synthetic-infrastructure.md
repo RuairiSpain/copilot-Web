@@ -1,6 +1,6 @@
 # ADR-004: Synthetic infrastructure (azure.yaml-only Foundry projects)
 
-- Status: Accepted
+- Status: Accepted design; provider-template evidence remains provisional (ADR-008)
 - lastVerified: 2026-10-04
 - Evidence base: `Azure/azure-dev` @ `afe4b2b4d262bab4c11f4937e7a7942557ab0ecd`; extensions `azure.ai.projects` 1.0.0-beta.13 (`version.txt`), `azure.ai.agents` 1.0.0-beta.18. Fixtures: `test/spikes/azd/`.
 
@@ -58,7 +58,7 @@ Foundry azd projects can have no `infra/` folder. Foundry Doctor's Bicep adapter
 ## Decision
 
 1. Foundry Doctor treats azure.yaml-only projects as first-class. Source acquisition reports `iac: synthetic` when no `<infra.path>/<infra.module>.bicep|.bicepparam` exists (and no `infra.layers` path with one) and `infra.provider` is `microsoft.foundry` (or a legacy Foundry host drives it).
-2. The azure.yaml reader is a lossless YAML AST (`internal/azureyaml`) that reports duplicate mapping keys, unresolved `${VAR}` (honouring `:-` defaults and `$$` escapes) and unresolved `uses` targets as findings with line/column. The executable spike `test/spikes/azd/spike_test.go` pins this behaviour against `expected.json` and runs in `go test ./...`. Verified with `go.yaml.in/yaml/v3`: decoding into a map or typed struct rejects a duplicate key with an error that carries no usable location, while decoding into a node AST succeeds, so the AST route is the one that yields every occurrence and its line. Some other YAML libraries keep the last value silently, which is why the AST route is the portable choice. A second, build-tagged test validates the valid fixture against the real azd JSON schema and proves the check can fail (`schema_spike_test.go`).
+2. The azure.yaml reader contract is a lossless YAML AST (`internal/azureyaml`) that reports duplicate mapping keys, unresolved `${VAR}` (honouring `:-` defaults and `$$` escapes) and unresolved `uses` targets as findings with line/column. The executable spike `test/spikes/azd/spike_test.go` exercises the proposed behaviour against `expected.json` in `go test ./...`; it is spike code, not the Phase 1 reader. A second, build-tagged test validates the fixture against schemas from the exact Azure-dev commit `afe4b2b4d262bab4c11f4937e7a7942557ab0ecd` and proves a deliberately invalid agent is rejected (`schema_spike_test.go`). That test is conditional on `AZURE_DEV_DIR`, Python, PyYAML and jsonschema/referencing. It is not run by `verify-phase.sh`; the local Windows ARM64 tagged command passed, while successful current CI evidence remains open.
 3. Rules needing ARM facts are `skipped` with reason `synthetic-infrastructure` in local mode; they never pass. Rules about azure.yaml, references, env keys and cross-service wiring run.
 4. Env resolution order for local mode: selected azd environment file, then process environment, mirroring `resolveVars`. Missing env file: references are `unresolved` and the finding says which env was selected.
 5. Unknown versions fail safely, by tier:
@@ -78,5 +78,7 @@ Foundry azd projects can have no `infra/` folder. Foundry Doctor's Bicep adapter
 ## Unverified
 
 - Exact set of resources the embedded `main.bicep` creates per extension version (the files exist; they were not compiled or enumerated).
+- Successful current CI evidence for the build-tagged schema and provider spike. The local tagged
+  command passed against the exact pinned clone and workflow-pinned Python dependencies.
 - Where azd records the default environment (`.azure/config.json` field names) and `.azure/<env>/config.json` schema (docs mention the files; fields not read).
 - Alpha-schema gating specifics.

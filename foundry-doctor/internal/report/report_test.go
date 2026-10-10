@@ -1,203 +1,343 @@
-// Package report_test holds the cross-format tests: determinism, injection, canaries, unicode,
-// empty and huge reports. Per-format golden tests live in the subpackages.
-package report_test
+package report
 
 import (
 	"bytes"
-	"math/rand"
+	"encoding/json"
+	"flag"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
-	"sync"
 	"testing"
-	"time"
 
-	"github.com/ruairispain/copilot-web/foundry-doctor/internal/report/console"
-	reportjson "github.com/ruairispain/copilot-web/foundry-doctor/internal/report/json"
-	"github.com/ruairispain/copilot-web/foundry-doctor/internal/report/markdown"
-	"github.com/ruairispain/copilot-web/foundry-doctor/internal/report/reporttest"
-	"github.com/ruairispain/copilot-web/foundry-doctor/internal/report/sarif"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
 
-func reporters() []sdk.Reporter {
-	return []sdk.Reporter{console.New(console.Options{}), reportjson.New(), markdown.New(), sarif.New(sarif.Options{})}
+var update = flag.Bool("update", false, "update golden files")
+
+func fixture() ([]sdk.Finding, Run) {
+	fs := []sdk.Finding{
+		{RuleID: "FND-002", Severity: sdk.SeverityWarning, Pillar: "security", Evidence: "note=plain | `x` <script>", Recommendation: "Use *managed* identity", Location: sdk.Location{File: "infra/main.bicep", Line: 12, Column: 3}, DocsURL: "https://learn.microsoft.com/azure/foundry"},
+		{RuleID: "FND-001", Severity: sdk.SeverityError, Evidence: "line1\nline2\x1b[31m", Location: sdk.Location{File: "C:\\abs\\secret\\azure.yaml", Line: 1}},
+		{RuleID: "FND-003", Severity: sdk.SeverityInfo, Baselined: true, Location: sdk.Location{File: "../../etc/passwd"}},
+		{RuleID: "FND-004", Severity: sdk.SeverityError, Suppressed: &sdk.Suppression{Reason: "accepted", Owner: "team"}},
+	}
+	run := Run{ToolVersion: "1.0.0", Profile: "default", ExitCode: 1, Skipped: []sdk.Skip{
+		{RuleID: "FND-020", Reason: "az not signed in", Required: true},
+		{RuleID: "FND-010", Reason: "optional scanner missing"},
+	}}
+	return fs, run
 }
 
-func render(t *testing.T, rp sdk.Reporter, r *sdk.Report) string {
+func golden(t *testing.T, name string, got []byte) {
 	t.Helper()
+	p := filepath.Join("testdata", name)
+	if *update {
+		if err := os.WriteFile(p, got, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatalf("missing golden %s (run with -update): %v", name, err)
+	}
+	if !bytes.Equal(bytes.ReplaceAll(want, []byte("\r\n"), []byte("\n")), got) {
+		t.Errorf("%s differs from golden:\n%s", name, got)
+	}
+}
+
+func TestGolden(t *testing.T) {
+	fs, run := fixture()
+	for _, f := range []struct {
+		fmt  Format
+		file string
+	}{{FormatConsole, "console.golden"}, {FormatJSON, "report.json.golden"}, {FormatMarkdown, "report.md.golden"}, {FormatSARIF, "report.sarif.golden"}} {
+		var b bytes.Buffer
+		if err := Write(&b, f.fmt, fs, run); err != nil {
+			t.Fatal(err)
+		}
+		golden(t, f.file, b.Bytes())
+	}
+}
+
+func TestEmptyAndNil(t *testing.T) {
+	for _, f := range []Format{FormatConsole, FormatJSON, FormatMarkdown, FormatSARIF} {
+		var b bytes.Buffer
+		if err := Write(&b, f, nil, Run{}); err != nil {
+			t.Fatalf("%s: %v", f, err)
+		}
+		if b.Len() == 0 {
+			t.Fatalf("%s empty", f)
+		}
+		if f == FormatJSON || f == FormatSARIF {
+			var v map[string]any
+			if err := json.Unmarshal(b.Bytes(), &v); err != nil {
+				t.Fatalf("%s invalid json: %v", f, err)
+			}
+		}
+	}
+	golden(t, "empty.md.golden", func() []byte { var b bytes.Buffer; _ = Markdown(&b, nil, Run{}); return b.Bytes() }())
+}
+
+func TestUnknownFormat(t *testing.T) {
+	if err := Write(&bytes.Buffer{}, Format("x"), nil, Run{}); err == nil {
+		t.Fatal("want error")
+	}
+	if _, err := ParseFormat("nope"); err == nil {
+		t.Fatal("want error")
+	}
+	if f, err := ParseFormat("MD"); err != nil || f != FormatMarkdown {
+		t.Fatal(f, err)
+	}
+}
+
+func TestDeterministicAndNoMutation(t *testing.T) {
+	fs, run := fixture()
+	rev := make([]sdk.Finding, len(fs))
+	for i := range fs {
+		rev[len(fs)-1-i] = fs[i]
+	}
+	orig := rev[0].Location.File
+	for _, f := range []Format{FormatConsole, FormatJSON, FormatMarkdown, FormatSARIF} {
+		var a, b bytes.Buffer
+		_ = Write(&a, f, fs, run)
+		_ = Write(&b, f, rev, run)
+		if a.String() != b.String() {
+			t.Errorf("%s not deterministic", f)
+		}
+	}
+	if rev[0].Location.File != orig {
+		t.Error("input mutated")
+	}
+}
+
+func TestNoSecretsOrAbsolutePaths(t *testing.T) {
+	fs, run := fixture()
+	fs[0].Evidence = "token=ghp_" + strings.Repeat("a", 36)
+	for _, f := range []Format{FormatConsole, FormatJSON, FormatMarkdown, FormatSARIF} {
+		var b bytes.Buffer
+		_ = Write(&b, f, fs, run)
+		s := b.String()
+		if strings.Contains(s, "ghp_aaaa") {
+			t.Errorf("%s leaked secret", f)
+		}
+		if strings.Contains(s, "C:\\\\abs") || strings.Contains(s, "C:\\abs") || strings.Contains(s, "etc/passwd") && strings.Contains(s, "../") {
+			t.Errorf("%s leaked path", f)
+		}
+	}
+}
+
+func TestSanitizePath(t *testing.T) {
+	cases := map[string]string{
+		"":                       "",
+		"a/b.yaml":               "a/b.yaml",
+		"./a//b":                 "a/b",
+		"/etc/passwd":            "passwd",
+		"C:\\x\\y.bicep":         "y.bicep",
+		"..\\..\\z":              "z",
+		"a/../../b":              "b",
+		"\\\\srv\\share\\f.json": "f.json",
+		"~/.ssh/id":              "id",
+		"a\x00b/c\n":             "ab/c",
+		"..":                     "",
+	}
+	for in, want := range cases {
+		got := SanitizePath(in)
+		if got != want {
+			t.Errorf("SanitizePath(%q)=%q want %q", in, got, want)
+		}
+		if strings.HasPrefix(got, "/") || strings.Contains(got, "..") {
+			t.Errorf("unsafe result %q", got)
+		}
+	}
+}
+
+func TestSafeRuleID(t *testing.T) {
+	re := regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
+	for _, in := range []string{"", "FND-001", "a b/c", "../x", "Ã©\n", "---"} {
+		if g := SafeRuleID(in); !re.MatchString(g) {
+			t.Errorf("%q -> %q", in, g)
+		}
+	}
+}
+
+func TestSARIFStructure(t *testing.T) {
+	fs, run := fixture()
 	var b bytes.Buffer
-	if err := rp.Write(&b, r); err != nil {
-		t.Fatalf("%s: %v", rp.Format(), err)
+	if err := SARIF(&b, fs, run); err != nil {
+		t.Fatal(err)
 	}
-	return b.String()
-}
-
-func shuffled(r *sdk.Report, seed int64) *sdk.Report {
-	c := *r
-	rng := rand.New(rand.NewSource(seed))
-	c.Findings = append([]sdk.Finding(nil), r.Findings...)
-	c.Skipped = append([]sdk.SkippedCheck(nil), r.Skipped...)
-	c.Tools = append([]sdk.ToolStatus(nil), r.Tools...)
-	rng.Shuffle(len(c.Findings), func(i, j int) { c.Findings[i], c.Findings[j] = c.Findings[j], c.Findings[i] })
-	rng.Shuffle(len(c.Skipped), func(i, j int) { c.Skipped[i], c.Skipped[j] = c.Skipped[j], c.Skipped[i] })
-	rng.Shuffle(len(c.Tools), func(i, j int) { c.Tools[i], c.Tools[j] = c.Tools[j], c.Tools[i] })
-	return &c
-}
-
-func TestReportersDeterministic(t *testing.T) {
-	for _, base := range []*sdk.Report{reporttest.FullReport(), reporttest.Huge(200)} {
-		for _, rp := range reporters() {
-			want := render(t, rp, base)
-			for seed := int64(1); seed <= 8; seed++ {
-				if got := render(t, rp, shuffled(base, seed)); got != want {
-					t.Fatalf("%s: output depends on input order (seed %d)", rp.Format(), seed)
+	var log struct {
+		Version string
+		Runs    []struct {
+			Tool struct {
+				Driver struct{ Rules []struct{ ID string } }
+			}
+			Invocations []struct {
+				ExecutionSuccessful        bool
+				ToolExecutionNotifications []struct {
+					Level      string
+					Descriptor struct{ ID string }
 				}
 			}
-			for i := 0; i < 3; i++ {
-				if got := render(t, rp, base); got != want {
-					t.Fatalf("%s: repeated run differs", rp.Format())
-				}
+			Results []struct {
+				RuleID, BaselineState string
+				RuleIndex             int
+				PartialFingerprints   map[string]string
+				Suppressions          []any
 			}
 		}
 	}
-}
-
-func TestReportersConcurrentSafe(t *testing.T) {
-	r := reporttest.FullReport()
-	var wg sync.WaitGroup
-	for _, rp := range reporters() {
-		want := render(t, rp, r)
-		for i := 0; i < 4; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				var b bytes.Buffer
-				if err := rp.Write(&b, r); err != nil || b.String() != want {
-					t.Errorf("%s: concurrent output differs: %v", rp.Format(), err)
-				}
-			}()
+	if err := json.Unmarshal(b.Bytes(), &log); err != nil {
+		t.Fatal(err)
+	}
+	r := log.Runs[0]
+	if log.Version != "2.1.0" || len(r.Results) != 4 {
+		t.Fatalf("bad log %+v", log)
+	}
+	for _, res := range r.Results {
+		if r.Tool.Driver.Rules[res.RuleIndex].ID != res.RuleID || res.PartialFingerprints[FingerprintKey] == "" {
+			t.Errorf("bad result %+v", res)
 		}
 	}
-	wg.Wait()
-}
-
-func TestNoWallClockOrAbsolutePath(t *testing.T) {
-	year := time.Now().Format("2006-")
-	for _, rp := range reporters() {
-		out := render(t, rp, reporttest.FullReport())
-		if strings.Contains(out, "\\") && rp.Format() != "json" && rp.Format() != "markdown" && rp.Format() != "sarif" {
-			t.Errorf("%s: backslash in output", rp.Format())
-		}
-		if strings.Contains(out, "T"+year) || strings.Contains(out, "file:///") {
-			t.Errorf("%s: timestamp or absolute URI", rp.Format())
-		}
+	n := r.Invocations[0].ToolExecutionNotifications
+	if len(n) != 2 || n[0].Descriptor.ID != "FND-010" || n[1].Level != "warning" {
+		t.Errorf("notifications %+v", n)
+	}
+	if !r.Invocations[0].ExecutionSuccessful {
+		t.Error("exit 1 is a successful execution")
 	}
 }
 
-// Reporters print what they get; policy values under credential-like keys are the one place
-// where a secret could arrive outside Evidence, and none of the formats may print them.
-func TestCanaryPolicyValueNeverPrinted(t *testing.T) {
-	for _, rp := range reporters() {
-		if out := render(t, rp, reporttest.FullReport()); strings.Contains(out, reporttest.Canary) {
-			t.Errorf("%s printed the canary", rp.Format())
-		}
+func TestMarkdownEscaping(t *testing.T) {
+	f := []sdk.Finding{{RuleID: "R|1", Severity: sdk.SeverityError, Evidence: "a|b `` ` <img src=x onerror=1>\n# h", Recommendation: "[x](javascript:alert(1)) <b>", DocsURL: "javascript:alert(1)"}}
+	var b bytes.Buffer
+	_ = Markdown(&b, f, Run{ToolVersion: "<v>"})
+	s := b.String()
+	if strings.Contains(s, "<img") || strings.Contains(s, "<b>") || strings.Contains(s, "<v>") || strings.Contains(s, "](javascript") {
+		t.Errorf("unescaped output:\n%s", s)
 	}
-	// Redaction keeps the key visible so that the reader knows the setting exists.
-	if out := render(t, console.New(console.Options{}), reporttest.FullReport()); !strings.Contains(out, "apiToken = [redacted]") {
-		t.Errorf("redacted key not shown:\n%s", out)
-	}
+	checkTableRows(t, s)
 }
 
-func injectionReport() *sdk.Report {
-	hostile := "\x1b[2J\x1b[31mred\x1b]0;pwned\x07 \x00 \u202e|\n<img src=x onerror=alert(1)>[x](javascript:alert(1))\r@everyone"
-	return &sdk.Report{
-		Tool: sdk.ToolInfo{Name: "foundry-doctor\x1b[1m", Version: "1"}, Profile: "p\x1b[0m",
-		EffectivePolicy: map[string]any{"k\x1b[1m": hostile},
-		Findings: []sdk.Finding{{
-			RuleID: "FND-X-001" + "\x1b[1m", Severity: sdk.SeverityError, Profile: "p", Evidence: hostile, Recommendation: hostile, Fix: hostile,
-			DocsURL: "javascript:alert(1)", Fingerprint: "fp1:ee", Confidence: sdk.ConfidenceCertain,
-			Resource: sdk.ResourceRef{Name: hostile}, Location: sdk.Location{File: "a\x1b[1m.yaml", Line: 1},
-			Suppressed: &sdk.Suppression{Reason: hostile, Expires: "2030-01-01"},
-		}},
-		Skipped: []sdk.SkippedCheck{{RuleID: "FND-Y-001", Reason: hostile, Detail: hostile, MissingCapability: hostile}},
-	}
-}
-
-func TestInjectionStripped(t *testing.T) {
-	for _, rp := range reporters() {
-		if rp.Format() == "json" {
-			continue // JSON is the report as is; encoding/json escapes control characters.
+func checkTableRows(t *testing.T, s string) {
+	t.Helper()
+	for _, l := range strings.Split(s, "\n") {
+		if strings.HasPrefix(l, "| Severity") {
+			continue
 		}
-		out := render(t, rp, injectionReport())
-		for _, bad := range []string{"\x1b", "\x07", "\x00", "\u202e", "\r"} {
-			if strings.Contains(out, bad) {
-				t.Errorf("%s: output contains %q", rp.Format(), bad)
+		if strings.HasPrefix(l, "| ") && strings.Contains(l, "FND") || strings.HasPrefix(l, "| error") {
+			if n := len(regexp.MustCompile(`(^|[^\\])\|`).FindAllString(l, -1)); n != 8 {
+				t.Errorf("row has %d unescaped pipes: %q", n, l)
 			}
 		}
-		if strings.Contains(out, "pwned") && rp.Format() != "sarif" {
-			// The OSC payload is a title string and must disappear with its escape.
-			t.Errorf("%s: OSC payload survived", rp.Format())
+	}
+}
+
+func FuzzMarkdown(f *testing.F) {
+	f.Add("a|b", "`x`", "https://x.y")
+	f.Add("<script>\n", "[a](b)", "javascript:1")
+	f.Fuzz(func(t *testing.T, ev, rec, docs string) {
+		var b bytes.Buffer
+		if err := Markdown(&b, []sdk.Finding{{RuleID: ev, Severity: sdk.SeverityError, Evidence: ev, Recommendation: rec, DocsURL: docs, Resource: sdk.ResourceRef{Name: rec}}}, Run{}); err != nil {
+			t.Fatal(err)
 		}
-		if rp.Format() == "markdown" {
-			for _, bad := range []string{"<img", "](javascript:", "@everyone", "[x]("} {
-				if strings.Contains(out, bad) {
-					t.Errorf("markdown: raw %q survived:\n%s", bad, out)
+		for _, l := range strings.Split(b.String(), "\n") {
+			if strings.HasPrefix(l, "| error") {
+				if strings.Contains(l, "<script") || strings.Contains(l, "<img") {
+					t.Fatalf("raw html: %q", l)
+				}
+				if n := len(regexp.MustCompile(`(^|[^\\])\|`).FindAllString(l, -1)); n != 8 {
+					t.Fatalf("row break %d: %q", n, l)
 				}
 			}
 		}
-	}
-	if out := render(t, reportjson.New(), injectionReport()); strings.ContainsAny(out, "\x1b\x07\x00\r") {
-		t.Error("json contains raw control characters")
-	}
+	})
 }
 
-func TestUnicodeSurvives(t *testing.T) {
-	r := &sdk.Report{Findings: []sdk.Finding{{RuleID: "FND-U-001", Severity: sdk.SeverityInfo, Evidence: "日本語 café \U0001F600", Location: sdk.Location{File: "infra/日本.bicep", Line: 1}, Fingerprint: "fp1:u"}}}
-	for _, rp := range reporters() {
-		out := render(t, rp, r)
-		if !strings.Contains(out, "日本語 café \U0001F600") && rp.Format() != "json" {
-			t.Errorf("%s lost unicode evidence", rp.Format())
+func FuzzSARIF(f *testing.F) {
+	f.Add("FND-001", "C:\\a\\b", "msg")
+	f.Add("../x y", "../../z", "\x00\n")
+	re := regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
+	f.Fuzz(func(t *testing.T, id, file, msg string) {
+		var b bytes.Buffer
+		fs := []sdk.Finding{{RuleID: id, Severity: sdk.SeverityWarning, Evidence: msg, Location: sdk.Location{File: file, Line: 1}}}
+		if err := SARIF(&b, fs, Run{Skipped: []sdk.Skip{{RuleID: id, Reason: msg}}}); err != nil {
+			t.Fatal(err)
 		}
-		if !strings.Contains(out, "日本語") {
-			t.Errorf("%s lost unicode", rp.Format())
-		}
-	}
-}
-
-func TestEmptyReports(t *testing.T) {
-	for _, r := range []*sdk.Report{nil, {}} {
-		for _, rp := range reporters() {
-			if out := render(t, rp, r); out == "" {
-				t.Errorf("%s: empty output", rp.Format())
+		var v struct {
+			Version string
+			Runs    []struct {
+				Results []struct {
+					RuleID    string
+					Locations []struct {
+						PhysicalLocation struct{ ArtifactLocation struct{ URI string } }
+					}
+				}
 			}
 		}
+		if err := json.Unmarshal(b.Bytes(), &v); err != nil {
+			t.Fatal(err)
+		}
+		if v.Version != "2.1.0" {
+			t.Fatal("version")
+		}
+		for _, r := range v.Runs[0].Results {
+			if !re.MatchString(r.RuleID) {
+				t.Fatalf("bad ruleId %q", r.RuleID)
+			}
+			for _, l := range r.Locations {
+				u := l.PhysicalLocation.ArtifactLocation.URI
+				if strings.HasPrefix(u, "/") || hasDotDotSegment(u) || strings.Contains(u, ":") || strings.Contains(u, "\\") {
+					t.Fatalf("unsafe uri %q", u)
+				}
+			}
+		}
+	})
+}
+
+func TestClassifyExit(t *testing.T) {
+	errF := sdk.Finding{Severity: sdk.SeverityError}
+	warnF := sdk.Finding{Severity: sdk.SeverityWarning}
+	supp := sdk.Finding{Severity: sdk.SeverityError, Suppressed: &sdk.Suppression{Reason: "r"}}
+	base := sdk.Finding{Severity: sdk.SeverityError, Baselined: true}
+	opt := []sdk.Skip{{RuleID: "A"}}
+	req := []sdk.Skip{{RuleID: "A", Required: true}}
+	cases := []struct {
+		name string
+		o    Outcome
+		want int
+	}{
+		{"clean", Outcome{}, 0},
+		{"error finding", Outcome{Findings: []sdk.Finding{errF}}, 1},
+		{"warning below default threshold", Outcome{Findings: []sdk.Finding{warnF}}, 0},
+		{"warning at warning threshold", Outcome{Findings: []sdk.Finding{warnF}, FailOn: sdk.SeverityWarning}, 1},
+		{"invalid failon defaults to error", Outcome{Findings: []sdk.Finding{warnF}, FailOn: "bogus"}, 0},
+		{"suppressed ignored", Outcome{Findings: []sdk.Finding{supp}}, 0},
+		{"baselined ignored", Outcome{Findings: []sdk.Finding{base}}, 0},
+		{"optional skip keeps 0", Outcome{Skipped: opt}, 0},
+		{"optional skip with findings is 1", Outcome{Skipped: opt, Findings: []sdk.Finding{errF}}, 1},
+		{"strict skip", Outcome{Skipped: opt, Strict: true}, 3},
+		{"strict without skip", Outcome{Strict: true}, 0},
+		{"strict skip with findings is 3", Outcome{Skipped: opt, Strict: true, Findings: []sdk.Finding{errF}}, 3},
+		{"required skip is 2", Outcome{Skipped: req}, 2},
+		{"2 beats 1", Outcome{Skipped: req, Findings: []sdk.Finding{errF}}, 2},
+		{"2 beats strict 3", Outcome{Skipped: req, Strict: true}, 2},
+		{"cannot run", Outcome{CannotRun: true, Findings: []sdk.Finding{errF}}, 2},
+		{"internal beats all", Outcome{InternalError: true, CannotRun: true, Skipped: req, Findings: []sdk.Finding{errF}}, 4},
+	}
+	for _, c := range cases {
+		if got := ClassifyExit(c.o); got != c.want {
+			t.Errorf("%s: got %d want %d", c.name, got, c.want)
+		}
 	}
 }
 
-func TestHugeReport(t *testing.T) {
-	r := reporttest.Huge(30000)
-	for _, rp := range reporters() {
-		if out := render(t, rp, r); len(out) < 1000 {
-			t.Errorf("%s: short output", rp.Format())
+func hasDotDotSegment(u string) bool {
+	for _, s := range strings.Split(u, "/") {
+		if s == ".." {
+			return true
 		}
 	}
-	// SARIF caps at 25,000 and records the truncation.
-	out := render(t, sarif.New(sarif.Options{}), r)
-	if got := strings.Count(out, `"ruleIndex"`); got != sarif.DefaultMaxResults {
-		t.Errorf("sarif results = %d", got)
-	}
-	if !strings.Contains(out, "Results truncated: 5000 of 30000") {
-		t.Error("truncation notification missing")
-	}
-}
-
-func TestFormats(t *testing.T) {
-	got := map[string]bool{}
-	for _, rp := range reporters() {
-		got[rp.Format()] = true
-	}
-	for _, f := range []string{"console", "json", "markdown", "sarif"} {
-		if !got[f] {
-			t.Errorf("missing %s", f)
-		}
-	}
+	return false
 }

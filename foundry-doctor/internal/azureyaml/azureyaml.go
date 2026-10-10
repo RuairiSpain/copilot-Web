@@ -1,14 +1,6 @@
-// Package azureyaml reads an azure.yaml file into the model.AzureYAML view the rules consume (ADR-004, ADR-011).
-//
-// It parses with a yaml.Node tree, so every key and value keeps its line and column, duplicate mapping keys are
-// reported as data instead of failing the parse, and aliases are never expanded (an alias bomb costs nothing).
-// It never evaluates ${VAR} references: it only records which form each reference has and where it is.
-//
-// Structural checks (required fields, types, enums, patterns, forbidden properties) use the vendored azd schemas in
-// schemas/vendor/azd. This is a small keyword subset, not a JSON-schema engine (ADR-011 decision 3).
-//
-// Parse returns an error only when no usable document exists (empty, unparseable, several documents, not a
-// mapping, over a limit). Everything else a file can get wrong is returned as Issue values in the Result.
+// Package azureyaml parses azure.yaml into a lossless yaml.v3 node tree that
+// keeps line and column positions, detects duplicate keys and resolves
+// services.*.uses references. It never evaluates or expands values.
 package azureyaml
 
 import (
@@ -16,168 +8,222 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"regexp"
-	"strconv"
+	"sort"
 
 	"go.yaml.in/yaml/v3"
 
-	"github.com/ruairispain/copilot-web/foundry-doctor/internal/model"
+	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
 
-// Limits bound the work done on untrusted input. A zero field means the default.
-type Limits struct {
-	MaxBytes       int // raw file size
-	MaxDepth       int // nesting of mappings and sequences
-	MaxNodes       int // keys, values and collections together
-	MaxScalarBytes int // length of one scalar
+// Diagnostic is a structural problem found while parsing.
+type Diagnostic struct {
+	Message  string       `json:"message"`
+	Location sdk.Location `json:"location"`
 }
 
-// DefaultLimits returns the limits used when Options.Limits is zero.
-func DefaultLimits() Limits {
-	return Limits{MaxBytes: 1 << 20, MaxDepth: 64, MaxNodes: 100_000, MaxScalarBytes: 64 << 10}
+// Document is a parsed azure.yaml. It implements sdk.AzureYAMLView.
+type Document struct {
+	path        string
+	root        *yaml.Node
+	diagnostics []Diagnostic
 }
 
-func (l Limits) withDefaults() Limits {
-	d := DefaultLimits()
-	if l.MaxBytes <= 0 {
-		l.MaxBytes = d.MaxBytes
-	}
-	if l.MaxDepth <= 0 {
-		l.MaxDepth = d.MaxDepth
-	}
-	if l.MaxNodes <= 0 {
-		l.MaxNodes = d.MaxNodes
-	}
-	if l.MaxScalarBytes <= 0 {
-		l.MaxScalarBytes = d.MaxScalarBytes
-	}
-	return l
-}
+var _ sdk.AzureYAMLView = (*Document)(nil)
 
-// Options configure Parse.
-type Options struct {
-	File   string // relative path recorded in the result, normally "azure.yaml"
-	Limits Limits
-}
+// ErrEmpty is returned for an empty document.
+var ErrEmpty = errors.New("azure.yaml is empty")
 
-// Sentinel errors. Use errors.Is; the concrete errors below carry details.
-var (
-	ErrEmpty         = errors.New("azure.yaml is empty")
-	ErrSyntax        = errors.New("azure.yaml is not valid YAML")
-	ErrMultiDocument = errors.New("azure.yaml has more than one YAML document")
-	ErrNotMapping    = errors.New("azure.yaml root is not a mapping")
-	ErrLimit         = errors.New("azure.yaml exceeds a reader limit")
-)
-
-// SyntaxError is a YAML syntax error. Line is 0 when the parser did not report one.
-type SyntaxError struct {
-	Line int
-	Msg  string
-}
-
-func (e *SyntaxError) Error() string {
-	if e.Line > 0 {
-		return fmt.Sprintf("azure.yaml line %d: %s", e.Line, e.Msg)
-	}
-	return "azure.yaml: " + e.Msg
-}
-
-// Is makes errors.Is(err, ErrSyntax) true.
-func (e *SyntaxError) Is(target error) bool { return target == ErrSyntax }
-
-// Pos returns the error position.
-func (e *SyntaxError) Pos() model.Pos { return model.Pos{Line: e.Line} }
-
-// LimitError reports which limit was exceeded.
-type LimitError struct {
-	Limit string // "bytes", "depth", "nodes" or "scalar"
-	Max   int
-	Pos   model.Pos
-}
-
-func (e *LimitError) Error() string {
-	if e.Pos.Line > 0 {
-		return fmt.Sprintf("azure.yaml exceeds the %s limit of %d at line %d", e.Limit, e.Max, e.Pos.Line)
-	}
-	return fmt.Sprintf("azure.yaml exceeds the %s limit of %d", e.Limit, e.Max)
-}
-
-// Is makes errors.Is(err, ErrLimit) true.
-func (e *LimitError) Is(target error) bool { return target == ErrLimit }
-
-var yamlLineRe = regexp.MustCompile(`line (\d+)`)
-
-func syntaxError(err error) *SyntaxError {
-	msg := err.Error()
-	se := &SyntaxError{Msg: trimYAMLPrefix(msg)}
-	if m := yamlLineRe.FindStringSubmatch(msg); m != nil {
-		se.Line, _ = strconv.Atoi(m[1])
-	}
-	return se
-}
-
-func trimYAMLPrefix(s string) string {
-	const p = "yaml: "
-	if len(s) > len(p) && s[:len(p)] == p {
-		return s[len(p):]
-	}
-	return s
-}
-
-var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
-
-// Parse reads azure.yaml bytes. See the package comment for what is an error and what is data.
-func Parse(src []byte, opt Options) (res *Result, err error) {
-	lim := opt.Limits.withDefaults()
-	if len(src) > lim.MaxBytes {
-		return nil, &LimitError{Limit: "bytes", Max: lim.MaxBytes}
-	}
-	// A UTF-8 BOM is accepted and ignored. Columns count characters after it.
-	src = bytes.TrimPrefix(src, utf8BOM)
-
-	defer func() {
-		// The YAML library panics on some malformed input in older versions; never let that escape.
-		if r := recover(); r != nil {
-			res, err = nil, &SyntaxError{Msg: "the YAML parser rejected the input"}
+// Parse parses data strictly. Syntax errors, multiple documents, empty input
+// and a non-mapping root return an error. Duplicate keys and unresolved
+// uses references are recorded as diagnostics.
+func Parse(data []byte, path string) (*Document, error) {
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	var root yaml.Node
+	if err := dec.Decode(&root); err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil, fmt.Errorf("%s: %w", path, ErrEmpty)
 		}
-	}()
-
-	dec := yaml.NewDecoder(bytes.NewReader(src))
-	var doc yaml.Node
-	if derr := dec.Decode(&doc); derr != nil {
-		if errors.Is(derr, io.EOF) {
-			return nil, ErrEmpty
-		}
-		return nil, syntaxError(derr)
+		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
 	var extra yaml.Node
-	switch xerr := dec.Decode(&extra); {
-	case xerr == nil:
-		return nil, ErrMultiDocument
-	case !errors.Is(xerr, io.EOF):
-		return nil, syntaxError(xerr)
+	if err := dec.Decode(&extra); err == nil {
+		return nil, fmt.Errorf("parse %s: multiple YAML documents are not supported", path)
+	} else if !errors.Is(err, io.EOF) {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
-	if doc.Kind != yaml.DocumentNode || len(doc.Content) != 1 {
-		return nil, ErrEmpty
+	if root.Kind != yaml.DocumentNode || len(root.Content) != 1 || root.Content[0].Kind != yaml.MappingNode {
+		return nil, fmt.Errorf("parse %s: top level must be a mapping", path)
 	}
-	top := doc.Content[0]
-	if top.Kind != yaml.MappingNode {
-		return nil, fmt.Errorf("%w (line %d)", ErrNotMapping, top.Line)
-	}
+	d := &Document{path: path, root: root.Content[0]}
+	d.checkDuplicates(d.root, nil, 0)
+	d.checkUses()
+	sort.SliceStable(d.diagnostics, func(i, j int) bool {
+		a, b := d.diagnostics[i].Location, d.diagnostics[j].Location
+		if a.Line != b.Line {
+			return a.Line < b.Line
+		}
+		return a.Column < b.Column
+	})
+	return d, nil
+}
 
-	b := &builder{lim: lim}
-	root, cerr := b.convert(top, "", model.Pos{}, nil, 0)
-	if cerr != nil {
-		return nil, cerr
+// Path returns the path the document was parsed from.
+func (d *Document) Path() string { return d.path }
+
+// Root returns the lossless root mapping node.
+func (d *Document) Root() *yaml.Node { return d.root }
+
+// Diagnostics returns structural problems found at parse time.
+func (d *Document) Diagnostics() []Diagnostic {
+	return append([]Diagnostic(nil), d.diagnostics...)
+}
+
+func (d *Document) loc(n *yaml.Node) sdk.Location {
+	return sdk.Location{File: d.path, Line: n.Line, Column: n.Column}
+}
+
+const maxDepth = 64
+
+func (d *Document) checkDuplicates(n *yaml.Node, trail []string, depth int) {
+	if depth > maxDepth {
+		return
 	}
-	res = &Result{
-		YAML:           &model.AzureYAML{File: opt.File, Root: root},
-		Duplicates:     b.dups,
-		Interpolations: b.interps,
-		Issues:         b.finish(),
+	switch n.Kind {
+	case yaml.MappingNode:
+		seen := map[string]bool{}
+		for i := 0; i+1 < len(n.Content); i += 2 {
+			k, v := n.Content[i], n.Content[i+1]
+			if seen[k.Value] {
+				d.diagnostics = append(d.diagnostics, Diagnostic{
+					Message:  fmt.Sprintf("duplicate key %q", k.Value),
+					Location: d.loc(k),
+				})
+			}
+			seen[k.Value] = true
+			d.checkDuplicates(v, append(trail, k.Value), depth+1)
+		}
+	case yaml.SequenceNode:
+		for _, c := range n.Content {
+			d.checkDuplicates(c, trail, depth+1)
+		}
+	case yaml.AliasNode:
+		// Aliases are not expanded; their anchors were already visited.
 	}
-	project(res)
-	checkStructure(res, top)
-	model.SortIssues(res.Issues)
-	return res, nil
+}
+
+func child(n *yaml.Node, key string) *yaml.Node {
+	if n == nil {
+		return nil
+	}
+	if n.Kind == yaml.AliasNode {
+		n = n.Alias
+	}
+	if n == nil || n.Kind != yaml.MappingNode {
+		return nil
+	}
+	var found *yaml.Node
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		if n.Content[i].Value == key {
+			found = n.Content[i+1] // last duplicate wins, as in yaml.v3 maps
+		}
+	}
+	return found
+}
+
+func keys(n *yaml.Node) []string {
+	if n == nil || n.Kind != yaml.MappingNode {
+		return nil
+	}
+	var out []string
+	seen := map[string]bool{}
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		if k := n.Content[i].Value; !seen[k] {
+			seen[k] = true
+			out = append(out, k)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// ServiceNames returns the sorted names under services.
+func (d *Document) ServiceNames() []string { return keys(child(d.root, "services")) }
+
+// ResourceNames returns the sorted names under resources.
+func (d *Document) ResourceNames() []string { return keys(child(d.root, "resources")) }
+
+// Lookup returns the scalar text at path and its location. Non-scalar nodes
+// report ok=false; use LookupAny for those.
+func (d *Document) Lookup(path ...string) (string, sdk.Location, bool) {
+	v, loc, ok := d.LookupAny(path...)
+	if !ok {
+		return "", loc, false
+	}
+	switch v.(type) {
+	case map[string]any, []any, nil:
+		return "", loc, false
+	}
+	return fmt.Sprint(v), loc, true
+}
+
+// LookupAny walks path through mappings and returns the decoded value and the
+// location of the value node.
+func (d *Document) LookupAny(path ...string) (any, sdk.Location, bool) {
+	n := d.root
+	for _, p := range path {
+		n = child(n, p)
+		if n == nil {
+			return nil, sdk.Location{}, false
+		}
+	}
+	if n.Kind == yaml.AliasNode && n.Alias != nil {
+		n = n.Alias
+	}
+	var v any
+	if err := n.Decode(&v); err != nil {
+		return nil, d.loc(n), false
+	}
+	return v, d.loc(n), true
+}
+
+// Uses returns the uses references of a service in document order.
+func (d *Document) Uses(service string) []Ref {
+	svc := child(child(d.root, "services"), service)
+	u := child(svc, "uses")
+	if u == nil || u.Kind != yaml.SequenceNode {
+		return nil
+	}
+	var out []Ref
+	for _, it := range u.Content {
+		if it.Kind == yaml.ScalarNode {
+			out = append(out, Ref{Name: it.Value, Location: d.loc(it)})
+		}
+	}
+	return out
+}
+
+// Ref is a named reference with its location.
+type Ref struct {
+	Name     string
+	Location sdk.Location
+}
+
+func (d *Document) checkUses() {
+	known := map[string]bool{}
+	for _, n := range d.ServiceNames() {
+		known[n] = true
+	}
+	for _, n := range d.ResourceNames() {
+		known[n] = true
+	}
+	for _, s := range d.ServiceNames() {
+		for _, r := range d.Uses(s) {
+			if !known[r.Name] {
+				d.diagnostics = append(d.diagnostics, Diagnostic{
+					Message:  fmt.Sprintf("services.%s.uses references unknown name %q", s, r.Name),
+					Location: r.Location,
+				})
+			}
+		}
+	}
 }

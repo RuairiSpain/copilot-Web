@@ -66,16 +66,24 @@ sources:
     (preview).
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     No existing tool examined checks that a pipeline gates promotion on Foundry evaluations; the commands are Foundry and
     azd specific and PSRule, Policy, Defender, Advisor and Checkov do not read pipeline definitions for them.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/ops

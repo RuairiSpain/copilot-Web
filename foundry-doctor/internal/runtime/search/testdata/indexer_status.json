@@ -1,0 +1,9 @@
+{
+  "status": "running",
+  "lastResult": {
+    "status": "success",
+    "itemsFailed": 0,
+    "errorMessage": "DOCUMENT_SENTINEL_TEXT",
+    "errorCode": "none"
+  }
+}

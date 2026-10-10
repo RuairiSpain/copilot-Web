@@ -1,0 +1,27 @@
+mode: set
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/monitor/http.go:20.95,22.2 1 0
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/monitor/monitor.go:45.97,47.16 2 1
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/monitor/monitor.go:47.16,49.3 1 0
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/monitor/monitor.go:50.2,50.31 1 1
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/monitor/monitor.go:53.93,55.16 2 1
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/monitor/monitor.go:55.16,57.3 1 0
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/monitor/monitor.go:58.2,58.31 1 1
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/monitor/monitor.go:61.112,63.16 2 1
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/monitor/monitor.go:63.16,65.3 1 0
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/monitor/monitor.go:66.2,66.31 1 1
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/monitor/monitor.go:69.114,71.16 2 1
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/monitor/monitor.go:71.16,73.3 1 0
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/monitor/monitor.go:74.2,75.24 2 1
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/monitor/monitor.go:75.24,82.3 1 1
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/monitor/monitor.go:83.2,83.17 1 1
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/monitor/monitor.go:86.129,88.16 2 1
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/monitor/monitor.go:88.16,90.3 1 0
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/monitor/monitor.go:91.2,92.31 2 1
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/monitor/monitor.go:92.31,94.3 1 1
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/monitor/monitor.go:95.2,95.17 1 1
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/monitor/monitor.go:98.57,100.23 2 1
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/monitor/monitor.go:100.23,102.3 1 1
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/monitor/monitor.go:103.2,103.12 1 1
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/monitor/monitor.go:109.63,110.59 1 1
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/monitor/monitor.go:110.59,112.3 1 1
+github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/monitor/monitor.go:113.2,113.230 1 1

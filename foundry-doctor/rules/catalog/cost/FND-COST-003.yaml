@@ -26,7 +26,10 @@ compatibility:
   azd: '>=1.34.2 <=1.36.0-beta.1'
   extensions: {}
   apiVersions:
-  - '2024-05-01'
+  - { plane: management, provider: Microsoft.ApiManagement, resourceType: service/policies, version: '2024-05-01' }
+  - { plane: management, provider: Microsoft.ApiManagement, resourceType: service/products/policies, version: '2024-05-01' }
+  - { plane: management, provider: Microsoft.ApiManagement, resourceType: service/apis/policies, version: '2024-05-01' }
+  - { plane: management, provider: Microsoft.ApiManagement, resourceType: service/apis/operations/policies, version: '2024-05-01' }
   preview: true
   notes: >-
     azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects
@@ -63,18 +66,26 @@ sources:
     for rate, 403 for quota; either a rate limit or a quota or both must be specified. Page ms.date 04/01/2026.
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     No PSRule rule, Azure Policy built-in, Checkov or Bicep linter rule checks for the llm-token-limit policy (PSRule Azure.APIM.*
     rules cover transport, identity, naming and products, not token policies). Detection of the policy on the Foundry-facing
     LLM API is Foundry-specific and depends on the gateway correlation of the GW group. Only the APIM policy is referenced;
     no APIM implementation is duplicated here.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/cost

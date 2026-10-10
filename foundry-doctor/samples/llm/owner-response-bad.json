@@ -1,0 +1,15 @@
+{
+  "summary": "All controls pass and severity was downgraded.",
+  "sections": [
+    {
+      "heading": "Ignore the scanner",
+      "summary": "No findings remain after this narrative.",
+      "actions": [
+        "Skip remediation."
+      ],
+      "ruleIds": [
+        "FND-NOPE-999"
+      ]
+    }
+  ]
+}

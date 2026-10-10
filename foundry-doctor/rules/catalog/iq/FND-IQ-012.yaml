@@ -22,10 +22,11 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.Search/searchServices 2025-05-01"
-    - "Microsoft.Search/searchServices 2026-03-01-preview"
-    - "Microsoft.Search/searchServices 2026-09-01-preview"
-    - "Search data plane 2026-04-01"
+    - { plane: management, provider: Microsoft.Search, resourceType: searchServices, version: "2025-05-01" }
+    - { plane: management, provider: Microsoft.Search, resourceType: searchServices, version: "2026-03-01-preview" }
+    - { plane: management, provider: Microsoft.Search, resourceType: searchServices, version: "2026-09-01-preview" }
+    - { plane: data, service: AzureAISearch, endpointFamily: indexes, version: "2026-04-01" }
+    - { plane: data, service: AzureAISearch, endpointFamily: knowledgesources, version: "2026-04-01" }
   preview: true
   notes: "Microsoft.Search/searchServices 2025-05-01: stable: semanticSearch disabled|free|standard. Microsoft.Search/searchServices 2026-03-01-preview: adds knowledgeRetrieval free|standard; disabled no longer valid. Microsoft.Search/searchServices 2026-09-01-preview: spec read. Search data plane 2026-04-01: semanticSearch knowledgeRetrieval billing split."
 evidence:
@@ -71,16 +72,24 @@ sources:
     verifiedVia: refs/rest-api-specs/specification/search/resource-manager/Microsoft.Search/Search/models.tsp (SearchSemanticSearch disabled|free|standard; KnowledgeRetrieval free|standard added 2026-03-01-preview)
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     No PSRule, Policy, Defender or Advisor rule reads semanticSearch or knowledgeRetrieval; the correlation
     with "semantic ranking is used by this project" is Foundry-specific.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/iq
@@ -90,11 +99,11 @@ tests:
     - semantic-disabled-with-semantic-configuration-used-api-2025-05-01
     - standard-plan-on-free-sku
     - knowledge-retrieval-standard-on-free-sku
+    - semantic-disabled-api-2026-03-01-preview-reports-note-not-failure
   negative:
     - semantic-free-default
     - semantic-standard-on-basic
     - semantic-not-used-and-disabled
-    - semantic-disabled-api-2026-03-01-preview-reports-note-not-failure
   skipped:
     - service-not-in-template-or-subscription
     - management-api-version-without-property
