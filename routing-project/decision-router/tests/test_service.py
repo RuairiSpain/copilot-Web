@@ -48,7 +48,7 @@ def test_model_router_shaped_request_returns_the_model_response_unchanged(make_p
     log = last_log(tmp_path)
     assert log["request_id"] == "req-1" and log["compatibility"] == "old"
     assert log["decision"]["ranking"][:2] == ["gpt-5.5", "gpt-5.6-terra"] and log["outcome"] == "success"
-    assert [s["step"] for s in log["stage1"]["steps"]] == ["lifecycle", "allowlist", "selection", "capabilities",
+    assert [s["step"] for s in log["stage1"]["steps"]] == ["api", "lifecycle", "allowlist", "selection", "capabilities",
                                                            "location", "size", "price_band"]
     assert "Compare two vendors" not in (tmp_path / "decisions.jsonl").read_text()
 
@@ -148,6 +148,52 @@ def test_claude_streaming_is_translated(make_pipeline, settings, fake):
     text = "".join(e["choices"][0]["delta"].get("content", "") for e in events if e["choices"])
     assert text == "answer from claude-sonnet-5"
     assert events[-1]["usage"]["completion_tokens"] == 5 and response.text.rstrip().endswith("data: [DONE]")
+
+
+NATIVE = {"model": "anything", "max_tokens": 200, "system": "Be brief.",
+          "messages": [{"role": "user", "content": [{"type": "text", "text": "Compare two vendors."}]}]}
+
+
+def test_claude_translation_off_forwards_the_messages_body_unchanged(make_pipeline, settings, fake, tmp_path):
+    fake.decision_responses.append(ranked(["claude-opus-5"]))
+    with client_for(make_pipeline, settings) as client:
+        response = client.post("/v1/chat/completions", json=dict(NATIVE, claude_translation=False))
+    assert response.status_code == 200
+    body = response.json()
+    assert body["type"] == "message" and body["content"][0]["text"] == "answer from claude-opus-5"  # native shape
+    assert response.headers["x-router-served-model"] == "claude-opus-5"
+    call = chat_calls(fake)[0]
+    assert call["path"] == "/anthropic/v1/messages"
+    assert call["body"] == dict(NATIVE, model="claude-opus-5")  # only `model` changes; no extension fields
+    offered = set(decision_calls(fake)[0]["questions"]["route"]["criteria"])
+    assert offered and all(name.startswith("claude-") for name in offered)
+    state = decision_calls(fake)[0]["state"]
+    assert "[system]\nBe brief." in state and "Compare two vendors." in state
+    log = last_log(tmp_path)
+    assert log["claude_translation"] is False and log["usage"]["prompt_tokens"] == 12
+    api_step = next(s for s in log["stage1"]["steps"] if s["step"] == "api")
+    assert {r["model"] for r in api_step["removed"]} >= {"gpt-5.5", "FW-GLM-5.3"}
+
+
+def test_claude_translation_off_streams_native_events(make_pipeline, settings, fake):
+    fake.decision_responses.append(ranked(["claude-sonnet-5"]))
+    with client_for(make_pipeline, settings) as client:
+        response = client.post("/v1/chat/completions", json=dict(NATIVE, stream=True, claude_translation=False))
+    assert response.status_code == 200
+    assert "event: message_start" in response.text and "chat.completion.chunk" not in response.text
+
+
+def test_claude_translation_off_with_non_claude_subset_is_422(make_pipeline, settings, fake):
+    with client_for(make_pipeline, settings) as client:
+        response = client.post("/v1/chat/completions", json=dict(
+            NATIVE, claude_translation=False, routing_constraints={"models": ["gpt-5.5"]}))
+    assert response.status_code == 422 and response.json()["error"]["stage1"]["empty_at"] == "selection"
+
+
+def test_claude_translation_must_be_boolean(make_pipeline, settings):
+    with client_for(make_pipeline, settings) as client:
+        response = client.post("/v1/route", json={"messages": USER, "claude_translation": "off"})
+    assert response.status_code == 400
 
 
 def test_mai_models_use_the_mai_endpoint(make_pipeline, settings, fake):

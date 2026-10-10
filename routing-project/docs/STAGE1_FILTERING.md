@@ -10,7 +10,7 @@ Operators can also cap the choice for every request. Code: `decision-router/deci
 
 ## Request fields
 
-All three are optional and are removed before the request reaches a model, so a request
+All four are optional and are removed before the request reaches a model, so a request
 without them is a plain Model Router request.
 
 ```json
@@ -36,12 +36,13 @@ without them is a plain Model Router request.
 |---|---|
 | `routing_mode` | `cost`, `balanced` or `quality`. Picks a price band of what is left after the other steps. |
 | `compatibility` | `old` (Model Router pool) or `new` (latest models). See `MODEL_CATALOGS.md`. |
+| `claude_translation` | `true` (default): the body is chat completions, and Claude is called through the translation layer. `false`: the body is an Anthropic Messages request, only Claude models are candidates, and the chosen one receives the body unchanged (only `model` is set) and its native response is returned. See below. |
 | `routing_constraints.models` | Only these models: the developer's chosen subset. Names must exist in the selected catalog. |
 | `routing_constraints.exclude_models` | Never these models. |
 | `routing_constraints.providers` | Only models from these providers (case-insensitive): `OpenAI`, `Anthropic`, `xAI`, `DeepSeek`, `Meta`, `Fireworks`, `Microsoft`. |
 | `routing_constraints.capabilities` | Models must support each one: `tools`, `parallel_tools`, `structured_output`, `json_object`, `streaming`, `reasoning`, `image_input`, `computer_use`. |
-| `routing_constraints.region` | The model must be deployable in this Azure region (for example `swedencentral`; `"Sweden Central"` is accepted). |
-| `routing_constraints.deployment_type` | `global_standard`, `data_zone_standard` or `standard`. With `region`, the model must be available in that region for that deployment type. |
+| `routing_constraints.region` | The model must be deployable in this Azure region (for example `swedencentral`; `"Sweden Central"` is accepted). Fireworks models deploy globally and pass any region. |
+| `routing_constraints.deployment_type` | `global_standard`, `data_zone_standard` or `standard`. With `region`, the model must be available in that region for that deployment type. Fireworks models offer `global_standard` only. |
 | `routing_constraints.inference_in_azure` | Excludes models whose inference runs outside Azure: Anthropic-hosted Claude and Fireworks models. |
 | `routing_constraints.min_context_tokens` | The context window must be at least this large. |
 | `routing_constraints.allow_preview` | Overrides `ROUTER_ALLOW_PREVIEW` for this request. |
@@ -68,6 +69,7 @@ cut close to a limit.
 
 | Step | Removes a model when |
 |---|---|
+| 0. `api` | `claude_translation` is `false` and the model is not Claude (it cannot take a Messages body) |
 | 1. `lifecycle` | it is deprecated, retired or legacy (always), or preview and previews are not allowed |
 | 2. `allowlist` | `ROUTER_MODEL_ALLOWLIST` is set and the model is not on it |
 | 3. `selection` | it is outside `models`, inside `exclude_models`, or not from a listed provider |
@@ -96,6 +98,34 @@ What happens with the result:
 
 The same record (`stage1`) is written to the decision log for every request, and `/v1/route`
 returns it, so you can see why a model was or wasn't offered.
+
+## `claude_translation: false` (native Claude passthrough)
+
+For callers that already speak the Anthropic Messages API:
+
+```json
+{
+  "claude_translation": false,
+  "routing_mode": "quality",
+  "model": "ignored",
+  "max_tokens": 1024,
+  "system": "You are a careful reviewer.",
+  "messages": [{"role": "user", "content": [{"type": "text", "text": "Review this clause..."}]}]
+}
+```
+
+- **Stage 1:** the `api` step keeps only Claude models. The other filters still apply.
+  Requirements are read from the Messages body: `tools`, `stream: true`, and `image` content blocks.
+- **Decision-1:** it sees the conversation, including the top-level `system` prompt, and chooses among the Claude candidates.
+- **The model call:** the chosen Claude deployment receives the body exactly as sent, with
+  `model` set to its deployment and this router's extension fields removed.
+- **The response:** it comes back unchanged, in Messages format, and streams as native Anthropic
+  events (`event: message_start`, ...).
+- **Errors:** they are also returned in Anthropic's shape, not translated.
+- **Logging:** the decision log normalises Claude's `input_tokens`/`output_tokens` into
+  `prompt_tokens`/`completion_tokens`, so cost and metrics work either way.
+
+If the constraints leave no Claude model, the request gets the usual 422 naming the step.
 
 ## Unknown capabilities
 

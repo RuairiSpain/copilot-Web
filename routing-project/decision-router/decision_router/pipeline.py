@@ -21,6 +21,7 @@ from typing import Any
 
 import httpx
 
+from .anthropic import chat_usage as anthropic_usage
 from .catalog import Catalog, CatalogError, Catalogs, ModelEntry
 from .config import ROUTING_MODES, Settings
 from .decision1 import Decision, Decision1Client, DecisionError, build_state, execution_order
@@ -30,7 +31,7 @@ from .stage1 import ConstraintError, Constraints, parse_constraints, select
 from .telemetry import Telemetry
 
 # Extension fields this router reads; removed before the body is forwarded to a model.
-ROUTER_FIELDS = ("routing_mode", "compatibility", "routing_constraints")
+ROUTER_FIELDS = ("routing_mode", "compatibility", "routing_constraints", "claude_translation")
 
 
 class RoutingError(Exception):
@@ -90,6 +91,8 @@ class Prepared:
     catalog: Catalog
     constraints: Constraints
     body: dict[str, Any]
+    # claude_translation=false: `body` is an Anthropic Messages request, forwarded to Claude unchanged.
+    passthrough: bool = False
 
 
 @dataclass
@@ -104,6 +107,7 @@ class Routed:
     # Models in the order they will be called (see execution_order).
     order: list[str] = field(default_factory=list)
     low_confidence: bool = False
+    passthrough: bool = False
 
 
 @dataclass
@@ -155,19 +159,22 @@ class RouterPipeline:
         mode = body.get("routing_mode") or catalog.default_mode
         if mode not in ROUTING_MODES:
             raise RoutingError(400, "invalid_routing_mode", f"routing_mode must be one of {list(ROUTING_MODES)}")
+        translation = body.get("claude_translation", True)
+        if not isinstance(translation, bool):
+            raise RoutingError(400, "invalid_request", "claude_translation must be true or false")
         try:
             constraints = parse_constraints(body.get("routing_constraints"), catalog)
         except ConstraintError as exc:
             raise RoutingError(400, "invalid_routing_constraints", str(exc)) from exc
         # `model` names the router deployment the client called; it is replaced per target.
         forwarded = {k: v for k, v in body.items() if k not in ROUTER_FIELDS and k != "model"}
-        return Prepared(mode, catalog, constraints, forwarded)
+        return Prepared(mode, catalog, constraints, forwarded, passthrough=not translation)
 
     # ------------------------------------------------------------------ stages 1 and 2
     async def route(self, prepared: Prepared, request_id: str) -> Routed:
         started = self._clock()
         catalog, mode, body = prepared.catalog, prepared.mode, prepared.body
-        stage1 = select(catalog, mode, prepared.constraints, body, self.settings)
+        stage1 = select(catalog, mode, prepared.constraints, body, self.settings, passthrough=prepared.passthrough)
         candidates = stage1.candidates
         event: dict[str, Any] = {
             "request_id": request_id,
@@ -175,6 +182,7 @@ class RouterPipeline:
             "compatibility": catalog.compatibility,
             "catalog_sha256": catalog.fingerprint,
             "routing_constraints": prepared.constraints.as_dict(),
+            "claude_translation": not prepared.passthrough,
             "stage1": stage1.log(),
             "candidates": [m.name for m in candidates],
             "stream": bool(body.get("stream")),
@@ -218,7 +226,8 @@ class RouterPipeline:
             "usage": decision.usage,
             "cost": self.prices.decision_cost(decision.usage),
         }
-        return Routed(request_id, mode, catalog, candidates, decision, started, event, order, low_confidence)
+        return Routed(request_id, mode, catalog, candidates, decision, started, event, order, low_confidence,
+                      prepared.passthrough)
 
     def record_route_only(self, routed: Routed, body: dict[str, Any]) -> None:
         routed.event.update(outcome="routed", total_latency_ms=round((self._clock() - routed.started) * 1000, 3))
@@ -239,7 +248,7 @@ class RouterPipeline:
                 t0 = self._clock()
                 record: dict[str, Any] = {"model": name, "attempt": attempt, "status": None}
                 try:
-                    response = await self.chat.send(entry, body,
+                    response = await self.chat.send(entry, body, passthrough=routed.passthrough,
                                                     timeout=min(settings.request_timeout_seconds, remaining),
                                                     stream=stream)
                 except httpx.TimeoutException:
@@ -283,6 +292,8 @@ class RouterPipeline:
                 attempts: list[dict[str, Any]], outcome: str, response_json: Any = None,
                 error_code: str | None = None) -> None:
         usage = response_json.get("usage") if isinstance(response_json, dict) else None
+        if isinstance(usage, dict) and "input_tokens" in usage and "prompt_tokens" not in usage:
+            usage = anthropic_usage(usage)  # native Claude response (claude_translation=false)
         provider_model = response_json.get("model") if isinstance(response_json, dict) else None
         routed.event.update(
             outcome=outcome,

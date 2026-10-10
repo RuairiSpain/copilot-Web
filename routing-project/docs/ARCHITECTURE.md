@@ -51,7 +51,9 @@ body.
 translates the request (system messages, images, tools, tool results, tool_choice, stop,
 streaming) and translates the answer back to a chat completion, so callers never see the
 difference. `response_format` is not translated, so stage 1 keeps structured-output requests
-away from Claude. Code: `decision_router/anthropic.py`.
+away from Claude. Code: `decision_router/anthropic.py`. A request can turn this off with
+`"claude_translation": false`: it then sends an Anthropic Messages body, only Claude models are
+candidates, and the native Claude response is returned unchanged (`docs/STAGE1_FILTERING.md`).
 
 **Output** is the chosen model's response, unchanged, including streamed responses. Its
 `model` field names the model that answered.

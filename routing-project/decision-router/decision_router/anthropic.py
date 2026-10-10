@@ -125,7 +125,7 @@ def to_messages_request(body: dict[str, Any], deployment: str, default_max_token
     return request
 
 
-def _usage(usage: dict[str, Any] | None) -> dict[str, Any]:
+def chat_usage(usage: dict[str, Any] | None) -> dict[str, Any]:
     usage = usage or {}
     cached = int(usage.get("cache_read_input_tokens") or 0)
     prompt = int(usage.get("input_tokens") or 0) + cached + int(usage.get("cache_creation_input_tokens") or 0)
@@ -149,7 +149,7 @@ def from_messages_response(message: dict[str, Any]) -> dict[str, Any]:
         "model": message.get("model"),
         "choices": [{"index": 0, "message": reply,
                      "finish_reason": FINISH_REASONS.get(message.get("stop_reason") or "", "stop")}],
-        "usage": _usage(message.get("usage")),
+        "usage": chat_usage(message.get("usage")),
     }
 
 
@@ -217,7 +217,7 @@ class ChatCompletionStream(httpx.AsyncByteStream):
                 yield f"data: {json.dumps({'error': {'message': error.get('message'), 'type': error.get('type')}})}\n\n".encode()
         if self.include_usage:
             payload = {"id": chunk_id, "object": "chat.completion.chunk", "created": created, "model": model,
-                       "choices": [], "usage": _usage(usage)}
+                       "choices": [], "usage": chat_usage(usage)}
             yield f"data: {json.dumps(payload)}\n\n".encode()
         yield b"data: [DONE]\n\n"
 

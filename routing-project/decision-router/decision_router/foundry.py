@@ -31,8 +31,19 @@ class ChatClient:
             raise RuntimeError(f"no endpoint configured for {entry.api} models")
         return url
 
-    async def send(self, entry: ModelEntry, body: dict[str, Any], *, timeout: float, stream: bool = False) -> httpx.Response:
-        """HTTP errors are returned, not raised. With stream=True the caller owns the response and must close it."""
+    async def send(self, entry: ModelEntry, body: dict[str, Any], *, timeout: float, stream: bool = False,
+                   passthrough: bool = False) -> httpx.Response:
+        """HTTP errors are returned, not raised. With stream=True the caller owns the response and must close it.
+
+        passthrough=True (claude_translation=false): `body` is already an Anthropic Messages request; it is
+        sent to Claude unchanged apart from `model`, and Claude's native response is returned unchanged.
+        """
+        if passthrough:
+            if entry.api != "anthropic_messages":
+                raise RuntimeError(f"{entry.name} cannot take an Anthropic Messages body")
+            request = self._http.build_request("POST", self.url_for(entry), json=dict(body, model=entry.deployment),
+                                               headers=await self._anthropic_headers(), timeout=timeout)
+            return await self._http.send(request, stream=stream)
         if entry.api == "anthropic_messages":
             return await self._send_anthropic(entry, body, timeout=timeout, stream=stream)
         payload = dict(body, model=entry.deployment)
@@ -43,9 +54,8 @@ class ChatClient:
     async def _send_anthropic(self, entry: ModelEntry, body: dict[str, Any], *, timeout: float,
                               stream: bool) -> httpx.Response:
         payload = anthropic.to_messages_request(body, entry.deployment, self.settings.anthropic_default_max_tokens)
-        headers = {**await self.auth.headers(key_header="x-api-key", scope=AI_AZURE_SCOPE),
-                   "anthropic-version": self.settings.anthropic_version}
-        request = self._http.build_request("POST", self.url_for(entry), json=payload, headers=headers, timeout=timeout)
+        request = self._http.build_request("POST", self.url_for(entry), json=payload,
+                                           headers=await self._anthropic_headers(), timeout=timeout)
         upstream = await self._http.send(request, stream=stream)
         kept = {k: v for k, v in upstream.headers.items() if k.lower() in PASSTHROUGH_HEADERS}
         if upstream.status_code >= 400:
@@ -60,6 +70,10 @@ class ChatClient:
         message = upstream.json()
         return httpx.Response(200, headers={**kept, "content-type": "application/json"},
                               content=json.dumps(anthropic.from_messages_response(message)).encode())
+
+    async def _anthropic_headers(self) -> dict[str, str]:
+        return {**await self.auth.headers(key_header="x-api-key", scope=AI_AZURE_SCOPE),
+                "anthropic-version": self.settings.anthropic_version}
 
     async def send_router(self, deployment: str, body: dict[str, Any], *, timeout: float) -> httpx.Response:
         """Call a Model Router deployment (comparison harness)."""

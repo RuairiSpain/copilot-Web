@@ -38,6 +38,8 @@ class ModelEntry:
     capabilities: dict[str, str] = field(default_factory=dict)
     infrastructure: str = "azure"
     regions: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    # "published" (regions listed), "global" (deployable from any region, Global Standard), or "unknown"
+    region_status: str = "unknown"
 
     def capability(self, name: str) -> str:
         return self.capabilities.get(name, "unknown")
@@ -93,6 +95,7 @@ class Catalog:
                 capabilities=dict(m.get("capabilities") or {}),
                 infrastructure=hosting.get("infrastructure", "azure"),
                 regions={k: tuple(v) for k, v in (m.get("regions") or {}).items()},
+                region_status=m.get("region_status", "published" if m.get("regions") else "unknown"),
             ))
         modes = {}
         for name, spec in data["routing_modes"].items():

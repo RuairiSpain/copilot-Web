@@ -53,7 +53,8 @@ Values not in the docs snapshot:
 | Claude Opus 5 and Fable 5.1 image input | Early project catalog |
 | Streaming for Azure OpenAI chat models | Chat Completions API behaviour; the capability tables list it for only some models |
 | Claude tools, parallel tools, streaming, structured output | What the router's Messages adapter translates (structured output: no) |
-| Regions for Fireworks models, gpt-oss-120b and grok-4 | Not published: `region_status: unknown`, so region-constrained requests exclude them |
+| Fireworks regions | Global (confirmed by the project owner): `region_status: global`, Global Standard only; passes any region filter, excluded by `inference_in_azure` because inference runs on Fireworks infrastructure |
+| Regions for gpt-oss-120b and grok-4 | Not published: `region_status: unknown`, so region-constrained requests exclude them |
 
 ## Entry format
 

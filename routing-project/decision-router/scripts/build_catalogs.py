@@ -250,6 +250,11 @@ def build_entry(spec: dict, docs: Docs, sources: dict) -> dict:
     regions = docs.regions_for(name, version) or docs.regions_for(doc_name, doc_version)
     if regions:
         used.append(FILES["regions_marketplace" if spec["docs"] == "claude" else "regions_standard"])
+    region_status = "published" if regions else "unknown"
+    deployment_types = sorted(regions)
+    if spec.get("region_scope") == "global":
+        region_status, deployment_types = "global", ["global_standard"]
+        used.append("spec:sources.fireworks_global")
     hosting = spec.get("hosting") or parsed.get("hosting") or "azure"
     in_router = name.lower() in docs.router or doc_name.lower() in docs.router
 
@@ -273,9 +278,9 @@ def build_entry(spec: dict, docs: Docs, sources: dict) -> dict:
             "infrastructure": hosting,
             "azure_region_controls_processing": hosting == "azure",
         },
-        "deployment_types": sorted(regions) if regions else [],
+        "deployment_types": deployment_types,
         "regions": regions,
-        "region_status": "published" if regions else "unknown",
+        "region_status": region_status,
         "source": {"docs_commit": docs.commit, "files": sorted(set(used))},
     }
 

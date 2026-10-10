@@ -73,14 +73,31 @@ def test_structured_output_keeps_claude_out(catalog, settings):
 def test_region_and_residency(catalog, settings):
     sweden = select(catalog, "balanced", Constraints(region="swedencentral"), USER, settings)
     reasons = removed(sweden, "location")
-    assert reasons["FW-GLM-5.3"] == "regions not published"
+    assert reasons["grok-4"] == "regions not published"
     assert "gpt-5-nano" in names(sweden)
+    assert "FW-GLM-5.3" in names(sweden)  # Fireworks deploys globally, from any region
     in_azure = select(catalog, "balanced", Constraints(inference_in_azure=True), USER, settings)
     assert "claude-opus-4-7" not in names(in_azure) and "FW-Kimi-K3" not in names(in_azure)
     assert "claude-opus-5" in names(in_azure)
     data_zone = select(catalog, "balanced", Constraints(region="swedencentral", deployment_type="data_zone_standard"),
                        USER, settings)
     assert all("swedencentral" in m.regions["data_zone_standard"] for m in data_zone.candidates)
+
+
+def test_fireworks_is_global_standard_only(catalog, settings):
+    dz = select(catalog, "balanced", Constraints(deployment_type="data_zone_standard"), USER, settings)
+    assert removed(dz, "location")["FW-Kimi-K3"] == "global deployment only, no data_zone_standard"
+    gs = select(catalog, "balanced", Constraints(region="uksouth", deployment_type="global_standard"), USER, settings)
+    assert "FW-Kimi-K3" in names(gs)
+    assert catalog.by_name["FW-Kimi-K3"].region_status == "global"
+
+
+def test_passthrough_keeps_only_claude(catalog, settings):
+    body = {"messages": [{"role": "user", "content": [{"type": "image", "source": {"type": "url", "url": "u"}}]}],
+            "max_tokens": 100, "tools": [{"name": "f", "input_schema": {}}]}
+    result = select(catalog, "balanced", Constraints(), body, settings, passthrough=True)
+    assert names(result) and all(m.api == "anthropic_messages" for m in result.candidates)
+    assert set(result.requirements) == {"tools", "image_input"}
 
 
 def test_size_filter(new_catalog, settings):

@@ -3,6 +3,8 @@
 Steps run in a fixed order and each one is recorded, so the decision log shows which step
 removed which model and why:
 
+  0. api                with claude_translation=false the body is an Anthropic Messages request,
+                        which only Claude models accept
   1. lifecycle          deprecated/retired/legacy always out; preview out unless allowed
   2. operator allow-list ROUTER_MODEL_ALLOWLIST
   3. request selection  routing_constraints.models / exclude_models / providers
@@ -91,6 +93,21 @@ def parse_constraints(raw: Any, catalog: Catalog) -> Constraints:
                        bool(raw.get("inference_in_azure", False)), min_context, raw.get("allow_preview"))
 
 
+def requirements_from_messages_body(body: dict[str, Any]) -> dict[str, str]:
+    """Same as requirements_from_request, for an Anthropic Messages body (claude_translation=false)."""
+    needs: dict[str, str] = {}
+    if body.get("tools"):
+        needs["tools"] = "request has tools"
+    if body.get("stream") is True:
+        needs["streaming"] = "stream=true"
+    for message in body.get("messages", []):
+        content = message.get("content") if isinstance(message, dict) else None
+        if isinstance(content, list) and any(isinstance(p, dict) and p.get("type") == "image" for p in content):
+            needs["image_input"] = "messages contain images"
+            break
+    return needs
+
+
 def requirements_from_request(body: dict[str, Any]) -> dict[str, str]:
     """Capabilities the request itself needs, with the field that implies each one."""
     needs: dict[str, str] = {}
@@ -116,7 +133,8 @@ def requirements_from_request(body: dict[str, Any]) -> dict[str, str]:
 
 def estimated_tokens(body: dict[str, Any], chars_per_token: float) -> tuple[int, int]:
     """(prompt tokens, requested output tokens). A deliberately simple estimate: characters / chars_per_token."""
-    text = json.dumps(body.get("messages", []), ensure_ascii=False) + json.dumps(body.get("tools") or [])
+    text = (json.dumps(body.get("messages", []), ensure_ascii=False) + json.dumps(body.get("tools") or [])
+            + json.dumps(body.get("system") or ""))
     output = body.get("max_completion_tokens") or body.get("max_tokens") or 0
     return math.ceil(len(text) / chars_per_token), int(output) if isinstance(output, int) else 0
 
@@ -132,9 +150,10 @@ class Stage1Result:
         return {"steps": self.steps, "requirements": self.requirements, "empty_at": self.empty_at}
 
 
-def select(catalog: Catalog, mode: str, constraints: Constraints, body: dict[str, Any], settings: Settings) -> Stage1Result:
+def select(catalog: Catalog, mode: str, constraints: Constraints, body: dict[str, Any], settings: Settings,
+           passthrough: bool = False) -> Stage1Result:
     remaining = list(catalog.models)
-    requirements = requirements_from_request(body)
+    requirements = requirements_from_messages_body(body) if passthrough else requirements_from_request(body)
     result = Stage1Result([], requirements=requirements)
 
     def step(name: str, keep) -> bool:
@@ -151,6 +170,11 @@ def select(catalog: Catalog, mode: str, constraints: Constraints, body: dict[str
         return True
 
     allow_preview = settings.allow_preview if constraints.allow_preview is None else constraints.allow_preview
+
+    def api(m: ModelEntry) -> str | None:
+        if passthrough and m.api != "anthropic_messages":
+            return "cannot take an Anthropic Messages body (claude_translation=false)"
+        return None
     unknown_ok = settings.unknown_capability == "eligible"
 
     def lifecycle(m: ModelEntry) -> str | None:
@@ -184,6 +208,11 @@ def select(catalog: Catalog, mode: str, constraints: Constraints, body: dict[str
     def location(m: ModelEntry) -> str | None:
         if constraints.inference_in_azure and m.infrastructure != "azure":
             return f"inference runs on {m.infrastructure} infrastructure"
+        if m.region_status == "global":
+            # Deployable from any region, as a Global Standard deployment only.
+            if constraints.deployment_type and constraints.deployment_type != "global_standard":
+                return f"global deployment only, no {constraints.deployment_type}"
+            return None
         if constraints.deployment_type and constraints.deployment_type not in m.regions and m.regions:
             return f"no {constraints.deployment_type} deployment"
         if constraints.region:
@@ -208,7 +237,7 @@ def select(catalog: Catalog, mode: str, constraints: Constraints, body: dict[str
             return f"asks for {output_tokens} output tokens, limit is {m.max_output_tokens}"
         return None
 
-    for name, keep in (("lifecycle", lifecycle), ("allowlist", allowlist), ("selection", selection),
+    for name, keep in (("api", api), ("lifecycle", lifecycle), ("allowlist", allowlist), ("selection", selection),
                        ("capabilities", capabilities), ("location", location), ("size", size)):
         if not step(name, keep):
             return result

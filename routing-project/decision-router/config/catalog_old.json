@@ -250,13 +250,16 @@
         "infrastructure": "fireworks",
         "azure_region_controls_processing": false
       },
-      "deployment_types": [],
+      "deployment_types": [
+        "global_standard"
+      ],
       "regions": {},
-      "region_status": "unknown",
+      "region_status": "global",
       "source": {
         "docs_commit": "87fa4a9688b9562e3c520ca718dcfc29f9fc488a",
         "files": [
-          "spec:sources.early_catalog"
+          "spec:sources.early_catalog",
+          "spec:sources.fireworks_global"
         ]
       }
     },
@@ -945,13 +948,16 @@
         "infrastructure": "fireworks",
         "azure_region_controls_processing": false
       },
-      "deployment_types": [],
+      "deployment_types": [
+        "global_standard"
+      ],
       "regions": {},
-      "region_status": "unknown",
+      "region_status": "global",
       "source": {
         "docs_commit": "87fa4a9688b9562e3c520ca718dcfc29f9fc488a",
         "files": [
-          "spec:sources.early_catalog"
+          "spec:sources.early_catalog",
+          "spec:sources.fireworks_global"
         ]
       }
     },
@@ -994,13 +1000,16 @@
         "infrastructure": "fireworks",
         "azure_region_controls_processing": false
       },
-      "deployment_types": [],
+      "deployment_types": [
+        "global_standard"
+      ],
       "regions": {},
-      "region_status": "unknown",
+      "region_status": "global",
       "source": {
         "docs_commit": "87fa4a9688b9562e3c520ca718dcfc29f9fc488a",
         "files": [
-          "spec:sources.early_catalog"
+          "spec:sources.early_catalog",
+          "spec:sources.fireworks_global"
         ]
       }
     },
@@ -2488,6 +2497,7 @@
   "sources": {
     "early_catalog": "Model card fields from the project's early catalog (Microsoft Foundry model cards, retrieved 2026-10-10); not published in the docs snapshot.",
     "openai_streaming": "Azure OpenAI Chat Completions API supports stream=true for all chat models; the capability tables list it only for some models.",
-    "anthropic_adapter": "Called through the router's Messages API adapter: tools, parallel tools and streaming are translated; response_format is not, so structured output is reported as unavailable."
+    "anthropic_adapter": "Called through the router's Messages API adapter: tools, parallel tools and streaming are translated; response_format is not, so structured output is reported as unavailable.",
+    "fireworks_global": "Fireworks models deploy as Global Standard and are available from any Foundry region (confirmed by the project owner); inference runs on Fireworks infrastructure."
   }
 }

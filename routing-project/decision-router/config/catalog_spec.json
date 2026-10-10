@@ -33,7 +33,8 @@
   "sources": {
     "early_catalog": "Model card fields from the project's early catalog (Microsoft Foundry model cards, retrieved 2026-10-10); not published in the docs snapshot.",
     "openai_streaming": "Azure OpenAI Chat Completions API supports stream=true for all chat models; the capability tables list it only for some models.",
-    "anthropic_adapter": "Called through the router's Messages API adapter: tools, parallel tools and streaming are translated; response_format is not, so structured output is reported as unavailable."
+    "anthropic_adapter": "Called through the router's Messages API adapter: tools, parallel tools and streaming are translated; response_format is not, so structured output is reported as unavailable.",
+    "fireworks_global": "Fireworks models deploy as Global Standard and are available from any Foundry region (confirmed by the project owner); inference runs on Fireworks infrastructure."
   },
   "catalogs": {
     "old": {
@@ -115,7 +116,8 @@
               "parallel_tools": "unknown",
               "image_input": "yes"
             }
-          }
+          },
+          "region_scope": "global"
         },
         {
           "name": "gpt-oss-120b",
@@ -215,7 +217,8 @@
               "parallel_tools": "unknown",
               "image_input": "yes"
             }
-          }
+          },
+          "region_scope": "global"
         },
         {
           "name": "FW-GLM-5.3",
@@ -247,7 +250,8 @@
               "parallel_tools": "unknown",
               "image_input": "no"
             }
-          }
+          },
+          "region_scope": "global"
         },
         {
           "name": "claude-haiku-4-5",
@@ -492,7 +496,8 @@
               "parallel_tools": "unknown",
               "image_input": "yes"
             }
-          }
+          },
+          "region_scope": "global"
         },
         {
           "name": "gpt-oss-120b",
@@ -593,7 +598,8 @@
               "parallel_tools": "unknown",
               "image_input": "yes"
             }
-          }
+          },
+          "region_scope": "global"
         },
         {
           "name": "FW-GLM-5.3",
@@ -625,7 +631,8 @@
               "parallel_tools": "unknown",
               "image_input": "no"
             }
-          }
+          },
+          "region_scope": "global"
         },
         {
           "name": "DeepSeek-V4-Pro",
