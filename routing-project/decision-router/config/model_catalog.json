@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "_note": "The model pool must match the model subset of the Model Router deployments you compare against, and each `deployment` must be the Foundry deployment both arms call. Descriptions are what Decision-1 reads to tell the options apart: review them before use. `tier` orders models by price, 1 = cheapest.",
+  "default_mode": "balanced",
+  "models": [
+    {
+      "name": "gpt-5-nano",
+      "deployment": "gpt-5-nano",
+      "tier": 1,
+      "aliases": [],
+      "description": "Trivial, single-step work: a one-line code change, a lookup, a one-sentence answer, simple classification or extraction."
+    },
+    {
+      "name": "gpt-5-mini",
+      "deployment": "gpt-5-mini",
+      "tier": 2,
+      "aliases": [],
+      "description": "Simple work that needs some care: short summaries, extraction with citations from a few documents, small self-contained functions."
+    },
+    {
+      "name": "deepseek-v4-flash",
+      "deployment": "deepseek-v4-flash",
+      "tier": 3,
+      "aliases": [],
+      "description": "Low-cost generalist, strongest at code and written content of moderate complexity: modules, tests, refactors, drafts, rewrites, scripted data handling."
+    },
+    {
+      "name": "gpt-5.5",
+      "deployment": "gpt-5.5",
+      "tier": 4,
+      "aliases": [],
+      "description": "General mid-to-high complexity work: synthesis across many documents, comparison and recommendation, careful writing where wording must be defensible."
+    },
+    {
+      "name": "o4-mini",
+      "deployment": "o4-mini",
+      "tier": 5,
+      "aliases": [],
+      "description": "Deep step-by-step reasoning: multi-step planning, tool orchestration, maths, debugging intermittent failures, cost and capacity models."
+    },
+    {
+      "name": "gpt-5.6-terra",
+      "deployment": "gpt-5.6-terra",
+      "tier": 6,
+      "aliases": [],
+      "description": "Maximum capability: enterprise strategy, large-scale architecture, regulator-grade analysis, long high-stakes documents."
+    }
+  ],
+  "routing_modes": {
+    "cost": {
+      "models": ["gpt-5-nano", "gpt-5-mini", "deepseek-v4-flash"],
+      "instructions": "Choose the model that should answer the conversation in the state. Cost mode: choose the cheapest model that can still answer well. Prefer a more expensive model only when a cheaper one would likely give a wrong or incomplete answer."
+    },
+    "balanced": {
+      "models": ["gpt-5-nano", "gpt-5-mini", "deepseek-v4-flash", "gpt-5.5", "o4-mini", "gpt-5.6-terra"],
+      "instructions": "Choose the model that should answer the conversation in the state. Balanced mode: weigh answer quality against cost. Prefer a cheaper model when its answer would be about as good as the best model's answer."
+    },
+    "quality": {
+      "models": ["gpt-5.5", "o4-mini", "gpt-5.6-terra"],
+      "instructions": "Choose the model that should answer the conversation in the state. Quality mode: choose the model most likely to give the best answer. Ignore cost."
+    }
+  }
+}

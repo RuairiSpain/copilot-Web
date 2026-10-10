@@ -1,0 +1,53 @@
+name: routing-project
+
+# The Decision-1 router is a separate Python service, so it only runs when it changes.
+on:
+  push:
+    branches: [main]
+    paths: ["routing-project/**", ".github/workflows/routing-project.yml"]
+  pull_request:
+    paths: ["routing-project/**", ".github/workflows/routing-project.yml"]
+
+defaults:
+  run:
+    working-directory: routing-project/decision-router
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: routing-project/decision-router/requirements*.txt
+
+      - run: pip install -r requirements-dev.txt
+
+      - run: ruff check .
+
+      - run: pytest -q
+
+      # Exercises the comparison harness end to end against the in-memory fake.
+      - run: python scripts/compare_with_model_router.py --dry-run --sample 64 --shuffle-options --output-dir /tmp/dry-run
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the container image
+        run: docker build -t decision-router:ci .
+
+      - name: Boot it and check health
+        run: |
+          docker run -d --name router -p 5001:5001 \
+            -e FOUNDRY_ENDPOINT=https://ci.services.ai.azure.com -e FOUNDRY_API_KEY=ci \
+            decision-router:ci
+          for _ in $(seq 1 30); do
+            curl -sf http://localhost:5001/health/ready && exit 0 || sleep 1
+          done
+          docker logs router
+          exit 1

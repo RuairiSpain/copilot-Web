@@ -1,0 +1,14 @@
+{
+  "version": "customer-supplied-required",
+  "currency": "USD",
+  "_note": "Fill in the prices that apply to your subscription and deployments. Nulls mean 'unpriced', so no cost figure is ever invented. cached_input_per_million is optional; when null, cached input tokens are priced as normal input.",
+  "models": {
+    "gpt-5-nano": {"input_per_million": null, "cached_input_per_million": null, "output_per_million": null},
+    "gpt-5-mini": {"input_per_million": null, "cached_input_per_million": null, "output_per_million": null},
+    "deepseek-v4-flash": {"input_per_million": null, "cached_input_per_million": null, "output_per_million": null},
+    "gpt-5.5": {"input_per_million": null, "cached_input_per_million": null, "output_per_million": null},
+    "o4-mini": {"input_per_million": null, "cached_input_per_million": null, "output_per_million": null},
+    "gpt-5.6-terra": {"input_per_million": null, "cached_input_per_million": null, "output_per_million": null}
+  },
+  "decision1": {"input_per_million": 0.042, "_source": "Microsoft list price, US and EU DataZone, October 2026; output is not billed"}
+}

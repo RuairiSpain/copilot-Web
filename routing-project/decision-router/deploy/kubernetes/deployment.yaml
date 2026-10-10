@@ -1,0 +1,52 @@
+# Uses AKS workload identity: bind the service account to a managed identity that has
+# "Cognitive Services User" on the Foundry resource. No API keys are mounted.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: decision-router
+  annotations:
+    azure.workload.identity/client-id: <managed-identity-client-id>
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: decision-router}
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxUnavailable: 0, maxSurge: 1}
+  selector: {matchLabels: {app: decision-router}}
+  template:
+    metadata:
+      labels: {app: decision-router, azure.workload.identity/use: "true"}
+    spec:
+      serviceAccountName: decision-router
+      securityContext: {runAsNonRoot: true, runAsUser: 1001, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: router
+          image: <registry>/decision-router:<immutable-digest>
+          ports: [{name: http, containerPort: 5001}]
+          env:
+            - {name: FOUNDRY_ENDPOINT, value: "https://<resource>.services.ai.azure.com"}
+            - {name: DECISION1_DEPLOYMENT, value: "microsoft-decision-1"}
+            - {name: ROUTER_DEFAULT_MODE, value: "balanced"}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          readinessProbe: {httpGet: {path: /health/ready, port: http}, initialDelaySeconds: 5, periodSeconds: 10}
+          livenessProbe: {httpGet: {path: /health/live, port: http}, initialDelaySeconds: 10, periodSeconds: 30}
+          resources:
+            requests: {cpu: 250m, memory: 256Mi}
+            limits: {cpu: "1", memory: 512Mi}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: {name: decision-router}
+spec:
+  minAvailable: 2
+  selector: {matchLabels: {app: decision-router}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: decision-router}
+spec:
+  selector: {app: decision-router}
+  ports: [{name: http, port: 80, targetPort: http}]
