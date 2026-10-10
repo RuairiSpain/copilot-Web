@@ -59,10 +59,14 @@ def test_probabilities_rounded_in_transit_are_renormalised():
     assert abs(sum(probabilities.values()) - 1) < 1e-12
 
 
+def quality(catalog):
+    return [catalog.by_name[n] for n in ("gpt-5.5", "gpt-5.6-sol", "gpt-6-astra")]
+
+
 def test_ranking_ignores_the_order_options_were_sent_in(catalog):
-    probabilities = {"gpt-5.6-terra": 0.2, "o4-mini": 0.5, "gpt-5.5": 0.3}
-    assert rank(probabilities, catalog.candidates("quality")) == ["o4-mini", "gpt-5.5", "gpt-5.6-terra"]
-    assert rank(probabilities, list(reversed(catalog.candidates("quality")))) == ["o4-mini", "gpt-5.5", "gpt-5.6-terra"]
+    probabilities = {"gpt-6-astra": 0.2, "gpt-5.6-sol": 0.5, "gpt-5.5": 0.3}
+    assert rank(probabilities, quality(catalog)) == ["gpt-5.6-sol", "gpt-5.5", "gpt-6-astra"]
+    assert rank(probabilities, list(reversed(quality(catalog)))) == ["gpt-5.6-sol", "gpt-5.5", "gpt-6-astra"]
 
 
 def test_confident_top_model_is_called_first():
@@ -80,9 +84,10 @@ def test_threshold_zero_disables_the_rule():
 
 
 def test_rank_orders_by_probability_then_price(catalog):
-    candidates = catalog.candidates("quality")
-    assert rank({"gpt-5.5": 0.2, "o4-mini": 0.5, "gpt-5.6-terra": 0.3}, candidates) == ["o4-mini", "gpt-5.6-terra", "gpt-5.5"]
-    assert rank({"gpt-5.5": 0.4, "o4-mini": 0.2, "gpt-5.6-terra": 0.4}, candidates)[0] == "gpt-5.5"
+    candidates = quality(catalog)
+    assert rank({"gpt-5.5": 0.2, "gpt-5.6-sol": 0.5, "gpt-6-astra": 0.3}, candidates) == ["gpt-5.6-sol", "gpt-6-astra", "gpt-5.5"]
+    # tie between gpt-5.5 (tier 18) and gpt-6-astra (tier 24): the cheaper wins
+    assert rank({"gpt-5.5": 0.4, "gpt-5.6-sol": 0.2, "gpt-6-astra": 0.4}, candidates)[0] == "gpt-5.5"
 
 
 def test_state_includes_conversation_and_request_facts():
@@ -118,6 +123,6 @@ def test_single_candidate_skips_the_call(catalog, settings):
         raise AssertionError("Decision-1 must not be called with one option")
 
     client = Decision1Client("https://x/systemone", "d1", FoundryAuth("k"), http=httpx.AsyncClient(transport=httpx.MockTransport(fail)))
-    only = catalog.candidates("quality")[:1]
+    only = quality(catalog)[:1]
     decision = asyncio.run(client.decide("s", "i", catalog.criteria(only), only))
     assert decision.skipped and decision.ranking == ["gpt-5.5"]

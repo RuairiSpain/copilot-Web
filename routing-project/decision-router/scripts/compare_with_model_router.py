@@ -2,7 +2,8 @@
 """Compare the Decision-1 pipeline with Foundry Model Router on the routing dataset.
 
 Model Router's routing mode is a deployment setting, so give one Model Router deployment
-per mode, all with the same model subset as config/model_catalog.json:
+per mode, all with the same model subset as config/catalog_old.json (use --compatibility old,
+the default, for a like-for-like comparison):
 
   export FOUNDRY_ENDPOINT=https://<resource>.services.ai.azure.com
   export MODEL_ROUTER_DEPLOYMENTS='{"cost": "model-router-cost", "balanced": "model-router", "quality": "model-router-quality"}'
@@ -25,7 +26,7 @@ import httpx
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from decision_router.auth import FoundryAuth  # noqa: E402
-from decision_router.catalog import Catalog  # noqa: E402
+from decision_router.catalog import Catalogs  # noqa: E402
 from decision_router.comparison import load_rows, render_markdown, run, stratified_sample, summarize  # noqa: E402
 from decision_router.config import Settings  # noqa: E402
 from decision_router.decision1 import Decision1Client  # noqa: E402
@@ -43,14 +44,17 @@ async def main(args: argparse.Namespace) -> int:
     output_dir: Path = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
     settings = replace(settings, decision_log_path=output_dir / "decision_log.jsonl")
-    catalog = Catalog.load(settings.catalog_path, settings.deployment_overrides, settings.default_mode)
+    catalogs = Catalogs.load(settings.catalog_dir, args.compatibility, settings.deployment_overrides,
+                             settings.default_mode)
+    catalog = catalogs.get(args.compatibility)
     prices = PriceTable(settings.pricing_path)
 
     router_deployments = json.loads(os.getenv("MODEL_ROUTER_DEPLOYMENTS") or "{}")
     if args.dry_run:
         router_deployments = {mode: f"model-router-{mode}" for mode in catalog.modes}
         pool = [m.deployment for m in catalog.models]
-        fake = FakeFoundry(pool, {f"model-router-{mode}": [m.name for m in catalog.models] for mode in catalog.modes})
+        fake = FakeFoundry(pool, {f"model-router-{mode}": [m.name for m in catalogs.get("old").models]
+                                  for mode in catalog.modes})
         http = httpx.AsyncClient(transport=fake.transport())
         settings = replace(settings, foundry_endpoint="https://dry-run.services.ai.azure.com")
         auth = FoundryAuth(api_key="dry-run")
@@ -66,9 +70,9 @@ async def main(args: argparse.Namespace) -> int:
         auth = FoundryAuth(settings.foundry_api_key)
 
     decision_auth = FoundryAuth(settings.decision1_api_key) if settings.decision1_api_key and not args.dry_run else auth
-    chat = ChatClient(settings.resolved_chat_url or "", auth, http=http)
+    chat = ChatClient(settings, auth, http=http)
     pipeline = RouterPipeline(
-        settings, catalog,
+        settings, catalogs,
         Decision1Client(settings.resolved_decision1_url or "", settings.decision1_deployment, decision_auth,
                         timeout_seconds=settings.decision_timeout_seconds,
                         max_attempts=settings.decision_max_attempts, http=http),
@@ -84,7 +88,7 @@ async def main(args: argparse.Namespace) -> int:
             pipeline=pipeline, router=chat, router_deployments=router_deployments, catalog=catalog, prices=prices,
             max_output_tokens=args.max_output_tokens, max_tokens_param=args.max_tokens_param,
             decide_only=args.decide_only, store_outputs=not args.no_outputs, timeout=settings.request_timeout_seconds,
-            shuffle_repeats=args.shuffle_options, seed=args.seed,
+            shuffle_repeats=args.shuffle_options, seed=args.seed, compatibility=args.compatibility,
         )
     finally:
         await pipeline.close()
@@ -93,6 +97,7 @@ async def main(args: argparse.Namespace) -> int:
     summary = summarize(records)
     meta = {"data": [str(p) for p in paths], "sample": args.sample, "seed": args.seed, "dry_run": args.dry_run,
             "decide_only": args.decide_only, "shuffle_options": args.shuffle_options,
+            "compatibility": args.compatibility,
             "low_confidence_threshold": settings.low_confidence_threshold, "catalog_sha256": catalog.fingerprint,
             "router_deployments": router_deployments, "decision1_deployment": settings.decision1_deployment}
     (output_dir / "report.json").write_text(json.dumps({"meta": meta, "summary": summary}, indent=2) + "\n")
@@ -113,6 +118,8 @@ if __name__ == "__main__":
                         help="reasoning models reject max_tokens; some non-OpenAI models reject max_completion_tokens")
     parser.add_argument("--decide-only", action="store_true",
                         help="stop our arm after Decision-1 (Model Router still generates: it has no route-only call)")
+    parser.add_argument("--compatibility", choices=["old", "new"], default="old",
+                        help="catalog for our arm; 'old' matches Model Router's pool (default)")
     parser.add_argument("--shuffle-options", type=int, nargs="?", const=1, default=0, metavar="N",
                         help="option-order test: re-ask Decision-1 N more times per prompt (default 1) with the "
                              "options in a different order, and report how often the ranking changes. "

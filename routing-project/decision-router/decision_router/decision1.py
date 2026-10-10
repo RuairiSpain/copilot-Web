@@ -110,7 +110,7 @@ def build_state(body: dict[str, Any], max_chars: int) -> str:
     """
     messages = [m for m in body.get("messages", []) if isinstance(m, dict)]
     facts = [f"{len(messages)} message(s)"]
-    tools = [t.get("function", {}).get("name") for t in body.get("tools") or [] if isinstance(t, dict)]
+    tools = [(t.get("function") or {}).get("name") or t.get("name") for t in body.get("tools") or [] if isinstance(t, dict)]
     if tools:
         facts.append("tools offered: " + ", ".join(str(t) for t in tools if t))
     fmt = body.get("response_format")
@@ -122,6 +122,10 @@ def build_state(body: dict[str, Any], max_chars: int) -> str:
     header = "Request: " + "; ".join(facts) + "\nConversation, oldest first:\n\n"
 
     blocks = [_render_message(m) for m in messages]
+    system = body.get("system")  # top-level system prompt of an Anthropic Messages body
+    if system:
+        blocks.insert(0, _render_message({"role": "system", "content": system}))
+        messages = [{"role": "system"}] + messages
     budget = max_chars - len(header)
     if sum(len(b) + 2 for b in blocks) <= budget:
         return header + "\n\n".join(blocks)

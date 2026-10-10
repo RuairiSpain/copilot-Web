@@ -8,11 +8,21 @@ from typing import Any
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 ROUTING_MODES = ("cost", "balanced", "quality")
+COMPATIBILITIES = ("old", "new")
+API_PATHS = {
+    "openai_chat": "/openai/v1/chat/completions",
+    "mai_chat": "/mai/v1/chat/completions",
+    "anthropic_messages": "/anthropic/v1/messages",
+}
 
 
 def _bool(name: str, default: bool) -> bool:
     raw = os.getenv(name)
     return default if raw is None else raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _list(name: str) -> tuple[str, ...]:
+    return tuple(item.strip() for item in (os.getenv(name) or "").split(",") if item.strip())
 
 
 def _json_object(name: str) -> dict[str, Any]:
@@ -35,7 +45,19 @@ class Settings:
     decision1_deployment: str = "microsoft-decision-1"
     decision1_api_key: str | None = None
     chat_completions_url: str | None = None
-    catalog_path: Path = PACKAGE_ROOT / "config/model_catalog.json"
+    anthropic_messages_url: str | None = None
+    anthropic_version: str = "2023-06-01"
+    # Default output budget for Claude, whose Messages API requires max_tokens.
+    anthropic_default_max_tokens: int = 4096
+    catalog_dir: Path = PACKAGE_ROOT / "config"
+    # "old" = Model Router 2025-11-18 pool without deprecated models; "new" = latest models.
+    compatibility: str = "old"
+    # Operator allow-list across both catalogs; empty means every catalog model is allowed.
+    model_allowlist: tuple[str, ...] = ()
+    allow_preview: bool = True
+    # How stage 1 treats a capability the catalog marks "unknown": "ineligible" or "eligible".
+    unknown_capability: str = "ineligible"
+    chars_per_token: float = 4.0
     pricing_path: Path = PACKAGE_ROOT / "config/model_pricing.json"
     deployment_overrides: dict[str, str] = field(default_factory=dict)
     default_mode: str | None = None
@@ -61,7 +83,14 @@ class Settings:
             decision1_deployment=os.getenv("DECISION1_DEPLOYMENT", "microsoft-decision-1"),
             decision1_api_key=os.getenv("DECISION1_API_KEY"),
             chat_completions_url=os.getenv("FOUNDRY_CHAT_COMPLETIONS_URL"),
-            catalog_path=Path(os.getenv("ROUTER_CATALOG_PATH", str(PACKAGE_ROOT / "config/model_catalog.json"))),
+            anthropic_messages_url=os.getenv("FOUNDRY_ANTHROPIC_MESSAGES_URL"),
+            anthropic_version=os.getenv("ANTHROPIC_VERSION", "2023-06-01"),
+            anthropic_default_max_tokens=int(os.getenv("ROUTER_ANTHROPIC_DEFAULT_MAX_TOKENS", "4096")),
+            catalog_dir=Path(os.getenv("ROUTER_CATALOG_DIR", str(PACKAGE_ROOT / "config"))),
+            compatibility=os.getenv("ROUTER_COMPATIBILITY", "old"),
+            model_allowlist=_list("ROUTER_MODEL_ALLOWLIST"),
+            allow_preview=_bool("ROUTER_ALLOW_PREVIEW", True),
+            unknown_capability=os.getenv("ROUTER_UNKNOWN_CAPABILITY", "ineligible"),
             pricing_path=Path(os.getenv("ROUTER_PRICING_PATH", str(PACKAGE_ROOT / "config/model_pricing.json"))),
             deployment_overrides={str(k): str(v) for k, v in _json_object("ROUTER_DEPLOYMENT_MAP").items()},
             default_mode=os.getenv("ROUTER_DEFAULT_MODE") or None,
@@ -80,6 +109,12 @@ class Settings:
         return settings
 
     def validate(self) -> None:
+        if self.compatibility not in COMPATIBILITIES:
+            raise ValueError(f"ROUTER_COMPATIBILITY must be one of {COMPATIBILITIES}")
+        if self.unknown_capability not in ("ineligible", "eligible"):
+            raise ValueError("ROUTER_UNKNOWN_CAPABILITY must be 'ineligible' or 'eligible'")
+        if self.anthropic_default_max_tokens < 1:
+            raise ValueError("ROUTER_ANTHROPIC_DEFAULT_MAX_TOKENS must be positive")
         if self.default_mode is not None and self.default_mode not in ROUTING_MODES:
             raise ValueError(f"ROUTER_DEFAULT_MODE must be one of {ROUTING_MODES}")
         if self.state_max_chars < 1000:
@@ -106,10 +141,16 @@ class Settings:
 
     @property
     def resolved_chat_url(self) -> str | None:
-        if self.chat_completions_url:
+        return self.url_for("openai_chat")
+
+    def url_for(self, api: str) -> str | None:
+        """Where a model with this API type is called."""
+        if api == "openai_chat" and self.chat_completions_url:
             return self.chat_completions_url
+        if api == "anthropic_messages" and self.anthropic_messages_url:
+            return self.anthropic_messages_url
         if self.foundry_endpoint:
-            return f"{self.foundry_endpoint.rstrip('/')}/openai/v1/chat/completions"
+            return f"{self.foundry_endpoint.rstrip('/')}{API_PATHS[api]}"
         return None
 
     @property

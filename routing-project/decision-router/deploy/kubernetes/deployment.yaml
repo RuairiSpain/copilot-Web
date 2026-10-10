@@ -30,6 +30,7 @@ spec:
             - {name: FOUNDRY_ENDPOINT, value: "https://<resource>.services.ai.azure.com"}
             - {name: DECISION1_DEPLOYMENT, value: "microsoft-decision-1"}
             - {name: ROUTER_DEFAULT_MODE, value: "balanced"}
+            - {name: ROUTER_COMPATIBILITY, value: "new"}
           securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
           readinessProbe: {httpGet: {path: /health/ready, port: http}, initialDelaySeconds: 5, periodSeconds: 10}
           livenessProbe: {httpGet: {path: /health/live, port: http}, initialDelaySeconds: 10, periodSeconds: 30}

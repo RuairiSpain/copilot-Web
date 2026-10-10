@@ -49,9 +49,9 @@ async def option_order_test(pipeline: RouterPipeline, routed: Routed, body: dict
     if base.skipped:
         return []
     by_name: dict[str, ModelEntry] = {m.name: m for m in routed.candidates}
-    criteria = pipeline.catalog.criteria(routed.candidates)
+    criteria = routed.catalog.criteria(routed.candidates)
     state = build_state(body, pipeline.settings.state_max_chars)
-    instructions = pipeline.catalog.modes[routed.mode].instructions
+    instructions = routed.catalog.modes[routed.mode].instructions
     results = []
     for order in shuffled_orders(base.candidates, repeats, key):
         try:
@@ -116,20 +116,22 @@ def _message_text(parsed: Any) -> str | None:
 async def run_row(row: dict[str, Any], *, pipeline: RouterPipeline, router: ChatClient,
                   router_deployments: dict[str, str], catalog: Catalog, prices: PriceTable,
                   max_output_tokens: int | None, max_tokens_param: str, decide_only: bool,
-                  store_outputs: bool, timeout: float, shuffle_repeats: int = 0, seed: int = 0) -> dict[str, Any]:
+                  store_outputs: bool, timeout: float, shuffle_repeats: int = 0, seed: int = 0,
+                  compatibility: str = "old") -> dict[str, Any]:
     mode = PREFERENCE_TO_MODE[row["quality_preference"]]
     body = build_body(row["prompt"], max_output_tokens, max_tokens_param)
     record: dict[str, Any] = {
         "id": row.get("id"), "task_type": row.get("task_type"), "complexity": row.get("complexity"),
         "template_id": row.get("template_id"), "quality_preference": row["quality_preference"],
-        "routing_mode": mode, "policy_label": row.get("selected_model"),
+        "routing_mode": mode, "compatibility": compatibility, "policy_label": row.get("selected_model"),
     }
 
     async def ours() -> None:
         out: dict[str, Any] = {}
         try:
-            _, forwarded = pipeline.prepare(dict(body, routing_mode=mode))
-            routed = await pipeline.route(forwarded, mode, f"cmp-{row.get('id')}")
+            prepared = pipeline.prepare(dict(body, routing_mode=mode, compatibility=compatibility))
+            forwarded = prepared.body
+            routed = await pipeline.route(prepared, f"cmp-{row.get('id')}")
             d = routed.decision
             record["decision1"] = {"candidates": d.candidates, "ranking": d.ranking, "probabilities": d.probabilities,
                                    "execution_order": routed.order, "low_confidence": routed.low_confidence,
@@ -164,7 +166,7 @@ async def run_row(row: dict[str, Any], *, pipeline: RouterPipeline, router: Chat
             return
         t0 = time.perf_counter()
         try:
-            response = await router.send(deployment, body, timeout=timeout)
+            response = await router.send_router(deployment, body, timeout=timeout)
             out["latency_ms"] = round((time.perf_counter() - t0) * 1000, 3)
             if response.status_code >= 400:
                 out["error"] = f"http_{response.status_code}"
