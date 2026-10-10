@@ -1,5 +1,9 @@
 """Stage 1 filter -> Decision-1 ranking -> decision log -> call the selected model.
 
+Stage 1 (stage1.py) narrows the chosen catalog (`compatibility`: old or new) by lifecycle, the
+operator allow-list, the request's routing_constraints, what the request itself needs (tools,
+images, JSON schema, streaming, size), location and the routing mode's price band.
+
 The model called first is the one with the highest probability, unless that probability is
 below ROUTER_LOW_CONFIDENCE_THRESHOLD; then the second-ranked model is called first and the
 top model second. If a call fails, the next model in that order is tried. Every
@@ -17,29 +21,34 @@ from typing import Any
 
 import httpx
 
-from .catalog import Catalog, CatalogError, ModelEntry
+from .catalog import Catalog, CatalogError, Catalogs, ModelEntry
 from .config import ROUTING_MODES, Settings
 from .decision1 import Decision, Decision1Client, DecisionError, build_state, execution_order
 from .foundry import ChatClient
 from .pricing import PriceTable
+from .stage1 import ConstraintError, Constraints, parse_constraints, select
 from .telemetry import Telemetry
 
-ROUTER_FIELDS = ("routing_mode",)
+# Extension fields this router reads; removed before the body is forwarded to a model.
+ROUTER_FIELDS = ("routing_mode", "compatibility", "routing_constraints")
 
 
 class RoutingError(Exception):
     """A failure this service reports in the OpenAI error shape."""
 
-    def __init__(self, status_code: int, code: str, message: str, attempts: list[dict[str, Any]] | None = None):
+    def __init__(self, status_code: int, code: str, message: str, attempts: list[dict[str, Any]] | None = None,
+                 details: dict[str, Any] | None = None):
         super().__init__(message)
         self.status_code = status_code
         self.code = code
         self.attempts = attempts or []
+        self.details = details or {}
 
     def body(self) -> dict[str, Any]:
         error: dict[str, Any] = {"message": str(self), "type": "router_error", "code": self.code}
         if self.attempts:
             error["attempts"] = self.attempts
+        error.update(self.details)
         return {"error": error}
 
 
@@ -75,9 +84,19 @@ def _retry_after_seconds(response: httpx.Response) -> float | None:
 
 
 @dataclass
+class Prepared:
+    """A validated request: which catalog, which mode, which constraints, and the body to forward."""
+    mode: str
+    catalog: Catalog
+    constraints: Constraints
+    body: dict[str, Any]
+
+
+@dataclass
 class Routed:
     request_id: str
     mode: str
+    catalog: Catalog
     candidates: list[ModelEntry]
     decision: Decision
     started: float
@@ -108,12 +127,12 @@ class StreamingCompletion:
 
 
 class RouterPipeline:
-    def __init__(self, settings: Settings, catalog: Catalog, decision: Decision1Client, chat: ChatClient,
+    def __init__(self, settings: Settings, catalogs: Catalogs, decision: Decision1Client, chat: ChatClient,
                  telemetry: Telemetry, prices: PriceTable, *,
                  sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
                  clock: Callable[[], float] = time.monotonic):
         self.settings = settings
-        self.catalog = catalog
+        self.catalogs = catalogs
         self.decision = decision
         self.chat = chat
         self.telemetry = telemetry
@@ -122,39 +141,56 @@ class RouterPipeline:
         self._clock = clock
 
     # ------------------------------------------------------------------ request shape
-    def prepare(self, body: Any) -> tuple[str, dict[str, Any]]:
-        """Validate a Model-Router-style body. Returns the routing mode and the body to forward."""
+    def prepare(self, body: Any) -> Prepared:
+        """Validate a Model-Router-style body plus this router's optional extension fields."""
         if not isinstance(body, dict):
             raise RoutingError(400, "invalid_request", "request body must be a JSON object")
         messages = body.get("messages")
         if not isinstance(messages, list) or not messages or not all(isinstance(m, dict) for m in messages):
             raise RoutingError(400, "invalid_request", "'messages' must be a non-empty array of message objects")
-        mode = body.get("routing_mode") or self.catalog.default_mode
+        try:
+            catalog = self.catalogs.get(body.get("compatibility"))
+        except CatalogError as exc:
+            raise RoutingError(400, "invalid_compatibility", str(exc)) from exc
+        mode = body.get("routing_mode") or catalog.default_mode
         if mode not in ROUTING_MODES:
             raise RoutingError(400, "invalid_routing_mode", f"routing_mode must be one of {list(ROUTING_MODES)}")
+        try:
+            constraints = parse_constraints(body.get("routing_constraints"), catalog)
+        except ConstraintError as exc:
+            raise RoutingError(400, "invalid_routing_constraints", str(exc)) from exc
         # `model` names the router deployment the client called; it is replaced per target.
         forwarded = {k: v for k, v in body.items() if k not in ROUTER_FIELDS and k != "model"}
-        return mode, forwarded
+        return Prepared(mode, catalog, constraints, forwarded)
 
     # ------------------------------------------------------------------ stages 1 and 2
-    async def route(self, body: dict[str, Any], mode: str, request_id: str) -> Routed:
+    async def route(self, prepared: Prepared, request_id: str) -> Routed:
         started = self._clock()
-        try:
-            candidates = self.catalog.candidates(mode)
-        except CatalogError as exc:
-            raise RoutingError(400, "invalid_routing_mode", str(exc)) from exc
+        catalog, mode, body = prepared.catalog, prepared.mode, prepared.body
+        stage1 = select(catalog, mode, prepared.constraints, body, self.settings)
+        candidates = stage1.candidates
         event: dict[str, Any] = {
             "request_id": request_id,
             "routing_mode": mode,
-            "catalog_sha256": self.catalog.fingerprint,
+            "compatibility": catalog.compatibility,
+            "catalog_sha256": catalog.fingerprint,
+            "routing_constraints": prepared.constraints.as_dict(),
+            "stage1": stage1.log(),
             "candidates": [m.name for m in candidates],
             "stream": bool(body.get("stream")),
         }
+        if not candidates:
+            event.update(outcome="no_eligible_models", total_latency_ms=round((self._clock() - started) * 1000, 3))
+            self.telemetry.record(event, body)
+            raise RoutingError(422, "no_eligible_models",
+                               f"no model in the '{catalog.compatibility}' catalog passes stage 1; the "
+                               f"'{stage1.empty_at}' step removed the last candidates",
+                               details={"stage1": stage1.log()})
         try:
             decision = await self.decision.decide(
                 build_state(body, self.settings.state_max_chars),
-                self.catalog.modes[mode].instructions,
-                self.catalog.criteria(candidates),
+                catalog.modes[mode].instructions,
+                catalog.criteria(candidates),
                 candidates,
             )
         except DecisionError as exc:
@@ -182,7 +218,7 @@ class RouterPipeline:
             "usage": decision.usage,
             "cost": self.prices.decision_cost(decision.usage),
         }
-        return Routed(request_id, mode, candidates, decision, started, event, order, low_confidence)
+        return Routed(request_id, mode, catalog, candidates, decision, started, event, order, low_confidence)
 
     def record_route_only(self, routed: Routed, body: dict[str, Any]) -> None:
         routed.event.update(outcome="routed", total_latency_ms=round((self._clock() - routed.started) * 1000, 3))
@@ -195,7 +231,7 @@ class RouterPipeline:
         deadline = routed.started + settings.total_timeout_seconds
         attempts: list[dict[str, Any]] = []
         for name in routed.order:
-            entry = self.catalog.by_name[name]
+            entry = routed.catalog.by_name[name]
             for attempt in range(1, settings.attempts_per_model + 1):
                 remaining = deadline - self._clock()
                 if remaining <= 0:
@@ -203,7 +239,7 @@ class RouterPipeline:
                 t0 = self._clock()
                 record: dict[str, Any] = {"model": name, "attempt": attempt, "status": None}
                 try:
-                    response = await self.chat.send(entry.deployment, body,
+                    response = await self.chat.send(entry, body,
                                                     timeout=min(settings.request_timeout_seconds, remaining),
                                                     stream=stream)
                 except httpx.TimeoutException:

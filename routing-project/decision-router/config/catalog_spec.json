@@ -1,0 +1,726 @@
+{
+  "schema_version": 2,
+  "_note": "Hand-maintained input to scripts/build_catalogs.py. It lists which models belong to each compatibility catalog, their price tier, the description Decision-1 reads, and any value the Microsoft docs do not publish (marked with its source). Lifecycle, retirement dates, regions, limits and most capabilities are read from the pinned MicrosoftDocs/azure-ai-docs snapshot when the catalogs are built.",
+  "docs": {
+    "repository": "https://github.com/MicrosoftDocs/azure-ai-docs",
+    "commit": "87fa4a9688b9562e3c520ca718dcfc29f9fc488a"
+  },
+  "tier_status": "provisional: ordered by expected price, awaiting confirmation; 1 = cheapest",
+  "default_mode": "balanced",
+  "routing_modes": {
+    "cost": {
+      "price_band": {
+        "from": "cheapest",
+        "share": 0.3333
+      },
+      "instructions": "Choose the model that should answer the conversation in the state. Cost mode: choose the cheapest model that can still answer well. Prefer a more expensive model only when a cheaper one would likely give a wrong or incomplete answer."
+    },
+    "balanced": {
+      "price_band": {
+        "from": "cheapest",
+        "share": 1.0
+      },
+      "instructions": "Choose the model that should answer the conversation in the state. Balanced mode: weigh answer quality against cost. Prefer a cheaper model when its answer would be about as good as the best model's answer."
+    },
+    "quality": {
+      "price_band": {
+        "from": "priciest",
+        "share": 0.3333
+      },
+      "instructions": "Choose the model that should answer the conversation in the state. Quality mode: choose the model most likely to give the best answer. Ignore cost."
+    }
+  },
+  "sources": {
+    "early_catalog": "Model card fields from the project's early catalog (Microsoft Foundry model cards, retrieved 2026-10-10); not published in the docs snapshot.",
+    "openai_streaming": "Azure OpenAI Chat Completions API supports stream=true for all chat models; the capability tables list it only for some models.",
+    "anthropic_adapter": "Called through the router's Messages API adapter: tools, parallel tools and streaming are translated; response_format is not, so structured output is reported as unavailable."
+  },
+  "catalogs": {
+    "old": {
+      "_note": "Model Router version 2025-11-18 routing pool (35 models) with the 6 deprecated models removed. Use for like-for-like comparison with Model Router.",
+      "router_version": "2025-11-18",
+      "excluded": [
+        {
+          "name": "gpt-4.1",
+          "reason": "deprecated (retirement schedule, 2026-10-05)"
+        },
+        {
+          "name": "gpt-4.1-mini",
+          "reason": "deprecated (retirement schedule, 2026-10-05)"
+        },
+        {
+          "name": "gpt-4.1-nano",
+          "reason": "deprecated (retirement schedule, 2026-10-05)"
+        },
+        {
+          "name": "gpt-4o",
+          "reason": "legacy/deprecated (retirement schedule, 2026-10-05)"
+        },
+        {
+          "name": "gpt-4o-mini",
+          "reason": "deprecated (retirement schedule, 2026-10-05)"
+        },
+        {
+          "name": "o4-mini",
+          "reason": "deprecated, retires 2026-11-19 (retirement schedule, 2026-10-05)"
+        }
+      ],
+      "models": [
+        {
+          "name": "gpt-5-nano",
+          "provider": "OpenAI",
+          "version": "2025-08-07",
+          "tier": 1,
+          "api": "openai_chat",
+          "docs": "openai",
+          "description": "Fastest, cheapest GPT-5 model: one-step tasks, short answers, lookups, simple classification and extraction."
+        },
+        {
+          "name": "gpt-5.4-nano",
+          "provider": "OpenAI",
+          "version": "2026-03-17",
+          "tier": 2,
+          "api": "openai_chat",
+          "docs": "openai",
+          "description": "Lightweight GPT-5.4 model for low-latency, high-volume simple tasks: short answers, rewriting, classification, extraction."
+        },
+        {
+          "name": "FW-GLM-5.3-Flash",
+          "provider": "Fireworks",
+          "version": "1",
+          "tier": 3,
+          "api": "openai_chat",
+          "docs": "none",
+          "hosting": "fireworks",
+          "description": "Fast, low-cost GLM model with long context and function calling; good for quick drafting, summaries and simple agent steps.",
+          "overrides": {
+            "source": "early_catalog",
+            "lifecycle": "ga",
+            "limits": {
+              "context_tokens": 1048576,
+              "max_output_tokens": null
+            },
+            "modalities": {
+              "input": [
+                "text",
+                "image"
+              ]
+            },
+            "capabilities": {
+              "tools": "yes",
+              "streaming": "yes",
+              "reasoning": "unknown",
+              "structured_output": "unknown",
+              "json_object": "unknown",
+              "parallel_tools": "unknown",
+              "image_input": "yes"
+            }
+          }
+        },
+        {
+          "name": "gpt-oss-120b",
+          "provider": "OpenAI",
+          "version": "1",
+          "tier": 4,
+          "api": "openai_chat",
+          "docs": "openai",
+          "description": "Open-weight reasoning model with function calling and structured output; text only; solid low-cost choice for maths, code and analysis."
+        },
+        {
+          "name": "gpt-5-mini",
+          "provider": "OpenAI",
+          "version": "2025-08-07",
+          "tier": 5,
+          "api": "openai_chat",
+          "docs": "openai",
+          "description": "Small GPT-5 reasoning model: everyday questions, short summaries, extraction with citations, small functions."
+        },
+        {
+          "name": "grok-4-1-fast-reasoning",
+          "provider": "xAI",
+          "version": "1",
+          "tier": 6,
+          "api": "openai_chat",
+          "docs": "others",
+          "doc_name": "grok-4.1-fast-reasoning",
+          "aliases": [
+            "grok-4.1-fast-reasoning"
+          ],
+          "description": "Fast, low-cost reasoning model tuned for agentic tool calling and quick multi-step answers."
+        },
+        {
+          "name": "Llama-4-Maverick-17B-128E-Instruct-FP8",
+          "provider": "Meta",
+          "version": "1",
+          "tier": 7,
+          "api": "openai_chat",
+          "docs": "others",
+          "description": "Multilingual multimodal Llama model: image understanding, general writing and code generation; no tool calling."
+        },
+        {
+          "name": "DeepSeek-V3.2",
+          "provider": "DeepSeek",
+          "version": "1",
+          "tier": 8,
+          "api": "openai_chat",
+          "docs": "others",
+          "description": "Efficient open reasoning model for code, maths and agent tasks; text only, 128K context."
+        },
+        {
+          "name": "gpt-5.4-mini",
+          "provider": "OpenAI",
+          "version": "2026-03-17",
+          "tier": 9,
+          "api": "openai_chat",
+          "docs": "openai",
+          "description": "Compact GPT-5.4 model for high-volume everyday work: summaries, extraction, routine code, tool calls."
+        },
+        {
+          "name": "gpt-5.6-luna",
+          "provider": "OpenAI",
+          "version": "2026-07-09",
+          "tier": 10,
+          "api": "openai_chat",
+          "docs": "openai",
+          "description": "Fast, cost-efficient GPT-5.6 model for low-latency, multilingual and large-context work."
+        },
+        {
+          "name": "FW-Kimi-K3",
+          "provider": "Fireworks",
+          "version": "1",
+          "tier": 11,
+          "api": "openai_chat",
+          "docs": "none",
+          "hosting": "fireworks",
+          "description": "Native-vision Kimi model for long-horizon coding and knowledge work with tool use.",
+          "overrides": {
+            "source": "early_catalog",
+            "lifecycle": "ga",
+            "limits": {
+              "context_tokens": 1048576,
+              "max_output_tokens": null
+            },
+            "modalities": {
+              "input": [
+                "text",
+                "image"
+              ]
+            },
+            "capabilities": {
+              "tools": "yes",
+              "reasoning": "yes",
+              "streaming": "unknown",
+              "structured_output": "unknown",
+              "json_object": "unknown",
+              "parallel_tools": "unknown",
+              "image_input": "yes"
+            }
+          }
+        },
+        {
+          "name": "FW-GLM-5.3",
+          "provider": "Fireworks",
+          "version": "1",
+          "tier": 12,
+          "api": "openai_chat",
+          "docs": "none",
+          "hosting": "fireworks",
+          "description": "Flagship GLM model for complex software engineering and long-horizon agents; text only.",
+          "overrides": {
+            "source": "early_catalog",
+            "lifecycle": "ga",
+            "limits": {
+              "context_tokens": 1048576,
+              "max_output_tokens": 131072
+            },
+            "modalities": {
+              "input": [
+                "text"
+              ]
+            },
+            "capabilities": {
+              "tools": "yes",
+              "reasoning": "yes",
+              "streaming": "yes",
+              "structured_output": "yes",
+              "json_object": "unknown",
+              "parallel_tools": "unknown",
+              "image_input": "no"
+            }
+          }
+        },
+        {
+          "name": "claude-haiku-4-5",
+          "provider": "Anthropic",
+          "version": "20251001",
+          "doc_version": "1",
+          "tier": 13,
+          "api": "anthropic_messages",
+          "docs": "claude",
+          "description": "Fast Claude model for scaled coding, agents and sub-agent workloads. Retires 2026-11-15."
+        },
+        {
+          "name": "gpt-5",
+          "provider": "OpenAI",
+          "version": "2025-08-07",
+          "tier": 14,
+          "api": "openai_chat",
+          "docs": "openai",
+          "description": "GPT-5 reasoning model for logic-heavy, multi-step tasks."
+        },
+        {
+          "name": "gpt-5.2",
+          "provider": "OpenAI",
+          "version": "2025-12-11",
+          "tier": 15,
+          "api": "openai_chat",
+          "docs": "openai",
+          "description": "Enterprise agent model for long-running professional tasks and structured output."
+        },
+        {
+          "name": "gpt-5.4",
+          "provider": "OpenAI",
+          "version": "2026-03-05",
+          "tier": 16,
+          "api": "openai_chat",
+          "docs": "openai",
+          "description": "Frontier GPT-5.4 model for complex professional and agentic workflows."
+        },
+        {
+          "name": "gpt-5.6-terra",
+          "provider": "OpenAI",
+          "version": "2026-07-09",
+          "tier": 17,
+          "api": "openai_chat",
+          "docs": "openai",
+          "description": "Balanced GPT-5.6 reasoning model for scalable enterprise work: multi-step planning, tool orchestration, analysis."
+        },
+        {
+          "name": "gpt-5.5",
+          "provider": "OpenAI",
+          "version": "2026-04-24",
+          "tier": 18,
+          "api": "openai_chat",
+          "docs": "openai",
+          "description": "Agentic model for complex multi-step coding, research and data analysis; synthesis across many documents."
+        },
+        {
+          "name": "grok-4",
+          "provider": "xAI",
+          "version": "1",
+          "tier": 19,
+          "api": "openai_chat",
+          "docs": "others",
+          "description": "xAI reasoning model with advanced reasoning and tool use; text only."
+        },
+        {
+          "name": "grok-4.6",
+          "provider": "xAI",
+          "version": "1",
+          "tier": 20,
+          "api": "openai_chat",
+          "docs": "others",
+          "description": "Multimodal xAI model (preview) for coding, engineering, research and agentic workflows."
+        },
+        {
+          "name": "claude-sonnet-4-5",
+          "provider": "Anthropic",
+          "version": "20250929",
+          "doc_version": "1",
+          "tier": 21,
+          "api": "anthropic_messages",
+          "docs": "claude",
+          "description": "Sonnet model for complex agents, long-horizon tasks and high-volume coding. Anthropic-hosted only; retires 2026-11-30."
+        },
+        {
+          "name": "claude-sonnet-5",
+          "provider": "Anthropic",
+          "version": "1",
+          "tier": 22,
+          "api": "anthropic_messages",
+          "docs": "claude",
+          "description": "Sonnet model for coding, agents and professional work at scale; reasoning over whole codebases."
+        },
+        {
+          "name": "gpt-5.6-sol",
+          "provider": "OpenAI",
+          "version": "2026-07-09",
+          "tier": 23,
+          "api": "openai_chat",
+          "docs": "openai",
+          "description": "Flagship GPT-5.6 reasoning model for complex, compute-intensive work."
+        },
+        {
+          "name": "gpt-6-astra",
+          "provider": "OpenAI",
+          "version": "2026-09-03",
+          "tier": 24,
+          "api": "openai_chat",
+          "docs": "openai",
+          "lifecycle": "ga",
+          "description": "Frontier GPT-6 reasoning model for complex problem-solving, coding, agentic workflows and enterprise knowledge work."
+        },
+        {
+          "name": "claude-opus-4-6",
+          "provider": "Anthropic",
+          "version": "1",
+          "tier": 25,
+          "api": "anthropic_messages",
+          "docs": "claude",
+          "description": "Opus model for coding, enterprise agents and computer use. Anthropic-hosted only."
+        },
+        {
+          "name": "claude-opus-4-7",
+          "provider": "Anthropic",
+          "version": "1",
+          "tier": 26,
+          "api": "anthropic_messages",
+          "docs": "claude",
+          "description": "Opus model for coding, enterprise workflows and long-running agents. Anthropic-hosted only."
+        },
+        {
+          "name": "claude-opus-4-8",
+          "provider": "Anthropic",
+          "version": "1",
+          "tier": 27,
+          "api": "anthropic_messages",
+          "docs": "claude",
+          "description": "Opus model for coding, agents and enterprise workflows with high-resolution image input."
+        },
+        {
+          "name": "claude-opus-5",
+          "provider": "Anthropic",
+          "version": "1",
+          "tier": 28,
+          "api": "anthropic_messages",
+          "docs": "claude",
+          "description": "Top-capability Opus model for the hardest reasoning, long-running agents and professional work.",
+          "overrides": {
+            "source": "early_catalog",
+            "capabilities": {
+              "image_input": "yes"
+            },
+            "modalities": {
+              "input": [
+                "text",
+                "image"
+              ]
+            }
+          }
+        },
+        {
+          "name": "claude-fable-5-1",
+          "provider": "Anthropic",
+          "version": "1",
+          "tier": 29,
+          "api": "anthropic_messages",
+          "docs": "claude",
+          "description": "Frontier Claude model (preview, Anthropic-hosted) for long-running coding, scientific discovery and demanding knowledge work.",
+          "overrides": {
+            "source": "early_catalog",
+            "capabilities": {
+              "image_input": "yes"
+            },
+            "modalities": {
+              "input": [
+                "text",
+                "image"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "new": {
+      "_note": "Latest Azure-available model per provider and role, plus MAI-Thinking-1 and three Phi-4 models. Models marked in_model_router=false cannot be chosen by Model Router, so use the old catalog for comparisons.",
+      "models": [
+        {
+          "name": "Phi-4-mini-instruct",
+          "provider": "Microsoft",
+          "version": "1",
+          "tier": 1,
+          "api": "openai_chat",
+          "docs": "partners",
+          "description": "Small, multilingual Phi model for simple instructions, short answers and lightweight extraction; no tool calling."
+        },
+        {
+          "name": "gpt-5.4-nano",
+          "provider": "OpenAI",
+          "version": "2026-03-17",
+          "tier": 2,
+          "api": "openai_chat",
+          "docs": "openai",
+          "description": "Lightweight GPT-5.4 model for low-latency, high-volume simple tasks: short answers, rewriting, classification, extraction."
+        },
+        {
+          "name": "Phi-4",
+          "provider": "Microsoft",
+          "version": "7",
+          "tier": 3,
+          "api": "openai_chat",
+          "docs": "partners",
+          "description": "Phi small language model for reasoning-heavy short prompts in many languages; 16K context, no tool calling."
+        },
+        {
+          "name": "FW-GLM-5.3-Flash",
+          "provider": "Fireworks",
+          "version": "1",
+          "tier": 4,
+          "api": "openai_chat",
+          "docs": "none",
+          "hosting": "fireworks",
+          "description": "Fast, low-cost GLM model with long context and function calling; good for quick drafting, summaries and simple agent steps.",
+          "overrides": {
+            "source": "early_catalog",
+            "lifecycle": "ga",
+            "limits": {
+              "context_tokens": 1048576,
+              "max_output_tokens": null
+            },
+            "modalities": {
+              "input": [
+                "text",
+                "image"
+              ]
+            },
+            "capabilities": {
+              "tools": "yes",
+              "streaming": "yes",
+              "reasoning": "unknown",
+              "structured_output": "unknown",
+              "json_object": "unknown",
+              "parallel_tools": "unknown",
+              "image_input": "yes"
+            }
+          }
+        },
+        {
+          "name": "gpt-oss-120b",
+          "provider": "OpenAI",
+          "version": "1",
+          "tier": 5,
+          "api": "openai_chat",
+          "docs": "openai",
+          "description": "Open-weight reasoning model with function calling and structured output; text only; solid low-cost choice for maths, code and analysis."
+        },
+        {
+          "name": "Phi-4-reasoning",
+          "provider": "Microsoft",
+          "version": "1",
+          "tier": 6,
+          "api": "openai_chat",
+          "docs": "partners",
+          "description": "Phi reasoning model for step-by-step maths and logic problems; English, 32K context, no tool calling."
+        },
+        {
+          "name": "DeepSeek-V4-Flash",
+          "provider": "DeepSeek",
+          "version": "2026-04-23",
+          "tier": 7,
+          "api": "openai_chat",
+          "docs": "others",
+          "description": "Fast DeepSeek V4 reasoning model with a 1M-token context and tool calling; strong low-cost choice for code and long documents."
+        },
+        {
+          "name": "grok-4-1-fast-reasoning",
+          "provider": "xAI",
+          "version": "1",
+          "tier": 8,
+          "api": "openai_chat",
+          "docs": "others",
+          "doc_name": "grok-4.1-fast-reasoning",
+          "aliases": [
+            "grok-4.1-fast-reasoning"
+          ],
+          "description": "Fast, low-cost reasoning model tuned for agentic tool calling and quick multi-step answers."
+        },
+        {
+          "name": "Llama-4-Maverick-17B-128E-Instruct-FP8",
+          "provider": "Meta",
+          "version": "1",
+          "tier": 9,
+          "api": "openai_chat",
+          "docs": "others",
+          "description": "Multilingual multimodal Llama model: image understanding, general writing and code generation; no tool calling."
+        },
+        {
+          "name": "gpt-5.4-mini",
+          "provider": "OpenAI",
+          "version": "2026-03-17",
+          "tier": 10,
+          "api": "openai_chat",
+          "docs": "openai",
+          "description": "Compact GPT-5.4 model for high-volume everyday work: summaries, extraction, routine code, tool calls."
+        },
+        {
+          "name": "gpt-6-luna",
+          "provider": "OpenAI",
+          "version": "2026-09-22",
+          "tier": 11,
+          "api": "openai_chat",
+          "docs": "openai",
+          "lifecycle": "ga",
+          "description": "Fast, cost-efficient GPT-6 model for low-latency, multilingual and large-context work."
+        },
+        {
+          "name": "FW-Kimi-K3",
+          "provider": "Fireworks",
+          "version": "1",
+          "tier": 12,
+          "api": "openai_chat",
+          "docs": "none",
+          "hosting": "fireworks",
+          "description": "Native-vision Kimi model for long-horizon coding and knowledge work with tool use.",
+          "overrides": {
+            "source": "early_catalog",
+            "lifecycle": "ga",
+            "limits": {
+              "context_tokens": 1048576,
+              "max_output_tokens": null
+            },
+            "modalities": {
+              "input": [
+                "text",
+                "image"
+              ]
+            },
+            "capabilities": {
+              "tools": "yes",
+              "reasoning": "yes",
+              "streaming": "unknown",
+              "structured_output": "unknown",
+              "json_object": "unknown",
+              "parallel_tools": "unknown",
+              "image_input": "yes"
+            }
+          }
+        },
+        {
+          "name": "FW-GLM-5.3",
+          "provider": "Fireworks",
+          "version": "1",
+          "tier": 13,
+          "api": "openai_chat",
+          "docs": "none",
+          "hosting": "fireworks",
+          "description": "Flagship GLM model for complex software engineering and long-horizon agents; text only.",
+          "overrides": {
+            "source": "early_catalog",
+            "lifecycle": "ga",
+            "limits": {
+              "context_tokens": 1048576,
+              "max_output_tokens": 131072
+            },
+            "modalities": {
+              "input": [
+                "text"
+              ]
+            },
+            "capabilities": {
+              "tools": "yes",
+              "reasoning": "yes",
+              "streaming": "yes",
+              "structured_output": "yes",
+              "json_object": "unknown",
+              "parallel_tools": "unknown",
+              "image_input": "no"
+            }
+          }
+        },
+        {
+          "name": "DeepSeek-V4-Pro",
+          "provider": "DeepSeek",
+          "version": "2026-04-23",
+          "tier": 14,
+          "api": "openai_chat",
+          "docs": "others",
+          "description": "Large DeepSeek V4 reasoning model with a 1M-token context: hard code, maths and long-document analysis with tools."
+        },
+        {
+          "name": "claude-haiku-5-5",
+          "provider": "Anthropic",
+          "version": "1",
+          "tier": 15,
+          "api": "anthropic_messages",
+          "docs": "claude",
+          "description": "Fast, low-cost Claude model with adaptive thinking: coding, agents and sub-agent work over large contexts."
+        },
+        {
+          "name": "MAI-Thinking-1",
+          "provider": "Microsoft",
+          "version": "2026-06-01",
+          "tier": 16,
+          "api": "mai_chat",
+          "docs": "others",
+          "description": "Microsoft reasoning model (preview) for multi-step maths, coding and enterprise reasoning; text only, tool calling."
+        },
+        {
+          "name": "gpt-5.6-terra",
+          "provider": "OpenAI",
+          "version": "2026-07-09",
+          "tier": 17,
+          "api": "openai_chat",
+          "docs": "openai",
+          "description": "Balanced GPT-5.6 reasoning model for scalable enterprise work: multi-step planning, tool orchestration, analysis."
+        },
+        {
+          "name": "gpt-5.5",
+          "provider": "OpenAI",
+          "version": "2026-04-24",
+          "tier": 18,
+          "api": "openai_chat",
+          "docs": "openai",
+          "description": "Agentic model for complex multi-step coding, research and data analysis; synthesis across many documents."
+        },
+        {
+          "name": "grok-4.7",
+          "provider": "xAI",
+          "version": "1",
+          "tier": 19,
+          "api": "openai_chat",
+          "docs": "others",
+          "lifecycle": "ga",
+          "description": "Latest xAI model with a 500K context for coding, research and agentic work with tools."
+        },
+        {
+          "name": "claude-sonnet-5-5",
+          "provider": "Anthropic",
+          "version": "1",
+          "tier": 20,
+          "api": "anthropic_messages",
+          "docs": "claude",
+          "description": "Latest Sonnet: strong coding, agents and professional writing with adaptive thinking over whole codebases."
+        },
+        {
+          "name": "gpt-6-astra",
+          "provider": "OpenAI",
+          "version": "2026-09-03",
+          "tier": 21,
+          "api": "openai_chat",
+          "docs": "openai",
+          "lifecycle": "ga",
+          "description": "Frontier GPT-6 reasoning model for complex problem-solving, coding, agentic workflows and enterprise knowledge work."
+        },
+        {
+          "name": "gpt-6.1-sol",
+          "provider": "OpenAI",
+          "version": "2026-09-29",
+          "tier": 22,
+          "api": "openai_chat",
+          "docs": "openai",
+          "lifecycle": "ga",
+          "description": "Newest flagship OpenAI reasoning model for the hardest analysis, research and multi-agent work. Tool calling is Responses API only."
+        },
+        {
+          "name": "claude-opus-5-5",
+          "provider": "Anthropic",
+          "version": "1",
+          "tier": 23,
+          "api": "anthropic_messages",
+          "docs": "claude",
+          "description": "Latest Opus: top-capability Claude for long-running agentic coding, root-cause analysis and high-stakes work."
+        }
+      ]
+    }
+  }
+}

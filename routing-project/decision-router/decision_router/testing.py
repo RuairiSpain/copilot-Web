@@ -55,11 +55,15 @@ class FakeFoundry:
             return self._decision(body)
         if request.url.path.endswith("/chat/completions"):
             return self._chat(request, body)
+        if request.url.path.endswith("/anthropic/v1/messages"):
+            return self._messages(request, body)
         return httpx.Response(404, json={"error": {"code": "not_found"}})
 
     def _decision(self, body: dict[str, Any]) -> httpx.Response:
         if self.decision_responses:
             queued = self.decision_responses.popleft()
+            if callable(queued):  # built from the request, e.g. to rank whatever options were offered
+                queued = queued(body)
             return queued if isinstance(queued, httpx.Response) else httpx.Response(200, json=queued)
         question = body["questions"]["route"]
         options = list(question["criteria"])
@@ -106,3 +110,71 @@ class FakeFoundry:
                          "message": {"role": "assistant", "content": f"answer from {served}"}}],
             "usage": {"prompt_tokens": prompt_tokens, "completion_tokens": 5, "total_tokens": prompt_tokens + 5},
         })
+
+    def _messages(self, request: httpx.Request, body: dict[str, Any]) -> httpx.Response:
+        """Anthropic Messages API, as Claude deployments on Foundry expose it."""
+        deployment = body.get("model", "")
+        queue = self.failures.get(deployment)
+        if queue:
+            status = queue.popleft()
+            if status == 0:
+                raise httpx.ConnectError("simulated network failure", request=request)
+            return httpx.Response(status, json={"type": "error", "error": {"type": "overloaded_error" if status >= 500
+                                                                         else "invalid_request_error",
+                                                                         "message": "simulated"}})
+        tools = body.get("tools") or []
+        if tools:
+            content = [{"type": "tool_use", "id": "toolu_fake", "name": tools[0]["name"], "input": {"q": "x"}}]
+            stop = "tool_use"
+        else:
+            content = [{"type": "text", "text": f"answer from {deployment}"}]
+            stop = "end_turn"
+        if body.get("stream"):
+            events = [
+                ("message_start", {"type": "message_start", "message": {"id": "msg_fake", "model": deployment,
+                                                                        "usage": {"input_tokens": 12}}}),
+            ]
+            for index, block in enumerate(content):
+                if block["type"] == "text":
+                    events += [("content_block_start", {"type": "content_block_start", "index": index,
+                                                        "content_block": {"type": "text", "text": ""}}),
+                               ("content_block_delta", {"type": "content_block_delta", "index": index,
+                                                        "delta": {"type": "text_delta", "text": block["text"]}})]
+                else:
+                    events += [("content_block_start", {"type": "content_block_start", "index": index,
+                                                        "content_block": {"type": "tool_use", "id": block["id"],
+                                                                          "name": block["name"], "input": {}}}),
+                               ("content_block_delta", {"type": "content_block_delta", "index": index,
+                                                        "delta": {"type": "input_json_delta",
+                                                                  "partial_json": json.dumps(block["input"])}})]
+                events.append(("content_block_stop", {"type": "content_block_stop", "index": index}))
+            events += [("message_delta", {"type": "message_delta", "delta": {"stop_reason": stop},
+                                          "usage": {"output_tokens": 5}}),
+                       ("message_stop", {"type": "message_stop"})]
+            payload = "".join(f"event: {name}\ndata: {json.dumps(data)}\n\n" for name, data in events)
+            return httpx.Response(200, stream=_Chunks(payload.encode()), headers={"content-type": "text/event-stream"})
+        return httpx.Response(200, json={"id": "msg_fake", "type": "message", "role": "assistant", "model": deployment,
+                                         "content": content, "stop_reason": stop,
+                                         "usage": {"input_tokens": 12, "output_tokens": 5}})
+
+
+def ranked(order: list[str], top: float = 0.6):
+    """A queued Decision-1 answer that ranks `order` first (in that order) among whatever options are offered."""
+    def build(body: dict[str, Any]) -> dict[str, Any]:
+        options = list(body["questions"]["route"]["criteria"])
+        listed = [o for o in order if o in options]
+        rest = [o for o in options if o not in listed]
+        probabilities: dict[str, float] = {}
+        remaining = 1.0
+        share = top
+        for name in listed:
+            probabilities[name] = share
+            remaining -= share
+            share = remaining / 2
+        for name in rest:
+            probabilities[name] = remaining / max(1, len(rest)) / 4
+        total = sum(probabilities.values())
+        probabilities = {k: v / total for k, v in probabilities.items()}
+        return {"answers": {"route": {"type": "choice", "choice": listed[0] if listed else options[0],
+                                      "probabilities": probabilities, "confidence": top}}}
+    return build

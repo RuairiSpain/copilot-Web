@@ -1,11 +1,15 @@
 # Architecture
 
 ```
-client ── POST /v1/chat/completions (Model Router body + optional routing_mode)
-   │
+client ── POST /v1/chat/completions (Model Router body + optional routing_mode, compatibility,
+   │                                       routing_constraints)
    ▼
-stage 1   catalog.candidates(mode)            deterministic, from config/model_catalog.json
-   │      cost → nano, mini, deepseek  ·  balanced → all six  ·  quality → gpt-5.5, o4-mini, terra
+catalog   compatibility = old | new           config/catalog_old.json (Model Router pool) or
+   │                                          config/catalog_new.json (latest models)
+   ▼
+stage 1   deterministic filter (stage1.py)    lifecycle → operator allow-list → requested models/
+   │                                          providers → capabilities (asked for + read from the
+   │                                          request) → region/residency → size → price band
    ▼
 stage 2   Decision-1 "choice" question        state = rendered conversation
    │      criteria = candidates + descriptions + price rank
@@ -18,9 +22,14 @@ select    execution order                     highest probability first; if that
 log       decision log line                   candidates, probabilities, ranking, execution order, usage, cost
    │
    ▼
-generate  POST {endpoint}/openai/v1/chat/completions, model = first model in the execution order
+generate  first model in the execution order, at its API's endpoint:
+          openai_chat → /openai/v1/chat/completions · mai_chat → /mai/v1/chat/completions ·
+          anthropic_messages → /anthropic/v1/messages (translated to and from chat completions)
           on failure, the next model in that order (stage-1 candidates only)
 ```
+
+Stage 1, the catalogs and the request fields that drive them are described in
+`docs/STAGE1_FILTERING.md` and `docs/MODEL_CATALOGS.md`.
 
 ## Input and output
 
@@ -31,7 +40,18 @@ and so on) is forwarded unchanged.
 
 **Routing mode.** Model Router sets its mode on the deployment. This service does the same
 with `default_mode` in the catalog or `ROUTER_DEFAULT_MODE`, and also accepts a
-`routing_mode` field per request, which is removed before the request is forwarded.
+`routing_mode` field per request. The mode picks a price band of whatever stage 1 leaves:
+`cost` the cheapest third, `balanced` all, `quality` the most expensive third.
+
+**Extension fields.** `routing_mode`, `compatibility` and `routing_constraints` are read by this
+router and removed before the request is forwarded, so the model sees a plain chat-completions
+body.
+
+**Claude.** Claude deployments on Foundry accept only the Anthropic Messages API. The router
+translates the request (system messages, images, tools, tool results, tool_choice, stop,
+streaming) and translates the answer back to a chat completion, so callers never see the
+difference. `response_format` is not translated, so stage 1 keeps structured-output requests
+away from Claude. Code: `decision_router/anthropic.py`.
 
 **Output** is the chosen model's response, unchanged, including streamed responses. Its
 `model` field names the model that answered.
@@ -50,11 +70,11 @@ api-key: <key>            or   Authorization: Bearer <Entra token, scope cogniti
    "type": "choice",
    "instructions": "Choose the model that should answer ... Cost mode: ...",
    "criteria": {"gpt-5-nano": "Trivial, single-step work ... Price rank 1 of 6 in the pool (1 is cheapest).",
-                "gpt-5-mini": "...", "deepseek-v4-flash": "..."}}}}
+                "gpt-5-mini": "...", "gpt-5.4-nano": "..."}}}}
 
 200 {"model": "microsoft-decision-1", "usage": {"prompt_tokens": 412, ...},
      "answers": {"route": {"type": "choice", "choice": "gpt-5-mini",
-                           "probabilities": {"gpt-5-nano": 0.21, "gpt-5-mini": 0.64, "deepseek-v4-flash": 0.15},
+                           "probabilities": {"gpt-5-nano": 0.21, "gpt-5-mini": 0.64, "gpt-5.4-nano": 0.15},
                            "confidence": 0.81}}}
 ```
 
@@ -91,9 +111,9 @@ model fails. The rest of the order is unchanged.
 
 | Probabilities | Threshold | Execution order | `low_confidence` |
 |---|---|---|---|
-| gpt-5.5 0.70, o4-mini 0.20, terra 0.10 | 0.5 | gpt-5.5, o4-mini, terra | false |
-| gpt-5.5 0.45, o4-mini 0.35, terra 0.20 | 0.5 | o4-mini, gpt-5.5, terra | true |
-| gpt-5.5 0.45, o4-mini 0.35, terra 0.20 | 0 (off) | gpt-5.5, o4-mini, terra | false |
+| gpt-5.5 0.70, gpt-5.6-terra 0.20, gpt-5.6-sol 0.10 | 0.5 | gpt-5.5, gpt-5.6-terra, gpt-5.6-sol | false |
+| gpt-5.5 0.45, gpt-5.6-terra 0.35, gpt-5.6-sol 0.20 | 0.5 | gpt-5.6-terra, gpt-5.5, gpt-5.6-sol | true |
+| gpt-5.5 0.45, gpt-5.6-terra 0.35, gpt-5.6-sol 0.20 | 0 (off) | gpt-5.5, gpt-5.6-terra, gpt-5.6-sol | false |
 
 Notes:
 
@@ -103,7 +123,7 @@ Notes:
 - `0.5` is a starting value, not a validated one. Microsoft's guidance is to choose thresholds
   per task on your own data. The comparison report includes a threshold sweep (below) for
   that purpose.
-- With six candidates a top probability of 0.45 can still be a clear lead; with two it is
+- With many candidates a top probability of 0.45 can still be a clear lead; with two it is
   nearly a coin toss. If one threshold does not suit every mode, that is visible in the
   report's per-mode figures.
 
@@ -139,10 +159,13 @@ messages is logged instead.
 ## Comparing with Model Router
 
 Model Router's mode is a deployment setting, so the comparison needs one Model Router
-deployment per mode. Each must use **the same model subset** as `config/model_catalog.json`,
-and the catalog's `deployment` names must be the deployments Model Router uses. Then both
-arms choose from the same models and generate with the same deployments, and the only
-difference is the routing decision.
+deployment per mode. Run the harness with `--compatibility old` (the default).
+`config/catalog_old.json` is Model Router's routing pool minus its six deprecated models, so give
+each Model Router deployment a custom model subset listing exactly those 29 models; with the
+default pool it could still pick a deprecated model that our router never offers. The catalog's
+`deployment` names must be the deployments Model Router uses (Claude models must be deployed to
+the resource for Model Router too). Then both arms choose from the same models and generate with
+the same deployments, and the only difference is the routing decision.
 
 ```bash
 export FOUNDRY_ENDPOINT=https://<resource>.services.ai.azure.com
@@ -190,10 +213,18 @@ What the report does and does not show:
 | `FOUNDRY_CHAT_COMPLETIONS_URL` | `{endpoint}/openai/v1/chat/completions` | Override the chat route |
 | `ROUTER_DEFAULT_MODE` | catalog `default_mode` | `cost`, `balanced` or `quality` |
 | `ROUTER_DEPLOYMENT_MAP` | `{}` | JSON, model name → deployment name |
-| `ROUTER_CATALOG_PATH` / `ROUTER_PRICING_PATH` | `config/...` | Catalog and price table |
+| `ROUTER_PRICING_PATH` | `config/model_pricing.json` | Price table |
 | `ROUTER_STATE_MAX_CHARS` | `24000` | Size of the conversation text sent to Decision-1 |
 | `ROUTER_DECISION_TIMEOUT_SECONDS` | `10` | Time budget for the Decision-1 call, retries included |
 | `ROUTER_DECISION_MAX_ATTEMPTS` | `3` | Decision-1 attempts on 408, 429, 5xx and network errors |
+| `ROUTER_COMPATIBILITY` | `old` | Default catalog: `old` (Model Router pool) or `new` (latest models) |
+| `ROUTER_CATALOG_DIR` | `config/` | Folder holding `catalog_old.json` and `catalog_new.json` |
+| `ROUTER_MODEL_ALLOWLIST` | unset | Comma-separated model names any request may use; unset allows all |
+| `ROUTER_ALLOW_PREVIEW` | `true` | Whether preview models are eligible by default |
+| `ROUTER_UNKNOWN_CAPABILITY` | `ineligible` | How stage 1 treats a capability the catalog marks unknown |
+| `FOUNDRY_ANTHROPIC_MESSAGES_URL` | `{endpoint}/anthropic/v1/messages` | Override the Claude route |
+| `ANTHROPIC_VERSION` | `2023-06-01` | `anthropic-version` header for Claude |
+| `ROUTER_ANTHROPIC_DEFAULT_MAX_TOKENS` | `4096` | Output budget sent to Claude when the request sets none |
 | `ROUTER_LOW_CONFIDENCE_THRESHOLD` | `0.5` | Below this top probability, call the second-ranked model first; `0` turns the rule off |
 | `ROUTER_REQUEST_TIMEOUT_SECONDS` | `60` | Per model call |
 | `ROUTER_TOTAL_TIMEOUT_SECONDS` | `90` | Whole request, across fallbacks |

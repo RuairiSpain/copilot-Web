@@ -92,8 +92,9 @@ def _option_order_run(make_pipeline, fake, bias):
         results = []
         for i in range(40):
             body["messages"][0]["content"] = f"Plan a database migration, variant {i}."
-            routed = await pipe.route(body, "balanced", f"r{i}")
-            results += await option_order_test(pipe, routed, body, 2, f"k{i}")
+            prepared = pipe.prepare(dict(body, routing_mode="balanced"))
+            routed = await pipe.route(prepared, f"r{i}")
+            results += await option_order_test(pipe, routed, prepared.body, 2, f"k{i}")
         return results
     return asyncio.run(go())
 

@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from . import __version__
 from .auth import FoundryAuth
-from .catalog import Catalog
+from .catalog import Catalogs
 from .config import Settings
 from .decision1 import Decision1Client
 from .foundry import ChatClient
@@ -20,18 +20,19 @@ from .telemetry import Telemetry
 
 
 def build_pipeline(settings: Settings) -> RouterPipeline:
-    catalog = Catalog.load(settings.catalog_path, settings.deployment_overrides, settings.default_mode)
+    catalogs = Catalogs.load(settings.catalog_dir, settings.compatibility, settings.deployment_overrides,
+                             settings.default_mode)
     if not settings.configured:
         raise RuntimeError("set FOUNDRY_ENDPOINT (or DECISION1_ENDPOINT and FOUNDRY_CHAT_COMPLETIONS_URL)")
     chat_auth = FoundryAuth(settings.foundry_api_key)
     decision_auth = FoundryAuth(settings.decision1_api_key) if settings.decision1_api_key else chat_auth
     return RouterPipeline(
         settings,
-        catalog,
+        catalogs,
         Decision1Client(settings.resolved_decision1_url or "", settings.decision1_deployment, decision_auth,
                         timeout_seconds=settings.decision_timeout_seconds,
                         max_attempts=settings.decision_max_attempts),
-        ChatClient(settings.resolved_chat_url or "", chat_auth),
+        ChatClient(settings, chat_auth),
         Telemetry(settings.decision_log_path, settings.log_prompts),
         PriceTable(settings.pricing_path),
     )
@@ -41,6 +42,7 @@ def _routing_headers(routed: Routed, served: str | None = None) -> dict[str, str
     headers = {
         "x-request-id": routed.request_id,
         "x-router-mode": routed.mode,
+        "x-router-compatibility": routed.catalog.compatibility,
         "x-router-ranking": ",".join(routed.decision.ranking),
         "x-router-low-confidence": str(routed.low_confidence).lower(),
     }
@@ -89,8 +91,9 @@ def create_app(settings: Settings | None = None, *, pipeline: RouterPipeline | N
     @app.post("/openai/v1/chat/completions")
     async def chat_completions(request: Request) -> Response:
         rid = request_id(request)
-        mode, body = pipe.prepare(await read_body(request))
-        routed = await pipe.route(body, mode, rid)
+        prepared = pipe.prepare(await read_body(request))
+        routed = await pipe.route(prepared, rid)
+        body = prepared.body
         if body.get("stream"):
             result = await pipe.stream(routed, body)
             return StreamingResponse(result.chunks, status_code=result.status_code, media_type=result.content_type,
@@ -103,15 +106,17 @@ def create_app(settings: Settings | None = None, *, pipeline: RouterPipeline | N
     async def route_only(request: Request) -> JSONResponse:
         """Stages 1 and 2 only: what would be called, without calling it."""
         rid = request_id(request)
-        mode, body = pipe.prepare(await read_body(request))
-        routed = await pipe.route(body, mode, rid)
-        pipe.record_route_only(routed, body)
+        prepared = pipe.prepare(await read_body(request))
+        routed = await pipe.route(prepared, rid)
+        pipe.record_route_only(routed, prepared.body)
         decision = routed.decision
         return JSONResponse(
             {
                 "request_id": rid,
-                "routing_mode": mode,
+                "routing_mode": routed.mode,
+                "compatibility": routed.catalog.compatibility,
                 "candidates": [m.name for m in routed.candidates],
+                "stage1": routed.event["stage1"],
                 "ranking": [{"model": name, "probability": decision.probabilities[name]} for name in decision.ranking],
                 "execution_order": routed.order,
                 "low_confidence": routed.low_confidence,
@@ -129,9 +134,8 @@ def create_app(settings: Settings | None = None, *, pipeline: RouterPipeline | N
     async def ready() -> dict[str, Any]:
         return {
             "status": "ready",
-            "catalog_sha256": pipe.catalog.fingerprint,
-            "models": [m.name for m in pipe.catalog.models],
-            "default_mode": pipe.catalog.default_mode,
+            "default_compatibility": pipe.catalogs.default,
+            "catalogs": {name: c.describe() for name, c in pipe.catalogs.catalogs.items()},
             "decision1_deployment": pipe.decision.deployment,
         }
 

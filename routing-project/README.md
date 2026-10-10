@@ -3,8 +3,11 @@
 A model router for Microsoft Foundry that takes the same input as Foundry Model Router
 and returns the same output, but makes its choice with **Microsoft-Decision-1**:
 
-1. **Stage 1 (deterministic).** The routing mode (`cost`, `balanced`, `quality`) filters the
-   model pool to a candidate list.
+1. **Stage 1 (deterministic).** Starting from the chosen catalog (`compatibility`: `old` is
+   Model Router's pool without deprecated models, `new` is the latest models), filters remove
+   models by lifecycle, the operator allow-list, the request's `routing_constraints` (model
+   subset, providers, capabilities, region, residency, context size), what the request itself
+   needs (tools, images, JSON schema, streaming), and finally the routing mode's price band.
 2. **Stage 2 (Decision-1).** The conversation, the routing instructions and the candidates
    with their descriptions go to Decision-1 as one `choice` question. Its probabilities give
    a ranked list of models.
@@ -22,7 +25,7 @@ There is no other router behind Decision-1. If it cannot answer, the request fai
 |---|---|
 | `decision-router/` | The service, the comparison harness, tests and deployment manifests |
 | `dataset-v31/` | 40,000 prompts used to compare this router with Foundry Model Router |
-| `docs/` | Architecture, the Decision-1 contract, and the option-order testing guide |
+| `docs/` | Architecture and the Decision-1 contract, stage-1 filtering, the model catalogs, option-order testing |
 
 ## Quick start
 
@@ -40,6 +43,9 @@ curl -s localhost:5001/v1/chat/completions -H 'content-type: application/json' -
   "messages": [{"role": "user", "content": "Summarise the attached contract clause."}],
   "routing_mode": "cost", "max_completion_tokens": 400}'
 ```
+
+Claude models are called through the Anthropic Messages API and their answers are translated
+back, so every response has the same chat-completions shape.
 
 The response body is the chosen model's chat completion, unchanged. Its `model` field names
 the model that answered, as with Model Router. Routing details are in the

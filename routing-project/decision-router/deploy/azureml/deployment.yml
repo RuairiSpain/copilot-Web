@@ -13,6 +13,7 @@ environment_variables:
   FOUNDRY_ENDPOINT: "https://<resource>.services.ai.azure.com"
   DECISION1_DEPLOYMENT: "microsoft-decision-1"
   ROUTER_DEFAULT_MODE: "balanced"
+  ROUTER_COMPATIBILITY: "new"
   # Keep the router's own budget below request_timeout_ms so it can return a clean error.
   ROUTER_TOTAL_TIMEOUT_SECONDS: "110"
 instance_type: Standard_DS2_v2

@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from decision_router.auth import FoundryAuth  # noqa: E402
-from decision_router.catalog import Catalog  # noqa: E402
+from decision_router.catalog import Catalogs  # noqa: E402
 from decision_router.config import Settings  # noqa: E402
 from decision_router.decision1 import Decision1Client  # noqa: E402
 from decision_router.foundry import ChatClient  # noqa: E402
@@ -32,18 +32,28 @@ def settings() -> Settings:
 
 
 @pytest.fixture
-def catalog(settings: Settings) -> Catalog:
-    return Catalog.load(settings.catalog_path)
+def catalogs(settings: Settings) -> Catalogs:
+    return Catalogs.load(settings.catalog_dir, settings.compatibility)
 
 
 @pytest.fixture
-def fake(catalog: Catalog) -> FakeFoundry:
+def catalog(catalogs: Catalogs):
+    return catalogs.get("old")
+
+
+@pytest.fixture
+def new_catalog(catalogs: Catalogs):
+    return catalogs.get("new")
+
+
+@pytest.fixture
+def fake(catalog) -> FakeFoundry:
     return FakeFoundry([m.deployment for m in catalog.models],
                        {"model-router": [m.name for m in catalog.models]})
 
 
 @pytest.fixture
-def make_pipeline(settings: Settings, catalog: Catalog, fake: FakeFoundry, tmp_path: Path):
+def make_pipeline(settings: Settings, catalogs: Catalogs, fake: FakeFoundry, tmp_path: Path):
     def build(**overrides) -> RouterPipeline:
         s = replace(settings, decision_log_path=tmp_path / "decisions.jsonl", **overrides)
         http = httpx.AsyncClient(transport=fake.transport())
@@ -54,9 +64,9 @@ def make_pipeline(settings: Settings, catalog: Catalog, fake: FakeFoundry, tmp_p
             sleeps.append(seconds)
 
         pipe = RouterPipeline(
-            s, catalog,
+            s, catalogs,
             Decision1Client(s.resolved_decision1_url, s.decision1_deployment, auth, http=http, sleep=no_sleep),
-            ChatClient(s.resolved_chat_url, auth, http=http),
+            ChatClient(s, auth, http=http),
             Telemetry(s.decision_log_path), PriceTable(s.pricing_path), sleep=no_sleep,
         )
         pipe.sleeps = sleeps
