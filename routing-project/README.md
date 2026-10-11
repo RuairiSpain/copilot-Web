@@ -25,7 +25,7 @@ There is no other router behind Decision-1. If it cannot answer, the request fai
 |---|---|
 | `decision-router/` | The service, the comparison harness, tests and deployment manifests |
 | `dataset-v31/` | 40,000 prompts used to compare this router with Foundry Model Router |
-| `docs/` | Architecture and the Decision-1 contract, stage-1 filtering, the model catalogs, option-order testing |
+| `docs/` | Architecture and the Decision-1 contract, stage-1 filtering, the model catalogs, authentication and Foundry Agent Service, option-order testing |
 
 ## Quick start
 
@@ -35,11 +35,12 @@ pip install -r requirements-dev.txt
 pytest -q                                    # no credentials needed
 
 export FOUNDRY_ENDPOINT=https://<resource>.services.ai.azure.com
+export ROUTER_API_KEYS=<a-long-random-key>   # or ROUTER_ENTRA_TENANT_ID + ROUTER_ENTRA_AUDIENCE
 python -m decision_router                    # serves on :5001
 ```
 
 ```bash
-curl -s localhost:5001/v1/chat/completions -H 'content-type: application/json' -d '{
+curl -s localhost:5001/v1/chat/completions -H 'content-type: application/json' -H "api-key: $ROUTER_API_KEYS" -d '{
   "messages": [{"role": "user", "content": "Summarise the attached contract clause."}],
   "routing_mode": "cost", "max_completion_tokens": 400}'
 ```
