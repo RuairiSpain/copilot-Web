@@ -37,7 +37,7 @@ without them is a plain Model Router request.
 | Field | Effect |
 |---|---|
 | `routing_mode` | `cost`, `balanced` or `quality`. Picks a price band of what is left after the other steps, and the instructions Decision-1 receives. |
-| `routing_cost_band` | Replaces the mode's price band. A label in the `new` catalog (`low`, `medium`, `high`, `top`) or a dollar range on either catalog: `"1-3"`, `"$10-$25"`, `"30-"` (no upper limit) or `{"min": 1, "max": 3}`. With `routing_constraints.actions`, a label means an even price group of that action's models instead of a dollar range. See [Cost bands](#cost-bands). |
+| `routing_cost_band` | Replaces the mode's price band. A label in the `new` catalog (`low`, `medium`, `medium-high`, `high`, `top`) or a dollar range on either catalog: `"1-3"`, `"$10-$25"`, `"30-"` (no upper limit) or `{"min": 1, "max": 3}`. With `routing_constraints.actions`, a label means an even price group of that action's models instead of a dollar range. See [Cost bands](#cost-bands). |
 | `compatibility` | `old` (Model Router pool) or `new` (latest models). See `MODEL_CATALOGS.md`. |
 | `claude_translation` | `true` (default): the body is chat completions, and Claude is called through the translation layer. `false`: the body is an Anthropic Messages request, only Claude models are candidates, and the chosen one receives the body unchanged (only `model` is set) and its native response is returned. See below. |
 | `routing_pin` | `true`: keep the conversation on the model that answered its first turn; stage 1 still runs on every turn. See `AGENT_SERVICE.md`. |
@@ -59,25 +59,27 @@ Unknown keys, unknown model names and unknown capability names return 400
 
 `routing_cost_band` selects models by USD output price per million tokens, from
 `config/model_pricing.json`, instead of by thirds. Both ends of a range are inclusive, so a model priced exactly on an
-edge ($1 or $25) is in both bands. The `new` catalog defines four named bands (`cost_bands` in `config/catalog_spec.json`):
+edge ($1, $3, $10 or $25) is in both bands. The `new` catalog defines five named bands (`cost_bands` in
+`config/catalog_spec.json`), which together cover $0–$60 with no gaps:
 
 | Band | Output price | Models in `new` |
 |---|---|---|
 | `low` | $0–$1 | Phi-4-mini-instruct, FW-GLM-5.3-Flash, claude-haiku-5-5, gpt-5.4-nano, Phi-4, gpt-oss-120b, Phi-4-reasoning, Llama-4-Maverick, grok-4-1-fast-reasoning, DeepSeek-V4-Flash |
 | `medium` | $1–$3 | gpt-5.4-mini, gpt-6-luna, FW-GLM-5.3, FW-Kimi-K3 |
+| `medium-high` | $3–$10 | gpt-5.4-mini, DeepSeek-V4-Pro, gpt-5.6-terra, MAI-Thinking-1, claude-sonnet-5-5, gpt-6.1-sol |
 | `high` | $10–$25 | claude-sonnet-5-5, gpt-6.1-sol, gpt-5.5, grok-4.7, claude-opus-5-5 |
 | `top` | $25–$60 | gpt-6-astra |
 
-The ranges leave one gap, $3–$10. DeepSeek-V4-Pro ($4), MAI-Thinking-1 ($7.50) and gpt-5.6-terra ($8)
-are in no named band; they are reached with `balanced` mode or a dollar range such as `"3-10"`.
+Every model is in at least one band. gpt-5.4-mini ($3) is in `medium` and `medium-high`;
+claude-sonnet-5-5 and gpt-6.1-sol ($10) are in `medium-high` and `high`.
 
 - The band is applied after the other steps, like the routing mode's band. Unlike a mode, a
   band can leave no models, for example `top` with `providers: ["Anthropic"]`, which returns 422.
 - `routing_mode` still applies: it sets the instructions Decision-1 receives inside the band.
 - The `old` catalog has no named bands and keeps the routing modes' thirds. A band name sent
   with `old` returns 400 `invalid_routing_cost_band`; a dollar range works on both catalogs.
-- Callers that can't add the field use the profiles `decision-router-low`, `-medium`, `-high`
-  and `-top` (`AGENT_SERVICE.md`).
+- Callers that can't add the field use the profiles `decision-router-low`, `-medium`,
+  `-medium-high`, `-high` and `-top` (`AGENT_SERVICE.md`).
 - `/v1/route` and the decision log report the band as `cost_band`.
 
 ### Labels with an action: even price groups
@@ -93,7 +95,8 @@ so on), sorts them by output price, and splits them into groups:
 With four groups, `low`, `medium`, `high` and `top` are the cheapest to the most expensive group.
 With fewer models, neighbouring labels share a group: with three groups `medium` and `high` share
 the middle one, with two `low` = `medium` and `high` = `top`, and with one (two or three models)
-every label returns all of them. So a label with an action never leaves fewer than two models when
+every label returns all of them. `medium-high` returns the `medium` and `high` groups together
+(the middle of the action's price range), or the shared group when they are the same. So a label with an action never leaves fewer than two models when
 two or more remain, and never leaves none.
 
 The groups for each action in `new`, with no other filters (output price per million tokens):

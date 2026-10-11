@@ -48,7 +48,7 @@ that supplies those fields:
 | `decision-router-cost` | `routing_mode: cost` |
 | `decision-router-balanced` | `routing_mode: balanced` |
 | `decision-router-quality` | `routing_mode: quality` |
-| `decision-router-low`, `-medium`, `-high`, `-top` | the `new` catalog and that cost band (`routing_cost_band`, see `STAGE1_FILTERING.md`) |
+| `decision-router-low`, `-medium`, `-medium-high`, `-high`, `-top` | the `new` catalog and that cost band (`routing_cost_band`, see `STAGE1_FILTERING.md`) |
 | `decision-router-coding` | For coding agents: the `new` catalog, `balanced` mode, pinning on, and only models strong at multi-step tool use that support `tools`: gpt-5.4-mini, gpt-5.5, gpt-6-astra, claude-haiku-5-5, claude-sonnet-5-5, claude-opus-5-5, DeepSeek-V4-Pro, FW-GLM-5.3 |
 | anything else | no profile; the router's defaults apply (as before) |
 

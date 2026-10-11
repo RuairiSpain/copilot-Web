@@ -31,11 +31,12 @@ def test_named_bands_on_output_price(new_catalog, settings):
     assert band(new_catalog, settings, "TOP")[0] == ["gpt-6-astra"]
 
 
-def test_models_in_the_gaps_are_in_no_named_band(new_catalog, settings):
-    named = {n for b in ("low", "medium", "high", "top") for n in band(new_catalog, settings, b)[0]}
-    assert {m.name for m in new_catalog.models} - named == {"DeepSeek-V4-Pro", "MAI-Thinking-1", "gpt-5.6-terra"}
-    assert band(new_catalog, settings, "3-10")[0] == ["gpt-5.4-mini", "DeepSeek-V4-Pro", "gpt-5.6-terra",
-                                                       "MAI-Thinking-1", "claude-sonnet-5-5", "gpt-6.1-sol"]
+def test_medium_high_closes_the_gap(new_catalog, settings):
+    assert band(new_catalog, settings, "medium-high")[0] == ["gpt-5.4-mini", "DeepSeek-V4-Pro", "gpt-5.6-terra",
+                                                              "MAI-Thinking-1", "claude-sonnet-5-5", "gpt-6.1-sol"]
+    assert band(new_catalog, settings, "medium-high")[0] == band(new_catalog, settings, "3-10")[0]
+    named = {n for b in new_catalog.cost_bands for n in band(new_catalog, settings, b)[0]}
+    assert named == {m.name for m in new_catalog.models}  # every model is in at least one named band
 
 
 @pytest.mark.parametrize("raw", ["0-1", "$0-$1", "0..1", {"min": 0, "max": 1}, {"max": 1}, "-1"])
@@ -58,7 +59,7 @@ def test_band_runs_after_the_other_filters_and_can_empty(new_catalog, settings):
 
 
 @pytest.mark.parametrize("raw, message", [
-    ("cheap", r"band name \(low, medium, high, top\)"),
+    ("cheap", r"band name \(low, medium, medium-high, high, top\)"),
     ("3-1", "min is above max"),
     ({"min": 1, "low": 2}, '"min" and/or "max"'),
     ({"min": -1}, "non-negative"),
@@ -78,6 +79,7 @@ def test_old_catalog_has_no_named_bands(catalog):
 def test_request_field_and_profiles(make_pipeline, settings, fake):
     pipe = make_pipeline()
     assert pipe.prepare({"model": "decision-router-top", "messages": USER["messages"]}).cost_band.name == "top"
+    assert pipe.prepare({"model": "decision-router-medium-high", "messages": USER["messages"]}).cost_band.max == 10
     fake.decision_responses.append(ranked(["gpt-5.5", "claude-opus-5-5"]))
     with TestClient(create_app(settings, pipeline=make_pipeline())) as c:
         routed = c.post("/v1/route", json={**USER, "compatibility": "new", "routing_cost_band": "high"}).json()
@@ -111,6 +113,15 @@ def test_equal_prices_stay_in_one_group(new_catalog):
         assert sum(map(len, groups)) == len(pool) and min(map(len, groups)) >= 2
         for low, high in zip(groups, groups[1:], strict=False):
             assert max(m.output_price for m in low) < min(m.output_price for m in high), action
+
+
+def test_medium_high_with_an_action_joins_the_middle_groups(new_catalog, settings):
+    both = grouped(new_catalog, settings, "code", "medium-high")
+    assert both == sorted(grouped(new_catalog, settings, "code", "medium") + grouped(new_catalog, settings, "code", "high"))
+    assert grouped(new_catalog, settings, "write", "medium-high") == ["Llama-4-Maverick-17B-128E-Instruct-FP8", "Phi-4",
+                                                                      "gpt-5.4-nano", "gpt-6-luna"]
+    # translate has one group: every label, medium-high included, returns it
+    assert grouped(new_catalog, settings, "translate", "medium-high") == grouped(new_catalog, settings, "translate", "low")
 
 
 def test_fewer_groups_share_labels(new_catalog, settings):

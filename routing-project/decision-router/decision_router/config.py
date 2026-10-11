@@ -19,7 +19,7 @@ DEFAULT_PROFILES: dict[str, dict[str, Any]] = {
     "decision-router-quality": {"routing_mode": "quality"},
     # The new catalog's named cost bands (catalog_spec.json), for callers that can't send routing_cost_band.
     **{f"decision-router-{band}": {"compatibility": "new", "routing_cost_band": band}
-       for band in ("low", "medium", "high", "top")},
+       for band in ("low", "medium", "medium-high", "high", "top")},
     # Coding agents: models strong at multi-step tool use, conversation pinned to one model.
     # Balanced, so Decision-1 weighs the whole list instead of only its most expensive third.
     "decision-router-coding": {

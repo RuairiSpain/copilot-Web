@@ -13,7 +13,8 @@ removed which model and why:
   5. location           routing_constraints.region / deployment_type / inference_in_azure
   6. size               estimated prompt + output tokens against the context window, input and output limits
   7. price band         with routing_cost_band: a band name plus routing_constraints.actions picks one
-                        of up to four even groups of what is left, by output price (action_cost_groups);
+                        of up to four even groups of what is left, by output price (action_cost_groups;
+                        medium-high is the medium and high groups together);
                         a band name alone or a dollar range keeps the models whose output price is in
                         it. Otherwise the routing mode's share of what is left, by tier
 
@@ -36,7 +37,8 @@ KNOWN_CAPABILITIES = ("tools", "structured_output", "streaming", "reasoning", "i
 DEPLOYMENT_TYPES = ("global_standard", "data_zone_standard", "standard")
 CONSTRAINT_KEYS = ("models", "exclude_models", "providers", "capabilities", "region", "deployment_type",
                    "inference_in_azure", "min_context_tokens", "allow_preview", "actions")
-COST_LABELS = ("low", "medium", "high", "top")
+COST_LABELS = ("low", "medium", "high", "top")  # one per action price group
+SPANNING_LABELS = {"medium-high": ("medium", "high")}  # with actions: the union of these groups
 
 
 class ConstraintError(ValueError):
@@ -311,8 +313,11 @@ def select(catalog: Catalog, mode: str, constraints: Constraints, body: dict[str
         if not step(name, keep):
             return result
 
-    if cost_band is not None and cost_band.name in COST_LABELS and constraints.actions:
-        group = {m.name for m in cost_group(action_cost_groups(remaining), cost_band.name)}
+    if cost_band is not None and constraints.actions and \
+            (cost_band.name in COST_LABELS or cost_band.name in SPANNING_LABELS):
+        groups = action_cost_groups(remaining)
+        labels = SPANNING_LABELS.get(cost_band.name, (cost_band.name,))
+        group = {m.name for label in labels for m in cost_group(groups, label)}
         what = f"the {cost_band.name} cost group for {', '.join(constraints.actions)}"
         step("price_band", lambda m: None if m.name in group else f"outside {what}")
     elif cost_band is not None:

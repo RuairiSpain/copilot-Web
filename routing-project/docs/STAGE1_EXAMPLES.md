@@ -51,10 +51,11 @@ How to read the examples:
 | A18 | Region where only global Fireworks models qualify | 3 of 26 |
 | A19 | Only one model passes | 1 of 23 |
 | A20 | Named cost band: high | 5 of 23 |
-| A21 | Dollar range instead of a band name | 6 of 23 |
-| A22 | Cost band profile with tools | 6 of 23 |
-| A23 | Action with a cost label: code, top | 4 of 23 |
-| A24 | Action with a cost label, after a tools filter | 3 of 23 |
+| A21 | Named cost band: medium-high | 6 of 23 |
+| A22 | Dollar range instead of a band name | 12 of 23 |
+| A23 | Cost band profile with tools | 6 of 23 |
+| A24 | Action with a cost label: code, top | 4 of 23 |
+| A25 | Action with a cost label, after a tools filter | 3 of 23 |
 | Z1 | Tools requested from models without tool calling | 0 models (empty at `capabilities`) |
 | Z2 | Tools on gpt-6.1-sol only | 0 models (empty at `capabilities`) |
 | Z3 | Regional (Standard) deployment type | 0 models (empty at `location`) |
@@ -679,19 +680,19 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5,claude-o
 
 **Explanation:** `routing_cost_band` replaces the mode's price band. The five models with output prices from $10 to $25 remain; the mode (`balanced`) still sets the instructions Decision-1 receives.
 
-### A21. Dollar range instead of a band name
+### A21. Named cost band: medium-high
 
-**Why it is useful:** A caller gives its own range. `3-10` covers the $3 to $10 gap that no named band includes.
+**Why it is useful:** `medium-high` is $3 to $10 per million output tokens, the range between `medium` and `high`.
 
 ```json
 {
   "compatibility": "new",
-  "routing_cost_band": "3-10",
+  "routing_cost_band": "medium-high",
   "messages": [{"role": "user", "content": "Summarise the attached contract clause and flag anything unusual."}]
 }
 ```
 
-**Read from the request:** catalog `new` (23 models), mode `balanced`, cost band $3-$10, estimated ~26 prompt tokens. Requirements: none.
+**Read from the request:** catalog `new` (23 models), mode `balanced`, cost band medium-high ($3-$10), estimated ~26 prompt tokens. Requirements: none.
 
 | Step | Removed | Left |
 |---|---|---|
@@ -702,13 +703,42 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5,claude-o
 | `capabilities` | – | 23 |
 | `location` | – | 23 |
 | `size` | – | 23 |
-| `price_band` | 17 × outside cost band $3-$10 | 6 |
+| `price_band` | 17 × outside cost band medium-high ($3-$10) | 6 |
 
 **Stage 1 output (the 6 options Decision-1 chooses from, cheapest first):** `gpt-5.4-mini`, `DeepSeek-V4-Pro`, `gpt-5.6-terra`, `MAI-Thinking-1`, `claude-sonnet-5-5`, `gpt-6.1-sol`
 
-**Explanation:** Both ends are inclusive, so gpt-5.4-mini ($3) and the two $10 models are kept alongside the three models that sit in the gap: DeepSeek-V4-Pro, gpt-5.6-terra and MAI-Thinking-1.
+**Explanation:** Both ends are inclusive, so gpt-5.4-mini ($3, also in `medium`) and the two $10 models (also in `high`) are kept alongside DeepSeek-V4-Pro, gpt-5.6-terra and MAI-Thinking-1, which are in no other band.
 
-### A22. Cost band profile with tools
+### A22. Dollar range instead of a band name
+
+**Why it is useful:** A caller gives its own range when no named band fits: here $2.50 to $33.33.
+
+```json
+{
+  "compatibility": "new",
+  "routing_cost_band": "2.5-33.33",
+  "messages": [{"role": "user", "content": "Summarise the attached contract clause and flag anything unusual."}]
+}
+```
+
+**Read from the request:** catalog `new` (23 models), mode `balanced`, cost band $2.5-$33.33, estimated ~26 prompt tokens. Requirements: none.
+
+| Step | Removed | Left |
+|---|---|---|
+| `api` | – | 23 |
+| `lifecycle` | – | 23 |
+| `allowlist` | – | 23 |
+| `selection` | – | 23 |
+| `capabilities` | – | 23 |
+| `location` | – | 23 |
+| `size` | – | 23 |
+| `price_band` | outside cost band $2.5-$33.33: `Phi-4-mini-instruct`, `FW-GLM-5.3-Flash`, `claude-haiku-5-5`, `gpt-5.4-nano`, `Phi-4`, `gpt-oss-120b`, `Phi-4-reasoning`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `grok-4-1-fast-reasoning`, `DeepSeek-V4-Flash`, `gpt-6-astra` | 12 |
+
+**Stage 1 output (the 12 options Decision-1 chooses from, cheapest first):** `gpt-5.4-mini`, `gpt-6-luna`, `FW-GLM-5.3`, `FW-Kimi-K3`, `DeepSeek-V4-Pro`, `gpt-5.6-terra`, `MAI-Thinking-1`, `claude-sonnet-5-5`, `gpt-6.1-sol`, `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`
+
+**Explanation:** The range keeps every model with an output price from $2.50 to $33.33, both ends included. It spans parts of four named bands, and leaves out the models under $2.50 and gpt-6-astra ($50).
+
+### A23. Cost band profile with tools
 
 **Why it is useful:** A Foundry agent that can't send `routing_cost_band` uses the built-in `decision-router-low` profile, and its request carries tools.
 
@@ -737,7 +767,7 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5,claude-o
 
 **Explanation:** The profile selects the `new` catalog and the `low` band. The capabilities step first removes the six models without Chat Completions tool calling: the three Phi models, Llama 4 Maverick, gpt-5.6-terra and gpt-6.1-sol. The band then keeps the six remaining models priced at $1 or less per million output tokens.
 
-### A23. Action with a cost label: code, top
+### A24. Action with a cost label: code, top
 
 **Why it is useful:** With `routing_constraints.actions`, the labels low, medium, high and top mean even groups of the models tagged for that action, by output price, instead of fixed dollar ranges.
 
@@ -767,7 +797,7 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5,claude-o
 
 **Explanation:** The capabilities step keeps the 14 models tagged `code`. They split into four groups of 3, 4, 3 and 4 by output price, and `top` is the most expensive group: gpt-5.5, grok-4.7, claude-opus-5-5 and gpt-6-astra. gpt-5.5 and grok-4.7 cost the same ($15), so they stay in one group.
 
-### A24. Action with a cost label, after a tools filter
+### A25. Action with a cost label, after a tools filter
 
 **Why it is useful:** The groups are formed from what the earlier steps leave, so a request with tools gets a split of the code models that can call tools.
 

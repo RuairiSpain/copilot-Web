@@ -43,7 +43,7 @@ with `default_mode` in the catalog or `ROUTER_DEFAULT_MODE`, and also accepts a
 `routing_mode` field per request. The mode picks a price band of whatever stage 1 leaves:
 `cost` the cheapest third, `balanced` all, `quality` the most expensive third. A
 `routing_cost_band` field replaces that band with an output-price range: a named band in the
-`new` catalog (`low`, `medium`, `high`, `top`) or a dollar range (`docs/STAGE1_FILTERING.md`).
+`new` catalog (`low`, `medium`, `medium-high`, `high`, `top`) or a dollar range (`docs/STAGE1_FILTERING.md`).
 
 **Extension fields.** `routing_mode`, `routing_cost_band`, `compatibility` and `routing_constraints` are read by this
 router and removed before the request is forwarded, so the model sees a plain chat-completions
