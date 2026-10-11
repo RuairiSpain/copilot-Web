@@ -10,7 +10,7 @@ Operators can also cap the choice for every request. Code: `decision-router/deci
 
 ## Request fields
 
-All four are optional and are removed before the request reaches a model, so a request
+These fields are all optional and are removed before the request reaches a model, so a request
 without them is a plain Model Router request.
 
 ```json
@@ -37,6 +37,7 @@ without them is a plain Model Router request.
 | `routing_mode` | `cost`, `balanced` or `quality`. Picks a price band of what is left after the other steps. |
 | `compatibility` | `old` (Model Router pool) or `new` (latest models). See `MODEL_CATALOGS.md`. |
 | `claude_translation` | `true` (default): the body is chat completions, and Claude is called through the translation layer. `false`: the body is an Anthropic Messages request, only Claude models are candidates, and the chosen one receives the body unchanged (only `model` is set) and its native response is returned. See below. |
+| `routing_pin` | `true`: keep the conversation on the model that answered its first turn; stage 1 still runs on every turn. See `AGENT_SERVICE.md`. |
 | `routing_constraints.models` | Only these models: the developer's chosen subset. Names must exist in the selected catalog. |
 | `routing_constraints.exclude_models` | Never these models. |
 | `routing_constraints.providers` | Only models from these providers (case-insensitive): `OpenAI`, `Anthropic`, `xAI`, `DeepSeek`, `Meta`, `Fireworks`, `Microsoft`. |

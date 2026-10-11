@@ -26,12 +26,13 @@ from .catalog import Catalog, CatalogError, Catalogs, ModelEntry
 from .config import ROUTING_MODES, Settings
 from .decision1 import Decision, Decision1Client, DecisionError, build_state, execution_order
 from .foundry import ChatClient
+from .pinning import PinStore, conversation_key
 from .pricing import PriceTable
 from .stage1 import ConstraintError, Constraints, parse_constraints, select
 from .telemetry import Telemetry
 
 # Extension fields this router reads; removed before the body is forwarded to a model.
-ROUTER_FIELDS = ("routing_mode", "compatibility", "routing_constraints", "claude_translation")
+ROUTER_FIELDS = ("routing_mode", "compatibility", "routing_constraints", "claude_translation", "routing_pin")
 
 
 class RoutingError(Exception):
@@ -95,6 +96,8 @@ class Prepared:
     passthrough: bool = False
     profile: str | None = None
     caller: dict[str, Any] | None = None  # who called (inbound.Caller.log()), for the decision log
+    pin: bool = False  # routing_pin: keep the conversation on one model (pinning.py)
+    session_id: str | None = None  # x-router-session-id header, when sent
 
 
 @dataclass
@@ -110,6 +113,7 @@ class Routed:
     order: list[str] = field(default_factory=list)
     low_confidence: bool = False
     passthrough: bool = False
+    pin_key: str | None = None  # set when pinning is on: a successful answer (re)pins the conversation
 
 
 @dataclass
@@ -145,6 +149,7 @@ class RouterPipeline:
         self.prices = prices
         self._sleep = sleep
         self._clock = clock
+        self.pins = PinStore(settings.pin_ttl_seconds, settings.pin_max_entries, clock=clock)
 
     # ------------------------------------------------------------------ request shape
     def prepare(self, body: Any) -> Prepared:
@@ -171,6 +176,9 @@ class RouterPipeline:
         translation = body.get("claude_translation", True)
         if not isinstance(translation, bool):
             raise RoutingError(400, "invalid_request", "claude_translation must be true or false")
+        pin = body.get("routing_pin", self.settings.pin_default)
+        if not isinstance(pin, bool):
+            raise RoutingError(400, "invalid_request", "routing_pin must be true or false")
         try:
             constraints = parse_constraints(body.get("routing_constraints"), catalog)
         except ConstraintError as exc:
@@ -178,7 +186,7 @@ class RouterPipeline:
         # `model` names the router deployment the client called; it is replaced per target.
         forwarded = {k: v for k, v in body.items() if k not in ROUTER_FIELDS and k != "model"}
         return Prepared(mode, catalog, constraints, forwarded, passthrough=not translation,
-                        profile=profile_name if profile else None)
+                        profile=profile_name if profile else None, pin=pin)
 
     # ------------------------------------------------------------------ stages 1 and 2
     async def route(self, prepared: Prepared, request_id: str) -> Routed:
@@ -206,22 +214,33 @@ class RouterPipeline:
                                f"no model in the '{catalog.compatibility}' catalog passes stage 1; the "
                                f"'{stage1.empty_at}' step removed the last candidates",
                                details={"stage1": stage1.log()})
-        try:
-            decision = await self.decision.decide(
-                build_state(body, self.settings.state_max_chars),
-                catalog.modes[mode].instructions,
-                catalog.criteria(candidates),
-                candidates,
-            )
-        except DecisionError as exc:
-            event.update(outcome="decision_failed", error_code=exc.code,
-                         total_latency_ms=round((self._clock() - started) * 1000, 3))
-            self.telemetry.record(event, body)
-            status = 504 if exc.code == "timeout" else 503 if exc.status_code == 429 else 502
-            raise RoutingError(status, "decision_unavailable", f"Decision-1 failed: {exc}") from exc
-        order, low_confidence = execution_order(decision.ranking, decision.probabilities,
-                                                0.0 if decision.skipped else self.settings.low_confidence_threshold)
+        pin_key, pinned, pin_log = self._pin_lookup(prepared, stage1, candidates)
+        if pin_log:
+            event["pin"] = pin_log
+        if pinned:
+            names = [m.name for m in candidates]
+            ranking = [n for n in pinned.ranking if n in names] + [n for n in names if n not in pinned.ranking]
+            decision = Decision(names, ranking, {n: pinned.probabilities.get(n, 0.0) for n in ranking},
+                                pinned.model, None, 0.0, skipped=True)
+            order, low_confidence = ranking, False
+        else:
+            try:
+                decision = await self.decision.decide(
+                    build_state(body, self.settings.state_max_chars),
+                    catalog.modes[mode].instructions,
+                    catalog.criteria(candidates),
+                    candidates,
+                )
+            except DecisionError as exc:
+                event.update(outcome="decision_failed", error_code=exc.code,
+                             total_latency_ms=round((self._clock() - started) * 1000, 3))
+                self.telemetry.record(event, body)
+                status = 504 if exc.code == "timeout" else 503 if exc.status_code == 429 else 502
+                raise RoutingError(status, "decision_unavailable", f"Decision-1 failed: {exc}") from exc
+            order, low_confidence = execution_order(decision.ranking, decision.probabilities,
+                                                    0.0 if decision.skipped else self.settings.low_confidence_threshold)
         event["decision"] = {
+            "pinned": pinned is not None,
             "deployment": self.decision.deployment,
             "ranking": decision.ranking,
             "execution_order": order,
@@ -239,7 +258,27 @@ class RouterPipeline:
             "cost": self.prices.decision_cost(decision.usage),
         }
         return Routed(request_id, mode, catalog, candidates, decision, started, event, order, low_confidence,
-                      prepared.passthrough)
+                      prepared.passthrough, pin_key)
+
+    def _pin_lookup(self, prepared: Prepared, stage1, candidates: list[ModelEntry]):
+        """(key, pin to follow or None, log entry or None) for this request."""
+        if not prepared.pin:
+            return None, None, None
+        caller = prepared.caller or {}
+        key = conversation_key(prepared.body, session_id=prepared.session_id,
+                               scope=(caller.get("method"), caller.get("identity"),
+                                      prepared.catalog.compatibility, prepared.mode, prepared.passthrough))
+        if key is None:
+            return None, None, {"status": "no_key"}
+        log: dict[str, Any] = {"key": key[:16], "source": "header" if prepared.session_id else "messages"}
+        pin = self.pins.get(key)
+        if pin is None:
+            return key, None, {**log, "status": "new"}
+        if pin.model in {m.name for m in candidates}:
+            return key, pin, {**log, "status": "followed", "model": pin.model}
+        reason = next((r["reason"] for s in stage1.steps for r in s["removed"] if r["model"] == pin.model),
+                      "not a candidate")
+        return key, None, {**log, "status": "rerouted", "previous_model": pin.model, "reason": reason}
 
     def record_route_only(self, routed: Routed, body: dict[str, Any]) -> None:
         routed.event.update(outcome="routed", total_latency_ms=round((self._clock() - routed.started) * 1000, 3))
@@ -320,6 +359,9 @@ class RouterPipeline:
         )
         if error_code:
             routed.event["error_code"] = error_code
+        if routed.pin_key and outcome == "success" and served:
+            self.pins.set(routed.pin_key, served.name, routed.order, routed.decision.probabilities)
+            routed.event.setdefault("pin", {})["pinned_to"] = served.name
         self.telemetry.record(routed.event, body)
 
     async def complete(self, routed: Routed, body: dict[str, Any]) -> Completion:

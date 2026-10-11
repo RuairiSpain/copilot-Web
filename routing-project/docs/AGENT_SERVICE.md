@@ -51,7 +51,8 @@ that supplies those fields:
 | anything else | no profile; the router's defaults apply (as before) |
 
 Add or replace profiles with `ROUTER_PROFILES`, a JSON object of name → fields. A profile can
-set any of `routing_mode`, `compatibility`, `routing_constraints` and `claude_translation`:
+set any of `routing_mode`, `compatibility`, `routing_constraints`, `claude_translation` and
+`routing_pin` (below):
 
 ```json
 {"agent-eu-support": {"routing_mode": "cost", "compatibility": "new",
@@ -98,6 +99,52 @@ What Microsoft's page says about this setup: it works for prompt agents only. Th
 tools are Code Interpreter, Functions, File Search, OpenAPI, Foundry IQ, SharePoint Grounding,
 Fabric Data Agent, MCP and Browser Automation. The router must be reachable from Agent
 Service's network.
+
+## Keeping a conversation on one model (pinning)
+
+An agent loop sends one request per step, each carrying the whole history, and Agent Service
+routes each one independently. Without pinning, a coding task can move between models step by
+step. The next model loses the previous one's reasoning, the code style can change, and
+prompt caching stops working. Turn pinning on with `"routing_pin": true` in the request, in a
+profile, or for every request with `ROUTER_PIN_DEFAULT=true`.
+
+```json
+{"agent-coding": {"routing_mode": "quality", "compatibility": "new", "routing_pin": true,
+                  "routing_constraints": {"capabilities": ["tools", "parallel_tools"]}}}
+```
+
+How it works (code: `decision-router/decision_router/pinning.py`):
+
+1. **First turn:** routed as usual. The model that answers becomes the conversation's pin, and the
+   rest of that turn's ranking is kept for fallback.
+2. **Later turns:** Decision-1 is not called. The pinned model is called first. If it fails, the
+   other models from the stored ranking that still pass stage 1 are tried in order, and
+   whichever answers becomes the new pin.
+3. **Stage 1 still runs on every turn.** If the pinned model no longer passes, the turn is
+   routed afresh and the conversation re-pinned. For example, a later step may add tools the
+   model can't call, or the history may outgrow its context window.
+
+**Identifying the conversation.** Agent Service sends no session ID, so the router uses the
+`x-router-session-id` header when a caller sends one. Otherwise it uses a hash of the first
+system message, the first user message and the `user` field, which every turn of a
+conversation repeats. Two conversations that start with exactly the same instructions and
+first message share a pin; the only effect is that both use the same model. Pins are never
+shared across callers (API key or Entra client), catalogs or routing modes.
+
+**Where pins are kept.** Pins are held in the replica's memory. They expire
+`ROUTER_PIN_TTL_SECONDS` after last use (default 3600), and at most `ROUTER_PIN_MAX_ENTRIES` are
+kept (default 10,000, least recently used dropped first). With several replicas, enable
+session affinity on the load balancer. Otherwise a request that reaches another replica is
+routed once and pinned there.
+
+**Seeing it.**
+- The `x-router-pin` response header is `new`, `followed`, `rerouted` or `no_key`.
+- The decision log's `pin` entry records the key prefix, the status, the model pinned to and,
+  for `rerouted`, the stage-1 reason the old model was dropped.
+- `/v1/route` reports the pin status but never creates a pin.
+
+Pinning is off by default, because Model Router routes every request independently and the
+comparison harness must behave the same way.
 
 ### Tools
 

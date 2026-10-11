@@ -16,6 +16,7 @@ from .config import Settings
 from .decision1 import Decision1Client
 from .foundry import ChatClient
 from .inbound import InboundAuth, Unauthorized
+from .pinning import SESSION_HEADER
 from .pipeline import ProviderError, Routed, RouterPipeline, RoutingError
 from .pricing import PriceTable
 from .telemetry import Telemetry
@@ -48,6 +49,8 @@ def _routing_headers(routed: Routed, served: str | None = None) -> dict[str, str
         "x-router-ranking": ",".join(routed.decision.ranking),
         "x-router-low-confidence": str(routed.low_confidence).lower(),
     }
+    if "pin" in routed.event:
+        headers["x-router-pin"] = routed.event["pin"].get("status", "")
     if served:
         headers["x-router-served-model"] = served
     return headers
@@ -99,7 +102,8 @@ def create_app(settings: Settings | None = None, *, pipeline: RouterPipeline | N
 
     async def prepare(request: Request) -> Any:
         caller = await gate.check(request.headers)
-        return replace(pipe.prepare(await read_body(request)), caller=caller.log())
+        session = request.headers.get(SESSION_HEADER)
+        return replace(pipe.prepare(await read_body(request)), caller=caller.log(), session_id=session or None)
 
     @app.exception_handler(ProviderError)
     async def provider_error(_: Request, exc: ProviderError) -> Response:
@@ -138,6 +142,7 @@ def create_app(settings: Settings | None = None, *, pipeline: RouterPipeline | N
                 "ranking": [{"model": name, "probability": decision.probabilities[name]} for name in decision.ranking],
                 "execution_order": routed.order,
                 "low_confidence": routed.low_confidence,
+                "pin": routed.event.get("pin"),
                 "decision": {"choice": decision.choice, "confidence": decision.confidence,
                              "latency_ms": decision.latency_ms, "skipped": decision.skipped},
             },
