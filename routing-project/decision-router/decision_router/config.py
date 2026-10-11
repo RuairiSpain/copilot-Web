@@ -81,6 +81,7 @@ class Settings:
     allow_preview: bool = True
     chars_per_token: float = 4.0
     pricing_path: Path = PACKAGE_ROOT / "config/model_pricing.json"
+    instructions_path: Path = PACKAGE_ROOT / "config/decision1_instructions.json"
     deployment_overrides: dict[str, str] = field(default_factory=dict)
     default_mode: str | None = None
     state_max_chars: int = 24_000
@@ -125,6 +126,8 @@ class Settings:
             model_allowlist=_list("ROUTER_MODEL_ALLOWLIST"),
             allow_preview=_bool("ROUTER_ALLOW_PREVIEW", True),
             pricing_path=Path(os.getenv("ROUTER_PRICING_PATH", str(PACKAGE_ROOT / "config/model_pricing.json"))),
+            instructions_path=Path(os.getenv("ROUTER_INSTRUCTIONS_PATH",
+                                             str(PACKAGE_ROOT / "config/decision1_instructions.json"))),
             deployment_overrides={str(k): str(v) for k, v in _json_object("ROUTER_DEPLOYMENT_MAP").items()},
             default_mode=os.getenv("ROUTER_DEFAULT_MODE") or None,
             state_max_chars=int(os.getenv("ROUTER_STATE_MAX_CHARS", "24000")),

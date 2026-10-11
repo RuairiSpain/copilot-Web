@@ -26,6 +26,7 @@ from .catalog import Catalog, CatalogError, Catalogs, CostBand, ModelEntry
 from .config import ROUTING_MODES, Settings
 from .decision1 import Decision, Decision1Client, DecisionError, build_state, execution_order
 from .foundry import ChatClient
+from .instructions import InstructionTemplates
 from .pinning import PinStore, conversation_key
 from .pricing import PriceTable
 from .stage1 import ConstraintError, Constraints, parse_constraints, parse_cost_band, select
@@ -116,6 +117,8 @@ class Routed:
     low_confidence: bool = False
     passthrough: bool = False
     pin_key: str | None = None  # set when pinning is on: a successful answer (re)pins the conversation
+    instructions: str = ""  # what Decision-1 was (or would have been) asked, from the instruction templates
+    criteria: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -152,6 +155,7 @@ class RouterPipeline:
         self._sleep = sleep
         self._clock = clock
         self.pins = PinStore(settings.pin_ttl_seconds, settings.pin_max_entries, clock=clock)
+        self.templates = InstructionTemplates.load(settings.instructions_path)
 
     # ------------------------------------------------------------------ request shape
     def prepare(self, body: Any) -> Prepared:
@@ -225,6 +229,12 @@ class RouterPipeline:
         pin_key, pinned, pin_log = self._pin_lookup(prepared, stage1, candidates)
         if pin_log:
             event["pin"] = pin_log
+        rendered = self.templates.render(
+            candidates, mode=mode, constraints=prepared.constraints, cost_band=prepared.cost_band,
+            requirements=stage1.requirements, body=body, chars_per_token=self.settings.chars_per_token,
+            profile=prepared.profile, passthrough=prepared.passthrough, pin=pin_log)
+        event["instructions"] = {"template_sha256": self.templates.fingerprint, "fragments": rendered.fragments,
+                                 "dropped": rendered.dropped, "text": rendered.instructions}
         if pinned:
             names = [m.name for m in candidates]
             ranking = [n for n in pinned.ranking if n in names] + [n for n in names if n not in pinned.ranking]
@@ -235,8 +245,8 @@ class RouterPipeline:
             try:
                 decision = await self.decision.decide(
                     build_state(body, self.settings.state_max_chars),
-                    catalog.modes[mode].instructions,
-                    catalog.criteria(candidates),
+                    rendered.instructions,
+                    rendered.criteria,
                     candidates,
                 )
             except DecisionError as exc:
@@ -266,7 +276,7 @@ class RouterPipeline:
             "cost": self.prices.decision_cost(decision.usage),
         }
         return Routed(request_id, mode, catalog, candidates, decision, started, event, order, low_confidence,
-                      prepared.passthrough, pin_key)
+                      prepared.passthrough, pin_key, rendered.instructions, rendered.criteria)
 
     def _pin_lookup(self, prepared: Prepared, stage1, candidates: list[ModelEntry]):
         """(key, pin to follow or None, log entry or None) for this request."""

@@ -178,15 +178,6 @@ class Catalog:
         count = max(1, math.ceil(len(ordered) * spec.band_share)) if ordered else 0
         return ordered[:count] if spec.band_from == "cheapest" else sorted(ordered[-count:], key=lambda m: m.tier)
 
-    def criteria(self, candidates: list[ModelEntry]) -> dict[str, str]:
-        """Option key -> description, with each model's price rank in the whole catalog."""
-        total = len(self.models)
-        rank = {m.name: i + 1 for i, m in enumerate(self.models)}
-        return {
-            m.name: f"{m.description} Price rank {rank[m.name]} of {total} in the pool (1 is cheapest)."
-            for m in candidates
-        }
-
     def resolve(self, served: str | None) -> str | None:
         """Map a model string returned by Foundry (often version-suffixed) to a catalog name."""
         if not served:

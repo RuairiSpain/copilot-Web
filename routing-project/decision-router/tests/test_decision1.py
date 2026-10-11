@@ -124,5 +124,5 @@ def test_single_candidate_skips_the_call(catalog, settings):
 
     client = Decision1Client("https://x/systemone", "d1", FoundryAuth("k"), http=httpx.AsyncClient(transport=httpx.MockTransport(fail)))
     only = quality(catalog)[:1]
-    decision = asyncio.run(client.decide("s", "i", catalog.criteria(only), only))
+    decision = asyncio.run(client.decide("s", "i", {m.name: m.description for m in only}, only))
     assert decision.skipped and decision.ranking == ["gpt-5.5"]

@@ -25,6 +25,7 @@ from stage1_examples_data import EXAMPLES, FINDINGS, INTRO, ZERO_INTRO  # noqa: 
 
 from decision_router.catalog import Catalogs  # noqa: E402
 from decision_router.config import Settings  # noqa: E402
+from decision_router.instructions import InstructionTemplates  # noqa: E402
 from decision_router.pipeline import RouterPipeline, RoutingError  # noqa: E402
 from decision_router.stage1 import estimated_tokens, select  # noqa: E402
 
@@ -44,7 +45,14 @@ def run(example: dict) -> dict:
     result = select(prepared.catalog, prepared.mode, prepared.constraints, prepared.body, settings,
                     passthrough=prepared.passthrough, cost_band=prepared.cost_band)
     prompt_tokens, output_tokens = estimated_tokens(prepared.body, settings.chars_per_token)
+    rendered = None
+    if len(result.candidates) >= 2:
+        rendered = InstructionTemplates.load(settings.instructions_path).render(
+            result.candidates, mode=prepared.mode, constraints=prepared.constraints, cost_band=prepared.cost_band,
+            requirements=result.requirements, body=prepared.body, chars_per_token=settings.chars_per_token,
+            profile=prepared.profile, passthrough=prepared.passthrough)
     return {
+        "rendered": rendered,
         "catalog": prepared.catalog, "mode": prepared.mode, "profile": prepared.profile, "pin": prepared.pin, "cost_band": prepared.cost_band,
         "passthrough": prepared.passthrough, "constraints": prepared.constraints.as_dict(),
         "requirements": result.requirements, "steps": result.steps, "empty_at": result.empty_at,
@@ -118,6 +126,9 @@ def render_example(number: str, example: dict, out: dict) -> list[str]:
         names = ", ".join(f"`{n}`" for n in out["candidates"])
         lines += [f"**Stage 1 output (the {len(out['candidates'])} options Decision-1 chooses from, cheapest "
                   f"first):** {names}", ""]
+        rendered = out["rendered"]
+        lines += [f"**Instructions sent to Decision-1** (fragments: {', '.join(f'`{f}`' for f in rendered.fragments)}):",
+                  "", f"> {rendered.instructions}", ""]
     lines += [f"**Explanation:** {example['explanation']}", ""]
     return lines
 

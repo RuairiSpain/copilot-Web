@@ -48,8 +48,8 @@ Deploy the version the catalog names; the router cannot tell which one a deploym
 
 ## Descriptions
 
-Decision-1 tells the options apart only by their descriptions (plus the price rank the router
-appends), so each one says:
+Decision-1 tells the options apart only by their descriptions (plus the output price and price
+rank among the options that the router appends; see `DECISION1_INSTRUCTIONS.md`), so each one says:
 
 - what the model is best at, in terms of task types a request might contain;
 - what it handles badly or cannot do (no tools, short output limit, text only, English only);

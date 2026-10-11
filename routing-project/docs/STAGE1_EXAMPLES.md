@@ -56,6 +56,13 @@ How to read the examples:
 | A23 | Cost band profile with tools | 6 of 23 |
 | A24 | Action with a cost label: code, top | 4 of 23 |
 | A25 | Action with a cost label, after a tools filter | 3 of 23 |
+| A26 | Writing task, top price group | 2 of 23 |
+| A27 | Planning task with a long answer | 2 of 23 |
+| A28 | Reasoning required, top price group | 4 of 23 |
+| A29 | Review task | 7 of 23 |
+| A30 | Extraction and summarisation together | 3 of 23 |
+| A31 | Orchestration with tools, low price group | 3 of 23 |
+| A32 | Translation | 2 of 23 |
 | Z1 | Tools requested from models without tool calling | 0 models (empty at `capabilities`) |
 | Z2 | Tools on gpt-6.1-sol only | 0 models (empty at `capabilities`) |
 | Z3 | Regional (Standard) deployment type | 0 models (empty at `location`) |
@@ -130,6 +137,10 @@ one test request against the deployment, then recording the source in `catalog_s
 
 **Stage 1 output (the 26 options Decision-1 chooses from, cheapest first):** `FW-GLM-5.3-Flash`, `gpt-5.4-nano`, `gpt-5.6-luna`, `gpt-oss-120b`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `grok-4-1-fast-reasoning`, `DeepSeek-V3.2`, `gpt-5.4-mini`, `FW-GLM-5.3`, `FW-Kimi-K3`, `claude-haiku-4-5`, `gpt-5.6-terra`, `gpt-5.2`, `claude-sonnet-5`, `gpt-5.4`, `gpt-5.5`, `gpt-5.6-sol`, `claude-sonnet-4-5`, `grok-4`, `grok-4.6`, `claude-opus-4-6`, `claude-opus-4-7`, `claude-opus-4-8`, `claude-opus-5`, `claude-fable-5-1`, `gpt-6-astra`
 
+**Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`):
+
+> Choose the model that should answer the conversation in the state. Balanced mode: weigh answer quality against cost. Prefer a cheaper model when its answer would be about as good as the best model's answer.
+
 **Explanation:** Nothing in the request narrows the choice and balanced mode keeps the whole price range, so all 26 models go to Decision-1. Decision-1 then weighs answer quality against cost using each model's description and price rank.
 
 ### A2. Cost mode
@@ -157,6 +168,10 @@ one test request against the deployment, then recording the source in `catalog_s
 | `price_band` | 17 × outside the cost price band | 9 |
 
 **Stage 1 output (the 9 options Decision-1 chooses from, cheapest first):** `FW-GLM-5.3-Flash`, `gpt-5.4-nano`, `gpt-5.6-luna`, `gpt-oss-120b`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `grok-4-1-fast-reasoning`, `DeepSeek-V3.2`, `gpt-5.4-mini`, `FW-GLM-5.3`
+
+**Instructions sent to Decision-1** (fragments: `base`, `mode.cost`):
+
+> Choose the model that should answer the conversation in the state. Cost mode: choose the cheapest model that can still answer well. Prefer a more expensive model only when a cheaper one would likely give a wrong or incomplete answer.
 
 **Explanation:** Cost mode keeps the cheapest third of whatever passes the earlier steps (9 of 26, by `tier`). Decision-1 is also told to prefer the cheapest model that can still answer well. A more expensive model can never be chosen, even if Decision-1 would rate it higher.
 
@@ -186,6 +201,10 @@ one test request against the deployment, then recording the source in `catalog_s
 
 **Stage 1 output (the 9 options Decision-1 chooses from, cheapest first):** `claude-sonnet-4-5`, `grok-4`, `grok-4.6`, `claude-opus-4-6`, `claude-opus-4-7`, `claude-opus-4-8`, `claude-opus-5`, `claude-fable-5-1`, `gpt-6-astra`
 
+**Instructions sent to Decision-1** (fragments: `base`, `mode.quality`):
+
+> Choose the model that should answer the conversation in the state. Quality mode: choose the model most likely to give the best answer. Ignore cost.
+
 **Explanation:** Quality mode keeps the most expensive third (9 of 26). Price is used as a stand-in for capability here, so the band includes grok-4, whose 8,192-token output limit makes it unsuitable for long answers. Decision-1, which reads the description, is expected to rank it low for those.
 
 ### A4. New catalog, balanced
@@ -213,6 +232,10 @@ one test request against the deployment, then recording the source in `catalog_s
 | `price_band` | – | 23 |
 
 **Stage 1 output (the 23 options Decision-1 chooses from, cheapest first):** `Phi-4-mini-instruct`, `FW-GLM-5.3-Flash`, `claude-haiku-5-5`, `gpt-5.4-nano`, `Phi-4`, `gpt-oss-120b`, `Phi-4-reasoning`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `grok-4-1-fast-reasoning`, `DeepSeek-V4-Flash`, `gpt-5.4-mini`, `gpt-6-luna`, `FW-GLM-5.3`, `FW-Kimi-K3`, `DeepSeek-V4-Pro`, `gpt-5.6-terra`, `MAI-Thinking-1`, `claude-sonnet-5-5`, `gpt-6.1-sol`, `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`, `gpt-6-astra`
+
+**Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`):
+
+> Choose the model that should answer the conversation in the state. Balanced mode: weigh answer quality against cost. Prefer a cheaper model when its answer would be about as good as the best model's answer.
 
 **Explanation:** No filter applies, so all 23 models of the `new` catalog are candidates.
 
@@ -243,6 +266,10 @@ one test request against the deployment, then recording the source in `catalog_s
 
 **Stage 1 output (the 17 options Decision-1 chooses from, cheapest first):** `FW-GLM-5.3-Flash`, `claude-haiku-5-5`, `gpt-5.4-nano`, `gpt-oss-120b`, `grok-4-1-fast-reasoning`, `DeepSeek-V4-Flash`, `gpt-5.4-mini`, `gpt-6-luna`, `FW-GLM-5.3`, `FW-Kimi-K3`, `DeepSeek-V4-Pro`, `MAI-Thinking-1`, `claude-sonnet-5-5`, `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`, `gpt-6-astra`
 
+**Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`, `req.tools`):
+
+> Choose the model that should answer the conversation in the state. Balanced mode: weigh answer quality against cost. Prefer a cheaper model when its answer would be about as good as the best model's answer. The request offers tools (read_file) and every option can call them: prefer the option most reliable at choosing and sequencing tool calls.
+
 **Explanation:** Stage 1 removes the six models that can't call tools through Chat Completions: the three Phi models, Llama 4 Maverick, gpt-6.1-sol (tool calling only through the Responses API) and gpt-5.6-terra (tools only with reasoning turned off). Claude stays, because the translation layer converts tool calls. 17 models remain.
 
 ### A6. Image input
@@ -270,6 +297,10 @@ one test request against the deployment, then recording the source in `catalog_s
 | `price_band` | – | 15 |
 
 **Stage 1 output (the 15 options Decision-1 chooses from, cheapest first):** `FW-GLM-5.3-Flash`, `claude-haiku-5-5`, `gpt-5.4-nano`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `grok-4-1-fast-reasoning`, `gpt-5.4-mini`, `gpt-6-luna`, `FW-Kimi-K3`, `gpt-5.6-terra`, `claude-sonnet-5-5`, `gpt-6.1-sol`, `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`, `gpt-6-astra`
+
+**Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`, `req.image_input`):
+
+> Choose the model that should answer the conversation in the state. Balanced mode: weigh answer quality against cost. Prefer a cheaper model when its answer would be about as good as the best model's answer. The request includes 1 image(s): prefer the option with the strongest image understanding.
 
 **Explanation:** Eight text-only models are removed (Phi, gpt-oss-120b, DeepSeek V4, FW-GLM-5.3, MAI-Thinking-1). 15 models that accept images remain.
 
@@ -300,6 +331,10 @@ one test request against the deployment, then recording the source in `catalog_s
 
 **Stage 1 output (the 12 options Decision-1 chooses from, cheapest first):** `claude-haiku-5-5`, `gpt-5.4-nano`, `gpt-oss-120b`, `gpt-5.4-mini`, `gpt-6-luna`, `FW-GLM-5.3`, `gpt-5.6-terra`, `claude-sonnet-5-5`, `gpt-6.1-sol`, `gpt-5.5`, `claude-opus-5-5`, `gpt-6-astra`
 
+**Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`, `req.structured_output`):
+
+> Choose the model that should answer the conversation in the state. Balanced mode: weigh answer quality against cost. Prefer a cheaper model when its answer would be about as good as the best model's answer. The answer must follow a JSON schema and every option supports this: judge on the content.
+
 **Explanation:** Models with `structured_output: yes` remain, including the three Claude models (the adapter sends the schema as `output_config.format`). The 11 removed models have `structured_output: no`: no source confirms that they enforce a schema, and the catalog records anything unconfirmed as `no`.
 
 ### A8. JSON mode (json_object)
@@ -328,6 +363,10 @@ one test request against the deployment, then recording the source in `catalog_s
 | `price_band` | – | 23 |
 
 **Stage 1 output (the 23 options Decision-1 chooses from, cheapest first):** `Phi-4-mini-instruct`, `FW-GLM-5.3-Flash`, `claude-haiku-5-5`, `gpt-5.4-nano`, `Phi-4`, `gpt-oss-120b`, `Phi-4-reasoning`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `grok-4-1-fast-reasoning`, `DeepSeek-V4-Flash`, `gpt-5.4-mini`, `gpt-6-luna`, `FW-GLM-5.3`, `FW-Kimi-K3`, `DeepSeek-V4-Pro`, `gpt-5.6-terra`, `MAI-Thinking-1`, `claude-sonnet-5-5`, `gpt-6.1-sol`, `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`, `gpt-6-astra`
+
+**Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`):
+
+> Choose the model that should answer the conversation in the state. Balanced mode: weigh answer quality against cost. Prefer a cheaper model when its answer would be about as good as the best model's answer.
 
 **Explanation:** Nothing is removed: `json_object` is no longer a catalog capability, so all 23 models are candidates. A model that doesn't support JSON mode may answer in free text. Claude always does, because the translation layer drops `response_format: json_object` (the Messages API has no equivalent). Callers that need guaranteed JSON should send a JSON schema instead (example A7).
 
@@ -358,6 +397,10 @@ one test request against the deployment, then recording the source in `catalog_s
 
 **Stage 1 output (the 16 options Decision-1 chooses from, cheapest first):** `FW-GLM-5.3-Flash`, `claude-haiku-5-5`, `gpt-5.4-nano`, `gpt-oss-120b`, `gpt-5.4-mini`, `gpt-6-luna`, `FW-GLM-5.3`, `DeepSeek-V4-Pro`, `gpt-5.6-terra`, `MAI-Thinking-1`, `claude-sonnet-5-5`, `gpt-6.1-sol`, `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`, `gpt-6-astra`
 
+**Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`):
+
+> Choose the model that should answer the conversation in the state. Balanced mode: weigh answer quality against cost. Prefer a cheaper model when its answer would be about as good as the best model's answer.
+
 **Explanation:** Seven models are removed because no source confirms they stream, so the catalog records `streaming: no`: the three Phi models, Llama 4 Maverick, grok-4-1-fast-reasoning, DeepSeek-V4-Flash and FW-Kimi-K3. 16 models remain.
 
 ### A10. Long document (~300K tokens)
@@ -385,6 +428,10 @@ one test request against the deployment, then recording the source in `catalog_s
 | `price_band` | – | 15 |
 
 **Stage 1 output (the 15 options Decision-1 chooses from, cheapest first):** `FW-GLM-5.3-Flash`, `claude-haiku-5-5`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `DeepSeek-V4-Flash`, `gpt-6-luna`, `FW-GLM-5.3`, `FW-Kimi-K3`, `DeepSeek-V4-Pro`, `gpt-5.6-terra`, `claude-sonnet-5-5`, `gpt-6.1-sol`, `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`, `gpt-6-astra`
+
+**Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`, `size.long_prompt`):
+
+> Choose the model that should answer the conversation in the state. Balanced mode: weigh answer quality against cost. Prefer a cheaper model when its answer would be about as good as the best model's answer. The prompt is about 300,015 tokens: prefer an option that stays accurate over long inputs.
 
 **Explanation:** The prompt is estimated at about 300,000 tokens (characters ÷ 4). Models with smaller context windows are removed, and so are gpt-5.4-nano and gpt-5.4-mini: their context is 400K, but they accept at most 272K tokens of input. 15 models with 500K to 1M-token contexts remain.
 
@@ -414,6 +461,10 @@ one test request against the deployment, then recording the source in `catalog_s
 | `price_band` | – | 6 |
 
 **Stage 1 output (the 6 options Decision-1 chooses from, cheapest first):** `DeepSeek-V4-Flash`, `gpt-5.4-mini`, `gpt-6-luna`, `gpt-5.6-terra`, `gpt-6.1-sol`, `gpt-5.5`
+
+**Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`):
+
+> Choose the model that should answer the conversation in the state. Balanced mode: weigh answer quality against cost. Prefer a cheaper model when its answer would be about as good as the best model's answer.
 
 **Explanation:** Fireworks models are removed (inference outside Azure), models without a Data Zone deployment are removed, gpt-oss-120b is removed because its regions aren't published, and models not offered in Sweden Central's Data Zone are removed. Six OpenAI and DeepSeek models remain.
 
@@ -445,6 +496,10 @@ one test request against the deployment, then recording the source in `catalog_s
 
 **Stage 1 output (the 2 options Decision-1 chooses from, cheapest first):** `DeepSeek-V4-Flash`, `gpt-5.4-mini`
 
+**Instructions sent to Decision-1** (fragments: `base`, `mode.cost`):
+
+> Choose the model that should answer the conversation in the state. Cost mode: choose the cheapest model that can still answer well. Prefer a more expensive model only when a cheaper one would likely give a wrong or incomplete answer.
+
 **Explanation:** The selection step keeps the five named models. Cost mode then keeps the cheapest third of those five, rounded up: DeepSeek-V4-Flash and gpt-5.4-mini.
 
 ### A13. One provider only
@@ -473,6 +528,10 @@ one test request against the deployment, then recording the source in `catalog_s
 | `price_band` | – | 3 |
 
 **Stage 1 output (the 3 options Decision-1 chooses from, cheapest first):** `claude-haiku-5-5`, `claude-sonnet-5-5`, `claude-opus-5-5`
+
+**Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`):
+
+> Choose the model that should answer the conversation in the state. Balanced mode: weigh answer quality against cost. Prefer a cheaper model when its answer would be about as good as the best model's answer.
 
 **Explanation:** Only the three Claude models in the `new` catalog remain: Haiku 5.5, Sonnet 5.5 and Opus 5.5.
 
@@ -503,6 +562,10 @@ one test request against the deployment, then recording the source in `catalog_s
 | `price_band` | – | 8 |
 
 **Stage 1 output (the 8 options Decision-1 chooses from, cheapest first):** `claude-haiku-5-5`, `gpt-5.4-mini`, `FW-GLM-5.3`, `DeepSeek-V4-Pro`, `claude-sonnet-5-5`, `gpt-5.5`, `claude-opus-5-5`, `gpt-6-astra`
+
+**Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`, `profile.coding`, `req.tools`):
+
+> Choose the model that should answer the conversation in the state. Balanced mode: weigh answer quality against cost. Prefer a cheaper model when its answer would be about as good as the best model's answer. The caller is a coding agent that works over many turns: prefer a model that is reliable at multi-step tool use and keeps a consistent approach across turns. The request offers tools (read_file) and every option can call them: prefer the option most reliable at choosing and sequencing tool calls.
 
 **Explanation:** The profile selects the `new` catalog, keeps its eight coding models, requires tool calling and turns pinning on. All eight support tools, so all eight go to Decision-1. `parallel_tool_calls: true` adds no requirement, because parallel tool calls are no longer a catalog capability.
 
@@ -535,6 +598,10 @@ one test request against the deployment, then recording the source in `catalog_s
 
 **Stage 1 output (the 3 options Decision-1 chooses from, cheapest first):** `claude-haiku-5-5`, `claude-sonnet-5-5`, `claude-opus-5-5`
 
+**Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`, `passthrough`):
+
+> Choose the model that should answer the conversation in the state. Balanced mode: weigh answer quality against cost. Prefer a cheaper model when its answer would be about as good as the best model's answer. The request is a native Anthropic Messages body and every option is a Claude model.
+
 **Explanation:** The `api` step removes every model that is not Claude. The three Claude models in the `new` catalog remain, and the chosen one receives the body unchanged.
 
 ### A16. Operator allow-list
@@ -564,6 +631,10 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5,claude-o
 
 **Stage 1 output (the 4 options Decision-1 chooses from, cheapest first):** `gpt-5.4-mini`, `gpt-5.5`, `grok-4`, `claude-opus-5`
 
+**Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`):
+
+> Choose the model that should answer the conversation in the state. Balanced mode: weigh answer quality against cost. Prefer a cheaper model when its answer would be about as good as the best model's answer.
+
 **Explanation:** Only the four allow-listed models remain. A request cannot add a model the operator has not allowed.
 
 ### A17. Previews excluded
@@ -592,6 +663,10 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5,claude-o
 
 **Stage 1 output (the 24 options Decision-1 chooses from, cheapest first):** `FW-GLM-5.3-Flash`, `gpt-5.4-nano`, `gpt-5.6-luna`, `gpt-oss-120b`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `grok-4-1-fast-reasoning`, `DeepSeek-V3.2`, `gpt-5.4-mini`, `FW-GLM-5.3`, `FW-Kimi-K3`, `claude-haiku-4-5`, `gpt-5.6-terra`, `gpt-5.2`, `claude-sonnet-5`, `gpt-5.4`, `gpt-5.5`, `gpt-5.6-sol`, `claude-sonnet-4-5`, `grok-4`, `claude-opus-4-6`, `claude-opus-4-7`, `claude-opus-4-8`, `claude-opus-5`, `gpt-6-astra`
 
+**Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`):
+
+> Choose the model that should answer the conversation in the state. Balanced mode: weigh answer quality against cost. Prefer a cheaper model when its answer would be about as good as the best model's answer.
+
 **Explanation:** grok-4.6 and claude-fable-5-1 are in preview and are removed. 24 models remain.
 
 ### A18. Region where only global Fireworks models qualify
@@ -619,6 +694,10 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5,claude-o
 | `price_band` | – | 3 |
 
 **Stage 1 output (the 3 options Decision-1 chooses from, cheapest first):** `FW-GLM-5.3-Flash`, `FW-GLM-5.3`, `FW-Kimi-K3`
+
+**Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`):
+
+> Choose the model that should answer the conversation in the state. Balanced mode: weigh answer quality against cost. Prefer a cheaper model when its answer would be about as good as the best model's answer.
 
 **Explanation:** No Azure-hosted model lists West India, so they are all removed, and gpt-oss-120b and grok-4 are removed because their regions aren't published. The three Fireworks models remain, because they deploy globally from any region. Their inference runs on Fireworks infrastructure, so a caller who wanted data to stay in India must also set `inference_in_azure` (see the example 'Region with no Azure availability, inference in Azure' below).
 
@@ -678,6 +757,10 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5,claude-o
 
 **Stage 1 output (the 5 options Decision-1 chooses from, cheapest first):** `claude-sonnet-5-5`, `gpt-6.1-sol`, `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`
 
+**Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`, `band.named`):
+
+> Choose the model that should answer the conversation in the state. Balanced mode: weigh answer quality against cost. Prefer a cheaper model when its answer would be about as good as the best model's answer. The caller asked for the high cost band: the 5 options cost $10 to $20 per million output tokens.
+
 **Explanation:** `routing_cost_band` replaces the mode's price band. The five models with output prices from $10 to $25 remain; the mode (`balanced`) still sets the instructions Decision-1 receives.
 
 ### A21. Named cost band: medium-high
@@ -706,6 +789,10 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5,claude-o
 | `price_band` | 17 × outside cost band medium-high ($3-$10) | 6 |
 
 **Stage 1 output (the 6 options Decision-1 chooses from, cheapest first):** `gpt-5.4-mini`, `DeepSeek-V4-Pro`, `gpt-5.6-terra`, `MAI-Thinking-1`, `claude-sonnet-5-5`, `gpt-6.1-sol`
+
+**Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`, `band.named`):
+
+> Choose the model that should answer the conversation in the state. Balanced mode: weigh answer quality against cost. Prefer a cheaper model when its answer would be about as good as the best model's answer. The caller asked for the medium-high cost band: the 6 options cost $3 to $10 per million output tokens.
 
 **Explanation:** Both ends are inclusive, so gpt-5.4-mini ($3, also in `medium`) and the two $10 models (also in `high`) are kept alongside DeepSeek-V4-Pro, gpt-5.6-terra and MAI-Thinking-1, which are in no other band.
 
@@ -736,6 +823,10 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5,claude-o
 
 **Stage 1 output (the 12 options Decision-1 chooses from, cheapest first):** `gpt-5.4-mini`, `gpt-6-luna`, `FW-GLM-5.3`, `FW-Kimi-K3`, `DeepSeek-V4-Pro`, `gpt-5.6-terra`, `MAI-Thinking-1`, `claude-sonnet-5-5`, `gpt-6.1-sol`, `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`
 
+**Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`, `band.range`):
+
+> Choose the model that should answer the conversation in the state. Balanced mode: weigh answer quality against cost. Prefer a cheaper model when its answer would be about as good as the best model's answer. The caller asked for output prices of $2.50 to $33.33 per million tokens: the 12 options cost $2.50 to $20.
+
 **Explanation:** The range keeps every model with an output price from $2.50 to $33.33, both ends included. It spans parts of four named bands, and leaves out the models under $2.50 and gpt-6-astra ($50).
 
 ### A23. Cost band profile with tools
@@ -764,6 +855,10 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5,claude-o
 | `price_band` | outside cost band low ($0-$1): `gpt-5.4-mini`, `gpt-6-luna`, `FW-GLM-5.3`, `FW-Kimi-K3`, `DeepSeek-V4-Pro`, `MAI-Thinking-1`, `claude-sonnet-5-5`, `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`, `gpt-6-astra` | 6 |
 
 **Stage 1 output (the 6 options Decision-1 chooses from, cheapest first):** `FW-GLM-5.3-Flash`, `claude-haiku-5-5`, `gpt-5.4-nano`, `gpt-oss-120b`, `grok-4-1-fast-reasoning`, `DeepSeek-V4-Flash`
+
+**Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`, `band.named`, `req.tools`):
+
+> Choose the model that should answer the conversation in the state. Balanced mode: weigh answer quality against cost. Prefer a cheaper model when its answer would be about as good as the best model's answer. The caller asked for the low cost band: the 6 options cost $0.40 to $0.80 per million output tokens. The request offers tools (read_file) and every option can call them: prefer the option most reliable at choosing and sequencing tool calls.
 
 **Explanation:** The profile selects the `new` catalog and the `low` band. The capabilities step first removes the six models without Chat Completions tool calling: the three Phi models, Llama 4 Maverick, gpt-5.6-terra and gpt-6.1-sol. The band then keeps the six remaining models priced at $1 or less per million output tokens.
 
@@ -794,6 +889,10 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5,claude-o
 | `price_band` | outside the top cost group for code: `claude-haiku-5-5`, `gpt-oss-120b`, `DeepSeek-V4-Flash`, `gpt-5.4-mini`, `FW-GLM-5.3`, `FW-Kimi-K3`, `DeepSeek-V4-Pro`, `gpt-5.6-terra`, `MAI-Thinking-1`, `claude-sonnet-5-5` | 4 |
 
 **Stage 1 output (the 4 options Decision-1 chooses from, cheapest first):** `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`, `gpt-6-astra`
+
+**Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`, `action.code`, `band.group`):
+
+> Choose the model that should answer the conversation in the state. Balanced mode: weigh answer quality against cost. Prefer a cheaper model when its answer would be about as good as the best model's answer. The task is software engineering: prefer a model that finds the root cause before changing code and checks its own work. The options are the top price group of the models suited to coding: 4 options costing $15 to $50 per million output tokens.
 
 **Explanation:** The capabilities step keeps the 14 models tagged `code`. They split into four groups of 3, 4, 3 and 4 by output price, and `top` is the most expensive group: gpt-5.5, grok-4.7, claude-opus-5-5 and gpt-6-astra. gpt-5.5 and grok-4.7 cost the same ($15), so they stay in one group.
 
@@ -826,7 +925,249 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5,claude-o
 
 **Stage 1 output (the 3 options Decision-1 chooses from, cheapest first):** `DeepSeek-V4-Pro`, `MAI-Thinking-1`, `claude-sonnet-5-5`
 
+**Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`, `action.code`, `band.group`, `req.tools`):
+
+> Choose the model that should answer the conversation in the state. Balanced mode: weigh answer quality against cost. Prefer a cheaper model when its answer would be about as good as the best model's answer. The task is software engineering: prefer a model that finds the root cause before changing code and checks its own work. The options are the high price group of the models suited to coding: 3 options costing $4 to $10 per million output tokens. The request offers tools (read_file) and every option can call them: prefer the option most reliable at choosing and sequencing tool calls.
+
 **Explanation:** Tool calling removes gpt-5.6-terra from the 14 code models, and the remaining 13 are split again, into groups of 3, 3, 3 and 4. The `high` group becomes DeepSeek-V4-Pro, MAI-Thinking-1 and claude-sonnet-5-5; with all 14 code models it is MAI-Thinking-1, gpt-5.6-terra and claude-sonnet-5-5.
+
+### A26. Writing task, top price group
+
+**Why it is useful:** A press release with `actions: ["write"]` and the `top` label: the most expensive models tagged for writing.
+
+```json
+{
+  "compatibility": "new",
+  "routing_cost_band": "top",
+  "routing_constraints": {"actions": ["write"]},
+  "messages": [{"role": "user", "content": "Write a 600-word press release announcing our new EU data centre in Stockholm."}]
+}
+```
+
+**Read from the request:** catalog `new` (23 models), mode `balanced`, cost band top ($25-$60), estimated ~29 prompt tokens. Requirements: none.
+
+| Step | Removed | Left |
+|---|---|---|
+| `api` | – | 23 |
+| `lifecycle` | – | 23 |
+| `allowlist` | – | 23 |
+| `selection` | – | 23 |
+| `capabilities` | 15 × not tagged for write (routing_constraints.actions) | 8 |
+| `location` | – | 8 |
+| `size` | – | 8 |
+| `price_band` | outside the top cost group for write: `Phi-4-mini-instruct`, `FW-GLM-5.3-Flash`, `gpt-5.4-nano`, `Phi-4`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `gpt-6-luna` | 2 |
+
+**Stage 1 output (the 2 options Decision-1 chooses from, cheapest first):** `grok-4.7`, `claude-opus-5-5`
+
+**Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`, `action.write`, `band.group`):
+
+> Choose the model that should answer the conversation in the state. Balanced mode: weigh answer quality against cost. Prefer a cheaper model when its answer would be about as good as the best model's answer. The task is writing: prefer a model whose text needs little editing and makes no unsupported claims. The options are the top price group of the models suited to writing: 2 options costing $15 to $20 per million output tokens.
+
+**Explanation:** The eight `write` models split into four price groups; `top` is grok-4.7 and claude-opus-5-5. The instructions add the writing fragment and say which price group the options are.
+
+### A27. Planning task with a long answer
+
+**Why it is useful:** A plan that may run to 16,000 tokens, with `actions: ["plan"]` and the `high` label.
+
+```json
+{
+  "compatibility": "new",
+  "routing_cost_band": "high",
+  "routing_constraints": {"actions": ["plan"]},
+  "max_completion_tokens": 16000,
+  "messages": [{"role": "user", "content": "Plan the migration of our billing system to event sourcing, phase by phase."}]
+}
+```
+
+**Read from the request:** catalog `new` (23 models), mode `balanced`, cost band high ($10-$25), estimated ~28 prompt tokens. Requirements: none.
+
+| Step | Removed | Left |
+|---|---|---|
+| `api` | – | 23 |
+| `lifecycle` | – | 23 |
+| `allowlist` | – | 23 |
+| `selection` | – | 23 |
+| `capabilities` | 15 × not tagged for plan (routing_constraints.actions) | 8 |
+| `location` | – | 8 |
+| `size` | – | 8 |
+| `price_band` | outside the high cost group for plan: `FW-GLM-5.3`, `DeepSeek-V4-Pro`, `gpt-5.6-terra`, `MAI-Thinking-1`, `claude-opus-5-5`, `gpt-6-astra` | 2 |
+
+**Stage 1 output (the 2 options Decision-1 chooses from, cheapest first):** `gpt-6.1-sol`, `gpt-5.5`
+
+**Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`, `action.plan`, `band.group`, `size.long_output`):
+
+> Choose the model that should answer the conversation in the state. Balanced mode: weigh answer quality against cost. Prefer a cheaper model when its answer would be about as good as the best model's answer. The task is planning: prefer a model that breaks the goal into concrete, ordered steps and notes the risks. The options are the high price group of the models suited to planning: 2 options costing $10 to $15 per million output tokens. The answer may run to 16,000 tokens: prefer an option that stays coherent over long outputs.
+
+**Explanation:** The `high` planning group is gpt-6.1-sol and gpt-5.5. Because `max_completion_tokens` is above 8,000, the instructions also ask for a model that stays coherent over long outputs.
+
+### A28. Reasoning required, top price group
+
+**Why it is useful:** `capabilities: ["reasoning"]` with `actions: ["reason"]` and the `top` label.
+
+```json
+{
+  "compatibility": "new",
+  "routing_cost_band": "top",
+  "routing_constraints": {"actions": ["reason"], "capabilities": ["reasoning"]},
+  "messages": [{"role": "user", "content": "Prove that the sum of two odd numbers is even, then generalise."}]
+}
+```
+
+**Read from the request:** catalog `new` (23 models), mode `balanced`, cost band top ($25-$60), estimated ~25 prompt tokens. Requirements: none.
+
+| Step | Removed | Left |
+|---|---|---|
+| `api` | – | 23 |
+| `lifecycle` | – | 23 |
+| `allowlist` | – | 23 |
+| `selection` | – | 23 |
+| `capabilities` | reasoning no (needed: routing_constraints.capabilities): `Phi-4-mini-instruct`, `FW-GLM-5.3-Flash`, `Phi-4`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `grok-4.7`<br>not tagged for reason (routing_constraints.actions): `gpt-5.4-nano`, `gpt-5.5` | 16 |
+| `location` | – | 16 |
+| `size` | – | 16 |
+| `price_band` | outside the top cost group for reason: `claude-haiku-5-5`, `gpt-oss-120b`, `Phi-4-reasoning`, `grok-4-1-fast-reasoning`, `DeepSeek-V4-Flash`, `gpt-5.4-mini`, `gpt-6-luna`, `FW-GLM-5.3`, `FW-Kimi-K3`, `DeepSeek-V4-Pro`, `gpt-5.6-terra`, `MAI-Thinking-1` | 4 |
+
+**Stage 1 output (the 4 options Decision-1 chooses from, cheapest first):** `claude-sonnet-5-5`, `gpt-6.1-sol`, `claude-opus-5-5`, `gpt-6-astra`
+
+**Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`, `action.reason`, `band.group`, `req.reasoning`):
+
+> Choose the model that should answer the conversation in the state. Balanced mode: weigh answer quality against cost. Prefer a cheaper model when its answer would be about as good as the best model's answer. The task needs multi-step reasoning: prefer a model that works through the problem rather than answering from pattern. The options are the top price group of the models suited to reasoning: 4 options costing $10 to $50 per million output tokens. The caller asked for a model with a reasoning mode; every option has one.
+
+**Explanation:** All four models in the top reasoning group have a reasoning mode, so none is removed; the instructions say so and add the reasoning-task fragment.
+
+### A29. Review task
+
+**Why it is useful:** `actions: ["evaluate"]` with no cost label: every model tagged for evaluation, in balanced mode.
+
+```json
+{
+  "compatibility": "new",
+  "routing_constraints": {"actions": ["evaluate"]},
+  "messages": [{"role": "user", "content": "Review this pull request description against our contribution guidelines."}]
+}
+```
+
+**Read from the request:** catalog `new` (23 models), mode `balanced`, estimated ~28 prompt tokens. Requirements: none.
+
+| Step | Removed | Left |
+|---|---|---|
+| `api` | – | 23 |
+| `lifecycle` | – | 23 |
+| `allowlist` | – | 23 |
+| `selection` | – | 23 |
+| `capabilities` | 16 × not tagged for evaluate (routing_constraints.actions) | 7 |
+| `location` | – | 7 |
+| `size` | – | 7 |
+| `price_band` | – | 7 |
+
+**Stage 1 output (the 7 options Decision-1 chooses from, cheapest first):** `gpt-oss-120b`, `DeepSeek-V4-Pro`, `gpt-5.6-terra`, `claude-sonnet-5-5`, `gpt-6.1-sol`, `gpt-5.5`, `claude-opus-5-5`
+
+**Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`, `action.evaluate`):
+
+> Choose the model that should answer the conversation in the state. Balanced mode: weigh answer quality against cost. Prefer a cheaper model when its answer would be about as good as the best model's answer. The task is to evaluate or review: prefer a model that judges carefully against the stated criteria and explains its verdict.
+
+**Explanation:** Without a label the price band is the routing mode's (balanced keeps all), so the seven `evaluate` models go to Decision-1 with the evaluation fragment.
+
+### A30. Extraction and summarisation together
+
+**Why it is useful:** Two actions: a model must be tagged for both.
+
+```json
+{
+  "compatibility": "new",
+  "routing_constraints": {"actions": ["extract", "summarize"]},
+  "messages": [{"role": "user", "content": "Pull the action items out of these meeting notes and summarise the decisions."}]
+}
+```
+
+**Read from the request:** catalog `new` (23 models), mode `balanced`, estimated ~29 prompt tokens. Requirements: none.
+
+| Step | Removed | Left |
+|---|---|---|
+| `api` | – | 23 |
+| `lifecycle` | – | 23 |
+| `allowlist` | – | 23 |
+| `selection` | – | 23 |
+| `capabilities` | 17 × not tagged for extract, summarize (routing_constraints.actions)<br>2 × not tagged for extract (routing_constraints.actions)<br>1 × not tagged for summarize (routing_constraints.actions) | 3 |
+| `location` | – | 3 |
+| `size` | – | 3 |
+| `price_band` | – | 3 |
+
+**Stage 1 output (the 3 options Decision-1 chooses from, cheapest first):** `Phi-4-mini-instruct`, `gpt-5.4-nano`, `gpt-5.4-mini`
+
+**Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`, `action.extract`, `action.summarize`):
+
+> Choose the model that should answer the conversation in the state. Balanced mode: weigh answer quality against cost. Prefer a cheaper model when its answer would be about as good as the best model's answer. The task is extraction: prefer a model that copies values exactly and leaves out what is not in the source. The task is summarisation: prefer a model that keeps the key facts and adds nothing that is not in the source.
+
+**Explanation:** Only models tagged `extract` and `summarize` remain, and the instructions include both task fragments.
+
+### A31. Orchestration with tools, low price group
+
+**Why it is useful:** An orchestrator step with tools and `actions: ["orchestrate"]`, `low` label.
+
+```json
+{
+  "compatibility": "new",
+  "routing_cost_band": "low",
+  "routing_constraints": {"actions": ["orchestrate"]},
+  "tools": [{"type": "function", "function": {"name": "read_file", "description": "Read a file from the repository", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}}}}],
+  "messages": [{"role": "user", "content": "Run the nightly report pipeline and tell me which step failed."}]
+}
+```
+
+**Read from the request:** catalog `new` (23 models), mode `balanced`, cost band low ($0-$1), estimated ~71 prompt tokens. Requirements: `tools` (request has tools).
+
+| Step | Removed | Left |
+|---|---|---|
+| `api` | – | 23 |
+| `lifecycle` | – | 23 |
+| `allowlist` | – | 23 |
+| `selection` | – | 23 |
+| `capabilities` | 8 × not tagged for orchestrate (routing_constraints.actions)<br>6 × tools no (needed: request has tools) | 9 |
+| `location` | – | 9 |
+| `size` | – | 9 |
+| `price_band` | outside the low cost group for orchestrate: `FW-GLM-5.3`, `FW-Kimi-K3`, `claude-sonnet-5-5`, `gpt-5.5`, `grok-4.7`, `gpt-6-astra` | 3 |
+
+**Stage 1 output (the 3 options Decision-1 chooses from, cheapest first):** `FW-GLM-5.3-Flash`, `claude-haiku-5-5`, `grok-4-1-fast-reasoning`
+
+**Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`, `action.orchestrate`, `band.group`, `req.tools`):
+
+> Choose the model that should answer the conversation in the state. Balanced mode: weigh answer quality against cost. Prefer a cheaper model when its answer would be about as good as the best model's answer. The task is to orchestrate steps or agents: prefer a model that follows the plan and calls tools in the right order. The options are the low price group of the models suited to orchestration: 3 options costing $0.40 to $0.50 per million output tokens. The request offers tools (read_file) and every option can call them: prefer the option most reliable at choosing and sequencing tool calls.
+
+**Explanation:** The low orchestration group after the tools filter goes to Decision-1 with the orchestration and tools fragments.
+
+### A32. Translation
+
+**Why it is useful:** `actions: ["translate"]`: two models are tagged for translation.
+
+```json
+{
+  "compatibility": "new",
+  "routing_cost_band": "medium",
+  "routing_constraints": {"actions": ["translate"]},
+  "messages": [{"role": "user", "content": "Translate this product page into Spanish, keeping the brand terms in English."}]
+}
+```
+
+**Read from the request:** catalog `new` (23 models), mode `balanced`, cost band medium ($1-$3), estimated ~29 prompt tokens. Requirements: none.
+
+| Step | Removed | Left |
+|---|---|---|
+| `api` | – | 23 |
+| `lifecycle` | – | 23 |
+| `allowlist` | – | 23 |
+| `selection` | – | 23 |
+| `capabilities` | 21 × not tagged for translate (routing_constraints.actions) | 2 |
+| `location` | – | 2 |
+| `size` | – | 2 |
+| `price_band` | – | 2 |
+
+**Stage 1 output (the 2 options Decision-1 chooses from, cheapest first):** `Llama-4-Maverick-17B-128E-Instruct-FP8`, `gpt-6-luna`
+
+**Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`, `action.translate`, `band.group`):
+
+> Choose the model that should answer the conversation in the state. Balanced mode: weigh answer quality against cost. Prefer a cheaper model when its answer would be about as good as the best model's answer. The task is translation: prefer a model that keeps the meaning, tone and terminology of the source. The options are the medium price group of the models suited to translation: 2 options costing $0.85 to $2.50 per million output tokens.
+
+**Explanation:** Both translation models go to Decision-1 with the translation fragment; any label would return the same two, because they form a single price group.
 
 ## Requests that leave no models
 

@@ -183,7 +183,7 @@
         "output_per_million": 0.5
       },
       "aliases": [],
-      "description": "Fastest, lowest-cost current Claude for coding, agents, sub-agent work, classification and extraction over large contexts (1M tokens); adaptive thinking, high-resolution image input and computer use. Prompts over 100,000 tokens are billed at a higher rate.",
+      "description": "Fastest, lowest-cost current Claude for coding, agents, sub-agent work, classification and extraction over large contexts (1M tokens); adaptive thinking and high-resolution image input. Prompts over 100,000 tokens are billed at a higher rate.",
       "provider": "Anthropic",
       "version": "2",
       "lifecycle": "ga",
@@ -847,7 +847,7 @@
         "output_per_million": 0.8
       },
       "aliases": [],
-      "description": "Fast DeepSeek V4 reasoning model with a 1M-token context and up to 384K output tokens: low-cost choice for code, maths and long-document work, with tool calling and JSON mode. Text only; English and Chinese.",
+      "description": "Fast DeepSeek V4 reasoning model with a 1M-token context and up to 384K output tokens: low-cost choice for code, maths and long-document work, with tool calling. Text only; English and Chinese.",
       "provider": "DeepSeek",
       "version": "2026-04-23",
       "lifecycle": "ga",
@@ -964,7 +964,7 @@
         "output_per_million": 3.0
       },
       "aliases": [],
-      "description": "Compact GPT-5.4 reasoning model and a good default for everyday work: summaries, extraction, routine code, data questions and tool calls, with structured outputs, image input and computer use. Handles moderate multi-step reasoning; use a frontier model for the hardest problems.",
+      "description": "Compact GPT-5.4 reasoning model and a good default for everyday work: summaries, extraction, routine code, data questions and tool calls, with structured outputs and image input. Handles moderate multi-step reasoning; use a frontier model for the hardest problems.",
       "provider": "OpenAI",
       "version": "2026-03-17",
       "lifecycle": "ga",
@@ -1087,7 +1087,7 @@
         "output_per_million": 2.5
       },
       "aliases": [],
-      "description": "Fast, cost-efficient GPT-6 model for low-latency, multilingual and large-context work (1M tokens), with reasoning-effort controls, tools, structured outputs, image input and computer use. Prefer it to larger GPT-6 models when speed and cost matter more than peak quality.",
+      "description": "Fast, cost-efficient GPT-6 model for low-latency, multilingual and large-context work (1M tokens), with reasoning-effort controls, tools, structured outputs and image input. Prefer it to larger GPT-6 models when speed and cost matter more than peak quality.",
       "provider": "OpenAI",
       "version": "2026-09-22",
       "lifecycle": "ga",
@@ -1330,7 +1330,7 @@
         "output_per_million": 4.0
       },
       "aliases": [],
-      "description": "Large DeepSeek V4 reasoning model for hard code, maths and long-document analysis (1M-token context, up to 384K output tokens), with tool calling and JSON mode. Text only; English and Chinese.",
+      "description": "Large DeepSeek V4 reasoning model for hard code, maths and long-document analysis (1M-token context, up to 384K output tokens), with tool calling. Text only; English and Chinese.",
       "provider": "DeepSeek",
       "version": "2026-04-23",
       "lifecycle": "ga",
@@ -1658,7 +1658,7 @@
         "output_per_million": 10.0
       },
       "aliases": [],
-      "description": "Latest Claude Sonnet, balancing speed and capability: coding, long-running agents, financial analysis, professional writing and cybersecurity, reasoning over whole codebases (1M-token context); adaptive thinking, high-resolution image input and computer use.",
+      "description": "Latest Claude Sonnet, balancing speed and capability: coding, long-running agents, financial analysis, professional writing and cybersecurity, reasoning over whole codebases (1M-token context); adaptive thinking and high-resolution image input.",
       "provider": "Anthropic",
       "version": "2",
       "lifecycle": "ga",
@@ -1868,7 +1868,7 @@
         "output_per_million": 15.0
       },
       "aliases": [],
-      "description": "OpenAI agentic model for complex multi-step coding, research and data analysis, including synthesis across many documents (1M-token context). Strong tool use, structured outputs and computer use.",
+      "description": "OpenAI agentic model for complex multi-step coding, research and data analysis, including synthesis across many documents (1M-token context). Strong tool use and structured outputs.",
       "provider": "OpenAI",
       "version": "2026-04-24",
       "lifecycle": "ga",
@@ -1987,7 +1987,7 @@
         "output_per_million": 15.0
       },
       "aliases": [],
-      "description": "Latest xAI model for coding, research and agentic work with tool calling and JSON mode; text and image input, 500K tokens shared between input and output. English-focused.",
+      "description": "Latest xAI model for coding, research and agentic work with tool calling; text and image input, 500K tokens shared between input and output. English-focused.",
       "provider": "xAI",
       "version": "1",
       "lifecycle": "ga",
@@ -2098,7 +2098,7 @@
         "output_per_million": 20.0
       },
       "aliases": [],
-      "description": "Latest Claude Opus for long-running agentic coding (finds root causes before changing code and checks its work), enterprise workflows, financial analysis and documents that need little editing; always-on adaptive thinking, vision and computer use; 1M-token context.",
+      "description": "Latest Claude Opus for long-running agentic coding (finds root causes before changing code and checks its work), enterprise workflows, financial analysis and documents that need little editing; always-on adaptive thinking and vision; 1M-token context.",
       "provider": "Anthropic",
       "version": "2",
       "lifecycle": "ga",
@@ -2188,7 +2188,7 @@
         "output_per_million": 50.0
       },
       "aliases": [],
-      "description": "Frontier GPT-6 reasoning model for the most complex problem-solving, coding, agentic workflows and enterprise knowledge work, with reasoning-effort and verbosity controls, tools, structured outputs, image input and computer use. Use it when answer quality matters most.",
+      "description": "Frontier GPT-6 reasoning model for the most complex problem-solving, coding, agentic workflows and enterprise knowledge work, with reasoning-effort and verbosity controls, tools, structured outputs and image input. Use it when answer quality matters most.",
       "provider": "OpenAI",
       "version": "2026-09-03",
       "lifecycle": "ga",
