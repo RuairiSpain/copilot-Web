@@ -46,6 +46,17 @@ def test_default_max_tokens_and_specific_tool_choice():
     assert request["max_tokens"] == 777 and request["tool_choice"] == {"type": "tool", "name": "get_weather"}
 
 
+def test_json_schema_becomes_output_config_format():
+    schema = {"type": "object", "properties": {"city": {"type": "string"}}, "required": ["city"],
+              "additionalProperties": False}
+    request = to_messages_request({"messages": [{"role": "user", "content": "hi"}], "response_format": {
+        "type": "json_schema", "json_schema": {"name": "place", "strict": True, "schema": schema}}}, "d", 100)
+    assert request["output_config"] == {"format": {"type": "json_schema", "schema": schema}}
+    plain = to_messages_request({"messages": [{"role": "user", "content": "hi"}],
+                                 "response_format": {"type": "json_object"}}, "d", 100)
+    assert "output_config" not in plain
+
+
 def test_response_translation():
     message = {"id": "msg_1", "model": "claude-opus-5", "stop_reason": "tool_use",
                "content": [{"type": "thinking", "thinking": "..."}, {"type": "text", "text": "Checking."},

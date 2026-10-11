@@ -1,212 +1,197 @@
 {
-  "version": "customer-supplied-required",
+  "version": "2026-10-11-global-standard-public-list",
   "currency": "USD",
-  "_note": "Fill in the prices that apply to your subscription and deployments. Nulls mean 'unpriced', so no cost figure is ever invented. cached_input_per_million is optional; when null, cached input tokens are priced as normal input.",
+  "_note": "USD public list prices per 1M tokens for the exact model versions in catalog_old.json and catalog_new.json, checked 2026-10-11. Global Standard short/default-context rates are used where a model has context-banded pricing (claude-haiku-5-5 doubles above 100,000 prompt tokens). cached_input_per_million equals input_per_million when no separate cached-input rate is published. Claude prices are Anthropic's standard rates, which Claude in Microsoft Foundry bills at (US Data Zone Standard deployments add 10%). Deprecated model versions are omitted. scripts/build_catalogs.py computes each catalog's `tier` from these prices.",
   "models": {
-    "gpt-5-nano": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
-    },
     "gpt-5.4-nano": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 0.1,
+      "cached_input_per_million": 0.01,
+      "output_per_million": 0.8
     },
     "FW-GLM-5.3-Flash": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 0.1,
+      "cached_input_per_million": 0.1,
+      "output_per_million": 0.4
     },
     "gpt-oss-120b": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
-    },
-    "gpt-5-mini": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 0.15,
+      "cached_input_per_million": 0.075,
+      "output_per_million": 0.6
     },
     "grok-4-1-fast-reasoning": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 0.2,
+      "cached_input_per_million": 0.05,
+      "output_per_million": 0.5
     },
     "Llama-4-Maverick-17B-128E-Instruct-FP8": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 0.19,
+      "cached_input_per_million": 0.19,
+      "output_per_million": 0.85
     },
     "DeepSeek-V3.2": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 0.28,
+      "cached_input_per_million": 0.028,
+      "output_per_million": 0.42
     },
     "gpt-5.4-mini": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 0.375,
+      "cached_input_per_million": 0.0375,
+      "output_per_million": 3.0
     },
     "gpt-5.6-luna": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 0.1,
+      "cached_input_per_million": 0.01,
+      "output_per_million": 0.8
     },
     "FW-Kimi-K3": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 0.6,
+      "cached_input_per_million": 0.6,
+      "output_per_million": 2.5
     },
     "FW-GLM-5.3": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 0.6,
+      "cached_input_per_million": 0.6,
+      "output_per_million": 2.5
     },
     "claude-haiku-4-5": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
-    },
-    "gpt-5": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 1.0,
+      "cached_input_per_million": 0.1,
+      "output_per_million": 5.0
     },
     "gpt-5.2": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 1.75,
+      "cached_input_per_million": 0.175,
+      "output_per_million": 14.0
     },
     "gpt-5.4": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 2.5,
+      "cached_input_per_million": 0.25,
+      "output_per_million": 15.0
     },
     "gpt-5.6-terra": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 1.0,
+      "cached_input_per_million": 0.1,
+      "output_per_million": 8.0
     },
     "gpt-5.5": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 2.5,
+      "cached_input_per_million": 0.25,
+      "output_per_million": 15.0
     },
     "grok-4": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 3.0,
+      "cached_input_per_million": 0.75,
+      "output_per_million": 15.0
     },
     "grok-4.6": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 3.0,
+      "cached_input_per_million": 0.75,
+      "output_per_million": 15.0
     },
     "claude-sonnet-4-5": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 3.0,
+      "cached_input_per_million": 0.3,
+      "output_per_million": 15.0
     },
     "claude-sonnet-5": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 2.0,
+      "cached_input_per_million": 0.2,
+      "output_per_million": 10.0
     },
     "gpt-5.6-sol": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 2.5,
+      "cached_input_per_million": 0.25,
+      "output_per_million": 15.0
     },
     "gpt-6-astra": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 10.0,
+      "cached_input_per_million": 1.0,
+      "output_per_million": 50.0
     },
     "claude-opus-4-6": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 5.0,
+      "cached_input_per_million": 0.5,
+      "output_per_million": 25.0
     },
     "claude-opus-4-7": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 5.0,
+      "cached_input_per_million": 0.5,
+      "output_per_million": 25.0
     },
     "claude-opus-4-8": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 5.0,
+      "cached_input_per_million": 0.5,
+      "output_per_million": 25.0
     },
     "claude-opus-5": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 5.0,
+      "cached_input_per_million": 0.5,
+      "output_per_million": 25.0
     },
     "claude-fable-5-1": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 10.0,
+      "cached_input_per_million": 0.25,
+      "output_per_million": 50.0
     },
     "Phi-4-mini-instruct": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 0.075,
+      "cached_input_per_million": 0.075,
+      "output_per_million": 0.3
     },
     "Phi-4": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 0.125,
+      "cached_input_per_million": 0.125,
+      "output_per_million": 0.5
     },
     "Phi-4-reasoning": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 0.15,
+      "cached_input_per_million": 0.15,
+      "output_per_million": 0.6
     },
     "DeepSeek-V4-Flash": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 0.2,
+      "cached_input_per_million": 0.02,
+      "output_per_million": 0.8
     },
     "gpt-6-luna": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 0.5,
+      "cached_input_per_million": 0.05,
+      "output_per_million": 2.5
     },
     "DeepSeek-V4-Pro": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 1.0,
+      "cached_input_per_million": 0.1,
+      "output_per_million": 4.0
     },
     "claude-haiku-5-5": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 0.1,
+      "cached_input_per_million": 0.01,
+      "output_per_million": 0.5
     },
     "MAI-Thinking-1": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 1.5,
+      "cached_input_per_million": 1.5,
+      "output_per_million": 7.5
     },
     "grok-4.7": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 3.0,
+      "cached_input_per_million": 0.75,
+      "output_per_million": 15.0
     },
     "claude-sonnet-5-5": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 2.0,
+      "cached_input_per_million": 0.1,
+      "output_per_million": 10.0
     },
     "gpt-6.1-sol": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 2.0,
+      "cached_input_per_million": 0.1,
+      "output_per_million": 10.0
     },
     "claude-opus-5-5": {
-      "input_per_million": null,
-      "cached_input_per_million": null,
-      "output_per_million": null
+      "input_per_million": 4.0,
+      "cached_input_per_million": 0.2,
+      "output_per_million": 20.0
     }
   },
   "decision1": {

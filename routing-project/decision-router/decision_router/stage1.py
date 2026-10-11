@@ -10,7 +10,7 @@ removed which model and why:
   3. request selection  routing_constraints.models / exclude_models / providers
   4. capabilities       routing_constraints.capabilities plus what the request itself needs
   5. location           routing_constraints.region / deployment_type / inference_in_azure
-  6. size               estimated prompt + output tokens against the context window and output limit
+  6. size               estimated prompt + output tokens against the context window, input and output limits
   7. price band         the routing mode's share of what is left, by tier
 
 No step may leave zero models silently: the caller turns an empty result into a 422 that names
@@ -233,6 +233,8 @@ def select(catalog: Catalog, mode: str, constraints: Constraints, body: dict[str
             return None if unknown_ok else "context window unknown"
         if needed_context > m.context_tokens:
             return f"needs ~{needed_context} tokens, context is {m.context_tokens}"
+        if m.max_input_tokens and prompt_tokens > m.max_input_tokens:
+            return f"prompt is ~{prompt_tokens} tokens, input limit is {m.max_input_tokens}"
         if output_tokens and m.max_output_tokens and output_tokens > m.max_output_tokens:
             return f"asks for {output_tokens} output tokens, limit is {m.max_output_tokens}"
         return None

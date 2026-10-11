@@ -28,8 +28,8 @@ def test_preview_models_can_be_excluded(catalog, settings):
 
 
 def test_operator_allowlist(catalog, settings):
-    result = select(catalog, "balanced", Constraints(), USER, replace(settings, model_allowlist=("gpt-5.5", "gpt-5-mini")))
-    assert names(result) == ["gpt-5-mini", "gpt-5.5"]
+    result = select(catalog, "balanced", Constraints(), USER, replace(settings, model_allowlist=("gpt-5.5", "gpt-5.4-mini")))
+    assert names(result) == ["gpt-5.4-mini", "gpt-5.5"]
 
 
 def test_developer_subset_and_providers(catalog, settings):
@@ -64,21 +64,30 @@ def test_capability_filter_with_unknown_values(new_catalog, settings):
     assert "FW-GLM-5.3" not in names(strict_parallel)
 
 
-def test_structured_output_keeps_claude_out(catalog, settings):
-    body = dict(USER, response_format={"type": "json_schema", "json_schema": {"name": "x", "schema": {}}})
-    result = select(catalog, "balanced", Constraints(), body, settings)
-    assert not any(n.startswith("claude-") for n in names(result))
+def test_json_schema_keeps_claude_but_json_object_does_not(catalog, settings):
+    schema = dict(USER, response_format={"type": "json_schema", "json_schema": {"name": "x", "schema": {}}})
+    assert "claude-opus-5" in names(select(catalog, "balanced", Constraints(), schema, settings))
+    json_mode = dict(USER, response_format={"type": "json_object"})
+    assert not any(n.startswith("claude-") for n in names(select(catalog, "balanced", Constraints(), json_mode, settings)))
 
 
-def test_region_and_residency(catalog, settings):
+def test_prompt_over_the_input_limit(new_catalog, settings):
+    body = {"messages": [{"role": "user", "content": "x" * 1_200_000}]}  # ~300K tokens: inside 400K, over 272K input
+    result = select(new_catalog, "balanced", Constraints(), body, settings)
+    assert removed(result, "size")["gpt-5.4-mini"].startswith("prompt is ~")
+    assert "gpt-5.5" in names(result)
+
+
+def test_region_and_residency(catalog, new_catalog, settings):
     sweden = select(catalog, "balanced", Constraints(region="swedencentral"), USER, settings)
     reasons = removed(sweden, "location")
     assert reasons["grok-4"] == "regions not published"
-    assert "gpt-5-nano" in names(sweden)
+    assert "gpt-5.4-nano" in names(sweden)
     assert "FW-GLM-5.3" in names(sweden)  # Fireworks deploys globally, from any region
     in_azure = select(catalog, "balanced", Constraints(inference_in_azure=True), USER, settings)
-    assert "claude-opus-4-7" not in names(in_azure) and "FW-Kimi-K3" not in names(in_azure)
-    assert "claude-opus-5" in names(in_azure)
+    assert "claude-opus-5" not in names(in_azure) and "FW-Kimi-K3" not in names(in_azure)  # opus-5 v1: Anthropic-hosted
+    new_in_azure = select(new_catalog, "balanced", Constraints(inference_in_azure=True), USER, settings)
+    assert "claude-opus-5-5" in names(new_in_azure)
     data_zone = select(catalog, "balanced", Constraints(region="swedencentral", deployment_type="data_zone_standard"),
                        USER, settings)
     assert all("swedencentral" in m.regions["data_zone_standard"] for m in data_zone.candidates)
@@ -111,8 +120,8 @@ def test_size_filter(new_catalog, settings):
 
 
 def test_price_band_applies_after_the_other_filters(catalog, settings):
-    subset = Constraints(models=("gpt-5-nano", "gpt-5.5", "claude-opus-5"))
-    assert names(select(catalog, "cost", subset, USER, settings)) == ["gpt-5-nano"]
+    subset = Constraints(models=("gpt-5.4-nano", "gpt-5.5", "claude-opus-5"))
+    assert names(select(catalog, "cost", subset, USER, settings)) == ["gpt-5.4-nano"]
     assert names(select(catalog, "quality", subset, USER, settings)) == ["claude-opus-5"]
 
 

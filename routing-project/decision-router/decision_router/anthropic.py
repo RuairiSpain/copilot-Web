@@ -7,9 +7,10 @@ requests to Claude are converted here and the answer converted back.
 
 Translated: system/developer messages, text and image content, assistant tool calls, tool results,
 tools, tool_choice, parallel_tool_calls, max_tokens/max_completion_tokens, temperature, top_p,
-stop, stream (with stream_options.include_usage), and user (as metadata.user_id).
-Not translated: response_format, n>1, logprobs, seed, presence/frequency penalties. Stage 1 keeps
-requests that need structured output away from Claude; the other fields are dropped.
+stop, stream (with stream_options.include_usage), user (as metadata.user_id), and
+response_format json_schema (as output_config.format, Claude's structured outputs).
+Not translated: response_format json_object (no Messages API equivalent; stage 1 keeps those
+requests away from Claude), n>1, logprobs, seed, presence/frequency penalties (dropped).
 """
 from __future__ import annotations
 
@@ -104,6 +105,10 @@ def to_messages_request(body: dict[str, Any], deployment: str, default_max_token
         request["stream"] = True
     if body.get("user"):
         request["metadata"] = {"user_id": str(body["user"])}
+    fmt = body.get("response_format")
+    if isinstance(fmt, dict) and fmt.get("type") == "json_schema":
+        schema = (fmt.get("json_schema") or {}).get("schema") or {"type": "object"}
+        request["output_config"] = {"format": {"type": "json_schema", "schema": schema}}
 
     tools = [t.get("function") or {} for t in body.get("tools") or [] if t.get("type", "function") == "function"]
     if tools:

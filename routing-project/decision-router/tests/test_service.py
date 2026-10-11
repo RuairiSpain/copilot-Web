@@ -79,13 +79,13 @@ def test_constraints_narrow_the_choice_and_are_not_forwarded(make_pipeline, sett
     fake.decision_responses.append(ranked(["gpt-5.4-mini"]))
     with client_for(make_pipeline, settings) as client:
         response = client.post("/v1/chat/completions", json={
-            "messages": USER,
-            "routing_constraints": {"models": ["gpt-5.4-mini", "gpt-5.5", "claude-opus-5"], "region": "swedencentral",
+            "messages": USER, "compatibility": "new",
+            "routing_constraints": {"models": ["gpt-5.4-mini", "gpt-5.5", "claude-opus-5-5"], "region": "swedencentral",
                                     "inference_in_azure": True},
         })
     assert response.status_code == 200
     offered = set(decision_calls(fake)[0]["questions"]["route"]["criteria"])
-    assert offered == {"gpt-5.4-mini", "gpt-5.5", "claude-opus-5"}
+    assert offered == {"gpt-5.4-mini", "gpt-5.5", "claude-opus-5-5"}
     assert "routing_constraints" not in chat_calls(fake)[0]["body"]
 
 
