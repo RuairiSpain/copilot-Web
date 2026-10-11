@@ -50,8 +50,9 @@ body.
 **Claude.** Claude deployments on Foundry accept only the Anthropic Messages API. The router
 translates the request (system messages, images, tools, tool results, tool_choice, stop,
 streaming) and translates the answer back to a chat completion, so callers never see the
-difference. `response_format` is not translated, so stage 1 keeps structured-output requests
-away from Claude. Code: `decision_router/anthropic.py`. A request can turn this off with
+difference. `response_format` of type `json_schema` becomes Claude's structured outputs
+(`output_config.format`); type `json_object` has no Messages API equivalent, so stage 1 keeps
+JSON-mode requests away from Claude. Code: `decision_router/anthropic.py`. A request can turn this off with
 `"claude_translation": false`: it then sends an Anthropic Messages body, only Claude models are
 candidates, and the native Claude response is returned unchanged (`docs/STAGE1_FILTERING.md`).
 
@@ -71,12 +72,12 @@ api-key: <key>            or   Authorization: Bearer <Entra token, scope cogniti
  "questions": {"route": {
    "type": "choice",
    "instructions": "Choose the model that should answer ... Cost mode: ...",
-   "criteria": {"gpt-5-nano": "Trivial, single-step work ... Price rank 1 of 6 in the pool (1 is cheapest).",
-                "gpt-5-mini": "...", "gpt-5.4-nano": "..."}}}}
+   "criteria": {"gpt-5.4-nano": "Smallest, fastest GPT-5.4 model ... Price rank 2 of 26 in the pool (1 is cheapest).",
+                "gpt-5.4-mini": "...", "gpt-5.6-terra": "..."}}}}
 
 200 {"model": "microsoft-decision-1", "usage": {"prompt_tokens": 412, ...},
-     "answers": {"route": {"type": "choice", "choice": "gpt-5-mini",
-                           "probabilities": {"gpt-5-nano": 0.21, "gpt-5-mini": 0.64, "gpt-5.4-nano": 0.15},
+     "answers": {"route": {"type": "choice", "choice": "gpt-5.4-mini",
+                           "probabilities": {"gpt-5.4-nano": 0.21, "gpt-5.4-mini": 0.64, "gpt-5.6-terra": 0.15},
                            "confidence": 0.81}}}
 ```
 
@@ -162,8 +163,8 @@ messages is logged instead.
 
 Model Router's mode is a deployment setting, so the comparison needs one Model Router
 deployment per mode. Run the harness with `--compatibility old` (the default).
-`config/catalog_old.json` is Model Router's routing pool minus its six deprecated models, so give
-each Model Router deployment a custom model subset listing exactly those 29 models; with the
+`config/catalog_old.json` is Model Router's routing pool minus its nine deprecated models, so give
+each Model Router deployment a custom model subset listing exactly those 26 models; with the
 default pool it could still pick a deprecated model that our router never offers. The catalog's
 `deployment` names must be the deployments Model Router uses (Claude models must be deployed to
 the resource for Model Router too). Then both arms choose from the same models and generate with

@@ -34,6 +34,8 @@ class ModelEntry:
     retires: str | None = None
     in_model_router: bool = False
     context_tokens: int | None = None
+    # Some models cap the prompt below the context window (GPT-5.x: 272K of 400K, 922K of 1.05M)
+    max_input_tokens: int | None = None
     max_output_tokens: int | None = None
     capabilities: dict[str, str] = field(default_factory=dict)
     infrastructure: str = "azure"
@@ -91,6 +93,7 @@ class Catalog:
                 retires=m.get("retires"),
                 in_model_router=bool(m.get("in_model_router")),
                 context_tokens=limits.get("context_tokens"),
+                max_input_tokens=limits.get("max_input_tokens"),
                 max_output_tokens=limits.get("max_output_tokens"),
                 capabilities=dict(m.get("capabilities") or {}),
                 infrastructure=hosting.get("infrastructure", "azure"),

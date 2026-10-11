@@ -43,7 +43,7 @@ without them is a plain Model Router request.
 | `routing_constraints.capabilities` | Models must support each one: `tools`, `parallel_tools`, `structured_output`, `json_object`, `streaming`, `reasoning`, `image_input`, `computer_use`. |
 | `routing_constraints.region` | The model must be deployable in this Azure region (for example `swedencentral`; `"Sweden Central"` is accepted). Fireworks models deploy globally and pass any region. |
 | `routing_constraints.deployment_type` | `global_standard`, `data_zone_standard` or `standard`. With `region`, the model must be available in that region for that deployment type. Fireworks models offer `global_standard` only. |
-| `routing_constraints.inference_in_azure` | Excludes models whose inference runs outside Azure: Anthropic-hosted Claude and Fireworks models. |
+| `routing_constraints.inference_in_azure` | Excludes models whose inference runs outside Azure: Anthropic-hosted Claude (version 1, which includes every Claude model in `old`) and Fireworks models. |
 | `routing_constraints.min_context_tokens` | The context window must be at least this large. |
 | `routing_constraints.allow_preview` | Overrides `ROUTER_ALLOW_PREVIEW` for this request. |
 
@@ -56,11 +56,11 @@ Unknown keys, unknown model names and unknown capability names return 400
 |---|---|
 | `tools` | `tools: yes` |
 | `parallel_tool_calls: true` (with tools) | `parallel_tools: yes` |
-| `response_format: {"type": "json_schema"}` | `structured_output: yes` |
-| `response_format: {"type": "json_object"}` | `json_object: yes` |
+| `response_format: {"type": "json_schema"}` | `structured_output: yes` (Claude qualifies: the adapter sends the schema as `output_config.format`) |
+| `response_format: {"type": "json_object"}` | `json_object: yes` (Claude does not: JSON mode has no Messages API equivalent) |
 | `stream: true` | `streaming: yes` |
 | an `image_url` part in `messages` | `image_input: yes` |
-| estimated prompt tokens + `max_completion_tokens` | a big enough context window, and an output limit at least as large as requested |
+| estimated prompt tokens + `max_completion_tokens` | a big enough context window, an input limit at least as large as the prompt (GPT-5.x models accept 272K of their 400K context, or 922K of 1.05M, as input), and an output limit at least as large as requested |
 
 The token estimate is characters ÷ 4, and deliberately rough. It exists to keep a 300,000-character prompt away from a 16K-context model, not to
 cut close to a limit.
@@ -75,7 +75,7 @@ cut close to a limit.
 | 3. `selection` | it is outside `models`, inside `exclude_models`, or not from a listed provider |
 | 4. `capabilities` | a requested or implied capability is `no`, or `unknown` while `ROUTER_UNKNOWN_CAPABILITY=ineligible` |
 | 5. `location` | inference runs outside Azure and `inference_in_azure` is set; or the region / deployment type is not available or not published |
-| 6. `size` | the estimated tokens exceed the context window, or the requested output exceeds the output limit |
+| 6. `size` | the estimated tokens exceed the context window, the prompt exceeds the input limit, or the requested output exceeds the output limit |
 | 7. `price_band` | it is outside the routing mode's band of what is left: `cost` = cheapest third, `balanced` = all, `quality` = most expensive third (at least one model always stays) |
 
 What happens with the result:
