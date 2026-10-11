@@ -44,7 +44,7 @@ jobs:
       - name: Boot it and check health
         run: |
           docker run -d --name router -p 5001:5001 \
-            -e FOUNDRY_ENDPOINT=https://ci.services.ai.azure.com -e FOUNDRY_API_KEY=ci \
+            -e FOUNDRY_ENDPOINT=https://ci.services.ai.azure.com -e FOUNDRY_API_KEY=ci -e ROUTER_API_KEYS=ci \
             decision-router:ci
           for _ in $(seq 1 30); do
             curl -sf http://localhost:5001/health/ready && exit 0 || sleep 1

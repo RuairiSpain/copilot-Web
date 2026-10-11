@@ -31,6 +31,14 @@ spec:
             - {name: DECISION1_DEPLOYMENT, value: "microsoft-decision-1"}
             - {name: ROUTER_DEFAULT_MODE, value: "balanced"}
             - {name: ROUTER_COMPATIBILITY, value: "new"}
+            # Inbound authentication: callers present a Microsoft Entra ID token for this audience
+            # (managed identity, or OAuth 2.0 client credentials from a Foundry Agent Service model
+            # connection) and/or an API key from the router-api-keys secret.
+            - {name: ROUTER_ENTRA_TENANT_ID, value: "<tenant-id>"}
+            - {name: ROUTER_ENTRA_AUDIENCE, value: "api://decision-router"}
+            - {name: ROUTER_ENTRA_ALLOWED_CLIENT_IDS, value: "<caller-client-ids, comma-separated>"}
+            - name: ROUTER_API_KEYS
+              valueFrom: {secretKeyRef: {name: router-api-keys, key: keys, optional: true}}
           securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
           readinessProbe: {httpGet: {path: /health/ready, port: http}, initialDelaySeconds: 5, periodSeconds: 10}
           livenessProbe: {httpGet: {path: /health/live, port: http}, initialDelaySeconds: 10, periodSeconds: 30}

@@ -9,6 +9,14 @@ from typing import Any
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 ROUTING_MODES = ("cost", "balanced", "quality")
 COMPATIBILITIES = ("old", "new")
+# `model` values that select a routing profile. A Foundry Agent Service model connection cannot add
+# routing_mode or other extension fields, so each agent picks a profile by the model name it calls.
+PROFILE_FIELDS = ("routing_mode", "compatibility", "routing_constraints", "claude_translation")
+DEFAULT_PROFILES: dict[str, dict[str, Any]] = {
+    "decision-router-cost": {"routing_mode": "cost"},
+    "decision-router-balanced": {"routing_mode": "balanced"},
+    "decision-router-quality": {"routing_mode": "quality"},
+}
 API_PATHS = {
     "openai_chat": "/openai/v1/chat/completions",
     "mai_chat": "/mai/v1/chat/completions",
@@ -72,6 +80,14 @@ class Settings:
     max_retry_after_seconds: float = 10.0
     decision_log_path: Path | None = None
     log_prompts: bool = False
+    # Inbound authentication (see inbound.py): API keys and/or Microsoft Entra ID tokens.
+    api_keys: tuple[str, ...] = ()
+    entra_tenant_id: str | None = None
+    entra_audiences: tuple[str, ...] = ()
+    entra_allowed_client_ids: tuple[str, ...] = ()
+    allow_unauthenticated: bool = False
+    # model name -> routing profile (defaults in DEFAULT_PROFILES, extended by ROUTER_PROFILES)
+    profiles: dict[str, dict[str, Any]] = field(default_factory=lambda: dict(DEFAULT_PROFILES))
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -104,6 +120,12 @@ class Settings:
             max_retry_after_seconds=float(os.getenv("ROUTER_MAX_RETRY_AFTER_SECONDS", "10")),
             decision_log_path=Path(log_path) if log_path else None,
             log_prompts=_bool("ROUTER_LOG_PROMPTS", False),
+            api_keys=_list("ROUTER_API_KEYS"),
+            entra_tenant_id=os.getenv("ROUTER_ENTRA_TENANT_ID") or None,
+            entra_audiences=_list("ROUTER_ENTRA_AUDIENCE"),
+            entra_allowed_client_ids=_list("ROUTER_ENTRA_ALLOWED_CLIENT_IDS"),
+            allow_unauthenticated=_bool("ROUTER_ALLOW_UNAUTHENTICATED", False),
+            profiles={**DEFAULT_PROFILES, **_json_object("ROUTER_PROFILES")},
         )
         settings.validate()
         return settings
@@ -130,6 +152,9 @@ class Settings:
                 raise ValueError(f"{name} must be positive")
         if self.max_retry_after_seconds < 0:
             raise ValueError("ROUTER_MAX_RETRY_AFTER_SECONDS must not be negative")
+        for name, profile in self.profiles.items():
+            if not isinstance(profile, dict) or set(profile) - set(PROFILE_FIELDS):
+                raise ValueError(f"ROUTER_PROFILES['{name}'] must be an object with keys from {PROFILE_FIELDS}")
 
     @property
     def resolved_decision1_url(self) -> str | None:
