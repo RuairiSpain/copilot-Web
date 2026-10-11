@@ -11,7 +11,8 @@ removed which model and why:
   4. capabilities       routing_constraints.capabilities plus what the request itself needs
   5. location           routing_constraints.region / deployment_type / inference_in_azure
   6. size               estimated prompt + output tokens against the context window, input and output limits
-  7. price band         the routing mode's share of what is left, by tier
+  7. price band         with routing_cost_band, the models whose output price is in that band or
+                        dollar range; otherwise the routing mode's share of what is left, by tier
 
 No step may leave zero models silently: the caller turns an empty result into a 422 that names
 the step.
@@ -20,10 +21,11 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from .catalog import EXCLUDED_LIFECYCLES, Catalog, ModelEntry
+from .catalog import EXCLUDED_LIFECYCLES, Catalog, CostBand, ModelEntry
 from .config import Settings
 
 KNOWN_CAPABILITIES = ("tools", "structured_output", "streaming", "reasoning", "image_input")
@@ -92,6 +94,38 @@ def parse_constraints(raw: Any, catalog: Catalog) -> Constraints:
                        bool(raw.get("inference_in_azure", False)), min_context, raw.get("allow_preview"))
 
 
+_RANGE = re.compile(r"^\$?(\d+(?:\.\d+)?)?\s*(?:-|\.\.)\s*\$?(\d+(?:\.\d+)?)?$")
+
+
+def parse_cost_band(raw: Any, catalog: Catalog) -> CostBand | None:
+    """routing_cost_band: a band name from the catalog ("low"), a dollar range string ("1-3", "$10-$25",
+    "30-" for open-ended) or {"min": 1, "max": 3}. Prices are USD per million output tokens."""
+    if raw is None:
+        return None
+    names = list(catalog.cost_bands)
+    if isinstance(raw, str):
+        value = raw.strip()
+        if value.lower() in catalog.cost_bands:
+            return catalog.cost_bands[value.lower()]
+        match = _RANGE.match(value)
+        if not match or not any(match.groups()):
+            known = f"a band name ({', '.join(names)}) or " if names else ""
+            raise ConstraintError(f"routing_cost_band must be {known}a dollar range such as \"1-3\"; got {raw!r}"
+                                  + ("" if names else f". The '{catalog.compatibility}' catalog has no named bands"))
+        low, high = (float(g) if g is not None else None for g in match.groups())
+    elif isinstance(raw, dict):
+        if not raw or set(raw) - {"min", "max"}:
+            raise ConstraintError('routing_cost_band object takes "min" and/or "max"')
+        if any(not isinstance(v, (int, float)) or isinstance(v, bool) or v < 0 for v in raw.values()):
+            raise ConstraintError("routing_cost_band min and max must be non-negative numbers")
+        low, high = raw.get("min"), raw.get("max")
+    else:
+        raise ConstraintError("routing_cost_band must be a string or an object")
+    if low is not None and high is not None and low > high:
+        raise ConstraintError("routing_cost_band: min is above max")
+    return CostBand(low, high)
+
+
 def requirements_from_messages_body(body: dict[str, Any]) -> dict[str, str]:
     """Same as requirements_from_request, for an Anthropic Messages body (claude_translation=false)."""
     needs: dict[str, str] = {}
@@ -145,7 +179,7 @@ class Stage1Result:
 
 
 def select(catalog: Catalog, mode: str, constraints: Constraints, body: dict[str, Any], settings: Settings,
-           passthrough: bool = False) -> Stage1Result:
+           passthrough: bool = False, cost_band: CostBand | None = None) -> Stage1Result:
     remaining = list(catalog.models)
     requirements = requirements_from_messages_body(body) if passthrough else requirements_from_request(body)
     result = Stage1Result([], requirements=requirements)
@@ -236,7 +270,15 @@ def select(catalog: Catalog, mode: str, constraints: Constraints, body: dict[str
         if not step(name, keep):
             return result
 
-    banded = {m.name for m in catalog.price_band(mode, remaining)}
-    step("price_band", lambda m: None if m.name in banded else f"outside the {mode} price band")
+    if cost_band is not None:
+        def in_band(m: ModelEntry) -> str | None:
+            if m.output_price is None:
+                return "no output price"
+            return None if cost_band.contains(m.output_price) else f"outside cost band {cost_band.label()}"
+        if not step("price_band", in_band):
+            return result
+    else:
+        banded = {m.name for m in catalog.price_band(mode, remaining)}
+        step("price_band", lambda m: None if m.name in banded else f"outside the {mode} price band")
     result.candidates = remaining
     return result

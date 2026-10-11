@@ -50,6 +50,9 @@ How to read the examples:
 | A17 | Previews excluded | 24 of 26 |
 | A18 | Region where only global Fireworks models qualify | 3 of 26 |
 | A19 | Only one model passes | 1 of 23 |
+| A20 | Named cost band: high | 5 of 23 |
+| A21 | Dollar range instead of a band name | 6 of 23 |
+| A22 | Cost band profile with tools | 6 of 23 |
 | Z1 | Tools requested from models without tool calling | 0 models (empty at `capabilities`) |
 | Z2 | Tools on gpt-6.1-sol only | 0 models (empty at `capabilities`) |
 | Z3 | Regional (Standard) deployment type | 0 models (empty at `location`) |
@@ -68,9 +71,11 @@ How to read the examples:
 | Z16 | Image input with text-only models | 0 models (empty at `capabilities`) |
 | Z17 | Reasoning required from non-reasoning models | 0 models (empty at `capabilities`) |
 | Z18 | Region with no Azure availability, inference in Azure | 0 models (empty at `location`) |
+| Z19 | Top band with Claude only | 0 models (empty at `price_band`) |
 | R1 | Capability that is no longer in the catalog | 400 `invalid_routing_constraints` |
 | R2 | Model name not in the catalog | 400 `invalid_routing_constraints` |
 | R3 | Old-catalog model requested from the new catalog | 400 `invalid_routing_constraints` |
+| R4 | Named cost band on the old catalog | 400 `invalid_routing_cost_band` |
 
 ## Findings
 
@@ -642,6 +647,93 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5,claude-o
 
 **Explanation:** The router calls gpt-5.5 directly. This saves the Decision-1 call (time and cost); the decision log records it as `skipped`.
 
+### A20. Named cost band: high
+
+**Why it is useful:** The `new` catalog's named bands pick models by output price instead of by thirds. `high` is $10 to $25 per million output tokens.
+
+```json
+{
+  "compatibility": "new",
+  "routing_cost_band": "high",
+  "messages": [{"role": "user", "content": "Summarise the attached contract clause and flag anything unusual."}]
+}
+```
+
+**Read from the request:** catalog `new` (23 models), mode `balanced`, cost band high ($10-$25), estimated ~26 prompt tokens. Requirements: none.
+
+| Step | Removed | Left |
+|---|---|---|
+| `api` | – | 23 |
+| `lifecycle` | – | 23 |
+| `allowlist` | – | 23 |
+| `selection` | – | 23 |
+| `capabilities` | – | 23 |
+| `location` | – | 23 |
+| `size` | – | 23 |
+| `price_band` | 18 × outside cost band high ($10-$25) | 5 |
+
+**Stage 1 output (the 5 options Decision-1 chooses from, cheapest first):** `claude-sonnet-5-5`, `gpt-6.1-sol`, `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`
+
+**Explanation:** `routing_cost_band` replaces the mode's price band. The five models with output prices from $10 to $25 remain; the mode (`balanced`) still sets the instructions Decision-1 receives.
+
+### A21. Dollar range instead of a band name
+
+**Why it is useful:** A caller gives its own range. `3-10` covers the $3 to $10 gap that no named band includes.
+
+```json
+{
+  "compatibility": "new",
+  "routing_cost_band": "3-10",
+  "messages": [{"role": "user", "content": "Summarise the attached contract clause and flag anything unusual."}]
+}
+```
+
+**Read from the request:** catalog `new` (23 models), mode `balanced`, cost band $3-$10, estimated ~26 prompt tokens. Requirements: none.
+
+| Step | Removed | Left |
+|---|---|---|
+| `api` | – | 23 |
+| `lifecycle` | – | 23 |
+| `allowlist` | – | 23 |
+| `selection` | – | 23 |
+| `capabilities` | – | 23 |
+| `location` | – | 23 |
+| `size` | – | 23 |
+| `price_band` | 17 × outside cost band $3-$10 | 6 |
+
+**Stage 1 output (the 6 options Decision-1 chooses from, cheapest first):** `gpt-5.4-mini`, `DeepSeek-V4-Pro`, `gpt-5.6-terra`, `MAI-Thinking-1`, `claude-sonnet-5-5`, `gpt-6.1-sol`
+
+**Explanation:** Both ends are inclusive, so gpt-5.4-mini ($3) and the two $10 models are kept alongside the three models that sit in the gap: DeepSeek-V4-Pro, gpt-5.6-terra and MAI-Thinking-1.
+
+### A22. Cost band profile with tools
+
+**Why it is useful:** A Foundry agent that can't send `routing_cost_band` uses the built-in `decision-router-low` profile, and its request carries tools.
+
+```json
+{
+  "model": "decision-router-low",
+  "messages": [{"role": "user", "content": "Look up the order status."}],
+  "tools": [{"type": "function", "function": {"name": "read_file", "description": "Read a file from the repository", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}}}}]
+}
+```
+
+**Read from the request:** catalog `new` (23 models), mode `balanced`, profile `decision-router-low`, cost band low ($0-$1), estimated ~62 prompt tokens. Requirements: `tools` (request has tools).
+
+| Step | Removed | Left |
+|---|---|---|
+| `api` | – | 23 |
+| `lifecycle` | – | 23 |
+| `allowlist` | – | 23 |
+| `selection` | – | 23 |
+| `capabilities` | tools no (needed: request has tools): `Phi-4-mini-instruct`, `Phi-4`, `Phi-4-reasoning`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `gpt-5.6-terra`, `gpt-6.1-sol` | 17 |
+| `location` | – | 17 |
+| `size` | – | 17 |
+| `price_band` | outside cost band low ($0-$1): `gpt-5.4-mini`, `gpt-6-luna`, `FW-GLM-5.3`, `FW-Kimi-K3`, `DeepSeek-V4-Pro`, `MAI-Thinking-1`, `claude-sonnet-5-5`, `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`, `gpt-6-astra` | 6 |
+
+**Stage 1 output (the 6 options Decision-1 chooses from, cheapest first):** `FW-GLM-5.3-Flash`, `claude-haiku-5-5`, `gpt-5.4-nano`, `gpt-oss-120b`, `grok-4-1-fast-reasoning`, `DeepSeek-V4-Flash`
+
+**Explanation:** The profile selects the `new` catalog and the `low` band. The capabilities step first removes the six models without Chat Completions tool calling: the three Phi models, Llama 4 Maverick, gpt-5.6-terra and gpt-6.1-sol. The band then keeps the six remaining models priced at $1 or less per million output tokens.
+
 ## Requests that leave no models
 
 These requests leave no candidates. The router returns **422 `no_eligible_models`**, names the
@@ -1131,6 +1223,36 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5`.
 
 **Explanation:** The Azure-hosted models are not offered in West India and the Fireworks models run outside Azure, so nothing remains.
 
+### Z19. Top band with Claude only
+
+**Why it is useful:** A named band combined with a provider restriction that has no model in that band.
+
+```json
+{
+  "compatibility": "new",
+  "routing_cost_band": "top",
+  "messages": [{"role": "user", "content": "Summarise the attached contract clause and flag anything unusual."}],
+  "routing_constraints": {"providers": ["Anthropic"]}
+}
+```
+
+**Read from the request:** catalog `new` (23 models), mode `balanced`, cost band top ($30-$60), estimated ~26 prompt tokens. Requirements: none.
+
+| Step | Removed | Left |
+|---|---|---|
+| `api` | – | 23 |
+| `lifecycle` | – | 23 |
+| `allowlist` | – | 23 |
+| `selection` | 8 × provider OpenAI not requested<br>4 × provider Microsoft not requested<br>3 × provider Fireworks not requested<br>2 × provider xAI not requested<br>2 × provider DeepSeek not requested<br>1 × provider Meta not requested | 3 |
+| `capabilities` | – | 3 |
+| `location` | – | 3 |
+| `size` | – | 3 |
+| `price_band` | outside cost band top ($30-$60): `claude-haiku-5-5`, `claude-sonnet-5-5`, `claude-opus-5-5` | 0 |
+
+**Stage 1 output:** no models. The request gets **422 `no_eligible_models`**; the `price_band` step removed the last candidates. Decision-1 is not called.
+
+**Explanation:** The `top` band is $30 to $60 and contains only gpt-6-astra. No Claude model in `new` costs that much, so the `price_band` step removes the last three. Unlike the routing modes, a cost band can leave nothing.
+
 ## Requests rejected before stage 1
 
 These never reach stage 1: the request itself is invalid, so the caller gets a 400 that says what to fix, not an empty model list.
@@ -1180,3 +1302,18 @@ Unknown names are rejected rather than ignored, so a typo never silently widens 
 **Result:** rejected with **400 `invalid_routing_constraints`** before stage 1: routing_constraints names models not in the 'new' catalog: ['claude-opus-5']
 
 Names are checked against the catalog the request selected. claude-opus-5 is only in `old`.
+
+### R4. Named cost band on the old catalog
+
+**Why it is useful:** The named bands exist only in `new`; the `old` catalog keeps the routing modes' thirds.
+
+```json
+{
+  "routing_cost_band": "low",
+  "messages": [{"role": "user", "content": "Summarise the attached contract clause and flag anything unusual."}]
+}
+```
+
+**Result:** rejected with **400 `invalid_routing_cost_band`** before stage 1: routing_cost_band must be a dollar range such as "1-3"; got 'low'. The 'old' catalog has no named bands
+
+The `old` catalog defines no band names, so `low` is rejected. A dollar range such as `"0-1"` works on either catalog.

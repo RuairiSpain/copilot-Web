@@ -47,6 +47,7 @@ class ModelEntry:
     regions: dict[str, tuple[str, ...]] = field(default_factory=dict)
     # "published" (regions listed), "global" (deployable from any region, Global Standard), or "unknown"
     region_status: str = "unknown"
+    output_price: float | None = None  # USD per million output tokens, from model_pricing.json
 
     def capability(self, name: str) -> str:
         return self.capabilities.get(name, "no")
@@ -60,19 +61,39 @@ class RoutingMode:
     band_share: float
 
 
+@dataclass(frozen=True)
+class CostBand:
+    """A USD range of output price per million tokens; both ends inclusive, None = open."""
+    min: float | None
+    max: float | None
+    name: str | None = None  # the catalog's band name, when the request named one
+
+    def contains(self, price: float) -> bool:
+        return (self.min is None or price >= self.min) and (self.max is None or price <= self.max)
+
+    def label(self) -> str:
+        low = "0" if self.min is None else f"{self.min:g}"
+        span = f"${low}-${self.max:g}" if self.max is not None else f"${low} and above"
+        return f"{self.name} ({span})" if self.name else span
+
+    def as_dict(self) -> dict[str, Any]:
+        return {"name": self.name, "min": self.min, "max": self.max}
+
+
 class CatalogError(ValueError):
     pass
 
 
 class Catalog:
     def __init__(self, compatibility: str, models: list[ModelEntry], modes: dict[str, RoutingMode],
-                 default_mode: str, fingerprint: str = ""):
+                 default_mode: str, fingerprint: str = "", cost_bands: dict[str, CostBand] | None = None):
         self.compatibility = compatibility
         self.models = sorted(models, key=lambda m: m.tier)
         self.by_name = {m.name: m for m in self.models}
         self.modes = modes
         self.default_mode = default_mode
         self.fingerprint = fingerprint
+        self.cost_bands = cost_bands or {}
         self._validate()
 
     @classmethod
@@ -104,14 +125,19 @@ class Catalog:
                 infrastructure=hosting.get("infrastructure", "azure"),
                 regions={k: tuple(v) for k, v in (m.get("regions") or {}).items()},
                 region_status=m.get("region_status", "published" if m.get("regions") else "unknown"),
+                output_price=(m.get("price") or {}).get("output_per_million"),
             ))
         modes = {}
         for name, spec in data["routing_modes"].items():
             band = spec.get("price_band") or {"from": "cheapest", "share": 1.0}
             modes[name] = RoutingMode(name, spec["instructions"].strip(), band["from"], float(band["share"]))
+        bands_spec = data.get("cost_bands") or {}
+        if bands_spec and bands_spec.get("basis") != "output_per_million":
+            raise CatalogError("cost_bands.basis must be output_per_million")
+        bands = {name: CostBand(b.get("min"), b.get("max"), name) for name, b in (bands_spec.get("bands") or {}).items()}
         compatibility = data.get("compatibility") or path.stem.removeprefix("catalog_")
         return cls(compatibility, models, modes, default_mode or data.get("default_mode", "balanced"),
-                   hashlib.sha256(raw_bytes).hexdigest())
+                   hashlib.sha256(raw_bytes).hexdigest(), bands)
 
     def _validate(self) -> None:
         names = [m.name for m in self.models]
@@ -141,6 +167,9 @@ class Catalog:
                 raise CatalogError(f"routing mode '{mode.name}' has no instructions")
         if self.default_mode not in self.modes:
             raise CatalogError(f"default_mode must be one of {ROUTING_MODES}")
+        for band in self.cost_bands.values():
+            if band.min is not None and band.max is not None and band.min > band.max:
+                raise CatalogError(f"cost band '{band.name}': min is above max")
 
     def price_band(self, mode: str, models: list[ModelEntry]) -> list[ModelEntry]:
         """The mode's share of `models` by price; never empty when `models` is not."""

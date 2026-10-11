@@ -11,11 +11,15 @@ ROUTING_MODES = ("cost", "balanced", "quality")
 COMPATIBILITIES = ("old", "new")
 # `model` values that select a routing profile. A Foundry Agent Service model connection cannot add
 # routing_mode or other extension fields, so each agent picks a profile by the model name it calls.
-PROFILE_FIELDS = ("routing_mode", "compatibility", "routing_constraints", "claude_translation", "routing_pin")
+PROFILE_FIELDS = ("routing_mode", "compatibility", "routing_constraints", "claude_translation", "routing_pin",
+                  "routing_cost_band")
 DEFAULT_PROFILES: dict[str, dict[str, Any]] = {
     "decision-router-cost": {"routing_mode": "cost"},
     "decision-router-balanced": {"routing_mode": "balanced"},
     "decision-router-quality": {"routing_mode": "quality"},
+    # The new catalog's named cost bands (catalog_spec.json), for callers that can't send routing_cost_band.
+    **{f"decision-router-{band}": {"compatibility": "new", "routing_cost_band": band}
+       for band in ("low", "medium", "high", "top")},
     # Coding agents: models strong at multi-step tool use, conversation pinned to one model.
     # Balanced, so Decision-1 weighs the whole list instead of only its most expensive third.
     "decision-router-coding": {

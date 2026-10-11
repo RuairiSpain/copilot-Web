@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "compatibility": "new",
-  "_note": "Latest Azure-available model per provider and role, plus MAI-Thinking-1 and three Phi-4 models. Models marked in_model_router=false cannot be chosen by Model Router, so use the old catalog for comparisons. 23 models. `tier` is computed from model_pricing.json (1 = cheapest). Descriptions are what Decision-1 reads to tell the options apart.",
+  "_note": "Latest Azure-available model per provider and role, plus MAI-Thinking-1 and three Phi-4 models. Models marked in_model_router=false cannot be chosen by Model Router, so use the old catalog for comparisons. 23 models. `tier` is computed from model_pricing.json (1 = cheapest) and `price` is copied from it. Descriptions are what Decision-1 reads to tell the options apart.",
   "tier_status": "computed from model_pricing.json version 2026-10-11-global-standard-public-list: ordered by USD input price, then output, cached-input price and name; 1 = cheapest",
   "generated_from": {
     "spec": "config/catalog_spec.json",
@@ -15,6 +15,11 @@
       "name": "Phi-4-mini-instruct",
       "deployment": "Phi-4-mini-instruct",
       "tier": 1,
+      "price": {
+        "input_per_million": 0.075,
+        "cached_input_per_million": 0.075,
+        "output_per_million": 0.3
+      },
       "aliases": [],
       "description": "Small Microsoft Phi model for simple instructions, short answers, classification and lightweight extraction in 23 languages. Output is limited to 4,096 tokens; no tool calling or image input; weak on multi-step reasoning.",
       "provider": "Microsoft",
@@ -108,6 +113,11 @@
       "name": "FW-GLM-5.3-Flash",
       "deployment": "FW-GLM-5.3-Flash",
       "tier": 2,
+      "price": {
+        "input_per_million": 0.1,
+        "cached_input_per_million": 0.1,
+        "output_per_million": 0.4
+      },
       "aliases": [],
       "description": "Fast, low-cost GLM model served by Fireworks. Suited to quick drafts, summaries, simple questions and light agent steps with function calling; accepts images. Weaker than flagship models on hard reasoning and complex code. Inference runs on Fireworks infrastructure, outside Azure.",
       "provider": "Fireworks",
@@ -167,6 +177,11 @@
       "name": "claude-haiku-5-5",
       "deployment": "claude-haiku-5-5",
       "tier": 3,
+      "price": {
+        "input_per_million": 0.1,
+        "cached_input_per_million": 0.01,
+        "output_per_million": 0.5
+      },
       "aliases": [],
       "description": "Fastest, lowest-cost current Claude for coding, agents, sub-agent work, classification and extraction over large contexts (1M tokens); adaptive thinking, high-resolution image input and computer use. Prompts over 100,000 tokens are billed at a higher rate.",
       "provider": "Anthropic",
@@ -251,6 +266,11 @@
       "name": "gpt-5.4-nano",
       "deployment": "gpt-5.4-nano",
       "tier": 4,
+      "price": {
+        "input_per_million": 0.1,
+        "cached_input_per_million": 0.01,
+        "output_per_million": 0.8
+      },
       "aliases": [],
       "description": "Smallest, fastest GPT-5.4 model. Good for short answers, classification, extraction, rewriting and simple tool calls at very high volume; supports reasoning, structured outputs and image input. Gives shallow answers on multi-step reasoning, hard code or long documents: choose a larger model for those.",
       "provider": "OpenAI",
@@ -355,6 +375,11 @@
       "name": "Phi-4",
       "deployment": "Phi-4",
       "tier": 5,
+      "price": {
+        "input_per_million": 0.125,
+        "cached_input_per_million": 0.125,
+        "output_per_million": 0.5
+      },
       "aliases": [],
       "description": "Microsoft Phi-4 small model for short reasoning, maths and general questions in many languages. 16K context with no tool calling or image input, so use it only for short prompts.",
       "provider": "Microsoft",
@@ -447,6 +472,11 @@
       "name": "gpt-oss-120b",
       "deployment": "gpt-oss-120b",
       "tier": 6,
+      "price": {
+        "input_per_million": 0.15,
+        "cached_input_per_million": 0.075,
+        "output_per_million": 0.6
+      },
       "aliases": [],
       "description": "OpenAI open-weight reasoning model, text only. Good value for maths, logic, code and structured analysis, with function calling and structured outputs. 131K context; less broad knowledge and weaker long-form writing than the GPT-5.x models.",
       "provider": "OpenAI",
@@ -504,6 +534,11 @@
       "name": "Phi-4-reasoning",
       "deployment": "Phi-4-reasoning",
       "tier": 7,
+      "price": {
+        "input_per_million": 0.15,
+        "cached_input_per_million": 0.15,
+        "output_per_million": 0.6
+      },
       "aliases": [],
       "description": "Phi-4 tuned for step-by-step maths, science and logic problems, returning its reasoning. English only, 32K context, no tool calling or image input.",
       "provider": "Microsoft",
@@ -595,6 +630,11 @@
       "name": "Llama-4-Maverick-17B-128E-Instruct-FP8",
       "deployment": "Llama-4-Maverick-17B-128E-Instruct-FP8",
       "tier": 8,
+      "price": {
+        "input_per_million": 0.19,
+        "cached_input_per_million": 0.19,
+        "output_per_million": 0.85
+      },
       "aliases": [],
       "description": "Meta's multilingual, multimodal mixture-of-experts model (12 languages). Good for general chat, writing, translation and image understanding at low cost. No tool calling or structured output; weaker on hard reasoning and complex code than reasoning models.",
       "provider": "Meta",
@@ -688,6 +728,11 @@
       "name": "grok-4-1-fast-reasoning",
       "deployment": "grok-4-1-fast-reasoning",
       "tier": 9,
+      "price": {
+        "input_per_million": 0.2,
+        "cached_input_per_million": 0.05,
+        "output_per_million": 0.5
+      },
       "aliases": [
         "grok-4.1-fast-reasoning"
       ],
@@ -796,6 +841,11 @@
       "name": "DeepSeek-V4-Flash",
       "deployment": "DeepSeek-V4-Flash",
       "tier": 10,
+      "price": {
+        "input_per_million": 0.2,
+        "cached_input_per_million": 0.02,
+        "output_per_million": 0.8
+      },
       "aliases": [],
       "description": "Fast DeepSeek V4 reasoning model with a 1M-token context and up to 384K output tokens: low-cost choice for code, maths and long-document work, with tool calling and JSON mode. Text only; English and Chinese.",
       "provider": "DeepSeek",
@@ -908,6 +958,11 @@
       "name": "gpt-5.4-mini",
       "deployment": "gpt-5.4-mini",
       "tier": 11,
+      "price": {
+        "input_per_million": 0.375,
+        "cached_input_per_million": 0.0375,
+        "output_per_million": 3.0
+      },
       "aliases": [],
       "description": "Compact GPT-5.4 reasoning model and a good default for everyday work: summaries, extraction, routine code, data questions and tool calls, with structured outputs, image input and computer use. Handles moderate multi-step reasoning; use a frontier model for the hardest problems.",
       "provider": "OpenAI",
@@ -1026,6 +1081,11 @@
       "name": "gpt-6-luna",
       "deployment": "gpt-6-luna",
       "tier": 12,
+      "price": {
+        "input_per_million": 0.5,
+        "cached_input_per_million": 0.05,
+        "output_per_million": 2.5
+      },
       "aliases": [],
       "description": "Fast, cost-efficient GPT-6 model for low-latency, multilingual and large-context work (1M tokens), with reasoning-effort controls, tools, structured outputs, image input and computer use. Prefer it to larger GPT-6 models when speed and cost matter more than peak quality.",
       "provider": "OpenAI",
@@ -1136,6 +1196,11 @@
       "name": "FW-GLM-5.3",
       "deployment": "FW-GLM-5.3",
       "tier": 13,
+      "price": {
+        "input_per_million": 0.6,
+        "cached_input_per_million": 0.6,
+        "output_per_million": 2.5
+      },
       "aliases": [],
       "description": "Flagship GLM model served by Fireworks for complex software engineering, long-horizon agents and reasoning, with tool calling and structured outputs. Text only. Inference runs on Fireworks infrastructure, outside Azure.",
       "provider": "Fireworks",
@@ -1195,6 +1260,11 @@
       "name": "FW-Kimi-K3",
       "deployment": "FW-Kimi-K3",
       "tier": 14,
+      "price": {
+        "input_per_million": 0.6,
+        "cached_input_per_million": 0.6,
+        "output_per_million": 2.5
+      },
       "aliases": [],
       "description": "Kimi K3 served by Fireworks: native-vision model for long-horizon coding, agentic tool use and knowledge work over long contexts; strong on code for its price. JSON-schema output is unconfirmed. Inference runs on Fireworks infrastructure, outside Azure.",
       "provider": "Fireworks",
@@ -1254,6 +1324,11 @@
       "name": "DeepSeek-V4-Pro",
       "deployment": "DeepSeek-V4-Pro",
       "tier": 15,
+      "price": {
+        "input_per_million": 1.0,
+        "cached_input_per_million": 0.1,
+        "output_per_million": 4.0
+      },
       "aliases": [],
       "description": "Large DeepSeek V4 reasoning model for hard code, maths and long-document analysis (1M-token context, up to 384K output tokens), with tool calling and JSON mode. Text only; English and Chinese.",
       "provider": "DeepSeek",
@@ -1361,6 +1436,11 @@
       "name": "gpt-5.6-terra",
       "deployment": "gpt-5.6-terra",
       "tier": 16,
+      "price": {
+        "input_per_million": 1.0,
+        "cached_input_per_million": 0.1,
+        "output_per_million": 8.0
+      },
       "aliases": [],
       "description": "Mid-size GPT-5.6 reasoning model that balances quality and cost: multi-step planning, coding and analysis over a 1M-token context, with image input and structured outputs. Its tool calling works through Chat Completions only with reasoning turned off, so requests with tools are not sent to it.",
       "provider": "OpenAI",
@@ -1474,6 +1554,11 @@
       "name": "MAI-Thinking-1",
       "deployment": "MAI-Thinking-1",
       "tier": 17,
+      "price": {
+        "input_per_million": 1.5,
+        "cached_input_per_million": 1.5,
+        "output_per_million": 7.5
+      },
       "aliases": [],
       "description": "Microsoft reasoning model (preview) for multi-step maths, coding and enterprise reasoning, with tool calling. Text only, 256K context, up to 64K output tokens.",
       "provider": "Microsoft",
@@ -1567,6 +1652,11 @@
       "name": "claude-sonnet-5-5",
       "deployment": "claude-sonnet-5-5",
       "tier": 18,
+      "price": {
+        "input_per_million": 2.0,
+        "cached_input_per_million": 0.1,
+        "output_per_million": 10.0
+      },
       "aliases": [],
       "description": "Latest Claude Sonnet, balancing speed and capability: coding, long-running agents, financial analysis, professional writing and cybersecurity, reasoning over whole codebases (1M-token context); adaptive thinking, high-resolution image input and computer use.",
       "provider": "Anthropic",
@@ -1651,6 +1741,11 @@
       "name": "gpt-6.1-sol",
       "deployment": "gpt-6.1-sol",
       "tier": 19,
+      "price": {
+        "input_per_million": 2.0,
+        "cached_input_per_million": 0.1,
+        "output_per_million": 10.0
+      },
       "aliases": [],
       "description": "Newest flagship OpenAI reasoning model for the hardest analysis, research and multi-agent work over a 1M-token context, with image input and structured outputs. Its tool calling works only through the Responses API, so requests with tools are not sent to it.",
       "provider": "OpenAI",
@@ -1767,6 +1862,11 @@
       "name": "gpt-5.5",
       "deployment": "gpt-5.5",
       "tier": 20,
+      "price": {
+        "input_per_million": 2.5,
+        "cached_input_per_million": 0.25,
+        "output_per_million": 15.0
+      },
       "aliases": [],
       "description": "OpenAI agentic model for complex multi-step coding, research and data analysis, including synthesis across many documents (1M-token context). Strong tool use, structured outputs and computer use.",
       "provider": "OpenAI",
@@ -1881,6 +1981,11 @@
       "name": "grok-4.7",
       "deployment": "grok-4.7",
       "tier": 21,
+      "price": {
+        "input_per_million": 3.0,
+        "cached_input_per_million": 0.75,
+        "output_per_million": 15.0
+      },
       "aliases": [],
       "description": "Latest xAI model for coding, research and agentic work with tool calling and JSON mode; text and image input, 500K tokens shared between input and output. English-focused.",
       "provider": "xAI",
@@ -1987,6 +2092,11 @@
       "name": "claude-opus-5-5",
       "deployment": "claude-opus-5-5",
       "tier": 22,
+      "price": {
+        "input_per_million": 4.0,
+        "cached_input_per_million": 0.2,
+        "output_per_million": 20.0
+      },
       "aliases": [],
       "description": "Latest Claude Opus for long-running agentic coding (finds root causes before changing code and checks its work), enterprise workflows, financial analysis and documents that need little editing; always-on adaptive thinking, vision and computer use; 1M-token context.",
       "provider": "Anthropic",
@@ -2072,6 +2182,11 @@
       "name": "gpt-6-astra",
       "deployment": "gpt-6-astra",
       "tier": 23,
+      "price": {
+        "input_per_million": 10.0,
+        "cached_input_per_million": 1.0,
+        "output_per_million": 50.0
+      },
       "aliases": [],
       "description": "Frontier GPT-6 reasoning model for the most complex problem-solving, coding, agentic workflows and enterprise knowledge work, with reasoning-effort and verbosity controls, tools, structured outputs, image input and computer use. Use it when answer quality matters most.",
       "provider": "OpenAI",
@@ -2192,6 +2307,28 @@
         "share": 0.3333
       },
       "instructions": "Choose the model that should answer the conversation in the state. Quality mode: choose the model most likely to give the best answer. Ignore cost."
+    }
+  },
+  "cost_bands": {
+    "_note": "Named cost bands for routing_cost_band, on USD output price per million tokens. Both ends are inclusive. The ranges leave gaps ($3-$10, $25-$30): a model priced in a gap is in no named band and is reached with balanced mode or a dollar range.",
+    "basis": "output_per_million",
+    "bands": {
+      "low": {
+        "min": 0,
+        "max": 1
+      },
+      "medium": {
+        "min": 1,
+        "max": 3
+      },
+      "high": {
+        "min": 10,
+        "max": 25
+      },
+      "top": {
+        "min": 30,
+        "max": 60
+      }
     }
   },
   "excluded_models": [],

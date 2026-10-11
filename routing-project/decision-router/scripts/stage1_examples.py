@@ -42,10 +42,10 @@ def run(example: dict) -> dict:
     except RoutingError as exc:
         return {"rejected": exc.body()["error"]}
     result = select(prepared.catalog, prepared.mode, prepared.constraints, prepared.body, settings,
-                    passthrough=prepared.passthrough)
+                    passthrough=prepared.passthrough, cost_band=prepared.cost_band)
     prompt_tokens, output_tokens = estimated_tokens(prepared.body, settings.chars_per_token)
     return {
-        "catalog": prepared.catalog, "mode": prepared.mode, "profile": prepared.profile, "pin": prepared.pin,
+        "catalog": prepared.catalog, "mode": prepared.mode, "profile": prepared.profile, "pin": prepared.pin, "cost_band": prepared.cost_band,
         "passthrough": prepared.passthrough, "constraints": prepared.constraints.as_dict(),
         "requirements": result.requirements, "steps": result.steps, "empty_at": result.empty_at,
         "candidates": [m.name for m in result.candidates], "tokens": (prompt_tokens, output_tokens),
@@ -100,6 +100,8 @@ def render_example(number: str, example: dict, out: dict) -> list[str]:
         facts.append(f"profile `{out['profile']}`")
     if out["passthrough"]:
         facts.append("`claude_translation: false`")
+    if out["cost_band"]:
+        facts.append(f"cost band {out['cost_band'].label()}")
     if out["pin"]:
         facts.append("pinning on")
     facts.append(f"estimated ~{out['tokens'][0]:,} prompt tokens")

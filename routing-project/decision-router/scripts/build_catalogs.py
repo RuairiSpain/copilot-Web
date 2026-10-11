@@ -245,7 +245,7 @@ ENDPOINTS = {"openai_chat": "/openai/v1/chat/completions", "mai_chat": "/mai/v1/
              "anthropic_messages": "/anthropic/v1/messages"}
 
 
-def build_entry(spec: dict, docs: Docs, sources: dict, tier: int) -> dict:
+def build_entry(spec: dict, docs: Docs, sources: dict, tier: int, price: dict) -> dict:
     name, version = spec["name"], spec["version"]
     doc_name, doc_version = spec.get("doc_name", name), spec.get("doc_version", version)
     used = []
@@ -304,6 +304,7 @@ def build_entry(spec: dict, docs: Docs, sources: dict, tier: int) -> dict:
         "name": name,
         "deployment": spec.get("deployment", name),
         "tier": tier,
+        "price": {k: price.get(k) for k in ("input_per_million", "cached_input_per_million", "output_per_million")},
         "aliases": spec.get("aliases", []),
         "description": spec["description"],
         "provider": spec["provider"],
@@ -394,7 +395,7 @@ def main() -> int:
         print(f"warning: docs checkout is {docs.commit}, spec pins {spec['docs']['commit']}", file=sys.stderr)
     for compatibility, catalog in spec["catalogs"].items():
         tier = tiers([m["name"] for m in catalog["models"]], pricing)
-        models = sorted((build_entry(m, docs, spec["sources"], tier[m["name"]]) for m in catalog["models"]),
+        models = sorted((build_entry(m, docs, spec["sources"], tier[m["name"]], pricing[m["name"]]) for m in catalog["models"]),
                         key=lambda e: e["tier"])
         check_lifecycle_policy(models, spec["lifecycle_policy"])
         if compatibility == "old":
@@ -405,7 +406,7 @@ def main() -> int:
             "schema_version": 2,
             "compatibility": compatibility,
             "_note": f"{catalog['_note']} {len(models)} models. `tier` is computed from model_pricing.json "
-                     "(1 = cheapest). Descriptions are what Decision-1 reads to tell the options apart.",
+                     "(1 = cheapest) and `price` is copied from it. Descriptions are what Decision-1 reads to tell the options apart.",
             "tier_status": f"computed from model_pricing.json version {price_file['version']}: ordered by USD input "
                            "price, then output, cached-input price and name; 1 = cheapest",
             "generated_from": {"spec": "config/catalog_spec.json", "docs": spec["docs"]["repository"],
@@ -414,6 +415,7 @@ def main() -> int:
             "default_mode": spec["default_mode"],
             "models": models,
             "routing_modes": spec["routing_modes"],
+            "cost_bands": catalog.get("cost_bands"),
             "excluded_models": catalog.get("excluded", []),
             "sources": spec["sources"],
         }

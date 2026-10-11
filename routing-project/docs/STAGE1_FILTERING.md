@@ -36,7 +36,8 @@ without them is a plain Model Router request.
 
 | Field | Effect |
 |---|---|
-| `routing_mode` | `cost`, `balanced` or `quality`. Picks a price band of what is left after the other steps. |
+| `routing_mode` | `cost`, `balanced` or `quality`. Picks a price band of what is left after the other steps, and the instructions Decision-1 receives. |
+| `routing_cost_band` | Replaces the mode's price band with an output-price range. A band name in the `new` catalog (`low`, `medium`, `high`, `top`) or a dollar range on either catalog: `"1-3"`, `"$10-$25"`, `"30-"` (no upper limit) or `{"min": 1, "max": 3}`. See [Cost bands](#cost-bands). |
 | `compatibility` | `old` (Model Router pool) or `new` (latest models). See `MODEL_CATALOGS.md`. |
 | `claude_translation` | `true` (default): the body is chat completions, and Claude is called through the translation layer. `false`: the body is an Anthropic Messages request, only Claude models are candidates, and the chosen one receives the body unchanged (only `model` is set) and its native response is returned. See below. |
 | `routing_pin` | `true`: keep the conversation on the model that answered its first turn; stage 1 still runs on every turn. See `AGENT_SERVICE.md`. |
@@ -52,6 +53,31 @@ without them is a plain Model Router request.
 
 Unknown keys, unknown model names and unknown capability names return 400
 `invalid_routing_constraints`, so a typo never silently widens the choice.
+
+## Cost bands
+
+`routing_cost_band` selects models by USD output price per million tokens, from
+`config/model_pricing.json`, instead of by thirds. Both ends of a range are inclusive. The
+`new` catalog defines four named bands (`cost_bands` in `config/catalog_spec.json`):
+
+| Band | Output price | Models in `new` |
+|---|---|---|
+| `low` | $0–$1 | Phi-4-mini-instruct, FW-GLM-5.3-Flash, claude-haiku-5-5, gpt-5.4-nano, Phi-4, gpt-oss-120b, Phi-4-reasoning, Llama-4-Maverick, grok-4-1-fast-reasoning, DeepSeek-V4-Flash |
+| `medium` | $1–$3 | gpt-5.4-mini, gpt-6-luna, FW-GLM-5.3, FW-Kimi-K3 |
+| `high` | $10–$25 | claude-sonnet-5-5, gpt-6.1-sol, gpt-5.5, grok-4.7, claude-opus-5-5 |
+| `top` | $30–$60 | gpt-6-astra |
+
+The ranges leave gaps. DeepSeek-V4-Pro ($4), MAI-Thinking-1 ($7.50) and gpt-5.6-terra ($8)
+are in no named band; they are reached with `balanced` mode or a dollar range such as `"3-10"`.
+
+- The band is applied after the other steps, like the routing mode's band. Unlike a mode, a
+  band can leave no models, for example `top` with `providers: ["Anthropic"]`, which returns 422.
+- `routing_mode` still applies: it sets the instructions Decision-1 receives inside the band.
+- The `old` catalog has no named bands and keeps the routing modes' thirds. A band name sent
+  with `old` returns 400 `invalid_routing_cost_band`; a dollar range works on both catalogs.
+- Callers that can't add the field use the profiles `decision-router-low`, `-medium`, `-high`
+  and `-top` (`AGENT_SERVICE.md`).
+- `/v1/route` and the decision log report the band as `cost_band`.
 
 ## Requirements read from the request
 
@@ -77,7 +103,7 @@ cut close to a limit.
 | 4. `capabilities` | a requested or implied capability is `no` |
 | 5. `location` | inference runs outside Azure and `inference_in_azure` is set; or the region / deployment type is not available or not published |
 | 6. `size` | the estimated tokens exceed the context window, the prompt exceeds the input limit, or the requested output exceeds the output limit |
-| 7. `price_band` | it is outside the routing mode's band of what is left: `cost` = cheapest third, `balanced` = all, `quality` = most expensive third (at least one model always stays) |
+| 7. `price_band` | with `routing_cost_band`: its output price is outside the band (this can leave no models). Otherwise: it is outside the routing mode's band of what is left: `cost` = cheapest third, `balanced` = all, `quality` = most expensive third (at least one model always stays) |
 
 What happens with the result:
 

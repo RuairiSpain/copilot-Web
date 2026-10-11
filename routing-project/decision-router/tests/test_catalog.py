@@ -118,6 +118,15 @@ def test_every_model_has_a_price_entry(settings, catalogs):
     prices = json.loads(settings.pricing_path.read_text())["models"]
     for catalog in catalogs.catalogs.values():
         assert {m.name for m in catalog.models} <= set(prices)
+        for m in catalog.models:
+            assert m.output_price == prices[m.name]["output_per_million"], \
+                f"{m.name}: model_pricing.json changed: rerun scripts/build_catalogs.py"
+
+
+def test_cost_bands_only_in_new(catalog, new_catalog):
+    assert catalog.cost_bands == {}
+    assert {n: (b.min, b.max) for n, b in new_catalog.cost_bands.items()} == {
+        "low": (0, 1), "medium": (1, 3), "high": (10, 25), "top": (30, 60)}
 
 
 def test_new_catalog_has_action_and_execution_tags(new_catalog):

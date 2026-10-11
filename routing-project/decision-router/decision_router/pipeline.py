@@ -22,17 +22,18 @@ from typing import Any
 import httpx
 
 from .anthropic import chat_usage as anthropic_usage
-from .catalog import Catalog, CatalogError, Catalogs, ModelEntry
+from .catalog import Catalog, CatalogError, Catalogs, CostBand, ModelEntry
 from .config import ROUTING_MODES, Settings
 from .decision1 import Decision, Decision1Client, DecisionError, build_state, execution_order
 from .foundry import ChatClient
 from .pinning import PinStore, conversation_key
 from .pricing import PriceTable
-from .stage1 import ConstraintError, Constraints, parse_constraints, select
+from .stage1 import ConstraintError, Constraints, parse_constraints, parse_cost_band, select
 from .telemetry import Telemetry
 
 # Extension fields this router reads; removed before the body is forwarded to a model.
-ROUTER_FIELDS = ("routing_mode", "compatibility", "routing_constraints", "claude_translation", "routing_pin")
+ROUTER_FIELDS = ("routing_mode", "compatibility", "routing_constraints", "claude_translation", "routing_pin",
+                 "routing_cost_band")
 
 
 class RoutingError(Exception):
@@ -98,6 +99,7 @@ class Prepared:
     caller: dict[str, Any] | None = None  # who called (inbound.Caller.log()), for the decision log
     pin: bool = False  # routing_pin: keep the conversation on one model (pinning.py)
     session_id: str | None = None  # x-router-session-id header, when sent
+    cost_band: CostBand | None = None  # routing_cost_band: replaces the mode's price band in stage 1
 
 
 @dataclass
@@ -183,16 +185,21 @@ class RouterPipeline:
             constraints = parse_constraints(body.get("routing_constraints"), catalog)
         except ConstraintError as exc:
             raise RoutingError(400, "invalid_routing_constraints", str(exc)) from exc
+        try:
+            cost_band = parse_cost_band(body.get("routing_cost_band"), catalog)
+        except ConstraintError as exc:
+            raise RoutingError(400, "invalid_routing_cost_band", str(exc)) from exc
         # `model` names the router deployment the client called; it is replaced per target.
         forwarded = {k: v for k, v in body.items() if k not in ROUTER_FIELDS and k != "model"}
         return Prepared(mode, catalog, constraints, forwarded, passthrough=not translation,
-                        profile=profile_name if profile else None, pin=pin)
+                        profile=profile_name if profile else None, pin=pin, cost_band=cost_band)
 
     # ------------------------------------------------------------------ stages 1 and 2
     async def route(self, prepared: Prepared, request_id: str) -> Routed:
         started = self._clock()
         catalog, mode, body = prepared.catalog, prepared.mode, prepared.body
-        stage1 = select(catalog, mode, prepared.constraints, body, self.settings, passthrough=prepared.passthrough)
+        stage1 = select(catalog, mode, prepared.constraints, body, self.settings, passthrough=prepared.passthrough,
+                        cost_band=prepared.cost_band)
         candidates = stage1.candidates
         event: dict[str, Any] = {
             "request_id": request_id,
@@ -200,6 +207,7 @@ class RouterPipeline:
             "compatibility": catalog.compatibility,
             "catalog_sha256": catalog.fingerprint,
             "routing_constraints": prepared.constraints.as_dict(),
+            "cost_band": prepared.cost_band.as_dict() if prepared.cost_band else None,
             "claude_translation": not prepared.passthrough,
             "profile": prepared.profile,
             "caller": prepared.caller,
@@ -267,7 +275,8 @@ class RouterPipeline:
         caller = prepared.caller or {}
         key = conversation_key(prepared.body, session_id=prepared.session_id,
                                scope=(caller.get("method"), caller.get("identity"),
-                                      prepared.catalog.compatibility, prepared.mode, prepared.passthrough))
+                                      prepared.catalog.compatibility, prepared.mode, prepared.passthrough,
+                                      prepared.cost_band))
         if key is None:
             return None, None, {"status": "no_key"}
         log: dict[str, Any] = {"key": key[:16], "source": "header" if prepared.session_id else "messages"}
