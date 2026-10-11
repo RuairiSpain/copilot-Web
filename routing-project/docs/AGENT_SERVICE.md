@@ -48,6 +48,7 @@ that supplies those fields:
 | `decision-router-cost` | `routing_mode: cost` |
 | `decision-router-balanced` | `routing_mode: balanced` |
 | `decision-router-quality` | `routing_mode: quality` |
+| `decision-router-coding` | For coding agents: the `new` catalog, `balanced` mode, pinning on, and only models strong at multi-step tool use that support `tools` and `parallel_tools`: gpt-5.4-mini, gpt-5.6-terra, gpt-5.5, gpt-6-astra, claude-haiku-5-5, claude-sonnet-5-5, claude-opus-5-5, DeepSeek-V4-Pro, FW-GLM-5.3 |
 | anything else | no profile; the router's defaults apply (as before) |
 
 Add or replace profiles with `ROUTER_PROFILES`, a JSON object of name → fields. A profile can
@@ -107,6 +108,9 @@ routes each one independently. Without pinning, a coding task can move between m
 step. The next model loses the previous one's reasoning, the code style can change, and
 prompt caching stops working. Turn pinning on with `"routing_pin": true` in the request, in a
 profile, or for every request with `ROUTER_PIN_DEFAULT=true`.
+
+The built-in `decision-router-coding` profile turns pinning on for coding agents (see the
+profile table above). To define your own:
 
 ```json
 {"agent-coding": {"routing_mode": "quality", "compatibility": "new", "routing_pin": true,

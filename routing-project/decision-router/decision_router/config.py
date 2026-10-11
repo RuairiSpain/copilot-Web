@@ -16,6 +16,18 @@ DEFAULT_PROFILES: dict[str, dict[str, Any]] = {
     "decision-router-cost": {"routing_mode": "cost"},
     "decision-router-balanced": {"routing_mode": "balanced"},
     "decision-router-quality": {"routing_mode": "quality"},
+    # Coding agents: models strong at multi-step tool use, conversation pinned to one model.
+    # Balanced, so Decision-1 weighs the whole list instead of only its most expensive third.
+    "decision-router-coding": {
+        "routing_mode": "balanced",
+        "compatibility": "new",
+        "routing_pin": True,
+        "routing_constraints": {
+            "capabilities": ["tools", "parallel_tools"],
+            "models": ["gpt-5.4-mini", "gpt-5.6-terra", "gpt-5.5", "gpt-6-astra", "claude-haiku-5-5",
+                       "claude-sonnet-5-5", "claude-opus-5-5", "DeepSeek-V4-Pro", "FW-GLM-5.3"],
+        },
+    },
 }
 API_PATHS = {
     "openai_chat": "/openai/v1/chat/completions",

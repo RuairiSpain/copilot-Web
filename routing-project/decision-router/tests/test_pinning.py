@@ -130,3 +130,16 @@ def test_store_expiry_and_size_limit():
     for key in ("x", "y", "z"):
         store.set(key, "m", [], {})
     assert len(store) == 2 and store.get("x") is None
+
+
+def test_builtin_coding_profile(make_pipeline, settings, fake):
+    pipe = make_pipeline()
+    prepared = pipe.prepare({"model": "decision-router-coding", "messages": TURN1, "tools": TOOLS})
+    assert prepared.pin and prepared.mode == "balanced" and prepared.catalog.compatibility == "new"
+    assert {"tools", "parallel_tools"} <= set(prepared.constraints.capabilities)
+    fake.decision_responses.append(ranked(["claude-sonnet-5-5"]))
+    with client(make_pipeline, settings) as c:
+        body = {"model": "decision-router-coding", "messages": TURN1, "tools": TOOLS, "parallel_tool_calls": True}
+        routed = c.post("/v1/route", json=body).json()
+    assert set(routed["candidates"]) <= set(prepared.constraints.models) and len(routed["candidates"]) >= 5
+    assert "gpt-6.1-sol" not in routed["candidates"]

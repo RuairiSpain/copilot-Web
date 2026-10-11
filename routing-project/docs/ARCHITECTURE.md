@@ -245,4 +245,4 @@ What the report does and does not show:
 | `ROUTER_ALLOW_UNAUTHENTICATED` | `false` | Start without inbound authentication (only behind something that authenticates) |
 | `ROUTER_PIN_DEFAULT` | `false` | Keep each conversation on the model that answered its first turn (`docs/AGENT_SERVICE.md`) |
 | `ROUTER_PIN_TTL_SECONDS` / `ROUTER_PIN_MAX_ENTRIES` | `3600` / `10000` | How long an unused pin lasts, and how many are kept per replica |
-| `ROUTER_PROFILES` | built-in `decision-router-cost/balanced/quality` | JSON, `model` name → routing fields (`docs/AGENT_SERVICE.md`) |
+| `ROUTER_PROFILES` | built-in `decision-router-cost/balanced/quality/coding` | JSON, `model` name → routing fields (`docs/AGENT_SERVICE.md`) |
