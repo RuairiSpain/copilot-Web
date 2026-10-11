@@ -7,6 +7,8 @@ can narrow the choice in two ways:
 - by what it contains: tools, images, a JSON schema, streaming, or its length.
 
 Operators can also cap the choice for every request. Code: `decision-router/decision_router/stage1.py`.
+Worked examples, with the computed output of every step, including requests that leave no
+models: `STAGE1_EXAMPLES.md`.
 
 ## Request fields
 

@@ -25,7 +25,7 @@ There is no other router behind Decision-1. If it cannot answer, the request fai
 |---|---|
 | `decision-router/` | The service, the comparison harness, tests and deployment manifests |
 | `dataset-v31/` | 40,000 prompts used to compare this router with Foundry Model Router |
-| `docs/` | Architecture and the Decision-1 contract, stage-1 filtering, the model catalogs, authentication and Foundry Agent Service, option-order testing |
+| `docs/` | Architecture and the Decision-1 contract, stage-1 filtering and worked stage-1 examples, the model catalogs, authentication and Foundry Agent Service, option-order testing |
 
 ## Quick start
 
