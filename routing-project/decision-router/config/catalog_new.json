@@ -1287,7 +1287,7 @@
       "deployment": "gpt-5.6-terra",
       "tier": 16,
       "aliases": [],
-      "description": "Mid-size GPT-5.6 reasoning model that balances quality and cost: multi-step planning, tool orchestration, coding and analysis over a 1M-token context, with image input and computer use. A strong default for moderately hard tasks.",
+      "description": "Mid-size GPT-5.6 reasoning model that balances quality and cost: multi-step planning, coding and analysis over a 1M-token context, with image input and structured outputs. Its tool calling works through Chat Completions only with reasoning turned off, so requests with tools are not sent to it.",
       "provider": "OpenAI",
       "version": "2026-07-09",
       "lifecycle": "ga",
@@ -1310,8 +1310,8 @@
         ]
       },
       "capabilities": {
-        "tools": "yes",
-        "parallel_tools": "yes",
+        "tools": "no",
+        "parallel_tools": "no",
         "structured_output": "yes",
         "json_object": "unknown",
         "streaming": "yes",
@@ -1384,6 +1384,7 @@
           "articles/foundry/foundry-models/includes/model-matrix/deployments-standard.md",
           "articles/foundry/openai/includes/concepts-model-retirement-schedule-content.md",
           "articles/foundry/openai/includes/models-azure-direct-openai.md",
+          "spec:sources.chat_tools_reasoning",
           "spec:sources.openai_streaming"
         ]
       }
@@ -2076,6 +2077,7 @@
     "anthropic_adapter": "Called through the router's Messages API adapter: tools, parallel tools and streaming are translated, and response_format json_schema becomes output_config.format (Claude structured outputs). response_format json_object has no Messages API equivalent and is not translated.",
     "fireworks_global": "Fireworks models deploy as Global Standard and are available from any Foundry region (confirmed by the project owner); inference runs on Fireworks infrastructure.",
     "claude_versions": "Foundry numbers Claude versions by hosting: version 1 runs on Anthropic infrastructure, version 2 on Azure. `old` uses the versions Model Router lists (1, or the dated 20250929/20251001 snapshots, treated as version 1); `new` uses the Azure-hosted version 2.",
-    "xai_variants": "xAI publishes grok-4-1-fast as two deployments, -reasoning and -non-reasoning (retirement schedule); this one is the reasoning variant."
+    "xai_variants": "xAI publishes grok-4-1-fast as two deployments, -reasoning and -non-reasoning (retirement schedule); this one is the reasoning variant.",
+    "chat_tools_reasoning": "Azure OpenAI reasoning models page (articles/foundry/openai/how-to/reasoning.md, 'Tool calling with reasoning models'): gpt-5.6 models can't combine reasoning with tools on Chat Completions. A request with `tools` fails unless reasoning_effort is 'none', and the default is 'medium'. This router calls Chat Completions, so tools are recorded as unavailable."
   }
 }

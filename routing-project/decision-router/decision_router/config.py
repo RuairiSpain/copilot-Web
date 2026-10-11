@@ -24,7 +24,7 @@ DEFAULT_PROFILES: dict[str, dict[str, Any]] = {
         "routing_pin": True,
         "routing_constraints": {
             "capabilities": ["tools", "parallel_tools"],
-            "models": ["gpt-5.4-mini", "gpt-5.6-terra", "gpt-5.5", "gpt-6-astra", "claude-haiku-5-5",
+            "models": ["gpt-5.4-mini", "gpt-5.5", "gpt-6-astra", "claude-haiku-5-5",
                        "claude-sonnet-5-5", "claude-opus-5-5", "DeepSeek-V4-Pro", "FW-GLM-5.3"],
         },
     },

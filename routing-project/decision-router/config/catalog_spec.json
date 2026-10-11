@@ -43,7 +43,8 @@
     "anthropic_adapter": "Called through the router's Messages API adapter: tools, parallel tools and streaming are translated, and response_format json_schema becomes output_config.format (Claude structured outputs). response_format json_object has no Messages API equivalent and is not translated.",
     "fireworks_global": "Fireworks models deploy as Global Standard and are available from any Foundry region (confirmed by the project owner); inference runs on Fireworks infrastructure.",
     "claude_versions": "Foundry numbers Claude versions by hosting: version 1 runs on Anthropic infrastructure, version 2 on Azure. `old` uses the versions Model Router lists (1, or the dated 20250929/20251001 snapshots, treated as version 1); `new` uses the Azure-hosted version 2.",
-    "xai_variants": "xAI publishes grok-4-1-fast as two deployments, -reasoning and -non-reasoning (retirement schedule); this one is the reasoning variant."
+    "xai_variants": "xAI publishes grok-4-1-fast as two deployments, -reasoning and -non-reasoning (retirement schedule); this one is the reasoning variant.",
+    "chat_tools_reasoning": "Azure OpenAI reasoning models page (articles/foundry/openai/how-to/reasoning.md, 'Tool calling with reasoning models'): gpt-5.6 models can't combine reasoning with tools on Chat Completions. A request with `tools` fails unless reasoning_effort is 'none', and the default is 'medium'. This router calls Chat Completions, so tools are recorded as unavailable."
   },
   "catalogs": {
     "old": {
@@ -185,7 +186,14 @@
           "version": "2026-07-09",
           "api": "openai_chat",
           "docs": "openai",
-          "description": "Smallest GPT-5.6 model: fast and low-cost with a 1M-token context, multilingual support, reasoning, tools, structured outputs, image input and computer use. Good for high-volume work over long inputs; not the best choice for the most difficult reasoning or code."
+          "description": "Smallest GPT-5.6 model: fast and low-cost with a 1M-token context, multilingual support, reasoning, structured outputs and image input. Good for high-volume work over long inputs; not the best choice for the most difficult reasoning or code. Its tool calling works through Chat Completions only with reasoning turned off, so requests with tools are not sent to it.",
+          "overrides": {
+            "source": "chat_tools_reasoning",
+            "capabilities": {
+              "tools": "no",
+              "parallel_tools": "no"
+            }
+          }
         },
         {
           "name": "FW-Kimi-K3",
@@ -283,7 +291,14 @@
           "version": "2026-07-09",
           "api": "openai_chat",
           "docs": "openai",
-          "description": "Mid-size GPT-5.6 reasoning model that balances quality and cost: multi-step planning, tool orchestration, coding and analysis over a 1M-token context, with image input and computer use. A strong default for moderately hard tasks."
+          "description": "Mid-size GPT-5.6 reasoning model that balances quality and cost: multi-step planning, coding and analysis over a 1M-token context, with image input and structured outputs. Its tool calling works through Chat Completions only with reasoning turned off, so requests with tools are not sent to it.",
+          "overrides": {
+            "source": "chat_tools_reasoning",
+            "capabilities": {
+              "tools": "no",
+              "parallel_tools": "no"
+            }
+          }
         },
         {
           "name": "gpt-5.5",
@@ -332,7 +347,14 @@
           "version": "2026-07-09",
           "api": "openai_chat",
           "docs": "openai",
-          "description": "Largest GPT-5.6 reasoning model for complex, compute-intensive work: hard maths, science, code and multi-step analysis over a 1M-token context, with tools, image input and computer use."
+          "description": "Largest GPT-5.6 reasoning model for complex, compute-intensive work: hard maths, science, code and multi-step analysis over a 1M-token context, with image input and structured outputs. Its tool calling works through Chat Completions only with reasoning turned off, so requests with tools are not sent to it.",
+          "overrides": {
+            "source": "chat_tools_reasoning",
+            "capabilities": {
+              "tools": "no",
+              "parallel_tools": "no"
+            }
+          }
         },
         {
           "name": "gpt-6-astra",
@@ -619,7 +641,14 @@
           "version": "2026-07-09",
           "api": "openai_chat",
           "docs": "openai",
-          "description": "Mid-size GPT-5.6 reasoning model that balances quality and cost: multi-step planning, tool orchestration, coding and analysis over a 1M-token context, with image input and computer use. A strong default for moderately hard tasks."
+          "description": "Mid-size GPT-5.6 reasoning model that balances quality and cost: multi-step planning, coding and analysis over a 1M-token context, with image input and structured outputs. Its tool calling works through Chat Completions only with reasoning turned off, so requests with tools are not sent to it.",
+          "overrides": {
+            "source": "chat_tools_reasoning",
+            "capabilities": {
+              "tools": "no",
+              "parallel_tools": "no"
+            }
+          }
         },
         {
           "name": "gpt-5.5",
