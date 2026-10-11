@@ -28,7 +28,8 @@ def root() -> Path:
 
 @pytest.fixture
 def settings() -> Settings:
-    return Settings(foundry_endpoint=ENDPOINT, foundry_api_key="test-key", attempts_per_model=2)
+    return Settings(foundry_endpoint=ENDPOINT, foundry_api_key="test-key", attempts_per_model=2,
+                    allow_unauthenticated=True)
 
 
 @pytest.fixture

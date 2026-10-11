@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import uuid
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from typing import Any
 
 from fastapi import FastAPI, Request, Response
@@ -14,6 +15,7 @@ from .catalog import Catalogs
 from .config import Settings
 from .decision1 import Decision1Client
 from .foundry import ChatClient
+from .inbound import InboundAuth, Unauthorized
 from .pipeline import ProviderError, Routed, RouterPipeline, RoutingError
 from .pricing import PriceTable
 from .telemetry import Telemetry
@@ -51,8 +53,15 @@ def _routing_headers(routed: Routed, served: str | None = None) -> dict[str, str
     return headers
 
 
-def create_app(settings: Settings | None = None, *, pipeline: RouterPipeline | None = None) -> FastAPI:
+def build_inbound_auth(settings: Settings) -> InboundAuth:
+    return InboundAuth(settings.api_keys, settings.entra_tenant_id, settings.entra_audiences,
+                       settings.entra_allowed_client_ids, settings.allow_unauthenticated)
+
+
+def create_app(settings: Settings | None = None, *, pipeline: RouterPipeline | None = None,
+               inbound: InboundAuth | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
+    gate = inbound or build_inbound_auth(settings)  # refuses to start with no inbound auth configured
     pipe = pipeline or build_pipeline(settings)
 
     @asynccontextmanager
@@ -83,6 +92,15 @@ def create_app(settings: Settings | None = None, *, pipeline: RouterPipeline | N
     async def routing_error(_: Request, exc: RoutingError) -> JSONResponse:
         return JSONResponse(exc.body(), status_code=exc.status_code)
 
+    @app.exception_handler(Unauthorized)
+    async def unauthorized(_: Request, exc: Unauthorized) -> JSONResponse:
+        return JSONResponse({"error": {"message": exc.message, "type": "authentication_error", "code": "unauthorized"}},
+                            status_code=401, headers={"WWW-Authenticate": "Bearer"})
+
+    async def prepare(request: Request) -> Any:
+        caller = await gate.check(request.headers)
+        return replace(pipe.prepare(await read_body(request)), caller=caller.log())
+
     @app.exception_handler(ProviderError)
     async def provider_error(_: Request, exc: ProviderError) -> Response:
         return Response(exc.content, status_code=exc.status_code, media_type=exc.content_type)
@@ -91,7 +109,7 @@ def create_app(settings: Settings | None = None, *, pipeline: RouterPipeline | N
     @app.post("/openai/v1/chat/completions")
     async def chat_completions(request: Request) -> Response:
         rid = request_id(request)
-        prepared = pipe.prepare(await read_body(request))
+        prepared = await prepare(request)
         routed = await pipe.route(prepared, rid)
         body = prepared.body
         if body.get("stream"):
@@ -106,7 +124,7 @@ def create_app(settings: Settings | None = None, *, pipeline: RouterPipeline | N
     async def route_only(request: Request) -> JSONResponse:
         """Stages 1 and 2 only: what would be called, without calling it."""
         rid = request_id(request)
-        prepared = pipe.prepare(await read_body(request))
+        prepared = await prepare(request)
         routed = await pipe.route(prepared, rid)
         pipe.record_route_only(routed, prepared.body)
         decision = routed.decision
@@ -134,6 +152,8 @@ def create_app(settings: Settings | None = None, *, pipeline: RouterPipeline | N
     async def ready() -> dict[str, Any]:
         return {
             "status": "ready",
+            "inbound_auth": gate.methods or ["none"],
+            "profiles": sorted(settings.profiles),
             "default_compatibility": pipe.catalogs.default,
             "catalogs": {name: c.describe() for name, c in pipe.catalogs.catalogs.items()},
             "decision1_deployment": pipe.decision.deployment,

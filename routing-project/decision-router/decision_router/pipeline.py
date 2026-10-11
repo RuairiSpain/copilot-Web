@@ -93,6 +93,8 @@ class Prepared:
     body: dict[str, Any]
     # claude_translation=false: `body` is an Anthropic Messages request, forwarded to Claude unchanged.
     passthrough: bool = False
+    profile: str | None = None
+    caller: dict[str, Any] | None = None  # who called (inbound.Caller.log()), for the decision log
 
 
 @dataclass
@@ -146,9 +148,16 @@ class RouterPipeline:
 
     # ------------------------------------------------------------------ request shape
     def prepare(self, body: Any) -> Prepared:
-        """Validate a Model-Router-style body plus this router's optional extension fields."""
+        """Validate a Model-Router-style body plus this router's optional extension fields.
+
+        When `model` names a routing profile (Settings.profiles), the profile supplies any extension
+        field the request leaves out; fields in the request win."""
         if not isinstance(body, dict):
             raise RoutingError(400, "invalid_request", "request body must be a JSON object")
+        profile_name = body.get("model") if isinstance(body.get("model"), str) else None
+        profile = self.settings.profiles.get(profile_name or "")
+        if profile:
+            body = {**profile, **body}
         messages = body.get("messages")
         if not isinstance(messages, list) or not messages or not all(isinstance(m, dict) for m in messages):
             raise RoutingError(400, "invalid_request", "'messages' must be a non-empty array of message objects")
@@ -168,7 +177,8 @@ class RouterPipeline:
             raise RoutingError(400, "invalid_routing_constraints", str(exc)) from exc
         # `model` names the router deployment the client called; it is replaced per target.
         forwarded = {k: v for k, v in body.items() if k not in ROUTER_FIELDS and k != "model"}
-        return Prepared(mode, catalog, constraints, forwarded, passthrough=not translation)
+        return Prepared(mode, catalog, constraints, forwarded, passthrough=not translation,
+                        profile=profile_name if profile else None)
 
     # ------------------------------------------------------------------ stages 1 and 2
     async def route(self, prepared: Prepared, request_id: str) -> Routed:
@@ -183,6 +193,8 @@ class RouterPipeline:
             "catalog_sha256": catalog.fingerprint,
             "routing_constraints": prepared.constraints.as_dict(),
             "claude_translation": not prepared.passthrough,
+            "profile": prepared.profile,
+            "caller": prepared.caller,
             "stage1": stage1.log(),
             "candidates": [m.name for m in candidates],
             "stream": bool(body.get("stream")),

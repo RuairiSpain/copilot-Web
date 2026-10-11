@@ -45,7 +45,11 @@ with `default_mode` in the catalog or `ROUTER_DEFAULT_MODE`, and also accepts a
 
 **Extension fields.** `routing_mode`, `compatibility` and `routing_constraints` are read by this
 router and removed before the request is forwarded, so the model sees a plain chat-completions
-body.
+body. Callers that can't add them (Foundry Agent Service) can name a routing profile in `model`
+instead (`docs/AGENT_SERVICE.md`).
+
+**Authentication.** Callers present an API key or a Microsoft Entra ID token; see
+`docs/AGENT_SERVICE.md`.
 
 **Claude.** Claude deployments on Foundry accept only the Anthropic Messages API. The router
 translates the request (system messages, images, tools, tool results, tool_choice, stop,
@@ -235,3 +239,8 @@ What the report does and does not show:
 | `ROUTER_MAX_RETRY_AFTER_SECONDS` | `10` | Longest `retry-after` the router waits for |
 | `ROUTER_DECISION_LOG_PATH` | unset | Also write the decision log to this file |
 | `ROUTER_LOG_PROMPTS` | `false` | Include message text in the decision log |
+| `ROUTER_API_KEYS` | unset | Comma-separated API keys callers may present (`docs/AGENT_SERVICE.md`) |
+| `ROUTER_ENTRA_TENANT_ID` / `ROUTER_ENTRA_AUDIENCE` | unset | Accept Microsoft Entra ID tokens issued by this tenant for this audience |
+| `ROUTER_ENTRA_ALLOWED_CLIENT_IDS` | unset | Comma-separated client IDs (apps, managed identities) allowed to call; unset allows any |
+| `ROUTER_ALLOW_UNAUTHENTICATED` | `false` | Start without inbound authentication (only behind something that authenticates) |
+| `ROUTER_PROFILES` | built-in `decision-router-cost/balanced/quality` | JSON, `model` name → routing fields (`docs/AGENT_SERVICE.md`) |
