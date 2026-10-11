@@ -26,8 +26,7 @@ from typing import Any
 from .catalog import EXCLUDED_LIFECYCLES, Catalog, ModelEntry
 from .config import Settings
 
-KNOWN_CAPABILITIES = ("tools", "parallel_tools", "structured_output", "json_object", "streaming", "reasoning",
-                      "image_input", "computer_use")
+KNOWN_CAPABILITIES = ("tools", "structured_output", "streaming", "reasoning", "image_input")
 DEPLOYMENT_TYPES = ("global_standard", "data_zone_standard", "standard")
 CONSTRAINT_KEYS = ("models", "exclude_models", "providers", "capabilities", "region", "deployment_type",
                    "inference_in_azure", "min_context_tokens", "allow_preview")
@@ -113,14 +112,9 @@ def requirements_from_request(body: dict[str, Any]) -> dict[str, str]:
     needs: dict[str, str] = {}
     if body.get("tools"):
         needs["tools"] = "request has tools"
-    if body.get("parallel_tool_calls") is True and body.get("tools"):
-        needs["parallel_tools"] = "parallel_tool_calls=true"
     fmt = body.get("response_format")
-    if isinstance(fmt, dict):
-        if fmt.get("type") == "json_schema":
-            needs["structured_output"] = "response_format=json_schema"
-        elif fmt.get("type") == "json_object":
-            needs["json_object"] = "response_format=json_object"
+    if isinstance(fmt, dict) and fmt.get("type") == "json_schema":
+        needs["structured_output"] = "response_format=json_schema"
     if body.get("stream") is True:
         needs["streaming"] = "stream=true"
     for message in body.get("messages", []):
@@ -175,7 +169,6 @@ def select(catalog: Catalog, mode: str, constraints: Constraints, body: dict[str
         if passthrough and m.api != "anthropic_messages":
             return "cannot take an Anthropic Messages body (claude_translation=false)"
         return None
-    unknown_ok = settings.unknown_capability == "eligible"
 
     def lifecycle(m: ModelEntry) -> str | None:
         if m.lifecycle in EXCLUDED_LIFECYCLES:
@@ -200,9 +193,8 @@ def select(catalog: Catalog, mode: str, constraints: Constraints, body: dict[str
 
     def capabilities(m: ModelEntry) -> str | None:
         for capability, why in needed.items():
-            value = m.capability(capability)
-            if value == "no" or (value == "unknown" and not unknown_ok):
-                return f"{capability} {value} (needed: {why})"
+            if m.capability(capability) != "yes":
+                return f"{capability} no (needed: {why})"
         return None
 
     def location(m: ModelEntry) -> str | None:
@@ -230,7 +222,7 @@ def select(catalog: Catalog, mode: str, constraints: Constraints, body: dict[str
 
     def size(m: ModelEntry) -> str | None:
         if m.context_tokens is None:
-            return None if unknown_ok else "context window unknown"
+            return "context window unknown"
         if needed_context > m.context_tokens:
             return f"needs ~{needed_context} tokens, context is {m.context_tokens}"
         if m.max_input_tokens and prompt_tokens > m.max_input_tokens:

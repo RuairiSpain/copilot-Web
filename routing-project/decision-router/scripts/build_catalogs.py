@@ -28,8 +28,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 UNKNOWN = "unknown"
-CAPABILITIES = ("tools", "parallel_tools", "structured_output", "json_object", "streaming", "reasoning",
-                "image_input", "computer_use")
+# Support flags, each "yes" or "no". Parsing records "unknown" where a source is silent; the built
+# catalog turns every unknown into "no", so a model is only offered for what a source confirms.
+CAPABILITIES = ("tools", "structured_output", "streaming", "reasoning", "image_input")
 
 FILES = {
     "router": "articles/foundry/openai/includes/model-router-supported.md",
@@ -263,7 +264,8 @@ def build_entry(spec: dict, docs: Docs, sources: dict, tier: int) -> dict:
     overrides = spec.get("overrides", {})
     if overrides:
         used.append(f"spec:sources.{overrides['source']}")
-    capabilities = {**caps(), **parsed.get("capabilities", {}), **overrides.get("capabilities", {})}
+    merged = {**caps(), **parsed.get("capabilities", {}), **overrides.get("capabilities", {})}
+    capabilities = {key: "no" if merged[key] == UNKNOWN else merged[key] for key in CAPABILITIES}
     # Descriptive tags (lists), maintained in the spec: what the model is good at and how it runs.
     capabilities.update({key: spec[key] for key in ("actions", "execution") if key in spec})
     limits = {"context_tokens": None, "max_input_tokens": None, "max_output_tokens": None,

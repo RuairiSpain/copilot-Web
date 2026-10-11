@@ -46,7 +46,7 @@
     "xai_variants": "xAI publishes grok-4-1-fast as two deployments, -reasoning and -non-reasoning (retirement schedule); this one is the reasoning variant.",
     "chat_tools_reasoning": "Azure OpenAI reasoning models page (articles/foundry/openai/how-to/reasoning.md, 'Tool calling with reasoning models'): gpt-5.6 models can't combine reasoning with tools on Chat Completions. A request with `tools` fails unless reasoning_effort is 'none', and the default is 'medium'. This router calls Chat Completions, so tools are recorded as unavailable.",
     "foundry_streaming_pages": "Foundry model pages with streaming instructions and examples: MAI-Thinking-1 (foundry-models/includes/use-foundry-models-mai-thinking.md, 'Stream responses'), grok-4.7 (foundry-models/includes/use-foundry-models-grok.md, 'Stream responses') and DeepSeek-V4-Pro (foundry-models/how-to/use-chat-reasoning.md, 'Stream a completion').",
-    "parallel_tools_conflict": "Microsoft's pages disagree on gpt-5.4-mini: the model table lists 'parallel tool calling', the reasoning-models feature table (openai/how-to/reasoning.md) shows it unsupported. Recorded as unknown until a deployment is tested."
+    "actions_write": "`write` added for models whose Foundry page names document or report writing: claude-opus-5-5 ('Performs knowledge work to produce documents that require limited editing', concepts-claude-models-content.md) and grok-4.7 ('generate reports, summarize large volumes of content', use-foundry-models-grok.md). No source found rates any model's hallucination rate."
   },
   "catalogs": {
     "old": {
@@ -125,8 +125,6 @@
               "streaming": "yes",
               "reasoning": "unknown",
               "structured_output": "unknown",
-              "json_object": "unknown",
-              "parallel_tools": "unknown",
               "image_input": "yes"
             }
           },
@@ -180,13 +178,7 @@
           "version": "2026-03-17",
           "api": "openai_chat",
           "docs": "openai",
-          "description": "Compact GPT-5.4 reasoning model and a good default for everyday work: summaries, extraction, routine code, data questions and tool calls, with structured outputs, image input and computer use. Handles moderate multi-step reasoning; use a frontier model for the hardest problems.",
-          "overrides": {
-            "source": "parallel_tools_conflict",
-            "capabilities": {
-              "parallel_tools": "unknown"
-            }
-          }
+          "description": "Compact GPT-5.4 reasoning model and a good default for everyday work: summaries, extraction, routine code, data questions and tool calls, with structured outputs, image input and computer use. Handles moderate multi-step reasoning; use a frontier model for the hardest problems."
         },
         {
           "name": "gpt-5.6-luna",
@@ -198,8 +190,7 @@
           "overrides": {
             "source": "chat_tools_reasoning",
             "capabilities": {
-              "tools": "no",
-              "parallel_tools": "no"
+              "tools": "no"
             }
           }
         },
@@ -229,8 +220,6 @@
               "reasoning": "yes",
               "streaming": "unknown",
               "structured_output": "unknown",
-              "json_object": "unknown",
-              "parallel_tools": "unknown",
               "image_input": "yes"
             }
           },
@@ -261,8 +250,6 @@
               "reasoning": "yes",
               "streaming": "yes",
               "structured_output": "yes",
-              "json_object": "unknown",
-              "parallel_tools": "unknown",
               "image_input": "no"
             }
           },
@@ -303,8 +290,7 @@
           "overrides": {
             "source": "chat_tools_reasoning",
             "capabilities": {
-              "tools": "no",
-              "parallel_tools": "no"
+              "tools": "no"
             }
           }
         },
@@ -359,8 +345,7 @@
           "overrides": {
             "source": "chat_tools_reasoning",
             "capabilities": {
-              "tools": "no",
-              "parallel_tools": "no"
+              "tools": "no"
             }
           }
         },
@@ -438,10 +423,9 @@
           "docs": "partners",
           "description": "Small Microsoft Phi model for simple instructions, short answers, classification and lightweight extraction in 23 languages. Output is limited to 4,096 tokens; no tool calling or image input; weak on multi-step reasoning.",
           "actions": [
-            "chat",
+            "write",
             "extract",
-            "summarize",
-            "format"
+            "summarize"
           ],
           "execution": [
             "high volume"
@@ -457,8 +441,7 @@
           "actions": [
             "extract",
             "write",
-            "summarize",
-            "chat"
+            "summarize"
           ],
           "execution": [
             "high volume"
@@ -473,7 +456,7 @@
           "description": "Microsoft Phi-4 small model for short reasoning, maths and general questions in many languages. 16K context with no tool calling or image input, so use it only for short prompts.",
           "actions": [
             "reason",
-            "chat"
+            "write"
           ],
           "execution": [
             "high volume"
@@ -505,8 +488,6 @@
               "streaming": "yes",
               "reasoning": "unknown",
               "structured_output": "unknown",
-              "json_object": "unknown",
-              "parallel_tools": "unknown",
               "image_input": "yes"
             }
           },
@@ -514,7 +495,6 @@
           "actions": [
             "write",
             "summarize",
-            "chat",
             "orchestrate"
           ],
           "execution": [
@@ -586,8 +566,7 @@
           },
           "actions": [
             "reason",
-            "orchestrate",
-            "search"
+            "orchestrate"
           ],
           "execution": [
             "high volume"
@@ -601,7 +580,6 @@
           "docs": "others",
           "description": "Meta's multilingual, multimodal mixture-of-experts model (12 languages). Good for general chat, writing, translation and image understanding at low cost. No tool calling or structured output; weaker on hard reasoning and complex code than reasoning models.",
           "actions": [
-            "chat",
             "write",
             "translate"
           ],
@@ -616,12 +594,6 @@
           "api": "openai_chat",
           "docs": "openai",
           "description": "Compact GPT-5.4 reasoning model and a good default for everyday work: summaries, extraction, routine code, data questions and tool calls, with structured outputs, image input and computer use. Handles moderate multi-step reasoning; use a frontier model for the hardest problems.",
-          "overrides": {
-            "source": "parallel_tools_conflict",
-            "capabilities": {
-              "parallel_tools": "unknown"
-            }
-          },
           "actions": [
             "summarize",
             "extract",
@@ -643,8 +615,7 @@
           "actions": [
             "reason",
             "translate",
-            "write",
-            "chat"
+            "write"
           ],
           "execution": [
             "high volume"
@@ -676,8 +647,6 @@
               "reasoning": "yes",
               "streaming": "unknown",
               "structured_output": "unknown",
-              "json_object": "unknown",
-              "parallel_tools": "unknown",
               "image_input": "yes"
             }
           },
@@ -716,8 +685,6 @@
               "reasoning": "yes",
               "streaming": "yes",
               "structured_output": "yes",
-              "json_object": "unknown",
-              "parallel_tools": "unknown",
               "image_input": "no"
             }
           },
@@ -804,8 +771,7 @@
           "overrides": {
             "source": "chat_tools_reasoning",
             "capabilities": {
-              "tools": "no",
-              "parallel_tools": "no"
+              "tools": "no"
             }
           },
           "actions": [
@@ -852,7 +818,7 @@
           "actions": [
             "code",
             "orchestrate",
-            "search"
+            "write"
           ],
           "execution": [
             "deep thinking"
@@ -922,7 +888,8 @@
             "code",
             "evaluate",
             "plan",
-            "reason"
+            "reason",
+            "write"
           ],
           "execution": [
             "deep thinking"

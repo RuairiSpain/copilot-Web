@@ -40,13 +40,10 @@
       },
       "capabilities": {
         "tools": "yes",
-        "parallel_tools": "unknown",
-        "structured_output": "unknown",
-        "json_object": "unknown",
+        "structured_output": "no",
         "streaming": "yes",
-        "reasoning": "unknown",
-        "image_input": "yes",
-        "computer_use": "unknown"
+        "reasoning": "no",
+        "image_input": "yes"
       },
       "hosting": {
         "infrastructure": "fireworks",
@@ -94,13 +91,10 @@
       },
       "capabilities": {
         "tools": "yes",
-        "parallel_tools": "yes",
         "structured_output": "yes",
-        "json_object": "unknown",
         "streaming": "yes",
         "reasoning": "yes",
-        "image_input": "yes",
-        "computer_use": "unknown"
+        "image_input": "yes"
       },
       "hosting": {
         "infrastructure": "azure",
@@ -193,13 +187,10 @@
       },
       "capabilities": {
         "tools": "no",
-        "parallel_tools": "no",
         "structured_output": "yes",
-        "json_object": "unknown",
         "streaming": "yes",
         "reasoning": "yes",
-        "image_input": "yes",
-        "computer_use": "yes"
+        "image_input": "yes"
       },
       "hosting": {
         "infrastructure": "azure",
@@ -299,13 +290,10 @@
       },
       "capabilities": {
         "tools": "yes",
-        "parallel_tools": "unknown",
         "structured_output": "yes",
-        "json_object": "unknown",
         "streaming": "yes",
         "reasoning": "yes",
-        "image_input": "no",
-        "computer_use": "unknown"
+        "image_input": "no"
       },
       "hosting": {
         "infrastructure": "azure",
@@ -352,13 +340,10 @@
       },
       "capabilities": {
         "tools": "no",
-        "parallel_tools": "unknown",
-        "structured_output": "unknown",
-        "json_object": "unknown",
-        "streaming": "unknown",
-        "reasoning": "unknown",
-        "image_input": "yes",
-        "computer_use": "unknown"
+        "structured_output": "no",
+        "streaming": "no",
+        "reasoning": "no",
+        "image_input": "yes"
       },
       "hosting": {
         "infrastructure": "azure",
@@ -443,13 +428,10 @@
       },
       "capabilities": {
         "tools": "yes",
-        "parallel_tools": "unknown",
-        "structured_output": "unknown",
-        "json_object": "unknown",
-        "streaming": "unknown",
+        "structured_output": "no",
+        "streaming": "no",
         "reasoning": "yes",
-        "image_input": "yes",
-        "computer_use": "unknown"
+        "image_input": "yes"
       },
       "hosting": {
         "infrastructure": "azure",
@@ -544,13 +526,10 @@
       },
       "capabilities": {
         "tools": "yes",
-        "parallel_tools": "unknown",
-        "structured_output": "unknown",
-        "json_object": "yes",
-        "streaming": "unknown",
+        "structured_output": "no",
+        "streaming": "no",
         "reasoning": "yes",
-        "image_input": "no",
-        "computer_use": "unknown"
+        "image_input": "no"
       },
       "hosting": {
         "infrastructure": "azure",
@@ -633,13 +612,10 @@
       },
       "capabilities": {
         "tools": "yes",
-        "parallel_tools": "unknown",
         "structured_output": "yes",
-        "json_object": "unknown",
         "streaming": "yes",
         "reasoning": "yes",
-        "image_input": "yes",
-        "computer_use": "yes"
+        "image_input": "yes"
       },
       "hosting": {
         "infrastructure": "azure",
@@ -712,8 +688,7 @@
           "articles/foundry/foundry-models/includes/model-matrix/deployments-standard.md",
           "articles/foundry/openai/includes/concepts-model-retirement-schedule-content.md",
           "articles/foundry/openai/includes/models-azure-direct-openai.md",
-          "spec:sources.openai_streaming",
-          "spec:sources.parallel_tools_conflict"
+          "spec:sources.openai_streaming"
         ]
       }
     },
@@ -745,13 +720,10 @@
       },
       "capabilities": {
         "tools": "yes",
-        "parallel_tools": "unknown",
         "structured_output": "yes",
-        "json_object": "unknown",
         "streaming": "yes",
         "reasoning": "yes",
-        "image_input": "no",
-        "computer_use": "unknown"
+        "image_input": "no"
       },
       "hosting": {
         "infrastructure": "fireworks",
@@ -799,13 +771,10 @@
       },
       "capabilities": {
         "tools": "yes",
-        "parallel_tools": "unknown",
-        "structured_output": "unknown",
-        "json_object": "unknown",
-        "streaming": "unknown",
+        "structured_output": "no",
+        "streaming": "no",
         "reasoning": "yes",
-        "image_input": "yes",
-        "computer_use": "unknown"
+        "image_input": "yes"
       },
       "hosting": {
         "infrastructure": "fireworks",
@@ -853,13 +822,10 @@
       },
       "capabilities": {
         "tools": "yes",
-        "parallel_tools": "yes",
         "structured_output": "yes",
-        "json_object": "no",
         "streaming": "yes",
         "reasoning": "yes",
-        "image_input": "yes",
-        "computer_use": "unknown"
+        "image_input": "yes"
       },
       "hosting": {
         "infrastructure": "anthropic",
@@ -921,13 +887,10 @@
       },
       "capabilities": {
         "tools": "no",
-        "parallel_tools": "no",
         "structured_output": "yes",
-        "json_object": "unknown",
         "streaming": "yes",
         "reasoning": "yes",
-        "image_input": "yes",
-        "computer_use": "yes"
+        "image_input": "yes"
       },
       "hosting": {
         "infrastructure": "azure",
@@ -1028,13 +991,10 @@
       },
       "capabilities": {
         "tools": "yes",
-        "parallel_tools": "yes",
         "structured_output": "yes",
-        "json_object": "unknown",
         "streaming": "yes",
         "reasoning": "yes",
-        "image_input": "yes",
-        "computer_use": "unknown"
+        "image_input": "yes"
       },
       "hosting": {
         "infrastructure": "azure",
@@ -1130,13 +1090,10 @@
       },
       "capabilities": {
         "tools": "yes",
-        "parallel_tools": "yes",
         "structured_output": "yes",
-        "json_object": "no",
         "streaming": "yes",
         "reasoning": "yes",
-        "image_input": "yes",
-        "computer_use": "yes"
+        "image_input": "yes"
       },
       "hosting": {
         "infrastructure": "anthropic",
@@ -1198,13 +1155,10 @@
       },
       "capabilities": {
         "tools": "yes",
-        "parallel_tools": "yes",
         "structured_output": "yes",
-        "json_object": "unknown",
         "streaming": "yes",
         "reasoning": "yes",
-        "image_input": "yes",
-        "computer_use": "yes"
+        "image_input": "yes"
       },
       "hosting": {
         "infrastructure": "azure",
@@ -1311,13 +1265,10 @@
       },
       "capabilities": {
         "tools": "yes",
-        "parallel_tools": "yes",
         "structured_output": "yes",
-        "json_object": "unknown",
         "streaming": "yes",
         "reasoning": "yes",
-        "image_input": "yes",
-        "computer_use": "yes"
+        "image_input": "yes"
       },
       "hosting": {
         "infrastructure": "azure",
@@ -1419,13 +1370,10 @@
       },
       "capabilities": {
         "tools": "no",
-        "parallel_tools": "no",
         "structured_output": "yes",
-        "json_object": "unknown",
         "streaming": "yes",
         "reasoning": "yes",
-        "image_input": "yes",
-        "computer_use": "yes"
+        "image_input": "yes"
       },
       "hosting": {
         "infrastructure": "azure",
@@ -1531,13 +1479,10 @@
       },
       "capabilities": {
         "tools": "yes",
-        "parallel_tools": "yes",
         "structured_output": "yes",
-        "json_object": "no",
         "streaming": "yes",
         "reasoning": "yes",
-        "image_input": "yes",
-        "computer_use": "yes"
+        "image_input": "yes"
       },
       "hosting": {
         "infrastructure": "anthropic",
@@ -1598,13 +1543,10 @@
       },
       "capabilities": {
         "tools": "yes",
-        "parallel_tools": "unknown",
-        "structured_output": "unknown",
-        "json_object": "unknown",
-        "streaming": "unknown",
-        "reasoning": "unknown",
-        "image_input": "no",
-        "computer_use": "unknown"
+        "structured_output": "no",
+        "streaming": "no",
+        "reasoning": "no",
+        "image_input": "no"
       },
       "hosting": {
         "infrastructure": "azure",
@@ -1650,13 +1592,10 @@
       },
       "capabilities": {
         "tools": "yes",
-        "parallel_tools": "unknown",
-        "structured_output": "unknown",
-        "json_object": "yes",
-        "streaming": "unknown",
-        "reasoning": "unknown",
-        "image_input": "yes",
-        "computer_use": "unknown"
+        "structured_output": "no",
+        "streaming": "no",
+        "reasoning": "no",
+        "image_input": "yes"
       },
       "hosting": {
         "infrastructure": "azure",
@@ -1738,13 +1677,10 @@
       },
       "capabilities": {
         "tools": "yes",
-        "parallel_tools": "yes",
         "structured_output": "yes",
-        "json_object": "no",
         "streaming": "yes",
         "reasoning": "yes",
-        "image_input": "yes",
-        "computer_use": "yes"
+        "image_input": "yes"
       },
       "hosting": {
         "infrastructure": "anthropic",
@@ -1806,13 +1742,10 @@
       },
       "capabilities": {
         "tools": "yes",
-        "parallel_tools": "yes",
         "structured_output": "yes",
-        "json_object": "no",
         "streaming": "yes",
         "reasoning": "yes",
-        "image_input": "yes",
-        "computer_use": "unknown"
+        "image_input": "yes"
       },
       "hosting": {
         "infrastructure": "anthropic",
@@ -1874,13 +1807,10 @@
       },
       "capabilities": {
         "tools": "yes",
-        "parallel_tools": "yes",
         "structured_output": "yes",
-        "json_object": "no",
         "streaming": "yes",
         "reasoning": "yes",
-        "image_input": "yes",
-        "computer_use": "yes"
+        "image_input": "yes"
       },
       "hosting": {
         "infrastructure": "anthropic",
@@ -1942,13 +1872,10 @@
       },
       "capabilities": {
         "tools": "yes",
-        "parallel_tools": "yes",
         "structured_output": "yes",
-        "json_object": "no",
         "streaming": "yes",
         "reasoning": "yes",
-        "image_input": "yes",
-        "computer_use": "yes"
+        "image_input": "yes"
       },
       "hosting": {
         "infrastructure": "anthropic",
@@ -2011,13 +1938,10 @@
       },
       "capabilities": {
         "tools": "yes",
-        "parallel_tools": "yes",
         "structured_output": "yes",
-        "json_object": "no",
         "streaming": "yes",
         "reasoning": "yes",
-        "image_input": "yes",
-        "computer_use": "unknown"
+        "image_input": "yes"
       },
       "hosting": {
         "infrastructure": "anthropic",
@@ -2072,13 +1996,10 @@
       },
       "capabilities": {
         "tools": "yes",
-        "parallel_tools": "yes",
         "structured_output": "yes",
-        "json_object": "unknown",
         "streaming": "yes",
         "reasoning": "yes",
-        "image_input": "yes",
-        "computer_use": "yes"
+        "image_input": "yes"
       },
       "hosting": {
         "infrastructure": "azure",
@@ -2210,6 +2131,6 @@
     "xai_variants": "xAI publishes grok-4-1-fast as two deployments, -reasoning and -non-reasoning (retirement schedule); this one is the reasoning variant.",
     "chat_tools_reasoning": "Azure OpenAI reasoning models page (articles/foundry/openai/how-to/reasoning.md, 'Tool calling with reasoning models'): gpt-5.6 models can't combine reasoning with tools on Chat Completions. A request with `tools` fails unless reasoning_effort is 'none', and the default is 'medium'. This router calls Chat Completions, so tools are recorded as unavailable.",
     "foundry_streaming_pages": "Foundry model pages with streaming instructions and examples: MAI-Thinking-1 (foundry-models/includes/use-foundry-models-mai-thinking.md, 'Stream responses'), grok-4.7 (foundry-models/includes/use-foundry-models-grok.md, 'Stream responses') and DeepSeek-V4-Pro (foundry-models/how-to/use-chat-reasoning.md, 'Stream a completion').",
-    "parallel_tools_conflict": "Microsoft's pages disagree on gpt-5.4-mini: the model table lists 'parallel tool calling', the reasoning-models feature table (openai/how-to/reasoning.md) shows it unsupported. Recorded as unknown until a deployment is tested."
+    "actions_write": "`write` added for models whose Foundry page names document or report writing: claude-opus-5-5 ('Performs knowledge work to produce documents that require limited editing', concepts-claude-models-content.md) and grok-4.7 ('generate reports, summarize large volumes of content', use-foundry-models-grok.md). No source found rates any model's hallucination rate."
   }
 }

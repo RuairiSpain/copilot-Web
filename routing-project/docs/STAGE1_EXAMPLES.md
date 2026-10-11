@@ -12,11 +12,12 @@ How to read the examples:
   router's request handling and stage 1 against the checked-in catalogs
   (`decision-router/scripts/stage1_examples.py`). A test fails if a catalog or rule change
   makes this page out of date.
-- **Default settings** unless an example says otherwise:
-  - catalog `old` (`ROUTER_COMPATIBILITY`);
-  - `ROUTER_UNKNOWN_CAPABILITY=ineligible`, so a capability recorded as `unknown` counts as missing;
-  - previews allowed;
-  - no operator allow-list.
+- **Default settings** unless an example says otherwise: catalog `old`
+  (`ROUTER_COMPATIBILITY`), previews allowed, no operator allow-list.
+- **Capabilities are `yes` or `no`.** Stage 1 filters on five: `tools`, `structured_output`,
+  `streaming`, `reasoning` and `image_input`. `no` covers both "a source says it is
+  unsupported" and "no source confirms it", so a model is only offered for what a source
+  confirms.
 - **Token estimate:** characters ÷ 4.
 - **What Decision-1 receives:** each remaining model becomes one option in the Decision-1
   request. The option key is the model name, and its text is the model's catalog description
@@ -37,20 +38,18 @@ How to read the examples:
 | A5 | Tool calling (agent step) | 17 of 23 |
 | A6 | Image input | 15 of 23 |
 | A7 | JSON-schema output | 12 of 23 |
-| A8 | JSON mode (json_object) | 3 of 23 |
+| A8 | JSON mode (json_object) | 23 of 23 |
 | A9 | Streaming | 16 of 23 |
-| A10 | Streaming with unknown capabilities allowed | 23 of 23 |
-| A11 | Long document (~300K tokens) | 15 of 23 |
-| A12 | EU data residency | 6 of 23 |
-| A13 | Developer-chosen subset, cost mode | 2 of 23 |
-| A14 | One provider only | 3 of 23 |
-| A15 | Coding agent profile | 5 of 23 |
-| A16 | Native Claude request (claude_translation: false) | 3 of 23 |
-| A17 | Operator allow-list | 4 of 26 |
-| A18 | Previews excluded | 24 of 26 |
-| A19 | Region where only global Fireworks models qualify | 3 of 26 |
-| A20 | Only one model passes | 1 of 23 |
-| A21 | EU residency with JSON mode | 1 of 23 |
+| A10 | Long document (~300K tokens) | 15 of 23 |
+| A11 | EU data residency | 6 of 23 |
+| A12 | Developer-chosen subset, cost mode | 2 of 23 |
+| A13 | One provider only | 3 of 23 |
+| A14 | Coding agent profile | 8 of 23 |
+| A15 | Native Claude request (claude_translation: false) | 3 of 23 |
+| A16 | Operator allow-list | 4 of 26 |
+| A17 | Previews excluded | 24 of 26 |
+| A18 | Region where only global Fireworks models qualify | 3 of 26 |
+| A19 | Only one model passes | 1 of 23 |
 | Z1 | Tools requested from models without tool calling | 0 models (empty at `capabilities`) |
 | Z2 | Tools on gpt-6.1-sol only | 0 models (empty at `capabilities`) |
 | Z3 | Regional (Standard) deployment type | 0 models (empty at `location`) |
@@ -64,45 +63,36 @@ How to read the examples:
 | Z11 | Prompt larger than every context window | 0 models (empty at `size`) |
 | Z12 | Minimum context larger than any model | 0 models (empty at `size`) |
 | Z13 | Output longer than the chosen models allow | 0 models (empty at `size`) |
-| Z14 | JSON mode plus computer use | 0 models (empty at `capabilities`) |
-| Z15 | Streaming from models whose streaming support is unpublished | 0 models (empty at `capabilities`) |
-| Z16 | Fireworks with Data Zone residency | 0 models (empty at `location`) |
-| Z17 | Image input with text-only models | 0 models (empty at `capabilities`) |
-| Z18 | Reasoning required from non-reasoning models | 0 models (empty at `capabilities`) |
-| Z19 | Region with no Azure availability, inference in Azure | 0 models (empty at `location`) |
-| R1 | Model name not in the catalog | 400 `invalid_routing_constraints` |
-| R2 | Old-catalog model requested from the new catalog | 400 `invalid_routing_constraints` |
+| Z14 | Streaming from models whose streaming support is unpublished | 0 models (empty at `capabilities`) |
+| Z15 | Fireworks with Data Zone residency | 0 models (empty at `location`) |
+| Z16 | Image input with text-only models | 0 models (empty at `capabilities`) |
+| Z17 | Reasoning required from non-reasoning models | 0 models (empty at `capabilities`) |
+| Z18 | Region with no Azure availability, inference in Azure | 0 models (empty at `location`) |
+| R1 | Capability that is no longer in the catalog | 400 `invalid_routing_constraints` |
+| R2 | Model name not in the catalog | 400 `invalid_routing_constraints` |
+| R3 | Old-catalog model requested from the new catalog | 400 `invalid_routing_constraints` |
 
 ## Findings
 
-Running the examples exposed catalog gaps: values recorded as `unknown` that make stage 1
-remove models. Each was then researched, in this order: Microsoft's docs, the providers' own
-docs, then blogs and forums. Provider sites (OpenAI, xAI, DeepSeek, Fireworks, Hugging Face)
-could not be reached from the build environment, so only Microsoft's docs were read
-directly. Results so far:
+Running the examples exposed catalog gaps, which were researched in this order: Microsoft's
+docs, the providers' own docs, then blogs and forums. Provider sites (OpenAI, xAI, DeepSeek,
+Fireworks, Hugging Face) could not be reached from the build environment, so only Microsoft's
+docs were read directly.
 
 1. **Streaming (A9):** Microsoft's Foundry pages give streaming instructions and examples for
-   MAI-Thinking-1, grok-4.7 and DeepSeek-V4-Pro, so those are now `yes`. No source was found
-   for the other seven: Phi (three models), Llama 4 Maverick, grok-4-1-fast-reasoning,
-   DeepSeek-V4-Flash and FW-Kimi-K3. They stay `unknown`.
-2. **JSON mode (A8):** Microsoft's JSON mode page ends with "supported with the following
-   models:" followed by an empty list. The model tables name "JSON Mode" only for retired
-   GPT-4o models. No source confirms JSON mode for any current OpenAI model, so they stay
-   `unknown`. DeepSeek V4 and grok-4.7 list JSON as a response format, so they stay `yes`.
-3. **GPT-5.6 tools (A5, A15):** Microsoft's reasoning-models page says gpt-5.6 models reject
-   Chat Completions requests that include `tools` unless `reasoning_effort` is `none`. This
-   router calls Chat Completions, so their `tools` value is now `no`, and gpt-5.6-terra was
-   removed from the coding profile.
-4. **Parallel tool calls (A15):** Microsoft's pages contradict each other on gpt-5.4-mini.
-   The model table lists parallel tool calling; the reasoning-models table shows it
-   unsupported. It is now `unknown`. No primary source covers FW-GLM-5.3 or DeepSeek-V4-Pro,
-   which stay `unknown`. Third-party catalogs say all three support it.
-5. **Standard (regional) deployments (Z3):** no model has published Standard availability, so
+   MAI-Thinking-1, grok-4.7 and DeepSeek-V4-Pro (`yes`). No source was found for the Phi
+   models, Llama 4 Maverick, grok-4-1-fast-reasoning, DeepSeek-V4-Flash or FW-Kimi-K3 (`no`).
+2. **GPT-5.6 tools (A5):** Microsoft's reasoning-models page says gpt-5.6 models reject Chat
+   Completions requests that include `tools` unless `reasoning_effort` is `none`. This router
+   calls Chat Completions, so their `tools` value is `no`, and gpt-5.6-terra is not in the
+   coding profile.
+3. **Removed capabilities:** `parallel_tools`, `json_object` and `computer_use` were mostly
+   unconfirmed and are no longer in the catalog, so stage 1 doesn't filter on them (A8, R1).
+4. **Standard (regional) deployments (Z3):** no model has published Standard availability, so
    `deployment_type: standard` always returns no models.
 
-The remaining unknowns can only be settled by a test call against each deployment, one
-request per capability. `ROUTER_UNKNOWN_CAPABILITY=eligible` (A10) treats them as supported in
-the meantime, at the risk of a failed call.
+A `no` that only means "unconfirmed" can be changed to `yes` by confirming the capability with
+one test request against the deployment, then recording the source in `catalog_spec.json`.
 
 ## Requests that reach Decision-1
 
@@ -294,18 +284,18 @@ the meantime, at the risk of a failed call.
 | `lifecycle` | – | 23 |
 | `allowlist` | – | 23 |
 | `selection` | – | 23 |
-| `capabilities` | structured_output unknown (needed: response_format=json_schema): `Phi-4-mini-instruct`, `FW-GLM-5.3-Flash`, `Phi-4`, `Phi-4-reasoning`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `grok-4-1-fast-reasoning`, `DeepSeek-V4-Flash`, `FW-Kimi-K3`, `DeepSeek-V4-Pro`, `MAI-Thinking-1`, `grok-4.7` | 12 |
+| `capabilities` | structured_output no (needed: response_format=json_schema): `Phi-4-mini-instruct`, `FW-GLM-5.3-Flash`, `Phi-4`, `Phi-4-reasoning`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `grok-4-1-fast-reasoning`, `DeepSeek-V4-Flash`, `FW-Kimi-K3`, `DeepSeek-V4-Pro`, `MAI-Thinking-1`, `grok-4.7` | 12 |
 | `location` | – | 12 |
 | `size` | – | 12 |
 | `price_band` | – | 12 |
 
 **Stage 1 output (the 12 options Decision-1 chooses from, cheapest first):** `claude-haiku-5-5`, `gpt-5.4-nano`, `gpt-oss-120b`, `gpt-5.4-mini`, `gpt-6-luna`, `FW-GLM-5.3`, `gpt-5.6-terra`, `claude-sonnet-5-5`, `gpt-6.1-sol`, `gpt-5.5`, `claude-opus-5-5`, `gpt-6-astra`
 
-**Explanation:** Models with `structured_output: yes` remain, including the three Claude models (the adapter sends the schema as `output_config.format`). The 11 removed models have `structured_output: unknown`: the catalog has no source saying they enforce a schema, and `ROUTER_UNKNOWN_CAPABILITY=ineligible` treats that as unsupported.
+**Explanation:** Models with `structured_output: yes` remain, including the three Claude models (the adapter sends the schema as `output_config.format`). The 11 removed models have `structured_output: no`: no source confirms that they enforce a schema, and the catalog records anything unconfirmed as `no`.
 
 ### A8. JSON mode (json_object)
 
-**Why it is useful:** JSON mode asks for any valid JSON without a schema. It shows how strongly an `unknown` capability value narrows the choice.
+**Why it is useful:** JSON mode asks for any valid JSON without a schema. It shows that JSON mode is not a capability stage 1 filters on.
 
 ```json
 {
@@ -315,7 +305,7 @@ the meantime, at the risk of a failed call.
 }
 ```
 
-**Read from the request:** catalog `new` (23 models), mode `balanced`, estimated ~26 prompt tokens. Requirements: `json_object` (response_format=json_object).
+**Read from the request:** catalog `new` (23 models), mode `balanced`, estimated ~26 prompt tokens. Requirements: none.
 
 | Step | Removed | Left |
 |---|---|---|
@@ -323,14 +313,14 @@ the meantime, at the risk of a failed call.
 | `lifecycle` | – | 23 |
 | `allowlist` | – | 23 |
 | `selection` | – | 23 |
-| `capabilities` | 17 × json_object unknown (needed: response_format=json_object)<br>3 × json_object no (needed: response_format=json_object) | 3 |
-| `location` | – | 3 |
-| `size` | – | 3 |
-| `price_band` | – | 3 |
+| `capabilities` | – | 23 |
+| `location` | – | 23 |
+| `size` | – | 23 |
+| `price_band` | – | 23 |
 
-**Stage 1 output (the 3 options Decision-1 chooses from, cheapest first):** `DeepSeek-V4-Flash`, `DeepSeek-V4-Pro`, `grok-4.7`
+**Stage 1 output (the 23 options Decision-1 chooses from, cheapest first):** `Phi-4-mini-instruct`, `FW-GLM-5.3-Flash`, `claude-haiku-5-5`, `gpt-5.4-nano`, `Phi-4`, `gpt-oss-120b`, `Phi-4-reasoning`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `grok-4-1-fast-reasoning`, `DeepSeek-V4-Flash`, `gpt-5.4-mini`, `gpt-6-luna`, `FW-GLM-5.3`, `FW-Kimi-K3`, `DeepSeek-V4-Pro`, `gpt-5.6-terra`, `MAI-Thinking-1`, `claude-sonnet-5-5`, `gpt-6.1-sol`, `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`, `gpt-6-astra`
 
-**Explanation:** Only three models remain: the two DeepSeek V4 models and grok-4.7, whose docs list JSON as a response format. Claude is removed because JSON mode has no Messages API equivalent (`no`). All OpenAI models are removed because the catalog records `json_object: unknown` for them; see the findings above.
+**Explanation:** Nothing is removed: `json_object` is no longer a catalog capability, so all 23 models are candidates. A model that doesn't support JSON mode may answer in free text. Claude always does, because the translation layer drops `response_format: json_object` (the Messages API has no equivalent). Callers that need guaranteed JSON should send a JSON schema instead (example A7).
 
 ### A9. Streaming
 
@@ -352,47 +342,16 @@ the meantime, at the risk of a failed call.
 | `lifecycle` | – | 23 |
 | `allowlist` | – | 23 |
 | `selection` | – | 23 |
-| `capabilities` | streaming unknown (needed: stream=true): `Phi-4-mini-instruct`, `Phi-4`, `Phi-4-reasoning`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `grok-4-1-fast-reasoning`, `DeepSeek-V4-Flash`, `FW-Kimi-K3` | 16 |
+| `capabilities` | streaming no (needed: stream=true): `Phi-4-mini-instruct`, `Phi-4`, `Phi-4-reasoning`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `grok-4-1-fast-reasoning`, `DeepSeek-V4-Flash`, `FW-Kimi-K3` | 16 |
 | `location` | – | 16 |
 | `size` | – | 16 |
 | `price_band` | – | 16 |
 
 **Stage 1 output (the 16 options Decision-1 chooses from, cheapest first):** `FW-GLM-5.3-Flash`, `claude-haiku-5-5`, `gpt-5.4-nano`, `gpt-oss-120b`, `gpt-5.4-mini`, `gpt-6-luna`, `FW-GLM-5.3`, `DeepSeek-V4-Pro`, `gpt-5.6-terra`, `MAI-Thinking-1`, `claude-sonnet-5-5`, `gpt-6.1-sol`, `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`, `gpt-6-astra`
 
-**Explanation:** Seven models are removed because their streaming support is `unknown` in the catalog: the three Phi models, Llama 4 Maverick, grok-4-1-fast-reasoning, DeepSeek-V4-Flash and FW-Kimi-K3. 16 models remain. No source was found for the removed models; see the findings above.
+**Explanation:** Seven models are removed because no source confirms they stream, so the catalog records `streaming: no`: the three Phi models, Llama 4 Maverick, grok-4-1-fast-reasoning, DeepSeek-V4-Flash and FW-Kimi-K3. 16 models remain.
 
-### A10. Streaming with unknown capabilities allowed
-
-**Why it is useful:** The same request with `ROUTER_UNKNOWN_CAPABILITY=eligible`. It shows the trade-off that setting controls.
-
-```json
-{
-  "messages": [{"role": "user", "content": "Summarise the attached contract clause and flag anything unusual."}],
-  "compatibility": "new",
-  "stream": true
-}
-```
-
-Router settings for this example: `unknown_capability=eligible`.
-
-**Read from the request:** catalog `new` (23 models), mode `balanced`, estimated ~26 prompt tokens. Requirements: `streaming` (stream=true).
-
-| Step | Removed | Left |
-|---|---|---|
-| `api` | – | 23 |
-| `lifecycle` | – | 23 |
-| `allowlist` | – | 23 |
-| `selection` | – | 23 |
-| `capabilities` | – | 23 |
-| `location` | – | 23 |
-| `size` | – | 23 |
-| `price_band` | – | 23 |
-
-**Stage 1 output (the 23 options Decision-1 chooses from, cheapest first):** `Phi-4-mini-instruct`, `FW-GLM-5.3-Flash`, `claude-haiku-5-5`, `gpt-5.4-nano`, `Phi-4`, `gpt-oss-120b`, `Phi-4-reasoning`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `grok-4-1-fast-reasoning`, `DeepSeek-V4-Flash`, `gpt-5.4-mini`, `gpt-6-luna`, `FW-GLM-5.3`, `FW-Kimi-K3`, `DeepSeek-V4-Pro`, `gpt-5.6-terra`, `MAI-Thinking-1`, `claude-sonnet-5-5`, `gpt-6.1-sol`, `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`, `gpt-6-astra`
-
-**Explanation:** With unknown values treated as supported, nothing is removed and all 23 models are candidates. The risk is that a model which in fact can't stream is chosen and the call fails; the router then falls back to the next ranked model.
-
-### A11. Long document (~300K tokens)
+### A10. Long document (~300K tokens)
 
 **Why it is useful:** Long prompts must not go to models whose context window or input limit is smaller. The size step is the only one that depends on the prompt's length.
 
@@ -420,7 +379,7 @@ Router settings for this example: `unknown_capability=eligible`.
 
 **Explanation:** The prompt is estimated at about 300,000 tokens (characters ÷ 4). Models with smaller context windows are removed, and so are gpt-5.4-nano and gpt-5.4-mini: their context is 400K, but they accept at most 272K tokens of input. 15 models with 500K to 1M-token contexts remain.
 
-### A12. EU data residency
+### A11. EU data residency
 
 **Why it is useful:** A typical compliance request: process in the EU (Sweden Central, Data Zone Standard) and only on Azure infrastructure.
 
@@ -449,7 +408,7 @@ Router settings for this example: `unknown_capability=eligible`.
 
 **Explanation:** Fireworks models are removed (inference outside Azure), models without a Data Zone deployment are removed, gpt-oss-120b is removed because its regions aren't published, and models not offered in Sweden Central's Data Zone are removed. Six OpenAI and DeepSeek models remain.
 
-### A13. Developer-chosen subset, cost mode
+### A12. Developer-chosen subset, cost mode
 
 **Why it is useful:** A developer who has approved five models and wants the cheapest suitable one. It shows that the price band applies to the subset, not to the whole catalog.
 
@@ -479,7 +438,7 @@ Router settings for this example: `unknown_capability=eligible`.
 
 **Explanation:** The selection step keeps the five named models. Cost mode then keeps the cheapest third of those five, rounded up: DeepSeek-V4-Flash and gpt-5.4-mini.
 
-### A14. One provider only
+### A13. One provider only
 
 **Why it is useful:** Restricting to one provider, for example for contractual reasons.
 
@@ -508,7 +467,7 @@ Router settings for this example: `unknown_capability=eligible`.
 
 **Explanation:** Only the three Claude models in the `new` catalog remain: Haiku 5.5, Sonnet 5.5 and Opus 5.5.
 
-### A15. Coding agent profile
+### A14. Coding agent profile
 
 **Why it is useful:** The built-in `decision-router-coding` profile, as a Foundry agent would use it: `model` names the profile, and the request has tools with parallel tool calls enabled.
 
@@ -521,7 +480,7 @@ Router settings for this example: `unknown_capability=eligible`.
 }
 ```
 
-**Read from the request:** catalog `new` (23 models), mode `balanced`, profile `decision-router-coding`, pinning on, estimated ~78 prompt tokens. Requirements: `tools` (request has tools), `parallel_tools` (parallel_tool_calls=true).
+**Read from the request:** catalog `new` (23 models), mode `balanced`, profile `decision-router-coding`, pinning on, estimated ~78 prompt tokens. Requirements: `tools` (request has tools).
 
 | Step | Removed | Left |
 |---|---|---|
@@ -529,16 +488,16 @@ Router settings for this example: `unknown_capability=eligible`.
 | `lifecycle` | – | 23 |
 | `allowlist` | – | 23 |
 | `selection` | 15 × not in routing_constraints.models | 8 |
-| `capabilities` | parallel_tools unknown (needed: parallel_tool_calls=true): `gpt-5.4-mini`, `FW-GLM-5.3`, `DeepSeek-V4-Pro` | 5 |
-| `location` | – | 5 |
-| `size` | – | 5 |
-| `price_band` | – | 5 |
+| `capabilities` | – | 8 |
+| `location` | – | 8 |
+| `size` | – | 8 |
+| `price_band` | – | 8 |
 
-**Stage 1 output (the 5 options Decision-1 chooses from, cheapest first):** `claude-haiku-5-5`, `claude-sonnet-5-5`, `gpt-5.5`, `claude-opus-5-5`, `gpt-6-astra`
+**Stage 1 output (the 8 options Decision-1 chooses from, cheapest first):** `claude-haiku-5-5`, `gpt-5.4-mini`, `FW-GLM-5.3`, `DeepSeek-V4-Pro`, `claude-sonnet-5-5`, `gpt-5.5`, `claude-opus-5-5`, `gpt-6-astra`
 
-**Explanation:** The profile selects the `new` catalog, keeps its eight coding models and turns pinning on. The request asks for parallel tool calls, so gpt-5.4-mini, FW-GLM-5.3 and DeepSeek-V4-Pro are removed: their `parallel_tools` value is `unknown`. Five models remain. When an agent sends `parallel_tool_calls: true`, those three models are never offered.
+**Explanation:** The profile selects the `new` catalog, keeps its eight coding models, requires tool calling and turns pinning on. All eight support tools, so all eight go to Decision-1. `parallel_tool_calls: true` adds no requirement, because parallel tool calls are no longer a catalog capability.
 
-### A16. Native Claude request (claude_translation: false)
+### A15. Native Claude request (claude_translation: false)
 
 **Why it is useful:** A caller that already speaks the Anthropic Messages API sends a native body. Only Claude can take it.
 
@@ -569,7 +528,7 @@ Router settings for this example: `unknown_capability=eligible`.
 
 **Explanation:** The `api` step removes every model that is not Claude. The three Claude models in the `new` catalog remain, and the chosen one receives the body unchanged.
 
-### A17. Operator allow-list
+### A16. Operator allow-list
 
 **Why it is useful:** `ROUTER_MODEL_ALLOWLIST` caps every request, whatever it asks for. Operators use it to limit spending or to allow only approved models.
 
@@ -598,7 +557,7 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5,claude-o
 
 **Explanation:** Only the four allow-listed models remain. A request cannot add a model the operator has not allowed.
 
-### A18. Previews excluded
+### A17. Previews excluded
 
 **Why it is useful:** Production callers often want generally available models only. `allow_preview: false` overrides `ROUTER_ALLOW_PREVIEW` for one request.
 
@@ -626,7 +585,7 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5,claude-o
 
 **Explanation:** grok-4.6 and claude-fable-5-1 are in preview and are removed. 24 models remain.
 
-### A19. Region where only global Fireworks models qualify
+### A18. Region where only global Fireworks models qualify
 
 **Why it is useful:** A region outside the published availability lists. It shows that a region filter does not imply that processing stays in that region.
 
@@ -654,7 +613,7 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5,claude-o
 
 **Explanation:** No Azure-hosted model lists West India, so they are all removed, and gpt-oss-120b and grok-4 are removed because their regions aren't published. The three Fireworks models remain, because they deploy globally from any region. Their inference runs on Fireworks infrastructure, so a caller who wanted data to stay in India must also set `inference_in_azure` (see the example 'Region with no Azure availability, inference in Azure' below).
 
-### A20. Only one model passes
+### A19. Only one model passes
 
 **Why it is useful:** When stage 1 leaves one model there is nothing to choose, and the router skips Decision-1.
 
@@ -682,36 +641,6 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5,claude-o
 **Stage 1 output:** one model, `gpt-5.5`. It is called directly; Decision-1 is not called.
 
 **Explanation:** The router calls gpt-5.5 directly. This saves the Decision-1 call (time and cost); the decision log records it as `skipped`.
-
-### A21. EU residency with JSON mode
-
-**Why it is useful:** Two reasonable requirements together can leave a single model. It shows how requirements combine.
-
-```json
-{
-  "messages": [{"role": "user", "content": "Summarise the attached contract clause and flag anything unusual."}],
-  "compatibility": "new",
-  "response_format": {"type": "json_object"},
-  "routing_constraints": {"region": "swedencentral", "deployment_type": "data_zone_standard", "inference_in_azure": true}
-}
-```
-
-**Read from the request:** catalog `new` (23 models), mode `balanced`, estimated ~26 prompt tokens. Requirements: `json_object` (response_format=json_object).
-
-| Step | Removed | Left |
-|---|---|---|
-| `api` | – | 23 |
-| `lifecycle` | – | 23 |
-| `allowlist` | – | 23 |
-| `selection` | – | 23 |
-| `capabilities` | 17 × json_object unknown (needed: response_format=json_object)<br>3 × json_object no (needed: response_format=json_object) | 3 |
-| `location` | not available in swedencentral: `DeepSeek-V4-Pro`, `grok-4.7` | 1 |
-| `size` | – | 1 |
-| `price_band` | – | 1 |
-
-**Stage 1 output:** one model, `DeepSeek-V4-Flash`. It is called directly; Decision-1 is not called.
-
-**Explanation:** JSON mode leaves the three models with `json_object: yes`. Of those, only DeepSeek-V4-Flash is offered in Sweden Central's Data Zone, so it is called directly. If it fails, there is no other model to fall back to.
 
 ## Requests that leave no models
 
@@ -1072,34 +1001,7 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5`.
 
 **Explanation:** All three are removed. Some models allow more output (Llama 4 Maverick, grok-4.7, DeepSeek V4), but they are not in the subset.
 
-### Z14. JSON mode plus computer use
-
-**Why it is useful:** Two capabilities no single model is recorded as having.
-
-```json
-{
-  "messages": [{"role": "user", "content": "Summarise the attached contract clause and flag anything unusual."}],
-  "compatibility": "new",
-  "response_format": {"type": "json_object"},
-  "routing_constraints": {"capabilities": ["computer_use"]}
-}
-```
-
-**Read from the request:** catalog `new` (23 models), mode `balanced`, estimated ~26 prompt tokens. Requirements: `json_object` (response_format=json_object).
-
-| Step | Removed | Left |
-|---|---|---|
-| `api` | – | 23 |
-| `lifecycle` | – | 23 |
-| `allowlist` | – | 23 |
-| `selection` | – | 23 |
-| `capabilities` | 14 × computer_use unknown (needed: routing_constraints.capabilities)<br>6 × json_object unknown (needed: response_format=json_object)<br>3 × json_object no (needed: response_format=json_object) | 0 |
-
-**Stage 1 output:** no models. The request gets **422 `no_eligible_models`**; the `capabilities` step removed the last candidates. Decision-1 is not called.
-
-**Explanation:** The models with `json_object: yes` (DeepSeek V4, grok-4.7) have `computer_use: unknown`; the models with computer use have `json_object` unknown or no.
-
-### Z15. Streaming from models whose streaming support is unpublished
+### Z14. Streaming from models whose streaming support is unpublished
 
 **Why it is useful:** Streaming to three models the catalog has no streaming source for.
 
@@ -1119,13 +1021,13 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5`.
 | `lifecycle` | – | 26 |
 | `allowlist` | – | 26 |
 | `selection` | 23 × not in routing_constraints.models | 3 |
-| `capabilities` | streaming unknown (needed: stream=true): `Llama-4-Maverick-17B-128E-Instruct-FP8`, `DeepSeek-V3.2`, `grok-4` | 0 |
+| `capabilities` | streaming no (needed: stream=true): `Llama-4-Maverick-17B-128E-Instruct-FP8`, `DeepSeek-V3.2`, `grok-4` | 0 |
 
 **Stage 1 output:** no models. The request gets **422 `no_eligible_models`**; the `capabilities` step removed the last candidates. Decision-1 is not called.
 
-**Explanation:** All three have `streaming: unknown` and are removed. With `ROUTER_UNKNOWN_CAPABILITY=eligible` all three would pass.
+**Explanation:** No source confirms streaming for any of the three, so the catalog records `streaming: no` and all three are removed.
 
-### Z16. Fireworks with Data Zone residency
+### Z15. Fireworks with Data Zone residency
 
 **Why it is useful:** Fireworks models with a Data Zone deployment type.
 
@@ -1151,7 +1053,7 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5`.
 
 **Explanation:** Fireworks models deploy as Global Standard only, so all three are removed.
 
-### Z17. Image input with text-only models
+### Z16. Image input with text-only models
 
 **Why it is useful:** An image sent with a provider restriction that leaves only text-only models.
 
@@ -1177,7 +1079,7 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5`.
 
 **Explanation:** DeepSeek and Microsoft models in `new` are all text-only, so the six candidates are removed.
 
-### Z18. Reasoning required from non-reasoning models
+### Z17. Reasoning required from non-reasoning models
 
 **Why it is useful:** `capabilities: ["reasoning"]` with a subset of models that have no reasoning mode.
 
@@ -1197,13 +1099,13 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5`.
 | `lifecycle` | – | 23 |
 | `allowlist` | – | 23 |
 | `selection` | 20 × not in routing_constraints.models | 3 |
-| `capabilities` | reasoning unknown (needed: routing_constraints.capabilities): `Phi-4-mini-instruct`, `Phi-4`, `Llama-4-Maverick-17B-128E-Instruct-FP8` | 0 |
+| `capabilities` | reasoning no (needed: routing_constraints.capabilities): `Phi-4-mini-instruct`, `Phi-4`, `Llama-4-Maverick-17B-128E-Instruct-FP8` | 0 |
 
 **Stage 1 output:** no models. The request gets **422 `no_eligible_models`**; the `capabilities` step removed the last candidates. Decision-1 is not called.
 
-**Explanation:** Phi-4, Phi-4-mini-instruct and Llama 4 Maverick have `reasoning: unknown`, so all three are removed.
+**Explanation:** Phi-4, Phi-4-mini-instruct and Llama 4 Maverick have `reasoning: no`, so all three are removed.
 
-### Z19. Region with no Azure availability, inference in Azure
+### Z18. Region with no Azure availability, inference in Azure
 
 **Why it is useful:** West India with processing kept on Azure.
 
@@ -1233,7 +1135,22 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5`.
 
 These never reach stage 1: the request itself is invalid, so the caller gets a 400 that says what to fix, not an empty model list.
 
-### R1. Model name not in the catalog
+### R1. Capability that is no longer in the catalog
+
+**Why it is useful:** A request still asking for one of the removed capabilities (parallel_tools, json_object, computer_use).
+
+```json
+{
+  "messages": [{"role": "user", "content": "Summarise the attached contract clause and flag anything unusual."}],
+  "routing_constraints": {"capabilities": ["parallel_tools"]}
+}
+```
+
+**Result:** rejected with **400 `invalid_routing_constraints`** before stage 1: unknown capabilities ['parallel_tools']; allowed: ['tools', 'structured_output', 'streaming', 'reasoning', 'image_input']
+
+Unknown capability names are rejected rather than ignored, so a client that relied on a removed capability learns it is no longer filtered on.
+
+### R2. Model name not in the catalog
 
 **Why it is useful:** A typo or an unknown model name in `routing_constraints.models`.
 
@@ -1248,7 +1165,7 @@ These never reach stage 1: the request itself is invalid, so the caller gets a 4
 
 Unknown names are rejected rather than ignored, so a typo never silently widens or empties the choice.
 
-### R2. Old-catalog model requested from the new catalog
+### R3. Old-catalog model requested from the new catalog
 
 **Why it is useful:** A model that exists in `old` but not in `new`.
 

@@ -48,7 +48,7 @@ that supplies those fields:
 | `decision-router-cost` | `routing_mode: cost` |
 | `decision-router-balanced` | `routing_mode: balanced` |
 | `decision-router-quality` | `routing_mode: quality` |
-| `decision-router-coding` | For coding agents: the `new` catalog, `balanced` mode, pinning on, and only models strong at multi-step tool use that support `tools` and `parallel_tools`: gpt-5.4-mini, gpt-5.5, gpt-6-astra, claude-haiku-5-5, claude-sonnet-5-5, claude-opus-5-5, DeepSeek-V4-Pro, FW-GLM-5.3 |
+| `decision-router-coding` | For coding agents: the `new` catalog, `balanced` mode, pinning on, and only models strong at multi-step tool use that support `tools`: gpt-5.4-mini, gpt-5.5, gpt-6-astra, claude-haiku-5-5, claude-sonnet-5-5, claude-opus-5-5, DeepSeek-V4-Pro, FW-GLM-5.3 |
 | anything else | no profile; the router's defaults apply (as before) |
 
 Add or replace profiles with `ROUTER_PROFILES`, a JSON object of name → fields. A profile can
@@ -114,7 +114,7 @@ profile table above). To define your own:
 
 ```json
 {"agent-coding": {"routing_mode": "quality", "compatibility": "new", "routing_pin": true,
-                  "routing_constraints": {"capabilities": ["tools", "parallel_tools"]}}}
+                  "routing_constraints": {"capabilities": ["tools"]}}}
 ```
 
 How it works (code: `decision-router/decision_router/pinning.py`):

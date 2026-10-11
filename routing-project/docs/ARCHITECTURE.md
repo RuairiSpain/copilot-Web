@@ -55,8 +55,8 @@ instead (`docs/AGENT_SERVICE.md`).
 translates the request (system messages, images, tools, tool results, tool_choice, stop,
 streaming) and translates the answer back to a chat completion, so callers never see the
 difference. `response_format` of type `json_schema` becomes Claude's structured outputs
-(`output_config.format`); type `json_object` has no Messages API equivalent, so stage 1 keeps
-JSON-mode requests away from Claude. Code: `decision_router/anthropic.py`. A request can turn this off with
+(`output_config.format`); type `json_object` has no Messages API equivalent and is dropped, so
+Claude answers JSON-mode requests in free text. Code: `decision_router/anthropic.py`. A request can turn this off with
 `"claude_translation": false`: it then sends an Anthropic Messages body, only Claude models are
 candidates, and the native Claude response is returned unchanged (`docs/STAGE1_FILTERING.md`).
 
@@ -228,7 +228,6 @@ What the report does and does not show:
 | `ROUTER_CATALOG_DIR` | `config/` | Folder holding `catalog_old.json` and `catalog_new.json` |
 | `ROUTER_MODEL_ALLOWLIST` | unset | Comma-separated model names any request may use; unset allows all |
 | `ROUTER_ALLOW_PREVIEW` | `true` | Whether preview models are eligible by default |
-| `ROUTER_UNKNOWN_CAPABILITY` | `ineligible` | How stage 1 treats a capability the catalog marks unknown |
 | `FOUNDRY_ANTHROPIC_MESSAGES_URL` | `{endpoint}/anthropic/v1/messages` | Override the Claude route |
 | `ANTHROPIC_VERSION` | `2023-06-01` | `anthropic-version` header for Claude |
 | `ROUTER_ANTHROPIC_DEFAULT_MAX_TOKENS` | `4096` | Output budget sent to Claude when the request sets none |

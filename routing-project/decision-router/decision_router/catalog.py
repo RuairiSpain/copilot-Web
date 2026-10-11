@@ -15,11 +15,10 @@ from typing import Any
 from .config import COMPATIBILITIES, ROUTING_MODES
 
 APIS = ("openai_chat", "mai_chat", "anthropic_messages")
-CAPABILITY_VALUES = ("yes", "no", "unknown")
+CAPABILITY_VALUES = ("yes", "no")  # "no" also covers "no source confirms it"
 # List-valued entries in `capabilities`: descriptive tags, not yes/no/unknown support flags.
 CAPABILITY_TAGS = {
-    "actions": ("chat", "code", "evaluate", "extract", "format", "orchestrate", "plan", "reason", "search",
-                "summarize", "translate", "write"),
+    "actions": ("code", "evaluate", "extract", "orchestrate", "plan", "reason", "summarize", "translate", "write"),
     "execution": ("deep thinking", "high volume"),
 }
 EXCLUDED_LIFECYCLES = ("deprecated", "retired", "legacy")
@@ -50,7 +49,7 @@ class ModelEntry:
     region_status: str = "unknown"
 
     def capability(self, name: str) -> str:
-        return self.capabilities.get(name, "unknown")
+        return self.capabilities.get(name, "no")
 
 
 @dataclass(frozen=True)
@@ -128,7 +127,7 @@ class Catalog:
                 raise CatalogError(f"{m.name}: api must be one of {APIS}")
             bad = {k: v for k, v in m.capabilities.items() if k not in CAPABILITY_TAGS and v not in CAPABILITY_VALUES}
             if bad:
-                raise CatalogError(f"{m.name}: capability values must be yes/no/unknown, got {bad}")
+                raise CatalogError(f"{m.name}: capability values must be yes or no, got {bad}")
             for tag, allowed in CAPABILITY_TAGS.items():
                 values = m.capabilities.get(tag, [])
                 if not isinstance(values, list) or set(values) - set(allowed):

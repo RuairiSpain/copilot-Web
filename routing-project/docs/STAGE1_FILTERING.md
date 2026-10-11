@@ -43,7 +43,7 @@ without them is a plain Model Router request.
 | `routing_constraints.models` | Only these models: the developer's chosen subset. Names must exist in the selected catalog. |
 | `routing_constraints.exclude_models` | Never these models. |
 | `routing_constraints.providers` | Only models from these providers (case-insensitive): `OpenAI`, `Anthropic`, `xAI`, `DeepSeek`, `Meta`, `Fireworks`, `Microsoft`. |
-| `routing_constraints.capabilities` | Models must support each one: `tools`, `parallel_tools`, `structured_output`, `json_object`, `streaming`, `reasoning`, `image_input`, `computer_use`. |
+| `routing_constraints.capabilities` | Models must support each one: `tools`, `structured_output`, `streaming`, `reasoning`, `image_input`. |
 | `routing_constraints.region` | The model must be deployable in this Azure region (for example `swedencentral`; `"Sweden Central"` is accepted). Fireworks models deploy globally and pass any region. |
 | `routing_constraints.deployment_type` | `global_standard`, `data_zone_standard` or `standard`. With `region`, the model must be available in that region for that deployment type. Fireworks models offer `global_standard` only. |
 | `routing_constraints.inference_in_azure` | Excludes models whose inference runs outside Azure: Anthropic-hosted Claude (version 1, which includes every Claude model in `old`) and Fireworks models. |
@@ -58,9 +58,7 @@ Unknown keys, unknown model names and unknown capability names return 400
 | If the request has... | ...the model must have |
 |---|---|
 | `tools` | `tools: yes` |
-| `parallel_tool_calls: true` (with tools) | `parallel_tools: yes` |
 | `response_format: {"type": "json_schema"}` | `structured_output: yes` (Claude qualifies: the adapter sends the schema as `output_config.format`) |
-| `response_format: {"type": "json_object"}` | `json_object: yes` (Claude does not: JSON mode has no Messages API equivalent) |
 | `stream: true` | `streaming: yes` |
 | an `image_url` part in `messages` | `image_input: yes` |
 | estimated prompt tokens + `max_completion_tokens` | a big enough context window, an input limit at least as large as the prompt (GPT-5.x models accept 272K of their 400K context, or 922K of 1.05M, as input), and an output limit at least as large as requested |
@@ -76,7 +74,7 @@ cut close to a limit.
 | 1. `lifecycle` | it is deprecated, retired or legacy (always), or preview and previews are not allowed |
 | 2. `allowlist` | `ROUTER_MODEL_ALLOWLIST` is set and the model is not on it |
 | 3. `selection` | it is outside `models`, inside `exclude_models`, or not from a listed provider |
-| 4. `capabilities` | a requested or implied capability is `no`, or `unknown` while `ROUTER_UNKNOWN_CAPABILITY=ineligible` |
+| 4. `capabilities` | a requested or implied capability is `no` |
 | 5. `location` | inference runs outside Azure and `inference_in_azure` is set; or the region / deployment type is not available or not published |
 | 6. `size` | the estimated tokens exceed the context window, the prompt exceeds the input limit, or the requested output exceeds the output limit |
 | 7. `price_band` | it is outside the routing mode's band of what is left: `cost` = cheapest third, `balanced` = all, `quality` = most expensive third (at least one model always stays) |
@@ -130,15 +128,17 @@ For callers that already speak the Anthropic Messages API:
 
 If the constraints leave no Claude model, the request gets the usual 422 naming the step.
 
-## Unknown capabilities
+## Capability values
 
-The catalogs record `unknown` where Microsoft's documentation does not say. The default,
-`ROUTER_UNKNOWN_CAPABILITY=ineligible`, treats unknown as unsupported: a request that needs
-tools never goes to a model that might not support them. The cost is that some capable
-models are skipped. For example, several Fireworks models have `parallel_tools: unknown`.
-Setting `eligible` reverses the trade-off. The decision log shows each removal caused by an
-unknown value (`"reason": "parallel_tools unknown (...)"`), so you can tell which catalog
-entries are worth confirming.
+Each capability is `yes` or `no`. `no` covers both "a source says it is unsupported" and "no
+source confirms it", so a request that needs a capability only reaches models a source
+confirms. The cost is that a model which in fact supports something, but has no source yet, is
+skipped. For example, seven models have `streaming: no` for lack of a source.
+
+Not filtered on: `parallel_tool_calls` and `response_format: {"type": "json_object"}`. Requests
+with them can reach any model. A model without JSON mode may answer in free text; Claude always
+does, because the translation layer drops `json_object`. Send a JSON schema when the answer
+must be JSON.
 
 Leaving out a filter keeps its models in play. Phi models have no tool calling, so they drop
 out of any request with `tools`, but remain candidates for plain text requests.

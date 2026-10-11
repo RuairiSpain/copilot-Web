@@ -9,8 +9,8 @@ Translated: system/developer messages, text and image content, assistant tool ca
 tools, tool_choice, parallel_tool_calls, max_tokens/max_completion_tokens, temperature, top_p,
 stop, stream (with stream_options.include_usage), user (as metadata.user_id), and
 response_format json_schema (as output_config.format, Claude's structured outputs).
-Not translated: response_format json_object (no Messages API equivalent; stage 1 keeps those
-requests away from Claude), n>1, logprobs, seed, presence/frequency penalties (dropped).
+Not translated: response_format json_object (no Messages API equivalent: the field is dropped and
+Claude answers in free text), n>1, logprobs, seed, presence/frequency penalties (dropped).
 """
 from __future__ import annotations
 

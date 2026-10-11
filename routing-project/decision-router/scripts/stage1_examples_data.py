@@ -28,11 +28,12 @@ How to read the examples:
   router's request handling and stage 1 against the checked-in catalogs
   (`decision-router/scripts/stage1_examples.py`). A test fails if a catalog or rule change
   makes this page out of date.
-- **Default settings** unless an example says otherwise:
-  - catalog `old` (`ROUTER_COMPATIBILITY`);
-  - `ROUTER_UNKNOWN_CAPABILITY=ineligible`, so a capability recorded as `unknown` counts as missing;
-  - previews allowed;
-  - no operator allow-list.
+- **Default settings** unless an example says otherwise: catalog `old`
+  (`ROUTER_COMPATIBILITY`), previews allowed, no operator allow-list.
+- **Capabilities are `yes` or `no`.** Stage 1 filters on five: `tools`, `structured_output`,
+  `streaming`, `reasoning` and `image_input`. `no` covers both "a source says it is
+  unsupported" and "no source confirms it", so a model is only offered for what a source
+  confirms.
 - **Token estimate:** characters ÷ 4.
 - **What Decision-1 receives:** each remaining model becomes one option in the Decision-1
   request. The option key is the model name, and its text is the model's catalog description
@@ -44,34 +45,25 @@ How to read the examples:
 """
 
 FINDINGS = """
-Running the examples exposed catalog gaps: values recorded as `unknown` that make stage 1
-remove models. Each was then researched, in this order: Microsoft's docs, the providers' own
-docs, then blogs and forums. Provider sites (OpenAI, xAI, DeepSeek, Fireworks, Hugging Face)
-could not be reached from the build environment, so only Microsoft's docs were read
-directly. Results so far:
+Running the examples exposed catalog gaps, which were researched in this order: Microsoft's
+docs, the providers' own docs, then blogs and forums. Provider sites (OpenAI, xAI, DeepSeek,
+Fireworks, Hugging Face) could not be reached from the build environment, so only Microsoft's
+docs were read directly.
 
 1. **Streaming (A9):** Microsoft's Foundry pages give streaming instructions and examples for
-   MAI-Thinking-1, grok-4.7 and DeepSeek-V4-Pro, so those are now `yes`. No source was found
-   for the other seven: Phi (three models), Llama 4 Maverick, grok-4-1-fast-reasoning,
-   DeepSeek-V4-Flash and FW-Kimi-K3. They stay `unknown`.
-2. **JSON mode (A8):** Microsoft's JSON mode page ends with "supported with the following
-   models:" followed by an empty list. The model tables name "JSON Mode" only for retired
-   GPT-4o models. No source confirms JSON mode for any current OpenAI model, so they stay
-   `unknown`. DeepSeek V4 and grok-4.7 list JSON as a response format, so they stay `yes`.
-3. **GPT-5.6 tools (A5, A15):** Microsoft's reasoning-models page says gpt-5.6 models reject
-   Chat Completions requests that include `tools` unless `reasoning_effort` is `none`. This
-   router calls Chat Completions, so their `tools` value is now `no`, and gpt-5.6-terra was
-   removed from the coding profile.
-4. **Parallel tool calls (A15):** Microsoft's pages contradict each other on gpt-5.4-mini.
-   The model table lists parallel tool calling; the reasoning-models table shows it
-   unsupported. It is now `unknown`. No primary source covers FW-GLM-5.3 or DeepSeek-V4-Pro,
-   which stay `unknown`. Third-party catalogs say all three support it.
-5. **Standard (regional) deployments (Z3):** no model has published Standard availability, so
+   MAI-Thinking-1, grok-4.7 and DeepSeek-V4-Pro (`yes`). No source was found for the Phi
+   models, Llama 4 Maverick, grok-4-1-fast-reasoning, DeepSeek-V4-Flash or FW-Kimi-K3 (`no`).
+2. **GPT-5.6 tools (A5):** Microsoft's reasoning-models page says gpt-5.6 models reject Chat
+   Completions requests that include `tools` unless `reasoning_effort` is `none`. This router
+   calls Chat Completions, so their `tools` value is `no`, and gpt-5.6-terra is not in the
+   coding profile.
+3. **Removed capabilities:** `parallel_tools`, `json_object` and `computer_use` were mostly
+   unconfirmed and are no longer in the catalog, so stage 1 doesn't filter on them (A8, R1).
+4. **Standard (regional) deployments (Z3):** no model has published Standard availability, so
    `deployment_type: standard` always returns no models.
 
-The remaining unknowns can only be settled by a test call against each deployment, one
-request per capability. `ROUTER_UNKNOWN_CAPABILITY=eligible` (A10) treats them as supported in
-the meantime, at the risk of a failed call.
+A `no` that only means "unconfirmed" can be changed to `yes` by confirming the capability with
+one test request against the deployment, then recording the source in `catalog_spec.json`.
 """
 
 ZERO_INTRO = """
@@ -116,20 +108,15 @@ EXAMPLES: list[dict] = [
          {"type": "text", "text": "What does this architecture diagram show?"}, IMAGE]}]}},
     {"title": 'JSON-schema output',
      "why": 'Callers that parse the answer programmatically send `response_format: json_schema`. Only models that enforce the schema should be offered.',
-     "explanation": 'Models with `structured_output: yes` remain, including the three Claude models (the adapter sends the schema as `output_config.format`). The 11 removed models have `structured_output: unknown`: the catalog has no source saying they enforce a schema, and `ROUTER_UNKNOWN_CAPABILITY=ineligible` treats that as unsupported.',
+     "explanation": 'Models with `structured_output: yes` remain, including the three Claude models (the adapter sends the schema as `output_config.format`). The 11 removed models have `structured_output: no`: no source confirms that they enforce a schema, and the catalog records anything unconfirmed as `no`.',
      "request": {"messages": msgs(), "compatibility": "new", "response_format": SCHEMA}},
     {"title": 'JSON mode (json_object)',
-     "why": 'JSON mode asks for any valid JSON without a schema. It shows how strongly an `unknown` capability value narrows the choice.',
-     "explanation": 'Only three models remain: the two DeepSeek V4 models and grok-4.7, whose docs list JSON as a response format. Claude is removed because JSON mode has no Messages API equivalent (`no`). All OpenAI models are removed because the catalog records `json_object: unknown` for them; see the findings above.',
+     "why": 'JSON mode asks for any valid JSON without a schema. It shows that JSON mode is not a capability stage 1 filters on.',
+     "explanation": "Nothing is removed: `json_object` is no longer a catalog capability, so all 23 models are candidates. A model that doesn't support JSON mode may answer in free text. Claude always does, because the translation layer drops `response_format: json_object` (the Messages API has no equivalent). Callers that need guaranteed JSON should send a JSON schema instead (example A7).",
      "request": {"messages": msgs(), "compatibility": "new", "response_format": {"type": "json_object"}}},
     {"title": 'Streaming',
      "why": '`stream: true` is common in chat front ends. This shows that streaming support is a filter, not a formatting detail.',
-     "explanation": 'Seven models are removed because their streaming support is `unknown` in the catalog: the three Phi models, Llama 4 Maverick, grok-4-1-fast-reasoning, DeepSeek-V4-Flash and FW-Kimi-K3. 16 models remain. No source was found for the removed models; see the findings above.',
-     "request": {"messages": msgs(), "compatibility": "new", "stream": True}},
-    {"title": 'Streaming with unknown capabilities allowed',
-     "why": 'The same request with `ROUTER_UNKNOWN_CAPABILITY=eligible`. It shows the trade-off that setting controls.',
-     "explanation": "With unknown values treated as supported, nothing is removed and all 23 models are candidates. The risk is that a model which in fact can't stream is chosen and the call fails; the router then falls back to the next ranked model.",
-     "settings": {"unknown_capability": "eligible"},
+     "explanation": 'Seven models are removed because no source confirms they stream, so the catalog records `streaming: no`: the three Phi models, Llama 4 Maverick, grok-4-1-fast-reasoning, DeepSeek-V4-Flash and FW-Kimi-K3. 16 models remain.',
      "request": {"messages": msgs(), "compatibility": "new", "stream": True}},
     {"title": 'Long document (~300K tokens)',
      "why": "Long prompts must not go to models whose context window or input limit is smaller. The size step is the only one that depends on the prompt's length.",
@@ -151,7 +138,7 @@ EXAMPLES: list[dict] = [
      "request": {"messages": msgs(), "compatibility": "new", "routing_constraints": {"providers": ["Anthropic"]}}},
     {"title": 'Coding agent profile',
      "why": 'The built-in `decision-router-coding` profile, as a Foundry agent would use it: `model` names the profile, and the request has tools with parallel tool calls enabled.',
-     "explanation": 'The profile selects the `new` catalog, keeps its eight coding models and turns pinning on. The request asks for parallel tool calls, so gpt-5.4-mini, FW-GLM-5.3 and DeepSeek-V4-Pro are removed: their `parallel_tools` value is `unknown`. Five models remain. When an agent sends `parallel_tool_calls: true`, those three models are never offered.',
+     "explanation": 'The profile selects the `new` catalog, keeps its eight coding models, requires tool calling and turns pinning on. All eight support tools, so all eight go to Decision-1. `parallel_tool_calls: true` adds no requirement, because parallel tool calls are no longer a catalog capability.',
      "request": {"model": "decision-router-coding", "messages": msgs("Fix the failing test in utils.py",
                                                                      "You are a coding agent."),
                  "tools": [TOOL], "parallel_tool_calls": True}},
@@ -242,14 +229,9 @@ EXAMPLES: list[dict] = [
      "explanation": 'All three are removed. Some models allow more output (Llama 4 Maverick, grok-4.7, DeepSeek V4), but they are not in the subset.',
      "request": {"messages": msgs(), "compatibility": "new", "max_completion_tokens": 200_000,
                  "routing_constraints": {"models": ["gpt-5.5", "claude-opus-5-5", "gpt-6-astra"]}}},
-    {"title": 'JSON mode plus computer use',
-     "why": 'Two capabilities no single model is recorded as having.',
-     "explanation": 'The models with `json_object: yes` (DeepSeek V4, grok-4.7) have `computer_use: unknown`; the models with computer use have `json_object` unknown or no.',
-     "request": {"messages": msgs(), "compatibility": "new", "response_format": {"type": "json_object"},
-                 "routing_constraints": {"capabilities": ["computer_use"]}}},
     {"title": 'Streaming from models whose streaming support is unpublished',
      "why": 'Streaming to three models the catalog has no streaming source for.',
-     "explanation": 'All three have `streaming: unknown` and are removed. With `ROUTER_UNKNOWN_CAPABILITY=eligible` all three would pass.',
+     "explanation": 'No source confirms streaming for any of the three, so the catalog records `streaming: no` and all three are removed.',
      "request": {"messages": msgs(), "stream": True,
                  "routing_constraints": {"models": ["Llama-4-Maverick-17B-128E-Instruct-FP8", "DeepSeek-V3.2", "grok-4"]}}},
     {"title": 'Fireworks with Data Zone residency',
@@ -263,15 +245,9 @@ EXAMPLES: list[dict] = [
      "request": {"compatibility": "new", "messages": [{"role": "user", "content": [
          {"type": "text", "text": "Describe this chart."}, IMAGE]}],
                  "routing_constraints": {"providers": ["DeepSeek", "Microsoft"]}}},
-    {"title": 'EU residency with JSON mode',
-     "why": 'Two reasonable requirements together can leave a single model. It shows how requirements combine.',
-     "explanation": "JSON mode leaves the three models with `json_object: yes`. Of those, only DeepSeek-V4-Flash is offered in Sweden Central's Data Zone, so it is called directly. If it fails, there is no other model to fall back to.",
-     "request": {"messages": msgs(), "compatibility": "new", "response_format": {"type": "json_object"},
-                 "routing_constraints": {"region": "swedencentral", "deployment_type": "data_zone_standard",
-                                         "inference_in_azure": True}}},
     {"title": 'Reasoning required from non-reasoning models',
      "why": '`capabilities: ["reasoning"]` with a subset of models that have no reasoning mode.',
-     "explanation": 'Phi-4, Phi-4-mini-instruct and Llama 4 Maverick have `reasoning: unknown`, so all three are removed.',
+     "explanation": 'Phi-4, Phi-4-mini-instruct and Llama 4 Maverick have `reasoning: no`, so all three are removed.',
      "request": {"messages": msgs(), "compatibility": "new", "routing_constraints": {
          "capabilities": ["reasoning"], "models": ["Phi-4", "Phi-4-mini-instruct", "Llama-4-Maverick-17B-128E-Instruct-FP8"]}}},
     {"title": 'Region with no Azure availability, inference in Azure',
@@ -279,6 +255,10 @@ EXAMPLES: list[dict] = [
      "explanation": 'The Azure-hosted models are not offered in West India and the Fireworks models run outside Azure, so nothing remains.',
      "request": {"messages": msgs(), "routing_constraints": {"region": "westindia", "inference_in_azure": True}}},
     # ------------------------------------------------------------------ rejected before stage 1
+    {"title": 'Capability that is no longer in the catalog',
+     "why": 'A request still asking for one of the removed capabilities (parallel_tools, json_object, computer_use).',
+     "explanation": 'Unknown capability names are rejected rather than ignored, so a client that relied on a removed capability learns it is no longer filtered on.',
+     "request": {"messages": msgs(), "routing_constraints": {"capabilities": ["parallel_tools"]}}},
     {"title": 'Model name not in the catalog',
      "why": 'A typo or an unknown model name in `routing_constraints.models`.',
      "explanation": 'Unknown names are rejected rather than ignored, so a typo never silently widens or empties the choice.',

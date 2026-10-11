@@ -90,7 +90,7 @@ def test_deployment_override(settings):
     (lambda d: d["routing_modes"]["cost"].update(price_band={"from": "middle", "share": 0.3}), "price_band"),
     (lambda d: d["routing_modes"].pop("quality"), "exactly"),
     (lambda d: d["models"][1].update(tier=d["models"][0]["tier"]), "tiers must be unique"),
-    (lambda d: d["models"][0]["capabilities"].update(tools="maybe"), "yes/no/unknown"),
+    (lambda d: d["models"][0]["capabilities"].update(tools="unknown"), "yes or no"),
     (lambda d: d["models"][0]["capabilities"].update(actions=["juggle"]), "capabilities.actions"),
     (lambda d: d["models"][0]["capabilities"].update(execution="high volume"), "capabilities.execution"),
     (lambda d: d["models"][0].update(api="grpc"), "api must be"),

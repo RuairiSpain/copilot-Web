@@ -46,29 +46,28 @@ def test_requirements_read_from_the_request():
                                                        {"type": "image_url", "image_url": {"url": "https://x/y.png"}}]}],
             "tools": [{"type": "function", "function": {"name": "f"}}], "parallel_tool_calls": True,
             "response_format": {"type": "json_schema", "json_schema": {}}, "stream": True}
-    assert set(requirements_from_request(body)) == {"tools", "parallel_tools", "structured_output", "streaming",
-                                                     "image_input"}
+    # parallel_tool_calls and json_object are no longer capabilities, so they add no requirement
+    assert set(requirements_from_request(body)) == {"tools", "structured_output", "streaming", "image_input"}
+    assert requirements_from_request(dict(body, response_format={"type": "json_object"})).get("structured_output") is None
 
 
-def test_capability_filter_with_unknown_values(new_catalog, settings):
+def test_capability_filter(new_catalog, settings):
     body = dict(USER, tools=[{"type": "function", "function": {"name": "f"}}])
     strict = select(new_catalog, "balanced", Constraints(), body, settings)
     assert removed(strict, "capabilities")["Phi-4"].startswith("tools no")
     assert "gpt-6.1-sol" not in names(strict)  # tool calling is Responses-API only
     images = select(new_catalog, "balanced", Constraints(capabilities=("image_input",)), USER, settings)
     assert "DeepSeek-V4-Pro" not in names(images) and "gpt-5.5" in names(images)
-    lenient = select(new_catalog, "balanced", Constraints(capabilities=("parallel_tools",)), USER,
-                     replace(settings, unknown_capability="eligible"))
-    assert "FW-GLM-5.3" in names(lenient)  # parallel_tools unknown, allowed when unknowns are eligible
-    strict_parallel = select(new_catalog, "balanced", Constraints(capabilities=("parallel_tools",)), USER, settings)
-    assert "FW-GLM-5.3" not in names(strict_parallel)
+    streamed = select(new_catalog, "balanced", Constraints(), dict(USER, stream=True), settings)
+    assert removed(streamed, "capabilities")["FW-Kimi-K3"] == "streaming no (needed: stream=true)"  # unconfirmed = no
+    assert "gpt-5.6-terra" not in names(strict)  # Chat Completions tools only with reasoning off
 
 
-def test_json_schema_keeps_claude_but_json_object_does_not(catalog, settings):
+def test_json_schema_keeps_claude_and_json_mode_is_not_filtered(catalog, settings):
     schema = dict(USER, response_format={"type": "json_schema", "json_schema": {"name": "x", "schema": {}}})
     assert "claude-opus-5" in names(select(catalog, "balanced", Constraints(), schema, settings))
     json_mode = dict(USER, response_format={"type": "json_object"})
-    assert not any(n.startswith("claude-") for n in names(select(catalog, "balanced", Constraints(), json_mode, settings)))
+    assert names(select(catalog, "balanced", Constraints(), json_mode, settings)) == [m.name for m in catalog.models]
 
 
 def test_prompt_over_the_input_limit(new_catalog, settings):
