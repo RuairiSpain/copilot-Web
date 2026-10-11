@@ -16,6 +16,12 @@ from .config import COMPATIBILITIES, ROUTING_MODES
 
 APIS = ("openai_chat", "mai_chat", "anthropic_messages")
 CAPABILITY_VALUES = ("yes", "no", "unknown")
+# List-valued entries in `capabilities`: descriptive tags, not yes/no/unknown support flags.
+CAPABILITY_TAGS = {
+    "actions": ("chat", "code", "evaluate", "extract", "format", "orchestrate", "plan", "reason", "search",
+                "summarize", "translate", "write"),
+    "execution": ("deep thinking", "high volume"),
+}
 EXCLUDED_LIFECYCLES = ("deprecated", "retired", "legacy")
 
 
@@ -37,7 +43,7 @@ class ModelEntry:
     # Some models cap the prompt below the context window (GPT-5.x: 272K of 400K, 922K of 1.05M)
     max_input_tokens: int | None = None
     max_output_tokens: int | None = None
-    capabilities: dict[str, str] = field(default_factory=dict)
+    capabilities: dict[str, Any] = field(default_factory=dict)
     infrastructure: str = "azure"
     regions: dict[str, tuple[str, ...]] = field(default_factory=dict)
     # "published" (regions listed), "global" (deployable from any region, Global Standard), or "unknown"
@@ -120,9 +126,13 @@ class Catalog:
                 raise CatalogError(f"{m.name}: every model needs a description; Decision-1 reads it")
             if m.api not in APIS:
                 raise CatalogError(f"{m.name}: api must be one of {APIS}")
-            bad = {k: v for k, v in m.capabilities.items() if v not in CAPABILITY_VALUES}
+            bad = {k: v for k, v in m.capabilities.items() if k not in CAPABILITY_TAGS and v not in CAPABILITY_VALUES}
             if bad:
                 raise CatalogError(f"{m.name}: capability values must be yes/no/unknown, got {bad}")
+            for tag, allowed in CAPABILITY_TAGS.items():
+                values = m.capabilities.get(tag, [])
+                if not isinstance(values, list) or set(values) - set(allowed):
+                    raise CatalogError(f"{m.name}: capabilities.{tag} must be a list drawn from {allowed}, got {values}")
         if set(self.modes) != set(ROUTING_MODES):
             raise CatalogError(f"{self.compatibility}: routing_modes must define exactly {ROUTING_MODES}")
         for mode in self.modes.values():

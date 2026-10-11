@@ -91,6 +91,8 @@ def test_deployment_override(settings):
     (lambda d: d["routing_modes"].pop("quality"), "exactly"),
     (lambda d: d["models"][1].update(tier=d["models"][0]["tier"]), "tiers must be unique"),
     (lambda d: d["models"][0]["capabilities"].update(tools="maybe"), "yes/no/unknown"),
+    (lambda d: d["models"][0]["capabilities"].update(actions=["juggle"]), "capabilities.actions"),
+    (lambda d: d["models"][0]["capabilities"].update(execution="high volume"), "capabilities.execution"),
     (lambda d: d["models"][0].update(api="grpc"), "api must be"),
     (lambda d: d.update(default_mode="fast"), "default_mode"),
 ])
@@ -116,3 +118,10 @@ def test_every_model_has_a_price_entry(settings, catalogs):
     prices = json.loads(settings.pricing_path.read_text())["models"]
     for catalog in catalogs.catalogs.values():
         assert {m.name for m in catalog.models} <= set(prices)
+
+
+def test_new_catalog_has_action_and_execution_tags(new_catalog):
+    for m in new_catalog.models:
+        assert m.capability("actions") and m.capability("execution"), m.name
+    assert new_catalog.by_name["claude-opus-5-5"].capabilities["execution"] == ["deep thinking"]
+    assert "translate" in new_catalog.by_name["gpt-6-luna"].capabilities["actions"]

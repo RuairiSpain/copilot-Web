@@ -114,8 +114,9 @@ Each model entry keeps the simple fields (`name`, `deployment`, `tier`, `aliases
   "api": "openai_chat", "endpoint_path": "/openai/v1/chat/completions",
   "limits": {"context_tokens": 400000, "max_input_tokens": 272000, "max_output_tokens": 128000},
   "modalities": {"input": ["text", "image"], "output": ["text"]},
-  "capabilities": {"tools": "yes", "parallel_tools": "yes", "structured_output": "yes", "json_object": "unknown",
-                   "streaming": "yes", "reasoning": "yes", "image_input": "yes", "computer_use": "yes"},
+  "capabilities": {"tools": "yes", "parallel_tools": "unknown", "structured_output": "yes", "json_object": "unknown",
+                   "streaming": "yes", "reasoning": "yes", "image_input": "yes", "computer_use": "yes",
+                   "actions": ["summarize", "extract", "code", "reason"], "execution": ["high volume"]},
   "hosting": {"infrastructure": "azure", "azure_region_controls_processing": true},
   "deployment_types": ["data_zone_standard", "global_standard"],
   "regions": {"global_standard": ["australiaeast", "..."], "data_zone_standard": ["eastus", "..."]},
@@ -129,6 +130,13 @@ Each model entry keeps the simple fields (`name`, `deployment`, `tier`, `aliases
   - `mai_chat`: `/mai/v1/chat/completions`. MAI-Thinking-1 is OpenAI-compatible but has its own path.
   - `anthropic_messages`: `/anthropic/v1/messages`, through the translation layer.
 - **Capability values** are `yes`, `no` or `unknown`. See `STAGE1_FILTERING.md` for how unknowns are treated.
+- **`actions` and `execution`** (in `capabilities`, `new` catalog only) are lists of descriptive
+  tags, not support flags. They are maintained in `catalog_spec.json`, and the loader rejects
+  values outside these lists:
+  - `actions`: `chat`, `code`, `evaluate`, `extract`, `format`, `orchestrate`, `plan`, `reason`,
+    `search`, `summarize`, `translate`, `write`: the kinds of task the model is suited to.
+  - `execution`: `high volume` (fast and low-cost) or `deep thinking` (slower, more thorough).
+  Stage 1 does not filter on them yet.
 - **Phi models** are assumed to be served on the `/openai/v1` route, like other Foundry models.
   Confirm this on your deployment before relying on them; if they aren't, change their `api` in the spec.
 

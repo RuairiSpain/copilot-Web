@@ -45,7 +45,16 @@
         "streaming": "unknown",
         "reasoning": "unknown",
         "image_input": "no",
-        "computer_use": "unknown"
+        "computer_use": "unknown",
+        "actions": [
+          "chat",
+          "extract",
+          "summarize",
+          "format"
+        ],
+        "execution": [
+          "high volume"
+        ]
       },
       "hosting": {
         "infrastructure": "azure",
@@ -134,7 +143,16 @@
         "streaming": "yes",
         "reasoning": "unknown",
         "image_input": "yes",
-        "computer_use": "unknown"
+        "computer_use": "unknown",
+        "actions": [
+          "write",
+          "summarize",
+          "chat",
+          "orchestrate"
+        ],
+        "execution": [
+          "high volume"
+        ]
       },
       "hosting": {
         "infrastructure": "fireworks",
@@ -188,7 +206,16 @@
         "streaming": "yes",
         "reasoning": "yes",
         "image_input": "yes",
-        "computer_use": "yes"
+        "computer_use": "yes",
+        "actions": [
+          "code",
+          "orchestrate",
+          "extract",
+          "reason"
+        ],
+        "execution": [
+          "high volume"
+        ]
       },
       "hosting": {
         "infrastructure": "azure",
@@ -266,7 +293,16 @@
         "streaming": "yes",
         "reasoning": "yes",
         "image_input": "yes",
-        "computer_use": "unknown"
+        "computer_use": "unknown",
+        "actions": [
+          "extract",
+          "write",
+          "summarize",
+          "chat"
+        ],
+        "execution": [
+          "high volume"
+        ]
       },
       "hosting": {
         "infrastructure": "azure",
@@ -364,7 +400,14 @@
         "streaming": "unknown",
         "reasoning": "unknown",
         "image_input": "no",
-        "computer_use": "unknown"
+        "computer_use": "unknown",
+        "actions": [
+          "reason",
+          "chat"
+        ],
+        "execution": [
+          "high volume"
+        ]
       },
       "hosting": {
         "infrastructure": "azure",
@@ -452,7 +495,15 @@
         "streaming": "yes",
         "reasoning": "yes",
         "image_input": "no",
-        "computer_use": "unknown"
+        "computer_use": "unknown",
+        "actions": [
+          "reason",
+          "code",
+          "evaluate"
+        ],
+        "execution": [
+          "deep thinking"
+        ]
       },
       "hosting": {
         "infrastructure": "azure",
@@ -504,7 +555,13 @@
         "streaming": "unknown",
         "reasoning": "yes",
         "image_input": "no",
-        "computer_use": "unknown"
+        "computer_use": "unknown",
+        "actions": [
+          "reason"
+        ],
+        "execution": [
+          "deep thinking"
+        ]
       },
       "hosting": {
         "infrastructure": "azure",
@@ -593,7 +650,15 @@
         "streaming": "unknown",
         "reasoning": "unknown",
         "image_input": "yes",
-        "computer_use": "unknown"
+        "computer_use": "unknown",
+        "actions": [
+          "chat",
+          "write",
+          "translate"
+        ],
+        "execution": [
+          "high volume"
+        ]
       },
       "hosting": {
         "infrastructure": "azure",
@@ -684,7 +749,15 @@
         "streaming": "unknown",
         "reasoning": "yes",
         "image_input": "yes",
-        "computer_use": "unknown"
+        "computer_use": "unknown",
+        "actions": [
+          "reason",
+          "orchestrate",
+          "search"
+        ],
+        "execution": [
+          "high volume"
+        ]
       },
       "hosting": {
         "infrastructure": "azure",
@@ -785,7 +858,15 @@
         "streaming": "unknown",
         "reasoning": "yes",
         "image_input": "no",
-        "computer_use": "unknown"
+        "computer_use": "unknown",
+        "actions": [
+          "reason",
+          "code",
+          "summarize"
+        ],
+        "execution": [
+          "high volume"
+        ]
       },
       "hosting": {
         "infrastructure": "azure",
@@ -893,7 +974,16 @@
         "streaming": "yes",
         "reasoning": "yes",
         "image_input": "yes",
-        "computer_use": "yes"
+        "computer_use": "yes",
+        "actions": [
+          "summarize",
+          "extract",
+          "code",
+          "reason"
+        ],
+        "execution": [
+          "high volume"
+        ]
       },
       "hosting": {
         "infrastructure": "azure",
@@ -1006,7 +1096,16 @@
         "streaming": "yes",
         "reasoning": "yes",
         "image_input": "yes",
-        "computer_use": "yes"
+        "computer_use": "yes",
+        "actions": [
+          "reason",
+          "translate",
+          "write",
+          "chat"
+        ],
+        "execution": [
+          "high volume"
+        ]
       },
       "hosting": {
         "infrastructure": "azure",
@@ -1110,7 +1209,16 @@
         "streaming": "yes",
         "reasoning": "yes",
         "image_input": "no",
-        "computer_use": "unknown"
+        "computer_use": "unknown",
+        "actions": [
+          "code",
+          "orchestrate",
+          "reason",
+          "plan"
+        ],
+        "execution": [
+          "deep thinking"
+        ]
       },
       "hosting": {
         "infrastructure": "fireworks",
@@ -1164,7 +1272,15 @@
         "streaming": "unknown",
         "reasoning": "yes",
         "image_input": "yes",
-        "computer_use": "unknown"
+        "computer_use": "unknown",
+        "actions": [
+          "code",
+          "orchestrate",
+          "reason"
+        ],
+        "execution": [
+          "deep thinking"
+        ]
       },
       "hosting": {
         "infrastructure": "fireworks",
@@ -1217,7 +1333,16 @@
         "streaming": "yes",
         "reasoning": "yes",
         "image_input": "no",
-        "computer_use": "unknown"
+        "computer_use": "unknown",
+        "actions": [
+          "reason",
+          "code",
+          "evaluate",
+          "plan"
+        ],
+        "execution": [
+          "deep thinking"
+        ]
       },
       "hosting": {
         "infrastructure": "azure",
@@ -1319,7 +1444,16 @@
         "streaming": "yes",
         "reasoning": "yes",
         "image_input": "yes",
-        "computer_use": "yes"
+        "computer_use": "yes",
+        "actions": [
+          "plan",
+          "code",
+          "reason",
+          "evaluate"
+        ],
+        "execution": [
+          "deep thinking"
+        ]
       },
       "hosting": {
         "infrastructure": "azure",
@@ -1425,7 +1559,15 @@
         "streaming": "yes",
         "reasoning": "yes",
         "image_input": "no",
-        "computer_use": "unknown"
+        "computer_use": "unknown",
+        "actions": [
+          "reason",
+          "code",
+          "plan"
+        ],
+        "execution": [
+          "deep thinking"
+        ]
       },
       "hosting": {
         "infrastructure": "azure",
@@ -1514,7 +1656,16 @@
         "streaming": "yes",
         "reasoning": "yes",
         "image_input": "yes",
-        "computer_use": "yes"
+        "computer_use": "yes",
+        "actions": [
+          "code",
+          "orchestrate",
+          "evaluate",
+          "reason"
+        ],
+        "execution": [
+          "deep thinking"
+        ]
       },
       "hosting": {
         "infrastructure": "azure",
@@ -1592,7 +1743,16 @@
         "streaming": "yes",
         "reasoning": "yes",
         "image_input": "yes",
-        "computer_use": "yes"
+        "computer_use": "yes",
+        "actions": [
+          "reason",
+          "plan",
+          "orchestrate",
+          "evaluate"
+        ],
+        "execution": [
+          "deep thinking"
+        ]
       },
       "hosting": {
         "infrastructure": "azure",
@@ -1702,7 +1862,16 @@
         "streaming": "yes",
         "reasoning": "yes",
         "image_input": "yes",
-        "computer_use": "yes"
+        "computer_use": "yes",
+        "actions": [
+          "code",
+          "plan",
+          "evaluate",
+          "orchestrate"
+        ],
+        "execution": [
+          "deep thinking"
+        ]
       },
       "hosting": {
         "infrastructure": "azure",
@@ -1810,7 +1979,15 @@
         "streaming": "yes",
         "reasoning": "unknown",
         "image_input": "yes",
-        "computer_use": "unknown"
+        "computer_use": "unknown",
+        "actions": [
+          "code",
+          "orchestrate",
+          "search"
+        ],
+        "execution": [
+          "deep thinking"
+        ]
       },
       "hosting": {
         "infrastructure": "azure",
@@ -1911,7 +2088,16 @@
         "streaming": "yes",
         "reasoning": "yes",
         "image_input": "yes",
-        "computer_use": "yes"
+        "computer_use": "yes",
+        "actions": [
+          "code",
+          "evaluate",
+          "plan",
+          "reason"
+        ],
+        "execution": [
+          "deep thinking"
+        ]
       },
       "hosting": {
         "infrastructure": "azure",
@@ -1989,7 +2175,16 @@
         "streaming": "yes",
         "reasoning": "yes",
         "image_input": "yes",
-        "computer_use": "yes"
+        "computer_use": "yes",
+        "actions": [
+          "reason",
+          "code",
+          "plan",
+          "orchestrate"
+        ],
+        "execution": [
+          "deep thinking"
+        ]
       },
       "hosting": {
         "infrastructure": "azure",

@@ -264,6 +264,8 @@ def build_entry(spec: dict, docs: Docs, sources: dict, tier: int) -> dict:
     if overrides:
         used.append(f"spec:sources.{overrides['source']}")
     capabilities = {**caps(), **parsed.get("capabilities", {}), **overrides.get("capabilities", {})}
+    # Descriptive tags (lists), maintained in the spec: what the model is good at and how it runs.
+    capabilities.update({key: spec[key] for key in ("actions", "execution") if key in spec})
     limits = {"context_tokens": None, "max_input_tokens": None, "max_output_tokens": None,
               **parsed.get("limits", {}), **overrides.get("limits", {})}
     modalities = {"input": ["text"], "output": ["text"], **parsed.get("modalities", {}), **overrides.get("modalities", {})}
