@@ -48,7 +48,7 @@ that supplies those fields:
 | `decision-router-cost` | `routing_mode: cost` |
 | `decision-router-balanced` | `routing_mode: balanced` |
 | `decision-router-quality` | `routing_mode: quality` |
-| `decision-router-coding` | For coding agents: the `new` catalog, `balanced` mode, pinning on, and only models strong at multi-step tool use that support `tools` and `parallel_tools`: gpt-5.4-mini, gpt-5.6-terra, gpt-5.5, gpt-6-astra, claude-haiku-5-5, claude-sonnet-5-5, claude-opus-5-5, DeepSeek-V4-Pro, FW-GLM-5.3 |
+| `decision-router-coding` | For coding agents: the `new` catalog, `balanced` mode, pinning on, and only models strong at multi-step tool use that support `tools` and `parallel_tools`: gpt-5.4-mini, gpt-5.5, gpt-6-astra, claude-haiku-5-5, claude-sonnet-5-5, claude-opus-5-5, DeepSeek-V4-Pro, FW-GLM-5.3 |
 | anything else | no profile; the router's defaults apply (as before) |
 
 Add or replace profiles with `ROUTER_PROFILES`, a JSON object of name → fields. A profile can
@@ -157,6 +157,7 @@ should call arrives in the `tools` array, so stage 1 removes models that can't c
 through Chat Completions:
 
 - Phi models, Llama 4 Maverick (`tools: no`);
-- gpt-6.1-sol, whose tool calling works only through the Responses API.
+- gpt-6.1-sol, whose tool calling works only through the Responses API;
+- the GPT-5.6 models, which reject Chat Completions requests with tools unless `reasoning_effort` is `none`.
 
 Claude models stay eligible: their tool calls are translated to and from the Messages API.

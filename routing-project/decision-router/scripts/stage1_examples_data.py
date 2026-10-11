@@ -44,22 +44,34 @@ How to read the examples:
 """
 
 FINDINGS = """
-Running the examples exposed these catalog gaps. Each one makes stage 1 remove models that
-can probably serve the request:
+Running the examples exposed catalog gaps: values recorded as `unknown` that make stage 1
+remove models. Each was then researched, in this order: Microsoft's docs, the providers' own
+docs, then blogs and forums. Provider sites (OpenAI, xAI, DeepSeek, Fireworks, Hugging Face)
+could not be reached from the build environment, so only Microsoft's docs were read
+directly. Results so far:
 
-1. **JSON mode:** every OpenAI model has `json_object: unknown`, because the capability
-   tables don't mention JSON mode. A `response_format: json_object` request therefore reaches
-   only DeepSeek V4 and grok-4.7 (example A8).
-2. **Streaming:** ten `new` models have `streaming: unknown`, so every `stream: true` request
-   loses them (A9): Phi, Llama 4 Maverick, grok, DeepSeek V4, FW-Kimi-K3 and MAI-Thinking-1.
-3. **Parallel tool calls:** FW-GLM-5.3 and DeepSeek-V4-Pro have `parallel_tools: unknown`. The
-   coding profile lists them, but they are never offered when an agent sends
-   `parallel_tool_calls: true` (A15).
-4. **Standard (regional) deployments:** no model has published Standard availability, so
-   `deployment_type: standard` always returns no models (Z3).
+1. **Streaming (A9):** Microsoft's Foundry pages give streaming instructions and examples for
+   MAI-Thinking-1, grok-4.7 and DeepSeek-V4-Pro, so those are now `yes`. No source was found
+   for the other seven: Phi (three models), Llama 4 Maverick, grok-4-1-fast-reasoning,
+   DeepSeek-V4-Flash and FW-Kimi-K3. They stay `unknown`.
+2. **JSON mode (A8):** Microsoft's JSON mode page ends with "supported with the following
+   models:" followed by an empty list. The model tables name "JSON Mode" only for retired
+   GPT-4o models. No source confirms JSON mode for any current OpenAI model, so they stay
+   `unknown`. DeepSeek V4 and grok-4.7 list JSON as a response format, so they stay `yes`.
+3. **GPT-5.6 tools (A5, A15):** Microsoft's reasoning-models page says gpt-5.6 models reject
+   Chat Completions requests that include `tools` unless `reasoning_effort` is `none`. This
+   router calls Chat Completions, so their `tools` value is now `no`, and gpt-5.6-terra was
+   removed from the coding profile.
+4. **Parallel tool calls (A15):** Microsoft's pages contradict each other on gpt-5.4-mini.
+   The model table lists parallel tool calling; the reasoning-models table shows it
+   unsupported. It is now `unknown`. No primary source covers FW-GLM-5.3 or DeepSeek-V4-Pro,
+   which stay `unknown`. Third-party catalogs say all three support it.
+5. **Standard (regional) deployments (Z3):** no model has published Standard availability, so
+   `deployment_type: standard` always returns no models.
 
-Confirming these values, or setting `ROUTER_UNKNOWN_CAPABILITY=eligible` (A10), would widen
-the choice. Each confirmed value goes in `catalog_spec.json` with its source.
+The remaining unknowns can only be settled by a test call against each deployment, one
+request per capability. `ROUTER_UNKNOWN_CAPABILITY=eligible` (A10) treats them as supported in
+the meantime, at the risk of a failed call.
 """
 
 ZERO_INTRO = """
@@ -95,7 +107,7 @@ EXAMPLES: list[dict] = [
      "request": {"messages": msgs(), "compatibility": "new"}},
     {"title": 'Tool calling (agent step)',
      "why": 'Agent steps carry a `tools` array. This is the most common requirement read from the request, and the one Foundry Agent Service requests always have.',
-     "explanation": "Stage 1 removes the five models that can't call tools through Chat Completions: the three Phi models, Llama 4 Maverick, and gpt-6.1-sol, whose tool calling works only through the Responses API. Claude stays, because the translation layer converts tool calls. 18 models remain.",
+     "explanation": "Stage 1 removes the six models that can't call tools through Chat Completions: the three Phi models, Llama 4 Maverick, gpt-6.1-sol (tool calling only through the Responses API) and gpt-5.6-terra (tools only with reasoning turned off). Claude stays, because the translation layer converts tool calls. 17 models remain.",
      "request": {"messages": msgs("Find where the retry limit is set."), "compatibility": "new", "tools": [TOOL]}},
     {"title": 'Image input',
      "why": 'Requests with an `image_url` part need a vision-capable model; sending them to a text-only model would fail or ignore the image.',
@@ -112,7 +124,7 @@ EXAMPLES: list[dict] = [
      "request": {"messages": msgs(), "compatibility": "new", "response_format": {"type": "json_object"}}},
     {"title": 'Streaming',
      "why": '`stream: true` is common in chat front ends. This shows that streaming support is a filter, not a formatting detail.',
-     "explanation": 'Ten models are removed because their streaming support is `unknown` in the catalog: Phi, Llama 4 Maverick, grok, DeepSeek V4, FW-Kimi-K3 and MAI-Thinking-1. 13 models remain. Most of the removed models probably do stream; see the findings above.',
+     "explanation": 'Seven models are removed because their streaming support is `unknown` in the catalog: the three Phi models, Llama 4 Maverick, grok-4-1-fast-reasoning, DeepSeek-V4-Flash and FW-Kimi-K3. 16 models remain. No source was found for the removed models; see the findings above.',
      "request": {"messages": msgs(), "compatibility": "new", "stream": True}},
     {"title": 'Streaming with unknown capabilities allowed',
      "why": 'The same request with `ROUTER_UNKNOWN_CAPABILITY=eligible`. It shows the trade-off that setting controls.',
@@ -139,7 +151,7 @@ EXAMPLES: list[dict] = [
      "request": {"messages": msgs(), "compatibility": "new", "routing_constraints": {"providers": ["Anthropic"]}}},
     {"title": 'Coding agent profile',
      "why": 'The built-in `decision-router-coding` profile, as a Foundry agent would use it: `model` names the profile, and the request has tools with parallel tool calls enabled.',
-     "explanation": 'The profile selects the `new` catalog, keeps its nine coding models and turns pinning on. The request asks for parallel tool calls, so FW-GLM-5.3 and DeepSeek-V4-Pro are removed: their `parallel_tools` value is `unknown`. Seven models remain. When an agent sends `parallel_tool_calls: true`, those two models are never offered.',
+     "explanation": 'The profile selects the `new` catalog, keeps its eight coding models and turns pinning on. The request asks for parallel tool calls, so gpt-5.4-mini, FW-GLM-5.3 and DeepSeek-V4-Pro are removed: their `parallel_tools` value is `unknown`. Five models remain. When an agent sends `parallel_tool_calls: true`, those three models are never offered.',
      "request": {"model": "decision-router-coding", "messages": msgs("Fix the failing test in utils.py",
                                                                      "You are a coding agent."),
                  "tools": [TOOL], "parallel_tool_calls": True}},

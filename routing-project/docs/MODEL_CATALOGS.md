@@ -92,6 +92,9 @@ Values not in the docs snapshot:
 | Fireworks models' limits and capabilities | Early project catalog (Foundry model cards, retrieved 2026-10-10) |
 | Claude Opus 5 image input | Early project catalog |
 | grok-4-1-fast-reasoning reasoning | xAI publishes it as the reasoning variant of grok-4-1-fast |
+| gpt-5.6 tools | Microsoft's reasoning-models page: Chat Completions requests with tools fail unless `reasoning_effort` is `none`, so `tools: no` |
+| Streaming for MAI-Thinking-1, grok-4.7, DeepSeek-V4-Pro | Their Foundry pages give streaming instructions and examples |
+| gpt-5.4-mini parallel tool calls | Microsoft's pages disagree (model table: yes; reasoning-models table: no), so `unknown` until tested |
 | Streaming for Azure OpenAI chat models | Chat Completions API behaviour; the capability tables list it for only some models |
 | Claude tools, parallel tools, streaming, structured output | What the router's Messages adapter translates: `json_schema` becomes `output_config.format` (structured output: yes); JSON mode is not translated (`json_object`: no) |
 | Fireworks regions | Global (confirmed by the project owner): `region_status: global`, Global Standard only; passes any region filter, excluded by `inference_in_azure` because inference runs on Fireworks infrastructure |
@@ -135,7 +138,7 @@ Each model entry keeps the simple fields (`name`, `deployment`, `tier`, `aliases
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | 1 | `FW-GLM-5.3-Flash` | Fireworks | 1 | ga | – | fireworks | 1M | 0.1 / 0.4 | yes | yes | unknown |
 | 2 | `gpt-5.4-nano` | OpenAI | 2026-03-17 | ga | 2027-09-21 | azure | 400K | 0.1 / 0.8 | yes | yes | yes |
-| 3 | `gpt-5.6-luna` | OpenAI | 2026-07-09 | ga | 2028-01-11 | azure | 1.05M | 0.1 / 0.8 | yes | yes | yes |
+| 3 | `gpt-5.6-luna` | OpenAI | 2026-07-09 | ga | 2028-01-11 | azure | 1.05M | 0.1 / 0.8 | no | yes | yes |
 | 4 | `gpt-oss-120b` | OpenAI | 1 | ga | – | azure | 128K | 0.15 / 0.6 | yes | no | yes |
 | 5 | `Llama-4-Maverick-17B-128E-Instruct-FP8` | Meta | 1 | ga | – | azure | 1M | 0.19 / 0.85 | no | yes | unknown |
 | 6 | `grok-4-1-fast-reasoning` | xAI | 1 | ga | – | azure | 125K | 0.2 / 0.5 | yes | yes | unknown |
@@ -144,12 +147,12 @@ Each model entry keeps the simple fields (`name`, `deployment`, `tier`, `aliases
 | 9 | `FW-GLM-5.3` | Fireworks | 1 | ga | – | fireworks | 1M | 0.6 / 2.5 | yes | no | yes |
 | 10 | `FW-Kimi-K3` | Fireworks | 1 | ga | – | fireworks | 1M | 0.6 / 2.5 | yes | yes | unknown |
 | 11 | `claude-haiku-4-5` | Anthropic | 20251001 | ga | 2026-11-15 | anthropic | 200K | 1 / 5 | yes | yes | yes |
-| 12 | `gpt-5.6-terra` | OpenAI | 2026-07-09 | ga | 2028-01-11 | azure | 1.05M | 1 / 8 | yes | yes | yes |
+| 12 | `gpt-5.6-terra` | OpenAI | 2026-07-09 | ga | 2028-01-11 | azure | 1.05M | 1 / 8 | no | yes | yes |
 | 13 | `gpt-5.2` | OpenAI | 2025-12-11 | ga | 2027-06-08 | azure | 400K | 1.75 / 14 | yes | yes | yes |
 | 14 | `claude-sonnet-5` | Anthropic | 1 | ga | 2027-06-30 | anthropic | 1M | 2 / 10 | yes | yes | yes |
 | 15 | `gpt-5.4` | OpenAI | 2026-03-05 | ga | 2027-09-02 | azure | 1.05M | 2.5 / 15 | yes | yes | yes |
 | 16 | `gpt-5.5` | OpenAI | 2026-04-24 | ga | 2027-10-26 | azure | 1.05M | 2.5 / 15 | yes | yes | yes |
-| 17 | `gpt-5.6-sol` | OpenAI | 2026-07-09 | ga | 2028-01-11 | azure | 1.05M | 2.5 / 15 | yes | yes | yes |
+| 17 | `gpt-5.6-sol` | OpenAI | 2026-07-09 | ga | 2028-01-11 | azure | 1.05M | 2.5 / 15 | no | yes | yes |
 | 18 | `claude-sonnet-4-5` | Anthropic | 20250929 | ga | 2026-11-30 | anthropic | 200K | 3 / 15 | yes | yes | yes |
 | 19 | `grok-4` | xAI | 1 | ga | – | azure | 262K | 3 / 15 | yes | no | unknown |
 | 20 | `grok-4.6` | xAI | 1 | preview | – | azure | 200K | 3 / 15 | yes | yes | unknown |
@@ -180,7 +183,7 @@ Each model entry keeps the simple fields (`name`, `deployment`, `tier`, `aliases
 | 13 | `FW-GLM-5.3` | Fireworks | 1 | ga | – | fireworks | 1M | 0.6 / 2.5 | yes | no | yes |
 | 14 | `FW-Kimi-K3` | Fireworks | 1 | ga | – | fireworks | 1M | 0.6 / 2.5 | yes | yes | unknown |
 | 15 | `DeepSeek-V4-Pro` | DeepSeek | 2026-04-23 | ga | 2028-02-20 | azure | 1M | 1 / 4 | yes | no | unknown |
-| 16 | `gpt-5.6-terra` | OpenAI | 2026-07-09 | ga | 2028-01-11 | azure | 1.05M | 1 / 8 | yes | yes | yes |
+| 16 | `gpt-5.6-terra` | OpenAI | 2026-07-09 | ga | 2028-01-11 | azure | 1.05M | 1 / 8 | no | yes | yes |
 | 17 | `MAI-Thinking-1` | Microsoft | 2026-06-01 | preview | – | azure | 250K | 1.5 / 7.5 | yes | no | unknown |
 | 18 | `claude-sonnet-5-5` | Anthropic | 2 | ga | – | azure | 1M | 2 / 10 | yes | yes | yes |
 | 19 | `gpt-6.1-sol` | OpenAI | 2026-09-29 | ga | – | azure | 1.05M | 2 / 10 | no | yes | yes |

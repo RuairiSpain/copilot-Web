@@ -887,7 +887,7 @@
       },
       "capabilities": {
         "tools": "yes",
-        "parallel_tools": "yes",
+        "parallel_tools": "unknown",
         "structured_output": "yes",
         "json_object": "unknown",
         "streaming": "yes",
@@ -966,7 +966,8 @@
           "articles/foundry/foundry-models/includes/model-matrix/deployments-standard.md",
           "articles/foundry/openai/includes/concepts-model-retirement-schedule-content.md",
           "articles/foundry/openai/includes/models-azure-direct-openai.md",
-          "spec:sources.openai_streaming"
+          "spec:sources.openai_streaming",
+          "spec:sources.parallel_tools_conflict"
         ]
       }
     },
@@ -1213,7 +1214,7 @@
         "parallel_tools": "unknown",
         "structured_output": "unknown",
         "json_object": "yes",
-        "streaming": "unknown",
+        "streaming": "yes",
         "reasoning": "yes",
         "image_input": "no",
         "computer_use": "unknown"
@@ -1278,7 +1279,8 @@
         "files": [
           "articles/foundry/foundry-models/includes/model-matrix/deployments-standard.md",
           "articles/foundry/foundry-models/includes/models-azure-direct-others.md",
-          "articles/foundry/openai/includes/concepts-model-retirement-schedule-content.md"
+          "articles/foundry/openai/includes/concepts-model-retirement-schedule-content.md",
+          "spec:sources.foundry_streaming_pages"
         ]
       }
     },
@@ -1420,7 +1422,7 @@
         "parallel_tools": "unknown",
         "structured_output": "unknown",
         "json_object": "unknown",
-        "streaming": "unknown",
+        "streaming": "yes",
         "reasoning": "yes",
         "image_input": "no",
         "computer_use": "unknown"
@@ -1472,7 +1474,8 @@
         "docs_commit": "87fa4a9688b9562e3c520ca718dcfc29f9fc488a",
         "files": [
           "articles/foundry/foundry-models/includes/model-matrix/deployments-standard.md",
-          "articles/foundry/foundry-models/includes/models-azure-direct-others.md"
+          "articles/foundry/foundry-models/includes/models-azure-direct-others.md",
+          "spec:sources.foundry_streaming_pages"
         ]
       }
     },
@@ -1804,7 +1807,7 @@
         "parallel_tools": "unknown",
         "structured_output": "unknown",
         "json_object": "yes",
-        "streaming": "unknown",
+        "streaming": "yes",
         "reasoning": "unknown",
         "image_input": "yes",
         "computer_use": "unknown"
@@ -1868,7 +1871,8 @@
         "docs_commit": "87fa4a9688b9562e3c520ca718dcfc29f9fc488a",
         "files": [
           "articles/foundry/foundry-models/includes/model-matrix/deployments-standard.md",
-          "articles/foundry/foundry-models/includes/models-azure-direct-others.md"
+          "articles/foundry/foundry-models/includes/models-azure-direct-others.md",
+          "spec:sources.foundry_streaming_pages"
         ]
       }
     },
@@ -2078,6 +2082,8 @@
     "fireworks_global": "Fireworks models deploy as Global Standard and are available from any Foundry region (confirmed by the project owner); inference runs on Fireworks infrastructure.",
     "claude_versions": "Foundry numbers Claude versions by hosting: version 1 runs on Anthropic infrastructure, version 2 on Azure. `old` uses the versions Model Router lists (1, or the dated 20250929/20251001 snapshots, treated as version 1); `new` uses the Azure-hosted version 2.",
     "xai_variants": "xAI publishes grok-4-1-fast as two deployments, -reasoning and -non-reasoning (retirement schedule); this one is the reasoning variant.",
-    "chat_tools_reasoning": "Azure OpenAI reasoning models page (articles/foundry/openai/how-to/reasoning.md, 'Tool calling with reasoning models'): gpt-5.6 models can't combine reasoning with tools on Chat Completions. A request with `tools` fails unless reasoning_effort is 'none', and the default is 'medium'. This router calls Chat Completions, so tools are recorded as unavailable."
+    "chat_tools_reasoning": "Azure OpenAI reasoning models page (articles/foundry/openai/how-to/reasoning.md, 'Tool calling with reasoning models'): gpt-5.6 models can't combine reasoning with tools on Chat Completions. A request with `tools` fails unless reasoning_effort is 'none', and the default is 'medium'. This router calls Chat Completions, so tools are recorded as unavailable.",
+    "foundry_streaming_pages": "Foundry model pages with streaming instructions and examples: MAI-Thinking-1 (foundry-models/includes/use-foundry-models-mai-thinking.md, 'Stream responses'), grok-4.7 (foundry-models/includes/use-foundry-models-grok.md, 'Stream responses') and DeepSeek-V4-Pro (foundry-models/how-to/use-chat-reasoning.md, 'Stream a completion').",
+    "parallel_tools_conflict": "Microsoft's pages disagree on gpt-5.4-mini: the model table lists 'parallel tool calling', the reasoning-models feature table (openai/how-to/reasoning.md) shows it unsupported. Recorded as unknown until a deployment is tested."
   }
 }

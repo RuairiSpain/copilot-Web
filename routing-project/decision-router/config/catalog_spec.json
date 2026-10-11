@@ -44,7 +44,9 @@
     "fireworks_global": "Fireworks models deploy as Global Standard and are available from any Foundry region (confirmed by the project owner); inference runs on Fireworks infrastructure.",
     "claude_versions": "Foundry numbers Claude versions by hosting: version 1 runs on Anthropic infrastructure, version 2 on Azure. `old` uses the versions Model Router lists (1, or the dated 20250929/20251001 snapshots, treated as version 1); `new` uses the Azure-hosted version 2.",
     "xai_variants": "xAI publishes grok-4-1-fast as two deployments, -reasoning and -non-reasoning (retirement schedule); this one is the reasoning variant.",
-    "chat_tools_reasoning": "Azure OpenAI reasoning models page (articles/foundry/openai/how-to/reasoning.md, 'Tool calling with reasoning models'): gpt-5.6 models can't combine reasoning with tools on Chat Completions. A request with `tools` fails unless reasoning_effort is 'none', and the default is 'medium'. This router calls Chat Completions, so tools are recorded as unavailable."
+    "chat_tools_reasoning": "Azure OpenAI reasoning models page (articles/foundry/openai/how-to/reasoning.md, 'Tool calling with reasoning models'): gpt-5.6 models can't combine reasoning with tools on Chat Completions. A request with `tools` fails unless reasoning_effort is 'none', and the default is 'medium'. This router calls Chat Completions, so tools are recorded as unavailable.",
+    "foundry_streaming_pages": "Foundry model pages with streaming instructions and examples: MAI-Thinking-1 (foundry-models/includes/use-foundry-models-mai-thinking.md, 'Stream responses'), grok-4.7 (foundry-models/includes/use-foundry-models-grok.md, 'Stream responses') and DeepSeek-V4-Pro (foundry-models/how-to/use-chat-reasoning.md, 'Stream a completion').",
+    "parallel_tools_conflict": "Microsoft's pages disagree on gpt-5.4-mini: the model table lists 'parallel tool calling', the reasoning-models feature table (openai/how-to/reasoning.md) shows it unsupported. Recorded as unknown until a deployment is tested."
   },
   "catalogs": {
     "old": {
@@ -178,7 +180,13 @@
           "version": "2026-03-17",
           "api": "openai_chat",
           "docs": "openai",
-          "description": "Compact GPT-5.4 reasoning model and a good default for everyday work: summaries, extraction, routine code, data questions and tool calls, with structured outputs, image input and computer use. Handles moderate multi-step reasoning; use a frontier model for the hardest problems."
+          "description": "Compact GPT-5.4 reasoning model and a good default for everyday work: summaries, extraction, routine code, data questions and tool calls, with structured outputs, image input and computer use. Handles moderate multi-step reasoning; use a frontier model for the hardest problems.",
+          "overrides": {
+            "source": "parallel_tools_conflict",
+            "capabilities": {
+              "parallel_tools": "unknown"
+            }
+          }
         },
         {
           "name": "gpt-5.6-luna",
@@ -535,7 +543,13 @@
           "version": "2026-03-17",
           "api": "openai_chat",
           "docs": "openai",
-          "description": "Compact GPT-5.4 reasoning model and a good default for everyday work: summaries, extraction, routine code, data questions and tool calls, with structured outputs, image input and computer use. Handles moderate multi-step reasoning; use a frontier model for the hardest problems."
+          "description": "Compact GPT-5.4 reasoning model and a good default for everyday work: summaries, extraction, routine code, data questions and tool calls, with structured outputs, image input and computer use. Handles moderate multi-step reasoning; use a frontier model for the hardest problems.",
+          "overrides": {
+            "source": "parallel_tools_conflict",
+            "capabilities": {
+              "parallel_tools": "unknown"
+            }
+          }
         },
         {
           "name": "gpt-6-luna",
@@ -617,7 +631,13 @@
           "version": "2026-04-23",
           "api": "openai_chat",
           "docs": "others",
-          "description": "Large DeepSeek V4 reasoning model for hard code, maths and long-document analysis (1M-token context, up to 384K output tokens), with tool calling and JSON mode. Text only; English and Chinese."
+          "description": "Large DeepSeek V4 reasoning model for hard code, maths and long-document analysis (1M-token context, up to 384K output tokens), with tool calling and JSON mode. Text only; English and Chinese.",
+          "overrides": {
+            "source": "foundry_streaming_pages",
+            "capabilities": {
+              "streaming": "yes"
+            }
+          }
         },
         {
           "name": "claude-haiku-5-5",
@@ -633,7 +653,13 @@
           "version": "2026-06-01",
           "api": "mai_chat",
           "docs": "others",
-          "description": "Microsoft reasoning model (preview) for multi-step maths, coding and enterprise reasoning, with tool calling. Text only, 256K context, up to 64K output tokens."
+          "description": "Microsoft reasoning model (preview) for multi-step maths, coding and enterprise reasoning, with tool calling. Text only, 256K context, up to 64K output tokens.",
+          "overrides": {
+            "source": "foundry_streaming_pages",
+            "capabilities": {
+              "streaming": "yes"
+            }
+          }
         },
         {
           "name": "gpt-5.6-terra",
@@ -665,7 +691,13 @@
           "api": "openai_chat",
           "docs": "others",
           "lifecycle": "ga",
-          "description": "Latest xAI model for coding, research and agentic work with tool calling and JSON mode; text and image input, 500K tokens shared between input and output. English-focused."
+          "description": "Latest xAI model for coding, research and agentic work with tool calling and JSON mode; text and image input, 500K tokens shared between input and output. English-focused.",
+          "overrides": {
+            "source": "foundry_streaming_pages",
+            "capabilities": {
+              "streaming": "yes"
+            }
+          }
         },
         {
           "name": "claude-sonnet-5-5",
