@@ -2,7 +2,14 @@ import pytest
 from fastapi.testclient import TestClient
 
 from decision_router.app import create_app
-from decision_router.stage1 import ConstraintError, Constraints, parse_cost_band, select
+from decision_router.stage1 import (
+    ConstraintError,
+    Constraints,
+    action_cost_groups,
+    parse_constraints,
+    parse_cost_band,
+    select,
+)
 from decision_router.testing import ranked
 
 USER = {"messages": [{"role": "user", "content": "hi"}]}
@@ -79,3 +86,57 @@ def test_request_field_and_profiles(make_pipeline, settings, fake):
     assert routed["candidates"] == ["claude-sonnet-5-5", "gpt-6.1-sol", "gpt-5.5", "grok-4.7", "claude-opus-5-5"]
     assert "routing_cost_band" not in fake.requests[-1]["body"]
     assert bad.status_code == 400 and bad.json()["error"]["code"] == "invalid_routing_cost_band"
+
+
+def grouped(new_catalog, settings, action, label, **extra):
+    constraints = parse_constraints({"actions": [action], **extra}, new_catalog)
+    result = select(new_catalog, "balanced", constraints, USER, settings, cost_band=parse_cost_band(label, new_catalog))
+    return sorted(m.name for m in result.candidates)
+
+
+def test_action_labels_split_the_action_into_even_groups(new_catalog, settings):
+    assert grouped(new_catalog, settings, "plan", "low") == ["DeepSeek-V4-Pro", "FW-GLM-5.3"]
+    assert grouped(new_catalog, settings, "plan", "top") == ["claude-opus-5-5", "gpt-6-astra"]
+    # write's top group is $15-$20: relative to the action, not the dollar band ($25-$60) where write has nothing
+    assert grouped(new_catalog, settings, "write", "top") == ["claude-opus-5-5", "grok-4.7"]
+    # models in the dollar gap ($3-$10) are in a group
+    assert grouped(new_catalog, settings, "code", "medium") == ["DeepSeek-V4-Pro", "FW-GLM-5.3", "FW-Kimi-K3",
+                                                                "gpt-5.4-mini"]
+
+
+def test_equal_prices_stay_in_one_group(new_catalog):
+    for action in ("code", "orchestrate", "reason", "summarize"):
+        pool = [m for m in new_catalog.models if action in m.capabilities["actions"]]
+        groups = action_cost_groups(pool)
+        assert sum(map(len, groups)) == len(pool) and min(map(len, groups)) >= 2
+        for low, high in zip(groups, groups[1:], strict=False):
+            assert max(m.output_price for m in low) < min(m.output_price for m in high), action
+
+
+def test_fewer_groups_share_labels(new_catalog, settings):
+    # evaluate has 7 models -> 3 groups: medium and high share the middle one
+    assert grouped(new_catalog, settings, "evaluate", "medium") == grouped(new_catalog, settings, "evaluate", "high")
+    assert grouped(new_catalog, settings, "summarize", "low") == ["FW-GLM-5.3-Flash", "Phi-4-mini-instruct"]
+    assert grouped(new_catalog, settings, "translate", "top") == grouped(new_catalog, settings, "translate", "low")
+
+
+def test_groups_are_formed_after_the_other_filters(new_catalog, settings):
+    # all 14 code models: gpt-6-astra shares the top group; with tools required, gpt-5.6-terra drops out first
+    everything = grouped(new_catalog, settings, "code", "high")
+    with_tools = grouped(new_catalog, settings, "code", "high", capabilities=["tools"])
+    assert "gpt-5.6-terra" in everything and "gpt-5.6-terra" not in with_tools and everything != with_tools
+
+
+def test_actions_filter_and_dollar_ranges(new_catalog, settings):
+    plan = select(new_catalog, "balanced", parse_constraints({"actions": ["plan", "code"]}, new_catalog), USER, settings)
+    assert sorted(m.name for m in plan.candidates) == ["DeepSeek-V4-Pro", "FW-GLM-5.3", "MAI-Thinking-1",
+                                                       "claude-opus-5-5", "gpt-5.5", "gpt-5.6-terra", "gpt-6-astra"]
+    # a dollar range with actions stays a dollar range
+    assert grouped(new_catalog, settings, "write", "10-25") == ["claude-opus-5-5", "grok-4.7"]
+
+
+def test_invalid_actions(catalog, new_catalog):
+    with pytest.raises(ConstraintError, match="unknown actions"):
+        parse_constraints({"actions": ["review"]}, new_catalog)
+    with pytest.raises(ConstraintError, match="'old' catalog has no action tags"):
+        parse_constraints({"actions": ["code"]}, catalog)

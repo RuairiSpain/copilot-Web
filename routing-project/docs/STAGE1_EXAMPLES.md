@@ -53,6 +53,8 @@ How to read the examples:
 | A20 | Named cost band: high | 5 of 23 |
 | A21 | Dollar range instead of a band name | 6 of 23 |
 | A22 | Cost band profile with tools | 6 of 23 |
+| A23 | Action with a cost label: code, top | 4 of 23 |
+| A24 | Action with a cost label, after a tools filter | 3 of 23 |
 | Z1 | Tools requested from models without tool calling | 0 models (empty at `capabilities`) |
 | Z2 | Tools on gpt-6.1-sol only | 0 models (empty at `capabilities`) |
 | Z3 | Regional (Standard) deployment type | 0 models (empty at `location`) |
@@ -76,6 +78,7 @@ How to read the examples:
 | R2 | Model name not in the catalog | 400 `invalid_routing_constraints` |
 | R3 | Old-catalog model requested from the new catalog | 400 `invalid_routing_constraints` |
 | R4 | Named cost band on the old catalog | 400 `invalid_routing_cost_band` |
+| R5 | Actions on the old catalog | 400 `invalid_routing_constraints` |
 
 ## Findings
 
@@ -734,6 +737,67 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5,claude-o
 
 **Explanation:** The profile selects the `new` catalog and the `low` band. The capabilities step first removes the six models without Chat Completions tool calling: the three Phi models, Llama 4 Maverick, gpt-5.6-terra and gpt-6.1-sol. The band then keeps the six remaining models priced at $1 or less per million output tokens.
 
+### A23. Action with a cost label: code, top
+
+**Why it is useful:** With `routing_constraints.actions`, the labels low, medium, high and top mean even groups of the models tagged for that action, by output price, instead of fixed dollar ranges.
+
+```json
+{
+  "compatibility": "new",
+  "routing_cost_band": "top",
+  "messages": [{"role": "user", "content": "Refactor this module."}],
+  "routing_constraints": {"actions": ["code"]}
+}
+```
+
+**Read from the request:** catalog `new` (23 models), mode `balanced`, cost band top ($25-$60), estimated ~15 prompt tokens. Requirements: none.
+
+| Step | Removed | Left |
+|---|---|---|
+| `api` | – | 23 |
+| `lifecycle` | – | 23 |
+| `allowlist` | – | 23 |
+| `selection` | – | 23 |
+| `capabilities` | not tagged for code (routing_constraints.actions): `Phi-4-mini-instruct`, `FW-GLM-5.3-Flash`, `gpt-5.4-nano`, `Phi-4`, `Phi-4-reasoning`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `grok-4-1-fast-reasoning`, `gpt-6-luna`, `gpt-6.1-sol` | 14 |
+| `location` | – | 14 |
+| `size` | – | 14 |
+| `price_band` | outside the top cost group for code: `claude-haiku-5-5`, `gpt-oss-120b`, `DeepSeek-V4-Flash`, `gpt-5.4-mini`, `FW-GLM-5.3`, `FW-Kimi-K3`, `DeepSeek-V4-Pro`, `gpt-5.6-terra`, `MAI-Thinking-1`, `claude-sonnet-5-5` | 4 |
+
+**Stage 1 output (the 4 options Decision-1 chooses from, cheapest first):** `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`, `gpt-6-astra`
+
+**Explanation:** The capabilities step keeps the 14 models tagged `code`. They split into four groups of 3, 4, 3 and 4 by output price, and `top` is the most expensive group: gpt-5.5, grok-4.7, claude-opus-5-5 and gpt-6-astra. gpt-5.5 and grok-4.7 cost the same ($15), so they stay in one group.
+
+### A24. Action with a cost label, after a tools filter
+
+**Why it is useful:** The groups are formed from what the earlier steps leave, so a request with tools gets a split of the code models that can call tools.
+
+```json
+{
+  "compatibility": "new",
+  "routing_cost_band": "high",
+  "messages": [{"role": "user", "content": "Fix the failing test."}],
+  "tools": [{"type": "function", "function": {"name": "read_file", "description": "Read a file from the repository", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}}}}],
+  "routing_constraints": {"actions": ["code"]}
+}
+```
+
+**Read from the request:** catalog `new` (23 models), mode `balanced`, cost band high ($10-$25), estimated ~61 prompt tokens. Requirements: `tools` (request has tools).
+
+| Step | Removed | Left |
+|---|---|---|
+| `api` | – | 23 |
+| `lifecycle` | – | 23 |
+| `allowlist` | – | 23 |
+| `selection` | – | 23 |
+| `capabilities` | tools no (needed: request has tools): `Phi-4-mini-instruct`, `Phi-4`, `Phi-4-reasoning`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `gpt-5.6-terra`, `gpt-6.1-sol`<br>not tagged for code (routing_constraints.actions): `FW-GLM-5.3-Flash`, `gpt-5.4-nano`, `grok-4-1-fast-reasoning`, `gpt-6-luna` | 13 |
+| `location` | – | 13 |
+| `size` | – | 13 |
+| `price_band` | outside the high cost group for code: `claude-haiku-5-5`, `gpt-oss-120b`, `DeepSeek-V4-Flash`, `gpt-5.4-mini`, `FW-GLM-5.3`, `FW-Kimi-K3`, `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`, `gpt-6-astra` | 3 |
+
+**Stage 1 output (the 3 options Decision-1 chooses from, cheapest first):** `DeepSeek-V4-Pro`, `MAI-Thinking-1`, `claude-sonnet-5-5`
+
+**Explanation:** Tool calling removes gpt-5.6-terra from the 14 code models, and the remaining 13 are split again, into groups of 3, 3, 3 and 4. The `high` group becomes DeepSeek-V4-Pro, MAI-Thinking-1 and claude-sonnet-5-5; with all 14 code models it is MAI-Thinking-1, gpt-5.6-terra and claude-sonnet-5-5.
+
 ## Requests that leave no models
 
 These requests leave no candidates. The router returns **422 `no_eligible_models`**, names the
@@ -1317,3 +1381,18 @@ Names are checked against the catalog the request selected. claude-opus-5 is onl
 **Result:** rejected with **400 `invalid_routing_cost_band`** before stage 1: routing_cost_band must be a dollar range such as "1-3"; got 'low'. The 'old' catalog has no named bands
 
 The `old` catalog defines no band names, so `low` is rejected. A dollar range such as `"0-1"` works on either catalog.
+
+### R5. Actions on the old catalog
+
+**Why it is useful:** Action tags exist only in the `new` catalog.
+
+```json
+{
+  "messages": [{"role": "user", "content": "Summarise the attached contract clause and flag anything unusual."}],
+  "routing_constraints": {"actions": ["code"]}
+}
+```
+
+**Result:** rejected with **400 `invalid_routing_constraints`** before stage 1: the 'old' catalog has no action tags; use the 'new' catalog
+
+The `old` catalog's models have no action tags, so an `actions` constraint is rejected rather than removing every model.
