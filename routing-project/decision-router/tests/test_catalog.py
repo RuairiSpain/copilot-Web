@@ -126,7 +126,9 @@ def test_every_model_has_a_price_entry(settings, catalogs):
 def test_cost_bands_only_in_new(catalog, new_catalog):
     assert catalog.cost_bands == {}
     assert {n: (b.min, b.max) for n, b in new_catalog.cost_bands.items()} == {
-        "low": (0, 1), "medium": (1, 3), "high": (10, 25), "top": (30, 60)}
+        "low": (0, 1), "medium": (1, 3), "high": (10, 25), "top": (25, 60)}
+    bands = new_catalog.cost_bands
+    assert bands["high"].contains(25) and bands["top"].contains(25)  # edges are inclusive: $25 is in both
 
 
 def test_new_catalog_has_action_and_execution_tags(new_catalog):

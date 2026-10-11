@@ -2310,7 +2310,7 @@
     }
   },
   "cost_bands": {
-    "_note": "Named cost bands for routing_cost_band, on USD output price per million tokens. Both ends are inclusive. The ranges leave gaps ($3-$10, $25-$30): a model priced in a gap is in no named band and is reached with balanced mode or a dollar range.",
+    "_note": "Named cost bands for routing_cost_band, on USD output price per million tokens. Both ends are inclusive, so a model at exactly $1 or $25 is in two bands. The ranges leave one gap ($3-$10): a model priced in it is in no named band and is reached with balanced mode or a dollar range.",
     "basis": "output_per_million",
     "bands": {
       "low": {
@@ -2326,7 +2326,7 @@
         "max": 25
       },
       "top": {
-        "min": 30,
+        "min": 25,
         "max": 60
       }
     }

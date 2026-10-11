@@ -47,7 +47,7 @@ def test_band_runs_after_the_other_filters_and_can_empty(new_catalog, settings):
     assert names == ["gpt-6-astra"]
     names, result = band(new_catalog, settings, "top", Constraints(providers=("anthropic",)))
     assert names == [] and result.empty_at == "price_band"
-    assert result.steps[-1]["removed"][0]["reason"] == "outside cost band top ($30-$60)"
+    assert result.steps[-1]["removed"][0]["reason"] == "outside cost band top ($25-$60)"
 
 
 @pytest.mark.parametrize("raw, message", [

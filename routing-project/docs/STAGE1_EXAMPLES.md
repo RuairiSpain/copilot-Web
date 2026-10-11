@@ -1236,7 +1236,7 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5`.
 }
 ```
 
-**Read from the request:** catalog `new` (23 models), mode `balanced`, cost band top ($30-$60), estimated ~26 prompt tokens. Requirements: none.
+**Read from the request:** catalog `new` (23 models), mode `balanced`, cost band top ($25-$60), estimated ~26 prompt tokens. Requirements: none.
 
 | Step | Removed | Left |
 |---|---|---|
@@ -1247,11 +1247,11 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5`.
 | `capabilities` | – | 3 |
 | `location` | – | 3 |
 | `size` | – | 3 |
-| `price_band` | outside cost band top ($30-$60): `claude-haiku-5-5`, `claude-sonnet-5-5`, `claude-opus-5-5` | 0 |
+| `price_band` | outside cost band top ($25-$60): `claude-haiku-5-5`, `claude-sonnet-5-5`, `claude-opus-5-5` | 0 |
 
 **Stage 1 output:** no models. The request gets **422 `no_eligible_models`**; the `price_band` step removed the last candidates. Decision-1 is not called.
 
-**Explanation:** The `top` band is $30 to $60 and contains only gpt-6-astra. No Claude model in `new` costs that much, so the `price_band` step removes the last three. Unlike the routing modes, a cost band can leave nothing.
+**Explanation:** The `top` band is $25 to $60 and, in `new`, contains only gpt-6-astra. No Claude model in `new` costs that much, so the `price_band` step removes the last three. Unlike the routing modes, a cost band can leave nothing.
 
 ## Requests rejected before stage 1
 

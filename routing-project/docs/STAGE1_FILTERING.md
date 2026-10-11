@@ -57,17 +57,17 @@ Unknown keys, unknown model names and unknown capability names return 400
 ## Cost bands
 
 `routing_cost_band` selects models by USD output price per million tokens, from
-`config/model_pricing.json`, instead of by thirds. Both ends of a range are inclusive. The
-`new` catalog defines four named bands (`cost_bands` in `config/catalog_spec.json`):
+`config/model_pricing.json`, instead of by thirds. Both ends of a range are inclusive, so a model priced exactly on an
+edge ($1 or $25) is in both bands. The `new` catalog defines four named bands (`cost_bands` in `config/catalog_spec.json`):
 
 | Band | Output price | Models in `new` |
 |---|---|---|
 | `low` | $0–$1 | Phi-4-mini-instruct, FW-GLM-5.3-Flash, claude-haiku-5-5, gpt-5.4-nano, Phi-4, gpt-oss-120b, Phi-4-reasoning, Llama-4-Maverick, grok-4-1-fast-reasoning, DeepSeek-V4-Flash |
 | `medium` | $1–$3 | gpt-5.4-mini, gpt-6-luna, FW-GLM-5.3, FW-Kimi-K3 |
 | `high` | $10–$25 | claude-sonnet-5-5, gpt-6.1-sol, gpt-5.5, grok-4.7, claude-opus-5-5 |
-| `top` | $30–$60 | gpt-6-astra |
+| `top` | $25–$60 | gpt-6-astra |
 
-The ranges leave gaps. DeepSeek-V4-Pro ($4), MAI-Thinking-1 ($7.50) and gpt-5.6-terra ($8)
+The ranges leave one gap, $3–$10. DeepSeek-V4-Pro ($4), MAI-Thinking-1 ($7.50) and gpt-5.6-terra ($8)
 are in no named band; they are reached with `balanced` mode or a dollar range such as `"3-10"`.
 
 - The band is applied after the other steps, like the routing mode's band. Unlike a mode, a

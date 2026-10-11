@@ -268,7 +268,7 @@ EXAMPLES: list[dict] = [
      "request": {"messages": msgs(), "routing_constraints": {"region": "westindia", "inference_in_azure": True}}},
     {"title": 'Top band with Claude only',
      "why": 'A named band combined with a provider restriction that has no model in that band.',
-     "explanation": 'The `top` band is $30 to $60 and contains only gpt-6-astra. No Claude model in `new` costs that much, so the `price_band` step removes the last three. Unlike the routing modes, a cost band can leave nothing.',
+     "explanation": 'The `top` band is $25 to $60 and, in `new`, contains only gpt-6-astra. No Claude model in `new` costs that much, so the `price_band` step removes the last three. Unlike the routing modes, a cost band can leave nothing.',
      "request": {"compatibility": "new", "routing_cost_band": "top", "messages": msgs(),
                  "routing_constraints": {"providers": ["Anthropic"]}}},
     # ------------------------------------------------------------------ rejected before stage 1
