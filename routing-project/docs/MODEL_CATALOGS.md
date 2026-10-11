@@ -24,7 +24,8 @@ because Model Router still routes to them; `new` leaves them out.
 ## Tiers come from prices
 
 `tier` orders models by price (1 = cheapest). It sets the routing modes' price bands, the
-price rank Decision-1 is shown, and the tie-break. The builder computes it from
+price rank Decision-1 is shown, and the tie-break. Each model's `price` is copied into the
+catalog too; the `new` catalog's named cost bands (`cost_bands`) use its output price. The builder computes it from
 `config/model_pricing.json`: input price, then output price, then cached-input price, then
 name. To change the order, change the prices and rebuild (below); a model without a price
 fails the build.
@@ -92,8 +93,11 @@ Values not in the docs snapshot:
 | Fireworks models' limits and capabilities | Early project catalog (Foundry model cards, retrieved 2026-10-10) |
 | Claude Opus 5 image input | Early project catalog |
 | grok-4-1-fast-reasoning reasoning | xAI publishes it as the reasoning variant of grok-4-1-fast |
+| gpt-5.6 tools | Microsoft's reasoning-models page: Chat Completions requests with tools fail unless `reasoning_effort` is `none`, so `tools: no` |
+| Streaming for MAI-Thinking-1, grok-4.7, DeepSeek-V4-Pro | Their Foundry pages give streaming instructions and examples |
 | Streaming for Azure OpenAI chat models | Chat Completions API behaviour; the capability tables list it for only some models |
-| Claude tools, parallel tools, streaming, structured output | What the router's Messages adapter translates: `json_schema` becomes `output_config.format` (structured output: yes); JSON mode is not translated (`json_object`: no) |
+| Claude tools, streaming, structured output | What the router's Messages adapter translates: `json_schema` becomes `output_config.format` (structured output: yes) |
+| `write` action for claude-opus-5-5 and grok-4.7 | Their Foundry pages name document and report writing |
 | Fireworks regions | Global (confirmed by the project owner): `region_status: global`, Global Standard only; passes any region filter, excluded by `inference_in_azure` because inference runs on Fireworks infrastructure |
 | Regions for gpt-oss-120b and grok-4 | Not published: `region_status: unknown`, so region-constrained requests exclude them |
 
@@ -111,8 +115,8 @@ Each model entry keeps the simple fields (`name`, `deployment`, `tier`, `aliases
   "api": "openai_chat", "endpoint_path": "/openai/v1/chat/completions",
   "limits": {"context_tokens": 400000, "max_input_tokens": 272000, "max_output_tokens": 128000},
   "modalities": {"input": ["text", "image"], "output": ["text"]},
-  "capabilities": {"tools": "yes", "parallel_tools": "yes", "structured_output": "yes", "json_object": "unknown",
-                   "streaming": "yes", "reasoning": "yes", "image_input": "yes", "computer_use": "yes"},
+  "capabilities": {"tools": "yes", "structured_output": "yes", "streaming": "yes", "reasoning": "yes", "image_input": "yes",
+                   "actions": ["summarize", "extract", "code", "reason"], "execution": ["high volume"]},
   "hosting": {"infrastructure": "azure", "azure_region_controls_processing": true},
   "deployment_types": ["data_zone_standard", "global_standard"],
   "regions": {"global_standard": ["australiaeast", "..."], "data_zone_standard": ["eastus", "..."]},
@@ -125,7 +129,16 @@ Each model entry keeps the simple fields (`name`, `deployment`, `tier`, `aliases
   - `openai_chat`: `/openai/v1/chat/completions`.
   - `mai_chat`: `/mai/v1/chat/completions`. MAI-Thinking-1 is OpenAI-compatible but has its own path.
   - `anthropic_messages`: `/anthropic/v1/messages`, through the translation layer.
-- **Capability values** are `yes`, `no` or `unknown`. See `STAGE1_FILTERING.md` for how unknowns are treated.
+- **Capability values** are `yes` or `no`. The build records anything no source confirms as `no`
+  (see `STAGE1_FILTERING.md`, "Capability values"). The five capabilities are `tools`,
+  `structured_output`, `streaming`, `reasoning` and `image_input`.
+- **`actions` and `execution`** (in `capabilities`, `new` catalog only) are lists of descriptive
+  tags, not support flags. They are maintained in `catalog_spec.json`, and the loader rejects
+  values outside these lists:
+  - `actions`: `code`, `evaluate`, `extract`, `orchestrate`, `plan`, `reason`, `summarize`,
+    `translate`, `write`: the kinds of task the model is suited to.
+  - `execution`: `high volume` (fast and low-cost) or `deep thinking` (slower, more thorough).
+  Stage 1 does not filter on them yet.
 - **Phi models** are assumed to be served on the `/openai/v1` route, like other Foundry models.
   Confirm this on your deployment before relying on them; if they aren't, change their `api` in the spec.
 
@@ -133,26 +146,26 @@ Each model entry keeps the simple fields (`name`, `deployment`, `tier`, `aliases
 
 | Tier | Model | Provider | Version | Lifecycle | Retires | Inference on | Context | In/out $ per 1M | Tools | Images | JSON schema |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | `FW-GLM-5.3-Flash` | Fireworks | 1 | ga | – | fireworks | 1M | 0.1 / 0.4 | yes | yes | unknown |
+| 1 | `FW-GLM-5.3-Flash` | Fireworks | 1 | ga | – | fireworks | 1M | 0.1 / 0.4 | yes | yes | no |
 | 2 | `gpt-5.4-nano` | OpenAI | 2026-03-17 | ga | 2027-09-21 | azure | 400K | 0.1 / 0.8 | yes | yes | yes |
-| 3 | `gpt-5.6-luna` | OpenAI | 2026-07-09 | ga | 2028-01-11 | azure | 1.05M | 0.1 / 0.8 | yes | yes | yes |
+| 3 | `gpt-5.6-luna` | OpenAI | 2026-07-09 | ga | 2028-01-11 | azure | 1.05M | 0.1 / 0.8 | no | yes | yes |
 | 4 | `gpt-oss-120b` | OpenAI | 1 | ga | – | azure | 128K | 0.15 / 0.6 | yes | no | yes |
-| 5 | `Llama-4-Maverick-17B-128E-Instruct-FP8` | Meta | 1 | ga | – | azure | 1M | 0.19 / 0.85 | no | yes | unknown |
-| 6 | `grok-4-1-fast-reasoning` | xAI | 1 | ga | – | azure | 125K | 0.2 / 0.5 | yes | yes | unknown |
-| 7 | `DeepSeek-V3.2` | DeepSeek | 1 | ga | – | azure | 125K | 0.28 / 0.42 | yes | no | unknown |
+| 5 | `Llama-4-Maverick-17B-128E-Instruct-FP8` | Meta | 1 | ga | – | azure | 1M | 0.19 / 0.85 | no | yes | no |
+| 6 | `grok-4-1-fast-reasoning` | xAI | 1 | ga | – | azure | 125K | 0.2 / 0.5 | yes | yes | no |
+| 7 | `DeepSeek-V3.2` | DeepSeek | 1 | ga | – | azure | 125K | 0.28 / 0.42 | yes | no | no |
 | 8 | `gpt-5.4-mini` | OpenAI | 2026-03-17 | ga | 2027-09-21 | azure | 400K | 0.375 / 3 | yes | yes | yes |
 | 9 | `FW-GLM-5.3` | Fireworks | 1 | ga | – | fireworks | 1M | 0.6 / 2.5 | yes | no | yes |
-| 10 | `FW-Kimi-K3` | Fireworks | 1 | ga | – | fireworks | 1M | 0.6 / 2.5 | yes | yes | unknown |
+| 10 | `FW-Kimi-K3` | Fireworks | 1 | ga | – | fireworks | 1M | 0.6 / 2.5 | yes | yes | no |
 | 11 | `claude-haiku-4-5` | Anthropic | 20251001 | ga | 2026-11-15 | anthropic | 200K | 1 / 5 | yes | yes | yes |
-| 12 | `gpt-5.6-terra` | OpenAI | 2026-07-09 | ga | 2028-01-11 | azure | 1.05M | 1 / 8 | yes | yes | yes |
+| 12 | `gpt-5.6-terra` | OpenAI | 2026-07-09 | ga | 2028-01-11 | azure | 1.05M | 1 / 8 | no | yes | yes |
 | 13 | `gpt-5.2` | OpenAI | 2025-12-11 | ga | 2027-06-08 | azure | 400K | 1.75 / 14 | yes | yes | yes |
 | 14 | `claude-sonnet-5` | Anthropic | 1 | ga | 2027-06-30 | anthropic | 1M | 2 / 10 | yes | yes | yes |
 | 15 | `gpt-5.4` | OpenAI | 2026-03-05 | ga | 2027-09-02 | azure | 1.05M | 2.5 / 15 | yes | yes | yes |
 | 16 | `gpt-5.5` | OpenAI | 2026-04-24 | ga | 2027-10-26 | azure | 1.05M | 2.5 / 15 | yes | yes | yes |
-| 17 | `gpt-5.6-sol` | OpenAI | 2026-07-09 | ga | 2028-01-11 | azure | 1.05M | 2.5 / 15 | yes | yes | yes |
+| 17 | `gpt-5.6-sol` | OpenAI | 2026-07-09 | ga | 2028-01-11 | azure | 1.05M | 2.5 / 15 | no | yes | yes |
 | 18 | `claude-sonnet-4-5` | Anthropic | 20250929 | ga | 2026-11-30 | anthropic | 200K | 3 / 15 | yes | yes | yes |
-| 19 | `grok-4` | xAI | 1 | ga | – | azure | 262K | 3 / 15 | yes | no | unknown |
-| 20 | `grok-4.6` | xAI | 1 | preview | – | azure | 200K | 3 / 15 | yes | yes | unknown |
+| 19 | `grok-4` | xAI | 1 | ga | – | azure | 262K | 3 / 15 | yes | no | no |
+| 20 | `grok-4.6` | xAI | 1 | preview | – | azure | 200K | 3 / 15 | yes | yes | no |
 | 21 | `claude-opus-4-6` | Anthropic | 1 | ga | 2027-02-02 | anthropic | 1M | 5 / 25 | yes | yes | yes |
 | 22 | `claude-opus-4-7` | Anthropic | 1 | ga | 2027-04-06 | anthropic | 1M | 5 / 25 | yes | yes | yes |
 | 23 | `claude-opus-4-8` | Anthropic | 1 | ga | 2027-09-01 | anthropic | 1M | 5 / 25 | yes | yes | yes |
@@ -165,26 +178,26 @@ Each model entry keeps the simple fields (`name`, `deployment`, `tier`, `aliases
 
 | Tier | Model | Provider | Version | Lifecycle | Retires | Inference on | Context | In/out $ per 1M | Tools | Images | JSON schema |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | `Phi-4-mini-instruct` | Microsoft | 1 | ga | – | azure | 128K | 0.075 / 0.3 | no | no | unknown |
-| 2 | `FW-GLM-5.3-Flash` | Fireworks | 1 | ga | – | fireworks | 1M | 0.1 / 0.4 | yes | yes | unknown |
+| 1 | `Phi-4-mini-instruct` | Microsoft | 1 | ga | – | azure | 128K | 0.075 / 0.3 | no | no | no |
+| 2 | `FW-GLM-5.3-Flash` | Fireworks | 1 | ga | – | fireworks | 1M | 0.1 / 0.4 | yes | yes | no |
 | 3 | `claude-haiku-5-5` | Anthropic | 2 | ga | – | azure | 1M | 0.1 / 0.5 | yes | yes | yes |
 | 4 | `gpt-5.4-nano` | OpenAI | 2026-03-17 | ga | 2027-09-21 | azure | 400K | 0.1 / 0.8 | yes | yes | yes |
-| 5 | `Phi-4` | Microsoft | 7 | ga | – | azure | 16K | 0.125 / 0.5 | no | no | unknown |
+| 5 | `Phi-4` | Microsoft | 7 | ga | – | azure | 16K | 0.125 / 0.5 | no | no | no |
 | 6 | `gpt-oss-120b` | OpenAI | 1 | ga | – | azure | 128K | 0.15 / 0.6 | yes | no | yes |
-| 7 | `Phi-4-reasoning` | Microsoft | 1 | ga | – | azure | 32K | 0.15 / 0.6 | no | no | unknown |
-| 8 | `Llama-4-Maverick-17B-128E-Instruct-FP8` | Meta | 1 | ga | – | azure | 1M | 0.19 / 0.85 | no | yes | unknown |
-| 9 | `grok-4-1-fast-reasoning` | xAI | 1 | ga | – | azure | 125K | 0.2 / 0.5 | yes | yes | unknown |
-| 10 | `DeepSeek-V4-Flash` | DeepSeek | 2026-04-23 | ga | 2028-02-20 | azure | 1M | 0.2 / 0.8 | yes | no | unknown |
+| 7 | `Phi-4-reasoning` | Microsoft | 1 | ga | – | azure | 32K | 0.15 / 0.6 | no | no | no |
+| 8 | `Llama-4-Maverick-17B-128E-Instruct-FP8` | Meta | 1 | ga | – | azure | 1M | 0.19 / 0.85 | no | yes | no |
+| 9 | `grok-4-1-fast-reasoning` | xAI | 1 | ga | – | azure | 125K | 0.2 / 0.5 | yes | yes | no |
+| 10 | `DeepSeek-V4-Flash` | DeepSeek | 2026-04-23 | ga | 2028-02-20 | azure | 1M | 0.2 / 0.8 | yes | no | no |
 | 11 | `gpt-5.4-mini` | OpenAI | 2026-03-17 | ga | 2027-09-21 | azure | 400K | 0.375 / 3 | yes | yes | yes |
 | 12 | `gpt-6-luna` | OpenAI | 2026-09-22 | ga | – | azure | 1.05M | 0.5 / 2.5 | yes | yes | yes |
 | 13 | `FW-GLM-5.3` | Fireworks | 1 | ga | – | fireworks | 1M | 0.6 / 2.5 | yes | no | yes |
-| 14 | `FW-Kimi-K3` | Fireworks | 1 | ga | – | fireworks | 1M | 0.6 / 2.5 | yes | yes | unknown |
-| 15 | `DeepSeek-V4-Pro` | DeepSeek | 2026-04-23 | ga | 2028-02-20 | azure | 1M | 1 / 4 | yes | no | unknown |
-| 16 | `gpt-5.6-terra` | OpenAI | 2026-07-09 | ga | 2028-01-11 | azure | 1.05M | 1 / 8 | yes | yes | yes |
-| 17 | `MAI-Thinking-1` | Microsoft | 2026-06-01 | preview | – | azure | 250K | 1.5 / 7.5 | yes | no | unknown |
+| 14 | `FW-Kimi-K3` | Fireworks | 1 | ga | – | fireworks | 1M | 0.6 / 2.5 | yes | yes | no |
+| 15 | `DeepSeek-V4-Pro` | DeepSeek | 2026-04-23 | ga | 2028-02-20 | azure | 1M | 1 / 4 | yes | no | no |
+| 16 | `gpt-5.6-terra` | OpenAI | 2026-07-09 | ga | 2028-01-11 | azure | 1.05M | 1 / 8 | no | yes | yes |
+| 17 | `MAI-Thinking-1` | Microsoft | 2026-06-01 | preview | – | azure | 250K | 1.5 / 7.5 | yes | no | no |
 | 18 | `claude-sonnet-5-5` | Anthropic | 2 | ga | – | azure | 1M | 2 / 10 | yes | yes | yes |
 | 19 | `gpt-6.1-sol` | OpenAI | 2026-09-29 | ga | – | azure | 1.05M | 2 / 10 | no | yes | yes |
 | 20 | `gpt-5.5` | OpenAI | 2026-04-24 | ga | 2027-10-26 | azure | 1.05M | 2.5 / 15 | yes | yes | yes |
-| 21 | `grok-4.7` | xAI | 1 | ga | – | azure | 500K | 3 / 15 | yes | yes | unknown |
+| 21 | `grok-4.7` | xAI | 1 | ga | – | azure | 500K | 3 / 15 | yes | yes | no |
 | 22 | `claude-opus-5-5` | Anthropic | 2 | ga | – | azure | 1M | 4 / 20 | yes | yes | yes |
 | 23 | `gpt-6-astra` | OpenAI | 2026-09-03 | ga | – | azure | 1.05M | 10 / 50 | yes | yes | yes |

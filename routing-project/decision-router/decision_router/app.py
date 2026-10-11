@@ -137,6 +137,7 @@ def create_app(settings: Settings | None = None, *, pipeline: RouterPipeline | N
                 "request_id": rid,
                 "routing_mode": routed.mode,
                 "compatibility": routed.catalog.compatibility,
+                "cost_band": routed.event["cost_band"],
                 "candidates": [m.name for m in routed.candidates],
                 "stage1": routed.event["stage1"],
                 "ranking": [{"model": name, "probability": decision.probabilities[name]} for name in decision.ranking],

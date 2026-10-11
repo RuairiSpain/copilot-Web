@@ -28,8 +28,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 UNKNOWN = "unknown"
-CAPABILITIES = ("tools", "parallel_tools", "structured_output", "json_object", "streaming", "reasoning",
-                "image_input", "computer_use")
+# Support flags, each "yes" or "no". Parsing records "unknown" where a source is silent; the built
+# catalog turns every unknown into "no", so a model is only offered for what a source confirms.
+CAPABILITIES = ("tools", "structured_output", "streaming", "reasoning", "image_input")
 
 FILES = {
     "router": "articles/foundry/openai/includes/model-router-supported.md",
@@ -244,7 +245,7 @@ ENDPOINTS = {"openai_chat": "/openai/v1/chat/completions", "mai_chat": "/mai/v1/
              "anthropic_messages": "/anthropic/v1/messages"}
 
 
-def build_entry(spec: dict, docs: Docs, sources: dict, tier: int) -> dict:
+def build_entry(spec: dict, docs: Docs, sources: dict, tier: int, price: dict) -> dict:
     name, version = spec["name"], spec["version"]
     doc_name, doc_version = spec.get("doc_name", name), spec.get("doc_version", version)
     used = []
@@ -263,7 +264,10 @@ def build_entry(spec: dict, docs: Docs, sources: dict, tier: int) -> dict:
     overrides = spec.get("overrides", {})
     if overrides:
         used.append(f"spec:sources.{overrides['source']}")
-    capabilities = {**caps(), **parsed.get("capabilities", {}), **overrides.get("capabilities", {})}
+    merged = {**caps(), **parsed.get("capabilities", {}), **overrides.get("capabilities", {})}
+    capabilities = {key: "no" if merged[key] == UNKNOWN else merged[key] for key in CAPABILITIES}
+    # Descriptive tags (lists), maintained in the spec: what the model is good at and how it runs.
+    capabilities.update({key: spec[key] for key in ("actions", "execution") if key in spec})
     limits = {"context_tokens": None, "max_input_tokens": None, "max_output_tokens": None,
               **parsed.get("limits", {}), **overrides.get("limits", {})}
     modalities = {"input": ["text"], "output": ["text"], **parsed.get("modalities", {}), **overrides.get("modalities", {})}
@@ -300,6 +304,7 @@ def build_entry(spec: dict, docs: Docs, sources: dict, tier: int) -> dict:
         "name": name,
         "deployment": spec.get("deployment", name),
         "tier": tier,
+        "price": {k: price.get(k) for k in ("input_per_million", "cached_input_per_million", "output_per_million")},
         "aliases": spec.get("aliases", []),
         "description": spec["description"],
         "provider": spec["provider"],
@@ -390,7 +395,7 @@ def main() -> int:
         print(f"warning: docs checkout is {docs.commit}, spec pins {spec['docs']['commit']}", file=sys.stderr)
     for compatibility, catalog in spec["catalogs"].items():
         tier = tiers([m["name"] for m in catalog["models"]], pricing)
-        models = sorted((build_entry(m, docs, spec["sources"], tier[m["name"]]) for m in catalog["models"]),
+        models = sorted((build_entry(m, docs, spec["sources"], tier[m["name"]], pricing[m["name"]]) for m in catalog["models"]),
                         key=lambda e: e["tier"])
         check_lifecycle_policy(models, spec["lifecycle_policy"])
         if compatibility == "old":
@@ -401,7 +406,7 @@ def main() -> int:
             "schema_version": 2,
             "compatibility": compatibility,
             "_note": f"{catalog['_note']} {len(models)} models. `tier` is computed from model_pricing.json "
-                     "(1 = cheapest). Descriptions are what Decision-1 reads to tell the options apart.",
+                     "(1 = cheapest) and `price` is copied from it. Descriptions are what Decision-1 reads to tell the options apart.",
             "tier_status": f"computed from model_pricing.json version {price_file['version']}: ordered by USD input "
                            "price, then output, cached-input price and name; 1 = cheapest",
             "generated_from": {"spec": "config/catalog_spec.json", "docs": spec["docs"]["repository"],
@@ -410,6 +415,7 @@ def main() -> int:
             "default_mode": spec["default_mode"],
             "models": models,
             "routing_modes": spec["routing_modes"],
+            "cost_bands": catalog.get("cost_bands"),
             "excluded_models": catalog.get("excluded", []),
             "sources": spec["sources"],
         }

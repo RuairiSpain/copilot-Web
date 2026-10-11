@@ -8,29 +8,35 @@ removed which model and why:
   1. lifecycle          deprecated/retired/legacy always out; preview out unless allowed
   2. operator allow-list ROUTER_MODEL_ALLOWLIST
   3. request selection  routing_constraints.models / exclude_models / providers
-  4. capabilities       routing_constraints.capabilities plus what the request itself needs
+  4. capabilities       routing_constraints.capabilities plus what the request itself needs, and
+                        routing_constraints.actions (the model must be tagged with every one)
   5. location           routing_constraints.region / deployment_type / inference_in_azure
   6. size               estimated prompt + output tokens against the context window, input and output limits
-  7. price band         the routing mode's share of what is left, by tier
+  7. price band         with routing_cost_band: a band name plus routing_constraints.actions picks one
+                        of up to four even groups of what is left, by output price (action_cost_groups);
+                        a band name alone or a dollar range keeps the models whose output price is in
+                        it. Otherwise the routing mode's share of what is left, by tier
 
 No step may leave zero models silently: the caller turns an empty result into a 422 that names
 the step.
 """
 from __future__ import annotations
 
+import itertools
 import json
 import math
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from .catalog import EXCLUDED_LIFECYCLES, Catalog, ModelEntry
+from .catalog import CAPABILITY_TAGS, EXCLUDED_LIFECYCLES, Catalog, CostBand, ModelEntry
 from .config import Settings
 
-KNOWN_CAPABILITIES = ("tools", "parallel_tools", "structured_output", "json_object", "streaming", "reasoning",
-                      "image_input", "computer_use")
+KNOWN_CAPABILITIES = ("tools", "structured_output", "streaming", "reasoning", "image_input")
 DEPLOYMENT_TYPES = ("global_standard", "data_zone_standard", "standard")
 CONSTRAINT_KEYS = ("models", "exclude_models", "providers", "capabilities", "region", "deployment_type",
-                   "inference_in_azure", "min_context_tokens", "allow_preview")
+                   "inference_in_azure", "min_context_tokens", "allow_preview", "actions")
+COST_LABELS = ("low", "medium", "high", "top")
 
 
 class ConstraintError(ValueError):
@@ -48,6 +54,7 @@ class Constraints:
     inference_in_azure: bool = False
     min_context_tokens: int | None = None
     allow_preview: bool | None = None
+    actions: tuple[str, ...] = ()
 
     def as_dict(self) -> dict[str, Any]:
         return {k: v for k, v in self.__dict__.items() if v not in ((), None, False)}
@@ -76,6 +83,12 @@ def parse_constraints(raw: Any, catalog: Catalog) -> Constraints:
     bad = [c for c in capabilities if c not in KNOWN_CAPABILITIES]
     if bad:
         raise ConstraintError(f"unknown capabilities {bad}; allowed: {list(KNOWN_CAPABILITIES)}")
+    actions = _names(raw, "actions")
+    bad = [a for a in actions if a not in CAPABILITY_TAGS["actions"]]
+    if bad:
+        raise ConstraintError(f"unknown actions {bad}; allowed: {list(CAPABILITY_TAGS['actions'])}")
+    if actions and not any(m.capabilities.get("actions") for m in catalog.models):
+        raise ConstraintError(f"the '{catalog.compatibility}' catalog has no action tags; use the 'new' catalog")
     deployment_type = raw.get("deployment_type")
     if deployment_type is not None and deployment_type not in DEPLOYMENT_TYPES:
         raise ConstraintError(f"routing_constraints.deployment_type must be one of {list(DEPLOYMENT_TYPES)}")
@@ -90,7 +103,67 @@ def parse_constraints(raw: Any, catalog: Catalog) -> Constraints:
             raise ConstraintError(f"routing_constraints.{flag} must be true or false")
     return Constraints(models, excluded, _names(raw, "providers"), capabilities,
                        region.strip().lower().replace(" ", "") if region else None, deployment_type,
-                       bool(raw.get("inference_in_azure", False)), min_context, raw.get("allow_preview"))
+                       bool(raw.get("inference_in_azure", False)), min_context, raw.get("allow_preview"),
+                       actions)
+
+
+_RANGE = re.compile(r"^\$?(\d+(?:\.\d+)?)?\s*(?:-|\.\.)\s*\$?(\d+(?:\.\d+)?)?$")
+
+
+def parse_cost_band(raw: Any, catalog: Catalog) -> CostBand | None:
+    """routing_cost_band: a band name from the catalog ("low"), a dollar range string ("1-3", "$10-$25",
+    "30-" for open-ended) or {"min": 1, "max": 3}. Prices are USD per million output tokens."""
+    if raw is None:
+        return None
+    names = list(catalog.cost_bands)
+    if isinstance(raw, str):
+        value = raw.strip()
+        if value.lower() in catalog.cost_bands:
+            return catalog.cost_bands[value.lower()]
+        match = _RANGE.match(value)
+        if not match or not any(match.groups()):
+            known = f"a band name ({', '.join(names)}) or " if names else ""
+            raise ConstraintError(f"routing_cost_band must be {known}a dollar range such as \"1-3\"; got {raw!r}"
+                                  + ("" if names else f". The '{catalog.compatibility}' catalog has no named bands"))
+        low, high = (float(g) if g is not None else None for g in match.groups())
+    elif isinstance(raw, dict):
+        if not raw or set(raw) - {"min", "max"}:
+            raise ConstraintError('routing_cost_band object takes "min" and/or "max"')
+        if any(not isinstance(v, (int, float)) or isinstance(v, bool) or v < 0 for v in raw.values()):
+            raise ConstraintError("routing_cost_band min and max must be non-negative numbers")
+        low, high = raw.get("min"), raw.get("max")
+    else:
+        raise ConstraintError("routing_cost_band must be a string or an object")
+    if low is not None and high is not None and low > high:
+        raise ConstraintError("routing_cost_band: min is above max")
+    return CostBand(low, high)
+
+
+def action_cost_groups(models: list[ModelEntry]) -> list[list[ModelEntry]]:
+    """Split models into up to four groups by output price, cheapest first: as many groups as allow at
+    least two models each without splitting models of equal price, and of those the most even split
+    (ties go to the split with later edges, so cheaper groups are the larger ones)."""
+    ordered = sorted(models, key=lambda m: (m.output_price if m.output_price is not None else math.inf, m.tier))
+    n = len(ordered)
+    starts = [i for i in range(2, n - 1) if ordered[i].output_price != ordered[i - 1].output_price]
+    for count in range(min(len(COST_LABELS), n // 2), 1, -1):
+        best = None
+        for edges in itertools.combinations(starts, count - 1):
+            bounds = (0, *edges, n)
+            sizes = [b - a for a, b in zip(bounds, bounds[1:], strict=False)]
+            if min(sizes) < 2:
+                continue
+            key = (sum((size - n / count) ** 2 for size in sizes), tuple(-e for e in edges))
+            if best is None or key < best[0]:
+                best = (key, bounds)
+        if best:
+            return [ordered[a:b] for a, b in zip(best[1], best[1][1:], strict=False)]
+    return [ordered]
+
+
+def cost_group(groups: list[list[ModelEntry]], label: str) -> list[ModelEntry]:
+    """low/medium/high/top -> a group; with fewer than four groups, neighbouring labels share one."""
+    return groups[round(COST_LABELS.index(label) * (len(groups) - 1) / (len(COST_LABELS) - 1))]
 
 
 def requirements_from_messages_body(body: dict[str, Any]) -> dict[str, str]:
@@ -113,14 +186,9 @@ def requirements_from_request(body: dict[str, Any]) -> dict[str, str]:
     needs: dict[str, str] = {}
     if body.get("tools"):
         needs["tools"] = "request has tools"
-    if body.get("parallel_tool_calls") is True and body.get("tools"):
-        needs["parallel_tools"] = "parallel_tool_calls=true"
     fmt = body.get("response_format")
-    if isinstance(fmt, dict):
-        if fmt.get("type") == "json_schema":
-            needs["structured_output"] = "response_format=json_schema"
-        elif fmt.get("type") == "json_object":
-            needs["json_object"] = "response_format=json_object"
+    if isinstance(fmt, dict) and fmt.get("type") == "json_schema":
+        needs["structured_output"] = "response_format=json_schema"
     if body.get("stream") is True:
         needs["streaming"] = "stream=true"
     for message in body.get("messages", []):
@@ -151,7 +219,7 @@ class Stage1Result:
 
 
 def select(catalog: Catalog, mode: str, constraints: Constraints, body: dict[str, Any], settings: Settings,
-           passthrough: bool = False) -> Stage1Result:
+           passthrough: bool = False, cost_band: CostBand | None = None) -> Stage1Result:
     remaining = list(catalog.models)
     requirements = requirements_from_messages_body(body) if passthrough else requirements_from_request(body)
     result = Stage1Result([], requirements=requirements)
@@ -175,7 +243,6 @@ def select(catalog: Catalog, mode: str, constraints: Constraints, body: dict[str
         if passthrough and m.api != "anthropic_messages":
             return "cannot take an Anthropic Messages body (claude_translation=false)"
         return None
-    unknown_ok = settings.unknown_capability == "eligible"
 
     def lifecycle(m: ModelEntry) -> str | None:
         if m.lifecycle in EXCLUDED_LIFECYCLES:
@@ -200,10 +267,10 @@ def select(catalog: Catalog, mode: str, constraints: Constraints, body: dict[str
 
     def capabilities(m: ModelEntry) -> str | None:
         for capability, why in needed.items():
-            value = m.capability(capability)
-            if value == "no" or (value == "unknown" and not unknown_ok):
-                return f"{capability} {value} (needed: {why})"
-        return None
+            if m.capability(capability) != "yes":
+                return f"{capability} no (needed: {why})"
+        missing = [a for a in constraints.actions if a not in m.capabilities.get("actions", [])]
+        return f"not tagged for {', '.join(missing)} (routing_constraints.actions)" if missing else None
 
     def location(m: ModelEntry) -> str | None:
         if constraints.inference_in_azure and m.infrastructure != "azure":
@@ -230,7 +297,7 @@ def select(catalog: Catalog, mode: str, constraints: Constraints, body: dict[str
 
     def size(m: ModelEntry) -> str | None:
         if m.context_tokens is None:
-            return None if unknown_ok else "context window unknown"
+            return "context window unknown"
         if needed_context > m.context_tokens:
             return f"needs ~{needed_context} tokens, context is {m.context_tokens}"
         if m.max_input_tokens and prompt_tokens > m.max_input_tokens:
@@ -244,7 +311,19 @@ def select(catalog: Catalog, mode: str, constraints: Constraints, body: dict[str
         if not step(name, keep):
             return result
 
-    banded = {m.name for m in catalog.price_band(mode, remaining)}
-    step("price_band", lambda m: None if m.name in banded else f"outside the {mode} price band")
+    if cost_band is not None and cost_band.name in COST_LABELS and constraints.actions:
+        group = {m.name for m in cost_group(action_cost_groups(remaining), cost_band.name)}
+        what = f"the {cost_band.name} cost group for {', '.join(constraints.actions)}"
+        step("price_band", lambda m: None if m.name in group else f"outside {what}")
+    elif cost_band is not None:
+        def in_band(m: ModelEntry) -> str | None:
+            if m.output_price is None:
+                return "no output price"
+            return None if cost_band.contains(m.output_price) else f"outside cost band {cost_band.label()}"
+        if not step("price_band", in_band):
+            return result
+    else:
+        banded = {m.name for m in catalog.price_band(mode, remaining)}
+        step("price_band", lambda m: None if m.name in banded else f"outside the {mode} price band")
     result.candidates = remaining
     return result

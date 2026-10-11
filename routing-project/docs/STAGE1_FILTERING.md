@@ -7,6 +7,8 @@ can narrow the choice in two ways:
 - by what it contains: tools, images, a JSON schema, streaming, or its length.
 
 Operators can also cap the choice for every request. Code: `decision-router/decision_router/stage1.py`.
+Worked examples, with the computed output of every step, including requests that leave no
+models: `STAGE1_EXAMPLES.md`.
 
 ## Request fields
 
@@ -34,14 +36,16 @@ without them is a plain Model Router request.
 
 | Field | Effect |
 |---|---|
-| `routing_mode` | `cost`, `balanced` or `quality`. Picks a price band of what is left after the other steps. |
+| `routing_mode` | `cost`, `balanced` or `quality`. Picks a price band of what is left after the other steps, and the instructions Decision-1 receives. |
+| `routing_cost_band` | Replaces the mode's price band. A label in the `new` catalog (`low`, `medium`, `high`, `top`) or a dollar range on either catalog: `"1-3"`, `"$10-$25"`, `"30-"` (no upper limit) or `{"min": 1, "max": 3}`. With `routing_constraints.actions`, a label means an even price group of that action's models instead of a dollar range. See [Cost bands](#cost-bands). |
 | `compatibility` | `old` (Model Router pool) or `new` (latest models). See `MODEL_CATALOGS.md`. |
 | `claude_translation` | `true` (default): the body is chat completions, and Claude is called through the translation layer. `false`: the body is an Anthropic Messages request, only Claude models are candidates, and the chosen one receives the body unchanged (only `model` is set) and its native response is returned. See below. |
 | `routing_pin` | `true`: keep the conversation on the model that answered its first turn; stage 1 still runs on every turn. See `AGENT_SERVICE.md`. |
 | `routing_constraints.models` | Only these models: the developer's chosen subset. Names must exist in the selected catalog. |
 | `routing_constraints.exclude_models` | Never these models. |
 | `routing_constraints.providers` | Only models from these providers (case-insensitive): `OpenAI`, `Anthropic`, `xAI`, `DeepSeek`, `Meta`, `Fireworks`, `Microsoft`. |
-| `routing_constraints.capabilities` | Models must support each one: `tools`, `parallel_tools`, `structured_output`, `json_object`, `streaming`, `reasoning`, `image_input`, `computer_use`. |
+| `routing_constraints.capabilities` | Models must support each one: `tools`, `structured_output`, `streaming`, `reasoning`, `image_input`. |
+| `routing_constraints.actions` | Models must be tagged with every listed action: `code`, `evaluate`, `extract`, `orchestrate`, `plan`, `reason`, `summarize`, `translate`, `write`. `new` catalog only. Changes what a `routing_cost_band` label means (see [Cost bands](#cost-bands)). |
 | `routing_constraints.region` | The model must be deployable in this Azure region (for example `swedencentral`; `"Sweden Central"` is accepted). Fireworks models deploy globally and pass any region. |
 | `routing_constraints.deployment_type` | `global_standard`, `data_zone_standard` or `standard`. With `region`, the model must be available in that region for that deployment type. Fireworks models offer `global_standard` only. |
 | `routing_constraints.inference_in_azure` | Excludes models whose inference runs outside Azure: Anthropic-hosted Claude (version 1, which includes every Claude model in `old`) and Fireworks models. |
@@ -51,14 +55,72 @@ without them is a plain Model Router request.
 Unknown keys, unknown model names and unknown capability names return 400
 `invalid_routing_constraints`, so a typo never silently widens the choice.
 
+## Cost bands
+
+`routing_cost_band` selects models by USD output price per million tokens, from
+`config/model_pricing.json`, instead of by thirds. Both ends of a range are inclusive, so a model priced exactly on an
+edge ($1 or $25) is in both bands. The `new` catalog defines four named bands (`cost_bands` in `config/catalog_spec.json`):
+
+| Band | Output price | Models in `new` |
+|---|---|---|
+| `low` | $0–$1 | Phi-4-mini-instruct, FW-GLM-5.3-Flash, claude-haiku-5-5, gpt-5.4-nano, Phi-4, gpt-oss-120b, Phi-4-reasoning, Llama-4-Maverick, grok-4-1-fast-reasoning, DeepSeek-V4-Flash |
+| `medium` | $1–$3 | gpt-5.4-mini, gpt-6-luna, FW-GLM-5.3, FW-Kimi-K3 |
+| `high` | $10–$25 | claude-sonnet-5-5, gpt-6.1-sol, gpt-5.5, grok-4.7, claude-opus-5-5 |
+| `top` | $25–$60 | gpt-6-astra |
+
+The ranges leave one gap, $3–$10. DeepSeek-V4-Pro ($4), MAI-Thinking-1 ($7.50) and gpt-5.6-terra ($8)
+are in no named band; they are reached with `balanced` mode or a dollar range such as `"3-10"`.
+
+- The band is applied after the other steps, like the routing mode's band. Unlike a mode, a
+  band can leave no models, for example `top` with `providers: ["Anthropic"]`, which returns 422.
+- `routing_mode` still applies: it sets the instructions Decision-1 receives inside the band.
+- The `old` catalog has no named bands and keeps the routing modes' thirds. A band name sent
+  with `old` returns 400 `invalid_routing_cost_band`; a dollar range works on both catalogs.
+- Callers that can't add the field use the profiles `decision-router-low`, `-medium`, `-high`
+  and `-top` (`AGENT_SERVICE.md`).
+- `/v1/route` and the decision log report the band as `cost_band`.
+
+### Labels with an action: even price groups
+
+When the request also has `routing_constraints.actions`, the labels stop being dollar ranges. Stage 1
+takes the models left after every earlier step (so already filtered to the action, tools, region and
+so on), sorts them by output price, and splits them into groups:
+
+1. As many groups as possible, up to four, with at least two models in each.
+2. Models with the same output price are always in the same group.
+3. Of the splits that satisfy both, the one with the most even group sizes.
+
+With four groups, `low`, `medium`, `high` and `top` are the cheapest to the most expensive group.
+With fewer models, neighbouring labels share a group: with three groups `medium` and `high` share
+the middle one, with two `low` = `medium` and `high` = `top`, and with one (two or three models)
+every label returns all of them. So a label with an action never leaves fewer than two models when
+two or more remain, and never leaves none.
+
+The groups for each action in `new`, with no other filters (output price per million tokens):
+
+| Action | low | medium | high | top |
+|---|---|---|---|---|
+| code | claude-haiku-5-5, gpt-oss-120b, DeepSeek-V4-Flash ($0.50–$0.80) | FW-GLM-5.3, FW-Kimi-K3, gpt-5.4-mini, DeepSeek-V4-Pro ($2.50–$4) | MAI-Thinking-1, gpt-5.6-terra, claude-sonnet-5-5 ($7.50–$10) | gpt-5.5, grok-4.7, claude-opus-5-5, gpt-6-astra ($15–$50) |
+| evaluate | gpt-oss-120b, DeepSeek-V4-Pro, gpt-5.6-terra ($0.60–$8) | claude-sonnet-5-5, gpt-6.1-sol ($10) | = medium | gpt-5.5, claude-opus-5-5 ($15–$20) |
+| extract | Phi-4-mini-instruct, claude-haiku-5-5 ($0.30–$0.50) | = low | gpt-5.4-nano, gpt-5.4-mini ($0.80–$3) | = high |
+| orchestrate | FW-GLM-5.3-Flash, claude-haiku-5-5, grok-4-1-fast-reasoning ($0.40–$0.50) | FW-GLM-5.3, FW-Kimi-K3 ($2.50) | claude-sonnet-5-5, gpt-6.1-sol ($10) | gpt-5.5, grok-4.7, gpt-6-astra ($15–$50) |
+| plan | FW-GLM-5.3, DeepSeek-V4-Pro ($2.50–$4) | MAI-Thinking-1, gpt-5.6-terra ($7.50–$8) | gpt-6.1-sol, gpt-5.5 ($10–$15) | claude-opus-5-5, gpt-6-astra ($20–$50) |
+| reason | claude-haiku-5-5, Phi-4, grok-4-1-fast-reasoning, gpt-oss-120b, Phi-4-reasoning ($0.50–$0.60) | DeepSeek-V4-Flash, gpt-6-luna, FW-GLM-5.3, FW-Kimi-K3 ($0.80–$2.50) | gpt-5.4-mini, DeepSeek-V4-Pro, MAI-Thinking-1, gpt-5.6-terra ($3–$8) | claude-sonnet-5-5, gpt-6.1-sol, claude-opus-5-5, gpt-6-astra ($10–$50) |
+| summarize | Phi-4-mini-instruct, FW-GLM-5.3-Flash ($0.30–$0.40) | = low | gpt-5.4-nano, DeepSeek-V4-Flash, gpt-5.4-mini ($0.80–$3) | = high |
+| translate | Llama-4-Maverick, gpt-6-luna ($0.85–$2.50) | = low | = low | = low |
+| write | Phi-4-mini-instruct, FW-GLM-5.3-Flash ($0.30–$0.40) | Phi-4, gpt-5.4-nano ($0.50–$0.80) | Llama-4-Maverick, gpt-6-luna ($0.85–$2.50) | grok-4.7, claude-opus-5-5 ($15–$20) |
+
+Because the groups are formed after the other steps, the same label can return different models
+for different requests: with `tools` in the request, gpt-5.6-terra leaves the code models and the
+13 that remain are split again. A dollar range with `actions` is still a dollar range, and a label
+without `actions` is still the dollar band above. Several actions mean a model must have all of them.
+
 ## Requirements read from the request
 
 | If the request has... | ...the model must have |
 |---|---|
 | `tools` | `tools: yes` |
-| `parallel_tool_calls: true` (with tools) | `parallel_tools: yes` |
 | `response_format: {"type": "json_schema"}` | `structured_output: yes` (Claude qualifies: the adapter sends the schema as `output_config.format`) |
-| `response_format: {"type": "json_object"}` | `json_object: yes` (Claude does not: JSON mode has no Messages API equivalent) |
 | `stream: true` | `streaming: yes` |
 | an `image_url` part in `messages` | `image_input: yes` |
 | estimated prompt tokens + `max_completion_tokens` | a big enough context window, an input limit at least as large as the prompt (GPT-5.x models accept 272K of their 400K context, or 922K of 1.05M, as input), and an output limit at least as large as requested |
@@ -74,10 +136,10 @@ cut close to a limit.
 | 1. `lifecycle` | it is deprecated, retired or legacy (always), or preview and previews are not allowed |
 | 2. `allowlist` | `ROUTER_MODEL_ALLOWLIST` is set and the model is not on it |
 | 3. `selection` | it is outside `models`, inside `exclude_models`, or not from a listed provider |
-| 4. `capabilities` | a requested or implied capability is `no`, or `unknown` while `ROUTER_UNKNOWN_CAPABILITY=ineligible` |
+| 4. `capabilities` | a requested or implied capability is `no`, or the model is not tagged with every action in `actions` |
 | 5. `location` | inference runs outside Azure and `inference_in_azure` is set; or the region / deployment type is not available or not published |
 | 6. `size` | the estimated tokens exceed the context window, the prompt exceeds the input limit, or the requested output exceeds the output limit |
-| 7. `price_band` | it is outside the routing mode's band of what is left: `cost` = cheapest third, `balanced` = all, `quality` = most expensive third (at least one model always stays) |
+| 7. `price_band` | with a `routing_cost_band` label and `actions`: it is outside that label's price group of what is left. With a label alone or a dollar range: its output price is outside the range (this can leave no models). Otherwise: it is outside the routing mode's band of what is left: `cost` = cheapest third, `balanced` = all, `quality` = most expensive third (at least one model always stays) |
 
 What happens with the result:
 
@@ -128,15 +190,17 @@ For callers that already speak the Anthropic Messages API:
 
 If the constraints leave no Claude model, the request gets the usual 422 naming the step.
 
-## Unknown capabilities
+## Capability values
 
-The catalogs record `unknown` where Microsoft's documentation does not say. The default,
-`ROUTER_UNKNOWN_CAPABILITY=ineligible`, treats unknown as unsupported: a request that needs
-tools never goes to a model that might not support them. The cost is that some capable
-models are skipped. For example, several Fireworks models have `parallel_tools: unknown`.
-Setting `eligible` reverses the trade-off. The decision log shows each removal caused by an
-unknown value (`"reason": "parallel_tools unknown (...)"`), so you can tell which catalog
-entries are worth confirming.
+Each capability is `yes` or `no`. `no` covers both "a source says it is unsupported" and "no
+source confirms it", so a request that needs a capability only reaches models a source
+confirms. The cost is that a model which in fact supports something, but has no source yet, is
+skipped. For example, seven models have `streaming: no` for lack of a source.
+
+Not filtered on: `parallel_tool_calls` and `response_format: {"type": "json_object"}`. Requests
+with them can reach any model. A model without JSON mode may answer in free text; Claude always
+does, because the translation layer drops `json_object`. Send a JSON schema when the answer
+must be JSON.
 
 Leaving out a filter keeps its models in play. Phi models have no tool calling, so they drop
 out of any request with `tools`, but remain candidates for plain text requests.

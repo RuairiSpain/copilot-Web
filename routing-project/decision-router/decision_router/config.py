@@ -11,11 +11,15 @@ ROUTING_MODES = ("cost", "balanced", "quality")
 COMPATIBILITIES = ("old", "new")
 # `model` values that select a routing profile. A Foundry Agent Service model connection cannot add
 # routing_mode or other extension fields, so each agent picks a profile by the model name it calls.
-PROFILE_FIELDS = ("routing_mode", "compatibility", "routing_constraints", "claude_translation", "routing_pin")
+PROFILE_FIELDS = ("routing_mode", "compatibility", "routing_constraints", "claude_translation", "routing_pin",
+                  "routing_cost_band")
 DEFAULT_PROFILES: dict[str, dict[str, Any]] = {
     "decision-router-cost": {"routing_mode": "cost"},
     "decision-router-balanced": {"routing_mode": "balanced"},
     "decision-router-quality": {"routing_mode": "quality"},
+    # The new catalog's named cost bands (catalog_spec.json), for callers that can't send routing_cost_band.
+    **{f"decision-router-{band}": {"compatibility": "new", "routing_cost_band": band}
+       for band in ("low", "medium", "high", "top")},
     # Coding agents: models strong at multi-step tool use, conversation pinned to one model.
     # Balanced, so Decision-1 weighs the whole list instead of only its most expensive third.
     "decision-router-coding": {
@@ -23,8 +27,8 @@ DEFAULT_PROFILES: dict[str, dict[str, Any]] = {
         "compatibility": "new",
         "routing_pin": True,
         "routing_constraints": {
-            "capabilities": ["tools", "parallel_tools"],
-            "models": ["gpt-5.4-mini", "gpt-5.6-terra", "gpt-5.5", "gpt-6-astra", "claude-haiku-5-5",
+            "capabilities": ["tools"],
+            "models": ["gpt-5.4-mini", "gpt-5.5", "gpt-6-astra", "claude-haiku-5-5",
                        "claude-sonnet-5-5", "claude-opus-5-5", "DeepSeek-V4-Pro", "FW-GLM-5.3"],
         },
     },
@@ -75,8 +79,6 @@ class Settings:
     # Operator allow-list across both catalogs; empty means every catalog model is allowed.
     model_allowlist: tuple[str, ...] = ()
     allow_preview: bool = True
-    # How stage 1 treats a capability the catalog marks "unknown": "ineligible" or "eligible".
-    unknown_capability: str = "ineligible"
     chars_per_token: float = 4.0
     pricing_path: Path = PACKAGE_ROOT / "config/model_pricing.json"
     deployment_overrides: dict[str, str] = field(default_factory=dict)
@@ -122,7 +124,6 @@ class Settings:
             compatibility=os.getenv("ROUTER_COMPATIBILITY", "old"),
             model_allowlist=_list("ROUTER_MODEL_ALLOWLIST"),
             allow_preview=_bool("ROUTER_ALLOW_PREVIEW", True),
-            unknown_capability=os.getenv("ROUTER_UNKNOWN_CAPABILITY", "ineligible"),
             pricing_path=Path(os.getenv("ROUTER_PRICING_PATH", str(PACKAGE_ROOT / "config/model_pricing.json"))),
             deployment_overrides={str(k): str(v) for k, v in _json_object("ROUTER_DEPLOYMENT_MAP").items()},
             default_mode=os.getenv("ROUTER_DEFAULT_MODE") or None,
@@ -152,8 +153,6 @@ class Settings:
     def validate(self) -> None:
         if self.compatibility not in COMPATIBILITIES:
             raise ValueError(f"ROUTER_COMPATIBILITY must be one of {COMPATIBILITIES}")
-        if self.unknown_capability not in ("ineligible", "eligible"):
-            raise ValueError("ROUTER_UNKNOWN_CAPABILITY must be 'ineligible' or 'eligible'")
         if self.anthropic_default_max_tokens < 1:
             raise ValueError("ROUTER_ANTHROPIC_DEFAULT_MAX_TOKENS must be positive")
         if self.default_mode is not None and self.default_mode not in ROUTING_MODES:

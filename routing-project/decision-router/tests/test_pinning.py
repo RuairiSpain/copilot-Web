@@ -136,7 +136,7 @@ def test_builtin_coding_profile(make_pipeline, settings, fake):
     pipe = make_pipeline()
     prepared = pipe.prepare({"model": "decision-router-coding", "messages": TURN1, "tools": TOOLS})
     assert prepared.pin and prepared.mode == "balanced" and prepared.catalog.compatibility == "new"
-    assert {"tools", "parallel_tools"} <= set(prepared.constraints.capabilities)
+    assert prepared.constraints.capabilities == ("tools",)
     fake.decision_responses.append(ranked(["claude-sonnet-5-5"]))
     with client(make_pipeline, settings) as c:
         body = {"model": "decision-router-coding", "messages": TURN1, "tools": TOOLS, "parallel_tool_calls": True}

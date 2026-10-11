@@ -43,7 +43,10 @@
     "anthropic_adapter": "Called through the router's Messages API adapter: tools, parallel tools and streaming are translated, and response_format json_schema becomes output_config.format (Claude structured outputs). response_format json_object has no Messages API equivalent and is not translated.",
     "fireworks_global": "Fireworks models deploy as Global Standard and are available from any Foundry region (confirmed by the project owner); inference runs on Fireworks infrastructure.",
     "claude_versions": "Foundry numbers Claude versions by hosting: version 1 runs on Anthropic infrastructure, version 2 on Azure. `old` uses the versions Model Router lists (1, or the dated 20250929/20251001 snapshots, treated as version 1); `new` uses the Azure-hosted version 2.",
-    "xai_variants": "xAI publishes grok-4-1-fast as two deployments, -reasoning and -non-reasoning (retirement schedule); this one is the reasoning variant."
+    "xai_variants": "xAI publishes grok-4-1-fast as two deployments, -reasoning and -non-reasoning (retirement schedule); this one is the reasoning variant.",
+    "chat_tools_reasoning": "Azure OpenAI reasoning models page (articles/foundry/openai/how-to/reasoning.md, 'Tool calling with reasoning models'): gpt-5.6 models can't combine reasoning with tools on Chat Completions. A request with `tools` fails unless reasoning_effort is 'none', and the default is 'medium'. This router calls Chat Completions, so tools are recorded as unavailable.",
+    "foundry_streaming_pages": "Foundry model pages with streaming instructions and examples: MAI-Thinking-1 (foundry-models/includes/use-foundry-models-mai-thinking.md, 'Stream responses'), grok-4.7 (foundry-models/includes/use-foundry-models-grok.md, 'Stream responses') and DeepSeek-V4-Pro (foundry-models/how-to/use-chat-reasoning.md, 'Stream a completion').",
+    "actions_write": "`write` added for models whose Foundry page names document or report writing: claude-opus-5-5 ('Performs knowledge work to produce documents that require limited editing', concepts-claude-models-content.md) and grok-4.7 ('generate reports, summarize large volumes of content', use-foundry-models-grok.md). No source found rates any model's hallucination rate."
   },
   "catalogs": {
     "old": {
@@ -122,8 +125,6 @@
               "streaming": "yes",
               "reasoning": "unknown",
               "structured_output": "unknown",
-              "json_object": "unknown",
-              "parallel_tools": "unknown",
               "image_input": "yes"
             }
           },
@@ -185,7 +186,13 @@
           "version": "2026-07-09",
           "api": "openai_chat",
           "docs": "openai",
-          "description": "Smallest GPT-5.6 model: fast and low-cost with a 1M-token context, multilingual support, reasoning, tools, structured outputs, image input and computer use. Good for high-volume work over long inputs; not the best choice for the most difficult reasoning or code."
+          "description": "Smallest GPT-5.6 model: fast and low-cost with a 1M-token context, multilingual support, reasoning, structured outputs and image input. Good for high-volume work over long inputs; not the best choice for the most difficult reasoning or code. Its tool calling works through Chat Completions only with reasoning turned off, so requests with tools are not sent to it.",
+          "overrides": {
+            "source": "chat_tools_reasoning",
+            "capabilities": {
+              "tools": "no"
+            }
+          }
         },
         {
           "name": "FW-Kimi-K3",
@@ -213,8 +220,6 @@
               "reasoning": "yes",
               "streaming": "unknown",
               "structured_output": "unknown",
-              "json_object": "unknown",
-              "parallel_tools": "unknown",
               "image_input": "yes"
             }
           },
@@ -245,8 +250,6 @@
               "reasoning": "yes",
               "streaming": "yes",
               "structured_output": "yes",
-              "json_object": "unknown",
-              "parallel_tools": "unknown",
               "image_input": "no"
             }
           },
@@ -283,7 +286,13 @@
           "version": "2026-07-09",
           "api": "openai_chat",
           "docs": "openai",
-          "description": "Mid-size GPT-5.6 reasoning model that balances quality and cost: multi-step planning, tool orchestration, coding and analysis over a 1M-token context, with image input and computer use. A strong default for moderately hard tasks."
+          "description": "Mid-size GPT-5.6 reasoning model that balances quality and cost: multi-step planning, coding and analysis over a 1M-token context, with image input and structured outputs. Its tool calling works through Chat Completions only with reasoning turned off, so requests with tools are not sent to it.",
+          "overrides": {
+            "source": "chat_tools_reasoning",
+            "capabilities": {
+              "tools": "no"
+            }
+          }
         },
         {
           "name": "gpt-5.5",
@@ -332,7 +341,13 @@
           "version": "2026-07-09",
           "api": "openai_chat",
           "docs": "openai",
-          "description": "Largest GPT-5.6 reasoning model for complex, compute-intensive work: hard maths, science, code and multi-step analysis over a 1M-token context, with tools, image input and computer use."
+          "description": "Largest GPT-5.6 reasoning model for complex, compute-intensive work: hard maths, science, code and multi-step analysis over a 1M-token context, with image input and structured outputs. Its tool calling works through Chat Completions only with reasoning turned off, so requests with tools are not sent to it.",
+          "overrides": {
+            "source": "chat_tools_reasoning",
+            "capabilities": {
+              "tools": "no"
+            }
+          }
         },
         {
           "name": "gpt-6-astra",
@@ -399,6 +414,28 @@
     },
     "new": {
       "_note": "Latest Azure-available model per provider and role, plus MAI-Thinking-1 and three Phi-4 models. Models marked in_model_router=false cannot be chosen by Model Router, so use the old catalog for comparisons.",
+      "cost_bands": {
+        "_note": "Named cost bands for routing_cost_band, on USD output price per million tokens. Both ends are inclusive, so a model at exactly $1 or $25 is in two bands. The ranges leave one gap ($3-$10): a model priced in it is in no named band and is reached with balanced mode or a dollar range.",
+        "basis": "output_per_million",
+        "bands": {
+          "low": {
+            "min": 0,
+            "max": 1
+          },
+          "medium": {
+            "min": 1,
+            "max": 3
+          },
+          "high": {
+            "min": 10,
+            "max": 25
+          },
+          "top": {
+            "min": 25,
+            "max": 60
+          }
+        }
+      },
       "models": [
         {
           "name": "Phi-4-mini-instruct",
@@ -406,7 +443,15 @@
           "version": "1",
           "api": "openai_chat",
           "docs": "partners",
-          "description": "Small Microsoft Phi model for simple instructions, short answers, classification and lightweight extraction in 23 languages. Output is limited to 4,096 tokens; no tool calling or image input; weak on multi-step reasoning."
+          "description": "Small Microsoft Phi model for simple instructions, short answers, classification and lightweight extraction in 23 languages. Output is limited to 4,096 tokens; no tool calling or image input; weak on multi-step reasoning.",
+          "actions": [
+            "write",
+            "extract",
+            "summarize"
+          ],
+          "execution": [
+            "high volume"
+          ]
         },
         {
           "name": "gpt-5.4-nano",
@@ -414,7 +459,15 @@
           "version": "2026-03-17",
           "api": "openai_chat",
           "docs": "openai",
-          "description": "Smallest, fastest GPT-5.4 model. Good for short answers, classification, extraction, rewriting and simple tool calls at very high volume; supports reasoning, structured outputs and image input. Gives shallow answers on multi-step reasoning, hard code or long documents: choose a larger model for those."
+          "description": "Smallest, fastest GPT-5.4 model. Good for short answers, classification, extraction, rewriting and simple tool calls at very high volume; supports reasoning, structured outputs and image input. Gives shallow answers on multi-step reasoning, hard code or long documents: choose a larger model for those.",
+          "actions": [
+            "extract",
+            "write",
+            "summarize"
+          ],
+          "execution": [
+            "high volume"
+          ]
         },
         {
           "name": "Phi-4",
@@ -422,7 +475,14 @@
           "version": "7",
           "api": "openai_chat",
           "docs": "partners",
-          "description": "Microsoft Phi-4 small model for short reasoning, maths and general questions in many languages. 16K context with no tool calling or image input, so use it only for short prompts."
+          "description": "Microsoft Phi-4 small model for short reasoning, maths and general questions in many languages. 16K context with no tool calling or image input, so use it only for short prompts.",
+          "actions": [
+            "reason",
+            "write"
+          ],
+          "execution": [
+            "high volume"
+          ]
         },
         {
           "name": "FW-GLM-5.3-Flash",
@@ -450,12 +510,18 @@
               "streaming": "yes",
               "reasoning": "unknown",
               "structured_output": "unknown",
-              "json_object": "unknown",
-              "parallel_tools": "unknown",
               "image_input": "yes"
             }
           },
-          "region_scope": "global"
+          "region_scope": "global",
+          "actions": [
+            "write",
+            "summarize",
+            "orchestrate"
+          ],
+          "execution": [
+            "high volume"
+          ]
         },
         {
           "name": "gpt-oss-120b",
@@ -463,7 +529,15 @@
           "version": "1",
           "api": "openai_chat",
           "docs": "openai",
-          "description": "OpenAI open-weight reasoning model, text only. Good value for maths, logic, code and structured analysis, with function calling and structured outputs. 131K context; less broad knowledge and weaker long-form writing than the GPT-5.x models."
+          "description": "OpenAI open-weight reasoning model, text only. Good value for maths, logic, code and structured analysis, with function calling and structured outputs. 131K context; less broad knowledge and weaker long-form writing than the GPT-5.x models.",
+          "actions": [
+            "reason",
+            "code",
+            "evaluate"
+          ],
+          "execution": [
+            "deep thinking"
+          ]
         },
         {
           "name": "Phi-4-reasoning",
@@ -471,7 +545,13 @@
           "version": "1",
           "api": "openai_chat",
           "docs": "partners",
-          "description": "Phi-4 tuned for step-by-step maths, science and logic problems, returning its reasoning. English only, 32K context, no tool calling or image input."
+          "description": "Phi-4 tuned for step-by-step maths, science and logic problems, returning its reasoning. English only, 32K context, no tool calling or image input.",
+          "actions": [
+            "reason"
+          ],
+          "execution": [
+            "deep thinking"
+          ]
         },
         {
           "name": "DeepSeek-V4-Flash",
@@ -479,7 +559,15 @@
           "version": "2026-04-23",
           "api": "openai_chat",
           "docs": "others",
-          "description": "Fast DeepSeek V4 reasoning model with a 1M-token context and up to 384K output tokens: low-cost choice for code, maths and long-document work, with tool calling and JSON mode. Text only; English and Chinese."
+          "description": "Fast DeepSeek V4 reasoning model with a 1M-token context and up to 384K output tokens: low-cost choice for code, maths and long-document work, with tool calling and JSON mode. Text only; English and Chinese.",
+          "actions": [
+            "reason",
+            "code",
+            "summarize"
+          ],
+          "execution": [
+            "high volume"
+          ]
         },
         {
           "name": "grok-4-1-fast-reasoning",
@@ -497,7 +585,14 @@
             "capabilities": {
               "reasoning": "yes"
             }
-          }
+          },
+          "actions": [
+            "reason",
+            "orchestrate"
+          ],
+          "execution": [
+            "high volume"
+          ]
         },
         {
           "name": "Llama-4-Maverick-17B-128E-Instruct-FP8",
@@ -505,7 +600,14 @@
           "version": "1",
           "api": "openai_chat",
           "docs": "others",
-          "description": "Meta's multilingual, multimodal mixture-of-experts model (12 languages). Good for general chat, writing, translation and image understanding at low cost. No tool calling or structured output; weaker on hard reasoning and complex code than reasoning models."
+          "description": "Meta's multilingual, multimodal mixture-of-experts model (12 languages). Good for general chat, writing, translation and image understanding at low cost. No tool calling or structured output; weaker on hard reasoning and complex code than reasoning models.",
+          "actions": [
+            "write",
+            "translate"
+          ],
+          "execution": [
+            "high volume"
+          ]
         },
         {
           "name": "gpt-5.4-mini",
@@ -513,7 +615,16 @@
           "version": "2026-03-17",
           "api": "openai_chat",
           "docs": "openai",
-          "description": "Compact GPT-5.4 reasoning model and a good default for everyday work: summaries, extraction, routine code, data questions and tool calls, with structured outputs, image input and computer use. Handles moderate multi-step reasoning; use a frontier model for the hardest problems."
+          "description": "Compact GPT-5.4 reasoning model and a good default for everyday work: summaries, extraction, routine code, data questions and tool calls, with structured outputs, image input and computer use. Handles moderate multi-step reasoning; use a frontier model for the hardest problems.",
+          "actions": [
+            "summarize",
+            "extract",
+            "code",
+            "reason"
+          ],
+          "execution": [
+            "high volume"
+          ]
         },
         {
           "name": "gpt-6-luna",
@@ -522,7 +633,15 @@
           "api": "openai_chat",
           "docs": "openai",
           "lifecycle": "ga",
-          "description": "Fast, cost-efficient GPT-6 model for low-latency, multilingual and large-context work (1M tokens), with reasoning-effort controls, tools, structured outputs, image input and computer use. Prefer it to larger GPT-6 models when speed and cost matter more than peak quality."
+          "description": "Fast, cost-efficient GPT-6 model for low-latency, multilingual and large-context work (1M tokens), with reasoning-effort controls, tools, structured outputs, image input and computer use. Prefer it to larger GPT-6 models when speed and cost matter more than peak quality.",
+          "actions": [
+            "reason",
+            "translate",
+            "write"
+          ],
+          "execution": [
+            "high volume"
+          ]
         },
         {
           "name": "FW-Kimi-K3",
@@ -550,12 +669,18 @@
               "reasoning": "yes",
               "streaming": "unknown",
               "structured_output": "unknown",
-              "json_object": "unknown",
-              "parallel_tools": "unknown",
               "image_input": "yes"
             }
           },
-          "region_scope": "global"
+          "region_scope": "global",
+          "actions": [
+            "code",
+            "orchestrate",
+            "reason"
+          ],
+          "execution": [
+            "deep thinking"
+          ]
         },
         {
           "name": "FW-GLM-5.3",
@@ -582,12 +707,19 @@
               "reasoning": "yes",
               "streaming": "yes",
               "structured_output": "yes",
-              "json_object": "unknown",
-              "parallel_tools": "unknown",
               "image_input": "no"
             }
           },
-          "region_scope": "global"
+          "region_scope": "global",
+          "actions": [
+            "code",
+            "orchestrate",
+            "reason",
+            "plan"
+          ],
+          "execution": [
+            "deep thinking"
+          ]
         },
         {
           "name": "DeepSeek-V4-Pro",
@@ -595,7 +727,22 @@
           "version": "2026-04-23",
           "api": "openai_chat",
           "docs": "others",
-          "description": "Large DeepSeek V4 reasoning model for hard code, maths and long-document analysis (1M-token context, up to 384K output tokens), with tool calling and JSON mode. Text only; English and Chinese."
+          "description": "Large DeepSeek V4 reasoning model for hard code, maths and long-document analysis (1M-token context, up to 384K output tokens), with tool calling and JSON mode. Text only; English and Chinese.",
+          "overrides": {
+            "source": "foundry_streaming_pages",
+            "capabilities": {
+              "streaming": "yes"
+            }
+          },
+          "actions": [
+            "reason",
+            "code",
+            "evaluate",
+            "plan"
+          ],
+          "execution": [
+            "deep thinking"
+          ]
         },
         {
           "name": "claude-haiku-5-5",
@@ -603,7 +750,16 @@
           "version": "2",
           "api": "anthropic_messages",
           "docs": "claude",
-          "description": "Fastest, lowest-cost current Claude for coding, agents, sub-agent work, classification and extraction over large contexts (1M tokens); adaptive thinking, high-resolution image input and computer use. Prompts over 100,000 tokens are billed at a higher rate."
+          "description": "Fastest, lowest-cost current Claude for coding, agents, sub-agent work, classification and extraction over large contexts (1M tokens); adaptive thinking, high-resolution image input and computer use. Prompts over 100,000 tokens are billed at a higher rate.",
+          "actions": [
+            "code",
+            "orchestrate",
+            "extract",
+            "reason"
+          ],
+          "execution": [
+            "high volume"
+          ]
         },
         {
           "name": "MAI-Thinking-1",
@@ -611,7 +767,21 @@
           "version": "2026-06-01",
           "api": "mai_chat",
           "docs": "others",
-          "description": "Microsoft reasoning model (preview) for multi-step maths, coding and enterprise reasoning, with tool calling. Text only, 256K context, up to 64K output tokens."
+          "description": "Microsoft reasoning model (preview) for multi-step maths, coding and enterprise reasoning, with tool calling. Text only, 256K context, up to 64K output tokens.",
+          "overrides": {
+            "source": "foundry_streaming_pages",
+            "capabilities": {
+              "streaming": "yes"
+            }
+          },
+          "actions": [
+            "reason",
+            "code",
+            "plan"
+          ],
+          "execution": [
+            "deep thinking"
+          ]
         },
         {
           "name": "gpt-5.6-terra",
@@ -619,7 +789,22 @@
           "version": "2026-07-09",
           "api": "openai_chat",
           "docs": "openai",
-          "description": "Mid-size GPT-5.6 reasoning model that balances quality and cost: multi-step planning, tool orchestration, coding and analysis over a 1M-token context, with image input and computer use. A strong default for moderately hard tasks."
+          "description": "Mid-size GPT-5.6 reasoning model that balances quality and cost: multi-step planning, coding and analysis over a 1M-token context, with image input and structured outputs. Its tool calling works through Chat Completions only with reasoning turned off, so requests with tools are not sent to it.",
+          "overrides": {
+            "source": "chat_tools_reasoning",
+            "capabilities": {
+              "tools": "no"
+            }
+          },
+          "actions": [
+            "plan",
+            "code",
+            "reason",
+            "evaluate"
+          ],
+          "execution": [
+            "deep thinking"
+          ]
         },
         {
           "name": "gpt-5.5",
@@ -627,7 +812,16 @@
           "version": "2026-04-24",
           "api": "openai_chat",
           "docs": "openai",
-          "description": "OpenAI agentic model for complex multi-step coding, research and data analysis, including synthesis across many documents (1M-token context). Strong tool use, structured outputs and computer use."
+          "description": "OpenAI agentic model for complex multi-step coding, research and data analysis, including synthesis across many documents (1M-token context). Strong tool use, structured outputs and computer use.",
+          "actions": [
+            "code",
+            "plan",
+            "evaluate",
+            "orchestrate"
+          ],
+          "execution": [
+            "deep thinking"
+          ]
         },
         {
           "name": "grok-4.7",
@@ -636,7 +830,21 @@
           "api": "openai_chat",
           "docs": "others",
           "lifecycle": "ga",
-          "description": "Latest xAI model for coding, research and agentic work with tool calling and JSON mode; text and image input, 500K tokens shared between input and output. English-focused."
+          "description": "Latest xAI model for coding, research and agentic work with tool calling and JSON mode; text and image input, 500K tokens shared between input and output. English-focused.",
+          "overrides": {
+            "source": "foundry_streaming_pages",
+            "capabilities": {
+              "streaming": "yes"
+            }
+          },
+          "actions": [
+            "code",
+            "orchestrate",
+            "write"
+          ],
+          "execution": [
+            "deep thinking"
+          ]
         },
         {
           "name": "claude-sonnet-5-5",
@@ -644,7 +852,16 @@
           "version": "2",
           "api": "anthropic_messages",
           "docs": "claude",
-          "description": "Latest Claude Sonnet, balancing speed and capability: coding, long-running agents, financial analysis, professional writing and cybersecurity, reasoning over whole codebases (1M-token context); adaptive thinking, high-resolution image input and computer use."
+          "description": "Latest Claude Sonnet, balancing speed and capability: coding, long-running agents, financial analysis, professional writing and cybersecurity, reasoning over whole codebases (1M-token context); adaptive thinking, high-resolution image input and computer use.",
+          "actions": [
+            "code",
+            "orchestrate",
+            "evaluate",
+            "reason"
+          ],
+          "execution": [
+            "deep thinking"
+          ]
         },
         {
           "name": "gpt-6-astra",
@@ -653,7 +870,16 @@
           "api": "openai_chat",
           "docs": "openai",
           "lifecycle": "ga",
-          "description": "Frontier GPT-6 reasoning model for the most complex problem-solving, coding, agentic workflows and enterprise knowledge work, with reasoning-effort and verbosity controls, tools, structured outputs, image input and computer use. Use it when answer quality matters most."
+          "description": "Frontier GPT-6 reasoning model for the most complex problem-solving, coding, agentic workflows and enterprise knowledge work, with reasoning-effort and verbosity controls, tools, structured outputs, image input and computer use. Use it when answer quality matters most.",
+          "actions": [
+            "reason",
+            "code",
+            "plan",
+            "orchestrate"
+          ],
+          "execution": [
+            "deep thinking"
+          ]
         },
         {
           "name": "gpt-6.1-sol",
@@ -662,7 +888,16 @@
           "api": "openai_chat",
           "docs": "openai",
           "lifecycle": "ga",
-          "description": "Newest flagship OpenAI reasoning model for the hardest analysis, research and multi-agent work over a 1M-token context, with image input and structured outputs. Its tool calling works only through the Responses API, so requests with tools are not sent to it."
+          "description": "Newest flagship OpenAI reasoning model for the hardest analysis, research and multi-agent work over a 1M-token context, with image input and structured outputs. Its tool calling works only through the Responses API, so requests with tools are not sent to it.",
+          "actions": [
+            "reason",
+            "plan",
+            "orchestrate",
+            "evaluate"
+          ],
+          "execution": [
+            "deep thinking"
+          ]
         },
         {
           "name": "claude-opus-5-5",
@@ -670,7 +905,17 @@
           "version": "2",
           "api": "anthropic_messages",
           "docs": "claude",
-          "description": "Latest Claude Opus for long-running agentic coding (finds root causes before changing code and checks its work), enterprise workflows, financial analysis and documents that need little editing; always-on adaptive thinking, vision and computer use; 1M-token context."
+          "description": "Latest Claude Opus for long-running agentic coding (finds root causes before changing code and checks its work), enterprise workflows, financial analysis and documents that need little editing; always-on adaptive thinking, vision and computer use; 1M-token context.",
+          "actions": [
+            "code",
+            "evaluate",
+            "plan",
+            "reason",
+            "write"
+          ],
+          "execution": [
+            "deep thinking"
+          ]
         }
       ]
     }
