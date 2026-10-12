@@ -3,5 +3,7 @@ package idn
 
 import "github.com/ruairispain/copilot-web/foundry-doctor/internal/rules"
 
-// Rules returns the rules of this group in ID order.
-func Rules() []rules.Rule { return nil }
+// Rules returns the rules of this group in ID order. FND-IDN-005 is not a Phase 1 rule.
+func Rules() []rules.Rule {
+	return []rules.Rule{newIDN001(), newIDN002(), newIDN003(), newIDN004(), newIDN006()}
+}
