@@ -80,7 +80,7 @@ api-key: <key>            or   Authorization: Bearer <Entra token, scope cogniti
  "questions": {"route": {
    "type": "choice",
    "instructions": "Choose the model that should answer ... Cost mode: ...",
-   "criteria": {"gpt-5.4-nano": "Smallest, fastest GPT-5.4 model ... Price per million tokens: $0.10 input, $0.80 output; 1 of 3 by price among these options, ordered by input price then output price (1 is cheapest).",
+   "criteria": {"gpt-5.4-nano": "Smallest, fastest GPT-5.4 model ... Price per million tokens: $0.10 input, $0.80 output; 1 of 3 by price among these options, ordered by output price then input price (1 is cheapest).",
                 "gpt-5.4-mini": "...", "gpt-5.6-terra": "..."}}}}
 
 200 {"model": "microsoft-decision-1", "usage": {"prompt_tokens": 412, ...},

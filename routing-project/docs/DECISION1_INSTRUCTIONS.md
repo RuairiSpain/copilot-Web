@@ -54,14 +54,13 @@ shows the rendered instructions for each example that reaches Decision-1.
 ## Criteria
 
 Each candidate's entry is its catalog description, followed by
-`Price per million tokens: $<input> input, $<output> output; <rank> of <count> by price among these options, ordered by input price then output price (1 is cheapest).`
+`Price per million tokens: $<input> input, $<output> output; <rank> of <count> by price among these options, ordered by output price then input price (1 is cheapest).`
 
 - The rank is among the options Decision-1 is choosing from, not the whole catalog. "3 of 3"
   is more useful to it than "rank 19 of 23".
-- The rank follows `tier`: input price first, then output price. The routing modes' price
-  bands use the same order. A model can therefore rank above one with a lower output price:
-  gpt-5.4-nano ($0.10 in, $0.80 out) ranks above Phi-4 ($0.125 in, $0.50 out). Both prices and
-  the ordering rule are stated, so the rank never contradicts the numbers shown.
+- The rank follows `tier`: output price first, then input price. The routing modes' price
+  bands and the named cost bands use the same order, so a higher rank never has a lower
+  output price.
 
 ## Design decisions
 
