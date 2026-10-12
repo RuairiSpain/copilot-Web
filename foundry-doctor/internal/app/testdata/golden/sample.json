@@ -1,0 +1,112 @@
+{
+  "schemaVersion": "1",
+  "tool": {
+    "name": "foundry-doctor",
+    "version": "v0.0.0-test"
+  },
+  "profile": "foundry-test",
+  "effectivePolicy": {
+    "policy.allowedExternalScopes": "[] [baseline]",
+    "policy.cost.devMaxCosmosThroughput": "(not set) [unset] - not set; the Cosmos sub-check is skipped",
+    "policy.cost.productionSizedSkuExemptions": "[] [baseline]",
+    "policy.dataResidency.deploymentSkus": "the SKUs whose documented processing scope satisfies the scope [baseline]",
+    "policy.dataResidency.regions": "(not set) [unset] - not set; dependent rules are skipped with profile-key-missing",
+    "policy.dataResidency.scope": "(not set) [unset] - not set; dependent rules are skipped with profile-key-missing",
+    "policy.disasterRecovery.declared": "(not set) [unset] - not set; informational question only",
+    "policy.environments.development": "(not set) [unset] - not set; dependent rules are skipped with profile-key-missing",
+    "policy.environments.nonProduction": "(not set) [unset] - not set; dependent rules are skipped with profile-key-missing",
+    "policy.environments.production": "(not set) [unset] - not set; dependent rules are skipped with profile-key-missing",
+    "policy.knowledge.requireDocumentLevelAccess": "(not set) [unset] - not set; dependent rules are skipped with profile-key-missing",
+    "policy.logRetention.minimumDays": "(not set) [unset] - not set; dependent rules are skipped with profile-key-missing",
+    "policy.managedByAzurePolicy": "[] [baseline]",
+    "policy.models.allow": "(not set) [unset] - not set; dependent rules are skipped with profile-key-missing",
+    "policy.models.deny": "(not set) [unset] - not set; dependent rules are skipped with profile-key-missing",
+    "policy.monitoring.publicTelemetry": "false [baseline]",
+    "policy.network.publicAccess": "forbidden [baseline]",
+    "policy.resourceScope": "same-resource-group [baseline]",
+    "policy.tags.required": "(not set) [unset] - not set; dependent rules are skipped with profile-key-missing",
+    "policy.tags.resourceTypes": "the rule's own list [baseline]"
+  },
+  "tools": [],
+  "findings": [
+    {
+      "ruleId": "FND-CFG-001",
+      "ruleVersion": 1,
+      "severity": "error",
+      "category": "must-have",
+      "pillar": "operations",
+      "basis": [
+        "platform"
+      ],
+      "profile": "foundry-test",
+      "resource": {
+        "kind": "service",
+        "name": "api"
+      },
+      "location": {
+        "file": "azure.yaml",
+        "line": 3
+      },
+      "evidence": "azure.yaml has a problem",
+      "recommendation": "Fix the YAML syntax or the reported schema violation. Add the yaml-language-server schema comment to azure.yaml so the editor flags the same errors, and install azure.ai.agents and azure.ai.projects at the versions declared in requiredVersions.",
+      "fix": "# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json\nname: my-agent-project\nservices:\n  ai-project:\n    host: azure.ai.project\n  my-agent:\n    host: azure.ai.agent\n    project: src/my-agent\n    uses: [ai-project]\n    kind: hosted\n",
+      "docsUrl": "https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference",
+      "lastVerified": "2026-10-05",
+      "confidence": "certain",
+      "baselined": false,
+      "fingerprint": "fp1:b87a6f615847f99b96d6e2698248afd0",
+      "key": "k1"
+    },
+    {
+      "ruleId": "FND-ENV-001",
+      "ruleVersion": 1,
+      "severity": "warning",
+      "category": "must-have",
+      "pillar": "operations",
+      "basis": [
+        "operations"
+      ],
+      "profile": "foundry-test",
+      "resource": {
+        "kind": "service",
+        "name": "api"
+      },
+      "location": {
+        "file": "azure.yaml",
+        "line": 3
+      },
+      "evidence": "an environment value is missing",
+      "recommendation": "Give each environment its own resource group, for example by including the environment name in the group name (resourceGroup: rg-${AZURE_ENV_NAME}), or record an explicit suppression with a reason and expiry when sharing is intentional.",
+      "fix": "name: my-agent-project\nresourceGroup: rg-${AZURE_ENV_NAME}\n",
+      "docsUrl": "https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview",
+      "lastVerified": "2026-10-05",
+      "confidence": "certain",
+      "baselined": false,
+      "fingerprint": "fp1:4973db290995ad26b2efbd7382701a3c",
+      "key": "k1"
+    }
+  ],
+  "skipped": [
+    {
+      "ruleId": "FND-NET-001",
+      "ruleVersion": 1,
+      "reason": "synthetic-infrastructure",
+      "detail": "iac: synthetic",
+      "missingCapability": "compiled ARM template"
+    }
+  ],
+  "summary": {
+    "info": 0,
+    "warning": 1,
+    "error": 1,
+    "suppressed": 0,
+    "baselined": 0,
+    "skipped": 1,
+    "passed": 0,
+    "hidden": 0,
+    "skippedByReason": {
+      "synthetic-infrastructure": 1
+    }
+  },
+  "exitCode": 1
+}
