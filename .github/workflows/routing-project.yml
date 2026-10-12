@@ -47,7 +47,13 @@ jobs:
             -e FOUNDRY_ENDPOINT=https://ci.services.ai.azure.com -e FOUNDRY_API_KEY=ci -e ROUTER_API_KEYS=ci \
             decision-router:ci
           for _ in $(seq 1 30); do
-            curl -sf http://localhost:5001/health/ready && exit 0 || sleep 1
+            curl -sf http://localhost:5001/health/ready && break || sleep 1
           done
-          docker logs router
-          exit 1
+          curl -sf http://localhost:5001/health/ready || { docker logs router; exit 1; }
+
+      - name: Check the MCP server answers
+        run: |
+          curl -sf -X POST http://localhost:5001/mcp -H 'api-key: ci' -H 'content-type: application/json' \
+            -H 'accept: application/json, text/event-stream' \
+            -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | tee /tmp/tools.json
+          grep -q '"list_models"' /tmp/tools.json || { docker logs router; exit 1; }

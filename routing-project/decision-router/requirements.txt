@@ -5,3 +5,4 @@ prometheus-client==0.26.0
 azure-identity==1.26.0
 PyJWT[crypto]==2.12.1
 redis==8.1.0
+mcp==2.3.0

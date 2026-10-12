@@ -7,4 +7,7 @@ COPY decision_router ./decision_router
 COPY config ./config
 USER router
 EXPOSE 5001
+# REST API and MCP server (/mcp) on the same port; /health/live answers without credentials.
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD python -c "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/health/live' % os.environ['PORT'], timeout=2)"
 CMD ["python", "-m", "decision_router"]

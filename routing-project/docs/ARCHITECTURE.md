@@ -1,5 +1,8 @@
 # Architecture
 
+The service runs as one Docker container that serves the REST API and an MCP server (`/mcp`,
+see `MCP.md`) on port 5001. Both go through the same pipeline below.
+
 ```
 client ── POST /v1/chat/completions (Model Router body + optional routing_mode, compatibility,
    │                                       routing_constraints)
@@ -272,6 +275,7 @@ What the report does and does not show:
 | `ROUTER_ATTEMPTS_PER_MODEL` | `2` | Attempts per model before the next ranked one |
 | `ROUTER_MAX_RETRY_AFTER_SECONDS` | `10` | Longest `retry-after` the router waits for |
 | `ROUTER_DECISION_FALLBACK` | `true` | When Decision-1 cannot answer, serve the cheapest candidate (degraded) instead of failing the request |
+| `ROUTER_MCP_ENABLED` | `true` | Serve the MCP server (tools `chat`, `route`, `list_models`) at `/mcp` on the same port (`MCP.md`) |
 | `ROUTER_READY_CHECK_SECONDS` | `300` | How long a Decision-1 success (a real call or a readiness probe) counts as healthy; after that `/health/ready` probes again in the background |
 | `ROUTER_PIN_STORE_URL` | (none) | `redis://` or `rediss://` URL to share conversation pins across replicas; in-process memory when unset |
 | `ROUTER_MAX_BODY_BYTES` | `20000000` | Largest request body accepted; larger bodies get 413 |

@@ -186,6 +186,28 @@ class Routed:
     instructions: str = ""  # what Decision-1 was (or would have been) asked, from the instruction templates
     criteria: dict[str, str] = field(default_factory=dict)
 
+    def summary(self) -> dict[str, Any]:
+        """What was decided and why: the body of POST /v1/route and of the MCP `route` tool."""
+        decision = self.decision
+        return {
+            "request_id": self.request_id,
+            "routing_mode": self.mode,
+            "compatibility": self.catalog.compatibility,
+            "cost_band": self.event.get("cost_band"),
+            "candidates": [m.name for m in self.candidates],
+            "stage1": self.event.get("stage1"),
+            "ranking": [{"model": name, "probability": decision.probabilities[name]} for name in decision.ranking],
+            "execution_order": self.order,
+            "low_confidence": self.low_confidence,
+            "degraded": self.event.get("degraded"),
+            "pin": self.event.get("pin"),
+            "decision1_input": {"instructions": self.instructions,
+                                "fragments": (self.event.get("instructions") or {}).get("fragments"),
+                                "criteria": self.criteria},
+            "decision": {"choice": decision.choice, "confidence": decision.confidence,
+                         "latency_ms": decision.latency_ms, "skipped": decision.skipped},
+        }
+
 
 @dataclass
 class Completion:

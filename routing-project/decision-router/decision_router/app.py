@@ -8,6 +8,7 @@ from typing import Any
 
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
+from starlette.routing import Route
 
 from . import __version__
 from .auth import FoundryAuth
@@ -68,9 +69,19 @@ def create_app(settings: Settings | None = None, *, pipeline: RouterPipeline | N
     gate = inbound or build_inbound_auth(settings)  # refuses to start with no inbound auth configured
     pipe = pipeline or build_pipeline(settings)
 
+    mcp = mcp_app = None
+    if settings.mcp_enabled:
+        from .mcp_server import build_mcp  # the MCP SDK is only imported when the MCP server is on
+
+        mcp, mcp_app = build_mcp(pipe, gate)
+
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        yield
+        if mcp is not None:
+            async with mcp.session_manager.run():
+                yield
+        else:
+            yield
         await pipe.close()
 
     app = FastAPI(
@@ -81,6 +92,16 @@ def create_app(settings: Settings | None = None, *, pipeline: RouterPipeline | N
         lifespan=lifespan,
     )
     app.state.pipeline = pipe
+    if mcp_app is not None:
+        class McpExact:
+            """/mcp itself would otherwise be redirected to /mcp/, and not every MCP client follows a
+            redirect on POST: serve it as the mounted app's root. (A class, so Starlette treats it as ASGI.)"""
+
+            async def __call__(self, scope, receive, send):
+                await mcp_app({**scope, "path": "/", "root_path": scope.get("root_path", "") + "/mcp"}, receive, send)
+
+        app.router.routes.append(Route("/mcp", endpoint=McpExact(), methods=["GET", "POST", "DELETE"]))
+        app.mount("/mcp", mcp_app)  # MCP clients connect to /mcp or /mcp/ (streamable HTTP)
 
     def request_id(request: Request) -> str:
         value = request.headers.get("x-request-id") or request.headers.get("x-ms-client-request-id")
@@ -144,26 +165,8 @@ def create_app(settings: Settings | None = None, *, pipeline: RouterPipeline | N
         prepared = await prepare(request)
         routed = await pipe.route(prepared, rid)
         pipe.record_route_only(routed, prepared.body)
-        decision = routed.decision
         return JSONResponse(
-            {
-                "request_id": rid,
-                "routing_mode": routed.mode,
-                "compatibility": routed.catalog.compatibility,
-                "cost_band": routed.event["cost_band"],
-                "candidates": [m.name for m in routed.candidates],
-                "stage1": routed.event["stage1"],
-                "ranking": [{"model": name, "probability": decision.probabilities[name]} for name in decision.ranking],
-                "execution_order": routed.order,
-                "low_confidence": routed.low_confidence,
-                "degraded": routed.event.get("degraded"),
-                "pin": routed.event.get("pin"),
-                "decision1_input": {"instructions": routed.instructions,
-                                    "fragments": routed.event["instructions"]["fragments"],
-                                    "criteria": routed.criteria},
-                "decision": {"choice": decision.choice, "confidence": decision.confidence,
-                             "latency_ms": decision.latency_ms, "skipped": decision.skipped},
-            },
+            routed.summary(),
             headers=_routing_headers(routed),
         )
 
