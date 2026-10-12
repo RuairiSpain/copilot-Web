@@ -25,9 +25,9 @@ There is no other router behind Decision-1. If it cannot answer, the request fai
 
 | Folder | Contents |
 |---|---|
-| `decision-router/` | The service, the comparison harness, tests and deployment manifests |
+| `decision-router/` | The service (REST API and MCP server, shipped as a Docker image), the comparison harness, tests and the Azure ML manifest |
 | `dataset-v31/` | 40,000 prompts used to compare this router with Foundry Model Router |
-| `docs/` | Architecture and the Decision-1 contract, stage-1 filtering and worked stage-1 examples, the model catalogs, authentication and Foundry Agent Service, option-order testing |
+| `docs/` | Architecture and the Decision-1 contract, the MCP server, stage-1 filtering and worked stage-1 examples, the model catalogs, authentication and Foundry Agent Service, option-order testing |
 
 ## Quick start
 
@@ -46,6 +46,31 @@ curl -s localhost:5001/v1/chat/completions -H 'content-type: application/json' -
   "messages": [{"role": "user", "content": "Summarise the attached contract clause."}],
   "routing_mode": "cost", "max_completion_tokens": 400}'
 ```
+
+### As a Docker container
+
+The image serves the REST API and the MCP server on port 5001:
+
+```bash
+docker build -t decision-router decision-router
+docker run -d --name decision-router -p 5001:5001 \
+  -e FOUNDRY_ENDPOINT=https://<resource>.services.ai.azure.com \
+  -e FOUNDRY_API_KEY=<key> \
+  -e ROUTER_API_KEYS=<a-long-random-key> \
+  decision-router
+```
+
+Leave out `FOUNDRY_API_KEY` to call Foundry with a managed identity or workload identity
+instead. Use `ROUTER_ENTRA_TENANT_ID` and `ROUTER_ENTRA_AUDIENCE` instead of, or as well as,
+`ROUTER_API_KEYS` to accept Entra tokens.
+
+- REST API: `http://localhost:5001/v1/chat/completions`, `/v1/route`, `/openai/v1/chat/completions`.
+- MCP server: `http://localhost:5001/mcp`, with tools `chat`, `route` and `list_models`
+  (`docs/MCP.md`).
+- Health: `/health/live`, `/health/ready`; metrics: `/metrics`. The image has a Docker
+  `HEALTHCHECK` on `/health/live`.
+- Run several containers behind a load balancer to scale. Set `ROUTER_PIN_STORE_URL` to a Redis
+  URL so conversation pins are shared between them (`docs/AGENT_SERVICE.md`).
 
 Claude models are called through the Anthropic Messages API and their answers are translated
 back, so every response has the same chat-completions shape.

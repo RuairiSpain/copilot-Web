@@ -101,6 +101,7 @@ class Settings:
     decision_fallback: bool = True
     # /health/ready trusts a Decision-1 success (real call or probe) this recent; otherwise it probes again.
     ready_check_seconds: float = 300.0
+    mcp_enabled: bool = True  # serve the MCP server at /mcp alongside the REST API (mcp_server.py)
     decision_log_path: Path | None = None
     log_prompts: bool = False
     # Inbound authentication (see inbound.py): API keys and/or Microsoft Entra ID tokens.
@@ -153,6 +154,7 @@ class Settings:
             caller_policies=_json_object("ROUTER_CALLER_POLICIES"),
             decision_fallback=_bool("ROUTER_DECISION_FALLBACK", True),
             ready_check_seconds=float(os.getenv("ROUTER_READY_CHECK_SECONDS", "300")),
+            mcp_enabled=_bool("ROUTER_MCP_ENABLED", True),
             decision_log_path=Path(log_path) if log_path else None,
             log_prompts=_bool("ROUTER_LOG_PROMPTS", False),
             api_keys=_list("ROUTER_API_KEYS"),
