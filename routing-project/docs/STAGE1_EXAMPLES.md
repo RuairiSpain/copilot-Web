@@ -38,7 +38,7 @@ How to read the examples:
 | A5 | Tool calling (agent step) | 17 of 23 |
 | A6 | Image input | 15 of 23 |
 | A7 | JSON-schema output | 12 of 23 |
-| A8 | JSON mode (json_object) | 23 of 23 |
+| A8 | JSON mode (json_object) | 20 of 23 |
 | A9 | Streaming | 16 of 23 |
 | A10 | Long document (~300K tokens) | 15 of 23 |
 | A11 | EU data residency | 6 of 23 |
@@ -135,7 +135,7 @@ one test request against the deployment, then recording the source in `catalog_s
 | `size` | – | 26 |
 | `price_band` | – | 26 |
 
-**Stage 1 output (the 26 options Decision-1 chooses from, cheapest first):** `FW-GLM-5.3-Flash`, `gpt-5.4-nano`, `gpt-5.6-luna`, `gpt-oss-120b`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `grok-4-1-fast-reasoning`, `DeepSeek-V3.2`, `gpt-5.4-mini`, `FW-GLM-5.3`, `FW-Kimi-K3`, `claude-haiku-4-5`, `gpt-5.6-terra`, `gpt-5.2`, `claude-sonnet-5`, `gpt-5.4`, `gpt-5.5`, `gpt-5.6-sol`, `claude-sonnet-4-5`, `grok-4`, `grok-4.6`, `claude-opus-4-6`, `claude-opus-4-7`, `claude-opus-4-8`, `claude-opus-5`, `claude-fable-5-1`, `gpt-6-astra`
+**Stage 1 output (the 26 options Decision-1 chooses from, cheapest first):** `FW-GLM-5.3-Flash`, `DeepSeek-V3.2`, `grok-4-1-fast-reasoning`, `gpt-oss-120b`, `gpt-5.4-nano`, `gpt-5.6-luna`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `FW-GLM-5.3`, `FW-Kimi-K3`, `gpt-5.4-mini`, `claude-haiku-4-5`, `gpt-5.6-terra`, `claude-sonnet-5`, `gpt-5.2`, `gpt-5.4`, `gpt-5.5`, `gpt-5.6-sol`, `claude-sonnet-4-5`, `grok-4`, `grok-4.6`, `claude-opus-4-6`, `claude-opus-4-7`, `claude-opus-4-8`, `claude-opus-5`, `claude-fable-5-1`, `gpt-6-astra`
 
 **Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`):
 
@@ -167,7 +167,7 @@ one test request against the deployment, then recording the source in `catalog_s
 | `size` | – | 26 |
 | `price_band` | 17 × outside the cost price band | 9 |
 
-**Stage 1 output (the 9 options Decision-1 chooses from, cheapest first):** `FW-GLM-5.3-Flash`, `gpt-5.4-nano`, `gpt-5.6-luna`, `gpt-oss-120b`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `grok-4-1-fast-reasoning`, `DeepSeek-V3.2`, `gpt-5.4-mini`, `FW-GLM-5.3`
+**Stage 1 output (the 9 options Decision-1 chooses from, cheapest first):** `FW-GLM-5.3-Flash`, `DeepSeek-V3.2`, `grok-4-1-fast-reasoning`, `gpt-oss-120b`, `gpt-5.4-nano`, `gpt-5.6-luna`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `FW-GLM-5.3`, `FW-Kimi-K3`
 
 **Instructions sent to Decision-1** (fragments: `base`, `mode.cost`):
 
@@ -231,7 +231,7 @@ one test request against the deployment, then recording the source in `catalog_s
 | `size` | – | 23 |
 | `price_band` | – | 23 |
 
-**Stage 1 output (the 23 options Decision-1 chooses from, cheapest first):** `Phi-4-mini-instruct`, `FW-GLM-5.3-Flash`, `claude-haiku-5-5`, `gpt-5.4-nano`, `Phi-4`, `gpt-oss-120b`, `Phi-4-reasoning`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `grok-4-1-fast-reasoning`, `DeepSeek-V4-Flash`, `gpt-5.4-mini`, `gpt-6-luna`, `FW-GLM-5.3`, `FW-Kimi-K3`, `DeepSeek-V4-Pro`, `gpt-5.6-terra`, `MAI-Thinking-1`, `claude-sonnet-5-5`, `gpt-6.1-sol`, `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`, `gpt-6-astra`
+**Stage 1 output (the 23 options Decision-1 chooses from, cheapest first):** `Phi-4-mini-instruct`, `FW-GLM-5.3-Flash`, `claude-haiku-5-5`, `Phi-4`, `grok-4-1-fast-reasoning`, `gpt-oss-120b`, `Phi-4-reasoning`, `gpt-5.4-nano`, `DeepSeek-V4-Flash`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `gpt-6-luna`, `FW-GLM-5.3`, `FW-Kimi-K3`, `gpt-5.4-mini`, `DeepSeek-V4-Pro`, `MAI-Thinking-1`, `gpt-5.6-terra`, `claude-sonnet-5-5`, `gpt-6.1-sol`, `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`, `gpt-6-astra`
 
 **Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`):
 
@@ -264,7 +264,7 @@ one test request against the deployment, then recording the source in `catalog_s
 | `size` | – | 17 |
 | `price_band` | – | 17 |
 
-**Stage 1 output (the 17 options Decision-1 chooses from, cheapest first):** `FW-GLM-5.3-Flash`, `claude-haiku-5-5`, `gpt-5.4-nano`, `gpt-oss-120b`, `grok-4-1-fast-reasoning`, `DeepSeek-V4-Flash`, `gpt-5.4-mini`, `gpt-6-luna`, `FW-GLM-5.3`, `FW-Kimi-K3`, `DeepSeek-V4-Pro`, `MAI-Thinking-1`, `claude-sonnet-5-5`, `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`, `gpt-6-astra`
+**Stage 1 output (the 17 options Decision-1 chooses from, cheapest first):** `FW-GLM-5.3-Flash`, `claude-haiku-5-5`, `grok-4-1-fast-reasoning`, `gpt-oss-120b`, `gpt-5.4-nano`, `DeepSeek-V4-Flash`, `gpt-6-luna`, `FW-GLM-5.3`, `FW-Kimi-K3`, `gpt-5.4-mini`, `DeepSeek-V4-Pro`, `MAI-Thinking-1`, `claude-sonnet-5-5`, `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`, `gpt-6-astra`
 
 **Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`, `req.tools`):
 
@@ -283,7 +283,7 @@ one test request against the deployment, then recording the source in `catalog_s
 }
 ```
 
-**Read from the request:** catalog `new` (23 models), mode `balanced`, estimated ~47 prompt tokens. Requirements: `image_input` (messages contain images).
+**Read from the request:** catalog `new` (23 models), mode `balanced`, estimated ~1,632 prompt tokens. Requirements: `image_input` (messages contain images).
 
 | Step | Removed | Left |
 |---|---|---|
@@ -296,7 +296,7 @@ one test request against the deployment, then recording the source in `catalog_s
 | `size` | – | 15 |
 | `price_band` | – | 15 |
 
-**Stage 1 output (the 15 options Decision-1 chooses from, cheapest first):** `FW-GLM-5.3-Flash`, `claude-haiku-5-5`, `gpt-5.4-nano`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `grok-4-1-fast-reasoning`, `gpt-5.4-mini`, `gpt-6-luna`, `FW-Kimi-K3`, `gpt-5.6-terra`, `claude-sonnet-5-5`, `gpt-6.1-sol`, `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`, `gpt-6-astra`
+**Stage 1 output (the 15 options Decision-1 chooses from, cheapest first):** `FW-GLM-5.3-Flash`, `claude-haiku-5-5`, `grok-4-1-fast-reasoning`, `gpt-5.4-nano`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `gpt-6-luna`, `FW-Kimi-K3`, `gpt-5.4-mini`, `gpt-5.6-terra`, `claude-sonnet-5-5`, `gpt-6.1-sol`, `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`, `gpt-6-astra`
 
 **Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`, `req.image_input`):
 
@@ -324,12 +324,12 @@ one test request against the deployment, then recording the source in `catalog_s
 | `lifecycle` | – | 23 |
 | `allowlist` | – | 23 |
 | `selection` | – | 23 |
-| `capabilities` | structured_output no (needed: response_format=json_schema): `Phi-4-mini-instruct`, `FW-GLM-5.3-Flash`, `Phi-4`, `Phi-4-reasoning`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `grok-4-1-fast-reasoning`, `DeepSeek-V4-Flash`, `FW-Kimi-K3`, `DeepSeek-V4-Pro`, `MAI-Thinking-1`, `grok-4.7` | 12 |
+| `capabilities` | structured_output no (needed: response_format=json_schema): `Phi-4-mini-instruct`, `FW-GLM-5.3-Flash`, `Phi-4`, `grok-4-1-fast-reasoning`, `Phi-4-reasoning`, `DeepSeek-V4-Flash`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `FW-Kimi-K3`, `DeepSeek-V4-Pro`, `MAI-Thinking-1`, `grok-4.7` | 12 |
 | `location` | – | 12 |
 | `size` | – | 12 |
 | `price_band` | – | 12 |
 
-**Stage 1 output (the 12 options Decision-1 chooses from, cheapest first):** `claude-haiku-5-5`, `gpt-5.4-nano`, `gpt-oss-120b`, `gpt-5.4-mini`, `gpt-6-luna`, `FW-GLM-5.3`, `gpt-5.6-terra`, `claude-sonnet-5-5`, `gpt-6.1-sol`, `gpt-5.5`, `claude-opus-5-5`, `gpt-6-astra`
+**Stage 1 output (the 12 options Decision-1 chooses from, cheapest first):** `claude-haiku-5-5`, `gpt-oss-120b`, `gpt-5.4-nano`, `gpt-6-luna`, `FW-GLM-5.3`, `gpt-5.4-mini`, `gpt-5.6-terra`, `claude-sonnet-5-5`, `gpt-6.1-sol`, `gpt-5.5`, `claude-opus-5-5`, `gpt-6-astra`
 
 **Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`, `req.structured_output`):
 
@@ -339,7 +339,7 @@ one test request against the deployment, then recording the source in `catalog_s
 
 ### A8. JSON mode (json_object)
 
-**Why it is useful:** JSON mode asks for any valid JSON without a schema. It shows that JSON mode is not a capability stage 1 filters on.
+**Why it is useful:** JSON mode asks for any valid JSON without a schema. JSON mode is not a catalog capability, but the Claude adapter cannot honour it.
 
 ```json
 {
@@ -357,18 +357,18 @@ one test request against the deployment, then recording the source in `catalog_s
 | `lifecycle` | – | 23 |
 | `allowlist` | – | 23 |
 | `selection` | – | 23 |
-| `capabilities` | – | 23 |
-| `location` | – | 23 |
-| `size` | – | 23 |
-| `price_band` | – | 23 |
+| `capabilities` | response_format=json_object is not available through the Claude adapter (use json_schema): `claude-haiku-5-5`, `claude-sonnet-5-5`, `claude-opus-5-5` | 20 |
+| `location` | – | 20 |
+| `size` | – | 20 |
+| `price_band` | – | 20 |
 
-**Stage 1 output (the 23 options Decision-1 chooses from, cheapest first):** `Phi-4-mini-instruct`, `FW-GLM-5.3-Flash`, `claude-haiku-5-5`, `gpt-5.4-nano`, `Phi-4`, `gpt-oss-120b`, `Phi-4-reasoning`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `grok-4-1-fast-reasoning`, `DeepSeek-V4-Flash`, `gpt-5.4-mini`, `gpt-6-luna`, `FW-GLM-5.3`, `FW-Kimi-K3`, `DeepSeek-V4-Pro`, `gpt-5.6-terra`, `MAI-Thinking-1`, `claude-sonnet-5-5`, `gpt-6.1-sol`, `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`, `gpt-6-astra`
+**Stage 1 output (the 20 options Decision-1 chooses from, cheapest first):** `Phi-4-mini-instruct`, `FW-GLM-5.3-Flash`, `Phi-4`, `grok-4-1-fast-reasoning`, `gpt-oss-120b`, `Phi-4-reasoning`, `gpt-5.4-nano`, `DeepSeek-V4-Flash`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `gpt-6-luna`, `FW-GLM-5.3`, `FW-Kimi-K3`, `gpt-5.4-mini`, `DeepSeek-V4-Pro`, `MAI-Thinking-1`, `gpt-5.6-terra`, `gpt-6.1-sol`, `gpt-5.5`, `grok-4.7`, `gpt-6-astra`
 
 **Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`):
 
 > Choose the model that should answer the conversation in the state. Balanced mode: weigh answer quality against cost. Prefer a cheaper model when its answer would be about as good as the best model's answer.
 
-**Explanation:** Nothing is removed: `json_object` is no longer a catalog capability, so all 23 models are candidates. A model that doesn't support JSON mode may answer in free text. Claude always does, because the translation layer drops `response_format: json_object` (the Messages API has no equivalent). Callers that need guaranteed JSON should send a JSON schema instead (example A7).
+**Explanation:** Only the Claude models are removed: the Messages API has no JSON mode, so Claude would answer in free text. The other models stay, because `json_object` is not a catalog capability; a model without JSON mode may still answer in free text. Callers that need guaranteed JSON should send a JSON schema instead (example A7), which Claude supports.
 
 ### A9. Streaming
 
@@ -390,12 +390,12 @@ one test request against the deployment, then recording the source in `catalog_s
 | `lifecycle` | – | 23 |
 | `allowlist` | – | 23 |
 | `selection` | – | 23 |
-| `capabilities` | streaming no (needed: stream=true): `Phi-4-mini-instruct`, `Phi-4`, `Phi-4-reasoning`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `grok-4-1-fast-reasoning`, `DeepSeek-V4-Flash`, `FW-Kimi-K3` | 16 |
+| `capabilities` | streaming no (needed: stream=true): `Phi-4-mini-instruct`, `Phi-4`, `grok-4-1-fast-reasoning`, `Phi-4-reasoning`, `DeepSeek-V4-Flash`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `FW-Kimi-K3` | 16 |
 | `location` | – | 16 |
 | `size` | – | 16 |
 | `price_band` | – | 16 |
 
-**Stage 1 output (the 16 options Decision-1 chooses from, cheapest first):** `FW-GLM-5.3-Flash`, `claude-haiku-5-5`, `gpt-5.4-nano`, `gpt-oss-120b`, `gpt-5.4-mini`, `gpt-6-luna`, `FW-GLM-5.3`, `DeepSeek-V4-Pro`, `gpt-5.6-terra`, `MAI-Thinking-1`, `claude-sonnet-5-5`, `gpt-6.1-sol`, `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`, `gpt-6-astra`
+**Stage 1 output (the 16 options Decision-1 chooses from, cheapest first):** `FW-GLM-5.3-Flash`, `claude-haiku-5-5`, `gpt-oss-120b`, `gpt-5.4-nano`, `gpt-6-luna`, `FW-GLM-5.3`, `gpt-5.4-mini`, `DeepSeek-V4-Pro`, `MAI-Thinking-1`, `gpt-5.6-terra`, `claude-sonnet-5-5`, `gpt-6.1-sol`, `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`, `gpt-6-astra`
 
 **Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`):
 
@@ -424,10 +424,10 @@ one test request against the deployment, then recording the source in `catalog_s
 | `selection` | – | 23 |
 | `capabilities` | – | 23 |
 | `location` | – | 23 |
-| `size` | needs ~300015 tokens, context is 131072: `Phi-4-mini-instruct`, `gpt-oss-120b`<br>prompt is ~300015 tokens, input limit is 272000: `gpt-5.4-nano`, `gpt-5.4-mini`<br>needs ~300015 tokens, context is 16384: `Phi-4`<br>needs ~300015 tokens, context is 32768: `Phi-4-reasoning`<br>needs ~300015 tokens, context is 128000: `grok-4-1-fast-reasoning`<br>needs ~300015 tokens, context is 256000: `MAI-Thinking-1` | 15 |
+| `size` | needs ~300015 tokens, context is 131072: `Phi-4-mini-instruct`, `gpt-oss-120b`<br>needs ~300015 tokens, context is 16384: `Phi-4`<br>needs ~300015 tokens, context is 128000: `grok-4-1-fast-reasoning`<br>needs ~300015 tokens, context is 32768: `Phi-4-reasoning`<br>prompt is ~300015 tokens, input limit is 272000: `gpt-5.4-nano`, `gpt-5.4-mini`<br>needs ~300015 tokens, context is 256000: `MAI-Thinking-1` | 15 |
 | `price_band` | – | 15 |
 
-**Stage 1 output (the 15 options Decision-1 chooses from, cheapest first):** `FW-GLM-5.3-Flash`, `claude-haiku-5-5`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `DeepSeek-V4-Flash`, `gpt-6-luna`, `FW-GLM-5.3`, `FW-Kimi-K3`, `DeepSeek-V4-Pro`, `gpt-5.6-terra`, `claude-sonnet-5-5`, `gpt-6.1-sol`, `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`, `gpt-6-astra`
+**Stage 1 output (the 15 options Decision-1 chooses from, cheapest first):** `FW-GLM-5.3-Flash`, `claude-haiku-5-5`, `DeepSeek-V4-Flash`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `gpt-6-luna`, `FW-GLM-5.3`, `FW-Kimi-K3`, `DeepSeek-V4-Pro`, `gpt-5.6-terra`, `claude-sonnet-5-5`, `gpt-6.1-sol`, `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`, `gpt-6-astra`
 
 **Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`, `size.long_prompt`):
 
@@ -460,7 +460,7 @@ one test request against the deployment, then recording the source in `catalog_s
 | `size` | – | 6 |
 | `price_band` | – | 6 |
 
-**Stage 1 output (the 6 options Decision-1 chooses from, cheapest first):** `DeepSeek-V4-Flash`, `gpt-5.4-mini`, `gpt-6-luna`, `gpt-5.6-terra`, `gpt-6.1-sol`, `gpt-5.5`
+**Stage 1 output (the 6 options Decision-1 chooses from, cheapest first):** `DeepSeek-V4-Flash`, `gpt-6-luna`, `gpt-5.4-mini`, `gpt-5.6-terra`, `gpt-6.1-sol`, `gpt-5.5`
 
 **Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`):
 
@@ -561,7 +561,7 @@ one test request against the deployment, then recording the source in `catalog_s
 | `size` | – | 8 |
 | `price_band` | – | 8 |
 
-**Stage 1 output (the 8 options Decision-1 chooses from, cheapest first):** `claude-haiku-5-5`, `gpt-5.4-mini`, `FW-GLM-5.3`, `DeepSeek-V4-Pro`, `claude-sonnet-5-5`, `gpt-5.5`, `claude-opus-5-5`, `gpt-6-astra`
+**Stage 1 output (the 8 options Decision-1 chooses from, cheapest first):** `claude-haiku-5-5`, `FW-GLM-5.3`, `gpt-5.4-mini`, `DeepSeek-V4-Pro`, `claude-sonnet-5-5`, `gpt-5.5`, `claude-opus-5-5`, `gpt-6-astra`
 
 **Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`, `profile.coding`, `req.tools`):
 
@@ -661,7 +661,7 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5,claude-o
 | `size` | – | 24 |
 | `price_band` | – | 24 |
 
-**Stage 1 output (the 24 options Decision-1 chooses from, cheapest first):** `FW-GLM-5.3-Flash`, `gpt-5.4-nano`, `gpt-5.6-luna`, `gpt-oss-120b`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `grok-4-1-fast-reasoning`, `DeepSeek-V3.2`, `gpt-5.4-mini`, `FW-GLM-5.3`, `FW-Kimi-K3`, `claude-haiku-4-5`, `gpt-5.6-terra`, `gpt-5.2`, `claude-sonnet-5`, `gpt-5.4`, `gpt-5.5`, `gpt-5.6-sol`, `claude-sonnet-4-5`, `grok-4`, `claude-opus-4-6`, `claude-opus-4-7`, `claude-opus-4-8`, `claude-opus-5`, `gpt-6-astra`
+**Stage 1 output (the 24 options Decision-1 chooses from, cheapest first):** `FW-GLM-5.3-Flash`, `DeepSeek-V3.2`, `grok-4-1-fast-reasoning`, `gpt-oss-120b`, `gpt-5.4-nano`, `gpt-5.6-luna`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `FW-GLM-5.3`, `FW-Kimi-K3`, `gpt-5.4-mini`, `claude-haiku-4-5`, `gpt-5.6-terra`, `claude-sonnet-5`, `gpt-5.2`, `gpt-5.4`, `gpt-5.5`, `gpt-5.6-sol`, `claude-sonnet-4-5`, `grok-4`, `claude-opus-4-6`, `claude-opus-4-7`, `claude-opus-4-8`, `claude-opus-5`, `gpt-6-astra`
 
 **Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`):
 
@@ -788,7 +788,7 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5,claude-o
 | `size` | – | 23 |
 | `price_band` | 17 × outside cost band medium-high ($3-$10) | 6 |
 
-**Stage 1 output (the 6 options Decision-1 chooses from, cheapest first):** `gpt-5.4-mini`, `DeepSeek-V4-Pro`, `gpt-5.6-terra`, `MAI-Thinking-1`, `claude-sonnet-5-5`, `gpt-6.1-sol`
+**Stage 1 output (the 6 options Decision-1 chooses from, cheapest first):** `gpt-5.4-mini`, `DeepSeek-V4-Pro`, `MAI-Thinking-1`, `gpt-5.6-terra`, `claude-sonnet-5-5`, `gpt-6.1-sol`
 
 **Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`, `band.named`):
 
@@ -819,9 +819,9 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5,claude-o
 | `capabilities` | – | 23 |
 | `location` | – | 23 |
 | `size` | – | 23 |
-| `price_band` | outside cost band $2.5-$33.33: `Phi-4-mini-instruct`, `FW-GLM-5.3-Flash`, `claude-haiku-5-5`, `gpt-5.4-nano`, `Phi-4`, `gpt-oss-120b`, `Phi-4-reasoning`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `grok-4-1-fast-reasoning`, `DeepSeek-V4-Flash`, `gpt-6-astra` | 12 |
+| `price_band` | outside cost band $2.5-$33.33: `Phi-4-mini-instruct`, `FW-GLM-5.3-Flash`, `claude-haiku-5-5`, `Phi-4`, `grok-4-1-fast-reasoning`, `gpt-oss-120b`, `Phi-4-reasoning`, `gpt-5.4-nano`, `DeepSeek-V4-Flash`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `gpt-6-astra` | 12 |
 
-**Stage 1 output (the 12 options Decision-1 chooses from, cheapest first):** `gpt-5.4-mini`, `gpt-6-luna`, `FW-GLM-5.3`, `FW-Kimi-K3`, `DeepSeek-V4-Pro`, `gpt-5.6-terra`, `MAI-Thinking-1`, `claude-sonnet-5-5`, `gpt-6.1-sol`, `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`
+**Stage 1 output (the 12 options Decision-1 chooses from, cheapest first):** `gpt-6-luna`, `FW-GLM-5.3`, `FW-Kimi-K3`, `gpt-5.4-mini`, `DeepSeek-V4-Pro`, `MAI-Thinking-1`, `gpt-5.6-terra`, `claude-sonnet-5-5`, `gpt-6.1-sol`, `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`
 
 **Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`, `band.range`):
 
@@ -852,9 +852,9 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5,claude-o
 | `capabilities` | tools no (needed: request has tools): `Phi-4-mini-instruct`, `Phi-4`, `Phi-4-reasoning`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `gpt-5.6-terra`, `gpt-6.1-sol` | 17 |
 | `location` | – | 17 |
 | `size` | – | 17 |
-| `price_band` | outside cost band low ($0-$1): `gpt-5.4-mini`, `gpt-6-luna`, `FW-GLM-5.3`, `FW-Kimi-K3`, `DeepSeek-V4-Pro`, `MAI-Thinking-1`, `claude-sonnet-5-5`, `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`, `gpt-6-astra` | 6 |
+| `price_band` | outside cost band low ($0-$1): `gpt-6-luna`, `FW-GLM-5.3`, `FW-Kimi-K3`, `gpt-5.4-mini`, `DeepSeek-V4-Pro`, `MAI-Thinking-1`, `claude-sonnet-5-5`, `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`, `gpt-6-astra` | 6 |
 
-**Stage 1 output (the 6 options Decision-1 chooses from, cheapest first):** `FW-GLM-5.3-Flash`, `claude-haiku-5-5`, `gpt-5.4-nano`, `gpt-oss-120b`, `grok-4-1-fast-reasoning`, `DeepSeek-V4-Flash`
+**Stage 1 output (the 6 options Decision-1 chooses from, cheapest first):** `FW-GLM-5.3-Flash`, `claude-haiku-5-5`, `grok-4-1-fast-reasoning`, `gpt-oss-120b`, `gpt-5.4-nano`, `DeepSeek-V4-Flash`
 
 **Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`, `band.named`, `req.tools`):
 
@@ -883,10 +883,10 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5,claude-o
 | `lifecycle` | – | 23 |
 | `allowlist` | – | 23 |
 | `selection` | – | 23 |
-| `capabilities` | not tagged for code (routing_constraints.actions): `Phi-4-mini-instruct`, `FW-GLM-5.3-Flash`, `gpt-5.4-nano`, `Phi-4`, `Phi-4-reasoning`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `grok-4-1-fast-reasoning`, `gpt-6-luna`, `gpt-6.1-sol` | 14 |
+| `capabilities` | not tagged for code (routing_constraints.actions): `Phi-4-mini-instruct`, `FW-GLM-5.3-Flash`, `Phi-4`, `grok-4-1-fast-reasoning`, `Phi-4-reasoning`, `gpt-5.4-nano`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `gpt-6-luna`, `gpt-6.1-sol` | 14 |
 | `location` | – | 14 |
 | `size` | – | 14 |
-| `price_band` | outside the top cost group for code: `claude-haiku-5-5`, `gpt-oss-120b`, `DeepSeek-V4-Flash`, `gpt-5.4-mini`, `FW-GLM-5.3`, `FW-Kimi-K3`, `DeepSeek-V4-Pro`, `gpt-5.6-terra`, `MAI-Thinking-1`, `claude-sonnet-5-5` | 4 |
+| `price_band` | outside the top cost group for code: `claude-haiku-5-5`, `gpt-oss-120b`, `DeepSeek-V4-Flash`, `FW-GLM-5.3`, `FW-Kimi-K3`, `gpt-5.4-mini`, `DeepSeek-V4-Pro`, `MAI-Thinking-1`, `gpt-5.6-terra`, `claude-sonnet-5-5` | 4 |
 
 **Stage 1 output (the 4 options Decision-1 chooses from, cheapest first):** `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`, `gpt-6-astra`
 
@@ -918,10 +918,10 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5,claude-o
 | `lifecycle` | – | 23 |
 | `allowlist` | – | 23 |
 | `selection` | – | 23 |
-| `capabilities` | tools no (needed: request has tools): `Phi-4-mini-instruct`, `Phi-4`, `Phi-4-reasoning`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `gpt-5.6-terra`, `gpt-6.1-sol`<br>not tagged for code (routing_constraints.actions): `FW-GLM-5.3-Flash`, `gpt-5.4-nano`, `grok-4-1-fast-reasoning`, `gpt-6-luna` | 13 |
+| `capabilities` | tools no (needed: request has tools): `Phi-4-mini-instruct`, `Phi-4`, `Phi-4-reasoning`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `gpt-5.6-terra`, `gpt-6.1-sol`<br>not tagged for code (routing_constraints.actions): `FW-GLM-5.3-Flash`, `grok-4-1-fast-reasoning`, `gpt-5.4-nano`, `gpt-6-luna` | 13 |
 | `location` | – | 13 |
 | `size` | – | 13 |
-| `price_band` | outside the high cost group for code: `claude-haiku-5-5`, `gpt-oss-120b`, `DeepSeek-V4-Flash`, `gpt-5.4-mini`, `FW-GLM-5.3`, `FW-Kimi-K3`, `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`, `gpt-6-astra` | 3 |
+| `price_band` | outside the high cost group for code: `claude-haiku-5-5`, `gpt-oss-120b`, `DeepSeek-V4-Flash`, `FW-GLM-5.3`, `FW-Kimi-K3`, `gpt-5.4-mini`, `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`, `gpt-6-astra` | 3 |
 
 **Stage 1 output (the 3 options Decision-1 chooses from, cheapest first):** `DeepSeek-V4-Pro`, `MAI-Thinking-1`, `claude-sonnet-5-5`
 
@@ -955,7 +955,7 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5,claude-o
 | `capabilities` | 15 × not tagged for write (routing_constraints.actions) | 8 |
 | `location` | – | 8 |
 | `size` | – | 8 |
-| `price_band` | outside the top cost group for write: `Phi-4-mini-instruct`, `FW-GLM-5.3-Flash`, `gpt-5.4-nano`, `Phi-4`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `gpt-6-luna` | 2 |
+| `price_band` | outside the top cost group for write: `Phi-4-mini-instruct`, `FW-GLM-5.3-Flash`, `Phi-4`, `gpt-5.4-nano`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `gpt-6-luna` | 2 |
 
 **Stage 1 output (the 2 options Decision-1 chooses from, cheapest first):** `grok-4.7`, `claude-opus-5-5`
 
@@ -990,7 +990,7 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5,claude-o
 | `capabilities` | 15 × not tagged for plan (routing_constraints.actions) | 8 |
 | `location` | – | 8 |
 | `size` | – | 8 |
-| `price_band` | outside the high cost group for plan: `FW-GLM-5.3`, `DeepSeek-V4-Pro`, `gpt-5.6-terra`, `MAI-Thinking-1`, `claude-opus-5-5`, `gpt-6-astra` | 2 |
+| `price_band` | outside the high cost group for plan: `FW-GLM-5.3`, `DeepSeek-V4-Pro`, `MAI-Thinking-1`, `gpt-5.6-terra`, `claude-opus-5-5`, `gpt-6-astra` | 2 |
 
 **Stage 1 output (the 2 options Decision-1 chooses from, cheapest first):** `gpt-6.1-sol`, `gpt-5.5`
 
@@ -1024,7 +1024,7 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5,claude-o
 | `capabilities` | reasoning no (needed: routing_constraints.capabilities): `Phi-4-mini-instruct`, `FW-GLM-5.3-Flash`, `Phi-4`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `grok-4.7`<br>not tagged for reason (routing_constraints.actions): `gpt-5.4-nano`, `gpt-5.5` | 16 |
 | `location` | – | 16 |
 | `size` | – | 16 |
-| `price_band` | outside the top cost group for reason: `claude-haiku-5-5`, `gpt-oss-120b`, `Phi-4-reasoning`, `grok-4-1-fast-reasoning`, `DeepSeek-V4-Flash`, `gpt-5.4-mini`, `gpt-6-luna`, `FW-GLM-5.3`, `FW-Kimi-K3`, `DeepSeek-V4-Pro`, `gpt-5.6-terra`, `MAI-Thinking-1` | 4 |
+| `price_band` | outside the top cost group for reason: `claude-haiku-5-5`, `grok-4-1-fast-reasoning`, `gpt-oss-120b`, `Phi-4-reasoning`, `DeepSeek-V4-Flash`, `gpt-6-luna`, `FW-GLM-5.3`, `FW-Kimi-K3`, `gpt-5.4-mini`, `DeepSeek-V4-Pro`, `MAI-Thinking-1`, `gpt-5.6-terra` | 4 |
 
 **Stage 1 output (the 4 options Decision-1 chooses from, cheapest first):** `claude-sonnet-5-5`, `gpt-6.1-sol`, `claude-opus-5-5`, `gpt-6-astra`
 
@@ -1280,7 +1280,7 @@ request can end up here:
 | `api` | – | 26 |
 | `lifecycle` | – | 26 |
 | `allowlist` | – | 26 |
-| `selection` | 10 × provider OpenAI not requested<br>3 × provider Fireworks not requested<br>3 × provider xAI not requested<br>1 × provider Meta not requested<br>1 × provider DeepSeek not requested | 8 |
+| `selection` | 10 × provider OpenAI not requested<br>3 × provider Fireworks not requested<br>3 × provider xAI not requested<br>1 × provider DeepSeek not requested<br>1 × provider Meta not requested | 8 |
 | `capabilities` | – | 8 |
 | `location` | inference runs on anthropic infrastructure: `claude-haiku-4-5`, `claude-sonnet-5`, `claude-sonnet-4-5`, `claude-opus-4-6`, `claude-opus-4-7`, `claude-opus-4-8`, `claude-opus-5`, `claude-fable-5-1` | 0 |
 
@@ -1465,7 +1465,7 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5`.
 | `selection` | – | 23 |
 | `capabilities` | – | 23 |
 | `location` | – | 23 |
-| `size` | 6 × needs ~1200014 tokens, context is 1000000<br>5 × needs ~1200014 tokens, context is 1050000<br>3 × needs ~1200014 tokens, context is 1048576<br>2 × needs ~1200014 tokens, context is 131072<br>2 × needs ~1200014 tokens, context is 400000<br>1 × needs ~1200014 tokens, context is 16384<br>1 × needs ~1200014 tokens, context is 32768<br>1 × needs ~1200014 tokens, context is 128000<br>1 × needs ~1200014 tokens, context is 256000<br>1 × needs ~1200014 tokens, context is 500000 | 0 |
+| `size` | 6 × needs ~1200014 tokens, context is 1000000<br>5 × needs ~1200014 tokens, context is 1050000<br>3 × needs ~1200014 tokens, context is 1048576<br>2 × needs ~1200014 tokens, context is 131072<br>2 × needs ~1200014 tokens, context is 400000<br>1 × needs ~1200014 tokens, context is 16384<br>1 × needs ~1200014 tokens, context is 128000<br>1 × needs ~1200014 tokens, context is 32768<br>1 × needs ~1200014 tokens, context is 256000<br>1 × needs ~1200014 tokens, context is 500000 | 0 |
 
 **Stage 1 output:** no models. The request gets **422 `no_eligible_models`**; the `size` step removed the last candidates. Decision-1 is not called.
 
@@ -1493,7 +1493,7 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5`.
 | `selection` | – | 23 |
 | `capabilities` | – | 23 |
 | `location` | – | 23 |
-| `size` | 6 × needs ~2000000 tokens, context is 1000000<br>5 × needs ~2000000 tokens, context is 1050000<br>3 × needs ~2000000 tokens, context is 1048576<br>2 × needs ~2000000 tokens, context is 131072<br>2 × needs ~2000000 tokens, context is 400000<br>1 × needs ~2000000 tokens, context is 16384<br>1 × needs ~2000000 tokens, context is 32768<br>1 × needs ~2000000 tokens, context is 128000<br>1 × needs ~2000000 tokens, context is 256000<br>1 × needs ~2000000 tokens, context is 500000 | 0 |
+| `size` | 6 × needs ~2000000 tokens, context is 1000000<br>5 × needs ~2000000 tokens, context is 1050000<br>3 × needs ~2000000 tokens, context is 1048576<br>2 × needs ~2000000 tokens, context is 131072<br>2 × needs ~2000000 tokens, context is 400000<br>1 × needs ~2000000 tokens, context is 16384<br>1 × needs ~2000000 tokens, context is 128000<br>1 × needs ~2000000 tokens, context is 32768<br>1 × needs ~2000000 tokens, context is 256000<br>1 × needs ~2000000 tokens, context is 500000 | 0 |
 
 **Stage 1 output:** no models. The request gets **422 `no_eligible_models`**; the `size` step removed the last candidates. Decision-1 is not called.
 
@@ -1548,7 +1548,7 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5`.
 | `lifecycle` | – | 26 |
 | `allowlist` | – | 26 |
 | `selection` | 23 × not in routing_constraints.models | 3 |
-| `capabilities` | streaming no (needed: stream=true): `Llama-4-Maverick-17B-128E-Instruct-FP8`, `DeepSeek-V3.2`, `grok-4` | 0 |
+| `capabilities` | streaming no (needed: stream=true): `DeepSeek-V3.2`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `grok-4` | 0 |
 
 **Stage 1 output:** no models. The request gets **422 `no_eligible_models`**; the `capabilities` step removed the last candidates. Decision-1 is not called.
 
@@ -1572,7 +1572,7 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5`.
 | `api` | – | 26 |
 | `lifecycle` | – | 26 |
 | `allowlist` | – | 26 |
-| `selection` | 10 × provider OpenAI not requested<br>8 × provider Anthropic not requested<br>3 × provider xAI not requested<br>1 × provider Meta not requested<br>1 × provider DeepSeek not requested | 3 |
+| `selection` | 10 × provider OpenAI not requested<br>8 × provider Anthropic not requested<br>3 × provider xAI not requested<br>1 × provider DeepSeek not requested<br>1 × provider Meta not requested | 3 |
 | `capabilities` | – | 3 |
 | `location` | global deployment only, no data_zone_standard: `FW-GLM-5.3-Flash`, `FW-GLM-5.3`, `FW-Kimi-K3` | 0 |
 
@@ -1592,7 +1592,7 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5`.
 }
 ```
 
-**Read from the request:** catalog `new` (23 models), mode `balanced`, estimated ~42 prompt tokens. Requirements: `image_input` (messages contain images).
+**Read from the request:** catalog `new` (23 models), mode `balanced`, estimated ~1,626 prompt tokens. Requirements: `image_input` (messages contain images).
 
 | Step | Removed | Left |
 |---|---|---|

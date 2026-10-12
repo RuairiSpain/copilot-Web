@@ -197,16 +197,23 @@ def rank(probabilities: dict[str, float], candidates: list[ModelEntry]) -> list[
     return sorted(probabilities, key=lambda name: (-probabilities[name], tier[name]))
 
 
-def execution_order(ranking: list[str], probabilities: dict[str, float], threshold: float) -> tuple[list[str], bool]:
-    """The order in which models are called.
+def execution_order(ranking: list[str], probabilities: dict[str, float], threshold: float, mode: str = "balanced",
+                    tiers: dict[str, int] | None = None) -> tuple[list[str], bool]:
+    """The order in which models are called, and whether Decision-1 was unsure.
 
-    Normally the probability ranking. When the top model's probability is below `threshold`,
-    the second-ranked model is called first and the top model moves to second place, so it
-    is still tried if the second fails. A threshold of 0 turns the rule off.
+    Normally the probability ranking. When the top model's probability is below `threshold` the
+    decision is flagged as low confidence, and what happens depends on the routing mode:
+    - cost: the cheaper (lower tier) of the top two models is called first, so an unsure
+      decision never costs more than it has to;
+    - balanced and quality: the top model is still called first; only the flag is set.
+    A threshold of 0 turns the rule off.
     """
-    if threshold > 0 and len(ranking) >= 2 and probabilities[ranking[0]] < threshold:
-        return [ranking[1], ranking[0], *ranking[2:]], True
-    return list(ranking), False
+    if not (threshold > 0 and len(ranking) >= 2 and probabilities[ranking[0]] < threshold):
+        return list(ranking), False
+    first, second = ranking[0], ranking[1]
+    if mode == "cost" and tiers and tiers.get(second, 0) < tiers.get(first, 0):
+        return [second, first, *ranking[2:]], True
+    return list(ranking), True
 
 
 def _retry_after(response: httpx.Response) -> float | None:
@@ -287,6 +294,19 @@ class Decision1Client:
                         round((time.perf_counter() - started) * 1000, 3), request=request,
                         response_model=body.get("model") if isinstance(body.get("model"), str) else None,
                         usage=usage if isinstance(usage, dict) else None, attempts=attempts)
+
+    async def probe(self) -> str | None:
+        """One small choice question, for readiness checks. None when Decision-1 answered, else the error code."""
+        request = build_request(self.deployment, "Health check.", "Choose either option.",
+                                {"a": "Option A.", "b": "Option B."})
+        try:
+            response, _ = await self._post(request, time.perf_counter())
+            parse_answer(response.json(), ["a", "b"])
+        except DecisionError as exc:
+            return exc.code
+        except ValueError:
+            return "invalid_response"
+        return None
 
     async def close(self) -> None:
         if self._owns_http:

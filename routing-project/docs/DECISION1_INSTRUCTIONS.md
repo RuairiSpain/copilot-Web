@@ -54,9 +54,13 @@ shows the rendered instructions for each example that reaches Decision-1.
 ## Criteria
 
 Each candidate's entry is its catalog description, followed by
-`Output price $<price> per million tokens; <rank> of <count> by price among these options (1 is cheapest).`
-The rank is among the options Decision-1 is choosing from, not the whole catalog. "3 of 3" is
-more useful to it than "rank 19 of 23".
+`Price per million tokens: $<input> input, $<output> output; <rank> of <count> by price among these options, ordered by output price then input price (1 is cheapest).`
+
+- The rank is among the options Decision-1 is choosing from, not the whole catalog. "3 of 3"
+  is more useful to it than "rank 19 of 23".
+- The rank follows `tier`: output price first, then input price. The routing modes' price
+  bands and the named cost bands use the same order, so a higher rank never has a lower
+  output price.
 
 ## Design decisions
 

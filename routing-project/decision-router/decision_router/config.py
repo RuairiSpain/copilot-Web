@@ -89,10 +89,18 @@ class Settings:
     decision_max_attempts: int = 3
     # Below this top-model probability, the second-ranked model is called first. 0 disables the rule.
     low_confidence_threshold: float = 0.5
+    # Per-mode overrides of low_confidence_threshold, e.g. {"cost": 0.4, "quality": 0.6}.
+    low_confidence_thresholds: dict[str, float] = field(default_factory=dict)
     request_timeout_seconds: float = 60.0
     total_timeout_seconds: float = 90.0
     attempts_per_model: int = 2
     max_retry_after_seconds: float = 10.0
+    max_body_bytes: int = 20_000_000  # larger request bodies get 413 before they are parsed
+    caller_policies: dict[str, Any] = field(default_factory=dict)  # see policy.py
+    # When Decision-1 cannot answer, serve the cheapest stage-1 candidate (logged as degraded) instead of failing.
+    decision_fallback: bool = True
+    # /health/ready trusts a Decision-1 success (real call or probe) this recent; otherwise it probes again.
+    ready_check_seconds: float = 300.0
     decision_log_path: Path | None = None
     log_prompts: bool = False
     # Inbound authentication (see inbound.py): API keys and/or Microsoft Entra ID tokens.
@@ -105,6 +113,7 @@ class Settings:
     pin_default: bool = False
     pin_ttl_seconds: float = 3600.0
     pin_max_entries: int = 10_000
+    pin_store_url: str | None = None  # redis:// or rediss:// to share pins across replicas (pinning.py)
     # model name -> routing profile (defaults in DEFAULT_PROFILES, extended by ROUTER_PROFILES)
     profiles: dict[str, dict[str, Any]] = field(default_factory=lambda: dict(DEFAULT_PROFILES))
 
@@ -134,10 +143,16 @@ class Settings:
             decision_timeout_seconds=float(os.getenv("ROUTER_DECISION_TIMEOUT_SECONDS", "10")),
             decision_max_attempts=int(os.getenv("ROUTER_DECISION_MAX_ATTEMPTS", "3")),
             low_confidence_threshold=float(os.getenv("ROUTER_LOW_CONFIDENCE_THRESHOLD", "0.5")),
+            low_confidence_thresholds={str(k): float(v)
+                                       for k, v in _json_object("ROUTER_LOW_CONFIDENCE_THRESHOLDS").items()},
             request_timeout_seconds=float(os.getenv("ROUTER_REQUEST_TIMEOUT_SECONDS", "60")),
             total_timeout_seconds=float(os.getenv("ROUTER_TOTAL_TIMEOUT_SECONDS", "90")),
             attempts_per_model=int(os.getenv("ROUTER_ATTEMPTS_PER_MODEL", "2")),
             max_retry_after_seconds=float(os.getenv("ROUTER_MAX_RETRY_AFTER_SECONDS", "10")),
+            max_body_bytes=int(os.getenv("ROUTER_MAX_BODY_BYTES", "20000000")),
+            caller_policies=_json_object("ROUTER_CALLER_POLICIES"),
+            decision_fallback=_bool("ROUTER_DECISION_FALLBACK", True),
+            ready_check_seconds=float(os.getenv("ROUTER_READY_CHECK_SECONDS", "300")),
             decision_log_path=Path(log_path) if log_path else None,
             log_prompts=_bool("ROUTER_LOG_PROMPTS", False),
             api_keys=_list("ROUTER_API_KEYS"),
@@ -149,6 +164,7 @@ class Settings:
             pin_default=_bool("ROUTER_PIN_DEFAULT", False),
             pin_ttl_seconds=float(os.getenv("ROUTER_PIN_TTL_SECONDS", "3600")),
             pin_max_entries=int(os.getenv("ROUTER_PIN_MAX_ENTRIES", "10000")),
+            pin_store_url=os.getenv("ROUTER_PIN_STORE_URL") or None,
         )
         settings.validate()
         return settings
@@ -164,6 +180,9 @@ class Settings:
             raise ValueError("ROUTER_STATE_MAX_CHARS must be at least 1000")
         if not 0 <= self.low_confidence_threshold < 1:
             raise ValueError("ROUTER_LOW_CONFIDENCE_THRESHOLD must be at least 0 and below 1")
+        if set(self.low_confidence_thresholds) - set(ROUTING_MODES) or \
+                not all(0 <= v < 1 for v in self.low_confidence_thresholds.values()):
+            raise ValueError(f"ROUTER_LOW_CONFIDENCE_THRESHOLDS keys must be from {ROUTING_MODES}, values in [0, 1)")
         if self.decision_max_attempts < 1:
             raise ValueError("ROUTER_DECISION_MAX_ATTEMPTS must be at least 1")
         if self.attempts_per_model < 1:
@@ -173,6 +192,8 @@ class Settings:
                 raise ValueError(f"{name} must be positive")
         if self.max_retry_after_seconds < 0:
             raise ValueError("ROUTER_MAX_RETRY_AFTER_SECONDS must not be negative")
+        if self.pin_store_url and not self.pin_store_url.startswith(("redis://", "rediss://")):
+            raise ValueError("ROUTER_PIN_STORE_URL must be a redis:// or rediss:// URL")
         if self.pin_ttl_seconds <= 0 or self.pin_max_entries < 1:
             raise ValueError("ROUTER_PIN_TTL_SECONDS and ROUTER_PIN_MAX_ENTRIES must be positive")
         for name, profile in self.profiles.items():
@@ -190,6 +211,9 @@ class Settings:
     @property
     def resolved_chat_url(self) -> str | None:
         return self.url_for("openai_chat")
+
+    def threshold_for(self, mode: str) -> float:
+        return self.low_confidence_thresholds.get(mode, self.low_confidence_threshold)
 
     def url_for(self, api: str) -> str | None:
         """Where a model with this API type is called."""

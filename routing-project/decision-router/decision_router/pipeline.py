@@ -13,10 +13,11 @@ Decision-1 itself fails, the request fails: there is no other router behind it.
 from __future__ import annotations
 
 import asyncio
+import json
 import random
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 import httpx
@@ -27,7 +28,8 @@ from .config import ROUTING_MODES, Settings
 from .decision1 import Decision, Decision1Client, DecisionError, build_state, execution_order
 from .foundry import ChatClient
 from .instructions import InstructionTemplates
-from .pinning import PinStore, conversation_key
+from .pinning import build_pin_store, conversation_key
+from .policy import CallerPolicy, PolicyError, load_policies, policy_for
 from .pricing import PriceTable
 from .stage1 import ConstraintError, Constraints, parse_constraints, parse_cost_band, select
 from .telemetry import Telemetry
@@ -67,6 +69,69 @@ class ProviderError(Exception):
         self.attempts = attempts
 
 
+# APIs whose streams can end with a usage chunk (stream_options.include_usage). MAI is left out:
+# its chat endpoint is not documented to accept stream_options.
+USAGE_STREAM_APIS = ("openai_chat", "anthropic_messages")
+
+
+class UsageTap:
+    """Reads token usage out of a server-sent event stream as it passes through.
+
+    Chat-completions streams: the usage-only chunk (`choices: []` and `usage`) is recorded, and dropped
+    from the output unless the caller asked for it. Native Anthropic streams (claude_translation=false):
+    usage from `message_start` and `message_delta` is merged; nothing is removed."""
+
+    def __init__(self, keep_usage_chunk: bool):
+        self.keep_usage_chunk = keep_usage_chunk
+        self.usage: dict[str, Any] | None = None
+        self._buffer = b""
+
+    def feed(self, chunk: bytes) -> bytes:
+        self._buffer += chunk
+        out = []
+        while True:
+            end, size = min(((self._buffer.find(sep), len(sep)) for sep in (b"\n\n", b"\r\n\r\n")
+                             if self._buffer.find(sep) >= 0), default=(-1, 0))
+            if end < 0:
+                break
+            event, self._buffer = self._buffer[:end + size], self._buffer[end + size:]
+            if self._keep(event):
+                out.append(event)
+        return b"".join(out)
+
+    def finish(self) -> bytes:
+        rest, self._buffer = self._buffer, b""
+        return rest
+
+    def _keep(self, event: bytes) -> bool:
+        for line in event.splitlines():
+            if not line.startswith(b"data:"):
+                continue
+            try:
+                data = json.loads(line[5:].strip() or b"null")
+            except ValueError:
+                return True
+            if not isinstance(data, dict):
+                return True
+            usage = data.get("usage") or (data.get("message") or {}).get("usage")
+            if isinstance(usage, dict):
+                self.usage = {**(self.usage or {}), **usage}
+                if data.get("choices") == [] and not self.keep_usage_chunk:
+                    return False
+        return True
+
+
+# Request parameters a model may refuse without the request being wrong: the router drops them and
+# retries the same model once, so callers can always send them (stream_options is added by the router).
+DROPPABLE_PARAMS = ("temperature", "top_p", "reasoning_effort", "stream_options")
+
+
+def _rejected_params(content: bytes, body: dict[str, Any]) -> list[str]:
+    """The droppable parameters in `body` that a 400 error message names."""
+    text = content.decode("utf-8", "replace").lower()
+    return [p for p in DROPPABLE_PARAMS if p in body and p in text]
+
+
 def _retryable(status: int) -> bool:
     return status in (408, 429) or status >= 500
 
@@ -101,6 +166,7 @@ class Prepared:
     pin: bool = False  # routing_pin: keep the conversation on one model (pinning.py)
     session_id: str | None = None  # x-router-session-id header, when sent
     cost_band: CostBand | None = None  # routing_cost_band: replaces the mode's price band in stage 1
+    policy: CallerPolicy | None = None  # the operator's limits for this caller (policy.py)
 
 
 @dataclass
@@ -154,8 +220,32 @@ class RouterPipeline:
         self.prices = prices
         self._sleep = sleep
         self._clock = clock
-        self.pins = PinStore(settings.pin_ttl_seconds, settings.pin_max_entries, clock=clock)
+        self.pins = build_pin_store(settings.pin_store_url, settings.pin_ttl_seconds, settings.pin_max_entries, clock)
         self.templates = InstructionTemplates.load(settings.instructions_path)
+        self._decision_checked: tuple[float, str | None] | None = None  # (when, error code or None)
+        self._probe_task: asyncio.Task | None = None
+        self._check_profiles()
+        try:
+            self.policies = load_policies(settings.caller_policies)
+        except PolicyError as exc:
+            raise ValueError(f"ROUTER_CALLER_POLICIES: {exc}") from exc
+        known = {m.name for c in catalogs.catalogs.values() for m in c.models}
+        for policy in self.policies.values():
+            if set(policy.models) - known:
+                raise ValueError(f"ROUTER_CALLER_POLICIES '{policy.name}' names unknown models "
+                                 f"{sorted(set(policy.models) - known)}")
+
+    def _check_profiles(self) -> None:
+        """Fail at startup, not on every request, when a profile names a model, band or mode the catalog lacks."""
+        for name, profile in self.settings.profiles.items():
+            try:
+                catalog = self.catalogs.get(profile.get("compatibility"))
+                if profile.get("routing_mode", catalog.default_mode) not in ROUTING_MODES:
+                    raise ConstraintError(f"routing_mode must be one of {list(ROUTING_MODES)}")
+                parse_constraints(profile.get("routing_constraints"), catalog)
+                parse_cost_band(profile.get("routing_cost_band"), catalog)
+            except (CatalogError, ConstraintError) as exc:
+                raise ValueError(f"routing profile '{name}' is invalid: {exc}") from exc
 
     # ------------------------------------------------------------------ request shape
     def prepare(self, body: Any) -> Prepared:
@@ -198,12 +288,44 @@ class RouterPipeline:
         return Prepared(mode, catalog, constraints, forwarded, passthrough=not translation,
                         profile=profile_name if profile else None, pin=pin, cost_band=cost_band)
 
+    async def decision1_health(self) -> dict[str, Any]:
+        """Whether Decision-1 answers, from the last real call or probe.
+
+        Never waits for Decision-1: readiness probes have short timeouts. When the last result is older
+        than ready_check_seconds a probe starts in the background and the previous result is returned;
+        before the first result, `ok` is None. So frequent readiness checks cost at most one small
+        Decision-1 call per window per replica."""
+        now = self._clock()
+        stale = self._decision_checked is None or now - self._decision_checked[0] >= self.settings.ready_check_seconds
+        if stale and (self._probe_task is None or self._probe_task.done()):
+            self._probe_task = asyncio.get_running_loop().create_task(self._probe_decision1())
+        if self._decision_checked is None:
+            return {"ok": None, "error": None, "checked_seconds_ago": None}
+        when, error = self._decision_checked
+        return {"ok": error is None, "error": error, "checked_seconds_ago": round(now - when, 1)}
+
+    async def _probe_decision1(self) -> None:
+        self._decision_checked = (self._clock(), await self.decision.probe())
+
+    def apply_policy(self, prepared: Prepared) -> Prepared:
+        """Bound a prepared request by the caller's policy. Applied after the request's own fields."""
+        policy = policy_for(self.policies, prepared.caller)
+        if policy is None:
+            return prepared
+        if policy.catalogs and prepared.catalog.compatibility not in policy.catalogs:
+            raise RoutingError(403, "policy_denied", f"this caller may use the {list(policy.catalogs)} catalog(s), "
+                                                     f"not '{prepared.catalog.compatibility}'")
+        if policy.modes and prepared.mode not in policy.modes:
+            raise RoutingError(403, "policy_denied", f"this caller may use routing modes {list(policy.modes)}, "
+                                                     f"not '{prepared.mode}'")
+        return replace(prepared, policy=policy)
+
     # ------------------------------------------------------------------ stages 1 and 2
     async def route(self, prepared: Prepared, request_id: str) -> Routed:
         started = self._clock()
         catalog, mode, body = prepared.catalog, prepared.mode, prepared.body
         stage1 = select(catalog, mode, prepared.constraints, body, self.settings, passthrough=prepared.passthrough,
-                        cost_band=prepared.cost_band)
+                        cost_band=prepared.cost_band, policy=prepared.policy)
         candidates = stage1.candidates
         event: dict[str, Any] = {
             "request_id": request_id,
@@ -212,6 +334,7 @@ class RouterPipeline:
             "catalog_sha256": catalog.fingerprint,
             "routing_constraints": prepared.constraints.as_dict(),
             "cost_band": prepared.cost_band.as_dict() if prepared.cost_band else None,
+            "policy": prepared.policy.as_dict() if prepared.policy else None,
             "claude_translation": not prepared.passthrough,
             "profile": prepared.profile,
             "caller": prepared.caller,
@@ -226,13 +349,13 @@ class RouterPipeline:
                                f"no model in the '{catalog.compatibility}' catalog passes stage 1; the "
                                f"'{stage1.empty_at}' step removed the last candidates",
                                details={"stage1": stage1.log()})
-        pin_key, pinned, pin_log = self._pin_lookup(prepared, stage1, candidates)
+        pin_key, pinned, pin_log = await self._pin_lookup(prepared, stage1, candidates)
         if pin_log:
             event["pin"] = pin_log
         rendered = self.templates.render(
             candidates, mode=mode, constraints=prepared.constraints, cost_band=prepared.cost_band,
             requirements=stage1.requirements, body=body, chars_per_token=self.settings.chars_per_token,
-            profile=prepared.profile, passthrough=prepared.passthrough, pin=pin_log)
+            profile=prepared.profile, passthrough=prepared.passthrough, pin=pin_log, tokens=stage1.tokens)
         event["instructions"] = {"template_sha256": self.templates.fingerprint, "fragments": rendered.fragments,
                                  "dropped": rendered.dropped, "text": rendered.instructions}
         if pinned:
@@ -250,13 +373,23 @@ class RouterPipeline:
                     candidates,
                 )
             except DecisionError as exc:
-                event.update(outcome="decision_failed", error_code=exc.code,
-                             total_latency_ms=round((self._clock() - started) * 1000, 3))
-                self.telemetry.record(event, body)
-                status = 504 if exc.code == "timeout" else 503 if exc.status_code == 429 else 502
-                raise RoutingError(status, "decision_unavailable", f"Decision-1 failed: {exc}") from exc
-            order, low_confidence = execution_order(decision.ranking, decision.probabilities,
-                                                    0.0 if decision.skipped else self.settings.low_confidence_threshold)
+                if not self.settings.decision_fallback:
+                    event.update(outcome="decision_failed", error_code=exc.code,
+                                 total_latency_ms=round((self._clock() - started) * 1000, 3))
+                    self.telemetry.record(event, body)
+                    status = 504 if exc.code == "timeout" else 503 if exc.status_code == 429 else 502
+                    raise RoutingError(status, "decision_unavailable", f"Decision-1 failed: {exc}") from exc
+                # Degraded: stage 1's candidates in price order, cheapest first, without Decision-1's ranking.
+                names = [m.name for m in candidates]
+                decision = Decision(names, names, {n: 0.0 for n in names}, names[0], None, 0.0, skipped=True)
+                event["degraded"] = {"reason": exc.code, "message": str(exc)}
+                order, low_confidence = names, False
+            else:
+                if not decision.skipped:
+                    self._decision_checked = (self._clock(), None)  # a real answer counts as a health check
+                threshold = 0.0 if decision.skipped else self.settings.threshold_for(mode)
+                order, low_confidence = execution_order(decision.ranking, decision.probabilities, threshold, mode,
+                                                        {m.name: m.tier for m in candidates})
         event["decision"] = {
             "pinned": pinned is not None,
             "deployment": self.decision.deployment,
@@ -264,7 +397,7 @@ class RouterPipeline:
             "execution_order": order,
             "top_probability": decision.probabilities[decision.ranking[0]],
             "low_confidence": low_confidence,
-            "low_confidence_threshold": self.settings.low_confidence_threshold,
+            "low_confidence_threshold": self.settings.threshold_for(mode),
             "probabilities": decision.probabilities,
             "choice": decision.choice,
             "confidence": decision.confidence,
@@ -278,7 +411,7 @@ class RouterPipeline:
         return Routed(request_id, mode, catalog, candidates, decision, started, event, order, low_confidence,
                       prepared.passthrough, pin_key, rendered.instructions, rendered.criteria)
 
-    def _pin_lookup(self, prepared: Prepared, stage1, candidates: list[ModelEntry]):
+    async def _pin_lookup(self, prepared: Prepared, stage1, candidates: list[ModelEntry]):
         """(key, pin to follow or None, log entry or None) for this request."""
         if not prepared.pin:
             return None, None, None
@@ -290,7 +423,7 @@ class RouterPipeline:
         if key is None:
             return None, None, {"status": "no_key"}
         log: dict[str, Any] = {"key": key[:16], "source": "header" if prepared.session_id else "messages"}
-        pin = self.pins.get(key)
+        pin = await self.pins.get(key)
         if pin is None:
             return key, None, {**log, "status": "new"}
         if pin.model in {m.name for m in candidates}:
@@ -311,14 +444,20 @@ class RouterPipeline:
         attempts: list[dict[str, Any]] = []
         for name in routed.order:
             entry = routed.catalog.by_name[name]
-            for attempt in range(1, settings.attempts_per_model + 1):
+            send_body, attempt, dropped_any = body, 0, False
+            if stream and not routed.passthrough and entry.api in USAGE_STREAM_APIS:
+                # Ask for the final usage chunk so streamed requests are logged with usage and cost;
+                # UsageTap removes it again if the caller did not ask for it.
+                send_body = {**body, "stream_options": {**(body.get("stream_options") or {}), "include_usage": True}}
+            while attempt < settings.attempts_per_model:
+                attempt += 1
                 remaining = deadline - self._clock()
                 if remaining <= 0:
                     raise RoutingError(504, "deadline_exceeded", "no model answered within the time budget", attempts)
                 t0 = self._clock()
                 record: dict[str, Any] = {"model": name, "attempt": attempt, "status": None}
                 try:
-                    response = await self.chat.send(entry, body, passthrough=routed.passthrough,
+                    response = await self.chat.send(entry, send_body, passthrough=routed.passthrough,
                                                     timeout=min(settings.request_timeout_seconds, remaining),
                                                     stream=stream)
                 except httpx.TimeoutException:
@@ -340,9 +479,27 @@ class RouterPipeline:
                         attempts.append(record)
                         await response.aclose()
                         break
+                    if response.status_code in (401, 403):
+                        # The router's own credentials were refused (for example a missing role on one
+                        # deployment). The caller's credentials are not involved, so passing this status
+                        # through would mislead them: try the next model, and end in 502 if none answers.
+                        record["outcome"] = "upstream_auth_error"
+                        attempts.append(record)
+                        await response.aclose()
+                        break
                     if not _retryable(response.status_code):
                         content = await response.aread()
                         await response.aclose()
+                        rejected = [] if routed.passthrough else _rejected_params(content, send_body)
+                        if response.status_code == 400 and rejected and not dropped_any:
+                            # Optional sampling/reasoning parameters are accepted from every caller; a model
+                            # that refuses one gets the request again without it, as if it had ignored it.
+                            record.update(outcome="parameter_rejected", dropped=rejected)
+                            attempts.append(record)
+                            send_body = {k: v for k, v in send_body.items() if k not in rejected}
+                            attempt -= 1  # dropping a parameter does not use up one of the model's attempts
+                            dropped_any = True
+                            continue
                         record["outcome"] = "client_error"
                         attempts.append(record)
                         raise ProviderError(response.status_code, content, response.headers.get("content-type"),
@@ -379,7 +536,7 @@ class RouterPipeline:
         if error_code:
             routed.event["error_code"] = error_code
         if routed.pin_key and outcome == "success" and served:
-            self.pins.set(routed.pin_key, served.name, routed.order, routed.decision.probabilities)
+            self.pins.set_nowait(routed.pin_key, served.name, routed.order, routed.decision.probabilities)
             routed.event.setdefault("pin", {})["pinned_to"] = served.name
         self.telemetry.record(routed.event, body)
 
@@ -412,22 +569,33 @@ class RouterPipeline:
             self._finish(routed, body, None, exc.attempts, "failed", error_code=exc.code)
             raise
 
+        tap = UsageTap(keep_usage_chunk=bool((body.get("stream_options") or {}).get("include_usage")))
+
         async def chunks() -> AsyncIterator[bytes]:
             outcome = "success"
             try:
                 async for chunk in response.aiter_raw():
-                    yield chunk
+                    out = tap.feed(chunk)
+                    if out:
+                        yield out
+                rest = tap.finish()
+                if rest:
+                    yield rest
             except BaseException:  # includes the client disconnecting (GeneratorExit / cancellation)
                 outcome = "stream_interrupted"
                 raise
             finally:
                 await response.aclose()
-                self._finish(routed, body, served, attempts, outcome)
+                self._finish(routed, body, served, attempts, outcome,
+                             {"usage": tap.usage} if tap.usage else None)
 
         return StreamingCompletion(routed, served, response.status_code,
                                    response.headers.get("content-type", "text/event-stream"), attempts, chunks())
 
     async def close(self) -> None:
+        if self._probe_task and not self._probe_task.done():
+            self._probe_task.cancel()
+        await self.pins.close()
         await self.decision.close()
         await self.chat.close()
         await self.decision.auth.close()

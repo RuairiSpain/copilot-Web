@@ -48,6 +48,7 @@ def _routing_headers(routed: Routed, served: str | None = None) -> dict[str, str
         "x-router-compatibility": routed.catalog.compatibility,
         "x-router-ranking": ",".join(routed.decision.ranking),
         "x-router-low-confidence": str(routed.low_confidence).lower(),
+        "x-router-degraded": "true" if routed.event.get("degraded") else "false",
     }
     if "pin" in routed.event:
         headers["x-router-pin"] = routed.event["pin"].get("status", "")
@@ -86,8 +87,19 @@ def create_app(settings: Settings | None = None, *, pipeline: RouterPipeline | N
         return value[:128] if value else str(uuid.uuid4())
 
     async def read_body(request: Request) -> Any:
+        limit = settings.max_body_bytes
+        too_large = RoutingError(413, "request_too_large", f"request body is larger than {limit:,} bytes")
+        declared = request.headers.get("content-length")
+        if declared and declared.isdigit() and int(declared) > limit:
+            raise too_large
+        chunks, size = [], 0
+        async for chunk in request.stream():  # counted as it arrives, so a body without a length is capped too
+            size += len(chunk)
+            if size > limit:
+                raise too_large
+            chunks.append(chunk)
         try:
-            return await request.json()
+            return json.loads(b"".join(chunks))
         except (json.JSONDecodeError, UnicodeDecodeError) as exc:
             raise RoutingError(400, "invalid_json", "request body is not valid JSON") from exc
 
@@ -103,7 +115,8 @@ def create_app(settings: Settings | None = None, *, pipeline: RouterPipeline | N
     async def prepare(request: Request) -> Any:
         caller = await gate.check(request.headers)
         session = request.headers.get(SESSION_HEADER)
-        return replace(pipe.prepare(await read_body(request)), caller=caller.log(), session_id=session or None)
+        prepared = replace(pipe.prepare(await read_body(request)), caller=caller.log(), session_id=session or None)
+        return pipe.apply_policy(prepared)
 
     @app.exception_handler(ProviderError)
     async def provider_error(_: Request, exc: ProviderError) -> Response:
@@ -143,6 +156,7 @@ def create_app(settings: Settings | None = None, *, pipeline: RouterPipeline | N
                 "ranking": [{"model": name, "probability": decision.probabilities[name]} for name in decision.ranking],
                 "execution_order": routed.order,
                 "low_confidence": routed.low_confidence,
+                "degraded": routed.event.get("degraded"),
                 "pin": routed.event.get("pin"),
                 "decision1_input": {"instructions": routed.instructions,
                                     "fragments": routed.event["instructions"]["fragments"],
@@ -158,15 +172,26 @@ def create_app(settings: Settings | None = None, *, pipeline: RouterPipeline | N
         return {"status": "ok", "version": __version__}
 
     @app.get("/health/ready")
-    async def ready() -> dict[str, Any]:
-        return {
-            "status": "ready",
+    async def ready() -> JSONResponse:
+        """Ready when Decision-1 answers. If it does not, the router can still serve requests degraded
+        (cheapest candidate) unless ROUTER_DECISION_FALLBACK=false, in which case it reports 503."""
+        decision1 = await pipe.decision1_health()
+        fallback = pipe.settings.decision_fallback
+        if decision1["ok"] is None:  # first probe still running
+            status = "starting" if fallback else "not_ready"
+        else:
+            status = "ready" if decision1["ok"] else "degraded" if fallback else "not_ready"
+        pins = getattr(pipe.pins, "ping", None)
+        return JSONResponse({
+            "status": status,
+            "decision1": decision1,
+            "pin_store": ("redis ok" if await pins() else "redis unavailable") if pins else "memory",
             "inbound_auth": gate.methods or ["none"],
             "profiles": sorted(settings.profiles),
             "default_compatibility": pipe.catalogs.default,
             "catalogs": {name: c.describe() for name, c in pipe.catalogs.catalogs.items()},
             "decision1_deployment": pipe.decision.deployment,
-        }
+        }, status_code=503 if status == "not_ready" else 200)
 
     @app.get("/metrics")
     async def metrics() -> Response:

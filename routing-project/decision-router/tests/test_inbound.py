@@ -67,7 +67,7 @@ def test_entra_token_from_a_managed_identity_or_client_credentials():
 
 @pytest.mark.parametrize("claims, message", [
     ({"aud": "api://something-else"}, "token rejected"),
-    ({"exp": int(time.time()) - 3600}, "token rejected"),
+    ({"exp": int(time.time()) - 3600}, "token expired"),
     ({"iss": "https://login.microsoftonline.com/other-tenant/v2.0"}, "token rejected"),
     ({"kid": "unknown"}, "unknown key"),
 ])
@@ -78,7 +78,7 @@ def test_entra_token_checks(claims, message):
 
 def test_allowed_client_ids():
     gate = entra(allowed_client_ids=("bbbbbbbb-0000-0000-0000-000000000002",))
-    with pytest.raises(Unauthorized, match="ROUTER_ENTRA_ALLOWED_CLIENT_IDS"):
+    with pytest.raises(Unauthorized, match="not allowed to call this router"):
         check(gate, {"Authorization": f"Bearer {token()}"})
 
 

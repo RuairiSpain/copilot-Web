@@ -107,3 +107,17 @@ def test_stream_translation_with_tool_calls():
     assert [p["choices"][0]["finish_reason"] for p in payloads if p["choices"]][-1] == "tool_calls"
     assert payloads[-1]["usage"]["prompt_tokens"] == 9 and payloads[-1]["usage"]["completion_tokens"] == 3
     assert text.rstrip().endswith("data: [DONE]")
+
+
+def test_sampling_and_effort_follow_what_each_claude_model_accepts():
+    body = {"messages": [{"role": "user", "content": "hi"}], "temperature": 0.2, "top_p": 0.9,
+            "reasoning_effort": "xhigh"}
+    newest = to_messages_request(body, "d", 4096, "claude-opus-5-5")
+    assert "temperature" not in newest and "top_p" not in newest  # these models return 400 for them
+    assert newest["output_config"] == {"effort": "xhigh"}
+    older = to_messages_request(body, "d", 4096, "claude-sonnet-4-5")
+    assert older["temperature"] == 0.2 and "top_p" not in older and "output_config" not in older
+    opus46 = to_messages_request(dict(body, reasoning_effort="minimal"), "d", 4096, "claude-opus-4-6")
+    assert opus46["output_config"] == {"effort": "low"} and opus46["temperature"] == 0.2
+    assert to_messages_request(dict(body, reasoning_effort="xhigh"), "d", 4096,
+                               "claude-opus-4-6")["output_config"] == {"effort": "high"}

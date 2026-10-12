@@ -63,11 +63,13 @@ def test_capability_filter(new_catalog, settings):
     assert "gpt-5.6-terra" not in names(strict)  # Chat Completions tools only with reasoning off
 
 
-def test_json_schema_keeps_claude_and_json_mode_is_not_filtered(catalog, settings):
+def test_json_schema_keeps_claude_and_json_mode_removes_only_claude(catalog, settings):
     schema = dict(USER, response_format={"type": "json_schema", "json_schema": {"name": "x", "schema": {}}})
     assert "claude-opus-5" in names(select(catalog, "balanced", Constraints(), schema, settings))
     json_mode = dict(USER, response_format={"type": "json_object"})
-    assert names(select(catalog, "balanced", Constraints(), json_mode, settings)) == [m.name for m in catalog.models]
+    result = select(catalog, "balanced", Constraints(), json_mode, settings)
+    assert names(result) == [m.name for m in catalog.models if m.api != "anthropic_messages"]
+    assert removed(result, "capabilities")["claude-opus-5"].startswith("response_format=json_object")
 
 
 def test_prompt_over_the_input_limit(new_catalog, settings):
@@ -146,3 +148,13 @@ def test_invalid_constraints(catalog, raw, message):
 
 def test_region_names_are_normalised(catalog):
     assert parse_constraints({"region": "Sweden Central"}, catalog).region == "swedencentral"
+
+
+def test_images_count_a_fixed_cost_not_their_base64_size(new_catalog, settings):
+    from decision_router.stage1 import IMAGE_TOKENS, estimated_tokens
+    image = {"type": "image_url", "image_url": {"url": "data:image/png;base64," + "A" * 1_000_000}}
+    body = {"messages": [{"role": "user", "content": [{"type": "text", "text": "describe"}, image, image]}]}
+    prompt, _ = estimated_tokens(body, settings.chars_per_token)
+    assert 2 * IMAGE_TOKENS < prompt < 2 * IMAGE_TOKENS + 100
+    result = select(new_catalog, "balanced", Constraints(), body, settings)
+    assert not removed(result, "size") and result.tokens[0] == prompt  # no model dropped for "size"

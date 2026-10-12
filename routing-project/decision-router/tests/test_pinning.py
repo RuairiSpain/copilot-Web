@@ -1,5 +1,7 @@
 import json
+from dataclasses import replace
 
+import pytest
 from fastapi.testclient import TestClient
 
 from decision_router.app import create_app
@@ -122,14 +124,14 @@ def test_store_expiry_and_size_limit():
     store = PinStore(ttl_seconds=10, max_entries=2, clock=lambda: now[0])
     store.set("a", "m1", ["m1", "m2"], {})
     now[0] = 8
-    assert store.get("a").model == "m1"  # use extends the pin
+    assert store.get_now("a").model == "m1"  # use extends the pin
     now[0] = 15
-    assert store.get("a") is not None
+    assert store.get_now("a") is not None
     now[0] = 30
-    assert store.get("a") is None
+    assert store.get_now("a") is None
     for key in ("x", "y", "z"):
         store.set(key, "m", [], {})
-    assert len(store) == 2 and store.get("x") is None
+    assert len(store) == 2 and store.get_now("x") is None
 
 
 def test_builtin_coding_profile(make_pipeline, settings, fake):
@@ -143,3 +145,48 @@ def test_builtin_coding_profile(make_pipeline, settings, fake):
         routed = c.post("/v1/route", json=body).json()
     assert set(routed["candidates"]) <= set(prepared.constraints.models) and len(routed["candidates"]) >= 5
     assert "gpt-6.1-sol" not in routed["candidates"]
+
+
+def test_pins_are_shared_through_redis_across_replicas(make_pipeline, settings, fake):
+    fakeredis = __import__("fakeredis")
+    from decision_router.pinning import RedisPinStore
+
+    server = fakeredis.FakeServer()
+    replicas = []
+    for _ in range(2):
+        pipe = make_pipeline(pin_default=True)
+        pipe.pins = RedisPinStore("redis://shared", 3600, client=fakeredis.aioredis.FakeRedis(server=server))
+        replicas.append(pipe)
+    fake.decision_responses.append(ranked(["gpt-5.5", "gpt-5.6-terra"]))
+    with TestClient(create_app(settings, pipeline=replicas[0])) as first:
+        assert served(first.post("/v1/chat/completions", json={"messages": TURN1})) == "gpt-5.5"
+    with TestClient(create_app(settings, pipeline=replicas[1])) as second:  # another replica, same conversation
+        response = second.post("/v1/chat/completions", json={"messages": TURN2})
+    assert served(response) == "gpt-5.5" and response.headers["x-router-pin"] == "followed"
+    assert len(decision_calls(fake)) == 1
+
+
+def test_redis_failure_never_fails_the_request(make_pipeline, settings, fake):
+    from decision_router.pinning import RedisPinStore
+
+    class Broken:
+        async def get(self, *_):
+            raise ConnectionError("redis down")
+
+        async def set(self, *_, **__):
+            raise ConnectionError("redis down")
+
+        async def aclose(self):
+            pass
+
+    pipe = make_pipeline(pin_default=True)
+    pipe.pins = RedisPinStore("redis://down", 3600, client=Broken())
+    fake.decision_responses.append(ranked(["gpt-5.5"]))
+    with TestClient(create_app(settings, pipeline=pipe)) as c:
+        response = c.post("/v1/chat/completions", json={"messages": TURN1})
+    assert response.status_code == 200 and response.headers["x-router-pin"] == "new"
+
+
+def test_pin_store_url_must_be_redis(settings):
+    with pytest.raises(ValueError, match="redis://"):
+        replace(settings, pin_store_url="memcached://x").validate()

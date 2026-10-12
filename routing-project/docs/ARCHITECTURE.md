@@ -13,12 +13,13 @@ stage 1   deterministic filter (stage1.py)    lifecycle → operator allow-list 
    ▼
 stage 2   Decision-1 "choice" question        state = rendered conversation
    │      instructions = fixed fragments chosen and filled by stage 1 (instructions.py)
-   │      criteria = candidates + descriptions + output price + price rank among the options
+   │      criteria = candidates + descriptions + input and output price + price rank among the options
    │      ranking = probabilities, highest first (ties → cheaper model)
    ▼
 select    execution order                     highest probability first; if that probability is
-   │                                          below ROUTER_LOW_CONFIDENCE_THRESHOLD, the second-
-   │                                          ranked model goes first and the top model second
+   │                                          below the low-confidence threshold, cost mode calls
+   │                                          the cheaper of the top two first; other modes keep the
+   │                                          top model and flag the decision
    ▼
 log       decision log line                   candidates, probabilities, ranking, execution order, usage, cost
    │
@@ -79,7 +80,7 @@ api-key: <key>            or   Authorization: Bearer <Entra token, scope cogniti
  "questions": {"route": {
    "type": "choice",
    "instructions": "Choose the model that should answer ... Cost mode: ...",
-   "criteria": {"gpt-5.4-nano": "Smallest, fastest GPT-5.4 model ... Output price $0.80 per million tokens; 1 of 3 by price among these options (1 is cheapest).",
+   "criteria": {"gpt-5.4-nano": "Smallest, fastest GPT-5.4 model ... Price per million tokens: $0.10 input, $0.80 output; 1 of 3 by price among these options, ordered by output price then input price (1 is cheapest).",
                 "gpt-5.4-mini": "...", "gpt-5.6-terra": "..."}}}}
 
 200 {"model": "microsoft-decision-1", "usage": {"prompt_tokens": 412, ...},
@@ -112,18 +113,45 @@ every option", plus the model name and token usage. The field names `probabiliti
 smoke-tested against Foundry. Confirm them with one live call; they are read in
 `decision_router/decision1.py:parse_answer`.
 
+## Health and readiness
+
+`/health/live`, `/health/ready` and `/metrics` need no credentials.
+
+`/health/ready` reports whether Decision-1 answers. It never waits for Decision-1, because
+readiness probes have short timeouts. Instead it returns the result of the last real Decision-1
+call or probe. When that result is older than `ROUTER_READY_CHECK_SECONDS` (300), it starts one
+small probe in the background, so frequent checks cost at most one tiny Decision-1 call per
+window per replica.
+
+| Decision-1 | `ROUTER_DECISION_FALLBACK=true` (default) | `false` |
+|---|---|---|
+| answers | 200 `ready` | 200 `ready` |
+| fails | 200 `degraded`: requests are still served, by the cheapest candidate | 503 `not_ready` |
+| first probe still running | 200 `starting` | 503 `not_ready` |
+
+The response also reports the pin store (`memory`, `redis ok` or `redis unavailable`; Redis is
+best effort and never makes the router unready), the catalogs, profiles and inbound auth methods.
+
 ## Selecting the model: the low-confidence rule
 
 The model called first is the one with the highest probability. When that probability is
-below `ROUTER_LOW_CONFIDENCE_THRESHOLD` (default `0.5`), the second-ranked model is called
-first instead, and the top model moves to second place, so it is still tried if the second
-model fails. The rest of the order is unchanged.
+below the threshold, Decision-1 is treated as unsure: the decision is flagged
+`low_confidence`, and what happens next depends on the routing mode.
 
-| Probabilities | Threshold | Execution order | `low_confidence` |
-|---|---|---|---|
-| gpt-5.5 0.70, gpt-5.6-terra 0.20, gpt-5.6-sol 0.10 | 0.5 | gpt-5.5, gpt-5.6-terra, gpt-5.6-sol | false |
-| gpt-5.5 0.45, gpt-5.6-terra 0.35, gpt-5.6-sol 0.20 | 0.5 | gpt-5.6-terra, gpt-5.5, gpt-5.6-sol | true |
-| gpt-5.5 0.45, gpt-5.6-terra 0.35, gpt-5.6-sol 0.20 | 0 (off) | gpt-5.5, gpt-5.6-terra, gpt-5.6-sol | false |
+| Mode | When unsure |
+|---|---|
+| `cost` | The cheaper (lower tier, so lower output price) of the top two models is called first; the other is the backup. If the top model is already the cheaper, nothing changes. |
+| `balanced`, `quality` | The top model is still called first. Only the flag is set. |
+
+| Probabilities | Mode | Threshold | Execution order | `low_confidence` |
+|---|---|---|---|---|
+| gpt-5.5 0.70, gpt-5.6-terra 0.20, gpt-5.6-sol 0.10 | any | 0.5 | gpt-5.5, gpt-5.6-terra, gpt-5.6-sol | false |
+| gpt-5.5 0.45, gpt-5.6-terra 0.35, gpt-5.6-sol 0.20 | cost | 0.5 | gpt-5.6-terra ($8), gpt-5.5 ($15), gpt-5.6-sol | true |
+| gpt-5.5 0.45, gpt-5.6-terra 0.35, gpt-5.6-sol 0.20 | balanced | 0.5 | gpt-5.5, gpt-5.6-terra, gpt-5.6-sol | true |
+| gpt-5.5 0.45, gpt-5.6-terra 0.35, gpt-5.6-sol 0.20 | any | 0 (off) | gpt-5.5, gpt-5.6-terra, gpt-5.6-sol | false |
+
+The threshold is `ROUTER_LOW_CONFIDENCE_THRESHOLD` (default `0.5`), overridable per mode
+with `ROUTER_LOW_CONFIDENCE_THRESHOLDS`, for example `{"cost": 0.4, "quality": 0.6}`.
 
 Notes:
 
@@ -146,13 +174,16 @@ The response carries `x-router-low-confidence: true|false`, and `/v1/route` retu
 | Event | Behaviour |
 |---|---|
 | Decision-1 returns 408, 429, 5xx or a network error | Retried with exponential backoff, honouring `retry-after-ms` / `retry-after`, up to `ROUTER_DECISION_MAX_ATTEMPTS` attempts inside `ROUTER_DECISION_TIMEOUT_SECONDS` |
-| Decision-1 still failing, or 400/401/403/404/422, refusal or malformed answer | `code: decision_unavailable`, status 503 for throttling, 504 for timeout, otherwise 502. No model is called. |
+| Decision-1 still failing, or 400/401/403/404/422, refusal or malformed answer | Degraded: the stage-1 candidates are called in price order, cheapest first, without Decision-1's ranking. The response carries `x-router-degraded: true` and the decision log `degraded` (reason and message). With `ROUTER_DECISION_FALLBACK=false`: `code: decision_unavailable`, status 503 for throttling, 504 for timeout, otherwise 502, and no model is called. |
 | Model returns 408, 429, 5xx or a network error | Retry the same model (`ROUTER_ATTEMPTS_PER_MODEL`, default 2), honouring `retry-after-ms` / `retry-after` up to `ROUTER_MAX_RETRY_AFTER_SECONDS`; then the next ranked model |
 | Model returns 404 (deployment missing) | Next ranked model, no retry |
-| Model returns another 4xx (bad request, content filter, auth) | Passed through to the client unchanged; no fallback, because another model would get the same request |
+| Model returns 401 or 403 | The router's own credentials were refused for that deployment (the caller's are never sent upstream). Next ranked model, no retry; logged as `upstream_auth_error`. If no model answers, 502 `all_models_failed`, never the upstream 401/403 |
+| Model returns 400 naming `temperature`, `top_p`, `reasoning_effort` or `stream_options` | The parameter is removed and the same model is called again, once, without using up an attempt; logged as `parameter_rejected` with the `dropped` list. Callers can therefore always send these parameters. For Claude the adapter goes further: it never sends `temperature`/`top_p` to the models that reject them (Opus 4.7 and later, Fable, Sonnet 5 and the 5.5 models), sends only `temperature` when both are given, and maps `reasoning_effort` to `output_config.effort` where the model supports it |
+| Model returns another 4xx (bad request, content filter) | Passed through to the client unchanged; no fallback, because another model would get the same request |
+| Request body larger than `ROUTER_MAX_BODY_BYTES` | 413 `request_too_large`, before the body is parsed |
 | All ranked models fail | 502, `code: all_models_failed`, with the attempt list |
 | `ROUTER_TOTAL_TIMEOUT_SECONDS` used up | 504, `code: deadline_exceeded` |
-| Streaming | Fallback is possible only before the first byte |
+| Streaming | Fallback is possible only before the first byte. The router asks OpenAI-style and Claude models for a final usage chunk (`stream_options.include_usage`), logs usage and cost from it, and removes it from the stream unless the caller asked for it. Native Claude streams report usage from `message_start` and `message_delta` |
 
 ## Decision log
 
@@ -234,11 +265,16 @@ What the report does and does not show:
 | `FOUNDRY_ANTHROPIC_MESSAGES_URL` | `{endpoint}/anthropic/v1/messages` | Override the Claude route |
 | `ANTHROPIC_VERSION` | `2023-06-01` | `anthropic-version` header for Claude |
 | `ROUTER_ANTHROPIC_DEFAULT_MAX_TOKENS` | `4096` | Output budget sent to Claude when the request sets none |
-| `ROUTER_LOW_CONFIDENCE_THRESHOLD` | `0.5` | Below this top probability, call the second-ranked model first; `0` turns the rule off |
+| `ROUTER_LOW_CONFIDENCE_THRESHOLD` | `0.5` | Below this top probability the decision is flagged low-confidence (cost mode then calls the cheaper of the top two first); `0` turns the rule off |
+| `ROUTER_LOW_CONFIDENCE_THRESHOLDS` | (none) | Per-mode thresholds as JSON, e.g. `{"cost": 0.4}`; modes not listed use the value above |
 | `ROUTER_REQUEST_TIMEOUT_SECONDS` | `60` | Per model call |
 | `ROUTER_TOTAL_TIMEOUT_SECONDS` | `90` | Whole request, across fallbacks |
 | `ROUTER_ATTEMPTS_PER_MODEL` | `2` | Attempts per model before the next ranked one |
 | `ROUTER_MAX_RETRY_AFTER_SECONDS` | `10` | Longest `retry-after` the router waits for |
+| `ROUTER_DECISION_FALLBACK` | `true` | When Decision-1 cannot answer, serve the cheapest candidate (degraded) instead of failing the request |
+| `ROUTER_READY_CHECK_SECONDS` | `300` | How long a Decision-1 success (a real call or a readiness probe) counts as healthy; after that `/health/ready` probes again in the background |
+| `ROUTER_PIN_STORE_URL` | (none) | `redis://` or `rediss://` URL to share conversation pins across replicas; in-process memory when unset |
+| `ROUTER_MAX_BODY_BYTES` | `20000000` | Largest request body accepted; larger bodies get 413 |
 | `ROUTER_DECISION_LOG_PATH` | unset | Also write the decision log to this file |
 | `ROUTER_LOG_PROMPTS` | `false` | Include message text in the decision log |
 | `ROUTER_API_KEYS` | unset | Comma-separated API keys callers may present (`docs/AGENT_SERVICE.md`) |

@@ -42,7 +42,8 @@ class FakeFoundry:
         self.requests: list[dict[str, Any]] = []
 
     def fail(self, deployment: str, *statuses: int) -> None:
-        """Queue HTTP statuses for a deployment's next calls (0 means a network error)."""
+        """Queue HTTP statuses for a deployment's next calls (0 means a network error). A status can be a
+        (status, message) pair to set the error message."""
         self.failures[deployment].extend(statuses)
 
     def transport(self) -> httpx.MockTransport:
@@ -85,10 +86,12 @@ class FakeFoundry:
         deployment = body.get("model", "")
         queue = self.failures.get(deployment)
         if queue:
-            status = queue.popleft()
+            status, message = (queue.popleft(), "simulated")
+            if isinstance(status, tuple):
+                status, message = status
             if status == 0:
                 raise httpx.ConnectError("simulated network failure", request=request)
-            return httpx.Response(status, json={"error": {"code": str(status), "message": "simulated"}})
+            return httpx.Response(status, json={"error": {"code": str(status), "message": message}})
         served = deployment
         if deployment in self.router_deployments:
             choices = self.router_deployments[deployment]
@@ -100,6 +103,10 @@ class FakeFoundry:
                 {"id": "fake", "object": "chat.completion.chunk", "model": served,
                  "choices": [{"index": 0, "delta": {"content": f"answer from {served}"}}]},
             ]
+            if (body.get("stream_options") or {}).get("include_usage"):  # as OpenAI: a final usage-only chunk
+                events.append({"id": "fake", "object": "chat.completion.chunk", "model": served, "choices": [],
+                               "usage": {"prompt_tokens": prompt_tokens, "completion_tokens": 5,
+                                         "total_tokens": prompt_tokens + 5}})
             payload = "".join(f"data: {json.dumps(e)}\n\n" for e in events) + "data: [DONE]\n\n"
             return httpx.Response(200, stream=_Chunks(payload.encode()), headers={"content-type": "text/event-stream"})
         return httpx.Response(200, json={

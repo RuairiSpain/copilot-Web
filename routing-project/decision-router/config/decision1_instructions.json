@@ -58,7 +58,7 @@
      "text": "The request is a native Anthropic Messages body and every option is a Claude model."}
   ],
   "criteria": {
-    "priced": "{description} Output price ${output_price} per million tokens; {price_rank} of {candidate_count} by price among these options (1 is cheapest).",
+    "priced": "{description} Price per million tokens: ${input_price} input, ${output_price} output; {price_rank} of {candidate_count} by price among these options, ordered by output price then input price (1 is cheapest).",
     "unpriced": "{description} {price_rank} of {candidate_count} by price among these options (1 is cheapest)."
   }
 }

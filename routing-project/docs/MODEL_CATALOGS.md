@@ -24,10 +24,11 @@ because Model Router still routes to them; `new` leaves them out.
 ## Tiers come from prices
 
 `tier` orders models by price (1 = cheapest). It sets the routing modes' price bands, the
-price rank Decision-1 is shown, and the tie-break. Each model's `price` is copied into the
-catalog too; the `new` catalog's named cost bands (`cost_bands`) use its output price. The builder computes it from
-`config/model_pricing.json`: input price, then output price, then cached-input price, then
-name. To change the order, change the prices and rebuild (below); a model without a price
+price rank Decision-1 is shown, the cheapest-first order of the degraded fallback, and the
+tie-break. The builder computes it from `config/model_pricing.json`: output price, then input
+price, then cached-input price, then name. Each model's `price` is copied into the catalog
+too; the `new` catalog's named cost bands (`cost_bands`) use its output price, so every price
+ordering in the router agrees. To change the order, change the prices and rebuild (below); a model without a price
 fails the build.
 
 Claude prices are Anthropic's standard rates, which Claude in Microsoft Foundry bills at (US

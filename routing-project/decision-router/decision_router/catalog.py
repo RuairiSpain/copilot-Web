@@ -48,6 +48,7 @@ class ModelEntry:
     # "published" (regions listed), "global" (deployable from any region, Global Standard), or "unknown"
     region_status: str = "unknown"
     output_price: float | None = None  # USD per million output tokens, from model_pricing.json
+    input_price: float | None = None
 
     def capability(self, name: str) -> str:
         return self.capabilities.get(name, "no")
@@ -126,6 +127,7 @@ class Catalog:
                 regions={k: tuple(v) for k, v in (m.get("regions") or {}).items()},
                 region_status=m.get("region_status", "published" if m.get("regions") else "unknown"),
                 output_price=(m.get("price") or {}).get("output_per_million"),
+                input_price=(m.get("price") or {}).get("input_per_million"),
             ))
         modes = {}
         for name, spec in data["routing_modes"].items():

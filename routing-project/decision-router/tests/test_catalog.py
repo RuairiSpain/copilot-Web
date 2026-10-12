@@ -46,8 +46,8 @@ def test_claude_version_sets_hosting(catalog, new_catalog):
 def test_tiers_follow_prices(settings, catalogs):
     prices = json.loads(settings.pricing_path.read_text())["models"]
     for catalog in catalogs.catalogs.values():
-        inputs = [prices[m.name]["input_per_million"] for m in catalog.models]
-        assert inputs == sorted(inputs) and [m.tier for m in catalog.models] == list(range(1, len(inputs) + 1))
+        outputs = [prices[m.name]["output_per_million"] for m in catalog.models]
+        assert outputs == sorted(outputs) and [m.tier for m in catalog.models] == list(range(1, len(outputs) + 1))
 
 
 def test_price_band_takes_the_modes_share(catalog):
