@@ -1,0 +1,424 @@
+{
+  "default-action-is-parameter": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "a": {
+        "type": "string"
+      }
+    },
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "AIServices",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {
+          "networkAcls": {
+            "defaultAction": "[parameters('a')]"
+          },
+          "publicNetworkAccess": "Enabled"
+        },
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      }
+    ]
+  },
+  "default-allow-is-not-restricted": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "AIServices",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {
+          "networkAcls": {
+            "defaultAction": "Allow"
+          },
+          "publicNetworkAccess": "Enabled"
+        },
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      }
+    ]
+  },
+  "deny-default-with-approved-private-endpoint-no-ip-rules": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "AIServices",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {
+          "networkAcls": {
+            "defaultAction": "Deny",
+            "ipRules": [],
+            "virtualNetworkRules": []
+          },
+          "publicNetworkAccess": "Enabled"
+        },
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "pe",
+        "properties": {
+          "privateLinkServiceConnections": [
+            {
+              "name": "c",
+              "properties": {
+                "groupIds": [
+                  "account"
+                ],
+                "privateLinkServiceId": "[resourceId('Microsoft.CognitiveServices/accounts', 'acct')]"
+              }
+            }
+          ],
+          "subnet": {
+            "id": "[parameters('peSubnetId')]"
+          }
+        },
+        "type": "Microsoft.Network/privateEndpoints"
+      }
+    ]
+  },
+  "deny-default-with-unresolved-endpoint": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "t": {
+        "type": "string"
+      }
+    },
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "AIServices",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {
+          "networkAcls": {
+            "defaultAction": "Deny",
+            "ipRules": [],
+            "virtualNetworkRules": []
+          },
+          "publicNetworkAccess": "Enabled"
+        },
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "pe",
+        "properties": {
+          "privateLinkServiceConnections": [
+            {
+              "name": "c",
+              "properties": {
+                "groupIds": [
+                  "account"
+                ],
+                "privateLinkServiceId": "[parameters('t')]"
+              }
+            }
+          ],
+          "subnet": {
+            "id": "[parameters('peSubnetId')]"
+          }
+        },
+        "type": "Microsoft.Network/privateEndpoints"
+      }
+    ]
+  },
+  "ip-rule-value-is-not-ipv4": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "AIServices",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {
+          "networkAcls": {
+            "defaultAction": "Deny",
+            "ipRules": [
+              {
+                "value": "2001:db8::/32"
+              }
+            ]
+          },
+          "publicNetworkAccess": "Enabled"
+        },
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      }
+    ]
+  },
+  "ip-rule-value-is-parameter": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "ip": {
+        "type": "string"
+      }
+    },
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "AIServices",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {
+          "networkAcls": {
+            "defaultAction": "Deny",
+            "ipRules": [
+              {
+                "value": "[parameters('ip')]"
+              }
+            ]
+          },
+          "publicNetworkAccess": "Enabled"
+        },
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      }
+    ]
+  },
+  "ip-rule-value-looks-like-a-secret": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "AIServices",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {
+          "networkAcls": {
+            "defaultAction": "Deny",
+            "ipRules": [
+              {
+                "value": "SECRETCANARY"
+              }
+            ]
+          },
+          "publicNetworkAccess": "Enabled"
+        },
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      }
+    ]
+  },
+  "ip-rules-supplied-by-parameter-array": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "rules": {
+        "type": "array"
+      }
+    },
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "AIServices",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {
+          "networkAcls": {
+            "defaultAction": "Deny",
+            "ipRules": "[parameters('rules')]"
+          },
+          "publicNetworkAccess": "Enabled"
+        },
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      }
+    ]
+  },
+  "public-disabled-account-ignores-acls": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "AIServices",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {
+          "networkAcls": {
+            "defaultAction": "Deny",
+            "ipRules": [],
+            "virtualNetworkRules": []
+          },
+          "publicNetworkAccess": "Disabled"
+        },
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      }
+    ]
+  },
+  "restricted-account-with-empty-ip-and-vnet-rules": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "AIServices",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {
+          "networkAcls": {
+            "defaultAction": "Deny",
+            "ipRules": [],
+            "virtualNetworkRules": []
+          },
+          "publicNetworkAccess": "Enabled"
+        },
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      }
+    ]
+  },
+  "restricted-account-with-one-ip-rule": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "AIServices",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {
+          "networkAcls": {
+            "defaultAction": "Deny",
+            "ipRules": [
+              {
+                "value": "203.0.113.0/24"
+              }
+            ]
+          },
+          "publicNetworkAccess": "Enabled"
+        },
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      }
+    ]
+  },
+  "restricted-account-with-single-ip-address": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "AIServices",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {
+          "networkAcls": {
+            "defaultAction": "Deny",
+            "ipRules": [
+              {
+                "value": "203.0.113.7"
+              }
+            ]
+          },
+          "publicNetworkAccess": "Enabled"
+        },
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      }
+    ]
+  },
+  "restricted-account-with-vnet-rule-only": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "AIServices",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {
+          "networkAcls": {
+            "defaultAction": "Deny",
+            "ipRules": [],
+            "virtualNetworkRules": [
+              {
+                "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.Network/virtualNetworks/v/subnets/s"
+              }
+            ]
+          },
+          "publicNetworkAccess": "Enabled"
+        },
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      }
+    ]
+  },
+  "restricted-account-without-rule-lists": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "AIServices",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {
+          "networkAcls": {
+            "defaultAction": "Deny"
+          },
+          "publicNetworkAccess": "Enabled"
+        },
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      }
+    ]
+  }
+}
