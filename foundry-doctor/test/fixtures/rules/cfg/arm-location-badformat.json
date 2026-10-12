@@ -1,0 +1,10 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {"deploySt": {"type": "bool"}},
+  "resources": [
+    {"type": "Microsoft.CognitiveServices/accounts", "apiVersion": "2025-06-01", "name": "acct", "location": "West US", "properties": {}},
+    {"type": "Microsoft.Storage/storageAccounts", "apiVersion": "2025-01-01", "name": "st", "location": "East US 2", "condition": "[parameters('deploySt')]", "properties": {}},
+    {"type": "Microsoft.Search/searchServices", "apiVersion": "2025-05-01", "name": "[format('srch{0}', copyIndex())]", "location": "Central US", "copy": {"name": "srch", "count": 2}, "properties": {}}
+  ]
+}
