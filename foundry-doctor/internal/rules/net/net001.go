@@ -26,8 +26,8 @@ const net001Fix = `properties: {
 // Finding "public-open": publicNetworkAccess Enabled or absent with networkAcls.defaultAction Allow or
 // absent. Finding "no-private-endpoint": publicNetworkAccess Disabled and no private endpoint with group
 // ID account targets the account. Restricted mode (Enabled with Deny) passes here and is NET-007's.
-// policy.network.publicAccess entra-only or allowed should lower the severity of "public-open"; the
-// result contract has no severity override, so the policy is named in the evidence only.
+// policy.network.publicAccess entra-only or allowed lowers the severity of "public-open" through
+// Result.MaxSeverity (ADR-007); it never skips the rule.
 func (r net001) Evaluate(ctx context.Context, in *model.Input) ([]rules.Result, error) {
 	t, res, stop, err := run(ctx, r, in)
 	if stop || err != nil {
@@ -55,9 +55,17 @@ func (r net001) account(t *topo, i int, policy model.PublicAccess) []rules.Resul
 		if ast == model.Absent || strings.EqualFold(acl, "Allow") {
 			ev := fmt.Sprintf("Account %s accepts traffic from all public networks: publicNetworkAccess is %s and networkAcls.defaultAction is %s.%s Policy policy.network.publicAccess is %s.",
 				acct.Name, shown(pst, pna, "absent (defaults to Enabled)"), shown(ast, acl, "absent (defaults to Allow)"), r.projects(t, i), policy)
-			return []rules.Result{failure(r, acct, "/properties/publicNetworkAccess", "public-open", text{ev,
+			res := failure(r, acct, "/properties/publicNetworkAccess", "public-open", text{ev,
 				"Set publicNetworkAccess to Disabled and add a private endpoint with group ID account, or use restricted mode (defaultAction Deny plus an allow list).", net001Fix},
-				sdk.ConfidenceCertain)}
+				sdk.ConfidenceCertain)
+			// ADR-007: entra-only lowers the finding to warning and allowed to info; it never skips.
+			switch policy {
+			case model.PublicEntraOnly:
+				res.MaxSeverity = sdk.SeverityWarning
+			case model.PublicAllowed:
+				res.MaxSeverity = sdk.SeverityInfo
+			}
+			return []rules.Result{res}
 		}
 		return []rules.Result{rules.Pass()}
 	case strings.EqualFold(pna, "Disabled"):

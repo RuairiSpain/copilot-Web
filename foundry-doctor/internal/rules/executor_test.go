@@ -390,3 +390,47 @@ func TestExecuteConcurrentCalls(t *testing.T) {
 		}
 	}
 }
+
+// capped returns a rule whose failure carries MaxSeverity.
+func capped(id string, max sdk.Severity) fakeRule {
+	f := fakeRule{id: id, version: 1}
+	f.eval = func(context.Context, *model.Input) ([]rules.Result, error) {
+		fd := rules.NewFinding(f, sdk.ResourceRef{Kind: "arm-resource", Type: "T", Name: id}, "key", "")
+		r := rules.Fail(fd)
+		r.MaxSeverity = max
+		return []rules.Result{r}, nil
+	}
+	return f
+}
+
+func TestMaxSeverityLowersButNeverRaises(t *testing.T) {
+	m := meta("FND-SEC-001", "SEC")
+	tests := []struct {
+		name    string
+		profile string
+		max     sdk.Severity
+		want    sdk.Severity
+	}{
+		{"prod capped to warning", rules.ProfileProd, sdk.SeverityWarning, sdk.SeverityWarning},
+		{"prod capped to info", rules.ProfileProd, sdk.SeverityInfo, sdk.SeverityInfo},
+		{"dev is already info, cap warning does not raise", rules.ProfileDev, sdk.SeverityWarning, sdk.SeverityInfo},
+		{"invalid cap is ignored", rules.ProfileProd, sdk.Severity("bogus"), sdk.SeverityError},
+		{"no cap", rules.ProfileProd, "", sdk.SeverityError},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			out := run(t, &model.Input{}, []rules.Entry{entry(m, capped("FND-SEC-001", tc.max))}, cfgFor(tc.profile))
+			if got := out.Findings[0].Severity; got != tc.want {
+				t.Errorf("severity %s, want %s", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestMaxSeverityIgnoredForPlatformBasis(t *testing.T) {
+	m := meta("FND-SEC-001", "SEC", func(m *catalog.Rule) { m.Basis = []string{"platform"} })
+	out := run(t, &model.Input{}, []rules.Entry{entry(m, capped("FND-SEC-001", sdk.SeverityInfo))}, cfgFor(rules.ProfileProd))
+	if got := out.Findings[0].Severity; got != sdk.SeverityError {
+		t.Errorf("platform-basis severity %s, want error", got)
+	}
+}
