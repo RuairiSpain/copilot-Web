@@ -1,10 +1,10 @@
 // Package env holds the native FND-ENV-* rules for azd environment values (key names only, never values).
 //
 // Cross-environment rules need more than one environment. model.Input carries only the selected
-// environment, so the rules read their environments through a Source. Rules() uses DefaultSource,
-// which can see only Input.Environment and therefore skips every cross-environment rule until the
-// engine supplies sibling environments (see the hand-off note on Input.Environments). RulesWith
-// injects a different Source, which the tests and the compare command use.
+// environment plus Input.Environments (the siblings), so the rules read their environments through a
+// Source. Rules() uses DefaultSource, which skips every cross-environment rule when the engine
+// supplied no siblings. RulesWith injects a different Source, which the tests and the compare
+// command use.
 //
 // No rule here puts an environment value into a Finding, a skip detail or an error. Evidence names
 // keys, environments and azure.yaml paths only.
@@ -21,9 +21,16 @@ import (
 // sorted; the rules sort by name and ignore duplicates.
 type Source func(in *model.Input) []model.Environment
 
-// DefaultSource returns the selected environment only, because model.Input has no sibling environments.
+// DefaultSource returns Input.Environments, falling back to the selected environment alone when the
+// engine supplied no siblings.
 func DefaultSource(in *model.Input) []model.Environment {
-	if in == nil || in.Environment == nil {
+	if in == nil {
+		return nil
+	}
+	if len(in.Environments) > 0 {
+		return in.Environments
+	}
+	if in.Environment == nil {
 		return nil
 	}
 	return []model.Environment{*in.Environment}

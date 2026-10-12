@@ -25,8 +25,9 @@ compatibility:
 evidence:
   description: >-
     Compute the key-level difference of two or more .azure/<env>/.env files and the azure.yaml after per-environment
-    substitution. Output lists key names with one of: only-in-A, only-in-B, differs, same. Values are not printed;
-    differing values are shown as salted hash fingerprints, and keys that look secret-bearing are shown by name only.
+    substitution. Output lists key names with one of: only-in-A, only-in-B, differs, same. Values are not printed and not
+    hashed: a key is reported only by name with the outcome (differs or same). Phase 1 compares .env files only; the
+    azure.yaml after per-environment substitution is not diffed.
   confidence: certain
 recommendation: >-
   Review the summary before promoting a release; use azd env get-values per environment for the details you are
