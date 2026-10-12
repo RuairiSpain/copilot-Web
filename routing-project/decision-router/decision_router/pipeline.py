@@ -16,7 +16,7 @@ import asyncio
 import random
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 import httpx
@@ -28,6 +28,7 @@ from .decision1 import Decision, Decision1Client, DecisionError, build_state, ex
 from .foundry import ChatClient
 from .instructions import InstructionTemplates
 from .pinning import PinStore, conversation_key
+from .policy import CallerPolicy, PolicyError, load_policies, policy_for
 from .pricing import PriceTable
 from .stage1 import ConstraintError, Constraints, parse_constraints, parse_cost_band, select
 from .telemetry import Telemetry
@@ -101,6 +102,7 @@ class Prepared:
     pin: bool = False  # routing_pin: keep the conversation on one model (pinning.py)
     session_id: str | None = None  # x-router-session-id header, when sent
     cost_band: CostBand | None = None  # routing_cost_band: replaces the mode's price band in stage 1
+    policy: CallerPolicy | None = None  # the operator's limits for this caller (policy.py)
 
 
 @dataclass
@@ -157,6 +159,15 @@ class RouterPipeline:
         self.pins = PinStore(settings.pin_ttl_seconds, settings.pin_max_entries, clock=clock)
         self.templates = InstructionTemplates.load(settings.instructions_path)
         self._check_profiles()
+        try:
+            self.policies = load_policies(settings.caller_policies)
+        except PolicyError as exc:
+            raise ValueError(f"ROUTER_CALLER_POLICIES: {exc}") from exc
+        known = {m.name for c in catalogs.catalogs.values() for m in c.models}
+        for policy in self.policies.values():
+            if set(policy.models) - known:
+                raise ValueError(f"ROUTER_CALLER_POLICIES '{policy.name}' names unknown models "
+                                 f"{sorted(set(policy.models) - known)}")
 
     def _check_profiles(self) -> None:
         """Fail at startup, not on every request, when a profile names a model, band or mode the catalog lacks."""
@@ -211,12 +222,25 @@ class RouterPipeline:
         return Prepared(mode, catalog, constraints, forwarded, passthrough=not translation,
                         profile=profile_name if profile else None, pin=pin, cost_band=cost_band)
 
+    def apply_policy(self, prepared: Prepared) -> Prepared:
+        """Bound a prepared request by the caller's policy. Applied after the request's own fields."""
+        policy = policy_for(self.policies, prepared.caller)
+        if policy is None:
+            return prepared
+        if policy.catalogs and prepared.catalog.compatibility not in policy.catalogs:
+            raise RoutingError(403, "policy_denied", f"this caller may use the {list(policy.catalogs)} catalog(s), "
+                                                     f"not '{prepared.catalog.compatibility}'")
+        if policy.modes and prepared.mode not in policy.modes:
+            raise RoutingError(403, "policy_denied", f"this caller may use routing modes {list(policy.modes)}, "
+                                                     f"not '{prepared.mode}'")
+        return replace(prepared, policy=policy)
+
     # ------------------------------------------------------------------ stages 1 and 2
     async def route(self, prepared: Prepared, request_id: str) -> Routed:
         started = self._clock()
         catalog, mode, body = prepared.catalog, prepared.mode, prepared.body
         stage1 = select(catalog, mode, prepared.constraints, body, self.settings, passthrough=prepared.passthrough,
-                        cost_band=prepared.cost_band)
+                        cost_band=prepared.cost_band, policy=prepared.policy)
         candidates = stage1.candidates
         event: dict[str, Any] = {
             "request_id": request_id,
@@ -225,6 +249,7 @@ class RouterPipeline:
             "catalog_sha256": catalog.fingerprint,
             "routing_constraints": prepared.constraints.as_dict(),
             "cost_band": prepared.cost_band.as_dict() if prepared.cost_band else None,
+            "policy": prepared.policy.as_dict() if prepared.policy else None,
             "claude_translation": not prepared.passthrough,
             "profile": prepared.profile,
             "caller": prepared.caller,

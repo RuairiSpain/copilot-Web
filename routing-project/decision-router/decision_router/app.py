@@ -114,7 +114,8 @@ def create_app(settings: Settings | None = None, *, pipeline: RouterPipeline | N
     async def prepare(request: Request) -> Any:
         caller = await gate.check(request.headers)
         session = request.headers.get(SESSION_HEADER)
-        return replace(pipe.prepare(await read_body(request)), caller=caller.log(), session_id=session or None)
+        prepared = replace(pipe.prepare(await read_body(request)), caller=caller.log(), session_id=session or None)
+        return pipe.apply_policy(prepared)
 
     @app.exception_handler(ProviderError)
     async def provider_error(_: Request, exc: ProviderError) -> Response:

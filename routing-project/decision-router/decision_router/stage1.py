@@ -6,7 +6,7 @@ removed which model and why:
   0. api                with claude_translation=false the body is an Anthropic Messages request,
                         which only Claude models accept
   1. lifecycle          deprecated/retired/legacy always out; preview out unless allowed
-  2. operator allow-list ROUTER_MODEL_ALLOWLIST
+  2. operator allow-list ROUTER_MODEL_ALLOWLIST, and the caller policy's models and price limit
   3. request selection  routing_constraints.models / exclude_models / providers
   4. capabilities       routing_constraints.capabilities plus what the request itself needs, and
                         routing_constraints.actions (the model must be tagged with every one)
@@ -250,7 +250,7 @@ class Stage1Result:
 
 
 def select(catalog: Catalog, mode: str, constraints: Constraints, body: dict[str, Any], settings: Settings,
-           passthrough: bool = False, cost_band: CostBand | None = None) -> Stage1Result:
+           passthrough: bool = False, cost_band: CostBand | None = None, policy: Any = None) -> Stage1Result:
     remaining = list(catalog.models)
     requirements = requirements_from_messages_body(body) if passthrough else requirements_from_request(body)
     result = Stage1Result([], requirements=requirements)
@@ -283,7 +283,14 @@ def select(catalog: Catalog, mode: str, constraints: Constraints, body: dict[str
         return None
 
     def allowlist(m: ModelEntry) -> str | None:
-        return None if not settings.model_allowlist or m.name in settings.model_allowlist else "not in ROUTER_MODEL_ALLOWLIST"
+        if settings.model_allowlist and m.name not in settings.model_allowlist:
+            return "not in ROUTER_MODEL_ALLOWLIST"
+        if policy is not None:  # policy.CallerPolicy: the operator's limits for this caller
+            if policy.models and m.name not in policy.models:
+                return f"not allowed by caller policy '{policy.name}'"
+            if policy.max_output_price is not None and (m.output_price is None or m.output_price > policy.max_output_price):
+                return f"output price above caller policy '{policy.name}' limit (${policy.max_output_price:g})"
+        return None
 
     def selection(m: ModelEntry) -> str | None:
         if constraints.models and m.name not in constraints.models:

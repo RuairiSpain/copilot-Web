@@ -37,6 +37,37 @@ To set up Entra ID: register an application (or reuse one) to represent the rout
 Application ID URI (for example `api://decision-router`), and use that URI as
 `ROUTER_ENTRA_AUDIENCE`. Callers request a token for `api://decision-router/.default`.
 
+## Per-caller limits (caller policies)
+
+Profiles and request fields are defaults that a caller can change. For limits a caller must not
+exceed, set `ROUTER_CALLER_POLICIES`, a JSON object keyed by caller. Code: `decision-router/decision_router/policy.py`.
+
+```json
+{"api_key:1":         {"catalogs": ["new"], "max_output_price": 10},
+ "entra:<client-id>": {"modes": ["cost", "balanced"], "models": ["gpt-5.4-mini", "claude-sonnet-5-5"]},
+ "*":                 {"max_output_price": 25}}
+```
+
+| Key | Matches |
+|---|---|
+| `api_key:<n>` | the n-th key in `ROUTER_API_KEYS` (1-based) |
+| `entra:<client id>` | an Entra token whose `azp`/`appid` is that client ID (case-insensitive) |
+| `*` | any caller without its own entry, including unauthenticated callers |
+
+| Field | Effect |
+|---|---|
+| `catalogs`, `modes` | A request (or profile) asking for another catalog or mode gets 403 `policy_denied`. |
+| `models` | Only these models can be candidates. |
+| `max_output_price` | Models above this output price (USD per million tokens) are removed. |
+
+Policies are applied after the request's own fields, so a request can narrow them but never
+widen them: naming gpt-6-astra in `routing_constraints.models` does not get past a $10 limit.
+`models` and `max_output_price` act in stage 1's `allowlist` step, so the decision log and
+`/v1/route` show which models the policy removed. The policy used is logged as `policy`.
+
+A caller with no entry, when there is no `*` entry, is unrestricted. Policy model names are
+checked at startup.
+
 ## Routing profiles: choosing a mode by model name
 
 Some callers can't add `routing_mode`, `compatibility` or `routing_constraints` to the body,
