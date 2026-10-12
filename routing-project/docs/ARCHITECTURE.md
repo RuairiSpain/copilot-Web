@@ -113,6 +113,25 @@ every option", plus the model name and token usage. The field names `probabiliti
 smoke-tested against Foundry. Confirm them with one live call; they are read in
 `decision_router/decision1.py:parse_answer`.
 
+## Health and readiness
+
+`/health/live`, `/health/ready` and `/metrics` need no credentials.
+
+`/health/ready` reports whether Decision-1 answers. It never waits for Decision-1, because
+readiness probes have short timeouts. Instead it returns the result of the last real Decision-1
+call or probe. When that result is older than `ROUTER_READY_CHECK_SECONDS` (300), it starts one
+small probe in the background, so frequent checks cost at most one tiny Decision-1 call per
+window per replica.
+
+| Decision-1 | `ROUTER_DECISION_FALLBACK=true` (default) | `false` |
+|---|---|---|
+| answers | 200 `ready` | 200 `ready` |
+| fails | 200 `degraded`: requests are still served, by the cheapest candidate | 503 `not_ready` |
+| first probe still running | 200 `starting` | 503 `not_ready` |
+
+The response also reports the pin store (`memory`, `redis ok` or `redis unavailable`; Redis is
+best effort and never makes the router unready), the catalogs, profiles and inbound auth methods.
+
 ## Selecting the model: the low-confidence rule
 
 The model called first is the one with the highest probability. When that probability is
@@ -253,6 +272,8 @@ What the report does and does not show:
 | `ROUTER_ATTEMPTS_PER_MODEL` | `2` | Attempts per model before the next ranked one |
 | `ROUTER_MAX_RETRY_AFTER_SECONDS` | `10` | Longest `retry-after` the router waits for |
 | `ROUTER_DECISION_FALLBACK` | `true` | When Decision-1 cannot answer, serve the cheapest candidate (degraded) instead of failing the request |
+| `ROUTER_READY_CHECK_SECONDS` | `300` | How long a Decision-1 success (a real call or a readiness probe) counts as healthy; after that `/health/ready` probes again in the background |
+| `ROUTER_PIN_STORE_URL` | (none) | `redis://` or `rediss://` URL to share conversation pins across replicas; in-process memory when unset |
 | `ROUTER_MAX_BODY_BYTES` | `20000000` | Largest request body accepted; larger bodies get 413 |
 | `ROUTER_DECISION_LOG_PATH` | unset | Also write the decision log to this file |
 | `ROUTER_LOG_PROMPTS` | `false` | Include message text in the decision log |

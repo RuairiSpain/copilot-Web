@@ -222,6 +222,8 @@ class RouterPipeline:
         self._clock = clock
         self.pins = build_pin_store(settings.pin_store_url, settings.pin_ttl_seconds, settings.pin_max_entries, clock)
         self.templates = InstructionTemplates.load(settings.instructions_path)
+        self._decision_checked: tuple[float, str | None] | None = None  # (when, error code or None)
+        self._probe_task: asyncio.Task | None = None
         self._check_profiles()
         try:
             self.policies = load_policies(settings.caller_policies)
@@ -285,6 +287,25 @@ class RouterPipeline:
         forwarded = {k: v for k, v in body.items() if k not in ROUTER_FIELDS and k != "model"}
         return Prepared(mode, catalog, constraints, forwarded, passthrough=not translation,
                         profile=profile_name if profile else None, pin=pin, cost_band=cost_band)
+
+    async def decision1_health(self) -> dict[str, Any]:
+        """Whether Decision-1 answers, from the last real call or probe.
+
+        Never waits for Decision-1: readiness probes have short timeouts. When the last result is older
+        than ready_check_seconds a probe starts in the background and the previous result is returned;
+        before the first result, `ok` is None. So frequent readiness checks cost at most one small
+        Decision-1 call per window per replica."""
+        now = self._clock()
+        stale = self._decision_checked is None or now - self._decision_checked[0] >= self.settings.ready_check_seconds
+        if stale and (self._probe_task is None or self._probe_task.done()):
+            self._probe_task = asyncio.get_running_loop().create_task(self._probe_decision1())
+        if self._decision_checked is None:
+            return {"ok": None, "error": None, "checked_seconds_ago": None}
+        when, error = self._decision_checked
+        return {"ok": error is None, "error": error, "checked_seconds_ago": round(now - when, 1)}
+
+    async def _probe_decision1(self) -> None:
+        self._decision_checked = (self._clock(), await self.decision.probe())
 
     def apply_policy(self, prepared: Prepared) -> Prepared:
         """Bound a prepared request by the caller's policy. Applied after the request's own fields."""
@@ -364,6 +385,8 @@ class RouterPipeline:
                 event["degraded"] = {"reason": exc.code, "message": str(exc)}
                 order, low_confidence = names, False
             else:
+                if not decision.skipped:
+                    self._decision_checked = (self._clock(), None)  # a real answer counts as a health check
                 threshold = 0.0 if decision.skipped else self.settings.threshold_for(mode)
                 order, low_confidence = execution_order(decision.ranking, decision.probabilities, threshold, mode,
                                                         {m.name: m.tier for m in candidates})
@@ -570,6 +593,8 @@ class RouterPipeline:
                                    response.headers.get("content-type", "text/event-stream"), attempts, chunks())
 
     async def close(self) -> None:
+        if self._probe_task and not self._probe_task.done():
+            self._probe_task.cancel()
         await self.pins.close()
         await self.decision.close()
         await self.chat.close()

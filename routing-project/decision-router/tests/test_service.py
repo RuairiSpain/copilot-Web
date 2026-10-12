@@ -454,3 +454,46 @@ def test_usage_tap_handles_split_events_and_native_claude_streams():
     events = (b'event: message_start\ndata: {"type": "message_start", "message": {"usage": {"input_tokens": 9}}}\n\n'
               b'event: message_delta\ndata: {"type": "message_delta", "usage": {"output_tokens": 4}}\n\n')
     assert native.feed(events) == events and native.usage == {"input_tokens": 9, "output_tokens": 4}
+
+
+def wait_ready(client, tries=200):
+    """/health/ready answers at once and probes Decision-1 in the background: poll until it has a result."""
+    import time
+    for _ in range(tries):
+        response = client.get("/health/ready")
+        if response.json()["decision1"]["ok"] is not None:
+            return response
+        time.sleep(0.01)
+    raise AssertionError("Decision-1 probe never finished")
+
+
+def test_ready_probes_decision1_once_per_window(make_pipeline, settings, fake):
+    fake.decision_responses.append(ranked(["a"]))
+    with client_for(make_pipeline, settings) as client:
+        assert client.get("/health/ready").json()["status"] == "starting"  # never waits for the probe
+        first = wait_ready(client)
+        second = client.get("/health/ready")
+    assert first.status_code == 200 and first.json()["status"] == "ready"
+    assert second.json()["decision1"]["ok"] and len(decision_calls(fake)) == 1  # cached within the window
+    assert first.json()["pin_store"] == "memory"
+
+
+def test_ready_reports_degraded_or_503_when_decision1_fails(make_pipeline, settings, fake):
+    fake.decision_responses.append(httpx.Response(401, json={"error": "unauthorized"}))
+    with client_for(make_pipeline, settings) as client:
+        degraded = wait_ready(client)
+    assert degraded.status_code == 200 and degraded.json()["status"] == "degraded"
+    assert degraded.json()["decision1"]["error"] == "http_error"
+    fake.decision_responses.append(httpx.Response(401, json={"error": "unauthorized"}))
+    with client_for(make_pipeline, settings, decision_fallback=False) as client:
+        assert client.get("/health/ready").status_code == 503  # not ready until the first probe answers
+        down = wait_ready(client)
+    assert down.status_code == 503 and down.json()["status"] == "not_ready"
+
+
+def test_a_real_decision_counts_as_the_health_check(make_pipeline, settings, fake):
+    fake.decision_responses.append(ranked(["gpt-5.5"]))
+    with client_for(make_pipeline, settings) as client:
+        client.post("/v1/route", json={"messages": USER})
+        ready = client.get("/health/ready")
+    assert ready.json()["decision1"]["ok"] and len(decision_calls(fake)) == 1

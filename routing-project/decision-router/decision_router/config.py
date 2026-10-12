@@ -99,6 +99,8 @@ class Settings:
     caller_policies: dict[str, Any] = field(default_factory=dict)  # see policy.py
     # When Decision-1 cannot answer, serve the cheapest stage-1 candidate (logged as degraded) instead of failing.
     decision_fallback: bool = True
+    # /health/ready trusts a Decision-1 success (real call or probe) this recent; otherwise it probes again.
+    ready_check_seconds: float = 300.0
     decision_log_path: Path | None = None
     log_prompts: bool = False
     # Inbound authentication (see inbound.py): API keys and/or Microsoft Entra ID tokens.
@@ -150,6 +152,7 @@ class Settings:
             max_body_bytes=int(os.getenv("ROUTER_MAX_BODY_BYTES", "20000000")),
             caller_policies=_json_object("ROUTER_CALLER_POLICIES"),
             decision_fallback=_bool("ROUTER_DECISION_FALLBACK", True),
+            ready_check_seconds=float(os.getenv("ROUTER_READY_CHECK_SECONDS", "300")),
             decision_log_path=Path(log_path) if log_path else None,
             log_prompts=_bool("ROUTER_LOG_PROMPTS", False),
             api_keys=_list("ROUTER_API_KEYS"),

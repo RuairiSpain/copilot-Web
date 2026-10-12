@@ -172,15 +172,26 @@ def create_app(settings: Settings | None = None, *, pipeline: RouterPipeline | N
         return {"status": "ok", "version": __version__}
 
     @app.get("/health/ready")
-    async def ready() -> dict[str, Any]:
-        return {
-            "status": "ready",
+    async def ready() -> JSONResponse:
+        """Ready when Decision-1 answers. If it does not, the router can still serve requests degraded
+        (cheapest candidate) unless ROUTER_DECISION_FALLBACK=false, in which case it reports 503."""
+        decision1 = await pipe.decision1_health()
+        fallback = pipe.settings.decision_fallback
+        if decision1["ok"] is None:  # first probe still running
+            status = "starting" if fallback else "not_ready"
+        else:
+            status = "ready" if decision1["ok"] else "degraded" if fallback else "not_ready"
+        pins = getattr(pipe.pins, "ping", None)
+        return JSONResponse({
+            "status": status,
+            "decision1": decision1,
+            "pin_store": ("redis ok" if await pins() else "redis unavailable") if pins else "memory",
             "inbound_auth": gate.methods or ["none"],
             "profiles": sorted(settings.profiles),
             "default_compatibility": pipe.catalogs.default,
             "catalogs": {name: c.describe() for name, c in pipe.catalogs.catalogs.items()},
             "decision1_deployment": pipe.decision.deployment,
-        }
+        }, status_code=503 if status == "not_ready" else 200)
 
     @app.get("/metrics")
     async def metrics() -> Response:

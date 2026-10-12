@@ -295,6 +295,19 @@ class Decision1Client:
                         response_model=body.get("model") if isinstance(body.get("model"), str) else None,
                         usage=usage if isinstance(usage, dict) else None, attempts=attempts)
 
+    async def probe(self) -> str | None:
+        """One small choice question, for readiness checks. None when Decision-1 answered, else the error code."""
+        request = build_request(self.deployment, "Health check.", "Choose either option.",
+                                {"a": "Option A.", "b": "Option B."})
+        try:
+            response, _ = await self._post(request, time.perf_counter())
+            parse_answer(response.json(), ["a", "b"])
+        except DecisionError as exc:
+            return exc.code
+        except ValueError:
+            return "invalid_response"
+        return None
+
     async def close(self) -> None:
         if self._owns_http:
             await self._http.aclose()
