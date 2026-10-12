@@ -164,7 +164,7 @@ The response carries `x-router-low-confidence: true|false`, and `/v1/route` retu
 | Request body larger than `ROUTER_MAX_BODY_BYTES` | 413 `request_too_large`, before the body is parsed |
 | All ranked models fail | 502, `code: all_models_failed`, with the attempt list |
 | `ROUTER_TOTAL_TIMEOUT_SECONDS` used up | 504, `code: deadline_exceeded` |
-| Streaming | Fallback is possible only before the first byte |
+| Streaming | Fallback is possible only before the first byte. The router asks OpenAI-style and Claude models for a final usage chunk (`stream_options.include_usage`), logs usage and cost from it, and removes it from the stream unless the caller asked for it. Native Claude streams report usage from `message_start` and `message_delta` |
 
 ## Decision log
 

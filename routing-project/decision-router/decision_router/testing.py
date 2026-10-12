@@ -103,6 +103,10 @@ class FakeFoundry:
                 {"id": "fake", "object": "chat.completion.chunk", "model": served,
                  "choices": [{"index": 0, "delta": {"content": f"answer from {served}"}}]},
             ]
+            if (body.get("stream_options") or {}).get("include_usage"):  # as OpenAI: a final usage-only chunk
+                events.append({"id": "fake", "object": "chat.completion.chunk", "model": served, "choices": [],
+                               "usage": {"prompt_tokens": prompt_tokens, "completion_tokens": 5,
+                                         "total_tokens": prompt_tokens + 5}})
             payload = "".join(f"data: {json.dumps(e)}\n\n" for e in events) + "data: [DONE]\n\n"
             return httpx.Response(200, stream=_Chunks(payload.encode()), headers={"content-type": "text/event-stream"})
         return httpx.Response(200, json={

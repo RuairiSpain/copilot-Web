@@ -303,10 +303,16 @@ def select(catalog: Catalog, mode: str, constraints: Constraints, body: dict[str
 
     needed = {c: "routing_constraints.capabilities" for c in constraints.capabilities} | requirements
 
+    fmt = body.get("response_format")
+    json_mode = not passthrough and isinstance(fmt, dict) and fmt.get("type") == "json_object"
+
     def capabilities(m: ModelEntry) -> str | None:
         for capability, why in needed.items():
             if m.capability(capability) != "yes":
                 return f"{capability} no (needed: {why})"
+        if json_mode and m.api == "anthropic_messages":
+            # The Messages API has no JSON mode; sent to Claude, the request would come back as free text.
+            return "response_format=json_object is not available through the Claude adapter (use json_schema)"
         missing = [a for a in constraints.actions if a not in m.capabilities.get("actions", [])]
         return f"not tagged for {', '.join(missing)} (routing_constraints.actions)" if missing else None
 

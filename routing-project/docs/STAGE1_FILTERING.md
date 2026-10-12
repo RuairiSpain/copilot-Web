@@ -124,6 +124,7 @@ without `actions` is still the dollar band above. Several actions mean a model m
 |---|---|
 | `tools` | `tools: yes` |
 | `response_format: {"type": "json_schema"}` | `structured_output: yes` (Claude qualifies: the adapter sends the schema as `output_config.format`) |
+| `response_format: {"type": "json_object"}` | not a Claude model: the Messages API has no JSON mode, so Claude would answer in free text. Other models are not filtered |
 | `stream: true` | `streaming: yes` |
 | an `image_url` part in `messages` | `image_input: yes` |
 | estimated prompt tokens + `max_completion_tokens` | a big enough context window, an input limit at least as large as the prompt (GPT-5.x models accept 272K of their 400K context, or 922K of 1.05M, as input), and an output limit at least as large as requested |

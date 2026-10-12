@@ -424,3 +424,33 @@ def test_other_400s_still_pass_through(make_pipeline, settings, fake):
     with client_for(make_pipeline, settings) as c:
         response = c.post("/v1/chat/completions", json={"messages": USER, "temperature": 0.3})
     assert response.status_code == 400 and len(chat_calls(fake)) == 1
+
+
+def test_streamed_usage_is_logged_and_the_usage_chunk_only_reaches_callers_who_asked(make_pipeline, settings, fake,
+                                                                                     tmp_path):
+    fake.decision_responses.extend([ranked(["gpt-5.6-terra", "gpt-5.5"])] * 2)
+    with client_for(make_pipeline, settings) as client:
+        plain = client.post("/v1/chat/completions", json={"messages": USER, "stream": True})
+        asked = client.post("/v1/chat/completions", json={"messages": USER, "stream": True,
+                                                          "stream_options": {"include_usage": True}})
+    assert '"usage"' not in plain.text and "answer from gpt-5.6-terra" in plain.text
+    assert plain.text.rstrip().endswith("data: [DONE]")
+    assert '"usage"' in asked.text
+    sent = [r["body"] for r in chat_calls(fake)]
+    assert all(b["stream_options"]["include_usage"] is True for b in sent)  # always requested upstream
+    for line in (tmp_path / "decisions.jsonl").read_text().splitlines():
+        event = json.loads(line)
+        assert event["usage"]["completion_tokens"] == 5 and event["cost"]["amount"] is not None
+
+
+def test_usage_tap_handles_split_events_and_native_claude_streams():
+    from decision_router.pipeline import UsageTap
+    tap = UsageTap(keep_usage_chunk=False)
+    stream = (b'data: {"choices": [{"delta": {"content": "hi"}}]}\n\n'
+              b'data: {"choices": [], "usage": {"prompt_tokens": 3, "completion_tokens": 2}}\n\ndata: [DONE]\n\n')
+    out = b"".join(tap.feed(stream[i:i + 7]) for i in range(0, len(stream), 7)) + tap.finish()
+    assert b"usage" not in out and out.endswith(b"data: [DONE]\n\n") and tap.usage["completion_tokens"] == 2
+    native = UsageTap(keep_usage_chunk=False)
+    events = (b'event: message_start\ndata: {"type": "message_start", "message": {"usage": {"input_tokens": 9}}}\n\n'
+              b'event: message_delta\ndata: {"type": "message_delta", "usage": {"output_tokens": 4}}\n\n')
+    assert native.feed(events) == events and native.usage == {"input_tokens": 9, "output_tokens": 4}

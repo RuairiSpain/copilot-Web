@@ -63,11 +63,13 @@ def test_capability_filter(new_catalog, settings):
     assert "gpt-5.6-terra" not in names(strict)  # Chat Completions tools only with reasoning off
 
 
-def test_json_schema_keeps_claude_and_json_mode_is_not_filtered(catalog, settings):
+def test_json_schema_keeps_claude_and_json_mode_removes_only_claude(catalog, settings):
     schema = dict(USER, response_format={"type": "json_schema", "json_schema": {"name": "x", "schema": {}}})
     assert "claude-opus-5" in names(select(catalog, "balanced", Constraints(), schema, settings))
     json_mode = dict(USER, response_format={"type": "json_object"})
-    assert names(select(catalog, "balanced", Constraints(), json_mode, settings)) == [m.name for m in catalog.models]
+    result = select(catalog, "balanced", Constraints(), json_mode, settings)
+    assert names(result) == [m.name for m in catalog.models if m.api != "anthropic_messages"]
+    assert removed(result, "capabilities")["claude-opus-5"].startswith("response_format=json_object")
 
 
 def test_prompt_over_the_input_limit(new_catalog, settings):

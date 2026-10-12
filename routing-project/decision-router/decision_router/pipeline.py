@@ -13,6 +13,7 @@ Decision-1 itself fails, the request fails: there is no other router behind it.
 from __future__ import annotations
 
 import asyncio
+import json
 import random
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -66,6 +67,58 @@ class ProviderError(Exception):
         self.content = content
         self.content_type = content_type or "application/json"
         self.attempts = attempts
+
+
+# APIs whose streams can end with a usage chunk (stream_options.include_usage). MAI is left out:
+# its chat endpoint is not documented to accept stream_options.
+USAGE_STREAM_APIS = ("openai_chat", "anthropic_messages")
+
+
+class UsageTap:
+    """Reads token usage out of a server-sent event stream as it passes through.
+
+    Chat-completions streams: the usage-only chunk (`choices: []` and `usage`) is recorded, and dropped
+    from the output unless the caller asked for it. Native Anthropic streams (claude_translation=false):
+    usage from `message_start` and `message_delta` is merged; nothing is removed."""
+
+    def __init__(self, keep_usage_chunk: bool):
+        self.keep_usage_chunk = keep_usage_chunk
+        self.usage: dict[str, Any] | None = None
+        self._buffer = b""
+
+    def feed(self, chunk: bytes) -> bytes:
+        self._buffer += chunk
+        out = []
+        while True:
+            end, size = min(((self._buffer.find(sep), len(sep)) for sep in (b"\n\n", b"\r\n\r\n")
+                             if self._buffer.find(sep) >= 0), default=(-1, 0))
+            if end < 0:
+                break
+            event, self._buffer = self._buffer[:end + size], self._buffer[end + size:]
+            if self._keep(event):
+                out.append(event)
+        return b"".join(out)
+
+    def finish(self) -> bytes:
+        rest, self._buffer = self._buffer, b""
+        return rest
+
+    def _keep(self, event: bytes) -> bool:
+        for line in event.splitlines():
+            if not line.startswith(b"data:"):
+                continue
+            try:
+                data = json.loads(line[5:].strip() or b"null")
+            except ValueError:
+                return True
+            if not isinstance(data, dict):
+                return True
+            usage = data.get("usage") or (data.get("message") or {}).get("usage")
+            if isinstance(usage, dict):
+                self.usage = {**(self.usage or {}), **usage}
+                if data.get("choices") == [] and not self.keep_usage_chunk:
+                    return False
+        return True
 
 
 # Request parameters a model may refuse without the request being wrong: the router drops them and
@@ -369,6 +422,10 @@ class RouterPipeline:
         for name in routed.order:
             entry = routed.catalog.by_name[name]
             send_body, attempt, dropped_any = body, 0, False
+            if stream and not routed.passthrough and entry.api in USAGE_STREAM_APIS:
+                # Ask for the final usage chunk so streamed requests are logged with usage and cost;
+                # UsageTap removes it again if the caller did not ask for it.
+                send_body = {**body, "stream_options": {**(body.get("stream_options") or {}), "include_usage": True}}
             while attempt < settings.attempts_per_model:
                 attempt += 1
                 remaining = deadline - self._clock()
@@ -489,17 +546,25 @@ class RouterPipeline:
             self._finish(routed, body, None, exc.attempts, "failed", error_code=exc.code)
             raise
 
+        tap = UsageTap(keep_usage_chunk=bool((body.get("stream_options") or {}).get("include_usage")))
+
         async def chunks() -> AsyncIterator[bytes]:
             outcome = "success"
             try:
                 async for chunk in response.aiter_raw():
-                    yield chunk
+                    out = tap.feed(chunk)
+                    if out:
+                        yield out
+                rest = tap.finish()
+                if rest:
+                    yield rest
             except BaseException:  # includes the client disconnecting (GeneratorExit / cancellation)
                 outcome = "stream_interrupted"
                 raise
             finally:
                 await response.aclose()
-                self._finish(routed, body, served, attempts, outcome)
+                self._finish(routed, body, served, attempts, outcome,
+                             {"usage": tap.usage} if tap.usage else None)
 
         return StreamingCompletion(routed, served, response.status_code,
                                    response.headers.get("content-type", "text/event-stream"), attempts, chunks())

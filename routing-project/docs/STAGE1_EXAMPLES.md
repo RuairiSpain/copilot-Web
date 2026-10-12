@@ -38,7 +38,7 @@ How to read the examples:
 | A5 | Tool calling (agent step) | 17 of 23 |
 | A6 | Image input | 15 of 23 |
 | A7 | JSON-schema output | 12 of 23 |
-| A8 | JSON mode (json_object) | 23 of 23 |
+| A8 | JSON mode (json_object) | 20 of 23 |
 | A9 | Streaming | 16 of 23 |
 | A10 | Long document (~300K tokens) | 15 of 23 |
 | A11 | EU data residency | 6 of 23 |
@@ -339,7 +339,7 @@ one test request against the deployment, then recording the source in `catalog_s
 
 ### A8. JSON mode (json_object)
 
-**Why it is useful:** JSON mode asks for any valid JSON without a schema. It shows that JSON mode is not a capability stage 1 filters on.
+**Why it is useful:** JSON mode asks for any valid JSON without a schema. JSON mode is not a catalog capability, but the Claude adapter cannot honour it.
 
 ```json
 {
@@ -357,18 +357,18 @@ one test request against the deployment, then recording the source in `catalog_s
 | `lifecycle` | – | 23 |
 | `allowlist` | – | 23 |
 | `selection` | – | 23 |
-| `capabilities` | – | 23 |
-| `location` | – | 23 |
-| `size` | – | 23 |
-| `price_band` | – | 23 |
+| `capabilities` | response_format=json_object is not available through the Claude adapter (use json_schema): `claude-haiku-5-5`, `claude-sonnet-5-5`, `claude-opus-5-5` | 20 |
+| `location` | – | 20 |
+| `size` | – | 20 |
+| `price_band` | – | 20 |
 
-**Stage 1 output (the 23 options Decision-1 chooses from, cheapest first):** `Phi-4-mini-instruct`, `FW-GLM-5.3-Flash`, `claude-haiku-5-5`, `Phi-4`, `grok-4-1-fast-reasoning`, `gpt-oss-120b`, `Phi-4-reasoning`, `gpt-5.4-nano`, `DeepSeek-V4-Flash`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `gpt-6-luna`, `FW-GLM-5.3`, `FW-Kimi-K3`, `gpt-5.4-mini`, `DeepSeek-V4-Pro`, `MAI-Thinking-1`, `gpt-5.6-terra`, `claude-sonnet-5-5`, `gpt-6.1-sol`, `gpt-5.5`, `grok-4.7`, `claude-opus-5-5`, `gpt-6-astra`
+**Stage 1 output (the 20 options Decision-1 chooses from, cheapest first):** `Phi-4-mini-instruct`, `FW-GLM-5.3-Flash`, `Phi-4`, `grok-4-1-fast-reasoning`, `gpt-oss-120b`, `Phi-4-reasoning`, `gpt-5.4-nano`, `DeepSeek-V4-Flash`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `gpt-6-luna`, `FW-GLM-5.3`, `FW-Kimi-K3`, `gpt-5.4-mini`, `DeepSeek-V4-Pro`, `MAI-Thinking-1`, `gpt-5.6-terra`, `gpt-6.1-sol`, `gpt-5.5`, `grok-4.7`, `gpt-6-astra`
 
 **Instructions sent to Decision-1** (fragments: `base`, `mode.balanced`):
 
 > Choose the model that should answer the conversation in the state. Balanced mode: weigh answer quality against cost. Prefer a cheaper model when its answer would be about as good as the best model's answer.
 
-**Explanation:** Nothing is removed: `json_object` is no longer a catalog capability, so all 23 models are candidates. A model that doesn't support JSON mode may answer in free text. Claude always does, because the translation layer drops `response_format: json_object` (the Messages API has no equivalent). Callers that need guaranteed JSON should send a JSON schema instead (example A7).
+**Explanation:** Only the Claude models are removed: the Messages API has no JSON mode, so Claude would answer in free text. The other models stay, because `json_object` is not a catalog capability; a model without JSON mode may still answer in free text. Callers that need guaranteed JSON should send a JSON schema instead (example A7), which Claude supports.
 
 ### A9. Streaming
 
