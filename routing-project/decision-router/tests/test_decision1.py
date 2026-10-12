@@ -74,9 +74,26 @@ def test_confident_top_model_is_called_first():
     assert order == ["a", "b", "c"] and low is False
 
 
-def test_low_confidence_calls_the_second_model_first_and_keeps_the_top_as_backup():
-    order, low = execution_order(["a", "b", "c"], {"a": 0.45, "b": 0.35, "c": 0.2}, 0.5)
-    assert order == ["b", "a", "c"] and low is True
+def test_low_confidence_in_cost_mode_calls_the_cheaper_of_the_top_two_first():
+    probabilities = {"a": 0.45, "b": 0.35, "c": 0.2}
+    cheaper_second = {"a": 5, "b": 2, "c": 1}
+    assert execution_order(["a", "b", "c"], probabilities, 0.5, "cost", cheaper_second) == (["b", "a", "c"], True)
+    dearer_second = {"a": 2, "b": 5, "c": 1}
+    assert execution_order(["a", "b", "c"], probabilities, 0.5, "cost", dearer_second) == (["a", "b", "c"], True)
+
+
+@pytest.mark.parametrize("mode", ["balanced", "quality"])
+def test_low_confidence_in_balanced_and_quality_keeps_the_top_model_and_flags_it(mode):
+    tiers = {"a": 5, "b": 2, "c": 1}
+    assert execution_order(["a", "b", "c"], {"a": 0.45, "b": 0.35, "c": 0.2}, 0.5, mode, tiers) == (["a", "b", "c"], True)
+
+
+def test_per_mode_thresholds(settings):
+    from dataclasses import replace
+    s = replace(settings, low_confidence_thresholds={"cost": 0.3})
+    assert (s.threshold_for("cost"), s.threshold_for("quality")) == (0.3, settings.low_confidence_threshold)
+    with pytest.raises(ValueError):
+        replace(settings, low_confidence_thresholds={"fast": 0.3}).validate()
 
 
 def test_threshold_zero_disables_the_rule():

@@ -61,7 +61,8 @@ async def option_order_test(pipeline: RouterPipeline, routed: Routed, body: dict
             results.append({"order": order, "error": exc.code})
             continue
         shuffled_first, _ = execution_order(shuffled.ranking, shuffled.probabilities,
-                                            pipeline.settings.low_confidence_threshold)
+                                            pipeline.settings.threshold_for(routed.mode), routed.mode,
+                                            {m.name: m.tier for m in routed.candidates})
         results.append({
             "order": order,
             "ranking": shuffled.ranking,
@@ -137,7 +138,7 @@ async def run_row(row: dict[str, Any], *, pipeline: RouterPipeline, router: Chat
                                    "execution_order": routed.order, "low_confidence": routed.low_confidence,
                                    "top_probability": d.probabilities[d.ranking[0]],
                                    "confidence": d.confidence, "latency_ms": d.latency_ms, "skipped": d.skipped,
-                                   "usage": d.usage}
+                                   "usage": d.usage, "tiers": {m.name: m.tier for m in routed.candidates}}
             if shuffle_repeats:
                 record["option_order"] = await option_order_test(pipeline, routed, forwarded, shuffle_repeats,
                                                                  f"{seed}:{row.get('id')}")
@@ -292,7 +293,8 @@ def _low_confidence_summary(decided: list[dict[str, Any]], both: list[dict[str, 
     sweep = []
     for threshold in THRESHOLD_SWEEP:
         def first(r: dict[str, Any], t: float = threshold) -> str:
-            return execution_order(r["decision1"]["ranking"], r["decision1"]["probabilities"], t)[0][0]
+            return execution_order(r["decision1"]["ranking"], r["decision1"]["probabilities"], t,
+                                   r.get("routing_mode", "balanced"), r["decision1"].get("tiers"))[0][0]
         sweep.append({
             "threshold": threshold,
             "fired_rate": _rate(sum(r["decision1"]["top_probability"] < threshold for r in scored), len(scored)),

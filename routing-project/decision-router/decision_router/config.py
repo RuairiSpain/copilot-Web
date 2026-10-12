@@ -89,6 +89,8 @@ class Settings:
     decision_max_attempts: int = 3
     # Below this top-model probability, the second-ranked model is called first. 0 disables the rule.
     low_confidence_threshold: float = 0.5
+    # Per-mode overrides of low_confidence_threshold, e.g. {"cost": 0.4, "quality": 0.6}.
+    low_confidence_thresholds: dict[str, float] = field(default_factory=dict)
     request_timeout_seconds: float = 60.0
     total_timeout_seconds: float = 90.0
     attempts_per_model: int = 2
@@ -135,6 +137,8 @@ class Settings:
             decision_timeout_seconds=float(os.getenv("ROUTER_DECISION_TIMEOUT_SECONDS", "10")),
             decision_max_attempts=int(os.getenv("ROUTER_DECISION_MAX_ATTEMPTS", "3")),
             low_confidence_threshold=float(os.getenv("ROUTER_LOW_CONFIDENCE_THRESHOLD", "0.5")),
+            low_confidence_thresholds={str(k): float(v)
+                                       for k, v in _json_object("ROUTER_LOW_CONFIDENCE_THRESHOLDS").items()},
             request_timeout_seconds=float(os.getenv("ROUTER_REQUEST_TIMEOUT_SECONDS", "60")),
             total_timeout_seconds=float(os.getenv("ROUTER_TOTAL_TIMEOUT_SECONDS", "90")),
             attempts_per_model=int(os.getenv("ROUTER_ATTEMPTS_PER_MODEL", "2")),
@@ -166,6 +170,9 @@ class Settings:
             raise ValueError("ROUTER_STATE_MAX_CHARS must be at least 1000")
         if not 0 <= self.low_confidence_threshold < 1:
             raise ValueError("ROUTER_LOW_CONFIDENCE_THRESHOLD must be at least 0 and below 1")
+        if set(self.low_confidence_thresholds) - set(ROUTING_MODES) or \
+                not all(0 <= v < 1 for v in self.low_confidence_thresholds.values()):
+            raise ValueError(f"ROUTER_LOW_CONFIDENCE_THRESHOLDS keys must be from {ROUTING_MODES}, values in [0, 1)")
         if self.decision_max_attempts < 1:
             raise ValueError("ROUTER_DECISION_MAX_ATTEMPTS must be at least 1")
         if self.attempts_per_model < 1:
@@ -192,6 +199,9 @@ class Settings:
     @property
     def resolved_chat_url(self) -> str | None:
         return self.url_for("openai_chat")
+
+    def threshold_for(self, mode: str) -> float:
+        return self.low_confidence_thresholds.get(mode, self.low_confidence_threshold)
 
     def url_for(self, api: str) -> str | None:
         """Where a model with this API type is called."""

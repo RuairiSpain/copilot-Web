@@ -268,8 +268,9 @@ class RouterPipeline:
                 self.telemetry.record(event, body)
                 status = 504 if exc.code == "timeout" else 503 if exc.status_code == 429 else 502
                 raise RoutingError(status, "decision_unavailable", f"Decision-1 failed: {exc}") from exc
-            order, low_confidence = execution_order(decision.ranking, decision.probabilities,
-                                                    0.0 if decision.skipped else self.settings.low_confidence_threshold)
+            threshold = 0.0 if decision.skipped else self.settings.threshold_for(mode)
+            order, low_confidence = execution_order(decision.ranking, decision.probabilities, threshold, mode,
+                                                    {m.name: m.tier for m in candidates})
         event["decision"] = {
             "pinned": pinned is not None,
             "deployment": self.decision.deployment,
@@ -277,7 +278,7 @@ class RouterPipeline:
             "execution_order": order,
             "top_probability": decision.probabilities[decision.ranking[0]],
             "low_confidence": low_confidence,
-            "low_confidence_threshold": self.settings.low_confidence_threshold,
+            "low_confidence_threshold": self.settings.threshold_for(mode),
             "probabilities": decision.probabilities,
             "choice": decision.choice,
             "confidence": decision.confidence,

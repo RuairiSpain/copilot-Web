@@ -36,13 +36,13 @@ def test_stratified_sample_is_balanced_and_reproducible():
     assert len(first) == 32 and len(cells) == 16
 
 
-def record(mode, ranking, candidates, router_model, policy=None, top=0.6):
+def record(mode, ranking, candidates, router_model, policy=None, top=0.6, tiers=None):
     probabilities = {name: (1 - top) / (len(candidates) - 1) for name in candidates}
     probabilities[ranking[0]] = top
     return {"routing_mode": mode, "task_type": "code", "policy_label": policy,
             "decision1": {"ranking": ranking, "candidates": candidates, "latency_ms": 10.0, "skipped": False,
                           "probabilities": probabilities, "top_probability": top, "execution_order": ranking,
-                          "low_confidence": False},
+                          "low_confidence": False, "tiers": tiers or {n: i for i, n in enumerate(candidates)}},
             "ours": {"served_model": ranking[0], "latency_ms": 100.0, "fallback_used": False, "cost": {"amount": None}},
             "router": {"provider_model": router_model, "served_model": router_model if router_model in POOL else None,
                        "latency_ms": 120.0, "cost": {"amount": None}}}
@@ -66,7 +66,9 @@ def test_summary_measures():
 
 def test_low_confidence_sweep_shows_what_each_threshold_would_do():
     records = [
-        record("cost", ["gpt-5-nano", "gpt-5-mini", "deepseek-v4-flash"], POOL[:3], "gpt-5-mini", top=0.4),
+        # unsure, and the second-ranked gpt-5-mini is the cheaper: cost mode serves it first
+        record("cost", ["gpt-5-nano", "gpt-5-mini", "deepseek-v4-flash"], POOL[:3], "gpt-5-mini", top=0.4,
+               tiers={"gpt-5-mini": 1, "gpt-5-nano": 2, "deepseek-v4-flash": 3}),
         record("cost", ["gpt-5-nano", "gpt-5-mini", "deepseek-v4-flash"], POOL[:3], "gpt-5-nano", top=0.9),
     ]
     low = summarize(records)["low_confidence"]

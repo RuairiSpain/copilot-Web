@@ -204,23 +204,28 @@ def test_mai_models_use_the_mai_endpoint(make_pipeline, settings, fake):
     assert chat_calls(fake)[0]["path"] == "/mai/v1/chat/completions"
 
 
-def test_low_confidence_top_model_is_skipped_for_the_second(make_pipeline, settings, fake, tmp_path):
+def test_low_confidence_in_balanced_keeps_the_top_model_and_flags_it(make_pipeline, settings, fake, tmp_path):
     fake.decision_responses.append(ranked(["gpt-5.5", "gpt-5.6-terra"], top=0.35))
     with client_for(make_pipeline, settings) as client:
         response = client.post("/v1/chat/completions", json={"messages": USER})
-    assert response.json()["model"] == "gpt-5.6-terra"
+    assert response.json()["model"] == "gpt-5.5"
     assert response.headers["x-router-low-confidence"] == "true"
-    assert response.headers["x-router-ranking"].startswith("gpt-5.5,gpt-5.6-terra")
     line = last_log(tmp_path)
     assert line["decision"]["low_confidence"] is True and line["decision"]["top_probability"] < 0.5
-    assert line["decision"]["execution_order"][:2] == ["gpt-5.6-terra", "gpt-5.5"] and line["fallback_used"] is False
+    assert line["decision"]["execution_order"][:2] == ["gpt-5.5", "gpt-5.6-terra"]
 
 
-def test_low_confidence_second_model_failing_falls_back_to_the_top_model(make_pipeline, settings, fake):
-    fake.decision_responses.append(ranked(["gpt-5.5", "gpt-5.6-terra"], top=0.35))
-    fake.fail("gpt-5.6-terra", 500, 500)
+def test_low_confidence_in_cost_mode_serves_the_cheaper_of_the_top_two(make_pipeline, settings, fake, tmp_path):
+    # gpt-5.6-terra ($8 output) is cheaper than gpt-5.5 ($15): it is called first, gpt-5.5 is the backup
+    two = {"models": ["gpt-5.5", "gpt-5.6-terra", "claude-opus-5"]}
+    fake.decision_responses.extend([ranked(["gpt-5.5", "gpt-5.6-terra"], top=0.35)] * 2)
     with client_for(make_pipeline, settings) as client:
-        assert client.post("/v1/chat/completions", json={"messages": USER}).json()["model"] == "gpt-5.5"
+        # a dollar range keeps all three as candidates while the mode stays "cost"
+        body = {"messages": USER, "routing_mode": "cost", "routing_constraints": two, "routing_cost_band": "0-100"}
+        served = client.post("/v1/chat/completions", json=body)
+        fake.fail("gpt-5.6-terra", 500, 500)
+        backup = client.post("/v1/chat/completions", json=body)
+    assert served.json()["model"] == "gpt-5.6-terra" and backup.json()["model"] == "gpt-5.5"
 
 
 def test_low_confidence_rule_can_be_turned_off(make_pipeline, settings, fake):
@@ -363,12 +368,13 @@ def test_upstream_401_or_403_tries_the_next_model_and_never_reaches_the_caller(m
         fake.fail("gpt-5.5", 403)
         served = c.post("/v1/chat/completions", json={"messages": USER})
         assert served.status_code == 200 and served.json()["model"] == "gpt-5.6-terra"
-        assert last_log(tmp_path)["attempts"][0]["outcome"] == "upstream_auth_error"
         fake.fail("gpt-5.5", 401)
         fake.fail("gpt-5.6-terra", 401)
         two = {"models": ["gpt-5.5", "gpt-5.6-terra"]}
         failed = c.post("/v1/chat/completions", json={"messages": USER, "routing_constraints": two})
     assert failed.status_code == 502 and failed.json()["error"]["code"] == "all_models_failed"
+    first = json.loads((tmp_path / "decisions.jsonl").read_text().splitlines()[0])  # written once the app stops
+    assert first["attempts"][0]["outcome"] == "upstream_auth_error"
 
 
 def test_request_body_over_the_limit_gets_413(make_pipeline, settings, fake):

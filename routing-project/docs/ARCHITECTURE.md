@@ -17,8 +17,9 @@ stage 2   Decision-1 "choice" question        state = rendered conversation
    │      ranking = probabilities, highest first (ties → cheaper model)
    ▼
 select    execution order                     highest probability first; if that probability is
-   │                                          below ROUTER_LOW_CONFIDENCE_THRESHOLD, the second-
-   │                                          ranked model goes first and the top model second
+   │                                          below the low-confidence threshold, cost mode calls
+   │                                          the cheaper of the top two first; other modes keep the
+   │                                          top model and flag the decision
    ▼
 log       decision log line                   candidates, probabilities, ranking, execution order, usage, cost
    │
@@ -115,15 +116,23 @@ smoke-tested against Foundry. Confirm them with one live call; they are read in
 ## Selecting the model: the low-confidence rule
 
 The model called first is the one with the highest probability. When that probability is
-below `ROUTER_LOW_CONFIDENCE_THRESHOLD` (default `0.5`), the second-ranked model is called
-first instead, and the top model moves to second place, so it is still tried if the second
-model fails. The rest of the order is unchanged.
+below the threshold, Decision-1 is treated as unsure: the decision is flagged
+`low_confidence`, and what happens next depends on the routing mode.
 
-| Probabilities | Threshold | Execution order | `low_confidence` |
-|---|---|---|---|
-| gpt-5.5 0.70, gpt-5.6-terra 0.20, gpt-5.6-sol 0.10 | 0.5 | gpt-5.5, gpt-5.6-terra, gpt-5.6-sol | false |
-| gpt-5.5 0.45, gpt-5.6-terra 0.35, gpt-5.6-sol 0.20 | 0.5 | gpt-5.6-terra, gpt-5.5, gpt-5.6-sol | true |
-| gpt-5.5 0.45, gpt-5.6-terra 0.35, gpt-5.6-sol 0.20 | 0 (off) | gpt-5.5, gpt-5.6-terra, gpt-5.6-sol | false |
+| Mode | When unsure |
+|---|---|
+| `cost` | The cheaper (lower tier, so lower output price) of the top two models is called first; the other is the backup. If the top model is already the cheaper, nothing changes. |
+| `balanced`, `quality` | The top model is still called first. Only the flag is set. |
+
+| Probabilities | Mode | Threshold | Execution order | `low_confidence` |
+|---|---|---|---|---|
+| gpt-5.5 0.70, gpt-5.6-terra 0.20, gpt-5.6-sol 0.10 | any | 0.5 | gpt-5.5, gpt-5.6-terra, gpt-5.6-sol | false |
+| gpt-5.5 0.45, gpt-5.6-terra 0.35, gpt-5.6-sol 0.20 | cost | 0.5 | gpt-5.6-terra ($8), gpt-5.5 ($15), gpt-5.6-sol | true |
+| gpt-5.5 0.45, gpt-5.6-terra 0.35, gpt-5.6-sol 0.20 | balanced | 0.5 | gpt-5.5, gpt-5.6-terra, gpt-5.6-sol | true |
+| gpt-5.5 0.45, gpt-5.6-terra 0.35, gpt-5.6-sol 0.20 | any | 0 (off) | gpt-5.5, gpt-5.6-terra, gpt-5.6-sol | false |
+
+The threshold is `ROUTER_LOW_CONFIDENCE_THRESHOLD` (default `0.5`), overridable per mode
+with `ROUTER_LOW_CONFIDENCE_THRESHOLDS`, for example `{"cost": 0.4, "quality": 0.6}`.
 
 Notes:
 
@@ -236,7 +245,8 @@ What the report does and does not show:
 | `FOUNDRY_ANTHROPIC_MESSAGES_URL` | `{endpoint}/anthropic/v1/messages` | Override the Claude route |
 | `ANTHROPIC_VERSION` | `2023-06-01` | `anthropic-version` header for Claude |
 | `ROUTER_ANTHROPIC_DEFAULT_MAX_TOKENS` | `4096` | Output budget sent to Claude when the request sets none |
-| `ROUTER_LOW_CONFIDENCE_THRESHOLD` | `0.5` | Below this top probability, call the second-ranked model first; `0` turns the rule off |
+| `ROUTER_LOW_CONFIDENCE_THRESHOLD` | `0.5` | Below this top probability the decision is flagged low-confidence (cost mode then calls the cheaper of the top two first); `0` turns the rule off |
+| `ROUTER_LOW_CONFIDENCE_THRESHOLDS` | (none) | Per-mode thresholds as JSON, e.g. `{"cost": 0.4}`; modes not listed use the value above |
 | `ROUTER_REQUEST_TIMEOUT_SECONDS` | `60` | Per model call |
 | `ROUTER_TOTAL_TIMEOUT_SECONDS` | `90` | Whole request, across fallbacks |
 | `ROUTER_ATTEMPTS_PER_MODEL` | `2` | Attempts per model before the next ranked one |
