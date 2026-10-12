@@ -538,7 +538,7 @@
         "output_per_million": 0.42
       },
       "aliases": [],
-      "description": "DeepSeek open model with visible reasoning; strong at code, maths and agent tasks for its price. English and Chinese, text only, 128K context; tool calling and JSON mode but no JSON-schema outputs.",
+      "description": "DeepSeek open model with visible reasoning; strong at code, maths and agent tasks for its price. English and Chinese, text only, 128K context; tool calling but no JSON-schema outputs.",
       "provider": "DeepSeek",
       "version": "1",
       "lifecycle": "ga",
@@ -628,7 +628,7 @@
         "output_per_million": 3.0
       },
       "aliases": [],
-      "description": "Compact GPT-5.4 reasoning model and a good default for everyday work: summaries, extraction, routine code, data questions and tool calls, with structured outputs, image input and computer use. Handles moderate multi-step reasoning; use a frontier model for the hardest problems.",
+      "description": "Compact GPT-5.4 reasoning model and a good default for everyday work: summaries, extraction, routine code, data questions and tool calls, with structured outputs and image input. Handles moderate multi-step reasoning; use a frontier model for the hardest problems.",
       "provider": "OpenAI",
       "version": "2026-03-17",
       "lifecycle": "ga",
@@ -1136,7 +1136,7 @@
         "output_per_million": 10.0
       },
       "aliases": [],
-      "description": "Claude Sonnet 5 for coding, long-running agents, financial analysis and professional writing, reasoning over whole codebases (1M-token context); adaptive thinking, high-resolution image input and computer use. Anthropic-hosted (version 1).",
+      "description": "Claude Sonnet 5 for coding, long-running agents, financial analysis and professional writing, reasoning over whole codebases (1M-token context); adaptive thinking and high-resolution image input. Anthropic-hosted (version 1).",
       "provider": "Anthropic",
       "version": "1",
       "lifecycle": "ga",
@@ -1206,7 +1206,7 @@
         "output_per_million": 15.0
       },
       "aliases": [],
-      "description": "Frontier GPT-5.4 model for complex professional work: multi-step reasoning, coding, analysis across long documents (1M-token context), tool use and computer use. Use it when a task needs depth that mini models lack.",
+      "description": "Frontier GPT-5.4 model for complex professional work: multi-step reasoning, coding, analysis across long documents (1M-token context) and tool use. Use it when a task needs depth that mini models lack.",
       "provider": "OpenAI",
       "version": "2026-03-05",
       "lifecycle": "ga",
@@ -1321,7 +1321,7 @@
         "output_per_million": 15.0
       },
       "aliases": [],
-      "description": "OpenAI agentic model for complex multi-step coding, research and data analysis, including synthesis across many documents (1M-token context). Strong tool use, structured outputs and computer use.",
+      "description": "OpenAI agentic model for complex multi-step coding, research and data analysis, including synthesis across many documents (1M-token context). Strong tool use and structured outputs.",
       "provider": "OpenAI",
       "version": "2026-04-24",
       "lifecycle": "ga",
@@ -1545,7 +1545,7 @@
         "output_per_million": 15.0
       },
       "aliases": [],
-      "description": "Claude Sonnet 4.5 for complex agents, long-horizon tasks and high-volume coding, with extended thinking, image input and computer use. 200K context, Anthropic-hosted only.",
+      "description": "Claude Sonnet 4.5 for complex agents, long-horizon tasks and high-volume coding, with extended thinking and image input. 200K context, Anthropic-hosted only.",
       "provider": "Anthropic",
       "version": "20250929",
       "lifecycle": "ga",
@@ -1668,7 +1668,7 @@
         "output_per_million": 15.0
       },
       "aliases": [],
-      "description": "xAI multimodal model (preview) for coding, engineering, research and agentic workflows; text and image input, tool calling and JSON mode, 200K context. Preview, so behaviour may change.",
+      "description": "xAI multimodal model (preview) for coding, engineering, research and agentic workflows; text and image input, tool calling, 200K context. Preview, so behaviour may change.",
       "provider": "xAI",
       "version": "1",
       "lifecycle": "preview",
@@ -1758,7 +1758,7 @@
         "output_per_million": 25.0
       },
       "aliases": [],
-      "description": "Claude Opus 4.6 for coding, enterprise agents and computer use, with advanced tool use (tool search, programmatic calling) and image input; 1M-token context. Anthropic-hosted only.",
+      "description": "Claude Opus 4.6 for coding and enterprise agents, with advanced tool use (tool search, programmatic calling) and image input; 1M-token context. Anthropic-hosted only.",
       "provider": "Anthropic",
       "version": "1",
       "lifecycle": "ga",
@@ -1898,7 +1898,7 @@
         "output_per_million": 25.0
       },
       "aliases": [],
-      "description": "Claude Opus 4.8 for coding, long-running agents, financial analysis and cybersecurity work, with high-resolution image input and computer use; 1M-token context. Anthropic-hosted (version 1).",
+      "description": "Claude Opus 4.8 for coding, long-running agents, financial analysis and cybersecurity work, with high-resolution image input; 1M-token context. Anthropic-hosted (version 1).",
       "provider": "Anthropic",
       "version": "1",
       "lifecycle": "ga",
@@ -1968,7 +1968,7 @@
         "output_per_million": 25.0
       },
       "aliases": [],
-      "description": "Claude Opus 5: near-Fable capability for long-horizon coding, complex agent orchestration, enterprise workflows and financial analysis; adaptive thinking up to max effort, image input and computer use; 1M-token context. Anthropic-hosted (version 1).",
+      "description": "Claude Opus 5: near-Fable capability for long-horizon coding, complex agent orchestration, enterprise workflows and financial analysis; adaptive thinking up to max effort and image input; 1M-token context. Anthropic-hosted (version 1).",
       "provider": "Anthropic",
       "version": "1",
       "lifecycle": "ga",
@@ -2102,7 +2102,7 @@
         "output_per_million": 50.0
       },
       "aliases": [],
-      "description": "Frontier GPT-6 reasoning model for the most complex problem-solving, coding, agentic workflows and enterprise knowledge work, with reasoning-effort and verbosity controls, tools, structured outputs, image input and computer use. Use it when answer quality matters most.",
+      "description": "Frontier GPT-6 reasoning model for the most complex problem-solving, coding, agentic workflows and enterprise knowledge work, with reasoning-effort and verbosity controls, tools, structured outputs and image input. Use it when answer quality matters most.",
       "provider": "OpenAI",
       "version": "2026-09-03",
       "lifecycle": "ga",

@@ -9,7 +9,9 @@ and returns the same output, but makes its choice with **Microsoft-Decision-1**:
    subset, providers, capabilities, region, residency, context size), what the request itself
    needs (tools, images, JSON schema, streaming), and finally the routing mode's price band.
 2. **Stage 2 (Decision-1).** The conversation, the routing instructions and the candidates
-   with their descriptions go to Decision-1 as one `choice` question. Its probabilities give
+   with their descriptions go to Decision-1 as one `choice` question. The instructions are
+   fixed fragments that stage 1 selects and fills (`docs/DECISION1_INSTRUCTIONS.md`); no model
+   writes them. Its probabilities give
    a ranked list of models.
 3. **Select.** The model with the highest probability is called first. If its probability is
    below `ROUTER_LOW_CONFIDENCE_THRESHOLD` (default 0.5), the second-ranked model is called

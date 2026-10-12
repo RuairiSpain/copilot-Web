@@ -170,7 +170,7 @@
           "version": "1",
           "api": "openai_chat",
           "docs": "others",
-          "description": "DeepSeek open model with visible reasoning; strong at code, maths and agent tasks for its price. English and Chinese, text only, 128K context; tool calling and JSON mode but no JSON-schema outputs."
+          "description": "DeepSeek open model with visible reasoning; strong at code, maths and agent tasks for its price. English and Chinese, text only, 128K context; tool calling but no JSON-schema outputs."
         },
         {
           "name": "gpt-5.4-mini",
@@ -178,7 +178,7 @@
           "version": "2026-03-17",
           "api": "openai_chat",
           "docs": "openai",
-          "description": "Compact GPT-5.4 reasoning model and a good default for everyday work: summaries, extraction, routine code, data questions and tool calls, with structured outputs, image input and computer use. Handles moderate multi-step reasoning; use a frontier model for the hardest problems."
+          "description": "Compact GPT-5.4 reasoning model and a good default for everyday work: summaries, extraction, routine code, data questions and tool calls, with structured outputs and image input. Handles moderate multi-step reasoning; use a frontier model for the hardest problems."
         },
         {
           "name": "gpt-5.6-luna",
@@ -278,7 +278,7 @@
           "version": "2026-03-05",
           "api": "openai_chat",
           "docs": "openai",
-          "description": "Frontier GPT-5.4 model for complex professional work: multi-step reasoning, coding, analysis across long documents (1M-token context), tool use and computer use. Use it when a task needs depth that mini models lack."
+          "description": "Frontier GPT-5.4 model for complex professional work: multi-step reasoning, coding, analysis across long documents (1M-token context) and tool use. Use it when a task needs depth that mini models lack."
         },
         {
           "name": "gpt-5.6-terra",
@@ -300,7 +300,7 @@
           "version": "2026-04-24",
           "api": "openai_chat",
           "docs": "openai",
-          "description": "OpenAI agentic model for complex multi-step coding, research and data analysis, including synthesis across many documents (1M-token context). Strong tool use, structured outputs and computer use."
+          "description": "OpenAI agentic model for complex multi-step coding, research and data analysis, including synthesis across many documents (1M-token context). Strong tool use and structured outputs."
         },
         {
           "name": "grok-4",
@@ -316,7 +316,7 @@
           "version": "1",
           "api": "openai_chat",
           "docs": "others",
-          "description": "xAI multimodal model (preview) for coding, engineering, research and agentic workflows; text and image input, tool calling and JSON mode, 200K context. Preview, so behaviour may change."
+          "description": "xAI multimodal model (preview) for coding, engineering, research and agentic workflows; text and image input, tool calling, 200K context. Preview, so behaviour may change."
         },
         {
           "name": "claude-sonnet-4-5",
@@ -325,7 +325,7 @@
           "doc_version": "1",
           "api": "anthropic_messages",
           "docs": "claude",
-          "description": "Claude Sonnet 4.5 for complex agents, long-horizon tasks and high-volume coding, with extended thinking, image input and computer use. 200K context, Anthropic-hosted only."
+          "description": "Claude Sonnet 4.5 for complex agents, long-horizon tasks and high-volume coding, with extended thinking and image input. 200K context, Anthropic-hosted only."
         },
         {
           "name": "claude-sonnet-5",
@@ -333,7 +333,7 @@
           "version": "1",
           "api": "anthropic_messages",
           "docs": "claude",
-          "description": "Claude Sonnet 5 for coding, long-running agents, financial analysis and professional writing, reasoning over whole codebases (1M-token context); adaptive thinking, high-resolution image input and computer use. Anthropic-hosted (version 1)."
+          "description": "Claude Sonnet 5 for coding, long-running agents, financial analysis and professional writing, reasoning over whole codebases (1M-token context); adaptive thinking and high-resolution image input. Anthropic-hosted (version 1)."
         },
         {
           "name": "gpt-5.6-sol",
@@ -356,7 +356,7 @@
           "api": "openai_chat",
           "docs": "openai",
           "lifecycle": "ga",
-          "description": "Frontier GPT-6 reasoning model for the most complex problem-solving, coding, agentic workflows and enterprise knowledge work, with reasoning-effort and verbosity controls, tools, structured outputs, image input and computer use. Use it when answer quality matters most."
+          "description": "Frontier GPT-6 reasoning model for the most complex problem-solving, coding, agentic workflows and enterprise knowledge work, with reasoning-effort and verbosity controls, tools, structured outputs and image input. Use it when answer quality matters most."
         },
         {
           "name": "claude-opus-4-6",
@@ -364,7 +364,7 @@
           "version": "1",
           "api": "anthropic_messages",
           "docs": "claude",
-          "description": "Claude Opus 4.6 for coding, enterprise agents and computer use, with advanced tool use (tool search, programmatic calling) and image input; 1M-token context. Anthropic-hosted only."
+          "description": "Claude Opus 4.6 for coding and enterprise agents, with advanced tool use (tool search, programmatic calling) and image input; 1M-token context. Anthropic-hosted only."
         },
         {
           "name": "claude-opus-4-7",
@@ -380,7 +380,7 @@
           "version": "1",
           "api": "anthropic_messages",
           "docs": "claude",
-          "description": "Claude Opus 4.8 for coding, long-running agents, financial analysis and cybersecurity work, with high-resolution image input and computer use; 1M-token context. Anthropic-hosted (version 1)."
+          "description": "Claude Opus 4.8 for coding, long-running agents, financial analysis and cybersecurity work, with high-resolution image input; 1M-token context. Anthropic-hosted (version 1)."
         },
         {
           "name": "claude-opus-5",
@@ -388,7 +388,7 @@
           "version": "1",
           "api": "anthropic_messages",
           "docs": "claude",
-          "description": "Claude Opus 5: near-Fable capability for long-horizon coding, complex agent orchestration, enterprise workflows and financial analysis; adaptive thinking up to max effort, image input and computer use; 1M-token context. Anthropic-hosted (version 1).",
+          "description": "Claude Opus 5: near-Fable capability for long-horizon coding, complex agent orchestration, enterprise workflows and financial analysis; adaptive thinking up to max effort and image input; 1M-token context. Anthropic-hosted (version 1).",
           "overrides": {
             "source": "early_catalog",
             "capabilities": {
@@ -563,7 +563,7 @@
           "version": "2026-04-23",
           "api": "openai_chat",
           "docs": "others",
-          "description": "Fast DeepSeek V4 reasoning model with a 1M-token context and up to 384K output tokens: low-cost choice for code, maths and long-document work, with tool calling and JSON mode. Text only; English and Chinese.",
+          "description": "Fast DeepSeek V4 reasoning model with a 1M-token context and up to 384K output tokens: low-cost choice for code, maths and long-document work, with tool calling. Text only; English and Chinese.",
           "actions": [
             "reason",
             "code",
@@ -619,7 +619,7 @@
           "version": "2026-03-17",
           "api": "openai_chat",
           "docs": "openai",
-          "description": "Compact GPT-5.4 reasoning model and a good default for everyday work: summaries, extraction, routine code, data questions and tool calls, with structured outputs, image input and computer use. Handles moderate multi-step reasoning; use a frontier model for the hardest problems.",
+          "description": "Compact GPT-5.4 reasoning model and a good default for everyday work: summaries, extraction, routine code, data questions and tool calls, with structured outputs and image input. Handles moderate multi-step reasoning; use a frontier model for the hardest problems.",
           "actions": [
             "summarize",
             "extract",
@@ -637,7 +637,7 @@
           "api": "openai_chat",
           "docs": "openai",
           "lifecycle": "ga",
-          "description": "Fast, cost-efficient GPT-6 model for low-latency, multilingual and large-context work (1M tokens), with reasoning-effort controls, tools, structured outputs, image input and computer use. Prefer it to larger GPT-6 models when speed and cost matter more than peak quality.",
+          "description": "Fast, cost-efficient GPT-6 model for low-latency, multilingual and large-context work (1M tokens), with reasoning-effort controls, tools, structured outputs and image input. Prefer it to larger GPT-6 models when speed and cost matter more than peak quality.",
           "actions": [
             "reason",
             "translate",
@@ -731,7 +731,7 @@
           "version": "2026-04-23",
           "api": "openai_chat",
           "docs": "others",
-          "description": "Large DeepSeek V4 reasoning model for hard code, maths and long-document analysis (1M-token context, up to 384K output tokens), with tool calling and JSON mode. Text only; English and Chinese.",
+          "description": "Large DeepSeek V4 reasoning model for hard code, maths and long-document analysis (1M-token context, up to 384K output tokens), with tool calling. Text only; English and Chinese.",
           "overrides": {
             "source": "foundry_streaming_pages",
             "capabilities": {
@@ -754,7 +754,7 @@
           "version": "2",
           "api": "anthropic_messages",
           "docs": "claude",
-          "description": "Fastest, lowest-cost current Claude for coding, agents, sub-agent work, classification and extraction over large contexts (1M tokens); adaptive thinking, high-resolution image input and computer use. Prompts over 100,000 tokens are billed at a higher rate.",
+          "description": "Fastest, lowest-cost current Claude for coding, agents, sub-agent work, classification and extraction over large contexts (1M tokens); adaptive thinking and high-resolution image input. Prompts over 100,000 tokens are billed at a higher rate.",
           "actions": [
             "code",
             "orchestrate",
@@ -816,7 +816,7 @@
           "version": "2026-04-24",
           "api": "openai_chat",
           "docs": "openai",
-          "description": "OpenAI agentic model for complex multi-step coding, research and data analysis, including synthesis across many documents (1M-token context). Strong tool use, structured outputs and computer use.",
+          "description": "OpenAI agentic model for complex multi-step coding, research and data analysis, including synthesis across many documents (1M-token context). Strong tool use and structured outputs.",
           "actions": [
             "code",
             "plan",
@@ -834,7 +834,7 @@
           "api": "openai_chat",
           "docs": "others",
           "lifecycle": "ga",
-          "description": "Latest xAI model for coding, research and agentic work with tool calling and JSON mode; text and image input, 500K tokens shared between input and output. English-focused.",
+          "description": "Latest xAI model for coding, research and agentic work with tool calling; text and image input, 500K tokens shared between input and output. English-focused.",
           "overrides": {
             "source": "foundry_streaming_pages",
             "capabilities": {
@@ -856,7 +856,7 @@
           "version": "2",
           "api": "anthropic_messages",
           "docs": "claude",
-          "description": "Latest Claude Sonnet, balancing speed and capability: coding, long-running agents, financial analysis, professional writing and cybersecurity, reasoning over whole codebases (1M-token context); adaptive thinking, high-resolution image input and computer use.",
+          "description": "Latest Claude Sonnet, balancing speed and capability: coding, long-running agents, financial analysis, professional writing and cybersecurity, reasoning over whole codebases (1M-token context); adaptive thinking and high-resolution image input.",
           "actions": [
             "code",
             "orchestrate",
@@ -874,7 +874,7 @@
           "api": "openai_chat",
           "docs": "openai",
           "lifecycle": "ga",
-          "description": "Frontier GPT-6 reasoning model for the most complex problem-solving, coding, agentic workflows and enterprise knowledge work, with reasoning-effort and verbosity controls, tools, structured outputs, image input and computer use. Use it when answer quality matters most.",
+          "description": "Frontier GPT-6 reasoning model for the most complex problem-solving, coding, agentic workflows and enterprise knowledge work, with reasoning-effort and verbosity controls, tools, structured outputs and image input. Use it when answer quality matters most.",
           "actions": [
             "reason",
             "code",
@@ -909,7 +909,7 @@
           "version": "2",
           "api": "anthropic_messages",
           "docs": "claude",
-          "description": "Latest Claude Opus for long-running agentic coding (finds root causes before changing code and checks its work), enterprise workflows, financial analysis and documents that need little editing; always-on adaptive thinking, vision and computer use; 1M-token context.",
+          "description": "Latest Claude Opus for long-running agentic coding (finds root causes before changing code and checks its work), enterprise workflows, financial analysis and documents that need little editing; always-on adaptive thinking and vision; 1M-token context.",
           "actions": [
             "code",
             "evaluate",

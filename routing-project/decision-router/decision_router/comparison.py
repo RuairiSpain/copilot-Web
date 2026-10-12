@@ -49,9 +49,9 @@ async def option_order_test(pipeline: RouterPipeline, routed: Routed, body: dict
     if base.skipped:
         return []
     by_name: dict[str, ModelEntry] = {m.name: m for m in routed.candidates}
-    criteria = routed.catalog.criteria(routed.candidates)
+    criteria = routed.criteria
     state = build_state(body, pipeline.settings.state_max_chars)
-    instructions = routed.catalog.modes[routed.mode].instructions
+    instructions = routed.instructions
     results = []
     for order in shuffled_orders(base.candidates, repeats, key):
         try:

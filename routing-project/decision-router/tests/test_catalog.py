@@ -58,13 +58,6 @@ def test_price_band_takes_the_modes_share(catalog):
     assert len(catalog.price_band("cost", models[:1])) == 1
 
 
-def test_criteria_cover_exactly_the_candidates_and_state_price_rank(catalog):
-    picked = [catalog.by_name["gpt-5.4-nano"], catalog.by_name["gpt-6-astra"]]
-    criteria = catalog.criteria(picked)
-    assert list(criteria) == ["gpt-5.4-nano", "gpt-6-astra"]
-    assert criteria["gpt-6-astra"].endswith("Price rank 26 of 26 in the pool (1 is cheapest).")
-
-
 def test_resolve_maps_versioned_and_alias_names(catalog):
     assert catalog.resolve("gpt-5.4-mini-2026-03-17") == "gpt-5.4-mini"
     assert catalog.resolve("grok-4.1-fast-reasoning") == "grok-4-1-fast-reasoning"

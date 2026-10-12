@@ -18,6 +18,7 @@ from decision_router.catalog import Catalogs  # noqa: E402
 from decision_router.comparison import PREFERENCE_TO_MODE, build_body, load_rows  # noqa: E402
 from decision_router.config import Settings  # noqa: E402
 from decision_router.decision1 import build_request, build_state  # noqa: E402
+from decision_router.instructions import InstructionTemplates  # noqa: E402
 from decision_router.stage1 import Constraints, select  # noqa: E402
 
 if __name__ == "__main__":
@@ -31,15 +32,19 @@ if __name__ == "__main__":
     settings = Settings.from_env()
     catalog = Catalogs.load(settings.catalog_dir, args.compatibility, settings.deployment_overrides,
                             settings.default_mode).get(args.compatibility)
+    templates = InstructionTemplates.load(settings.instructions_path)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     count = 0
     with args.output.open("w", encoding="utf-8") as handle:
         for row in load_rows([args.data]):
             mode = PREFERENCE_TO_MODE[row["quality_preference"]]
             body = build_body(row["prompt"], args.max_output_tokens, "max_completion_tokens")
-            candidates = select(catalog, mode, Constraints(), body, settings).candidates
+            result = select(catalog, mode, Constraints(), body, settings)
+            rendered = templates.render(result.candidates, mode=mode, constraints=Constraints(), cost_band=None,
+                                        requirements=result.requirements, body=body,
+                                        chars_per_token=settings.chars_per_token)
             request = build_request(settings.decision1_deployment, build_state(body, settings.state_max_chars),
-                                    catalog.modes[mode].instructions, catalog.criteria(candidates))
+                                    rendered.instructions, rendered.criteria)
             handle.write(json.dumps({"id": row.get("id"), "routing_mode": mode, "request": request,
                                      "policy_label": row.get("selected_model")}, ensure_ascii=False) + "\n")
             count += 1
