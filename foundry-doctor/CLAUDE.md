@@ -64,8 +64,8 @@ cannot spawn subagents, so the main session coordinates; the
 1. Plan and map every Definition of Done (DoD) item to work and tests.
 2. Run `go-implementer` agents in parallel, one package set each, in worktrees.
 3. Integrate, then run `scripts/claude/verify-phase.sh`.
-4. Independent reviews (read-only agents): `foundry-lead`, `azure-black-belt`,
-   `go-principal-engineer`, plus `security-reviewer` where Azure or data is touched.
+4. Independent reviews (read-only agents): `foundry-lead` and `azure-black-belt` every
+   phase. `go-principal-engineer` and `security-reviewer` are deferred to Phase 9 (ADR-013).
 5. Fix findings or record an ADR with evidence.
 6. Write the hand-off from `docs/development/hand-offs/TEMPLATE.md`.
 

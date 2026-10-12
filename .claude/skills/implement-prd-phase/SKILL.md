@@ -37,10 +37,11 @@ Run `foundry-doctor/scripts/claude/verify-phase.sh`. Fix failures in the code.
 Never weaken a test or a requirement to pass a gate.
 
 ## 6. Independent reviews (parallel, read-only)
-Launch `foundry-lead` and `azure-black-belt` always; `go-principal-engineer` when Go
-production code changed; `security-reviewer` when the phase touches Azure, data-plane,
-adapters, reports, annotation or LLM code. Give each only the phase DoD and the diff,
-not other reviewers' findings. Keep disagreements; do not average them.
+Launch `foundry-lead` and `azure-black-belt` always. `go-principal-engineer` and
+`security-reviewer` are deferred to the last project phase (Phase 9) by the project owner's
+decision (ADR-013): do not launch them in phases 0 to 8, and list them in the hand-off as
+deferred, not as met. Give each reviewer only the phase DoD and the diff, not other
+reviewers' findings. Keep disagreements; do not average them.
 
 ## 7. Remediate
 Fix blocking findings or record an ADR with evidence explaining why not. Re-run step 5
