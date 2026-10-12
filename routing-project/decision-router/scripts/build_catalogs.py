@@ -329,14 +329,14 @@ def build_entry(spec: dict, docs: Docs, sources: dict, tier: int, price: dict) -
 
 
 def tiers(names: list[str], pricing: dict) -> dict[str, int]:
-    """1 = cheapest, by input price, then output price, then cached-input price, then name."""
+    """1 = cheapest, by output price, then input price, then cached-input price, then name."""
     missing = [n for n in names if not (pricing.get(n) or {}).get("input_per_million")]
     if missing:
         raise SystemExit(f"model_pricing.json has no price for {missing}; tiers are computed from prices")
 
     def key(name: str) -> tuple:
         p = pricing[name]
-        return (p["input_per_million"], p.get("output_per_million") or 0,
+        return (p.get("output_per_million") or 0, p["input_per_million"],
                 p.get("cached_input_per_million") or p["input_per_million"], name.lower())
     return {name: i + 1 for i, name in enumerate(sorted(names, key=key))}
 
@@ -407,8 +407,8 @@ def main() -> int:
             "compatibility": compatibility,
             "_note": f"{catalog['_note']} {len(models)} models. `tier` is computed from model_pricing.json "
                      "(1 = cheapest) and `price` is copied from it. Descriptions are what Decision-1 reads to tell the options apart.",
-            "tier_status": f"computed from model_pricing.json version {price_file['version']}: ordered by USD input "
-                           "price, then output, cached-input price and name; 1 = cheapest",
+            "tier_status": f"computed from model_pricing.json version {price_file['version']}: ordered by USD output "
+                           "price, then input, cached-input price and name; 1 = cheapest",
             "generated_from": {"spec": "config/catalog_spec.json", "docs": spec["docs"]["repository"],
                                "docs_commit": docs.commit},
             "router_version": catalog.get("router_version"),

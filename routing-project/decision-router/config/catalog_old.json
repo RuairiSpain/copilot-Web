@@ -2,7 +2,7 @@
   "schema_version": 2,
   "compatibility": "old",
   "_note": "Model Router version 2025-11-18 routing pool with its deprecated models removed. Use for like-for-like comparison with Model Router. 26 models. `tier` is computed from model_pricing.json (1 = cheapest) and `price` is copied from it. Descriptions are what Decision-1 reads to tell the options apart.",
-  "tier_status": "computed from model_pricing.json version 2026-10-11-global-standard-public-list: ordered by USD input price, then output, cached-input price and name; 1 = cheapest",
+  "tier_status": "computed from model_pricing.json version 2026-10-11-global-standard-public-list: ordered by USD output price, then input, cached-input price and name; 1 = cheapest",
   "generated_from": {
     "spec": "config/catalog_spec.json",
     "docs": "https://github.com/MicrosoftDocs/azure-ai-docs",
@@ -68,9 +68,259 @@
       }
     },
     {
+      "name": "DeepSeek-V3.2",
+      "deployment": "DeepSeek-V3.2",
+      "tier": 2,
+      "price": {
+        "input_per_million": 0.28,
+        "cached_input_per_million": 0.028,
+        "output_per_million": 0.42
+      },
+      "aliases": [],
+      "description": "DeepSeek open model with visible reasoning; strong at code, maths and agent tasks for its price. English and Chinese, text only, 128K context; tool calling but no JSON-schema outputs.",
+      "provider": "DeepSeek",
+      "version": "1",
+      "lifecycle": "ga",
+      "retires": null,
+      "in_model_router": true,
+      "api": "openai_chat",
+      "endpoint_path": "/openai/v1/chat/completions",
+      "limits": {
+        "context_tokens": 128000,
+        "max_input_tokens": null,
+        "max_output_tokens": 128000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "capabilities": {
+        "tools": "yes",
+        "structured_output": "no",
+        "streaming": "no",
+        "reasoning": "yes",
+        "image_input": "no"
+      },
+      "hosting": {
+        "infrastructure": "azure",
+        "azure_region_controls_processing": true
+      },
+      "deployment_types": [
+        "global_standard"
+      ],
+      "regions": {
+        "global_standard": [
+          "australiaeast",
+          "brazilsouth",
+          "canadacentral",
+          "canadaeast",
+          "centralus",
+          "eastus",
+          "eastus2",
+          "francecentral",
+          "germanywestcentral",
+          "italynorth",
+          "japaneast",
+          "japanwest",
+          "koreacentral",
+          "northcentralus",
+          "norwayeast",
+          "polandcentral",
+          "southafricanorth",
+          "southcentralus",
+          "southindia",
+          "spaincentral",
+          "swedencentral",
+          "switzerlandnorth",
+          "switzerlandwest",
+          "uaenorth",
+          "uksouth",
+          "ukwest",
+          "westcentralus",
+          "westeurope",
+          "westus",
+          "westus2",
+          "westus3"
+        ]
+      },
+      "region_status": "published",
+      "source": {
+        "docs_commit": "87fa4a9688b9562e3c520ca718dcfc29f9fc488a",
+        "files": [
+          "articles/foundry/foundry-models/includes/model-matrix/deployments-standard.md",
+          "articles/foundry/foundry-models/includes/models-azure-direct-others.md",
+          "articles/foundry/openai/includes/concepts-model-retirement-schedule-content.md"
+        ]
+      }
+    },
+    {
+      "name": "grok-4-1-fast-reasoning",
+      "deployment": "grok-4-1-fast-reasoning",
+      "tier": 3,
+      "price": {
+        "input_per_million": 0.2,
+        "cached_input_per_million": 0.05,
+        "output_per_million": 0.5
+      },
+      "aliases": [
+        "grok-4.1-fast-reasoning"
+      ],
+      "description": "Fast, low-cost xAI reasoning model tuned for agentic tool calling and quick multi-step answers; accepts images. English-focused, 128K context. Choose it for fast tool-using agents and short reasoning, not for long documents or polished long-form writing.",
+      "provider": "xAI",
+      "version": "1",
+      "lifecycle": "ga",
+      "retires": null,
+      "in_model_router": true,
+      "api": "openai_chat",
+      "endpoint_path": "/openai/v1/chat/completions",
+      "limits": {
+        "context_tokens": 128000,
+        "max_input_tokens": null,
+        "max_output_tokens": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "capabilities": {
+        "tools": "yes",
+        "structured_output": "no",
+        "streaming": "no",
+        "reasoning": "yes",
+        "image_input": "yes"
+      },
+      "hosting": {
+        "infrastructure": "azure",
+        "azure_region_controls_processing": true
+      },
+      "deployment_types": [
+        "data_zone_standard",
+        "global_standard"
+      ],
+      "regions": {
+        "global_standard": [
+          "australiaeast",
+          "brazilsouth",
+          "canadacentral",
+          "canadaeast",
+          "centralus",
+          "eastus",
+          "eastus2",
+          "francecentral",
+          "germanywestcentral",
+          "italynorth",
+          "japaneast",
+          "japanwest",
+          "koreacentral",
+          "northcentralus",
+          "norwayeast",
+          "polandcentral",
+          "southafricanorth",
+          "southcentralus",
+          "southindia",
+          "spaincentral",
+          "swedencentral",
+          "switzerlandnorth",
+          "switzerlandwest",
+          "uaenorth",
+          "uksouth",
+          "ukwest",
+          "westcentralus",
+          "westeurope",
+          "westus",
+          "westus2",
+          "westus3"
+        ],
+        "data_zone_standard": [
+          "centralus",
+          "eastus",
+          "eastus2",
+          "northcentralus",
+          "southcentralus",
+          "westcentralus",
+          "westus",
+          "westus2",
+          "westus3"
+        ]
+      },
+      "region_status": "published",
+      "source": {
+        "docs_commit": "87fa4a9688b9562e3c520ca718dcfc29f9fc488a",
+        "files": [
+          "articles/foundry/foundry-models/includes/model-matrix/deployments-standard.md",
+          "articles/foundry/foundry-models/includes/models-azure-direct-others.md",
+          "articles/foundry/openai/includes/concepts-model-retirement-schedule-content.md",
+          "spec:sources.xai_variants"
+        ]
+      }
+    },
+    {
+      "name": "gpt-oss-120b",
+      "deployment": "gpt-oss-120b",
+      "tier": 4,
+      "price": {
+        "input_per_million": 0.15,
+        "cached_input_per_million": 0.075,
+        "output_per_million": 0.6
+      },
+      "aliases": [],
+      "description": "OpenAI open-weight reasoning model, text only. Good value for maths, logic, code and structured analysis, with function calling and structured outputs. 131K context; less broad knowledge and weaker long-form writing than the GPT-5.x models.",
+      "provider": "OpenAI",
+      "version": "1",
+      "lifecycle": "ga",
+      "retires": null,
+      "in_model_router": true,
+      "api": "openai_chat",
+      "endpoint_path": "/openai/v1/chat/completions",
+      "limits": {
+        "context_tokens": 131072,
+        "max_input_tokens": null,
+        "max_output_tokens": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "capabilities": {
+        "tools": "yes",
+        "structured_output": "yes",
+        "streaming": "yes",
+        "reasoning": "yes",
+        "image_input": "no"
+      },
+      "hosting": {
+        "infrastructure": "azure",
+        "azure_region_controls_processing": true
+      },
+      "deployment_types": [],
+      "regions": {},
+      "region_status": "unknown",
+      "source": {
+        "docs_commit": "87fa4a9688b9562e3c520ca718dcfc29f9fc488a",
+        "files": [
+          "articles/foundry/openai/includes/concepts-model-retirement-schedule-content.md",
+          "articles/foundry/openai/includes/models-azure-direct-openai.md",
+          "spec:sources.openai_streaming"
+        ]
+      }
+    },
+    {
       "name": "gpt-5.4-nano",
       "deployment": "gpt-5.4-nano",
-      "tier": 2,
+      "tier": 5,
       "price": {
         "input_per_million": 0.1,
         "cached_input_per_million": 0.01,
@@ -171,7 +421,7 @@
     {
       "name": "gpt-5.6-luna",
       "deployment": "gpt-5.6-luna",
-      "tier": 3,
+      "tier": 6,
       "price": {
         "input_per_million": 0.1,
         "cached_input_per_million": 0.01,
@@ -278,63 +528,9 @@
       }
     },
     {
-      "name": "gpt-oss-120b",
-      "deployment": "gpt-oss-120b",
-      "tier": 4,
-      "price": {
-        "input_per_million": 0.15,
-        "cached_input_per_million": 0.075,
-        "output_per_million": 0.6
-      },
-      "aliases": [],
-      "description": "OpenAI open-weight reasoning model, text only. Good value for maths, logic, code and structured analysis, with function calling and structured outputs. 131K context; less broad knowledge and weaker long-form writing than the GPT-5.x models.",
-      "provider": "OpenAI",
-      "version": "1",
-      "lifecycle": "ga",
-      "retires": null,
-      "in_model_router": true,
-      "api": "openai_chat",
-      "endpoint_path": "/openai/v1/chat/completions",
-      "limits": {
-        "context_tokens": 131072,
-        "max_input_tokens": null,
-        "max_output_tokens": 131072
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "capabilities": {
-        "tools": "yes",
-        "structured_output": "yes",
-        "streaming": "yes",
-        "reasoning": "yes",
-        "image_input": "no"
-      },
-      "hosting": {
-        "infrastructure": "azure",
-        "azure_region_controls_processing": true
-      },
-      "deployment_types": [],
-      "regions": {},
-      "region_status": "unknown",
-      "source": {
-        "docs_commit": "87fa4a9688b9562e3c520ca718dcfc29f9fc488a",
-        "files": [
-          "articles/foundry/openai/includes/concepts-model-retirement-schedule-content.md",
-          "articles/foundry/openai/includes/models-azure-direct-openai.md",
-          "spec:sources.openai_streaming"
-        ]
-      }
-    },
-    {
       "name": "Llama-4-Maverick-17B-128E-Instruct-FP8",
       "deployment": "Llama-4-Maverick-17B-128E-Instruct-FP8",
-      "tier": 5,
+      "tier": 7,
       "price": {
         "input_per_million": 0.19,
         "cached_input_per_million": 0.19,
@@ -423,19 +619,17 @@
       }
     },
     {
-      "name": "grok-4-1-fast-reasoning",
-      "deployment": "grok-4-1-fast-reasoning",
-      "tier": 6,
+      "name": "FW-GLM-5.3",
+      "deployment": "FW-GLM-5.3",
+      "tier": 8,
       "price": {
-        "input_per_million": 0.2,
-        "cached_input_per_million": 0.05,
-        "output_per_million": 0.5
+        "input_per_million": 0.6,
+        "cached_input_per_million": 0.6,
+        "output_per_million": 2.5
       },
-      "aliases": [
-        "grok-4.1-fast-reasoning"
-      ],
-      "description": "Fast, low-cost xAI reasoning model tuned for agentic tool calling and quick multi-step answers; accepts images. English-focused, 128K context. Choose it for fast tool-using agents and short reasoning, not for long documents or polished long-form writing.",
-      "provider": "xAI",
+      "aliases": [],
+      "description": "Flagship GLM model served by Fireworks for complex software engineering, long-horizon agents and reasoning, with tool calling and structured outputs. Text only. Inference runs on Fireworks infrastructure, outside Azure.",
+      "provider": "Fireworks",
       "version": "1",
       "lifecycle": "ga",
       "retires": null,
@@ -443,9 +637,64 @@
       "api": "openai_chat",
       "endpoint_path": "/openai/v1/chat/completions",
       "limits": {
-        "context_tokens": 128000,
+        "context_tokens": 1048576,
         "max_input_tokens": null,
-        "max_output_tokens": 128000
+        "max_output_tokens": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "capabilities": {
+        "tools": "yes",
+        "structured_output": "yes",
+        "streaming": "yes",
+        "reasoning": "yes",
+        "image_input": "no"
+      },
+      "hosting": {
+        "infrastructure": "fireworks",
+        "azure_region_controls_processing": false
+      },
+      "deployment_types": [
+        "global_standard"
+      ],
+      "regions": {},
+      "region_status": "global",
+      "source": {
+        "docs_commit": "87fa4a9688b9562e3c520ca718dcfc29f9fc488a",
+        "files": [
+          "spec:sources.early_catalog",
+          "spec:sources.fireworks_global"
+        ]
+      }
+    },
+    {
+      "name": "FW-Kimi-K3",
+      "deployment": "FW-Kimi-K3",
+      "tier": 9,
+      "price": {
+        "input_per_million": 0.6,
+        "cached_input_per_million": 0.6,
+        "output_per_million": 2.5
+      },
+      "aliases": [],
+      "description": "Kimi K3 served by Fireworks: native-vision model for long-horizon coding, agentic tool use and knowledge work over long contexts; strong on code for its price. JSON-schema output is unconfirmed. Inference runs on Fireworks infrastructure, outside Azure.",
+      "provider": "Fireworks",
+      "version": "1",
+      "lifecycle": "ga",
+      "retires": null,
+      "in_model_router": true,
+      "api": "openai_chat",
+      "endpoint_path": "/openai/v1/chat/completions",
+      "limits": {
+        "context_tokens": 1048576,
+        "max_input_tokens": null,
+        "max_output_tokens": null
       },
       "modalities": {
         "input": [
@@ -464,164 +713,26 @@
         "image_input": "yes"
       },
       "hosting": {
-        "infrastructure": "azure",
-        "azure_region_controls_processing": true
-      },
-      "deployment_types": [
-        "data_zone_standard",
-        "global_standard"
-      ],
-      "regions": {
-        "global_standard": [
-          "australiaeast",
-          "brazilsouth",
-          "canadacentral",
-          "canadaeast",
-          "centralus",
-          "eastus",
-          "eastus2",
-          "francecentral",
-          "germanywestcentral",
-          "italynorth",
-          "japaneast",
-          "japanwest",
-          "koreacentral",
-          "northcentralus",
-          "norwayeast",
-          "polandcentral",
-          "southafricanorth",
-          "southcentralus",
-          "southindia",
-          "spaincentral",
-          "swedencentral",
-          "switzerlandnorth",
-          "switzerlandwest",
-          "uaenorth",
-          "uksouth",
-          "ukwest",
-          "westcentralus",
-          "westeurope",
-          "westus",
-          "westus2",
-          "westus3"
-        ],
-        "data_zone_standard": [
-          "centralus",
-          "eastus",
-          "eastus2",
-          "northcentralus",
-          "southcentralus",
-          "westcentralus",
-          "westus",
-          "westus2",
-          "westus3"
-        ]
-      },
-      "region_status": "published",
-      "source": {
-        "docs_commit": "87fa4a9688b9562e3c520ca718dcfc29f9fc488a",
-        "files": [
-          "articles/foundry/foundry-models/includes/model-matrix/deployments-standard.md",
-          "articles/foundry/foundry-models/includes/models-azure-direct-others.md",
-          "articles/foundry/openai/includes/concepts-model-retirement-schedule-content.md",
-          "spec:sources.xai_variants"
-        ]
-      }
-    },
-    {
-      "name": "DeepSeek-V3.2",
-      "deployment": "DeepSeek-V3.2",
-      "tier": 7,
-      "price": {
-        "input_per_million": 0.28,
-        "cached_input_per_million": 0.028,
-        "output_per_million": 0.42
-      },
-      "aliases": [],
-      "description": "DeepSeek open model with visible reasoning; strong at code, maths and agent tasks for its price. English and Chinese, text only, 128K context; tool calling but no JSON-schema outputs.",
-      "provider": "DeepSeek",
-      "version": "1",
-      "lifecycle": "ga",
-      "retires": null,
-      "in_model_router": true,
-      "api": "openai_chat",
-      "endpoint_path": "/openai/v1/chat/completions",
-      "limits": {
-        "context_tokens": 128000,
-        "max_input_tokens": null,
-        "max_output_tokens": 128000
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "capabilities": {
-        "tools": "yes",
-        "structured_output": "no",
-        "streaming": "no",
-        "reasoning": "yes",
-        "image_input": "no"
-      },
-      "hosting": {
-        "infrastructure": "azure",
-        "azure_region_controls_processing": true
+        "infrastructure": "fireworks",
+        "azure_region_controls_processing": false
       },
       "deployment_types": [
         "global_standard"
       ],
-      "regions": {
-        "global_standard": [
-          "australiaeast",
-          "brazilsouth",
-          "canadacentral",
-          "canadaeast",
-          "centralus",
-          "eastus",
-          "eastus2",
-          "francecentral",
-          "germanywestcentral",
-          "italynorth",
-          "japaneast",
-          "japanwest",
-          "koreacentral",
-          "northcentralus",
-          "norwayeast",
-          "polandcentral",
-          "southafricanorth",
-          "southcentralus",
-          "southindia",
-          "spaincentral",
-          "swedencentral",
-          "switzerlandnorth",
-          "switzerlandwest",
-          "uaenorth",
-          "uksouth",
-          "ukwest",
-          "westcentralus",
-          "westeurope",
-          "westus",
-          "westus2",
-          "westus3"
-        ]
-      },
-      "region_status": "published",
+      "regions": {},
+      "region_status": "global",
       "source": {
         "docs_commit": "87fa4a9688b9562e3c520ca718dcfc29f9fc488a",
         "files": [
-          "articles/foundry/foundry-models/includes/model-matrix/deployments-standard.md",
-          "articles/foundry/foundry-models/includes/models-azure-direct-others.md",
-          "articles/foundry/openai/includes/concepts-model-retirement-schedule-content.md"
+          "spec:sources.early_catalog",
+          "spec:sources.fireworks_global"
         ]
       }
     },
     {
       "name": "gpt-5.4-mini",
       "deployment": "gpt-5.4-mini",
-      "tier": 8,
+      "tier": 10,
       "price": {
         "input_per_million": 0.375,
         "cached_input_per_million": 0.0375,
@@ -729,117 +840,6 @@
           "articles/foundry/openai/includes/concepts-model-retirement-schedule-content.md",
           "articles/foundry/openai/includes/models-azure-direct-openai.md",
           "spec:sources.openai_streaming"
-        ]
-      }
-    },
-    {
-      "name": "FW-GLM-5.3",
-      "deployment": "FW-GLM-5.3",
-      "tier": 9,
-      "price": {
-        "input_per_million": 0.6,
-        "cached_input_per_million": 0.6,
-        "output_per_million": 2.5
-      },
-      "aliases": [],
-      "description": "Flagship GLM model served by Fireworks for complex software engineering, long-horizon agents and reasoning, with tool calling and structured outputs. Text only. Inference runs on Fireworks infrastructure, outside Azure.",
-      "provider": "Fireworks",
-      "version": "1",
-      "lifecycle": "ga",
-      "retires": null,
-      "in_model_router": true,
-      "api": "openai_chat",
-      "endpoint_path": "/openai/v1/chat/completions",
-      "limits": {
-        "context_tokens": 1048576,
-        "max_input_tokens": null,
-        "max_output_tokens": 131072
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "capabilities": {
-        "tools": "yes",
-        "structured_output": "yes",
-        "streaming": "yes",
-        "reasoning": "yes",
-        "image_input": "no"
-      },
-      "hosting": {
-        "infrastructure": "fireworks",
-        "azure_region_controls_processing": false
-      },
-      "deployment_types": [
-        "global_standard"
-      ],
-      "regions": {},
-      "region_status": "global",
-      "source": {
-        "docs_commit": "87fa4a9688b9562e3c520ca718dcfc29f9fc488a",
-        "files": [
-          "spec:sources.early_catalog",
-          "spec:sources.fireworks_global"
-        ]
-      }
-    },
-    {
-      "name": "FW-Kimi-K3",
-      "deployment": "FW-Kimi-K3",
-      "tier": 10,
-      "price": {
-        "input_per_million": 0.6,
-        "cached_input_per_million": 0.6,
-        "output_per_million": 2.5
-      },
-      "aliases": [],
-      "description": "Kimi K3 served by Fireworks: native-vision model for long-horizon coding, agentic tool use and knowledge work over long contexts; strong on code for its price. JSON-schema output is unconfirmed. Inference runs on Fireworks infrastructure, outside Azure.",
-      "provider": "Fireworks",
-      "version": "1",
-      "lifecycle": "ga",
-      "retires": null,
-      "in_model_router": true,
-      "api": "openai_chat",
-      "endpoint_path": "/openai/v1/chat/completions",
-      "limits": {
-        "context_tokens": 1048576,
-        "max_input_tokens": null,
-        "max_output_tokens": null
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "capabilities": {
-        "tools": "yes",
-        "structured_output": "no",
-        "streaming": "no",
-        "reasoning": "yes",
-        "image_input": "yes"
-      },
-      "hosting": {
-        "infrastructure": "fireworks",
-        "azure_region_controls_processing": false
-      },
-      "deployment_types": [
-        "global_standard"
-      ],
-      "regions": {},
-      "region_status": "global",
-      "source": {
-        "docs_commit": "87fa4a9688b9562e3c520ca718dcfc29f9fc488a",
-        "files": [
-          "spec:sources.early_catalog",
-          "spec:sources.fireworks_global"
         ]
       }
     },
@@ -1023,9 +1023,79 @@
       }
     },
     {
+      "name": "claude-sonnet-5",
+      "deployment": "claude-sonnet-5",
+      "tier": 13,
+      "price": {
+        "input_per_million": 2.0,
+        "cached_input_per_million": 0.2,
+        "output_per_million": 10.0
+      },
+      "aliases": [],
+      "description": "Claude Sonnet 5 for coding, long-running agents, financial analysis and professional writing, reasoning over whole codebases (1M-token context); adaptive thinking and high-resolution image input. Anthropic-hosted (version 1).",
+      "provider": "Anthropic",
+      "version": "1",
+      "lifecycle": "ga",
+      "retires": "2027-06-30",
+      "in_model_router": true,
+      "api": "anthropic_messages",
+      "endpoint_path": "/anthropic/v1/messages",
+      "limits": {
+        "context_tokens": 1000000,
+        "max_input_tokens": null,
+        "max_output_tokens": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "capabilities": {
+        "tools": "yes",
+        "structured_output": "yes",
+        "streaming": "yes",
+        "reasoning": "yes",
+        "image_input": "yes"
+      },
+      "hosting": {
+        "infrastructure": "anthropic",
+        "azure_region_controls_processing": false
+      },
+      "deployment_types": [
+        "global_standard"
+      ],
+      "regions": {
+        "global_standard": [
+          "centralus",
+          "eastus",
+          "eastus2",
+          "northcentralus",
+          "southcentralus",
+          "swedencentral",
+          "westcentralus",
+          "westus",
+          "westus3"
+        ]
+      },
+      "region_status": "published",
+      "source": {
+        "docs_commit": "87fa4a9688b9562e3c520ca718dcfc29f9fc488a",
+        "files": [
+          "articles/foundry/foundry-models/includes/concepts-claude-models-content.md",
+          "articles/foundry/foundry-models/includes/model-matrix/marketplace-deployments-standard.md",
+          "articles/foundry/openai/includes/concepts-model-retirement-schedule-content.md",
+          "spec:sources.anthropic_adapter"
+        ]
+      }
+    },
+    {
       "name": "gpt-5.2",
       "deployment": "gpt-5.2",
-      "tier": 13,
+      "tier": 14,
       "price": {
         "input_per_million": 1.75,
         "cached_input_per_million": 0.175,
@@ -1123,76 +1193,6 @@
           "articles/foundry/openai/includes/concepts-model-retirement-schedule-content.md",
           "articles/foundry/openai/includes/models-azure-direct-openai.md",
           "spec:sources.openai_streaming"
-        ]
-      }
-    },
-    {
-      "name": "claude-sonnet-5",
-      "deployment": "claude-sonnet-5",
-      "tier": 14,
-      "price": {
-        "input_per_million": 2.0,
-        "cached_input_per_million": 0.2,
-        "output_per_million": 10.0
-      },
-      "aliases": [],
-      "description": "Claude Sonnet 5 for coding, long-running agents, financial analysis and professional writing, reasoning over whole codebases (1M-token context); adaptive thinking and high-resolution image input. Anthropic-hosted (version 1).",
-      "provider": "Anthropic",
-      "version": "1",
-      "lifecycle": "ga",
-      "retires": "2027-06-30",
-      "in_model_router": true,
-      "api": "anthropic_messages",
-      "endpoint_path": "/anthropic/v1/messages",
-      "limits": {
-        "context_tokens": 1000000,
-        "max_input_tokens": null,
-        "max_output_tokens": 128000
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "capabilities": {
-        "tools": "yes",
-        "structured_output": "yes",
-        "streaming": "yes",
-        "reasoning": "yes",
-        "image_input": "yes"
-      },
-      "hosting": {
-        "infrastructure": "anthropic",
-        "azure_region_controls_processing": false
-      },
-      "deployment_types": [
-        "global_standard"
-      ],
-      "regions": {
-        "global_standard": [
-          "centralus",
-          "eastus",
-          "eastus2",
-          "northcentralus",
-          "southcentralus",
-          "swedencentral",
-          "westcentralus",
-          "westus",
-          "westus3"
-        ]
-      },
-      "region_status": "published",
-      "source": {
-        "docs_commit": "87fa4a9688b9562e3c520ca718dcfc29f9fc488a",
-        "files": [
-          "articles/foundry/foundry-models/includes/concepts-claude-models-content.md",
-          "articles/foundry/foundry-models/includes/model-matrix/marketplace-deployments-standard.md",
-          "articles/foundry/openai/includes/concepts-model-retirement-schedule-content.md",
-          "spec:sources.anthropic_adapter"
         ]
       }
     },

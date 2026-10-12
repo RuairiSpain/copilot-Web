@@ -180,8 +180,8 @@ class InstructionTemplates:
     def criteria(self, candidates: list[ModelEntry]) -> dict[str, str]:
         """Option key -> description, with the option's prices and its price rank among the options.
 
-        The rank follows `tier` (input price, then output price), the same order the routing modes'
-        price bands use, so it is stated as such: a model can rank above one with a lower output price."""
+        The rank follows `tier` (output price, then input price), the same order the routing modes'
+        price bands and the named cost bands use."""
         ranked = {m.name: i + 1 for i, m in enumerate(sorted(candidates, key=lambda m: m.tier))}
         out = {}
         for m in candidates:

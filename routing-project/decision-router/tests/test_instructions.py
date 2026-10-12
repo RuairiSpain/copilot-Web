@@ -114,17 +114,18 @@ def test_criteria_rank_among_the_options_and_state_the_price(templates, catalog)
     criteria = templates.criteria(picked)
     assert list(criteria) == ["gpt-6-astra", "gpt-5.4-nano"]
     assert criteria["gpt-6-astra"].endswith("Price per million tokens: $10 input, $50 output; 2 of 2 by price among "
-                                            "these options, ordered by input price then output price (1 is cheapest).")
+                                            "these options, ordered by output price then input price (1 is cheapest).")
     assert "$0.10 input, $0.80 output; 1 of 2" in criteria["gpt-5.4-nano"]
 
 
-def test_criteria_name_the_ordering_when_it_differs_from_output_price(templates, new_catalog, settings):
-    # gpt-5.4-nano ($0.10 in, $0.80 out) ranks above Phi-4 ($0.125 in, $0.50 out): the text must say why
+def test_criteria_rank_follows_output_price(templates, new_catalog, settings):
+    # tiers order by output price, so a cheaper output price never ranks below a dearer one
     result = select(new_catalog, "cost", Constraints(), USER, settings)
     criteria = templates.criteria(result.candidates)
-    assert "$0.10 input, $0.80 output; 4 of 8" in criteria["gpt-5.4-nano"]
-    assert "$0.125 input, $0.50 output; 5 of 8" in criteria["Phi-4"]
-    assert all("ordered by input price then output price" in text for text in criteria.values())
+    ranked = sorted(result.candidates, key=lambda m: int(re.search(r"; (\d+) of", criteria[m.name]).group(1)))
+    prices = [m.output_price for m in ranked]
+    assert prices == sorted(prices)
+    assert all("ordered by output price then input price" in text for text in criteria.values())
     unpriced = templates.criteria([replace(new_catalog.by_name["gpt-5.5"], output_price=None)])
     assert unpriced["gpt-5.5"].endswith("1 of 1 by price among these options (1 is cheapest).")
 

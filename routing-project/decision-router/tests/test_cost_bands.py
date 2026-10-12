@@ -20,20 +20,20 @@ LOW = ["Phi-4-mini-instruct", "FW-GLM-5.3-Flash", "claude-haiku-5-5", "gpt-5.4-n
 def band(new_catalog, settings, raw, constraints=None):
     result = select(new_catalog, "balanced", constraints or Constraints(), USER, settings,
                     cost_band=parse_cost_band(raw, new_catalog))
-    return [m.name for m in result.candidates], result
+    return sorted(m.name for m in result.candidates), result
 
 
 def test_named_bands_on_output_price(new_catalog, settings):
-    assert band(new_catalog, settings, "low")[0] == LOW
-    assert band(new_catalog, settings, "medium")[0] == ["gpt-5.4-mini", "gpt-6-luna", "FW-GLM-5.3", "FW-Kimi-K3"]
-    assert band(new_catalog, settings, "high")[0] == ["claude-sonnet-5-5", "gpt-6.1-sol", "gpt-5.5", "grok-4.7",
-                                                       "claude-opus-5-5"]
-    assert band(new_catalog, settings, "TOP")[0] == ["gpt-6-astra"]
+    assert band(new_catalog, settings, "low")[0] == sorted(LOW)
+    assert band(new_catalog, settings, "medium")[0] == sorted(["gpt-5.4-mini", "gpt-6-luna", "FW-GLM-5.3", "FW-Kimi-K3"])
+    assert band(new_catalog, settings, "high")[0] == sorted(["claude-sonnet-5-5", "gpt-6.1-sol", "gpt-5.5", "grok-4.7",
+                                                       "claude-opus-5-5"])
+    assert band(new_catalog, settings, "TOP")[0] == sorted(["gpt-6-astra"])
 
 
 def test_medium_high_closes_the_gap(new_catalog, settings):
-    assert band(new_catalog, settings, "medium-high")[0] == ["gpt-5.4-mini", "DeepSeek-V4-Pro", "gpt-5.6-terra",
-                                                              "MAI-Thinking-1", "claude-sonnet-5-5", "gpt-6.1-sol"]
+    assert band(new_catalog, settings, "medium-high")[0] == sorted(["gpt-5.4-mini", "DeepSeek-V4-Pro", "gpt-5.6-terra",
+                                                              "MAI-Thinking-1", "claude-sonnet-5-5", "gpt-6.1-sol"])
     assert band(new_catalog, settings, "medium-high")[0] == band(new_catalog, settings, "3-10")[0]
     named = {n for b in new_catalog.cost_bands for n in band(new_catalog, settings, b)[0]}
     assert named == {m.name for m in new_catalog.models}  # every model is in at least one named band
@@ -41,13 +41,13 @@ def test_medium_high_closes_the_gap(new_catalog, settings):
 
 @pytest.mark.parametrize("raw", ["0-1", "$0-$1", "0..1", {"min": 0, "max": 1}, {"max": 1}, "-1"])
 def test_dollar_ranges_equal_to_the_low_band(new_catalog, settings, raw):
-    assert band(new_catalog, settings, raw)[0] == LOW
+    assert band(new_catalog, settings, raw)[0] == sorted(LOW)
 
 
 def test_open_ended_range_and_old_catalog(catalog, new_catalog, settings):
-    assert band(new_catalog, settings, "30-")[0] == ["gpt-6-astra"]
+    assert band(new_catalog, settings, "30-")[0] == sorted(["gpt-6-astra"])
     old = select(catalog, "balanced", Constraints(), USER, settings, cost_band=parse_cost_band("30-60", catalog))
-    assert [m.name for m in old.candidates] == ["claude-fable-5-1", "gpt-6-astra"]
+    assert sorted(m.name for m in old.candidates) == ["claude-fable-5-1", "gpt-6-astra"]
 
 
 def test_band_runs_after_the_other_filters_and_can_empty(new_catalog, settings):
