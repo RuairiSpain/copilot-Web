@@ -1,0 +1,377 @@
+"""Stage 1: the deterministic filter from catalog to the candidate list Decision-1 chooses from.
+
+Steps run in a fixed order and each one is recorded, so the decision log shows which step
+removed which model and why:
+
+  0. api                with claude_translation=false the body is an Anthropic Messages request,
+                        which only Claude models accept
+  1. lifecycle          deprecated/retired/legacy always out; preview out unless allowed
+  2. operator allow-list ROUTER_MODEL_ALLOWLIST, and the caller policy's models and price limit
+  3. request selection  routing_constraints.models / exclude_models / providers
+  4. capabilities       routing_constraints.capabilities plus what the request itself needs, and
+                        routing_constraints.actions (the model must be tagged with every one)
+  5. location           routing_constraints.region / deployment_type / inference_in_azure
+  6. size               estimated prompt + output tokens against the context window, input and output limits
+  7. price band         with routing_cost_band: a band name plus routing_constraints.actions picks one
+                        of up to four even groups of what is left, by output price (action_cost_groups;
+                        medium-high is the medium and high groups together);
+                        a band name alone or a dollar range keeps the models whose output price is in
+                        it. Otherwise the routing mode's share of what is left, by tier
+
+No step may leave zero models silently: the caller turns an empty result into a 422 that names
+the step.
+"""
+from __future__ import annotations
+
+import itertools
+import json
+import math
+import re
+from dataclasses import dataclass, field
+from typing import Any
+
+from .catalog import CAPABILITY_TAGS, EXCLUDED_LIFECYCLES, Catalog, CostBand, ModelEntry
+from .config import Settings
+
+KNOWN_CAPABILITIES = ("tools", "structured_output", "streaming", "reasoning", "image_input")
+DEPLOYMENT_TYPES = ("global_standard", "data_zone_standard", "standard")
+CONSTRAINT_KEYS = ("models", "exclude_models", "providers", "capabilities", "region", "deployment_type",
+                   "inference_in_azure", "min_context_tokens", "allow_preview", "actions")
+COST_LABELS = ("low", "medium", "high", "top")  # one per action price group
+SPANNING_LABELS = {"medium-high": ("medium", "high")}  # with actions: the union of these groups
+
+
+class ConstraintError(ValueError):
+    pass
+
+
+@dataclass(frozen=True)
+class Constraints:
+    models: tuple[str, ...] = ()
+    exclude_models: tuple[str, ...] = ()
+    providers: tuple[str, ...] = ()
+    capabilities: tuple[str, ...] = ()
+    region: str | None = None
+    deployment_type: str | None = None
+    inference_in_azure: bool = False
+    min_context_tokens: int | None = None
+    allow_preview: bool | None = None
+    actions: tuple[str, ...] = ()
+
+    def as_dict(self) -> dict[str, Any]:
+        return {k: v for k, v in self.__dict__.items() if v not in ((), None, False)}
+
+
+def _names(raw: dict[str, Any], key: str) -> tuple[str, ...]:
+    value = raw.get(key, [])
+    if not isinstance(value, list) or not all(isinstance(v, str) and v for v in value):
+        raise ConstraintError(f"routing_constraints.{key} must be a list of strings")
+    return tuple(value)
+
+
+def parse_constraints(raw: Any, catalog: Catalog) -> Constraints:
+    if raw is None:
+        return Constraints()
+    if not isinstance(raw, dict):
+        raise ConstraintError("routing_constraints must be an object")
+    unknown = set(raw) - set(CONSTRAINT_KEYS)
+    if unknown:
+        raise ConstraintError(f"unknown routing_constraints keys: {sorted(unknown)}; allowed: {list(CONSTRAINT_KEYS)}")
+    models, excluded = _names(raw, "models"), _names(raw, "exclude_models")
+    missing = [m for m in models + excluded if m not in catalog.by_name]
+    if missing:
+        raise ConstraintError(f"routing_constraints names models not in the '{catalog.compatibility}' catalog: {missing}")
+    capabilities = _names(raw, "capabilities")
+    bad = [c for c in capabilities if c not in KNOWN_CAPABILITIES]
+    if bad:
+        raise ConstraintError(f"unknown capabilities {bad}; allowed: {list(KNOWN_CAPABILITIES)}")
+    actions = _names(raw, "actions")
+    bad = [a for a in actions if a not in CAPABILITY_TAGS["actions"]]
+    if bad:
+        raise ConstraintError(f"unknown actions {bad}; allowed: {list(CAPABILITY_TAGS['actions'])}")
+    if actions and not any(m.capabilities.get("actions") for m in catalog.models):
+        raise ConstraintError(f"the '{catalog.compatibility}' catalog has no action tags; use the 'new' catalog")
+    deployment_type = raw.get("deployment_type")
+    if deployment_type is not None and deployment_type not in DEPLOYMENT_TYPES:
+        raise ConstraintError(f"routing_constraints.deployment_type must be one of {list(DEPLOYMENT_TYPES)}")
+    region = raw.get("region")
+    if region is not None and (not isinstance(region, str) or not region):
+        raise ConstraintError("routing_constraints.region must be an Azure region name such as 'swedencentral'")
+    min_context = raw.get("min_context_tokens")
+    if min_context is not None and (not isinstance(min_context, int) or isinstance(min_context, bool) or min_context < 1):
+        raise ConstraintError("routing_constraints.min_context_tokens must be a positive integer")
+    for flag in ("inference_in_azure", "allow_preview"):
+        if flag in raw and not isinstance(raw[flag], bool):
+            raise ConstraintError(f"routing_constraints.{flag} must be true or false")
+    return Constraints(models, excluded, _names(raw, "providers"), capabilities,
+                       region.strip().lower().replace(" ", "") if region else None, deployment_type,
+                       bool(raw.get("inference_in_azure", False)), min_context, raw.get("allow_preview"),
+                       actions)
+
+
+_RANGE = re.compile(r"^\$?(\d+(?:\.\d+)?)?\s*(?:-|\.\.)\s*\$?(\d+(?:\.\d+)?)?$")
+
+
+def parse_cost_band(raw: Any, catalog: Catalog) -> CostBand | None:
+    """routing_cost_band: a band name from the catalog ("low"), a dollar range string ("1-3", "$10-$25",
+    "30-" for open-ended) or {"min": 1, "max": 3}. Prices are USD per million output tokens."""
+    if raw is None:
+        return None
+    names = list(catalog.cost_bands)
+    if isinstance(raw, str):
+        value = raw.strip()
+        if value.lower() in catalog.cost_bands:
+            return catalog.cost_bands[value.lower()]
+        match = _RANGE.match(value)
+        if not match or not any(match.groups()):
+            known = f"a band name ({', '.join(names)}) or " if names else ""
+            raise ConstraintError(f"routing_cost_band must be {known}a dollar range such as \"1-3\"; got {raw!r}"
+                                  + ("" if names else f". The '{catalog.compatibility}' catalog has no named bands"))
+        low, high = (float(g) if g is not None else None for g in match.groups())
+    elif isinstance(raw, dict):
+        if not raw or set(raw) - {"min", "max"}:
+            raise ConstraintError('routing_cost_band object takes "min" and/or "max"')
+        if any(not isinstance(v, (int, float)) or isinstance(v, bool) or v < 0 for v in raw.values()):
+            raise ConstraintError("routing_cost_band min and max must be non-negative numbers")
+        low, high = raw.get("min"), raw.get("max")
+    else:
+        raise ConstraintError("routing_cost_band must be a string or an object")
+    if low is not None and high is not None and low > high:
+        raise ConstraintError("routing_cost_band: min is above max")
+    return CostBand(low, high)
+
+
+def action_cost_groups(models: list[ModelEntry]) -> list[list[ModelEntry]]:
+    """Split models into up to four groups by output price, cheapest first: as many groups as allow at
+    least two models each without splitting models of equal price, and of those the most even split
+    (ties go to the split with later edges, so cheaper groups are the larger ones)."""
+    ordered = sorted(models, key=lambda m: (m.output_price if m.output_price is not None else math.inf, m.tier))
+    n = len(ordered)
+    starts = [i for i in range(2, n - 1) if ordered[i].output_price != ordered[i - 1].output_price]
+    for count in range(min(len(COST_LABELS), n // 2), 1, -1):
+        best = None
+        for edges in itertools.combinations(starts, count - 1):
+            bounds = (0, *edges, n)
+            sizes = [b - a for a, b in zip(bounds, bounds[1:], strict=False)]
+            if min(sizes) < 2:
+                continue
+            key = (sum((size - n / count) ** 2 for size in sizes), tuple(-e for e in edges))
+            if best is None or key < best[0]:
+                best = (key, bounds)
+        if best:
+            return [ordered[a:b] for a, b in zip(best[1], best[1][1:], strict=False)]
+    return [ordered]
+
+
+def cost_group(groups: list[list[ModelEntry]], label: str) -> list[ModelEntry]:
+    """low/medium/high/top -> a group; with fewer than four groups, neighbouring labels share one."""
+    return groups[round(COST_LABELS.index(label) * (len(groups) - 1) / (len(COST_LABELS) - 1))]
+
+
+def requirements_from_messages_body(body: dict[str, Any]) -> dict[str, str]:
+    """Same as requirements_from_request, for an Anthropic Messages body (claude_translation=false)."""
+    needs: dict[str, str] = {}
+    if body.get("tools"):
+        needs["tools"] = "request has tools"
+    if body.get("stream") is True:
+        needs["streaming"] = "stream=true"
+    for message in body.get("messages", []):
+        content = message.get("content") if isinstance(message, dict) else None
+        if isinstance(content, list) and any(isinstance(p, dict) and p.get("type") == "image" for p in content):
+            needs["image_input"] = "messages contain images"
+            break
+    return needs
+
+
+def requirements_from_request(body: dict[str, Any]) -> dict[str, str]:
+    """Capabilities the request itself needs, with the field that implies each one."""
+    needs: dict[str, str] = {}
+    if body.get("tools"):
+        needs["tools"] = "request has tools"
+    fmt = body.get("response_format")
+    if isinstance(fmt, dict) and fmt.get("type") == "json_schema":
+        needs["structured_output"] = "response_format=json_schema"
+    if body.get("stream") is True:
+        needs["streaming"] = "stream=true"
+    for message in body.get("messages", []):
+        content = message.get("content") if isinstance(message, dict) else None
+        if isinstance(content, list) and any(isinstance(p, dict) and p.get("type") == "image_url" for p in content):
+            needs["image_input"] = "messages contain images"
+            break
+    return needs
+
+
+# Tokens counted per image instead of its encoded bytes. Providers bill an image by its pixel size,
+# not its base64 length: a large image is roughly 1,100 tokens on GPT models (high detail) and up to
+# about 1,600 on Claude, so 1,600 is the conservative figure.
+IMAGE_TOKENS = 1600
+IMAGE_PART_TYPES = ("image_url", "image", "input_image")
+
+
+def _without_images(messages: list[Any]) -> tuple[list[Any], int]:
+    """The messages with image parts replaced by a marker, and the number of images removed."""
+    images, out = 0, []
+    for message in messages:
+        content = message.get("content") if isinstance(message, dict) else None
+        if isinstance(content, list) and any(isinstance(p, dict) and p.get("type") in IMAGE_PART_TYPES for p in content):
+            parts = []
+            for part in content:
+                if isinstance(part, dict) and part.get("type") in IMAGE_PART_TYPES:
+                    images += 1
+                    parts.append({"type": "image"})
+                else:
+                    parts.append(part)
+            message = {**message, "content": parts}
+        out.append(message)
+    return out, images
+
+
+def estimated_tokens(body: dict[str, Any], chars_per_token: float) -> tuple[int, int]:
+    """(prompt tokens, requested output tokens). A deliberately simple estimate: characters / chars_per_token
+    for text, and IMAGE_TOKENS per image (an inline base64 image would otherwise count as its encoded size)."""
+    messages, images = _without_images(body.get("messages") or [])
+    text = (json.dumps(messages, ensure_ascii=False) + json.dumps(body.get("tools") or [])
+            + json.dumps(body.get("system") or ""))
+    output = body.get("max_completion_tokens") or body.get("max_tokens") or 0
+    return (math.ceil(len(text) / chars_per_token) + images * IMAGE_TOKENS,
+            int(output) if isinstance(output, int) else 0)
+
+
+@dataclass
+class Stage1Result:
+    candidates: list[ModelEntry]
+    steps: list[dict[str, Any]] = field(default_factory=list)
+    requirements: dict[str, str] = field(default_factory=dict)
+    empty_at: str | None = None
+    tokens: tuple[int, int] = (0, 0)  # (estimated prompt tokens, requested output tokens), computed once
+
+    def log(self) -> dict[str, Any]:
+        return {"steps": self.steps, "requirements": self.requirements, "empty_at": self.empty_at}
+
+
+def select(catalog: Catalog, mode: str, constraints: Constraints, body: dict[str, Any], settings: Settings,
+           passthrough: bool = False, cost_band: CostBand | None = None, policy: Any = None) -> Stage1Result:
+    remaining = list(catalog.models)
+    requirements = requirements_from_messages_body(body) if passthrough else requirements_from_request(body)
+    result = Stage1Result([], requirements=requirements)
+
+    def step(name: str, keep) -> bool:
+        nonlocal remaining
+        kept, removed = [], []
+        for model in remaining:
+            reason = keep(model)
+            (removed.append({"model": model.name, "reason": reason}) if reason else kept.append(model))
+        result.steps.append({"step": name, "removed": removed, "remaining": len(kept)})
+        remaining = kept
+        if not kept:
+            result.empty_at = name
+            return False
+        return True
+
+    allow_preview = settings.allow_preview if constraints.allow_preview is None else constraints.allow_preview
+
+    def api(m: ModelEntry) -> str | None:
+        if passthrough and m.api != "anthropic_messages":
+            return "cannot take an Anthropic Messages body (claude_translation=false)"
+        return None
+
+    def lifecycle(m: ModelEntry) -> str | None:
+        if m.lifecycle in EXCLUDED_LIFECYCLES:
+            return f"lifecycle {m.lifecycle}"
+        if m.lifecycle == "preview" and not allow_preview:
+            return "preview models not allowed"
+        return None
+
+    def allowlist(m: ModelEntry) -> str | None:
+        if settings.model_allowlist and m.name not in settings.model_allowlist:
+            return "not in ROUTER_MODEL_ALLOWLIST"
+        if policy is not None:  # policy.CallerPolicy: the operator's limits for this caller
+            if policy.models and m.name not in policy.models:
+                return f"not allowed by caller policy '{policy.name}'"
+            if policy.max_output_price is not None and (m.output_price is None or m.output_price > policy.max_output_price):
+                return f"output price above caller policy '{policy.name}' limit (${policy.max_output_price:g})"
+        return None
+
+    def selection(m: ModelEntry) -> str | None:
+        if constraints.models and m.name not in constraints.models:
+            return "not in routing_constraints.models"
+        if m.name in constraints.exclude_models:
+            return "in routing_constraints.exclude_models"
+        if constraints.providers and m.provider.lower() not in {p.lower() for p in constraints.providers}:
+            return f"provider {m.provider} not requested"
+        return None
+
+    needed = {c: "routing_constraints.capabilities" for c in constraints.capabilities} | requirements
+
+    fmt = body.get("response_format")
+    json_mode = not passthrough and isinstance(fmt, dict) and fmt.get("type") == "json_object"
+
+    def capabilities(m: ModelEntry) -> str | None:
+        for capability, why in needed.items():
+            if m.capability(capability) != "yes":
+                return f"{capability} no (needed: {why})"
+        if json_mode and m.api == "anthropic_messages":
+            # The Messages API has no JSON mode; sent to Claude, the request would come back as free text.
+            return "response_format=json_object is not available through the Claude adapter (use json_schema)"
+        missing = [a for a in constraints.actions if a not in m.capabilities.get("actions", [])]
+        return f"not tagged for {', '.join(missing)} (routing_constraints.actions)" if missing else None
+
+    def location(m: ModelEntry) -> str | None:
+        if constraints.inference_in_azure and m.infrastructure != "azure":
+            return f"inference runs on {m.infrastructure} infrastructure"
+        if m.region_status == "global":
+            # Deployable from any region, as a Global Standard deployment only.
+            if constraints.deployment_type and constraints.deployment_type != "global_standard":
+                return f"global deployment only, no {constraints.deployment_type}"
+            return None
+        if constraints.deployment_type and constraints.deployment_type not in m.regions and m.regions:
+            return f"no {constraints.deployment_type} deployment"
+        if constraints.region:
+            if not m.regions:
+                return "regions not published"
+            types = [constraints.deployment_type] if constraints.deployment_type else list(m.regions)
+            if not any(constraints.region in m.regions.get(t, ()) for t in types):
+                return f"not available in {constraints.region}"
+        elif constraints.deployment_type and not m.regions:
+            return "deployment types not published"
+        return None
+
+    prompt_tokens, output_tokens = estimated_tokens(body, settings.chars_per_token)
+    result.tokens = (prompt_tokens, output_tokens)
+    needed_context = max(prompt_tokens + output_tokens, constraints.min_context_tokens or 0)
+
+    def size(m: ModelEntry) -> str | None:
+        if m.context_tokens is None:
+            return "context window unknown"
+        if needed_context > m.context_tokens:
+            return f"needs ~{needed_context} tokens, context is {m.context_tokens}"
+        if m.max_input_tokens and prompt_tokens > m.max_input_tokens:
+            return f"prompt is ~{prompt_tokens} tokens, input limit is {m.max_input_tokens}"
+        if output_tokens and m.max_output_tokens and output_tokens > m.max_output_tokens:
+            return f"asks for {output_tokens} output tokens, limit is {m.max_output_tokens}"
+        return None
+
+    for name, keep in (("api", api), ("lifecycle", lifecycle), ("allowlist", allowlist), ("selection", selection),
+                       ("capabilities", capabilities), ("location", location), ("size", size)):
+        if not step(name, keep):
+            return result
+
+    if cost_band is not None and constraints.actions and \
+            (cost_band.name in COST_LABELS or cost_band.name in SPANNING_LABELS):
+        groups = action_cost_groups(remaining)
+        labels = SPANNING_LABELS.get(cost_band.name, (cost_band.name,))
+        group = {m.name for label in labels for m in cost_group(groups, label)}
+        what = f"the {cost_band.name} cost group for {', '.join(constraints.actions)}"
+        step("price_band", lambda m: None if m.name in group else f"outside {what}")
+    elif cost_band is not None:
+        def in_band(m: ModelEntry) -> str | None:
+            if m.output_price is None:
+                return "no output price"
+            return None if cost_band.contains(m.output_price) else f"outside cost band {cost_band.label()}"
+        if not step("price_band", in_band):
+            return result
+    else:
+        banded = {m.name for m in catalog.price_band(mode, remaining)}
+        step("price_band", lambda m: None if m.name in banded else f"outside the {mode} price band")
+    result.candidates = remaining
+    return result

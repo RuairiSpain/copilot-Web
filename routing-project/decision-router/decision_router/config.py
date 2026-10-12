@@ -1,0 +1,232 @@
+from __future__ import annotations
+
+import json
+import os
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+PACKAGE_ROOT = Path(__file__).resolve().parents[1]
+ROUTING_MODES = ("cost", "balanced", "quality")
+COMPATIBILITIES = ("old", "new")
+# `model` values that select a routing profile. A Foundry Agent Service model connection cannot add
+# routing_mode or other extension fields, so each agent picks a profile by the model name it calls.
+PROFILE_FIELDS = ("routing_mode", "compatibility", "routing_constraints", "claude_translation", "routing_pin",
+                  "routing_cost_band")
+DEFAULT_PROFILES: dict[str, dict[str, Any]] = {
+    "decision-router-cost": {"routing_mode": "cost"},
+    "decision-router-balanced": {"routing_mode": "balanced"},
+    "decision-router-quality": {"routing_mode": "quality"},
+    # The new catalog's named cost bands (catalog_spec.json), for callers that can't send routing_cost_band.
+    **{f"decision-router-{band}": {"compatibility": "new", "routing_cost_band": band}
+       for band in ("low", "medium", "medium-high", "high", "top")},
+    # Coding agents: models strong at multi-step tool use, conversation pinned to one model.
+    # Balanced, so Decision-1 weighs the whole list instead of only its most expensive third.
+    "decision-router-coding": {
+        "routing_mode": "balanced",
+        "compatibility": "new",
+        "routing_pin": True,
+        "routing_constraints": {
+            "capabilities": ["tools"],
+            "models": ["gpt-5.4-mini", "gpt-5.5", "gpt-6-astra", "claude-haiku-5-5",
+                       "claude-sonnet-5-5", "claude-opus-5-5", "DeepSeek-V4-Pro", "FW-GLM-5.3"],
+        },
+    },
+}
+API_PATHS = {
+    "openai_chat": "/openai/v1/chat/completions",
+    "mai_chat": "/mai/v1/chat/completions",
+    "anthropic_messages": "/anthropic/v1/messages",
+}
+
+
+def _bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    return default if raw is None else raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _list(name: str) -> tuple[str, ...]:
+    return tuple(item.strip() for item in (os.getenv(name) or "").split(",") if item.strip())
+
+
+def _json_object(name: str) -> dict[str, Any]:
+    raw = os.getenv(name)
+    if not raw:
+        return {}
+    value = json.loads(raw)
+    if not isinstance(value, dict):
+        raise ValueError(f"{name} must contain a JSON object")
+    return value
+
+
+@dataclass(frozen=True)
+class Settings:
+    # Foundry resource root, e.g. https://<resource>.services.ai.azure.com
+    foundry_endpoint: str | None = None
+    # When no key is set, requests authenticate with Microsoft Entra ID (managed identity, CLI, ...).
+    foundry_api_key: str | None = None
+    decision1_endpoint: str | None = None
+    decision1_deployment: str = "microsoft-decision-1"
+    decision1_api_key: str | None = None
+    chat_completions_url: str | None = None
+    anthropic_messages_url: str | None = None
+    anthropic_version: str = "2023-06-01"
+    # Default output budget for Claude, whose Messages API requires max_tokens.
+    anthropic_default_max_tokens: int = 4096
+    catalog_dir: Path = PACKAGE_ROOT / "config"
+    # "old" = Model Router 2025-11-18 pool without deprecated models; "new" = latest models.
+    compatibility: str = "old"
+    # Operator allow-list across both catalogs; empty means every catalog model is allowed.
+    model_allowlist: tuple[str, ...] = ()
+    allow_preview: bool = True
+    chars_per_token: float = 4.0
+    pricing_path: Path = PACKAGE_ROOT / "config/model_pricing.json"
+    instructions_path: Path = PACKAGE_ROOT / "config/decision1_instructions.json"
+    deployment_overrides: dict[str, str] = field(default_factory=dict)
+    default_mode: str | None = None
+    state_max_chars: int = 24_000
+    decision_timeout_seconds: float = 10.0
+    decision_max_attempts: int = 3
+    # Below this top-model probability, the second-ranked model is called first. 0 disables the rule.
+    low_confidence_threshold: float = 0.5
+    # Per-mode overrides of low_confidence_threshold, e.g. {"cost": 0.4, "quality": 0.6}.
+    low_confidence_thresholds: dict[str, float] = field(default_factory=dict)
+    request_timeout_seconds: float = 60.0
+    total_timeout_seconds: float = 90.0
+    attempts_per_model: int = 2
+    max_retry_after_seconds: float = 10.0
+    max_body_bytes: int = 20_000_000  # larger request bodies get 413 before they are parsed
+    caller_policies: dict[str, Any] = field(default_factory=dict)  # see policy.py
+    # When Decision-1 cannot answer, serve the cheapest stage-1 candidate (logged as degraded) instead of failing.
+    decision_fallback: bool = True
+    # /health/ready trusts a Decision-1 success (real call or probe) this recent; otherwise it probes again.
+    ready_check_seconds: float = 300.0
+    mcp_enabled: bool = True  # serve the MCP server at /mcp alongside the REST API (mcp_server.py)
+    decision_log_path: Path | None = None
+    log_prompts: bool = False
+    # Inbound authentication (see inbound.py): API keys and/or Microsoft Entra ID tokens.
+    api_keys: tuple[str, ...] = ()
+    entra_tenant_id: str | None = None
+    entra_audiences: tuple[str, ...] = ()
+    entra_allowed_client_ids: tuple[str, ...] = ()
+    allow_unauthenticated: bool = False
+    # Conversation pinning (pinning.py): default for requests that don't set routing_pin.
+    pin_default: bool = False
+    pin_ttl_seconds: float = 3600.0
+    pin_max_entries: int = 10_000
+    pin_store_url: str | None = None  # redis:// or rediss:// to share pins across replicas (pinning.py)
+    # model name -> routing profile (defaults in DEFAULT_PROFILES, extended by ROUTER_PROFILES)
+    profiles: dict[str, dict[str, Any]] = field(default_factory=lambda: dict(DEFAULT_PROFILES))
+
+    @classmethod
+    def from_env(cls) -> Settings:
+        log_path = os.getenv("ROUTER_DECISION_LOG_PATH")
+        settings = cls(
+            foundry_endpoint=os.getenv("FOUNDRY_ENDPOINT"),
+            foundry_api_key=os.getenv("FOUNDRY_API_KEY"),
+            decision1_endpoint=os.getenv("DECISION1_ENDPOINT"),
+            decision1_deployment=os.getenv("DECISION1_DEPLOYMENT", "microsoft-decision-1"),
+            decision1_api_key=os.getenv("DECISION1_API_KEY"),
+            chat_completions_url=os.getenv("FOUNDRY_CHAT_COMPLETIONS_URL"),
+            anthropic_messages_url=os.getenv("FOUNDRY_ANTHROPIC_MESSAGES_URL"),
+            anthropic_version=os.getenv("ANTHROPIC_VERSION", "2023-06-01"),
+            anthropic_default_max_tokens=int(os.getenv("ROUTER_ANTHROPIC_DEFAULT_MAX_TOKENS", "4096")),
+            catalog_dir=Path(os.getenv("ROUTER_CATALOG_DIR", str(PACKAGE_ROOT / "config"))),
+            compatibility=os.getenv("ROUTER_COMPATIBILITY", "old"),
+            model_allowlist=_list("ROUTER_MODEL_ALLOWLIST"),
+            allow_preview=_bool("ROUTER_ALLOW_PREVIEW", True),
+            pricing_path=Path(os.getenv("ROUTER_PRICING_PATH", str(PACKAGE_ROOT / "config/model_pricing.json"))),
+            instructions_path=Path(os.getenv("ROUTER_INSTRUCTIONS_PATH",
+                                             str(PACKAGE_ROOT / "config/decision1_instructions.json"))),
+            deployment_overrides={str(k): str(v) for k, v in _json_object("ROUTER_DEPLOYMENT_MAP").items()},
+            default_mode=os.getenv("ROUTER_DEFAULT_MODE") or None,
+            state_max_chars=int(os.getenv("ROUTER_STATE_MAX_CHARS", "24000")),
+            decision_timeout_seconds=float(os.getenv("ROUTER_DECISION_TIMEOUT_SECONDS", "10")),
+            decision_max_attempts=int(os.getenv("ROUTER_DECISION_MAX_ATTEMPTS", "3")),
+            low_confidence_threshold=float(os.getenv("ROUTER_LOW_CONFIDENCE_THRESHOLD", "0.5")),
+            low_confidence_thresholds={str(k): float(v)
+                                       for k, v in _json_object("ROUTER_LOW_CONFIDENCE_THRESHOLDS").items()},
+            request_timeout_seconds=float(os.getenv("ROUTER_REQUEST_TIMEOUT_SECONDS", "60")),
+            total_timeout_seconds=float(os.getenv("ROUTER_TOTAL_TIMEOUT_SECONDS", "90")),
+            attempts_per_model=int(os.getenv("ROUTER_ATTEMPTS_PER_MODEL", "2")),
+            max_retry_after_seconds=float(os.getenv("ROUTER_MAX_RETRY_AFTER_SECONDS", "10")),
+            max_body_bytes=int(os.getenv("ROUTER_MAX_BODY_BYTES", "20000000")),
+            caller_policies=_json_object("ROUTER_CALLER_POLICIES"),
+            decision_fallback=_bool("ROUTER_DECISION_FALLBACK", True),
+            ready_check_seconds=float(os.getenv("ROUTER_READY_CHECK_SECONDS", "300")),
+            mcp_enabled=_bool("ROUTER_MCP_ENABLED", True),
+            decision_log_path=Path(log_path) if log_path else None,
+            log_prompts=_bool("ROUTER_LOG_PROMPTS", False),
+            api_keys=_list("ROUTER_API_KEYS"),
+            entra_tenant_id=os.getenv("ROUTER_ENTRA_TENANT_ID") or None,
+            entra_audiences=_list("ROUTER_ENTRA_AUDIENCE"),
+            entra_allowed_client_ids=_list("ROUTER_ENTRA_ALLOWED_CLIENT_IDS"),
+            allow_unauthenticated=_bool("ROUTER_ALLOW_UNAUTHENTICATED", False),
+            profiles={**DEFAULT_PROFILES, **_json_object("ROUTER_PROFILES")},
+            pin_default=_bool("ROUTER_PIN_DEFAULT", False),
+            pin_ttl_seconds=float(os.getenv("ROUTER_PIN_TTL_SECONDS", "3600")),
+            pin_max_entries=int(os.getenv("ROUTER_PIN_MAX_ENTRIES", "10000")),
+            pin_store_url=os.getenv("ROUTER_PIN_STORE_URL") or None,
+        )
+        settings.validate()
+        return settings
+
+    def validate(self) -> None:
+        if self.compatibility not in COMPATIBILITIES:
+            raise ValueError(f"ROUTER_COMPATIBILITY must be one of {COMPATIBILITIES}")
+        if self.anthropic_default_max_tokens < 1:
+            raise ValueError("ROUTER_ANTHROPIC_DEFAULT_MAX_TOKENS must be positive")
+        if self.default_mode is not None and self.default_mode not in ROUTING_MODES:
+            raise ValueError(f"ROUTER_DEFAULT_MODE must be one of {ROUTING_MODES}")
+        if self.state_max_chars < 1000:
+            raise ValueError("ROUTER_STATE_MAX_CHARS must be at least 1000")
+        if not 0 <= self.low_confidence_threshold < 1:
+            raise ValueError("ROUTER_LOW_CONFIDENCE_THRESHOLD must be at least 0 and below 1")
+        if set(self.low_confidence_thresholds) - set(ROUTING_MODES) or \
+                not all(0 <= v < 1 for v in self.low_confidence_thresholds.values()):
+            raise ValueError(f"ROUTER_LOW_CONFIDENCE_THRESHOLDS keys must be from {ROUTING_MODES}, values in [0, 1)")
+        if self.decision_max_attempts < 1:
+            raise ValueError("ROUTER_DECISION_MAX_ATTEMPTS must be at least 1")
+        if self.attempts_per_model < 1:
+            raise ValueError("ROUTER_ATTEMPTS_PER_MODEL must be at least 1")
+        for name in ("decision_timeout_seconds", "request_timeout_seconds", "total_timeout_seconds"):
+            if getattr(self, name) <= 0:
+                raise ValueError(f"{name} must be positive")
+        if self.max_retry_after_seconds < 0:
+            raise ValueError("ROUTER_MAX_RETRY_AFTER_SECONDS must not be negative")
+        if self.pin_store_url and not self.pin_store_url.startswith(("redis://", "rediss://")):
+            raise ValueError("ROUTER_PIN_STORE_URL must be a redis:// or rediss:// URL")
+        if self.pin_ttl_seconds <= 0 or self.pin_max_entries < 1:
+            raise ValueError("ROUTER_PIN_TTL_SECONDS and ROUTER_PIN_MAX_ENTRIES must be positive")
+        for name, profile in self.profiles.items():
+            if not isinstance(profile, dict) or set(profile) - set(PROFILE_FIELDS):
+                raise ValueError(f"ROUTER_PROFILES['{name}'] must be an object with keys from {PROFILE_FIELDS}")
+
+    @property
+    def resolved_decision1_url(self) -> str | None:
+        if self.decision1_endpoint:
+            return self.decision1_endpoint
+        if self.foundry_endpoint:
+            return f"{self.foundry_endpoint.rstrip('/')}/providers/microsoft/v1/systemone"
+        return None
+
+    @property
+    def resolved_chat_url(self) -> str | None:
+        return self.url_for("openai_chat")
+
+    def threshold_for(self, mode: str) -> float:
+        return self.low_confidence_thresholds.get(mode, self.low_confidence_threshold)
+
+    def url_for(self, api: str) -> str | None:
+        """Where a model with this API type is called."""
+        if api == "openai_chat" and self.chat_completions_url:
+            return self.chat_completions_url
+        if api == "anthropic_messages" and self.anthropic_messages_url:
+            return self.anthropic_messages_url
+        if self.foundry_endpoint:
+            return f"{self.foundry_endpoint.rstrip('/')}{API_PATHS[api]}"
+        return None
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.resolved_decision1_url and self.resolved_chat_url)

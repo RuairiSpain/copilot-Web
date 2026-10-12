@@ -1,0 +1,8 @@
+$schema: https://azuremlschemas.azureedge.net/latest/managedOnlineEndpoint.schema.json
+name: decision-router
+auth_mode: aad_token
+public_network_access: disabled
+# The container authenticates to Foundry with this identity (DefaultAzureCredential).
+# Grant it "Cognitive Services User" on the Foundry resource that hosts Decision-1 and the models.
+identity:
+  type: system_assigned

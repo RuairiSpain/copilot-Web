@@ -1,0 +1,203 @@
+from __future__ import annotations
+
+import json
+import uuid
+from contextlib import asynccontextmanager
+from dataclasses import replace
+from typing import Any
+
+from fastapi import FastAPI, Request, Response
+from fastapi.responses import JSONResponse, StreamingResponse
+from starlette.routing import Route
+
+from . import __version__
+from .auth import FoundryAuth
+from .catalog import Catalogs
+from .config import Settings
+from .decision1 import Decision1Client
+from .foundry import ChatClient
+from .inbound import InboundAuth, Unauthorized
+from .pinning import SESSION_HEADER
+from .pipeline import ProviderError, Routed, RouterPipeline, RoutingError
+from .pricing import PriceTable
+from .telemetry import Telemetry
+
+
+def build_pipeline(settings: Settings) -> RouterPipeline:
+    catalogs = Catalogs.load(settings.catalog_dir, settings.compatibility, settings.deployment_overrides,
+                             settings.default_mode)
+    if not settings.configured:
+        raise RuntimeError("set FOUNDRY_ENDPOINT (or DECISION1_ENDPOINT and FOUNDRY_CHAT_COMPLETIONS_URL)")
+    chat_auth = FoundryAuth(settings.foundry_api_key)
+    decision_auth = FoundryAuth(settings.decision1_api_key) if settings.decision1_api_key else chat_auth
+    return RouterPipeline(
+        settings,
+        catalogs,
+        Decision1Client(settings.resolved_decision1_url or "", settings.decision1_deployment, decision_auth,
+                        timeout_seconds=settings.decision_timeout_seconds,
+                        max_attempts=settings.decision_max_attempts),
+        ChatClient(settings, chat_auth),
+        Telemetry(settings.decision_log_path, settings.log_prompts),
+        PriceTable(settings.pricing_path),
+    )
+
+
+def _routing_headers(routed: Routed, served: str | None = None) -> dict[str, str]:
+    headers = {
+        "x-request-id": routed.request_id,
+        "x-router-mode": routed.mode,
+        "x-router-compatibility": routed.catalog.compatibility,
+        "x-router-ranking": ",".join(routed.decision.ranking),
+        "x-router-low-confidence": str(routed.low_confidence).lower(),
+        "x-router-degraded": "true" if routed.event.get("degraded") else "false",
+    }
+    if "pin" in routed.event:
+        headers["x-router-pin"] = routed.event["pin"].get("status", "")
+    if served:
+        headers["x-router-served-model"] = served
+    return headers
+
+
+def build_inbound_auth(settings: Settings) -> InboundAuth:
+    return InboundAuth(settings.api_keys, settings.entra_tenant_id, settings.entra_audiences,
+                       settings.entra_allowed_client_ids, settings.allow_unauthenticated)
+
+
+def create_app(settings: Settings | None = None, *, pipeline: RouterPipeline | None = None,
+               inbound: InboundAuth | None = None) -> FastAPI:
+    settings = settings or Settings.from_env()
+    gate = inbound or build_inbound_auth(settings)  # refuses to start with no inbound auth configured
+    pipe = pipeline or build_pipeline(settings)
+
+    mcp = mcp_app = None
+    if settings.mcp_enabled:
+        from .mcp_server import build_mcp  # the MCP SDK is only imported when the MCP server is on
+
+        mcp, mcp_app = build_mcp(pipe, gate)
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        if mcp is not None:
+            async with mcp.session_manager.run():
+                yield
+        else:
+            yield
+        await pipe.close()
+
+    app = FastAPI(
+        title="Decision Router",
+        version=__version__,
+        description="Model-Router-compatible chat completions: stage-1 filter, Microsoft-Decision-1 ranking, "
+                    "then the top-ranked Foundry model.",
+        lifespan=lifespan,
+    )
+    app.state.pipeline = pipe
+    if mcp_app is not None:
+        class McpExact:
+            """/mcp itself would otherwise be redirected to /mcp/, and not every MCP client follows a
+            redirect on POST: serve it as the mounted app's root. (A class, so Starlette treats it as ASGI.)"""
+
+            async def __call__(self, scope, receive, send):
+                await mcp_app({**scope, "path": "/", "root_path": scope.get("root_path", "") + "/mcp"}, receive, send)
+
+        app.router.routes.append(Route("/mcp", endpoint=McpExact(), methods=["GET", "POST", "DELETE"]))
+        app.mount("/mcp", mcp_app)  # MCP clients connect to /mcp or /mcp/ (streamable HTTP)
+
+    def request_id(request: Request) -> str:
+        value = request.headers.get("x-request-id") or request.headers.get("x-ms-client-request-id")
+        return value[:128] if value else str(uuid.uuid4())
+
+    async def read_body(request: Request) -> Any:
+        limit = settings.max_body_bytes
+        too_large = RoutingError(413, "request_too_large", f"request body is larger than {limit:,} bytes")
+        declared = request.headers.get("content-length")
+        if declared and declared.isdigit() and int(declared) > limit:
+            raise too_large
+        chunks, size = [], 0
+        async for chunk in request.stream():  # counted as it arrives, so a body without a length is capped too
+            size += len(chunk)
+            if size > limit:
+                raise too_large
+            chunks.append(chunk)
+        try:
+            return json.loads(b"".join(chunks))
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise RoutingError(400, "invalid_json", "request body is not valid JSON") from exc
+
+    @app.exception_handler(RoutingError)
+    async def routing_error(_: Request, exc: RoutingError) -> JSONResponse:
+        return JSONResponse(exc.body(), status_code=exc.status_code)
+
+    @app.exception_handler(Unauthorized)
+    async def unauthorized(_: Request, exc: Unauthorized) -> JSONResponse:
+        return JSONResponse({"error": {"message": exc.message, "type": "authentication_error", "code": "unauthorized"}},
+                            status_code=401, headers={"WWW-Authenticate": "Bearer"})
+
+    async def prepare(request: Request) -> Any:
+        caller = await gate.check(request.headers)
+        session = request.headers.get(SESSION_HEADER)
+        prepared = replace(pipe.prepare(await read_body(request)), caller=caller.log(), session_id=session or None)
+        return pipe.apply_policy(prepared)
+
+    @app.exception_handler(ProviderError)
+    async def provider_error(_: Request, exc: ProviderError) -> Response:
+        return Response(exc.content, status_code=exc.status_code, media_type=exc.content_type)
+
+    @app.post("/v1/chat/completions")
+    @app.post("/openai/v1/chat/completions")
+    async def chat_completions(request: Request) -> Response:
+        rid = request_id(request)
+        prepared = await prepare(request)
+        routed = await pipe.route(prepared, rid)
+        body = prepared.body
+        if body.get("stream"):
+            result = await pipe.stream(routed, body)
+            return StreamingResponse(result.chunks, status_code=result.status_code, media_type=result.content_type,
+                                     headers=_routing_headers(routed, result.served.name))
+        completion = await pipe.complete(routed, body)
+        return Response(completion.content, status_code=completion.status_code, media_type=completion.content_type,
+                        headers=_routing_headers(routed, completion.served.name))
+
+    @app.post("/v1/route")
+    async def route_only(request: Request) -> JSONResponse:
+        """Stages 1 and 2 only: what would be called, without calling it."""
+        rid = request_id(request)
+        prepared = await prepare(request)
+        routed = await pipe.route(prepared, rid)
+        pipe.record_route_only(routed, prepared.body)
+        return JSONResponse(
+            routed.summary(),
+            headers=_routing_headers(routed),
+        )
+
+    @app.get("/health/live")
+    async def live() -> dict[str, Any]:
+        return {"status": "ok", "version": __version__}
+
+    @app.get("/health/ready")
+    async def ready() -> JSONResponse:
+        """Ready when Decision-1 answers. If it does not, the router can still serve requests degraded
+        (cheapest candidate) unless ROUTER_DECISION_FALLBACK=false, in which case it reports 503."""
+        decision1 = await pipe.decision1_health()
+        fallback = pipe.settings.decision_fallback
+        if decision1["ok"] is None:  # first probe still running
+            status = "starting" if fallback else "not_ready"
+        else:
+            status = "ready" if decision1["ok"] else "degraded" if fallback else "not_ready"
+        pins = getattr(pipe.pins, "ping", None)
+        return JSONResponse({
+            "status": status,
+            "decision1": decision1,
+            "pin_store": ("redis ok" if await pins() else "redis unavailable") if pins else "memory",
+            "inbound_auth": gate.methods or ["none"],
+            "profiles": sorted(settings.profiles),
+            "default_compatibility": pipe.catalogs.default,
+            "catalogs": {name: c.describe() for name, c in pipe.catalogs.catalogs.items()},
+            "decision1_deployment": pipe.decision.deployment,
+        }, status_code=503 if status == "not_ready" else 200)
+
+    @app.get("/metrics")
+    async def metrics() -> Response:
+        return Response(pipe.telemetry.render(), media_type="text/plain; version=0.0.4")
+
+    return app

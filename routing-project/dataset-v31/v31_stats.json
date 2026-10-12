@@ -1,0 +1,253 @@
+{
+  "total_generated": 40000,
+  "unique_prompts": 40000,
+  "duplicates": 0,
+  "splits": {
+    "train": 30560,
+    "val": 1760,
+    "test": 3680,
+    "ood_test": 4000
+  },
+  "audits": [
+    {
+      "name": "full",
+      "n": 36000,
+      "cell_counts_min_max": [
+        2250,
+        2250
+      ],
+      "by_task": {
+        "rag": 9000,
+        "code": 9000,
+        "content": 9000,
+        "reasoning": 9000
+      },
+      "by_preference": {
+        "high": 9000,
+        "medium": 9000,
+        "cheap": 9000,
+        "extra_high": 9000
+      },
+      "by_complexity": {
+        "1": 7200,
+        "2": 7200,
+        "3": 7200,
+        "4": 7200,
+        "5": 7200
+      },
+      "by_model": {
+        "deepseek-v4-flash": 9720,
+        "o4-mini": 5850,
+        "gpt-5.5": 5490,
+        "gpt-5-nano": 6300,
+        "gpt-5-mini": 3330,
+        "gpt-5.6-terra": 5310
+      },
+      "complexity_uniform_within_cells": true
+    },
+    {
+      "name": "train",
+      "n": 30560,
+      "cell_counts_min_max": [
+        1910,
+        1910
+      ],
+      "by_task": {
+        "rag": 7640,
+        "content": 7640,
+        "reasoning": 7640,
+        "code": 7640
+      },
+      "by_preference": {
+        "cheap": 7640,
+        "high": 7640,
+        "extra_high": 7640,
+        "medium": 7640
+      },
+      "by_complexity": {
+        "1": 6112,
+        "2": 6112,
+        "3": 6112,
+        "4": 6112,
+        "5": 6112
+      },
+      "by_model": {
+        "gpt-5-mini": 2827,
+        "o4-mini": 4960,
+        "gpt-5.5": 4663,
+        "deepseek-v4-flash": 8250,
+        "gpt-5-nano": 5348,
+        "gpt-5.6-terra": 4512
+      },
+      "complexity_uniform_within_cells": true
+    },
+    {
+      "name": "val",
+      "n": 1760,
+      "cell_counts_min_max": [
+        110,
+        110
+      ],
+      "by_task": {
+        "reasoning": 440,
+        "rag": 440,
+        "content": 440,
+        "code": 440
+      },
+      "by_preference": {
+        "high": 440,
+        "cheap": 440,
+        "extra_high": 440,
+        "medium": 440
+      },
+      "by_complexity": {
+        "1": 352,
+        "2": 352,
+        "3": 352,
+        "4": 352,
+        "5": 352
+      },
+      "by_model": {
+        "o4-mini": 285,
+        "gpt-5-mini": 163,
+        "gpt-5.6-terra": 264,
+        "gpt-5.5": 263,
+        "deepseek-v4-flash": 477,
+        "gpt-5-nano": 308
+      },
+      "complexity_uniform_within_cells": true
+    },
+    {
+      "name": "test",
+      "n": 3680,
+      "cell_counts_min_max": [
+        230,
+        230
+      ],
+      "by_task": {
+        "rag": 920,
+        "reasoning": 920,
+        "content": 920,
+        "code": 920
+      },
+      "by_preference": {
+        "medium": 920,
+        "high": 920,
+        "extra_high": 920,
+        "cheap": 920
+      },
+      "by_complexity": {
+        "1": 736,
+        "2": 736,
+        "3": 736,
+        "4": 736,
+        "5": 736
+      },
+      "by_model": {
+        "gpt-5.5": 564,
+        "o4-mini": 605,
+        "deepseek-v4-flash": 993,
+        "gpt-5-nano": 644,
+        "gpt-5-mini": 340,
+        "gpt-5.6-terra": 534
+      },
+      "complexity_uniform_within_cells": true
+    },
+    {
+      "name": "ood_test",
+      "n": 4000,
+      "cell_counts_min_max": [
+        250,
+        250
+      ],
+      "by_task": {
+        "reasoning": 1000,
+        "rag": 1000,
+        "content": 1000,
+        "code": 1000
+      },
+      "by_preference": {
+        "cheap": 1000,
+        "medium": 1000,
+        "high": 1000,
+        "extra_high": 1000
+      },
+      "by_complexity": {
+        "1": 800,
+        "2": 800,
+        "3": 800,
+        "4": 800,
+        "5": 800
+      },
+      "by_model": {
+        "gpt-5-nano": 700,
+        "gpt-5.5": 550,
+        "deepseek-v4-flash": 1000,
+        "o4-mini": 750,
+        "gpt-5.6-terra": 600,
+        "gpt-5-mini": 400
+      },
+      "complexity_uniform_within_cells": true
+    }
+  ],
+  "model_by_preference": {
+    "cheap": {
+      "gpt-5-nano": 4500,
+      "deepseek-v4-flash": 2070,
+      "gpt-5-mini": 2430
+    },
+    "medium": {
+      "deepseek-v4-flash": 3150,
+      "gpt-5.5": 2160,
+      "gpt-5-mini": 900,
+      "o4-mini": 990,
+      "gpt-5-nano": 1800
+    },
+    "high": {
+      "deepseek-v4-flash": 4500,
+      "o4-mini": 2610,
+      "gpt-5.6-terra": 900,
+      "gpt-5.5": 990
+    },
+    "extra_high": {
+      "gpt-5.5": 2340,
+      "gpt-5.6-terra": 4410,
+      "o4-mini": 2250
+    }
+  },
+  "model_by_task": {
+    "code": {
+      "deepseek-v4-flash": 2970,
+      "o4-mini": 1710,
+      "gpt-5-nano": 1800,
+      "gpt-5.6-terra": 1170,
+      "gpt-5.5": 900,
+      "gpt-5-mini": 450
+    },
+    "reasoning": {
+      "gpt-5.5": 990,
+      "o4-mini": 2340,
+      "deepseek-v4-flash": 1800,
+      "gpt-5.6-terra": 990,
+      "gpt-5-nano": 1800,
+      "gpt-5-mini": 1080
+    },
+    "rag": {
+      "deepseek-v4-flash": 1800,
+      "gpt-5-mini": 1800,
+      "gpt-5.6-terra": 1710,
+      "gpt-5.5": 2520,
+      "gpt-5-nano": 900,
+      "o4-mini": 270
+    },
+    "content": {
+      "o4-mini": 1530,
+      "gpt-5.5": 1080,
+      "deepseek-v4-flash": 3150,
+      "gpt-5.6-terra": 1440,
+      "gpt-5-nano": 1800
+    }
+  },
+  "train_test_prompt_overlap": 0,
+  "train_ood_prompt_overlap": 0
+}

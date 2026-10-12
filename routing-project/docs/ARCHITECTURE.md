@@ -1,0 +1,290 @@
+# Architecture
+
+The service runs as one Docker container that serves the REST API and an MCP server (`/mcp`,
+see `MCP.md`) on port 5001. Both go through the same pipeline below.
+
+```
+client ── POST /v1/chat/completions (Model Router body + optional routing_mode, compatibility,
+   │                                       routing_constraints)
+   ▼
+catalog   compatibility = old | new           config/catalog_old.json (Model Router pool) or
+   │                                          config/catalog_new.json (latest models)
+   ▼
+stage 1   deterministic filter (stage1.py)    lifecycle → operator allow-list → requested models/
+   │                                          providers → capabilities (asked for + read from the
+   │                                          request) → region/residency → size → price band
+   ▼
+stage 2   Decision-1 "choice" question        state = rendered conversation
+   │      instructions = fixed fragments chosen and filled by stage 1 (instructions.py)
+   │      criteria = candidates + descriptions + input and output price + price rank among the options
+   │      ranking = probabilities, highest first (ties → cheaper model)
+   ▼
+select    execution order                     highest probability first; if that probability is
+   │                                          below the low-confidence threshold, cost mode calls
+   │                                          the cheaper of the top two first; other modes keep the
+   │                                          top model and flag the decision
+   ▼
+log       decision log line                   candidates, probabilities, ranking, execution order, usage, cost
+   │
+   ▼
+generate  first model in the execution order, at its API's endpoint:
+          openai_chat → /openai/v1/chat/completions · mai_chat → /mai/v1/chat/completions ·
+          anthropic_messages → /anthropic/v1/messages (translated to and from chat completions)
+          on failure, the next model in that order (stage-1 candidates only)
+```
+
+Stage 1, the catalogs and the request fields that drive them are described in
+`docs/STAGE1_FILTERING.md` and `docs/MODEL_CATALOGS.md`.
+
+## Input and output
+
+**Input** is an OpenAI chat-completions body, the same one Model Router accepts. `model` is
+ignored (it names the router) and replaced with the chosen deployment. Every other field
+(`messages`, `tools`, `response_format`, `temperature`, `max_completion_tokens`, `stream`,
+and so on) is forwarded unchanged.
+
+**Routing mode.** Model Router sets its mode on the deployment. This service does the same
+with `default_mode` in the catalog or `ROUTER_DEFAULT_MODE`, and also accepts a
+`routing_mode` field per request. The mode picks a price band of whatever stage 1 leaves:
+`cost` the cheapest third, `balanced` all, `quality` the most expensive third. A
+`routing_cost_band` field replaces that band with an output-price range: a named band in the
+`new` catalog (`low`, `medium`, `medium-high`, `high`, `top`) or a dollar range (`docs/STAGE1_FILTERING.md`).
+
+**Extension fields.** `routing_mode`, `routing_cost_band`, `compatibility` and `routing_constraints` are read by this
+router and removed before the request is forwarded, so the model sees a plain chat-completions
+body. Callers that can't add them (Foundry Agent Service) can name a routing profile in `model`
+instead (`docs/AGENT_SERVICE.md`).
+
+**Authentication.** Callers present an API key or a Microsoft Entra ID token; see
+`docs/AGENT_SERVICE.md`.
+
+**Claude.** Claude deployments on Foundry accept only the Anthropic Messages API. The router
+translates the request (system messages, images, tools, tool results, tool_choice, stop,
+streaming) and translates the answer back to a chat completion, so callers never see the
+difference. `response_format` of type `json_schema` becomes Claude's structured outputs
+(`output_config.format`); type `json_object` has no Messages API equivalent and is dropped, so
+Claude answers JSON-mode requests in free text. Code: `decision_router/anthropic.py`. A request can turn this off with
+`"claude_translation": false`: it then sends an Anthropic Messages body, only Claude models are
+candidates, and the native Claude response is returned unchanged (`docs/STAGE1_FILTERING.md`).
+
+**Output** is the chosen model's response, unchanged, including streamed responses. Its
+`model` field names the model that answered.
+
+## Decision-1 contract
+
+```http
+POST https://<resource>.services.ai.azure.com/providers/microsoft/v1/systemone
+Content-Type: application/json
+Accept: application/json
+api-key: <key>            or   Authorization: Bearer <Entra token, scope cognitiveservices.azure.com>
+
+{"model": "microsoft-decision-1",
+ "state": "Request: 1 message(s); output limit: 400 tokens\nConversation, oldest first:\n\n[user]\n...",
+ "questions": {"route": {
+   "type": "choice",
+   "instructions": "Choose the model that should answer ... Cost mode: ...",
+   "criteria": {"gpt-5.4-nano": "Smallest, fastest GPT-5.4 model ... Price per million tokens: $0.10 input, $0.80 output; 1 of 3 by price among these options, ordered by output price then input price (1 is cheapest).",
+                "gpt-5.4-mini": "...", "gpt-5.6-terra": "..."}}}}
+
+200 {"model": "microsoft-decision-1", "usage": {"prompt_tokens": 412, ...},
+     "answers": {"route": {"type": "choice", "choice": "gpt-5.4-mini",
+                           "probabilities": {"gpt-5.4-nano": 0.21, "gpt-5.4-mini": 0.64, "gpt-5.6-terra": 0.15},
+                           "confidence": 0.81}}}
+```
+
+`model` in the request is the **deployment name**; `model` in the response is the underlying
+model (for example `microsoft-decision-1`). Both are logged, with the response's token usage
+and the Decision-1 cost (list price $0.042 per million input tokens; output is not billed).
+
+How the answer is used:
+
+- The ranking is the candidates in descending probability; ties go to the cheaper model. It
+  does not depend on the order the options were sent in. Decision-1's `choice` is logged; with
+  calibrated probabilities it is the top-ranked model.
+- Probabilities that sum to 1 within 0.01 are renormalised. A larger gap, a missing or extra
+  option, a `choice` that was not offered, or a `refusal` answer rejects the response.
+- A `choice` question needs at least two options. When stage 1 leaves a single model,
+  Decision-1 is not called.
+- `confidence` is optional and only logged.
+
+**Sources.** Route, request body, authentication, deployment-name semantics, error codes and
+pricing are from Microsoft's documentation ("Deploy and use Microsoft-Decision-1 in Microsoft
+Foundry", and the Foundry blog post of 9 October 2026). Microsoft publishes no sample response:
+the docs say only that a choice answer contains "the selected option and a probability for
+every option", plus the model name and token usage. The field names `probabilities` and
+`confidence` come from the `ElBruno.AI.Decisions` Foundry client (commit bc94ed9), which was
+smoke-tested against Foundry. Confirm them with one live call; they are read in
+`decision_router/decision1.py:parse_answer`.
+
+## Health and readiness
+
+`/health/live`, `/health/ready` and `/metrics` need no credentials.
+
+`/health/ready` reports whether Decision-1 answers. It never waits for Decision-1, because
+readiness probes have short timeouts. Instead it returns the result of the last real Decision-1
+call or probe. When that result is older than `ROUTER_READY_CHECK_SECONDS` (300), it starts one
+small probe in the background, so frequent checks cost at most one tiny Decision-1 call per
+window per replica.
+
+| Decision-1 | `ROUTER_DECISION_FALLBACK=true` (default) | `false` |
+|---|---|---|
+| answers | 200 `ready` | 200 `ready` |
+| fails | 200 `degraded`: requests are still served, by the cheapest candidate | 503 `not_ready` |
+| first probe still running | 200 `starting` | 503 `not_ready` |
+
+The response also reports the pin store (`memory`, `redis ok` or `redis unavailable`; Redis is
+best effort and never makes the router unready), the catalogs, profiles and inbound auth methods.
+
+## Selecting the model: the low-confidence rule
+
+The model called first is the one with the highest probability. When that probability is
+below the threshold, Decision-1 is treated as unsure: the decision is flagged
+`low_confidence`, and what happens next depends on the routing mode.
+
+| Mode | When unsure |
+|---|---|
+| `cost` | The cheaper (lower tier, so lower output price) of the top two models is called first; the other is the backup. If the top model is already the cheaper, nothing changes. |
+| `balanced`, `quality` | The top model is still called first. Only the flag is set. |
+
+| Probabilities | Mode | Threshold | Execution order | `low_confidence` |
+|---|---|---|---|---|
+| gpt-5.5 0.70, gpt-5.6-terra 0.20, gpt-5.6-sol 0.10 | any | 0.5 | gpt-5.5, gpt-5.6-terra, gpt-5.6-sol | false |
+| gpt-5.5 0.45, gpt-5.6-terra 0.35, gpt-5.6-sol 0.20 | cost | 0.5 | gpt-5.6-terra ($8), gpt-5.5 ($15), gpt-5.6-sol | true |
+| gpt-5.5 0.45, gpt-5.6-terra 0.35, gpt-5.6-sol 0.20 | balanced | 0.5 | gpt-5.5, gpt-5.6-terra, gpt-5.6-sol | true |
+| gpt-5.5 0.45, gpt-5.6-terra 0.35, gpt-5.6-sol 0.20 | any | 0 (off) | gpt-5.5, gpt-5.6-terra, gpt-5.6-sol | false |
+
+The threshold is `ROUTER_LOW_CONFIDENCE_THRESHOLD` (default `0.5`), overridable per mode
+with `ROUTER_LOW_CONFIDENCE_THRESHOLDS`, for example `{"cost": 0.4, "quality": 0.6}`.
+
+Notes:
+
+- The rule uses the top model's probability from `probabilities`, not the optional
+  `confidence` field.
+- It does not apply when stage 1 leaves a single model.
+- `0.5` is a starting value, not a validated one. Microsoft's guidance is to choose thresholds
+  per task on your own data. The comparison report includes a threshold sweep (below) for
+  that purpose.
+- With many candidates a top probability of 0.45 can still be a clear lead; with two it is
+  nearly a coin toss. If one threshold does not suit every mode, that is visible in the
+  report's per-mode figures.
+
+The response carries `x-router-low-confidence: true|false`, and `/v1/route` returns both
+`ranking` (by probability) and `execution_order`. The decision log records `ranking`,
+`execution_order`, `top_probability`, `low_confidence` and the threshold in force.
+
+## Failure handling
+
+| Event | Behaviour |
+|---|---|
+| Decision-1 returns 408, 429, 5xx or a network error | Retried with exponential backoff, honouring `retry-after-ms` / `retry-after`, up to `ROUTER_DECISION_MAX_ATTEMPTS` attempts inside `ROUTER_DECISION_TIMEOUT_SECONDS` |
+| Decision-1 still failing, or 400/401/403/404/422, refusal or malformed answer | Degraded: the stage-1 candidates are called in price order, cheapest first, without Decision-1's ranking. The response carries `x-router-degraded: true` and the decision log `degraded` (reason and message). With `ROUTER_DECISION_FALLBACK=false`: `code: decision_unavailable`, status 503 for throttling, 504 for timeout, otherwise 502, and no model is called. |
+| Model returns 408, 429, 5xx or a network error | Retry the same model (`ROUTER_ATTEMPTS_PER_MODEL`, default 2), honouring `retry-after-ms` / `retry-after` up to `ROUTER_MAX_RETRY_AFTER_SECONDS`; then the next ranked model |
+| Model returns 404 (deployment missing) | Next ranked model, no retry |
+| Model returns 401 or 403 | The router's own credentials were refused for that deployment (the caller's are never sent upstream). Next ranked model, no retry; logged as `upstream_auth_error`. If no model answers, 502 `all_models_failed`, never the upstream 401/403 |
+| Model returns 400 naming `temperature`, `top_p`, `reasoning_effort` or `stream_options` | The parameter is removed and the same model is called again, once, without using up an attempt; logged as `parameter_rejected` with the `dropped` list. Callers can therefore always send these parameters. For Claude the adapter goes further: it never sends `temperature`/`top_p` to the models that reject them (Opus 4.7 and later, Fable, Sonnet 5 and the 5.5 models), sends only `temperature` when both are given, and maps `reasoning_effort` to `output_config.effort` where the model supports it |
+| Model returns another 4xx (bad request, content filter) | Passed through to the client unchanged; no fallback, because another model would get the same request |
+| Request body larger than `ROUTER_MAX_BODY_BYTES` | 413 `request_too_large`, before the body is parsed |
+| All ranked models fail | 502, `code: all_models_failed`, with the attempt list |
+| `ROUTER_TOTAL_TIMEOUT_SECONDS` used up | 504, `code: deadline_exceeded` |
+| Streaming | Fallback is possible only before the first byte. The router asks OpenAI-style and Claude models for a final usage chunk (`stream_options.include_usage`), logs usage and cost from it, and removes it from the stream unless the caller asked for it. Native Claude streams report usage from `message_start` and `message_delta` |
+
+## Decision log
+
+One JSON line per request, to the `decision_router.decisions` logger and, when
+`ROUTER_DECISION_LOG_PATH` is set, to that file (written off the event loop):
+`request_id`, `routing_mode`, `catalog_sha256`, `candidates`, `decision` (`ranking`,
+`execution_order`, `top_probability`, `low_confidence`, `low_confidence_threshold`,
+`probabilities`, `choice`, `confidence`, `latency_ms`, `skipped`, `attempts`,
+`response_model`, `usage`, `cost`), `served_model`,
+`provider_model`, `fallback_used`, `attempts`, `usage`, `cost`, `total_latency_ms`,
+`outcome`. Message text is not logged unless `ROUTER_LOG_PROMPTS=true`; a SHA-256 of the
+messages is logged instead.
+
+## Comparing with Model Router
+
+Model Router's mode is a deployment setting, so the comparison needs one Model Router
+deployment per mode. Run the harness with `--compatibility old` (the default).
+`config/catalog_old.json` is Model Router's routing pool minus its nine deprecated models, so give
+each Model Router deployment a custom model subset listing exactly those 26 models; with the
+default pool it could still pick a deprecated model that our router never offers. The catalog's
+`deployment` names must be the deployments Model Router uses (Claude models must be deployed to
+the resource for Model Router too). Then both arms choose from the same models and generate with
+the same deployments, and the only difference is the routing decision.
+
+```bash
+export FOUNDRY_ENDPOINT=https://<resource>.services.ai.azure.com
+export MODEL_ROUTER_DEPLOYMENTS='{"cost":"model-router-cost","balanced":"model-router","quality":"model-router-quality"}'
+python scripts/compare_with_model_router.py --sample 400 --output-dir eval/run-001
+```
+
+Dataset `quality_preference` maps to modes: `cheap` → `cost`, `medium` and `high` →
+`balanced`, `extra_high` → `quality`. The sample is stratified by task type × preference.
+
+Outputs in `--output-dir`:
+
+- `results.jsonl`: per prompt, the Decision-1 candidates, probabilities and ranking, the
+  model each arm served, latency, usage, cost and the response text.
+- `decision_log.jsonl`: the service's own decision log for the run.
+- `report.json` and `report.md`: agreement (our first call, and Model Router's choice within
+  Decision-1's top 2), a low-confidence section (how often the rule fired, and what fire
+  rate and agreement thresholds from 0.3 to 0.8 would have given), how often Model Router chose a model outside the mode's stage-1 set,
+  model mix per mode, latency percentiles, cost totals, and agreement with the dataset's
+  policy labels.
+
+What the report does and does not show:
+
+- Agreement measures whether the two routers pick the same model, not which answer is
+  better. To judge quality, score the stored outputs, for example with Microsoft's
+  Model-Router-Auto-Evaluation harness or a pairwise judge that runs each pair in both orders.
+- The dataset's `selected_model` labels come from a hand-written policy, so agreement with
+  them is a reference point only.
+- If Model Router returns models that are not in the catalog, the report lists them and
+  leaves those rows out. Add them as `aliases`, or align the router's model subset.
+- `--shuffle-options [N]` re-asks Decision-1 with the options reordered and reports how often
+  the decision changes. See `docs/OPTION_ORDER_TESTING.md`.
+- `--decide-only` stops our arm after Decision-1. Model Router has no route-only call, so it
+  still generates.
+- `--dry-run` uses an in-memory fake for both arms. It checks the harness, not either router.
+
+## Configuration
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `FOUNDRY_ENDPOINT` | (required) | `https://<resource>.services.ai.azure.com` |
+| `FOUNDRY_API_KEY` | unset | API key; when unset, Entra ID via `DefaultAzureCredential` |
+| `DECISION1_DEPLOYMENT` | `microsoft-decision-1` | Decision-1 deployment name |
+| `DECISION1_ENDPOINT` / `DECISION1_API_KEY` | derived / `FOUNDRY_API_KEY` | Override when Decision-1 is on another resource |
+| `FOUNDRY_CHAT_COMPLETIONS_URL` | `{endpoint}/openai/v1/chat/completions` | Override the chat route |
+| `ROUTER_DEFAULT_MODE` | catalog `default_mode` | `cost`, `balanced` or `quality` |
+| `ROUTER_DEPLOYMENT_MAP` | `{}` | JSON, model name → deployment name |
+| `ROUTER_PRICING_PATH` | `config/model_pricing.json` | Price table |
+| `ROUTER_STATE_MAX_CHARS` | `24000` | Size of the conversation text sent to Decision-1 |
+| `ROUTER_DECISION_TIMEOUT_SECONDS` | `10` | Time budget for the Decision-1 call, retries included |
+| `ROUTER_DECISION_MAX_ATTEMPTS` | `3` | Decision-1 attempts on 408, 429, 5xx and network errors |
+| `ROUTER_COMPATIBILITY` | `old` | Default catalog: `old` (Model Router pool) or `new` (latest models) |
+| `ROUTER_CATALOG_DIR` | `config/` | Folder holding `catalog_old.json` and `catalog_new.json` |
+| `ROUTER_MODEL_ALLOWLIST` | unset | Comma-separated model names any request may use; unset allows all |
+| `ROUTER_ALLOW_PREVIEW` | `true` | Whether preview models are eligible by default |
+| `FOUNDRY_ANTHROPIC_MESSAGES_URL` | `{endpoint}/anthropic/v1/messages` | Override the Claude route |
+| `ANTHROPIC_VERSION` | `2023-06-01` | `anthropic-version` header for Claude |
+| `ROUTER_ANTHROPIC_DEFAULT_MAX_TOKENS` | `4096` | Output budget sent to Claude when the request sets none |
+| `ROUTER_LOW_CONFIDENCE_THRESHOLD` | `0.5` | Below this top probability the decision is flagged low-confidence (cost mode then calls the cheaper of the top two first); `0` turns the rule off |
+| `ROUTER_LOW_CONFIDENCE_THRESHOLDS` | (none) | Per-mode thresholds as JSON, e.g. `{"cost": 0.4}`; modes not listed use the value above |
+| `ROUTER_REQUEST_TIMEOUT_SECONDS` | `60` | Per model call |
+| `ROUTER_TOTAL_TIMEOUT_SECONDS` | `90` | Whole request, across fallbacks |
+| `ROUTER_ATTEMPTS_PER_MODEL` | `2` | Attempts per model before the next ranked one |
+| `ROUTER_MAX_RETRY_AFTER_SECONDS` | `10` | Longest `retry-after` the router waits for |
+| `ROUTER_DECISION_FALLBACK` | `true` | When Decision-1 cannot answer, serve the cheapest candidate (degraded) instead of failing the request |
+| `ROUTER_MCP_ENABLED` | `true` | Serve the MCP server (tools `chat`, `route`, `list_models`) at `/mcp` on the same port (`MCP.md`) |
+| `ROUTER_READY_CHECK_SECONDS` | `300` | How long a Decision-1 success (a real call or a readiness probe) counts as healthy; after that `/health/ready` probes again in the background |
+| `ROUTER_PIN_STORE_URL` | (none) | `redis://` or `rediss://` URL to share conversation pins across replicas; in-process memory when unset |
+| `ROUTER_MAX_BODY_BYTES` | `20000000` | Largest request body accepted; larger bodies get 413 |
+| `ROUTER_DECISION_LOG_PATH` | unset | Also write the decision log to this file |
+| `ROUTER_LOG_PROMPTS` | `false` | Include message text in the decision log |
+| `ROUTER_API_KEYS` | unset | Comma-separated API keys callers may present (`docs/AGENT_SERVICE.md`) |
+| `ROUTER_ENTRA_TENANT_ID` / `ROUTER_ENTRA_AUDIENCE` | unset | Accept Microsoft Entra ID tokens issued by this tenant for this audience |
+| `ROUTER_ENTRA_ALLOWED_CLIENT_IDS` | unset | Comma-separated client IDs (apps, managed identities) allowed to call; unset allows any |
+| `ROUTER_ALLOW_UNAUTHENTICATED` | `false` | Start without inbound authentication (only behind something that authenticates) |
+| `ROUTER_PIN_DEFAULT` | `false` | Keep each conversation on the model that answered its first turn (`docs/AGENT_SERVICE.md`) |
+| `ROUTER_PIN_TTL_SECONDS` / `ROUTER_PIN_MAX_ENTRIES` | `3600` / `10000` | How long an unused pin lasts, and how many are kept per replica |
+| `ROUTER_PROFILES` | built-in `decision-router-cost/balanced/quality/coding` | JSON, `model` name → routing fields (`docs/AGENT_SERVICE.md`) |
