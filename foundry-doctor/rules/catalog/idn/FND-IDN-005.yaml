@@ -25,9 +25,9 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.Authorization/roleAssignments 2022-04-01"
-    - "Microsoft.Authorization/roleAssignmentScheduleInstances 2020-10-01"
-    - "Microsoft.Authorization/roleEligibilityScheduleInstances 2020-10-01"
+    - { plane: management, provider: Microsoft.Authorization, resourceType: roleAssignments, version: "2022-04-01" }
+    - { plane: management, provider: Microsoft.Authorization, resourceType: roleAssignmentScheduleInstances, version: "2020-10-01" }
+    - { plane: management, provider: Microsoft.Authorization, resourceType: roleEligibilityScheduleInstances, version: "2020-10-01" }
   preview: false
   notes: "Not version dependent; reads ARM role assignments and PIM schedules (azd 1.36.0-beta.1 clone checked) Microsoft.Authorization/roleAssignmentScheduleInstances 2020-10-01: assignmentType Activated Assigned, memberType Inherited, Direct Group, endDateTime."
 evidence:
@@ -79,6 +79,7 @@ sources:
     note: Foundry Owner and Foundry Account Owner capabilities; used to justify including them in the inventory as a product choice.
 overlap:
   decision: adapt
+  provisional: true
   coverage: partial
   rationale: >-
     Built-in policies already audit subscription owner counts ("A maximum of 3 owners should be
@@ -90,21 +91,30 @@ overlap:
     assignments. Foundry Doctor adapts the owner-count idea and adds the Foundry-scope inventory with
     PIM classification. If Phase 2 cannot read schedule instances, the value shrinks to the
     inventory and the decision should be reconsidered as wrap of the Defender assessments.
-  psrule: []
-  azurePolicy:
-    - "4f11b553-d42e-4e3a-89be-32ca364cad4c (A maximum of 3 owners should be designated for your subscription)"
-    - "09024ccc-0c5f-475e-9457-b7c0d9ed487b (There should be more than one owner assigned to your subscription)"
-    - "339353f6-2387-4a45-abe4-7f529d121046 (Guest accounts with owner permissions on Azure resources should be removed)"
-    - "0cfea604-3201-4e14-88fc-fae4c427a6c5 (Blocked accounts with owner permissions on Azure resources should be removed)"
-    - "25237d14-4a47-4cb6-bc7c-8bbdd4671f31 (Azure role assignment management should be restricted to Microsoft Entra Privileged Identity Management)"
-  defender:
-    - "assessment 6f90a6d6-d4d6-0794-0ec1-98fa77878c2e (maximum of 3 owners; from policy 4f11b553)"
-    - "assessment 2c79b4af-f830-b61e-92b9-63dfa30f16e4 (more than one owner; from policy 09024ccc)"
-    - "assessment 20606e75-05c4-48c0-9d97-add6daa2109a (guest accounts with owner permissions; from policy 339353f6)"
-    - "assessment 050ac097-3dda-4d24-ab6d-82568e7a50cf (blocked accounts with owner permissions; from policy 0cfea604)"
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: searched-match
+      matches:
+        - "4f11b553-d42e-4e3a-89be-32ca364cad4c (A maximum of 3 owners should be designated for your subscription)"
+        - "09024ccc-0c5f-475e-9457-b7c0d9ed487b (There should be more than one owner assigned to your subscription)"
+        - "339353f6-2387-4a45-abe4-7f529d121046 (Guest accounts with owner permissions on Azure resources should be removed)"
+        - "0cfea604-3201-4e14-88fc-fae4c427a6c5 (Blocked accounts with owner permissions on Azure resources should be removed)"
+        - "25237d14-4a47-4cb6-bc7c-8bbdd4671f31 (Azure role assignment management should be restricted to Microsoft Entra Privileged Identity Management)"
+    defender:
+      state: searched-match
+      matches:
+        - "assessment 6f90a6d6-d4d6-0794-0ec1-98fa77878c2e (maximum of 3 owners; from policy 4f11b553)"
+        - "assessment 2c79b4af-f830-b61e-92b9-63dfa30f16e4 (more than one owner; from policy 09024ccc)"
+        - "assessment 20606e75-05c4-48c0-9d97-add6daa2109a (guest accounts with owner permissions; from policy 339353f6)"
+        - "assessment 050ac097-3dda-4d24-ab6d-82568e7a50cf (blocked accounts with owner permissions; from policy 0cfea604)"
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/idn

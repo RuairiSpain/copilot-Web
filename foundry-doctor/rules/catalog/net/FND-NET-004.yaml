@@ -25,8 +25,8 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.CognitiveServices/accounts 2026-09-01"
-    - "Microsoft.Network/virtualNetworks/subnets 2024-05-01"
+    - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts, version: "2026-09-01" }
+    - { plane: management, provider: Microsoft.Network, resourceType: virtualNetworks/subnets, version: "2024-05-01" }
   preview: false
   notes: "Not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked) Microsoft.CognitiveServices/accounts 2026-09-01: networkInjections."
 evidence:
@@ -80,18 +80,26 @@ sources:
     note: SubnetPropertiesFormat delegations (serviceName), addressPrefix, addressPrefixes.
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     No PSRule rule, built-in policy, Checkov check or Bicep linter rule knows the Foundry agent subnet
     contract (Microsoft.App/environments delegation, minimum /27, exclusivity). The only nearby policy
     ("Subnets should be private") is about default outbound access, and Azure.VNET.* rules do not read
     networkInjections. The value is the correlation from the account to its subnet.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/net

@@ -25,14 +25,14 @@ compatibility:
   azd: ''
   extensions: {}
   apiVersions:
-  - Microsoft.Insights/diagnosticSettings 2021-05-01-preview
-  - Microsoft.Insights/metrics 2024-02-01
-  - Log Analytics query API spec 2022-10-27
+  - { plane: management, provider: Microsoft.Insights, resourceType: diagnosticSettings, version: '2021-05-01-preview' }
+  - { plane: management, provider: Microsoft.Insights, resourceType: metrics, version: '2024-02-01' }
   preview: true
   notes: >-
     No azd dependency: Azure Monitor reads; no azd behaviour dependency Microsoft.Insights/diagnosticSettings 2021-05-01-preview:
-    the only version in the spec clone; no stable version found. Microsoft.Insights/metrics 2024-02-01: stable. Log Analytics
-    query API spec 2022-10-27: as pinned by the azquery Go SDK.
+    the only version in the spec clone; no stable version found. Microsoft.Insights/metrics 2024-02-01: stable. Removed the
+    Log Analytics query compatibility entry because 2022-10-27 is the SDK generation/specification version and the exact
+    wire-version contract was not verified; the query dependency remains documented here rather than inventing a date API version.
 evidence:
   description: >-
     Probe 1: GET /{accountResourceId}/providers/Microsoft.Insights/diagnosticSettings?api-version=2021-05-01-preview; at
@@ -87,30 +87,39 @@ sources:
     the SDK only.
 overlap:
   decision: native
+  provisional: true
   coverage: partial
   rationale: >-
     Azure Policy 1b4d1c4e (Diagnostic logs in Azure AI services resources should be enabled), b4330a05 (Resource logs in
     Search services) and the DINE deployments 55d1f543 and 08ba64b8 check or create the diagnostic setting; they cannot
     observe whether rows arrive. No PSRule rule for Foundry diagnostic settings was found. The arrival check and its traffic
     correlation are new. The configuration half belongs to an OPS rule that should reuse the Policy mappings.
-  psrule: []
-  azurePolicy:
-  - 1b4d1c4e-934c-4703-944c-27c82c06bebb
-  - b4330a05-a843-4bc8-bf9a-cacce50c67f4
-  - 55d1f543-d1b0-4811-9663-d6d0dbc6326d
-  - 08ba64b8-738f-4918-9686-730d2ed79c7d
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: searched-match
+      matches:
+      - 1b4d1c4e-934c-4703-944c-27c82c06bebb
+      - b4330a05-a843-4bc8-bf9a-cacce50c67f4
+      - 55d1f543-d1b0-4811-9663-d6d0dbc6326d
+      - 08ba64b8-738f-4918-9686-730d2ed79c7d
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/run
 tests:
   positive:
-  - diagnostic setting present, traffic in window, count query returns rows for RequestResponse
-  negative:
   - diagnostic setting present for over two hours, traffic in window, zero rows
+  negative:
+  - diagnostic setting present, traffic in window, count query returns rows for RequestResponse
   skipped:
   - no diagnostic setting to a workspace
   - caller cannot query the workspace

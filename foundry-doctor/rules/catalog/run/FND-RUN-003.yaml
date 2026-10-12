@@ -21,7 +21,11 @@ compatibility:
   extensions:
     azure.ai.agents: ">=1.0.0-beta.18 <=1.0.0-beta.18"
   apiVersions:
-    - "Microsoft.CognitiveServices accounts/projects projects/capabilityHosts accounts/capabilityHosts projects/connections 2026-09-01"
+    - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts/projects, version: "2026-09-01" }
+    - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts/projects/capabilityHosts, version: "2026-09-01" }
+    - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts/capabilityHosts, version: "2026-09-01" }
+    - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts/projects/connections, operation: list, version: "2026-09-01" }
+    - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts/connections, operation: list, version: "2026-09-01" }
   preview: true
   notes: "No azd dependency: ARM reads; no azd behaviour dependency azure.ai.agents 1.0.0-beta.18: read for overlap only. Extension ranges are exactly the versions whose schemas or source were read; widen them in Phase 1 by reading older tags. Microsoft.CognitiveServices accounts/projects projects/capabilityHosts accounts/capabilityHosts projects/connections 2026-09-01: stable."
 evidence:
@@ -68,28 +72,36 @@ sources:
     note: Overlap source (remote.connections) and README Project storage diagnostics (capability host read at api-version 2025-06-01 in storage_rbac_query.go).
 overlap:
   decision: native
+  provisional: true
   coverage: partial
   rationale: >-
     azd ai agent doctor check remote.connections only confirms that connection names configured in azure.yaml exist on the
     project (name matching); its storage diagnostics read the capability host to resolve storage bindings. Neither reads
     capability host or project provisioningState nor connection error. Azure Policy and PSRule do not model capability
     hosts. Correlating the capability host bindings with connection existence and state is Foundry-specific.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/run
 tests:
   positive:
-    - project and capability host Succeeded, all bound connections exist without error
-  negative:
     - capability host provisioningState Failed
     - bound storage connection name missing from project and account connections
     - connection reports a non-empty error
+  negative:
+    - project and capability host Succeeded, all bound connections exist without error
   skipped:
     - caller lacks ARM read on the project
     - project has no capability host (standard agent setup not used)

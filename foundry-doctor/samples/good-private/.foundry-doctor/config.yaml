@@ -1,0 +1,28 @@
+version: 1
+policy:
+  tags:
+    required:
+      - name: env
+        format: ^prod$
+      - name: owner
+        format: ^platform$
+    resourceTypes:
+      - Microsoft.CognitiveServices/accounts
+      - Microsoft.Search/searchServices
+      - Microsoft.Storage/storageAccounts
+      - Microsoft.DocumentDB/databaseAccounts
+      - Microsoft.OperationalInsights/workspaces
+  logRetention:
+    minimumDays: 30
+  network:
+    centralDns: true
+  dataResidency:
+    scope: global
+    regions:
+      - swedencentral
+    deploymentSkus:
+      - globalstandard
+  models:
+    allow:
+      - OpenAI/gpt-4.1-mini
+    deny: []

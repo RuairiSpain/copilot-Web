@@ -1,6 +1,6 @@
 # ADR-001: Rule engine strategy
 
-Status: Accepted (reviewed by the Foundry lead and the Azure black belt; see docs/development/hand-offs/phase-0.md)
+Status: Accepted architecture; implementation and adapter evidence remain provisional (ADR-008)
 Date: 2026-10-04
 
 ## Context
@@ -10,7 +10,7 @@ It also says to avoid duplicating lower-level tools, and to keep the core free o
 (PRD sections 2 and 9; Phase 0 "Tool overlap is higher than expected -> reduce native implementation and
 strengthen adapters").
 
-Phase 0 mapped all 108 rules to PSRule for Azure, Azure Policy, Defender for Cloud, Advisor, the Bicep linter
+Phase 0 recorded metadata mappings for all 108 rules to PSRule for Azure, Azure Policy, Defender for Cloud, Advisor, the Bicep linter
 and Checkov (`docs/overlap-analysis.md`, `docs/overlap/*.md`). Result, from the catalogue metadata:
 
 | Decision | Rules | Meaning |
@@ -21,7 +21,9 @@ and Checkov (`docs/overlap-analysis.md`, `docs/overlap/*.md`). Result, from the 
 | reuse | 1 | An existing tool already gives equivalent evidence; we map its ID (FND-SEC-005, owner PSRule). |
 | drop | 0 | |
 
-85 rules are verified against a primary source and 23 are labelled product opinion.
+The current catalogue has **82** rules verified against a primary source and **26** labelled
+product opinion. The earlier Phase 0 snapshot had 85 verified and 23 product-opinion rules; those
+historical counts must not be used for the current tree.
 
 ## Decision
 
@@ -45,7 +47,8 @@ and Checkov (`docs/overlap-analysis.md`, `docs/overlap/*.md`). Result, from the 
    | Required dependency missing or too old | Error naming tool, detected and required version | 2 |
    | Optional adapter on `auto`, missing | `adapter-unavailable` report entry; dependent checks skipped | 0/1, or 3 with `--strict` |
    | Adapter explicitly enabled, missing | As required | 2 |
-   | Adapter crashes or emits unparseable output | Protocol failure with redacted stderr | 4 |
+   | Explicitly requested adapter cannot start or its required input/permission is unavailable | Requested validation could not run | 2 |
+   | Adapter starts but violates its output protocol or Foundry Doctor fails internally | Protocol/internal failure with redacted stderr | 4 |
 
    The report carries a `tools` section (name, path, version, status) so CI can tell "passed" from "not run".
 7. **Reverting `adapt` to `reuse`.** The group research notes in `docs/overlap/` say that several `adapt` rules become `reuse`
@@ -67,4 +70,9 @@ and Checkov (`docs/overlap-analysis.md`, `docs/overlap/*.md`). Result, from the 
 ## Evidence
 
 `rules/catalog/**`, `docs/overlap-analysis.md`, `docs/overlap/*.md`, `docs/tool-compatibility.md`,
-`docs/licence-inventory.md`. Counts computed by `go run ./cmd/rulecatalog generate-overlap` on 2026-10-04.
+`docs/licence-inventory.md`. The 85/23 counts were computed by
+`go run ./cmd/rulecatalog generate-overlap` on 2026-10-04 and are historical. The current 82/26
+counts come from the current catalogue metadata and passed the local catalogue/document checks
+recorded in the Phase 0 hand-off. Counts describe catalogue metadata, not executed adapter
+compatibility. See ADR-008 for the structured-output, XF, synthetic-spike and release-licence
+evidence still required.

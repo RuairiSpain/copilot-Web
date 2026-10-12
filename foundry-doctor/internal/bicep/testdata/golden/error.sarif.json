@@ -1,0 +1,55 @@
+{
+  "$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "bicep"
+        }
+      },
+      "results": [
+        {
+          "ruleId": "BCP037",
+          "message": {
+            "text": "The property \"notARealProp\" is not allowed on objects of type \"StorageAccountPropertiesCreateParametersOrStorageAccountProperties\". Permissible properties include \"accessTier\", \"allowBlobPublicAccess\", \"allowCrossTenantReplication\", \"allowedCopyScope\", \"allowSharedKeyAccess\", \"azureFilesIdentityBasedAuthentication\", \"customDomain\", \"defaultToOAuthAuthentication\", \"dnsEndpointType\", \"encryption\", \"immutableStorageWithVersioning\", \"isHnsEnabled\", \"isLocalUserEnabled\", \"isNfsV3Enabled\", \"isSftpEnabled\", \"keyPolicy\", \"largeFileSharesState\", \"minimumTlsVersion\", \"networkAcls\", \"publicNetworkAccess\", \"routingPreference\", \"sasPolicy\", \"supportsHttpsTrafficOnly\". If this is a resource type definition inaccuracy, report it using https://aka.ms/bicep-type-issues. [https://aka.ms/bicep/core-diagnostics#BCP037]"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///proj/error.bicep"
+                },
+                "region": {
+                  "startLine": 8,
+                  "charOffset": 5
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "BCP057",
+          "level": "error",
+          "message": {
+            "text": "The name \"undefinedSymbol\" does not exist in the current context. [https://aka.ms/bicep/core-diagnostics#BCP057]"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///proj/error.bicep"
+                },
+                "region": {
+                  "startLine": 11,
+                  "charOffset": 21
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "columnKind": "utf16CodeUnits"
+    }
+  ]
+}

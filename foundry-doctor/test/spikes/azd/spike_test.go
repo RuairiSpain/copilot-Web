@@ -8,12 +8,15 @@
 package azdspike
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
+	"sort"
 	"strings"
 	"testing"
 
@@ -21,10 +24,17 @@ import (
 )
 
 type finding struct {
-	Path  string
-	Value string // variable name or `uses` value
-	Count int    // occurrences, for duplicate keys
-	Line  int
+	Path        string
+	Value       string // variable name or `uses` value
+	Count       int    // occurrences, for duplicate keys
+	Line        int
+	Column      int
+	Occurrences []position
+}
+
+type position struct {
+	Line   int
+	Column int
 }
 
 type result struct {
@@ -35,8 +45,12 @@ type result struct {
 
 // analyse reads azure.yaml bytes. env supplies azd environment values (.azure/<env>/.env).
 func analyse(src []byte, env map[string]string) (result, error) {
+	decoder := yaml.NewDecoder(bytes.NewReader(src))
 	var root yaml.Node
-	if err := yaml.Unmarshal(src, &root); err != nil {
+	if err := decoder.Decode(&root); err != nil {
+		if err == io.EOF {
+			return result{}, fmt.Errorf("empty document")
+		}
 		return result{}, err
 	}
 	var res result
@@ -44,7 +58,26 @@ func analyse(src []byte, env map[string]string) (result, error) {
 		return res, fmt.Errorf("empty document")
 	}
 	top := root.Content[0]
+	if top.Kind != yaml.MappingNode {
+		return res, fmt.Errorf("azure.yaml root must be a mapping, got %s", nodeKind(top))
+	}
+	var trailing yaml.Node
+	if err := decoder.Decode(&trailing); err == nil {
+		return res, fmt.Errorf("azure.yaml must contain exactly one document")
+	} else if err != io.EOF {
+		return res, fmt.Errorf("invalid trailing YAML document: %w", err)
+	}
 	walk(top, "", env, &res)
+	sort.SliceStable(res.Duplicates, func(i, j int) bool {
+		a, b := res.Duplicates[i], res.Duplicates[j]
+		if a.Line != b.Line {
+			return a.Line < b.Line
+		}
+		if a.Column != b.Column {
+			return a.Column < b.Column
+		}
+		return a.Path < b.Path
+	})
 	names := map[string]bool{}
 	for _, section := range []string{"services", "resources"} {
 		if m := child(top, section); m != nil && m.Kind == yaml.MappingNode {
@@ -69,6 +102,22 @@ func analyse(src []byte, env map[string]string) (result, error) {
 	return res, nil
 }
 
+func nodeKind(n *yaml.Node) string {
+	switch n.Kind {
+	case yaml.MappingNode:
+		return "mapping"
+	case yaml.SequenceNode:
+		return "sequence"
+	case yaml.ScalarNode:
+		if n.Tag == "!!null" {
+			return "null"
+		}
+		return "scalar"
+	default:
+		return fmt.Sprintf("kind %d", n.Kind)
+	}
+}
+
 func child(m *yaml.Node, key string) *yaml.Node {
 	if m == nil || m.Kind != yaml.MappingNode {
 		return nil
@@ -84,10 +133,11 @@ func child(m *yaml.Node, key string) *yaml.Node {
 func walk(n *yaml.Node, path string, env map[string]string, res *result) {
 	switch n.Kind {
 	case yaml.MappingNode:
-		seen := map[string]int{}
+		seen := map[string][]position{}
 		for i := 0; i+1 < len(n.Content); i += 2 {
-			k := n.Content[i].Value
-			seen[k]++
+			key := n.Content[i]
+			k := key.Value
+			seen[k] = append(seen[k], position{Line: key.Line, Column: key.Column})
 			p := k
 			if path != "" {
 				p = path + "." + k
@@ -95,12 +145,16 @@ func walk(n *yaml.Node, path string, env map[string]string, res *result) {
 			walk(n.Content[i+1], p, env, res)
 		}
 		for _, k := range slices.Sorted(mapsKeys(seen)) {
-			if seen[k] > 1 {
+			if len(seen[k]) > 1 {
 				p := k
 				if path != "" {
 					p = path + "." + k
 				}
-				res.Duplicates = append(res.Duplicates, finding{Path: p, Count: seen[k]})
+				occurrences := slices.Clone(seen[k])
+				res.Duplicates = append(res.Duplicates, finding{
+					Path: p, Count: len(occurrences), Line: occurrences[0].Line,
+					Column: occurrences[0].Column, Occurrences: occurrences,
+				})
 			}
 		}
 	case yaml.SequenceNode:
@@ -114,7 +168,7 @@ func walk(n *yaml.Node, path string, env map[string]string, res *result) {
 	}
 }
 
-func mapsKeys(m map[string]int) func(yield func(string) bool) {
+func mapsKeys[V any](m map[string]V) func(yield func(string) bool) {
 	return func(yield func(string) bool) {
 		for k := range m {
 			if !yield(k) {

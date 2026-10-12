@@ -77,27 +77,36 @@ sources:
   note: WARA 61187af4-7d36-4b48-b16e-de78bef143a0 (AOAI in multiple regions), pgVerified false.
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     PSRule has resource-level multi-region checks (for example Azure.APIM.MultiRegion) and WARA has per-resource multi-region
     recommendations, but none asks whether a DR strategy was chosen across the Foundry project. A deterministic check for
     'multi-region' would assert a business need that no source states, so this is a prompt recorded as product opinion.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/rel
 tests:
   positive:
+  - 'no declaration in configuration: reported as unanswered at info, never an error or warning'
   - 'declared strategy present: reported as answered at info'
   negative:
-  - 'no declaration in configuration: reported as unanswered at info, never an error or warning'
+  - 'quiet or CI profile configured to suppress prompts: produces no finding'
   skipped:
-  - 'quiet or CI profile configured to suppress prompts: skipped with reason'
+  - 'Foundry Doctor configuration input unavailable: skipped with reason'
   uncertain:
   - 'declaration present but references a recovery region not found in the template: reported uncertain'
 testability: Unit tests on configuration fixtures; no Azure access.

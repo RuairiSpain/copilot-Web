@@ -26,11 +26,10 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.CognitiveServices/accounts 2026-09-01"
-    - "Microsoft.CognitiveServices/accounts/projects 2026-09-01"
-    - "Microsoft.CognitiveServices/accounts/projects/connections 2026-09-01"
+    - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts, version: "2026-09-01" }
+    - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts/projects, version: "2026-09-01" }
   preview: false
-  notes: "Not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked) Microsoft.CognitiveServices/accounts 2026-09-01: identity.type: None, SystemAssigned, UserAssigned, SystemAssigned, UserAssigned. Microsoft.CognitiveServices/accounts/projects 2026-09-01: identity, same type. Microsoft.CognitiveServices/accounts/projects/connections 2026-09-01: ConnectionAuthType incl. ProjectManagedIdentity, AccountManagedIdentity."
+  notes: "Not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked) Microsoft.CognitiveServices/accounts 2026-09-01: identity.type: None, SystemAssigned, UserAssigned, SystemAssigned, UserAssigned. Microsoft.CognitiveServices/accounts/projects 2026-09-01: identity, same type. Connection authentication is out of scope for this rule, so no connection API compatibility is declared."
 evidence:
   description: >-
     For each Microsoft.CognitiveServices/accounts and accounts/projects resource, read identity.type.
@@ -87,6 +86,7 @@ sources:
     note: PSRule applies only to kind TextAnalytics, so it does not cover kind AIServices accounts or projects.
 overlap:
   decision: adapt
+  provisional: true
   coverage: partial
   rationale: >-
     The identity.type test already exists in three places: the built-in policy "Cognitive Services
@@ -96,17 +96,27 @@ overlap:
     Foundry workloads in the same template. Foundry Doctor adapts the property test and adds the
     project and workload scope plus profile severity. If Phase 1 only checks the account, downgrade to
     reuse and map the policy and Checkov IDs.
-  psrule:
-    - Azure.AI.ManagedIdentity
-    - Azure.ContainerApp.ManagedIdentity
-    - Azure.AppService.ManagedIdentity
-  azurePolicy:
-    - "fe3fd216-4f83-4fc1-8984-2bbec80a3418 (Cognitive Services accounts should use a managed identity)"
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov:
-    - CKV_AZURE_238
+  research:
+    psrule:
+      state: searched-match
+      matches:
+        - Azure.AI.ManagedIdentity
+        - Azure.ContainerApp.ManagedIdentity
+        - Azure.AppService.ManagedIdentity
+    azurePolicy:
+      state: searched-match
+      matches:
+        - "fe3fd216-4f83-4fc1-8984-2bbec80a3418 (Cognitive Services accounts should use a managed identity)"
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: searched-match
+      matches:
+        - CKV_AZURE_238
 implementation:
   owner: native
   package: internal/rules/idn

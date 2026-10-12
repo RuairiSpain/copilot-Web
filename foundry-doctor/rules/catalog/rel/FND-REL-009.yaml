@@ -6,7 +6,7 @@ description: 'An API Management instance used as the AI gateway in front of Foun
   the availability features the workload needs. Documented facts: the Developer tier is for non-production use and has no
   SLA; availability zones and multi-region deployment are Premium features (zones also on v2 tiers per the zones article);
   Consumption, Basic and Standard have neither. Choosing a tier is a cost-versus-resilience decision, so this is a recommendation.'
-status: verified
+status: product-opinion
 phases:
 - '4'
 - '8'
@@ -17,6 +17,7 @@ basis:
 - reliability
 - waf
 - wara
+- opinion
 category: nice-to-have
 pillar: reliability
 severity:
@@ -27,27 +28,47 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.ApiManagement/service 2024-05-01"
-    - "Microsoft.ApiManagement/service 2025-09-01-preview"
+    - { plane: management, provider: Microsoft.ApiManagement, resourceType: service, version: "2024-05-01" }
+    - { plane: management, provider: Microsoft.ApiManagement, resourceType: service, version: "2025-09-01-preview" }
   preview: true
   notes: "properties.additionalLocations[] and top-level zones were read in apimdeployment.json 2024-05-01. No azd dependency: reads compiled ARM JSON or ARM control plane Microsoft.ApiManagement/service 2024-05-01 / 2025-09-01-preview: stable) SkuType enum: Developer, Standard, Premium, Basic, Consumption, Isolated, BasicV2, StandardV2; adds PremiumV2."
 evidence:
-  description: 'Compiled ARM or live Microsoft.ApiManagement/service. Read sku.name, sku.capacity, zones, properties.additionalLocations.
-    Finding A (prod): sku.name is Developer (no SLA per the features article). Finding B (prod): sku.name is Consumption,
-    Basic or Standard (no availability zones per the features table) or Premium without zones / with sku.capacity below 2
-    (PSRule Azure.APIM.AvailabilityZone wants at least two scale units across zones). Finding C (info): Premium with no additionalLocations
-    (single region). StandardV2: the features table says no availability zones, the zones article says Standard v2 and Premium
-    v2 can enable zone redundancy; the sources conflict, so StandardV2 is reported uncertain. Phase 8: scope to instances
+  description: 'Compiled ARM or live Microsoft.ApiManagement/service. Read sku.name, sku.capacity, zones and properties.additionalLocations,
+    but evaluate them only against a resilience objective declared by the profile. If production declares only that an SLA
+    is required, Developer is a violation. If the profile declares zone resilience, compare the tier and zones with the
+    currently documented support and report an unknown region or StandardV2 as uncertain; do not assume that a syntactically
+    declared zone is available in the selected region. If the profile declares regional resilience, require the documented
+    Premium multi-region shape. With no declared objective, emit skipped rather than treating Premium, zones or a second
+    region as universally required. Phase 8 scopes to instances
     that act as an AI gateway for a Foundry project (backend targets a Foundry or Azure OpenAI endpoint, or a Foundry AI gateway
     connection).'
   confidence: likely
-recommendation: For production traffic that needs an SLA, use a tier with an SLA (not Developer) and, if zone-level resilience
-  matters, Premium (or a v2 tier that supports zone redundancy) with at least two scale units across availability zones. Add
-  a second region only if the workload needs regional resilience (see FND-REL-007); that is Premium only. Accept lower tiers
-  in dev and test.
-fix: "resource apim 'Microsoft.ApiManagement/service@2024-05-01' = {\n  name: apimName\n  location: location\n  sku: { name:\
-  \ 'Premium', capacity: 2 }\n  zones: [ '1', '2' ]\n  properties: {\n    publisherEmail: publisherEmail\n    publisherName:\
-  \ publisherName\n  }\n}"
+recommendation: >-
+  Select the least APIM tier and capacity that satisfy the workload's declared SLA, throughput,
+  zone-resilience and multi-region objectives; do not default to Premium or two units. For production
+  traffic that requires an SLA, do not use Developer. If zone resilience is declared, select the
+  least documented zone-capable tier and capacity that satisfy the objective in a region where APIM
+  zone support has been verified. Select Premium and add another region only when regional
+  resilience is declared (see FND-REL-007). Record the cost-versus-resilience tradeoff and accept a
+  lower tier or capacity when it satisfies the declared objective.
+fix: |
+  // Values are selected from the declared SLA, throughput, zone and region objectives.
+  // Do not hard-code Premium/2 as a universal baseline. Verify current tier SLA,
+  // regional feature availability and required capacity before setting these parameters.
+  param apimTier string
+  param apimCapacity int
+  resource apim 'Microsoft.ApiManagement/service@2024-05-01' = {
+    name: apimName
+    location: location
+    sku: {
+      name: apimTier
+      capacity: apimCapacity
+    }
+    properties: {
+      publisherEmail: publisherEmail
+      publisherName: publisherName
+    }
+  }
 sources:
 - url: https://learn.microsoft.com/azure/api-management/api-management-features
   lastVerified: '2026-10-04'
@@ -76,37 +97,48 @@ sources:
   note: Overlap source (PSRule for Azure rule documentation).
 overlap:
   decision: adapt
+  provisional: true
   coverage: partial
   rationale: PSRule Azure.APIM.AvailabilityZone and Azure.APIM.MultiRegion cover the zones and additionalLocations checks,
     and WARA has matching recommendations. None flags the Developer tier (no SLA) or ties the tier to Foundry gateway use.
     Foundry Doctor adds the tier-versus-SLA finding, scope to AI gateway instances in front of Foundry, and per-profile severity.
     If that scope is not delivered, downgrade to reuse for zones and multi-region.
-  psrule:
-  - Azure.APIM.AvailabilityZone
-  - Azure.APIM.MultiRegion
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: searched-match
+      matches:
+      - Azure.APIM.AvailabilityZone
+      - Azure.APIM.MultiRegion
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/rel
 tests:
   positive:
-  - Premium, capacity 2, two zones passes
-  - Developer tier in dev profile at info
+  - Developer tier violates declared production SLA objective
+  - Standard tier violates declared zone-resilience objective
   negative:
-  - Developer tier in prod profile reports no SLA
-  - Standard tier in prod profile reports no availability zones
-  - Premium capacity 1 reports fewer than two scale units
+  - least documented tier and capacity satisfying the declared SLA and throughput objectives produces no finding
+  - documented zone-capable tier and sufficient capacity in a verified region satisfies the declared zone objective
   skipped:
   - 'APIM instance not used as a gateway for Foundry (Phase 8 scope): out of scope'
   - 'no control-plane access in live mode: skipped with the missing capability'
+  - 'no resilience objective declared: skipped'
   uncertain:
   - 'StandardV2: sources conflict on zone support, reported uncertain'
+  - 'declared zones but APIM zone availability in the selected region is not verified'
   - sku or zones supplied by unresolved expressions
 testability: Unit tests on compiled ARM fixtures; Phase 8 correlation tests use fixtures with a backend targeting a Foundry
   endpoint.
-notes: Phase 4 covers the tier facts; Phase 8 adds Foundry AI gateway scoping. The SLA percentage per tier was not read here
-  and is not stated. The documented regional availability of zones was not read and is not asserted.
+notes: The tier and feature facts are verified; requiring a particular resilience objective is a product opinion, hence
+  this rule's lifecycle status. Phase 4 covers tier facts and Phase 8 adds Foundry gateway scoping. The SLA percentage and
+  regional availability of zones were not read and are not asserted. Advisor is unresearched; the adapt decision is provisional.

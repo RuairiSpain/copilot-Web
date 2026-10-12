@@ -21,7 +21,9 @@ compatibility:
   azd: ">=1.34.2 <=1.36.0-beta.1"
   extensions: {}
   apiVersions:
-    - "2026-09-01"
+    - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts, version: "2026-09-01" }
+    - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts/projects, version: "2026-09-01" }
+    - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts/deployments, version: "2026-09-01" }
   preview: true
   notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from a changelog and was not verified."
 evidence:
@@ -69,6 +71,7 @@ sources:
     note: PSRule AZURE_RESOURCE_REQUIRED_TAGS (case-sensitive names) and AZURE_TAG_FORMAT_FOR_<TAG_NAME>; WAF OE:04. Azure.Resource.UseTags (CO:03) only checks that some tag exists.
 overlap:
   decision: adapt
+  provisional: true
   coverage: partial
   rationale: >-
     PSRule Azure.Resource.RequiredTags with a configured tag list already gives equivalent evidence for required tag
@@ -79,16 +82,29 @@ overlap:
     groups). Foundry Doctor adapts the idea so it runs without the PSRule runtime, takes the required list from the
     Foundry Doctor profile per environment, scopes it to the Foundry stack, and reports tag-limit violations. It does not
     redefine the generic check; users who run PSRule can map this ID to Azure.Resource.RequiredTags.
-  psrule: [Azure.Resource.RequiredTags, Azure.Resource.UseTags, Azure.Group.RequiredTags, Azure.Subscription.RequiredTags]
-  azurePolicy:
-    - 871b6d14-10aa-478d-b590-94f262ecfa99
-    - 1e30110a-5ceb-460c-a204-c1c3969c6d62
-    - 96670d01-0a4d-4649-9c89-2d3abc0a5025
-    - 8ce3da23-7156-49e4-b145-24f95f9dcb46
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: searched-match
+      matches:
+      - 'Azure.Resource.RequiredTags'
+      - 'Azure.Resource.UseTags'
+      - 'Azure.Group.RequiredTags'
+      - 'Azure.Subscription.RequiredTags'
+    azurePolicy:
+      state: searched-match
+      matches:
+        - 871b6d14-10aa-478d-b590-94f262ecfa99
+        - 1e30110a-5ceb-460c-a204-c1c3969c6d62
+        - 96670d01-0a4d-4649-9c89-2d3abc0a5025
+        - 8ce3da23-7156-49e4-b145-24f95f9dcb46
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/ops

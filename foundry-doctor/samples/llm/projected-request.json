@@ -1,0 +1,17 @@
+{
+  "audience": "owner",
+  "findings": [
+    {
+      "ruleId": "FND-IDN-001",
+      "explanation": "Managed identities are required for Foundry and workloads.",
+      "evidence": "identity is missing (infra/main.bicep:10:2)",
+      "recommendation": "Use system-assigned or user-assigned managed identities."
+    },
+    {
+      "ruleId": "FND-NET-001",
+      "explanation": "Public access and private endpoint posture must match the intended network design.",
+      "evidence": "public network access remains enabled",
+      "recommendation": "Disable public access or justify the public posture explicitly."
+    }
+  ]
+}

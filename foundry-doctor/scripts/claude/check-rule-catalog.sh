@@ -8,7 +8,7 @@ if [ ! -d cmd/rulecatalog ]; then
   echo "check-rule-catalog: SKIPPED (cmd/rulecatalog does not exist yet)"
   exit 5
 fi
-go run ./cmd/rulecatalog validate || exit 1
+go run ./cmd/rulecatalog validate --phase0 || exit 1
 go run ./cmd/rulecatalog generate-docs --check || exit 1
 go run ./cmd/rulecatalog generate-overlap --check || exit 1
 echo "check-rule-catalog: ok"

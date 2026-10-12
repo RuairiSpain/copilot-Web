@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,6 +17,7 @@ const seed = "id: FND-CFG-001\nversion: 1\ngroup: CFG\ntitle: t\nstatus: propose
 func setup(t *testing.T, files map[string]string) string {
 	t.Helper()
 	dir := t.TempDir()
+	files["go.mod"] = "module github.com/ruairispain/copilot-web/foundry-doctor\n\ngo 1.25.12\n"
 	for name, content := range files {
 		p := filepath.Join(dir, name)
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
@@ -108,5 +111,111 @@ func TestGenerateCreatesOutputDirectory(t *testing.T) {
 	}
 	if _, err := os.Stat("new/dir/catalog.md"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestPathsAreConfinedToRepository(t *testing.T) {
+	root := setup(t, map[string]string{"rules/catalog/cfg/FND-CFG-001.yaml": seed})
+	outside := t.TempDir()
+	if got, _, e := exec("validate", "--dir", outside); got != 2 || !strings.Contains(e, "outside repository root") {
+		t.Fatalf("outside dir: exit=%d stderr=%q", got, e)
+	}
+	if got, _, e := exec("generate-docs", "--out", filepath.Join(root, "..", "escaped.md")); got != 2 || !strings.Contains(e, "outside repository root") {
+		t.Fatalf("outside output: exit=%d stderr=%q", got, e)
+	}
+}
+
+func TestPathsRejectSymlinkComponents(t *testing.T) {
+	root := setup(t, map[string]string{"rules/catalog/cfg/FND-CFG-001.yaml": seed})
+	outside := t.TempDir()
+	link := filepath.Join(root, "linked")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if got, _, e := exec("validate", "--dir", link); got != 2 {
+		t.Fatalf("symlink dir: exit=%d stderr=%q", got, e)
+	}
+	if got, _, e := exec("generate-docs", "--out", filepath.Join(link, "out.md")); got != 2 {
+		t.Fatalf("symlink output: exit=%d stderr=%q", got, e)
+	}
+}
+
+func TestCancellationIsUtilityError(t *testing.T) {
+	setup(t, map[string]string{"rules/catalog/cfg/FND-CFG-001.yaml": seed})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	var stdout, stderr bytes.Buffer
+	if got := run(ctx, []string{"validate"}, &stdout, &stderr); got != 2 || !strings.Contains(stderr.String(), context.Canceled.Error()) {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", got, stdout.String(), stderr.String())
+	}
+}
+
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) { return 0, io.ErrClosedPipe }
+
+func TestWriterFailureIsUtilityError(t *testing.T) {
+	setup(t, map[string]string{"rules/catalog/cfg/FND-CFG-001.yaml": seed})
+	if got := run(context.Background(), []string{"validate"}, failingWriter{}, io.Discard); got != 2 {
+		t.Fatalf("exit=%d, want 2", got)
+	}
+}
+
+func TestAtomicRenameFailurePreservesDestination(t *testing.T) {
+	dir := t.TempDir()
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+	if err := os.WriteFile(filepath.Join(dir, "out.md"), []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	wantErr := errors.New("rename failed")
+	err = writeRootFileAtomicWithRename(root, "out.md", []byte("new"), func(string, string) error { return wantErr })
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("error=%v, want rename failure", err)
+	}
+	got, err := os.ReadFile(filepath.Join(dir, "out.md"))
+	if err != nil || string(got) != "old" {
+		t.Fatalf("destination=%q error=%v; original was not preserved", got, err)
+	}
+	matches, err := filepath.Glob(filepath.Join(dir, ".rulecatalog-*"))
+	if err != nil || len(matches) != 0 {
+		t.Fatalf("temporary files=%v error=%v", matches, err)
+	}
+}
+
+func TestRootedOperationsRejectDirectorySymlinkSwap(t *testing.T) {
+	repo := t.TempDir()
+	outside := t.TempDir()
+	safe := filepath.Join(repo, "safe")
+	moved := filepath.Join(repo, "safe-before-swap")
+	if err := os.Mkdir(safe, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(safe, "input"), []byte("inside"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	root, err := os.OpenRoot(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+	if err := os.Rename(safe, moved); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, safe); err != nil {
+		t.Skipf("symlink swaps unavailable: %v", err)
+	}
+
+	if _, err := readRootFile(root, filepath.Join("safe", "input")); err == nil {
+		t.Fatal("rooted read followed swapped symlink outside repository")
+	}
+	if err := writeRootFileAtomic(root, filepath.Join("safe", "output"), []byte("outside write")); err == nil {
+		t.Fatal("rooted write followed swapped symlink outside repository")
+	}
+	if _, err := os.Stat(filepath.Join(outside, "output")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("outside output exists or stat failed unexpectedly: %v", err)
 	}
 }

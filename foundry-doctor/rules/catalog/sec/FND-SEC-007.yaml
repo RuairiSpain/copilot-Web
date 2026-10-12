@@ -27,7 +27,7 @@ compatibility:
   extensions:
     azure.ai.agents: '>=1.0.0-beta.18 <=1.0.0-beta.18'
   apiVersions:
-  - Microsoft.CognitiveServices/accounts 2026-09-01
+  - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts, version: '2026-09-01' }
   preview: true
   notes: >-
     azd verified at exactly 1.36.0-beta.1. Extension ranges are exactly the versions whose schemas or source were read;
@@ -81,6 +81,7 @@ sources:
   note: DeploymentProperties.raiPolicyName; RaiPolicyProperties (basePolicyName, mode, contentFilters).
 overlap:
   decision: native
+  provisional: true
   coverage: partial
   rationale: >-
     No PSRule, Checkov or Bicep linter rule covers guardrail binding. Azure Policy has [Preview] built-ins (for example
@@ -89,36 +90,42 @@ overlap:
     Foundry Doctor adds cross-file correlation (azure.yaml hosted agent policy to the raiPolicies resource in Bicep), which
     no existing tool does. The azd azure.ai.agents extension validates ARM ID shape and existence only at deploy time (it
     has an rai_policy_not_found error code); the doctor catches this in preflight.
-  psrule: []
-  azurePolicy:
-  - af253d37-136a-42f8-a1fc-30010c083d41
-  - f3a9c2e0-7b4d-4d8f-9c3a-2e1f6b9a8d4e
-  - c1ad46c6-37f8-4af0-9c71-c208375c87dd
-  - 930f48f9-f07e-427c-9494-52603581c6a9
-  - 595f98a5-b562-4ab6-b9c8-2ff9f39a3f7c
-  - 9224c1cc-34fc-44f1-ad08-5c4b079c9ce6
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: searched-match
+      matches:
+      - af253d37-136a-42f8-a1fc-30010c083d41
+      - f3a9c2e0-7b4d-4d8f-9c3a-2e1f6b9a8d4e
+      - c1ad46c6-37f8-4af0-9c71-c208375c87dd
+      - 930f48f9-f07e-427c-9494-52603581c6a9
+      - 595f98a5-b562-4ab6-b9c8-2ff9f39a3f7c
+      - 9224c1cc-34fc-44f1-ad08-5c4b079c9ce6
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/sec
 tests:
   positive:
-  - deployment without raiPolicyName passes because Microsoft.DefaultV2 applies
-  - hosted agent with rai_policy full ARM ID matching a declared raiPolicies resource passes
-  negative:
   - hosted agent with no policies entry fails
   - raiPolicyName is a bare name fails
   - raiPolicyName references an undeclared policy fails
+  negative:
+  - deployment without raiPolicyName passes because Microsoft.DefaultV2 applies
+  - hosted agent with rai_policy full ARM ID matching a declared raiPolicies resource passes
   skipped:
   - policy defined outside scanned files and no control-plane access is skipped
-  - >-
-    uncertain: Microsoft-managed policy names other than Microsoft.DefaultV2 and Microsoft.Default are not enumerated; treated
-    uncertain
   uncertain:
   - raiPolicyName-references-existing-live-policy-not-in-template
+  - Microsoft-managed policy name other than Microsoft.DefaultV2 or Microsoft.Default is not enumerated
 testability: Deterministic for azure.yaml and Bicep; existence in the live account needs control-plane read.
 notes: >-
   Whether an omitted raiPolicyName means Microsoft.DefaultV2 versus Microsoft.Default on model deployments is documented

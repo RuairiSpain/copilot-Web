@@ -3,13 +3,14 @@ version: 1
 group: CFG
 title: "MCP tools use allow lists"
 description: >-
-  Remote MCP tools configured for an agent should restrict the tools the agent can call with an allow
-  list (allowed_tools) rather than exposing every tool of the server. The default when allowed_tools is
-  omitted is all tools of the MCP server.
-status: verified
+  For the direct inline MCP tool shape whose property is literally allowed_tools, remote MCP tools
+  should restrict the tools the agent can call rather than expose every tool of the server. Foundry
+  documents the allow-list recommendation and the all-tools default for its MCP tool definition, but
+  no reviewed source confirms that azure.yaml accepts or forwards this spelling.
+status: product-opinion
 phases: ["later"]
 inputs: ["azure.yaml"]
-basis: ["security"]
+basis: ["security", "opinion"]
 category: nice-to-have
 pillar: security
 severity:
@@ -26,15 +27,21 @@ compatibility:
   notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from a changelog and was not verified. Extension ranges are exactly the versions whose schemas or source were read; widen them in Phase 1 by reading older tags."
 evidence:
   description: >-
-    For each tool of type mcp in a prompt agent tools list or a toolbox tools list, report the tool when
-    allowed_tools is absent or an empty list. Tool definitions are passed through by the azd schemas
-    (additionalProperties true), so the property is read as written; the rule is skipped for tool types
-    that do not take an allow list and for toolbox endpoint reuse mode where tools are not declared.
-  confidence: likely
+    Inspect only a direct inline tools[] entry with type mcp and a literal allowed_tools key. Report
+    an empty literal list as a product-opinion finding. If allowed_tools is absent, report Uncertain:
+    the documented MCP default is all tools, but the reviewed material does not prove that this
+    azure.yaml shape maps to that service property. Skip toolbox endpoint-reuse mode, non-MCP tool
+    types, unreadable references, and any alias or differently spelled property; never infer an
+    undocumented azure.yaml spelling.
+  confidence: uncertain
 recommendation: >-
-  Add allowed_tools with the exact tool names the agent needs. Tool names are case-sensitive and must
-  match what the MCP server returns from tools/list.
+  Where the selected azure.yaml extension version documents support for it, add allowed_tools with
+  the exact tool names the agent needs. Tool names are case-sensitive and must match what the MCP
+  server returns from tools/list. Otherwise configure the allow list through a documented supported
+  surface and do not guess the manifest property name.
 fix: |
+  # Partial MCP tool fragment. Use only after the selected azure.yaml extension
+  # version documents this property spelling.
   tools:
     - type: mcp
       connection: github-conn
@@ -50,32 +57,42 @@ sources:
     note: Troubleshooting row - allowed_tools filter, case-sensitive tool names.
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     No PSRule, Policy, Defender, Advisor, Bicep or Checkov rule models Foundry MCP tool configuration.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/cfg
 testability: Offline from azure.yaml. Allow-list accuracy against the live server is not checked (that would be a data-plane check).
 tests:
   positive:
-    - mcp-tool-without-allowed-tools
-    - mcp-tool-empty-allowed-tools
+    - direct-inline-mcp-tool-with-literal-empty-allowed-tools-reports-opinion-finding
   negative:
-    - mcp-tool-with-allowed-tools
+    - direct-inline-mcp-tool-with-nonempty-literal-allowed-tools-produces-no-finding
     - non-mcp-tool
   skipped:
     - toolbox-endpoint-reuse-mode
     - tool-defined-in-unreadable-ref-file
+    - mcp-tool-uses-an-unproven-allow-list-property-spelling
+  uncertain:
+    - direct-inline-mcp-tool-omits-allowed-tools-because-azure-yaml-mapping-is-unverified
 notes: >-
-  Unverified: that azure.yaml toolbox tools[] and prompt-agent tools[] entries accept the allowed_tools key
-  by that spelling. It is documented for the REST/SDK tool definition and the schemas pass unknown tool
-  properties through, but no azure.yaml example with allowed_tools was found in the clones. Severity is a
-  product choice; the source states a best practice, not a platform constraint. Rule stays verified for the
-  best-practice fact and default behaviour only.
+  The allowed_tools best practice and service default are documented, but their mapping to
+  azure.yaml is not. additionalProperties does not prove service acceptance or forwarding. The rule
+  is therefore product-opinion, restricted to the literal direct-inline shape, and omission is
+  Uncertain rather than a violation. The exact extension package versions reviewed are recorded in
+  compatibility; immutable repository revisions were unavailable.

@@ -7,148 +7,149 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"runtime"
+	"strings"
 	"time"
 )
 
-// Default limits for one compiler run.
 const (
-	DefaultTimeout   = 60 * time.Second
-	DefaultMaxStdout = 32 << 20 // compiled ARM of large projects is a few MB
-	DefaultMaxStderr = 4 << 20
+	defaultTimeout   = 60 * time.Second
+	defaultMaxOutput = 32 << 20
 )
 
-// RunSpec describes one execution of the Bicep CLI.
-type RunSpec struct {
-	Path      string   // absolute path of the executable
-	Args      []string // arguments after the executable
-	Dir       string   // working directory
-	Env       []string // complete environment; nothing is inherited
-	Timeout   time.Duration
-	MaxStdout int
-	MaxStderr int
-}
-
-// RunResult is the captured outcome of a run. ExitCode is -1 when the process did not exit normally.
+// RunResult is the captured outcome of one process run.
 type RunResult struct {
-	Stdout, Stderr []byte
-	ExitCode       int
-	// Truncated is set when stdout or stderr exceeded its limit; the process is then killed.
+	Stdout    []byte
+	Stderr    []byte
+	ExitCode  int
 	Truncated bool
 }
 
-// Runner executes the CLI. It is the seam used to fake the compiler in tests.
+// Runner executes the Bicep CLI. A non-nil error means the process could not be
+// started or was cancelled/timed out; a non-zero exit code is NOT an error.
 type Runner interface {
-	Run(ctx context.Context, spec RunSpec) (RunResult, error)
+	Run(ctx context.Context, exe string, args []string, dir string) (RunResult, error)
 }
 
-// ErrTimeout is returned when the compiler exceeds its time limit.
-var ErrTimeout = errors.New("bicep: timed out")
-
-// ErrOutputTooLarge is returned when the compiler output exceeds the configured limit.
-var ErrOutputTooLarge = errors.New("bicep: output exceeds the size limit")
-
-// ExecRunner runs the CLI as a child process.
-type ExecRunner struct{}
-
-// limitBuffer keeps at most max bytes and reports overflow without failing the writer, so the
-// child never sees a broken pipe; the caller kills it on overflow.
-type limitBuffer struct {
-	buf      bytes.Buffer
-	max      int
-	over     bool
-	onExceed func()
+// ExecRunner is the production Runner. It passes a minimal allow-listed
+// environment so credentials, proxies and tracing settings are not inherited.
+type ExecRunner struct {
+	Timeout   time.Duration
+	MaxOutput int
+	// ExtraEnv entries (NAME=value) are appended after the allow-listed set.
+	ExtraEnv []string
+	// Getenv overrides os.Getenv (tests).
+	Getenv func(string) string
 }
 
-func (l *limitBuffer) Write(p []byte) (int, error) {
-	room := l.max - l.buf.Len()
-	if len(p) > room {
-		if room > 0 {
-			l.buf.Write(p[:room])
-		}
-		if !l.over {
-			l.over = true
-			if l.onExceed != nil {
-				l.onExceed()
-			}
-		}
-		return len(p), nil
+type boundedBuffer struct {
+	buf       bytes.Buffer
+	remaining int
+	truncated bool
+}
+
+func (w *boundedBuffer) Write(p []byte) (int, error) {
+	n := len(p)
+	if len(p) > w.remaining {
+		p = p[:w.remaining]
+		w.truncated = true
 	}
-	return l.buf.Write(p)
+	if len(p) > 0 {
+		w.buf.Write(p)
+		w.remaining -= len(p)
+	}
+	return n, nil
+}
+
+var envAllow = []string{
+	"PATH", "HOME", "USERPROFILE", "TMP", "TEMP", "TMPDIR", "SystemRoot",
+	"DOTNET_BUNDLE_EXTRACT_BASE_DIR", "DOTNET_CLI_TELEMETRY_OPTOUT",
+}
+
+func (r ExecRunner) env() []string {
+	get := r.Getenv
+	if get == nil {
+		get = os.Getenv
+	}
+	env := []string{"DOTNET_CLI_TELEMETRY_OPTOUT=1", "BICEP_TELEMETRY_OPTOUT=1"}
+	for _, n := range envAllow {
+		if n == "SystemRoot" && runtime.GOOS != "windows" {
+			continue
+		}
+		if v := get(n); v != "" {
+			env = append(env, n+"="+v)
+		}
+	}
+	return append(env, r.ExtraEnv...)
 }
 
 // Run implements Runner.
-func (ExecRunner) Run(ctx context.Context, spec RunSpec) (RunResult, error) {
-	if spec.Path == "" {
-		return RunResult{ExitCode: -1}, errors.New("run bicep: empty executable path")
-	}
-	timeout := spec.Timeout
+func (r ExecRunner) Run(ctx context.Context, exe string, args []string, dir string) (RunResult, error) {
+	timeout, limit := r.Timeout, r.MaxOutput
 	if timeout <= 0 {
-		timeout = DefaultTimeout
+		timeout = defaultTimeout
 	}
-	maxOut, maxErr := spec.MaxStdout, spec.MaxStderr
-	if maxOut <= 0 {
-		maxOut = DefaultMaxStdout
-	}
-	if maxErr <= 0 {
-		maxErr = DefaultMaxStderr
+	if limit <= 0 {
+		limit = defaultMaxOutput
 	}
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-
-	cmd := exec.CommandContext(runCtx, spec.Path, spec.Args...)
-	cmd.Dir = spec.Dir
-	cmd.Env = spec.Env
-	if cmd.Env == nil {
-		cmd.Env = []string{} // never inherit the parent environment
-	}
-	cmd.WaitDelay = 2 * time.Second
-	out := &limitBuffer{max: maxOut, onExceed: cancel}
-	errb := &limitBuffer{max: maxErr, onExceed: cancel}
+	cmd := exec.CommandContext(runCtx, exe, args...)
+	cmd.Dir = dir
+	cmd.Env = r.env()
+	out := &boundedBuffer{remaining: limit}
+	errb := &boundedBuffer{remaining: limit}
 	cmd.Stdout, cmd.Stderr = out, errb
-
 	err := cmd.Run()
-	res := RunResult{Stdout: out.buf.Bytes(), Stderr: errb.buf.Bytes(), ExitCode: -1, Truncated: out.over || errb.over}
-	if res.Truncated {
-		return res, fmt.Errorf("run bicep %v: %w", spec.Args, ErrOutputTooLarge)
-	}
-	if cmd.ProcessState != nil && cmd.ProcessState.Exited() {
-		res.ExitCode = cmd.ProcessState.ExitCode()
+	res := RunResult{
+		Stdout:    append([]byte(nil), out.buf.Bytes()...),
+		Stderr:    append([]byte(nil), errb.buf.Bytes()...),
+		Truncated: out.truncated || errb.truncated,
 	}
 	if err == nil {
 		return res, nil
 	}
-	var ee *exec.ExitError
-	switch {
-	case errors.Is(runCtx.Err(), context.DeadlineExceeded) && ctx.Err() == nil:
-		return res, fmt.Errorf("run bicep %v after %s: %w", spec.Args, timeout, ErrTimeout)
-	case ctx.Err() != nil:
-		return res, fmt.Errorf("run bicep %v: %w", spec.Args, ctx.Err())
-	case errors.As(err, &ee):
-		return res, nil // a non-zero exit is a result, not an error
+	if ctx.Err() != nil { // caller cancelled or its own deadline expired
+		return res, ctx.Err()
 	}
-	return res, fmt.Errorf("run bicep %v: %w", spec.Args, err)
+	if errors.Is(runCtx.Err(), context.DeadlineExceeded) {
+		return res, toolErr(KindTimeout, "bicep CLI timed out", err)
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		res.ExitCode = exitErr.ExitCode()
+		if res.ExitCode < 0 { // killed by signal
+			res.ExitCode = 1
+		}
+		return res, nil
+	}
+	return res, fmt.Errorf("start bicep CLI: %w", err)
 }
 
-// MinimalEnv returns the allow-listed environment for the compiler. It carries no AZURE_*
-// variable, no token and nothing from the user's environment, and it points HOME at the given
-// directory so the compiler never reads or writes the real home.
-func MinimalEnv(home string) []string {
-	env := []string{
-		"HOME=" + home,
-		"DOTNET_CLI_HOME=" + home,
-		"DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1",
-		"DOTNET_CLI_TELEMETRY_OPTOUT=1",
-		"DOTNET_NOLOGO=1",
-		"TMPDIR=" + home,
-	}
-	if runtime.GOOS == "windows" {
-		env = append(env, "USERPROFILE="+home, "TEMP="+home, "TMP="+home)
-		if sr := os.Getenv("SystemRoot"); sr != "" { // the .NET runtime needs it on Windows
-			env = append(env, "SystemRoot="+sr)
+var (
+	ansiRE   = regexp.MustCompile("\x1b\\[[0-9;?]*[ -/]*[@-~]")
+	secretRE = regexp.MustCompile(`(?i)((?:password|passwd|pwd|secret|token|apikey|api[-_]key|key|authorization|sig|sas)\s*[=:]\s*)(?:bearer\s+)?[^\s,;"']+`)
+)
+
+// sanitize strips control sequences, redacts secret-looking assignments and
+// bounds the length of text derived from compiler output.
+func sanitize(s string, max int) string {
+	s = ansiRE.ReplaceAllString(s, "")
+	s = strings.ToValidUTF8(s, "")
+	s = strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\t' {
+			return ' '
 		}
-	} else {
-		env = append(env, "PATH=/usr/bin:/bin")
+		if r < 0x20 || r == 0x7f {
+			return -1
+		}
+		return r
+	}, s)
+	s = secretRE.ReplaceAllString(s, "${1}[REDACTED]")
+	s = strings.TrimSpace(s)
+	if max > 0 && len(s) > max {
+		s = strings.ToValidUTF8(s[:max], "") + "..."
 	}
-	return env
+	return s
 }

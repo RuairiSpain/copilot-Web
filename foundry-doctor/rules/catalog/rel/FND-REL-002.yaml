@@ -25,7 +25,7 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.Storage/storageAccounts 2026-09-01"
+    - { plane: management, provider: Microsoft.Storage, resourceType: storageAccounts, version: "2026-09-01" }
   preview: false
   notes: "No azd dependency: reads compiled ARM JSON or ARM control plane Microsoft.Storage/storageAccounts 2026-09-01 / 2026-09-01: stable) - storage/resource-manager/Microsoft.Storage/stable//openapi.json (SkuName enum."
 evidence:
@@ -67,29 +67,39 @@ sources:
   note: Built-in policy bf045164-79ba-4215-8f95-f8048dc1780b (audit geo-redundant storage).
 overlap:
   decision: adapt
+  provisional: true
   coverage: partial
   rationale: PSRule Azure.Storage.UseReplication tests the same sku.name values and WARA e6c7e1cc is the matching recommendation.
     Azure Policy bf045164 audits geo-redundant only (not ZRS). Foundry Doctor adds scope (only storage accounts a Foundry
     project or capability host uses), the Agent Service GZRS expectation, and per-profile severity. Without that scoping this
     is a reuse of PSRule.
-  psrule:
-  - Azure.Storage.UseReplication
-  azurePolicy:
-  - bf045164-79ba-4215-8f95-f8048dc1780b
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: searched-match
+      matches:
+      - Azure.Storage.UseReplication
+    azurePolicy:
+      state: searched-match
+      matches:
+      - bf045164-79ba-4215-8f95-f8048dc1780b
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/rel
 tests:
   positive:
-  - Standard_ZRS storage account passes
-  - Standard_GZRS Agent Service storage passes including the GZRS note
-  negative:
   - Standard_LRS storage account referenced by a project reports single-zone redundancy
   - Standard_ZRS Agent Service storage reports the GZRS note at info
+  negative:
+  - Standard_ZRS storage account passes
+  - Standard_GZRS Agent Service storage passes including the GZRS note
   skipped:
   - 'storage account not referenced by Foundry: out of scope'
   - 'no control-plane access in live mode: skipped with the missing capability'

@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "1",
+  "tool": "foundry-doctor",
+  "toolVersion": "0.1.0-dev",
+  "profile": "foundry-test",
+  "reviewDir": "review/sample.review",
+  "summary": {
+    "total": 2,
+    "inline": 1,
+    "manifestOnly": 1
+  },
+  "files": [
+    {
+      "path": "azure.yaml",
+      "reviewPath": "review/sample.review/azure.yaml",
+      "commentStyle": "yaml",
+      "annotationCount": 1
+    }
+  ],
+  "annotations": [
+    {
+      "id": "fp-1",
+      "kind": "finding",
+      "ruleId": "FND-CFG-001",
+      "severity": "error",
+      "category": "must-have",
+      "file": "azure.yaml",
+      "line": 3,
+      "column": 1,
+      "message": "services must declare at least one service",
+      "recommendation": "Add a supported service definition.",
+      "fingerprint": "fp-1",
+      "inline": true
+    },
+    {
+      "id": "fp-2",
+      "kind": "finding",
+      "ruleId": "FND-NET-001",
+      "severity": "warning",
+      "message": "Foundry account public access is enabled.",
+      "inline": false,
+      "inlineReason": "imprecise-location"
+    }
+  ]
+}

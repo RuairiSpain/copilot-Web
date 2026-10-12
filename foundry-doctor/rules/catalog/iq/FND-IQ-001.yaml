@@ -23,9 +23,12 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "2026-08-01-preview"
-    - "2026-05-01-preview"
-    - "2026-04-01"
+    - { plane: data, service: AzureAISearch, endpointFamily: knowledgesources, version: "2026-08-01-preview" }
+    - { plane: data, service: AzureAISearch, endpointFamily: indexes, version: "2026-08-01-preview" }
+    - { plane: data, service: AzureAISearch, endpointFamily: knowledgesources, version: "2026-05-01-preview" }
+    - { plane: data, service: AzureAISearch, endpointFamily: indexes, version: "2026-05-01-preview" }
+    - { plane: data, service: AzureAISearch, endpointFamily: knowledgesources, version: "2026-04-01" }
+    - { plane: data, service: AzureAISearch, endpointFamily: indexes, version: "2026-04-01" }
   preview: true
   notes: "API 2026-08-01-preview: searchIndexParameters.queryHints, baseFilter; spec docs read. API 2026-05-01-preview: searchIndexParameters.baseFilter added; spec read. API 2026-04-01: index field filterable attribute only; no queryHints/baseFilter."
 evidence:
@@ -78,16 +81,24 @@ sources:
     verifiedVia: refs/rest-api-specs/specification/search/data-plane/Search/models-service.tsp (SearchIndexKnowledgeSourceParameters, baseFilter @added 2026-05-01-preview, queryHints @added 2026-08-01-preview)
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     No PSRule, Azure Policy, Defender, Advisor, Bicep linter or Checkov rule reads Search index schemas or
     Foundry IQ knowledge sources. The value is cross-object correlation (knowledge source to index fields).
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/iq

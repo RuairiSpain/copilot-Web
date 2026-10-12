@@ -1,0 +1,65 @@
+name: foundry-doctor-runtime-diagnostics
+
+# Manual-only runtime diagnostics. Explicit protected environment, OIDC only
+# (no client secrets). Optional self-hosted runner label for VNet-isolated
+# Foundry projects. Read-only; never runs on pull requests.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Protected GitHub environment to use.
+        type: environment
+        required: true
+      runner-label:
+        description: Runner label (ubuntu-latest, or a self-hosted VNet runner label).
+        type: string
+        default: ubuntu-latest
+      profile:
+        type: choice
+        options: [dev, test, prod]
+        default: test
+
+permissions:
+  contents: read
+
+jobs:
+  runtime:
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: 30
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: foundry-doctor/go.mod
+          cache-dependency-path: foundry-doctor/go.sum
+      - name: Azure login (OIDC)
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Build foundry-doctor
+        working-directory: foundry-doctor
+        run: go build -trimpath -o "$RUNNER_TEMP/foundry-doctor" ./cmd/foundry-doctor
+      - name: Run runtime diagnostics
+        shell: bash
+        env:
+          PROFILE: ${{ inputs.profile }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/evidence"
+          "$RUNNER_TEMP/foundry-doctor" doctor --runtime --profile "$PROFILE" --strict \
+            --format json --out "$RUNNER_TEMP/evidence/runtime.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: foundry-doctor-runtime-evidence
+          path: ${{ runner.temp }}/evidence
+          if-no-files-found: warn
+          retention-days: 14

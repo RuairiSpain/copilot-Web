@@ -56,7 +56,10 @@ Rule: the doctor never needs prompts to produce findings; prompts are optional c
 
 - One cobra command model, two host adapters: the standalone `cmd/foundry-doctor` in the core module and the azd extension host in its own module (`foundry-doctor/extension/`, ADR-005), because `azdext` requires a newer Go than the core.
 - The extension must declare capabilities `custom-commands` and `metadata` (see notes) and must use `requiredAzdVersion` (>= 1.34.2 recommended; see notes).
-- Exit codes: azd propagates a positive extension exit code (`extension-framework.md`, "Invoking Extension Commands"), so `0` pass, `1` operational failure, `2` gate breach can be preserved under `azd foundry`.
+- Exit codes: azd propagates a positive extension exit code (`extension-framework.md`, "Invoking Extension Commands").
+  Foundry Doctor translates outcomes to its own PRD contract: `0` no threshold findings, `1` findings,
+  `2` requested validation unable to run, `3` skipped under `--strict`, and `4` internal/adapter protocol failure.
+  The azd documentation's example meanings for 1 and 2 are not Foundry Doctor's meanings.
 
 ## Collision behaviour (closed after the Phase 0 review)
 
@@ -74,12 +77,13 @@ The extension SDK reserves these global flags and enforces them at startup with 
 (`cli/azd/docs/extensions/extensions-style-guide.md`). An extension that registers one for another purpose fails to start.
 The PRD's command surface conflicts in two places:
 
-- `--output <path>` (doctor, annotate): use `--out <path>`. In extension mode `-o/--output` keeps azd's meaning (output format).
-  The standalone binary may accept `--output` as an alias only if it never shares code paths with extension registration.
+- The former report-path spelling is replaced by `--out <path>` (doctor, annotate). In extension mode
+  `-o/--output` keeps azd's meaning (output format).
+  The standalone binary also uses `--out`; it does not add a divergent `--output` path alias.
 - `compare <left-env> <right-env>` cannot take `--environment`/`-e`; the style guide suggests `--env-name` or `--target-env`.
   The PRD form uses positional arguments, which is compatible.
 
-The PRD text is not changed; this ADR is the record and the command layer follows it in Phase 1.
+The PRD command surface is updated to reflect this decision and the command layer follows it in Phase 1.
 **Decision (project owner, 2026-10-05): use `--out <path>`** for every command that writes a file, in the extension and in the standalone binary (see ADR-007).
 
 ## Unverified

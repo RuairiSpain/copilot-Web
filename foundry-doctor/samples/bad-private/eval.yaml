@@ -1,0 +1,5 @@
+dataset:
+  path: evals\customer-prompts.jsonl
+evaluators:
+  - name: groundedness
+    kind: built-in

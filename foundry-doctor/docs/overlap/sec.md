@@ -1,5 +1,8 @@
 # Overlap fragment: SEC (FND-SEC-001..014)
 
+Research-state semantics are defined in `research-status.md`; unavailable Defender/Advisor sources
+are unresearched, not searched-no-match, and affected decisions are provisional.
+
 Researched 2026-10-04 against the local clones listed in `docs/development/phase-0-research-brief.md`.
 Property names and enums come from `Azure/azure-rest-api-specs` (versions in each rule's
 `compatibility.apiVersions`). Overlap IDs come from PSRule for Azure docs and rule YAML, Azure Policy

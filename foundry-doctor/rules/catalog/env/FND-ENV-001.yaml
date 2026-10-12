@@ -43,7 +43,7 @@ fix: |
   resourceGroup: rg-${AZURE_ENV_NAME}
 sources:
   - url: https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview
-    lastVerified: "2026-10-04"
+    lastVerified: "2026-10-05"
     verifiedVia: refs/azd-docs/articles/azure-developer-cli/environments-overview.md
     note: Each environment has its own Azure resource group and configuration; .azure/<env>/.env stores AZURE_RESOURCE_GROUP.
   - url: https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
@@ -90,16 +90,24 @@ sources:
       code read, although the schema text says it overrides the group used for infrastructure provisioning.
 overlap:
   decision: native
+  provisional: false
   coverage: none
   rationale: >-
     Cross-environment comparison of azd environments is azd-specific. PSRule, Policy, Defender and Advisor evaluate one
     deployed resource or template at a time and have no concept of sibling azd environments.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: searched-none
+    azurePolicy:
+      state: searched-none
+    defender:
+      state: searched-none
+    advisor:
+      state: searched-none
+    bicepLinter:
+      state: searched-none
+    checkov:
+      state: searched-none
 implementation:
   owner: native
   package: internal/rules/env

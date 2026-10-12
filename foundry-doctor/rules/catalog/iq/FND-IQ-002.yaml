@@ -22,9 +22,12 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "2026-08-01-preview"
-    - "2026-05-01-preview"
-    - "2026-04-01"
+    - { plane: data, service: AzureAISearch, endpointFamily: indexes, version: "2026-08-01-preview" }
+    - { plane: data, service: AzureAISearch, endpointFamily: knowledgesources, version: "2026-08-01-preview" }
+    - { plane: data, service: AzureAISearch, endpointFamily: indexes, version: "2026-05-01-preview" }
+    - { plane: data, service: AzureAISearch, endpointFamily: knowledgesources, version: "2026-05-01-preview" }
+    - { plane: data, service: AzureAISearch, endpointFamily: indexes, version: "2026-04-01" }
+    - { plane: data, service: AzureAISearch, endpointFamily: knowledgesources, version: "2026-04-01" }
   preview: true
   notes: "API 2026-08-01-preview / 2026-05-01-preview: semanticConfigurationName optional on search index knowledge sources since. API 2026-04-01: semanticConfigurationName still required on the knowledge source."
 evidence:
@@ -73,17 +76,25 @@ sources:
     note: Starting with 2026-05-01-preview semanticConfigurationName is optional; earlier versions still require it.
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     PSRule for Azure checks Search service SKU, naming, managed identity and SLA replica counts only
     (Azure.Search.*); nothing inspects index fields or semantic configurations. Checkov has only
     AzureSearchSLAIndex/AzureSearchSLAQueryUpdates (replica counts).
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/iq

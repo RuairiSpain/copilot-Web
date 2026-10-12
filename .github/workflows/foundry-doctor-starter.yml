@@ -1,0 +1,33 @@
+name: foundry-doctor-pr
+
+# Starter workflow: runs the offline doctor on pull requests that touch the
+# Foundry project. Uses pull_request (never pull_request_target) so fork PRs
+# run with a read-only token and no secrets.
+
+on:
+  pull_request:
+    paths:
+      - "foundry-doctor/**"
+      - "foundry-doctor/samples/**"
+      - ".github/workflows/foundry-doctor-*.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundry-doctor-pr-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  doctor:
+    # Reusable workflow needs the caller to grant what the SARIF job requests.
+    permissions:
+      contents: read
+      security-events: write
+    uses: ./.github/workflows/foundry-doctor-offline.yml
+    with:
+      profile: dev
+      fail-on: high
+      project-path: foundry-doctor/samples/good
+      strict: true

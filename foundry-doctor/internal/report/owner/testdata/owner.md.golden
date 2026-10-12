@@ -1,0 +1,32 @@
+# Foundry Doctor WAF owner summary
+
+> Scope-limited architecture summary. This is not a certification or a complete Well-Architected review.
+
+- Profile: `foundry-prod`
+- Decision: Proceed with conditions\: mandatory controls need remediation or manual review\.
+- Assessed scope: local project evidence only
+
+## Summary
+
+| State | Count |
+|---|---|
+| FAIL | 1 |
+| WARNING | 1 |
+| UNKNOWN | 1 |
+| QUESTION | 1 |
+| SKIPPED | 1 |
+| PASS | 2 |
+
+## Top five actions
+
+- **Managed identities used** (FAIL, security): Use managed identity\. Source: <https://learn.microsoft.com/example> (`2026-10-05`)
+- **DR strategy question** (QUESTION, reliability): Record the DR decision\.
+
+## Unassessed scope
+
+- Telemetry sink exists (UNKNOWN, operations)
+
+## Limitations
+
+- Not a certification\.
+- Control\-plane evidence was not available\.

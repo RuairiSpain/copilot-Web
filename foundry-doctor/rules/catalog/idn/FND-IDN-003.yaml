@@ -25,8 +25,8 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.Authorization/roleAssignments 2022-04-01"
-    - "Microsoft.ManagedIdentity/userAssignedIdentities 2024-11-30"
+    - { plane: management, provider: Microsoft.Authorization, resourceType: roleAssignments, version: "2022-04-01" }
+    - { plane: management, provider: Microsoft.ManagedIdentity, resourceType: userAssignedIdentities, version: "2024-11-30" }
   preview: false
   notes: "Not version dependent; reads compiled ARM JSON (azd 1.36.0-beta.1 clone checked) Microsoft.Authorization/roleAssignments 2022-04-01: principalId, principalType enum User, Group, ServicePrincipal, ForeignGroup, Device, AgentUser, AgentServicePrincipal. Microsoft.ManagedIdentity/userAssignedIdentities 2024-11-30: properties.principalId, properties.clientId."
 evidence:
@@ -84,6 +84,7 @@ sources:
     note: Documents that the project managed identity object ID must be looked up to obtain the client ID, showing that the two are different values.
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     No PSRule rule, Checkov check or Bicep linter rule inspects Microsoft.Authorization/roleAssignments
@@ -91,12 +92,19 @@ overlap:
     roleAssignments/principalType is the PIM-only policy, which restricts who may create assignments
     and does not test the template. The check is a small, deterministic template inspection tied to a
     documented replication failure, so it is native.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/idn

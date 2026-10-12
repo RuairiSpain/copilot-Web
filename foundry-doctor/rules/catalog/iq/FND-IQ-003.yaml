@@ -21,8 +21,8 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "2026-04-01"
-    - "2026-08-01-preview"
+    - { plane: data, service: AzureAISearch, endpointFamily: indexes, version: "2026-04-01" }
+    - { plane: data, service: AzureAISearch, endpointFamily: indexes, version: "2026-08-01-preview" }
   preview: true
 evidence:
   description: >-
@@ -70,14 +70,22 @@ sources:
     note: Expected field dimensions by modelName (min and max).
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: No lower-level tool validates Search index vector schemas; Foundry-specific correlation (index to knowledge source) is the value.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/iq

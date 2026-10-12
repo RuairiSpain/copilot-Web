@@ -3,10 +3,13 @@
 - Status: Accepted (Phase 0 spike; reviewed by the Foundry lead, who reproduced the CLI results)
 - Date: 2026-10-04
 - Owner: `internal/bicep`
-- Tested CLI: **Bicep CLI version 0.47.16 (3f73e1a234)**, `linux-x64` standalone binary
+- Current compatibility contract: **Bicep CLI 0.48.1**, pinned by the tagged-spike CI job. A
+  successful tagged CI run is not yet evidenced.
+- Historical spike CLI: **Bicep CLI version 0.47.16 (3f73e1a234)**, `linux-x64` standalone binary
   (`https://github.com/Azure/bicep/releases/download/v0.47.16/bicep-linux-x64`), generator version in ARM
-  metadata `0.47.16.16243`. Tag `v0.48.1` was listed by `git ls-remote` but has no `bicep-linux-x64`
-  asset (HTTP 404), so v0.47.16 is the newest installable release found.
+  metadata `0.47.16.16243`. At the time of that historical run, the `v0.48.1` standalone
+  `bicep-linux-x64` asset returned HTTP 404. That observation does not define the current contract:
+  current CI installs 0.48.1 with `az bicep install --version v0.48.1`.
 - Licence: MIT, Copyright (c) Microsoft Corporation (`bicep --license`, repo `LICENSE`). The binary is
   not vendored in this repository; it is an external prerequisite.
 - Host: Linux, no .NET SDK installed (standalone binary), run with `DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1`
@@ -44,7 +47,7 @@ be proven.
   `.bicep` file and, at most, `confidence=likely`. No line number is emitted unless the compiler
   supplied it.
 
-## Evidence (all from fixtures in `test/spikes/bicep/`)
+## Historical 0.47.16 evidence (all from fixtures in `test/spikes/bicep/`)
 
 Fixtures: `main.bicep` (parameters, `@secure()` param, variable, `if` resource, `for` resource,
 module, `for`+`if` module, child resource via `parent:`, outputs), `modules/storage.bicep`,
@@ -205,10 +208,15 @@ A secondary `JSONRPC` implementation can satisfy the same interface later.
 ## Consequences
 
 - No Bicep parsing code; behaviour follows the pinned compiler (record version in each report).
-- Phase 1 task: re-run the spike on Bicep 0.48.1 or later when a linux-x64 release asset exists (the `v0.48.1` tag exists, but its asset returned HTTP 404 during Phase 0, so the spike ran on 0.47.16), and record the compatibility floor as the lowest version in the CI matrix. The earliest Bicep version that supports `--diagnostics-format sarif`, `--stdout` and `jsonrpc` is unverified.
+- The current contract is 0.48.1. The tagged CI job installs that version through Azure CLI and is
+  configured to run the Bicep and azd spikes, but no successful workflow run is recorded. The local
+  Windows ARM64 tagged command passed with the official-source 0.48.1 executable built from commit
+  `cec7951cf694f1067eb17b5b062209fb66c710a9`. The earliest Bicep version that supports
+  `--diagnostics-format sarif`, `--stdout` and `jsonrpc` is unverified.
 - Interface notes for Phase 1 and Phase 6 (Foundry lead review): `ParamsResult` holds the two decoded JSON documents and a nullable `templateSpecId`; `Diagnostic` gets optional `EndLine` and `EndColumn`, filled by a second implementation over `bicep jsonrpc` (the text and SARIF outputs have no end position); a SARIF result with no `level` means `warning`; `build` writes SARIF to stderr and `lint` to stdout, so parsing must be stream-aware and must ignore non-diagnostic stderr lines such as the experimental-features warning. Annotated copies (Phase 6) can place compiler diagnostics reliably but cannot place ARM-derived findings, because no Bicep output maps a resource to source lines; Phase 6 must accept diagnostics-only annotation or a labelled heuristic.
-- The Bicep CLI is a runtime prerequisite for Bicep checks (exit 2 when absent). CI must pin a version
-  (0.47.16 here) and run `go test -tags spike` against it to detect output changes.
+- The Bicep CLI is a runtime prerequisite for Bicep checks (exit 2 when absent). CI pins 0.48.1 and
+  is configured to run `go test -tags spike` against it to detect output changes; configuration is
+  not evidence of a successful run.
 - ARM-level findings have no source line in MVP; this is a documented limitation. Revisit when the
   `sourceMapping` feature stabilises or through the jsonrpc API; `symbolicNameCodegen` could improve
   identity matching.

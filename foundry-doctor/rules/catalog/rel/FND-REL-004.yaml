@@ -25,7 +25,7 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.Authorization/locks 2020-05-01"
+    - { plane: management, provider: Microsoft.Authorization, resourceType: locks, version: "2020-05-01" }
   preview: false
   notes: "No azd dependency: reads compiled ARM JSON or ARM control plane Microsoft.Authorization/locks 2020-05-01 / 2020-05-01: stable) - resources/resource-manager/Microsoft.Authorization/locks/stable//locks.json."
 evidence:
@@ -64,27 +64,35 @@ sources:
   note: Built-in policy 78460a36-508a-49a4-b2b2-2f5ec564f4bb (denyAction delete); complementary, not equivalent.
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: No PSRule for Azure rule, Checkov check, Defender recommendation or Bicep linter rule for management locks was
     found in the clones (PSRule Azure.Resource.* covers tags and regions only). Azure Policy 78460a36 (Do not allow deletion
     of resource types) blocks deletes by resource type instead of requiring a lock, so it is a different control and is listed
     as related only. The Foundry-specific value is knowing which resources form the project's state (via connections and capability
     host) and checking inherited locks.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/rel
 tests:
   positive:
+  - Cosmos account referenced by the capability host with no lock at any scope reports missing delete lock
+  negative:
   - Foundry account with a CanNotDelete lock resource passes
   - storage account covered by a resource-group-scope lock passes in live mode
-  negative:
-  - Cosmos account referenced by the capability host with no lock at any scope reports missing delete lock
   skipped:
   - 'no Microsoft.Authorization/locks/read permission in live mode: skipped with the missing capability'
   - 'dependency not used by the project: out of scope'

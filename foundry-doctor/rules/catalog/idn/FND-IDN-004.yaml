@@ -26,7 +26,7 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.Authorization/roleAssignments 2022-04-01"
+    - { plane: management, provider: Microsoft.Authorization, resourceType: roleAssignments, version: "2022-04-01" }
   preview: false
   notes: "Not version dependent; reads compiled ARM JSON and ARM role assignments (azd 1.36.0-beta.1 clone checked) Microsoft.Authorization/roleAssignments 2022-04-01: roleDefinitionId, principalId, principalType, condition, conditionVersion."
 evidence:
@@ -42,11 +42,16 @@ evidence:
     application identity at subscription, management group or resource group scope. Report Owner,
     User Access Administrator and Role Based Access Control Administrator at resource scope as the
     same failure. Report Contributor at the scope of a single Foundry resource as info with the
-    reason that narrower Foundry roles exist. Downgrade a Role Based Access Control Administrator or
-    User Access Administrator assignment that carries a condition to info (the documentation
-    recommends conditions to constrain role assignment). Skip assignments whose principal cannot be
-    resolved and report the unresolved principal. Identities listed in the Foundry Doctor config as
-    deployment identities are excluded.
+    reason that narrower Foundry roles exist.     A condition is recorded as evidence and its semantics must be evaluated. A condition that cannot
+    be evaluated makes the result uncertain. For Role Based Access Control Administrator, evaluate
+    the effective delegated role IDs, principal types or principal IDs and scopes allowed by the
+    condition; a verified restrictive condition can make the assignment least-privileged, while an
+    unrestricted or ineffectively restricted assignment fails. An assignment whose principal cannot be
+    correlated to an application or deployment identity is uncertain, not skipped, and records the
+    unresolved principal. Likewise, if the caller can enumerate the target scope but lacks permission
+    to enumerate one or more ancestor scopes, effective privileged access is uncertain because an
+    inherited assignment may be hidden. Identities listed in the Foundry Doctor config as deployment
+    identities are excluded.
   confidence: likely
 recommendation: >-
   Replace Owner, Contributor, User Access Administrator and Role Based Access Control Administrator
@@ -74,6 +79,10 @@ sources:
     lastVerified: "2026-10-04"
     verifiedVia: github.com/MicrosoftDocs/azure-docs articles/role-based-access-control/best-practices.md (ms.date 03/30/2025)
     note: Grant the least privilege; avoid broader roles at broader scopes; limit privileged administrator role assignments; use a narrow scope; add a condition when a role can create role assignments.
+  - url: https://learn.microsoft.com/azure/role-based-access-control/delegate-role-assignments-overview
+    lastVerified: "2026-10-04"
+    verifiedVia: Microsoft Learn constrained delegation overview
+    note: Role Based Access Control Administrator can be constrained with conditions over assignable role definitions and principal attributes to delegate only specific role-assignment actions.
   - url: https://learn.microsoft.com/azure/foundry/concepts/rbac-foundry
     lastVerified: "2026-10-04"
     verifiedVia: refs/azure-ai-docs/articles/foundry/concepts/rbac-foundry.md (ms.date 09/16/2026, role permission tables)
@@ -90,20 +99,9 @@ sources:
     lastVerified: "2026-10-04"
     verifiedVia: github.com/MicrosoftDocs/azure-docs articles/role-based-access-control/built-in-roles/privileged.md (ms.date 07/01/2026; role id fields)
     note: Role definition GUIDs.
-  - url: https://github.com/MicrosoftDocs/azure-docs/blob/eb1e05deecc53c7a1a192453a3b8183e45f73c10/articles/role-based-access-control/built-in-roles.md
-    lastVerified: '2026-10-05'
-    verifiedVia: >-
-      MicrosoftDocs/azure-docs main @ eb1e05deecc53c7a1a192453a3b8183e45f73c10 (2026-10-04),
-      articles/role-based-access-control/built-in-roles.md (ms.date 09/10/2026), fetched from
-      raw.githubusercontent.com on 2026-10-05; each GUID matched against the role-name column of the table. The local
-      clone does not contain this path (sparse checkout), so the file was fetched directly.
-    note: >-
-      Verified GUIDs: Owner 8e3af657-a8ff-443c-a75c-2fe8c4bcb635; Contributor b24988ac-6180-42a0-ab88-20f7382dd24c;
-      User Access Administrator 18d7d88d-d35e-4fb5-a5c3-7773c20a72d9; Role Based Access Control Administrator
-      f58310d9-a9f6-439a-9e8d-f62e7b41a168; Foundry Owner c883944f-8b7b-4483-af10-35834be79c4a; Foundry Account Owner
-      e47c6f54-e4a2-4754-9501-8e0985b135e1. The first four are listed under the Privileged category of the reference.
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     No PSRule rule, Checkov check (CKV_AZURE_39 tests custom roles with subscription-owner
@@ -113,12 +111,19 @@ overlap:
     could not be verified from the local sources. The Foundry-specific value is knowing which
     principals are the project, account and agent identities and that Foundry data-plane access does
     not need these roles.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/idn
@@ -130,22 +135,26 @@ tests:
     - project-identity-contributor-on-resource-group
     - workload-identity-owner-on-subscription
     - project-identity-user-access-administrator-no-condition
+    - project-identity-rbac-administrator-with-ineffective-condition
   negative:
     - project-identity-foundry-user-on-account
     - pipeline-identity-contributor-on-project
-    - rbac-administrator-with-condition
+    - project-identity-rbac-administrator-with-restrictive-condition
   skipped:
-    - principal-is-parameter
-    - live-role-assignments-not-readable
+    - control-plane-role-assignment-inventory-unavailable-at-every-required-scope
   uncertain:
+    - principal-is-parameter-and-cannot-be-correlated-to-an-application-or-deployment-identity
+    - principal-id-not-present-in-the-available-identity-inventory
+    - current-scope-assignments-readable-but-one-or-more-ancestor-scopes-not-readable
     - identity-is-both-application-and-deployment
+    - rbac-administrator-with-unresolved-condition
 notes: >-
-  Unverified: Defender for Cloud (Defender CSPM permission management) recommendations about overprivileged
-  identities; no Defender reference was in the local sources. Product decision inside a verified rule: Contributor at
-  the scope of a single Foundry resource is reported as info, not a failure, because the Foundry sources themselves
-  list Contributor as the minimum role for several tools and the CI/CD quickstart. Foundry Owner
-  (c883944f-8b7b-4483-af10-35834be79c4a) and Foundry Account Owner (e47c6f54-e4a2-4754-9501-8e0985b135e1) are broad
-  Foundry roles; they are not in the privileged administrator roles documentation, so the rule does not flag them.
-  Phase 1 fact check (2026-10-05): the Owner, Contributor, User Access Administrator, Role Based Access Control
-  Administrator, Foundry Owner and Foundry Account Owner GUIDs were matched to role names in the built-in roles
-  reference (ms.date 09/10/2026).
+  Unverified: Defender for Cloud (Defender CSPM permission management) recommendations about
+  overprivileged identities; no Defender reference was in the local sources. Product decision inside
+  a verified rule: Contributor at the scope of a single Foundry resource is reported as info, not a
+  failure, because the Foundry sources themselves list Contributor as the minimum role for several
+  tools and the CI/CD quickstart. Foundry Owner (c883944f-8b7b-4483-af10-35834be79c4a) and Foundry
+  Account Owner (e47c6f54-e4a2-4754-9501-8e0985b135e1) are broad Foundry roles; they are not in the
+  privileged administrator roles documentation, so the rule does not flag them. Missing all
+  role-assignment inventory is Skipped; partial inventory, unresolved principal correlation, or
+  missing permission at an ancestor scope is Uncertain and must never be reported as compliant.

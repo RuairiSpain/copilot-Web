@@ -61,7 +61,7 @@ environments. `foundry-doctor scaffold` may propose a first `policy.environments
 
 ### Related decision: the output flag
 
-The PRD's `--output <path>` becomes `--out <path>` in every command that writes a file, in the extension and in the standalone binary, so the two
+The former report-path spelling becomes `--out <path>` in every command that writes a file, in the extension and in the standalone binary, so the two
 command surfaces are identical. The output format is selected with `--format` in both. Under azd, `-o/--output` keeps azd's meaning and Foundry Doctor
 ignores it (ADR-003).
 

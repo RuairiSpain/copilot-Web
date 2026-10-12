@@ -24,8 +24,10 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.ApiManagement diagnostics 2025-09-01-preview"
-    - "Microsoft.ApiManagement diagnostics 2024-05-01"
+    - { plane: management, provider: Microsoft.ApiManagement, resourceType: service/diagnostics, version: "2025-09-01-preview" }
+    - { plane: management, provider: Microsoft.ApiManagement, resourceType: service/apis/diagnostics, version: "2025-09-01-preview" }
+    - { plane: management, provider: Microsoft.ApiManagement, resourceType: service/diagnostics, version: "2024-05-01" }
+    - { plane: management, provider: Microsoft.ApiManagement, resourceType: service/apis/diagnostics, version: "2024-05-01" }
   preview: true
   notes: "No azd dependency: reads compiled ARM JSON or ARM control plane Microsoft.ApiManagement diagnostics 2025-09-01-preview / 2024-05-01 / 2025-09-01-preview: preview; largeLanguageModel property exists only in preview specs in the reviewed clone, the stable does not have it) - apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/preview//openapi.json."
 evidence:
@@ -52,30 +54,39 @@ sources:
     (messages=all, maxSizeInBytes max 262144); HttpMessageDiagnostic.body.bytes max 8192.
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: No PSRule APIM rule, Azure Policy built-in in the reviewed APIM policy folder, Defender or Checkov
     check covers LLM message logging. Foundry-specific semantics (AI gateway in front of a Foundry deployment) make
     this native. Whether message logging is acceptable is a data-governance choice, so severity is info in dev and
     escalates with the profile.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/sec
 tests:
   positive:
-  - largeLanguageModel.logs enabled without requests/responses passes
-  negative:
   - largeLanguageModel.requests.messages all fails
   - responses.messages all fails
   - frontend.request.body.bytes > 0 on an LLM API fails
+  negative:
+  - largeLanguageModel.logs enabled without requests/responses passes
   skipped:
   - diagnostic uses an apiVersion without largeLanguageModel is skipped
-  - 'uncertain: body.bytes > 0 on an API that is not demonstrably an LLM API is reported uncertain'
+  uncertain:
+  - body.bytes above zero on an API that is not demonstrably an LLM API
 testability: Deterministic on ARM JSON when apiVersion carries largeLanguageModel; older API versions are skipped.
 notes: 'Phase 8 preview schema: property names verified against 2025-09-01-preview only. The rule treats prompt
   logging as a security/privacy recommendation (basis security), not a platform constraint.'

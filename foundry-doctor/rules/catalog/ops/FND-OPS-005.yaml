@@ -26,7 +26,7 @@ compatibility:
   azd: '>=1.34.2 <=1.36.0-beta.1'
   extensions: {}
   apiVersions:
-  - '2026-09-01'
+  - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts/projects, version: '2026-09-01' }
   preview: true
   notes: >-
     azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects
@@ -97,6 +97,7 @@ sources:
     BCP334 and BCP335 warn that a value can be shorter or longer than the target's configured minimum or maximum length.
 overlap:
   decision: adapt
+  provisional: true
   coverage: partial
   rationale: >-
     PSRule for Azure has one name rule per resource type that covers most of the table (Azure.Storage.Name, Azure.APIM.Name,
@@ -107,25 +108,34 @@ overlap:
     Foundry Doctor adapts the idea: one table-driven rule across the whole Foundry stack, resolving azd environment values,
     with the table sourced and dated. PSRule documents differ from the Learn table for Log Analytics (3-63 versus 4-63)
     and Application Insights (1-255 versus 1-260), so the Learn table is the authority here.
-  psrule:
-  - Azure.Storage.Name
-  - Azure.APIM.Name
-  - Azure.Search.Name
-  - Azure.Cosmos.AccountName
-  - Azure.KeyVault.Name
-  - Azure.ACR.Name
-  - Azure.Log.Name
-  - Azure.AppInsights.Name
-  - Azure.ContainerApp.Name
-  - Azure.Group.Name
-  - Azure.AI.FoundryNaming
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter:
-  - BCP334
-  - BCP335
-  checkov: []
+  research:
+    psrule:
+      state: searched-match
+      matches:
+      - Azure.Storage.Name
+      - Azure.APIM.Name
+      - Azure.Search.Name
+      - Azure.Cosmos.AccountName
+      - Azure.KeyVault.Name
+      - Azure.ACR.Name
+      - Azure.Log.Name
+      - Azure.AppInsights.Name
+      - Azure.ContainerApp.Name
+      - Azure.Group.Name
+      - Azure.AI.FoundryNaming
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: searched-match
+      matches:
+      - BCP334
+      - BCP335
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/ops

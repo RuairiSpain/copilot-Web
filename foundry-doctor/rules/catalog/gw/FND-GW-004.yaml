@@ -20,8 +20,8 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.ApiManagement/service/apis 2025-09-01-preview"
-    - "Microsoft.ApiManagement/service/apis 2024-05-01"
+    - { plane: management, provider: Microsoft.ApiManagement, resourceType: service/apis, version: "2025-09-01-preview" }
+    - { plane: management, provider: Microsoft.ApiManagement, resourceType: service/apis, version: "2024-05-01" }
   preview: true
   notes: "Microsoft.ApiManagement/service/apis 2025-09-01-preview / 2024-05-01: properties.path read in spec."
 evidence:
@@ -63,17 +63,25 @@ sources:
     verifiedVia: refs/rest-api-specs/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/preview/2025-09-01-preview/openapi.json (ApiContractProperties.path "Relative URL uniquely identifying this API and all of its resource paths within the API Management service instance", maxLength 400)
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: No PSRule, Policy, Defender, Advisor or Checkov control checks API path uniqueness; it is a cross-resource uniqueness check.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
-  package: internal/providers/apim
+  package: internal/rules/gw
 testability: Fully offline from compiled ARM; pure grouping function.
 tests:
   positive:

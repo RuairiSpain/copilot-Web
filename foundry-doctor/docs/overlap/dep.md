@@ -1,5 +1,8 @@
 # Overlap fragment: DEP
 
+Research-state semantics are defined in `research-status.md`; empty Defender/Advisor arrays are
+unresearched by default and overlap decisions remain provisional.
+
 Phase 0 research, verified 2026-10-04 against the local clones in `refs/` (Learn source repositories and GitHub specs, because
 learn.microsoft.com is blocked), plus raw GitHub files where a clone was incomplete (noted per rule). Test scenario convention:
 `positive` = the rule reports a violation, `negative` = compliant input, `skipped` = the rule cannot run and says why, `uncertain`

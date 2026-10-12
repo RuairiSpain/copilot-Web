@@ -6,133 +6,131 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"time"
-
-	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
+	"regexp"
+	"strconv"
 )
 
-// ToolName is the name used in the report's tools section and as the adapter name.
-const ToolName = "bicep"
-
-// DiscoverOptions controls CLI discovery. `az bicep` is never used.
-type DiscoverOptions struct {
-	// ExplicitPath is the configured executable (flag, config or BICEP_PATH read by the caller).
-	// It must be absolute. When empty, `bicep` is looked up on PATH.
-	ExplicitPath string
-	// Required marks the tool as required for this run (a Bicep-backed project). The app layer
-	// turns a required tool that is not available into exit code 2; this package never fails.
-	Required bool
-	// LookPath finds an executable on PATH. Nil means exec.LookPath.
-	LookPath func(file string) (string, error)
-	// Runner executes `bicep --version`. Nil means ExecRunner.
-	Runner Runner
-	// Timeout bounds the version probe. Zero means 15 seconds.
-	Timeout time.Duration
+// Version is a parsed Bicep CLI version.
+type Version struct {
+	Major, Minor, Patch int
 }
 
-// Discovery is the outcome of Discover. Path is absolute when State is available or
-// unsupported-version and is what the compiler must execute.
-type Discovery struct {
+func (v Version) String() string { return fmt.Sprintf("%d.%d.%d", v.Major, v.Minor, v.Patch) }
+
+// Compare returns -1, 0 or 1.
+func (v Version) Compare(o Version) int {
+	for _, p := range [][2]int{{v.Major, o.Major}, {v.Minor, o.Minor}, {v.Patch, o.Patch}} {
+		if p[0] < p[1] {
+			return -1
+		}
+		if p[0] > p[1] {
+			return 1
+		}
+	}
+	return 0
+}
+
+// Contract is the parsed ContractVersion.
+var Contract = Version{0, 48, 1}
+
+var versionRE = regexp.MustCompile(`Bicep CLI version (\d+)\.(\d+)\.(\d+)`)
+
+// ParseVersion parses `bicep --version` output.
+func ParseVersion(out string) (Version, error) {
+	m := versionRE.FindStringSubmatch(out)
+	if m == nil {
+		return Version{}, errors.New("unrecognised version output")
+	}
+	var v Version
+	for i, dst := range []*int{&v.Major, &v.Minor, &v.Patch} {
+		n, err := strconv.Atoi(m[i+1])
+		if err != nil {
+			return Version{}, err
+		}
+		*dst = n
+	}
+	return v, nil
+}
+
+// Tool is a discovered, version-checked Bicep CLI.
+type Tool struct {
 	Path    string
 	Version Version
-	Status  sdk.ToolStatus
+	// Newer is true when the CLI is newer than the tested contract version.
+	Newer bool
+	// Source is "BICEP_PATH", "option" or "PATH".
+	Source string
 }
 
-// Available reports whether the compiler can be used.
-func (d Discovery) Available() bool { return d.Status.State == sdk.ToolAvailable }
+// DiscoverOptions controls discovery.
+type DiscoverOptions struct {
+	// Path is an explicit CLI path; "" or "auto" means BICEP_PATH then PATH.
+	Path     string
+	Getenv   func(string) string
+	LookPath func(string) (string, error)
+	Stat     func(string) (os.FileInfo, error)
+	Runner   Runner
+}
 
-// Discover finds the Bicep CLI and reads its version. It never returns an error: a missing,
-// unsupported or broken CLI is a sdk.ToolStatus.
-func Discover(ctx context.Context, opts DiscoverOptions) Discovery {
-	st := sdk.ToolStatus{Name: ToolName, Required: opts.Required, State: sdk.ToolMissing}
-	look := opts.LookPath
+// Discover locates the CLI (explicit path, BICEP_PATH, then `bicep` on PATH;
+// `az bicep` is not used) and verifies it meets the compatibility contract.
+// Failures are *ToolError values for which IsDependencyError is true.
+func Discover(ctx context.Context, o DiscoverOptions) (Tool, error) {
+	getenv, look, stat, runner := o.Getenv, o.LookPath, o.Stat, o.Runner
+	if getenv == nil {
+		getenv = os.Getenv
+	}
 	if look == nil {
 		look = exec.LookPath
 	}
-	runner := opts.Runner
+	if stat == nil {
+		stat = os.Stat
+	}
 	if runner == nil {
-		runner = ExecRunner{}
+		runner = ExecRunner{Timeout: defaultTimeout}
 	}
 
-	path := opts.ExplicitPath
+	var path, source string
 	switch {
-	case path != "":
-		if !filepath.IsAbs(path) {
-			st.State = sdk.ToolFailed
-			st.Detail = "the configured Bicep path must be absolute"
-			return Discovery{Status: st}
-		}
+	case o.Path != "" && o.Path != "auto":
+		path, source = o.Path, "option"
+	case getenv("BICEP_PATH") != "" && getenv("BICEP_PATH") != "auto":
+		path, source = getenv("BICEP_PATH"), "BICEP_PATH"
 	default:
 		p, err := look("bicep")
-		switch {
-		case errors.Is(err, exec.ErrDot):
-			st.Detail = "bicep resolves to a relative PATH entry; refusing to execute it"
-			return Discovery{Status: st}
-		case err != nil:
-			st.Detail = "bicep was not found on PATH"
-			return Discovery{Status: st}
-		}
-		abs, err := filepath.Abs(p)
 		if err != nil {
-			st.Detail = "bicep found on PATH but its path cannot be made absolute"
-			return Discovery{Status: st}
+			return Tool{}, toolErr(KindMissing, "bicep not found via BICEP_PATH or PATH", err)
 		}
-		path = abs
+		path, source = p, "PATH"
 	}
-	st.Path = path
-
-	fi, err := os.Stat(path)
-	switch {
-	case err != nil:
-		st.Detail = "the Bicep executable does not exist"
-		return Discovery{Status: st}
-	case fi.IsDir() || fi.Mode()&0o111 == 0:
-		st.Detail = "the Bicep path is not an executable file"
-		return Discovery{Status: st}
+	if source != "PATH" {
+		fi, err := stat(path)
+		if err != nil || fi.IsDir() {
+			return Tool{}, toolErr(KindMissing, "configured bicep path does not exist", err)
+		}
 	}
 
-	home, cleanup, err := tempHome()
+	res, err := runner.Run(ctx, path, []string{"--version"}, "")
 	if err != nil {
-		st.State = sdk.ToolFailed
-		st.Detail = "cannot create a temporary home for the version probe"
-		return Discovery{Path: path, Status: st}
+		var te *ToolError
+		if errors.As(err, &te) {
+			return Tool{}, err
+		}
+		if ctx.Err() != nil {
+			return Tool{}, ctx.Err()
+		}
+		return Tool{}, toolErr(KindNotExecutable, "bicep CLI could not be started", err)
 	}
-	defer cleanup()
-	timeout := opts.Timeout
-	if timeout <= 0 {
-		timeout = 15 * time.Second
+	if res.ExitCode != 0 {
+		return Tool{}, toolErr(KindNotExecutable, fmt.Sprintf("bicep --version exited %d", res.ExitCode), nil)
 	}
-	res, err := runner.Run(ctx, RunSpec{
-		Path: path, Args: []string{"--version"}, Dir: home, Env: MinimalEnv(home),
-		Timeout: timeout, MaxStdout: 64 << 10, MaxStderr: 64 << 10,
-	})
-	if err != nil || res.ExitCode != 0 {
-		st.State = sdk.ToolFailed
-		st.Detail = "`bicep --version` failed"
-		return Discovery{Path: path, Status: st}
+	v, perr := ParseVersion(string(res.Stdout) + string(res.Stderr))
+	if perr != nil {
+		return Tool{}, toolErr(KindVersionUnknown, "cannot determine bicep version", perr)
 	}
-	v, err := ParseVersion(string(res.Stdout))
-	if err != nil {
-		st.State = sdk.ToolFailed
-		st.Detail = "`bicep --version` printed an unrecognised version"
-		return Discovery{Path: path, Status: st}
+	if v.Compare(Contract) < 0 {
+		return Tool{}, toolErr(KindVersionTooOld,
+			fmt.Sprintf("bicep %s is older than the supported %s", v, ContractVersion), nil)
 	}
-	st.Version = v.String()
-	if v.Compare(MinVersion()) < 0 {
-		st.State = sdk.ToolUnsupported
-		st.Detail = fmt.Sprintf("Bicep %s is older than the minimum supported %s", v, MinVersion())
-		return Discovery{Path: path, Version: v, Status: st}
-	}
-	st.State = sdk.ToolAvailable
-	return Discovery{Path: path, Version: v, Status: st}
-}
-
-// tempHome creates an empty private directory used as HOME for one compiler run.
-func tempHome() (string, func(), error) {
-	dir, err := os.MkdirTemp("", "fdoctor-bicep-")
-	if err != nil {
-		return "", func() {}, fmt.Errorf("create temp home: %w", err)
-	}
-	return dir, func() { _ = os.RemoveAll(dir) }, nil
+	return Tool{Path: path, Version: v, Newer: v.Compare(Contract) > 0, Source: source}, nil
 }

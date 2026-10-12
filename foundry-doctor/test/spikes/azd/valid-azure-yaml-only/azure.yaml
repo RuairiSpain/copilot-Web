@@ -7,6 +7,8 @@ name: foundry-spike-valid
 
 requiredVersions:
   azd: ">= 1.34.2"
+  extensions:
+    azure.ai.projects: "1.0.0-beta.13"
 
 infra:
   provider: microsoft.foundry
