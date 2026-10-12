@@ -1,0 +1,517 @@
+{
+  "account-kind-is-parameter": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "kind": {
+        "type": "string"
+      }
+    },
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "[parameters('kind')]",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {},
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      }
+    ]
+  },
+  "account-public-absent-defaults": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "AIServices",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {},
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      }
+    ]
+  },
+  "account-public-access-is-parameter": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "pna": {
+        "type": "string"
+      }
+    },
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "AIServices",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {
+          "publicNetworkAccess": "[parameters('pna')]"
+        },
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      }
+    ]
+  },
+  "account-public-disabled-conditional-endpoint": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "deployPe": {
+        "type": "bool"
+      }
+    },
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "AIServices",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {
+          "publicNetworkAccess": "Disabled"
+        },
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "condition": "[parameters('deployPe')]",
+        "location": "swedencentral",
+        "name": "pe",
+        "properties": {
+          "privateLinkServiceConnections": [
+            {
+              "name": "c",
+              "properties": {
+                "groupIds": [
+                  "account"
+                ],
+                "privateLinkServiceId": "[resourceId('Microsoft.CognitiveServices/accounts', 'acct')]"
+              }
+            }
+          ],
+          "subnet": {
+            "id": "[parameters('peSubnetId')]"
+          }
+        },
+        "type": "Microsoft.Network/privateEndpoints"
+      }
+    ]
+  },
+  "account-public-disabled-endpoint-pending-live": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "AIServices",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {
+          "publicNetworkAccess": "Disabled"
+        },
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "pe",
+        "properties": {
+          "manualPrivateLinkServiceConnections": [
+            {
+              "name": "c",
+              "properties": {
+                "groupIds": [
+                  "account"
+                ],
+                "privateLinkServiceId": "[resourceId('Microsoft.CognitiveServices/accounts', 'acct')]"
+              }
+            }
+          ],
+          "subnet": {
+            "id": "[parameters('peSubnetId')]"
+          }
+        },
+        "type": "Microsoft.Network/privateEndpoints"
+      }
+    ]
+  },
+  "account-public-disabled-looped-endpoint": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "AIServices",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {
+          "publicNetworkAccess": "Disabled"
+        },
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "copy": {
+          "count": 2,
+          "name": "pes"
+        },
+        "location": "swedencentral",
+        "name": "pe",
+        "properties": {
+          "privateLinkServiceConnections": [
+            {
+              "name": "c",
+              "properties": {
+                "groupIds": [
+                  "account"
+                ],
+                "privateLinkServiceId": "[resourceId('Microsoft.CognitiveServices/accounts', 'acct')]"
+              }
+            }
+          ],
+          "subnet": {
+            "id": "[parameters('peSubnetId')]"
+          }
+        },
+        "type": "Microsoft.Network/privateEndpoints"
+      }
+    ]
+  },
+  "account-public-disabled-no-private-endpoint": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "AIServices",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {
+          "publicNetworkAccess": "Disabled"
+        },
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      }
+    ]
+  },
+  "account-public-disabled-with-account-groupid-endpoint": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "AIServices",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {
+          "publicNetworkAccess": "Disabled"
+        },
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "pe",
+        "properties": {
+          "privateLinkServiceConnections": [
+            {
+              "name": "c",
+              "properties": {
+                "groupIds": [
+                  "account"
+                ],
+                "privateLinkServiceId": "[resourceId('Microsoft.CognitiveServices/accounts', 'acct')]"
+              }
+            }
+          ],
+          "subnet": {
+            "id": "[parameters('peSubnetId')]"
+          }
+        },
+        "type": "Microsoft.Network/privateEndpoints"
+      }
+    ]
+  },
+  "account-public-disabled-wrong-groupid-endpoint": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "AIServices",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {
+          "publicNetworkAccess": "Disabled"
+        },
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "pe",
+        "properties": {
+          "privateLinkServiceConnections": [
+            {
+              "name": "c",
+              "properties": {
+                "groupIds": [
+                  "blob"
+                ],
+                "privateLinkServiceId": "[resourceId('Microsoft.CognitiveServices/accounts', 'acct')]"
+              }
+            }
+          ],
+          "subnet": {
+            "id": "[parameters('peSubnetId')]"
+          }
+        },
+        "type": "Microsoft.Network/privateEndpoints"
+      }
+    ]
+  },
+  "account-public-enabled-default-allow-in-prod": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "AIServices",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {
+          "networkAcls": {
+            "defaultAction": "Allow"
+          },
+          "publicNetworkAccess": "Enabled"
+        },
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      }
+    ]
+  },
+  "account-resource-id-is-parameter-and-no-arm-access": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "accountId": {
+        "type": "string"
+      }
+    },
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "AIServices",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {
+          "publicNetworkAccess": "Disabled"
+        },
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "pe",
+        "properties": {
+          "privateLinkServiceConnections": [
+            {
+              "name": "c",
+              "properties": {
+                "groupIds": [
+                  "account"
+                ],
+                "privateLinkServiceId": "[parameters('accountId')]"
+              }
+            }
+          ],
+          "subnet": {
+            "id": "[parameters('peSubnetId')]"
+          }
+        },
+        "type": "Microsoft.Network/privateEndpoints"
+      }
+    ]
+  },
+  "account-restricted-mode-with-ip-rules": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "AIServices",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {
+          "networkAcls": {
+            "defaultAction": "Deny",
+            "ipRules": [
+              {
+                "value": "203.0.113.0/24"
+              }
+            ]
+          },
+          "publicNetworkAccess": "Enabled"
+        },
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      }
+    ]
+  },
+  "dev-profile-public-account-reports-info": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "AIServices",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {
+          "networkAcls": {
+            "defaultAction": "Allow"
+          },
+          "publicNetworkAccess": "Enabled"
+        },
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      }
+    ]
+  },
+  "not-an-ai-services-account": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "OpenAI",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {
+          "publicNetworkAccess": "Disabled"
+        },
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      }
+    ]
+  },
+  "private-endpoint-defined-in-another-template": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "AIServices",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {
+          "publicNetworkAccess": "Disabled"
+        },
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "pe",
+        "properties": {
+          "privateLinkServiceConnections": [
+            {
+              "name": "c",
+              "properties": {
+                "groupIds": [
+                  "account"
+                ],
+                "privateLinkServiceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/other"
+              }
+            }
+          ],
+          "subnet": {
+            "id": "[parameters('peSubnetId')]"
+          }
+        },
+        "type": "Microsoft.Network/privateEndpoints"
+      }
+    ]
+  },
+  "project-under-account": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "AIServices",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {
+          "publicNetworkAccess": "Enabled"
+        },
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      },
+      {
+        "apiVersion": "2026-09-01",
+        "dependsOn": [
+          "acct"
+        ],
+        "location": "swedencentral",
+        "name": "[format('{0}/{1}', 'acct', 'proj')]",
+        "properties": {},
+        "type": "Microsoft.CognitiveServices/accounts/projects"
+      }
+    ]
+  }
+}
