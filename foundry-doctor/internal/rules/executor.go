@@ -217,7 +217,11 @@ func absorb(out *Outcome, e Entry, results []Result, cfg ExecConfig) error {
 			if f.RuleID != e.Meta.ID || f.RuleVersion != e.Meta.Version {
 				return fmt.Errorf("result %d: finding names %s v%d, rule is %s v%d", i, f.RuleID, f.RuleVersion, e.Meta.ID, e.Meta.Version)
 			}
-			findings = append(findings, stamp(f, r.Status, e.Meta, sev, cfg))
+			fsev := sev
+			if r.MaxSeverity.Valid() && fsev.Rank() > r.MaxSeverity.Rank() && !slices.Contains(e.Meta.Basis, "platform") {
+				fsev = r.MaxSeverity
+			}
+			findings = append(findings, stamp(f, r.Status, e.Meta, fsev, cfg))
 		}
 	}
 	out.Findings = append(out.Findings, findings...)

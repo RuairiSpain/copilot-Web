@@ -32,6 +32,11 @@ type Result struct {
 	Status  sdk.Status
 	Finding *sdk.Finding
 	Skip    *sdk.SkippedCheck
+	// MaxSeverity optionally caps the severity the engine stamps on this finding (for example when a
+	// policy key such as policy.network.publicAccess accepts the condition). The engine lowers the
+	// profile severity to this value when it is higher, and ignores it for platform-basis rules, which
+	// are errors in every profile. Rules still never set Finding.Severity.
+	MaxSeverity sdk.Severity
 }
 
 // Pass returns a pass result.

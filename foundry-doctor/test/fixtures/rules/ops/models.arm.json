@@ -1,0 +1,31 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "modelName": { "type": "string" }
+  },
+  "resources": [
+    { "type": "Microsoft.CognitiveServices/accounts/deployments", "apiVersion": "2026-09-01", "name": "acct/chat", "sku": { "name": "Standard" }, "properties": { "model": { "format": "OpenAI", "name": "gpt-x", "version": "1" } } },
+    { "type": "Microsoft.CognitiveServices/accounts/deployments", "apiVersion": "2026-09-01", "name": "acct/mistral", "sku": { "name": "Standard" }, "properties": { "model": { "format": "Mistral", "name": "mistral-large", "version": "2" } } },
+    { "type": "Microsoft.CognitiveServices/accounts/deployments", "apiVersion": "2026-09-01", "name": "acct/param", "sku": { "name": "Standard" }, "properties": { "model": { "format": "OpenAI", "name": "[parameters('modelName')]", "version": "1" } } },
+    { "type": "Microsoft.CognitiveServices/accounts/deployments", "apiVersion": "2026-09-01", "name": "acct/router", "sku": { "name": "Standard" }, "properties": { "model": { "format": "OpenAI", "name": "model-router", "version": "1" } } },
+    { "type": "Microsoft.Authorization/policyAssignments", "apiVersion": "2022-06-01", "name": "pa-match",
+      "properties": { "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/aafe3651-cb78-4f68-9f81-e7e41509110f",
+        "parameters": { "effect": { "value": "Audit" }, "allowedPublishers": { "value": ["OpenAI"] }, "allowedAssetIds": { "value": [] } } } },
+    { "type": "Microsoft.Authorization/policyAssignments", "apiVersion": "2022-06-01", "name": "pa-case",
+      "properties": { "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/aafe3651-cb78-4f68-9f81-e7e41509110f",
+        "parameters": { "allowedPublishers": { "value": ["openai"] } } } },
+    { "type": "Microsoft.Authorization/policyAssignments", "apiVersion": "2022-06-01", "name": "pa-diff",
+      "properties": { "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/aafe3651-cb78-4f68-9f81-e7e41509110f",
+        "parameters": { "allowedPublishers": { "value": ["OpenAI", "Mistral"] } } } },
+    { "type": "Microsoft.Authorization/policyAssignments", "apiVersion": "2022-06-01", "name": "pa-deny-empty",
+      "properties": { "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/aafe3651-cb78-4f68-9f81-e7e41509110f",
+        "parameters": { "effect": { "value": "Deny" } } } },
+    { "type": "Microsoft.Authorization/policyAssignments", "apiVersion": "2022-06-01", "name": "pa-unresolved",
+      "properties": { "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/aafe3651-cb78-4f68-9f81-e7e41509110f",
+        "parameters": { "allowedPublishers": { "value": "[parameters('modelName')]" } } } },
+    { "type": "Microsoft.Authorization/policyAssignments", "apiVersion": "2022-06-01", "name": "pa-other",
+      "properties": { "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/00000000-0000-0000-0000-000000000000",
+        "parameters": { "allowedPublishers": { "value": ["x"] } } } }
+  ]
+}

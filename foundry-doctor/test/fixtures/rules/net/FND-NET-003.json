@@ -1,0 +1,1558 @@
+{
+  "azure-government-zone-names": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "AIServices",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {
+          "publicNetworkAccess": "Disabled"
+        },
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "pe",
+        "properties": {
+          "privateLinkServiceConnections": [
+            {
+              "name": "c",
+              "properties": {
+                "groupIds": [
+                  "account"
+                ],
+                "privateLinkServiceId": "[resourceId('Microsoft.CognitiveServices/accounts', 'acct')]"
+              }
+            }
+          ],
+          "subnet": {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'vnet', 'snet')]"
+          }
+        },
+        "type": "Microsoft.Network/privateEndpoints"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "vnet",
+        "properties": {
+          "addressSpace": {
+            "addressPrefixes": [
+              "10.0.0.0/16"
+            ]
+          }
+        },
+        "type": "Microsoft.Network/virtualNetworks"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "dependsOn": [
+          "vnet"
+        ],
+        "name": "vnet/snet",
+        "properties": {
+          "addressPrefix": "10.0.0.0/24"
+        },
+        "type": "Microsoft.Network/virtualNetworks/subnets"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "dependsOn": [
+          "pe"
+        ],
+        "name": "pe/default",
+        "properties": {
+          "privateDnsZoneConfigs": [
+            {
+              "name": "z0",
+              "properties": {
+                "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.cognitiveservices.azure.us')]"
+              }
+            }
+          ]
+        },
+        "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups"
+      }
+    ]
+  },
+  "central-hub-dns-zone-in-other-subscription": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "resources": [
+      {
+        "apiVersion": "2025-05-01",
+        "location": "swedencentral",
+        "name": "srch",
+        "properties": {},
+        "sku": {
+          "name": "standard"
+        },
+        "type": "Microsoft.Search/searchServices"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "pe",
+        "properties": {
+          "privateLinkServiceConnections": [
+            {
+              "name": "c",
+              "properties": {
+                "groupIds": [
+                  "searchService"
+                ],
+                "privateLinkServiceId": "[resourceId('Microsoft.Search/searchServices', 'srch')]"
+              }
+            }
+          ],
+          "subnet": {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'vnet', 'snet')]"
+          }
+        },
+        "type": "Microsoft.Network/privateEndpoints"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "vnet",
+        "properties": {
+          "addressSpace": {
+            "addressPrefixes": [
+              "10.0.0.0/16"
+            ]
+          }
+        },
+        "type": "Microsoft.Network/virtualNetworks"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "dependsOn": [
+          "vnet"
+        ],
+        "name": "vnet/snet",
+        "properties": {
+          "addressPrefix": "10.0.0.0/24"
+        },
+        "type": "Microsoft.Network/virtualNetworks/subnets"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "dependsOn": [
+          "pe"
+        ],
+        "name": "pe/default",
+        "properties": {
+          "privateDnsZoneConfigs": [
+            {
+              "name": "z0",
+              "properties": {
+                "privateDnsZoneId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/hub/providers/Microsoft.Network/privateDnsZones/privatelink.search.windows.net"
+              }
+            }
+          ]
+        },
+        "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups"
+      }
+    ]
+  },
+  "dine-policy-manages-dns-zone-group": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "AIServices",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {
+          "publicNetworkAccess": "Disabled"
+        },
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "pe",
+        "properties": {
+          "privateLinkServiceConnections": [
+            {
+              "name": "c",
+              "properties": {
+                "groupIds": [
+                  "account"
+                ],
+                "privateLinkServiceId": "[resourceId('Microsoft.CognitiveServices/accounts', 'acct')]"
+              }
+            }
+          ],
+          "subnet": {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'vnet', 'snet')]"
+          }
+        },
+        "type": "Microsoft.Network/privateEndpoints"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "vnet",
+        "properties": {
+          "addressSpace": {
+            "addressPrefixes": [
+              "10.0.0.0/16"
+            ]
+          }
+        },
+        "type": "Microsoft.Network/virtualNetworks"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "dependsOn": [
+          "vnet"
+        ],
+        "name": "vnet/snet",
+        "properties": {
+          "addressPrefix": "10.0.0.0/24"
+        },
+        "type": "Microsoft.Network/virtualNetworks/subnets"
+      }
+    ]
+  },
+  "endpoint-group-ids-are-parameter": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "g": {
+        "type": "array"
+      }
+    },
+    "resources": [
+      {
+        "apiVersion": "2025-05-01",
+        "location": "swedencentral",
+        "name": "srch",
+        "properties": {},
+        "sku": {
+          "name": "standard"
+        },
+        "type": "Microsoft.Search/searchServices"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "pe",
+        "properties": {
+          "privateLinkServiceConnections": [
+            {
+              "name": "c",
+              "properties": {
+                "groupIds": "[parameters('g')]",
+                "privateLinkServiceId": "[resourceId('Microsoft.Search/searchServices', 'srch')]"
+              }
+            }
+          ],
+          "subnet": {
+            "id": "[parameters('peSubnetId')]"
+          }
+        },
+        "type": "Microsoft.Network/privateEndpoints"
+      }
+    ]
+  },
+  "endpoint-subnet-is-parameter": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "resources": [
+      {
+        "apiVersion": "2025-05-01",
+        "location": "swedencentral",
+        "name": "srch",
+        "properties": {},
+        "sku": {
+          "name": "standard"
+        },
+        "type": "Microsoft.Search/searchServices"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "pe",
+        "properties": {
+          "privateLinkServiceConnections": [
+            {
+              "name": "c",
+              "properties": {
+                "groupIds": [
+                  "searchService"
+                ],
+                "privateLinkServiceId": "[resourceId('Microsoft.Search/searchServices', 'srch')]"
+              }
+            }
+          ],
+          "subnet": {
+            "id": "[parameters('peSubnetId')]"
+          }
+        },
+        "type": "Microsoft.Network/privateEndpoints"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "dependsOn": [
+          "pe"
+        ],
+        "name": "pe/default",
+        "properties": {
+          "privateDnsZoneConfigs": [
+            {
+              "name": "z0",
+              "properties": {
+                "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.search.windows.net')]"
+              }
+            }
+          ]
+        },
+        "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups"
+      },
+      {
+        "apiVersion": "2024-06-01",
+        "location": "global",
+        "name": "privatelink.search.windows.net",
+        "properties": {},
+        "type": "Microsoft.Network/privateDnsZones"
+      },
+      {
+        "apiVersion": "2024-06-01",
+        "dependsOn": [
+          "privatelink.search.windows.net"
+        ],
+        "location": "global",
+        "name": "privatelink.search.windows.net/l1",
+        "properties": {
+          "registrationEnabled": false,
+          "virtualNetwork": {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks', 'vnet')]"
+          }
+        },
+        "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks"
+      }
+    ]
+  },
+  "foundry-endpoint-three-zones-linked": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "AIServices",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {
+          "publicNetworkAccess": "Disabled"
+        },
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "pe",
+        "properties": {
+          "privateLinkServiceConnections": [
+            {
+              "name": "c",
+              "properties": {
+                "groupIds": [
+                  "account"
+                ],
+                "privateLinkServiceId": "[resourceId('Microsoft.CognitiveServices/accounts', 'acct')]"
+              }
+            }
+          ],
+          "subnet": {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'vnet', 'snet')]"
+          }
+        },
+        "type": "Microsoft.Network/privateEndpoints"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "vnet",
+        "properties": {
+          "addressSpace": {
+            "addressPrefixes": [
+              "10.0.0.0/16"
+            ]
+          }
+        },
+        "type": "Microsoft.Network/virtualNetworks"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "dependsOn": [
+          "vnet"
+        ],
+        "name": "vnet/snet",
+        "properties": {
+          "addressPrefix": "10.0.0.0/24"
+        },
+        "type": "Microsoft.Network/virtualNetworks/subnets"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "dependsOn": [
+          "pe"
+        ],
+        "name": "pe/default",
+        "properties": {
+          "privateDnsZoneConfigs": [
+            {
+              "name": "z0",
+              "properties": {
+                "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.cognitiveservices.azure.com')]"
+              }
+            },
+            {
+              "name": "z1",
+              "properties": {
+                "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.openai.azure.com')]"
+              }
+            },
+            {
+              "name": "z2",
+              "properties": {
+                "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.services.ai.azure.com')]"
+              }
+            }
+          ]
+        },
+        "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups"
+      },
+      {
+        "apiVersion": "2024-06-01",
+        "location": "global",
+        "name": "privatelink.cognitiveservices.azure.com",
+        "properties": {},
+        "type": "Microsoft.Network/privateDnsZones"
+      },
+      {
+        "apiVersion": "2024-06-01",
+        "dependsOn": [
+          "privatelink.cognitiveservices.azure.com"
+        ],
+        "location": "global",
+        "name": "privatelink.cognitiveservices.azure.com/l1",
+        "properties": {
+          "registrationEnabled": false,
+          "virtualNetwork": {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks', 'vnet')]"
+          }
+        },
+        "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks"
+      },
+      {
+        "apiVersion": "2024-06-01",
+        "location": "global",
+        "name": "privatelink.openai.azure.com",
+        "properties": {},
+        "type": "Microsoft.Network/privateDnsZones"
+      },
+      {
+        "apiVersion": "2024-06-01",
+        "dependsOn": [
+          "privatelink.openai.azure.com"
+        ],
+        "location": "global",
+        "name": "privatelink.openai.azure.com/l1",
+        "properties": {
+          "registrationEnabled": false,
+          "virtualNetwork": {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks', 'vnet')]"
+          }
+        },
+        "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks"
+      },
+      {
+        "apiVersion": "2024-06-01",
+        "location": "global",
+        "name": "privatelink.services.ai.azure.com",
+        "properties": {},
+        "type": "Microsoft.Network/privateDnsZones"
+      },
+      {
+        "apiVersion": "2024-06-01",
+        "dependsOn": [
+          "privatelink.services.ai.azure.com"
+        ],
+        "location": "global",
+        "name": "privatelink.services.ai.azure.com/l1",
+        "properties": {
+          "registrationEnabled": false,
+          "virtualNetwork": {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks', 'vnet')]"
+          }
+        },
+        "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks"
+      }
+    ]
+  },
+  "foundry-endpoint-without-zone-group": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "AIServices",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {
+          "publicNetworkAccess": "Disabled"
+        },
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "pe",
+        "properties": {
+          "privateLinkServiceConnections": [
+            {
+              "name": "c",
+              "properties": {
+                "groupIds": [
+                  "account"
+                ],
+                "privateLinkServiceId": "[resourceId('Microsoft.CognitiveServices/accounts', 'acct')]"
+              }
+            }
+          ],
+          "subnet": {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'vnet', 'snet')]"
+          }
+        },
+        "type": "Microsoft.Network/privateEndpoints"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "vnet",
+        "properties": {
+          "addressSpace": {
+            "addressPrefixes": [
+              "10.0.0.0/16"
+            ]
+          }
+        },
+        "type": "Microsoft.Network/virtualNetworks"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "dependsOn": [
+          "vnet"
+        ],
+        "name": "vnet/snet",
+        "properties": {
+          "addressPrefix": "10.0.0.0/24"
+        },
+        "type": "Microsoft.Network/virtualNetworks/subnets"
+      }
+    ]
+  },
+  "foundry-endpoint-zone-group-with-only-cognitiveservices-zone": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "AIServices",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {
+          "publicNetworkAccess": "Disabled"
+        },
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "pe",
+        "properties": {
+          "privateLinkServiceConnections": [
+            {
+              "name": "c",
+              "properties": {
+                "groupIds": [
+                  "account"
+                ],
+                "privateLinkServiceId": "[resourceId('Microsoft.CognitiveServices/accounts', 'acct')]"
+              }
+            }
+          ],
+          "subnet": {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'vnet', 'snet')]"
+          }
+        },
+        "type": "Microsoft.Network/privateEndpoints"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "vnet",
+        "properties": {
+          "addressSpace": {
+            "addressPrefixes": [
+              "10.0.0.0/16"
+            ]
+          }
+        },
+        "type": "Microsoft.Network/virtualNetworks"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "dependsOn": [
+          "vnet"
+        ],
+        "name": "vnet/snet",
+        "properties": {
+          "addressPrefix": "10.0.0.0/24"
+        },
+        "type": "Microsoft.Network/virtualNetworks/subnets"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "dependsOn": [
+          "pe"
+        ],
+        "name": "pe/default",
+        "properties": {
+          "privateDnsZoneConfigs": [
+            {
+              "name": "z0",
+              "properties": {
+                "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.cognitiveservices.azure.com')]"
+              }
+            }
+          ]
+        },
+        "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups"
+      },
+      {
+        "apiVersion": "2024-06-01",
+        "location": "global",
+        "name": "privatelink.cognitiveservices.azure.com",
+        "properties": {},
+        "type": "Microsoft.Network/privateDnsZones"
+      },
+      {
+        "apiVersion": "2024-06-01",
+        "dependsOn": [
+          "privatelink.cognitiveservices.azure.com"
+        ],
+        "location": "global",
+        "name": "privatelink.cognitiveservices.azure.com/l1",
+        "properties": {
+          "registrationEnabled": false,
+          "virtualNetwork": {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks', 'vnet')]"
+          }
+        },
+        "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks"
+      }
+    ]
+  },
+  "link-to-other-vnet": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "resources": [
+      {
+        "apiVersion": "2025-05-01",
+        "location": "swedencentral",
+        "name": "srch",
+        "properties": {},
+        "sku": {
+          "name": "standard"
+        },
+        "type": "Microsoft.Search/searchServices"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "pe",
+        "properties": {
+          "privateLinkServiceConnections": [
+            {
+              "name": "c",
+              "properties": {
+                "groupIds": [
+                  "searchService"
+                ],
+                "privateLinkServiceId": "[resourceId('Microsoft.Search/searchServices', 'srch')]"
+              }
+            }
+          ],
+          "subnet": {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'vnet', 'snet')]"
+          }
+        },
+        "type": "Microsoft.Network/privateEndpoints"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "vnet",
+        "properties": {
+          "addressSpace": {
+            "addressPrefixes": [
+              "10.0.0.0/16"
+            ]
+          }
+        },
+        "type": "Microsoft.Network/virtualNetworks"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "dependsOn": [
+          "vnet"
+        ],
+        "name": "vnet/snet",
+        "properties": {
+          "addressPrefix": "10.0.0.0/24"
+        },
+        "type": "Microsoft.Network/virtualNetworks/subnets"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "other",
+        "properties": {
+          "addressSpace": {
+            "addressPrefixes": [
+              "10.0.0.0/16"
+            ]
+          }
+        },
+        "type": "Microsoft.Network/virtualNetworks"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "dependsOn": [
+          "pe"
+        ],
+        "name": "pe/default",
+        "properties": {
+          "privateDnsZoneConfigs": [
+            {
+              "name": "z0",
+              "properties": {
+                "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.search.windows.net')]"
+              }
+            }
+          ]
+        },
+        "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups"
+      },
+      {
+        "apiVersion": "2024-06-01",
+        "location": "global",
+        "name": "privatelink.search.windows.net",
+        "properties": {},
+        "type": "Microsoft.Network/privateDnsZones"
+      },
+      {
+        "apiVersion": "2024-06-01",
+        "dependsOn": [
+          "privatelink.search.windows.net"
+        ],
+        "location": "global",
+        "name": "privatelink.search.windows.net/l1",
+        "properties": {
+          "registrationEnabled": false,
+          "virtualNetwork": {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks', 'other')]"
+          }
+        },
+        "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks"
+      }
+    ]
+  },
+  "link-vnet-is-parameter": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "v": {
+        "type": "string"
+      }
+    },
+    "resources": [
+      {
+        "apiVersion": "2025-05-01",
+        "location": "swedencentral",
+        "name": "srch",
+        "properties": {},
+        "sku": {
+          "name": "standard"
+        },
+        "type": "Microsoft.Search/searchServices"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "pe",
+        "properties": {
+          "privateLinkServiceConnections": [
+            {
+              "name": "c",
+              "properties": {
+                "groupIds": [
+                  "searchService"
+                ],
+                "privateLinkServiceId": "[resourceId('Microsoft.Search/searchServices', 'srch')]"
+              }
+            }
+          ],
+          "subnet": {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'vnet', 'snet')]"
+          }
+        },
+        "type": "Microsoft.Network/privateEndpoints"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "vnet",
+        "properties": {
+          "addressSpace": {
+            "addressPrefixes": [
+              "10.0.0.0/16"
+            ]
+          }
+        },
+        "type": "Microsoft.Network/virtualNetworks"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "dependsOn": [
+          "vnet"
+        ],
+        "name": "vnet/snet",
+        "properties": {
+          "addressPrefix": "10.0.0.0/24"
+        },
+        "type": "Microsoft.Network/virtualNetworks/subnets"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "dependsOn": [
+          "pe"
+        ],
+        "name": "pe/default",
+        "properties": {
+          "privateDnsZoneConfigs": [
+            {
+              "name": "z0",
+              "properties": {
+                "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.search.windows.net')]"
+              }
+            }
+          ]
+        },
+        "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups"
+      },
+      {
+        "apiVersion": "2024-06-01",
+        "location": "global",
+        "name": "privatelink.search.windows.net",
+        "properties": {},
+        "type": "Microsoft.Network/privateDnsZones"
+      },
+      {
+        "apiVersion": "2024-06-01",
+        "dependsOn": [
+          "privatelink.search.windows.net"
+        ],
+        "location": "global",
+        "name": "privatelink.search.windows.net/l1",
+        "properties": {
+          "virtualNetwork": {
+            "id": "[parameters('v')]"
+          }
+        },
+        "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks"
+      }
+    ]
+  },
+  "search-endpoint-wrong-zone-name": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "resources": [
+      {
+        "apiVersion": "2025-05-01",
+        "location": "swedencentral",
+        "name": "srch",
+        "properties": {},
+        "sku": {
+          "name": "standard"
+        },
+        "type": "Microsoft.Search/searchServices"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "pe",
+        "properties": {
+          "privateLinkServiceConnections": [
+            {
+              "name": "c",
+              "properties": {
+                "groupIds": [
+                  "searchService"
+                ],
+                "privateLinkServiceId": "[resourceId('Microsoft.Search/searchServices', 'srch')]"
+              }
+            }
+          ],
+          "subnet": {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'vnet', 'snet')]"
+          }
+        },
+        "type": "Microsoft.Network/privateEndpoints"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "vnet",
+        "properties": {
+          "addressSpace": {
+            "addressPrefixes": [
+              "10.0.0.0/16"
+            ]
+          }
+        },
+        "type": "Microsoft.Network/virtualNetworks"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "dependsOn": [
+          "vnet"
+        ],
+        "name": "vnet/snet",
+        "properties": {
+          "addressPrefix": "10.0.0.0/24"
+        },
+        "type": "Microsoft.Network/virtualNetworks/subnets"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "dependsOn": [
+          "pe"
+        ],
+        "name": "pe/default",
+        "properties": {
+          "privateDnsZoneConfigs": [
+            {
+              "name": "z0",
+              "properties": {
+                "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.blob.core.windows.net')]"
+              }
+            }
+          ]
+        },
+        "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups"
+      }
+    ]
+  },
+  "storage-blob-endpoint-with-linked-zone": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "resources": [
+      {
+        "apiVersion": "2025-01-01",
+        "kind": "StorageV2",
+        "location": "swedencentral",
+        "name": "st",
+        "properties": {},
+        "sku": {
+          "name": "Standard_LRS"
+        },
+        "type": "Microsoft.Storage/storageAccounts"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "pe",
+        "properties": {
+          "privateLinkServiceConnections": [
+            {
+              "name": "c",
+              "properties": {
+                "groupIds": [
+                  "blob"
+                ],
+                "privateLinkServiceId": "[resourceId('Microsoft.Storage/storageAccounts', 'st')]"
+              }
+            }
+          ],
+          "subnet": {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'vnet', 'snet')]"
+          }
+        },
+        "type": "Microsoft.Network/privateEndpoints"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "vnet",
+        "properties": {
+          "addressSpace": {
+            "addressPrefixes": [
+              "10.0.0.0/16"
+            ]
+          }
+        },
+        "type": "Microsoft.Network/virtualNetworks"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "dependsOn": [
+          "vnet"
+        ],
+        "name": "vnet/snet",
+        "properties": {
+          "addressPrefix": "10.0.0.0/24"
+        },
+        "type": "Microsoft.Network/virtualNetworks/subnets"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "dependsOn": [
+          "pe"
+        ],
+        "name": "pe/default",
+        "properties": {
+          "privateDnsZoneConfigs": [
+            {
+              "name": "z0",
+              "properties": {
+                "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.blob.core.windows.net')]"
+              }
+            }
+          ]
+        },
+        "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups"
+      },
+      {
+        "apiVersion": "2024-06-01",
+        "location": "global",
+        "name": "privatelink.blob.core.windows.net",
+        "properties": {},
+        "type": "Microsoft.Network/privateDnsZones"
+      },
+      {
+        "apiVersion": "2024-06-01",
+        "dependsOn": [
+          "privatelink.blob.core.windows.net"
+        ],
+        "location": "global",
+        "name": "privatelink.blob.core.windows.net/l1",
+        "properties": {
+          "registrationEnabled": false,
+          "virtualNetwork": {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks', 'vnet')]"
+          }
+        },
+        "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks"
+      }
+    ]
+  },
+  "two-zone-groups": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "resources": [
+      {
+        "apiVersion": "2025-05-01",
+        "location": "swedencentral",
+        "name": "srch",
+        "properties": {},
+        "sku": {
+          "name": "standard"
+        },
+        "type": "Microsoft.Search/searchServices"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "pe",
+        "properties": {
+          "privateLinkServiceConnections": [
+            {
+              "name": "c",
+              "properties": {
+                "groupIds": [
+                  "searchService"
+                ],
+                "privateLinkServiceId": "[resourceId('Microsoft.Search/searchServices', 'srch')]"
+              }
+            }
+          ],
+          "subnet": {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'vnet', 'snet')]"
+          }
+        },
+        "type": "Microsoft.Network/privateEndpoints"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "vnet",
+        "properties": {
+          "addressSpace": {
+            "addressPrefixes": [
+              "10.0.0.0/16"
+            ]
+          }
+        },
+        "type": "Microsoft.Network/virtualNetworks"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "dependsOn": [
+          "vnet"
+        ],
+        "name": "vnet/snet",
+        "properties": {
+          "addressPrefix": "10.0.0.0/24"
+        },
+        "type": "Microsoft.Network/virtualNetworks/subnets"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "dependsOn": [
+          "pe"
+        ],
+        "name": "pe/default",
+        "properties": {
+          "privateDnsZoneConfigs": [
+            {
+              "name": "z0",
+              "properties": {
+                "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.search.windows.net')]"
+              }
+            }
+          ]
+        },
+        "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "dependsOn": [
+          "pe"
+        ],
+        "name": "pe/second",
+        "properties": {
+          "privateDnsZoneConfigs": [
+            {
+              "name": "z0",
+              "properties": {
+                "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.search.windows.net')]"
+              }
+            }
+          ]
+        },
+        "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups"
+      }
+    ]
+  },
+  "unknown-group-id-with-zone-group": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "t": {
+        "type": "string"
+      }
+    },
+    "resources": [
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "pe",
+        "properties": {
+          "privateLinkServiceConnections": [
+            {
+              "name": "c",
+              "properties": {
+                "groupIds": [
+                  "sites"
+                ],
+                "privateLinkServiceId": "[parameters('t')]"
+              }
+            }
+          ],
+          "subnet": {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'vnet', 'snet')]"
+          }
+        },
+        "type": "Microsoft.Network/privateEndpoints"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "vnet",
+        "properties": {
+          "addressSpace": {
+            "addressPrefixes": [
+              "10.0.0.0/16"
+            ]
+          }
+        },
+        "type": "Microsoft.Network/virtualNetworks"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "dependsOn": [
+          "vnet"
+        ],
+        "name": "vnet/snet",
+        "properties": {
+          "addressPrefix": "10.0.0.0/24"
+        },
+        "type": "Microsoft.Network/virtualNetworks/subnets"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "dependsOn": [
+          "pe"
+        ],
+        "name": "pe/default",
+        "properties": {
+          "privateDnsZoneConfigs": [
+            {
+              "name": "z0",
+              "properties": {
+                "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.azurewebsites.net')]"
+              }
+            }
+          ]
+        },
+        "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups"
+      }
+    ]
+  },
+  "zone-group-with-six-zones": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "AIServices",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {
+          "publicNetworkAccess": "Disabled"
+        },
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "pe",
+        "properties": {
+          "privateLinkServiceConnections": [
+            {
+              "name": "c",
+              "properties": {
+                "groupIds": [
+                  "account"
+                ],
+                "privateLinkServiceId": "[resourceId('Microsoft.CognitiveServices/accounts', 'acct')]"
+              }
+            }
+          ],
+          "subnet": {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'vnet', 'snet')]"
+          }
+        },
+        "type": "Microsoft.Network/privateEndpoints"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "vnet",
+        "properties": {
+          "addressSpace": {
+            "addressPrefixes": [
+              "10.0.0.0/16"
+            ]
+          }
+        },
+        "type": "Microsoft.Network/virtualNetworks"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "dependsOn": [
+          "vnet"
+        ],
+        "name": "vnet/snet",
+        "properties": {
+          "addressPrefix": "10.0.0.0/24"
+        },
+        "type": "Microsoft.Network/virtualNetworks/subnets"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "dependsOn": [
+          "pe"
+        ],
+        "name": "pe/default",
+        "properties": {
+          "privateDnsZoneConfigs": [
+            {
+              "name": "z0",
+              "properties": {
+                "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.cognitiveservices.azure.com')]"
+              }
+            },
+            {
+              "name": "z1",
+              "properties": {
+                "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.openai.azure.com')]"
+              }
+            },
+            {
+              "name": "z2",
+              "properties": {
+                "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.services.ai.azure.com')]"
+              }
+            },
+            {
+              "name": "z3",
+              "properties": {
+                "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.a.example')]"
+              }
+            },
+            {
+              "name": "z4",
+              "properties": {
+                "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.b.example')]"
+              }
+            },
+            {
+              "name": "z5",
+              "properties": {
+                "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.c.example')]"
+              }
+            }
+          ]
+        },
+        "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups"
+      }
+    ]
+  },
+  "zone-id-is-parameter": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "zoneId": {
+        "type": "string"
+      }
+    },
+    "resources": [
+      {
+        "apiVersion": "2026-09-01",
+        "kind": "AIServices",
+        "location": "swedencentral",
+        "name": "acct",
+        "properties": {
+          "publicNetworkAccess": "Disabled"
+        },
+        "sku": {
+          "name": "S0"
+        },
+        "type": "Microsoft.CognitiveServices/accounts"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "pe",
+        "properties": {
+          "privateLinkServiceConnections": [
+            {
+              "name": "c",
+              "properties": {
+                "groupIds": [
+                  "account"
+                ],
+                "privateLinkServiceId": "[resourceId('Microsoft.CognitiveServices/accounts', 'acct')]"
+              }
+            }
+          ],
+          "subnet": {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'vnet', 'snet')]"
+          }
+        },
+        "type": "Microsoft.Network/privateEndpoints"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "vnet",
+        "properties": {
+          "addressSpace": {
+            "addressPrefixes": [
+              "10.0.0.0/16"
+            ]
+          }
+        },
+        "type": "Microsoft.Network/virtualNetworks"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "dependsOn": [
+          "vnet"
+        ],
+        "name": "vnet/snet",
+        "properties": {
+          "addressPrefix": "10.0.0.0/24"
+        },
+        "type": "Microsoft.Network/virtualNetworks/subnets"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "dependsOn": [
+          "pe"
+        ],
+        "name": "pe/default",
+        "properties": {
+          "privateDnsZoneConfigs": [
+            {
+              "name": "z0",
+              "properties": {
+                "privateDnsZoneId": "[parameters('zoneId')]"
+              }
+            }
+          ]
+        },
+        "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups"
+      }
+    ]
+  },
+  "zone-without-vnet-link": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "resources": [
+      {
+        "apiVersion": "2025-05-01",
+        "location": "swedencentral",
+        "name": "srch",
+        "properties": {},
+        "sku": {
+          "name": "standard"
+        },
+        "type": "Microsoft.Search/searchServices"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "pe",
+        "properties": {
+          "privateLinkServiceConnections": [
+            {
+              "name": "c",
+              "properties": {
+                "groupIds": [
+                  "searchService"
+                ],
+                "privateLinkServiceId": "[resourceId('Microsoft.Search/searchServices', 'srch')]"
+              }
+            }
+          ],
+          "subnet": {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'vnet', 'snet')]"
+          }
+        },
+        "type": "Microsoft.Network/privateEndpoints"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "location": "swedencentral",
+        "name": "vnet",
+        "properties": {
+          "addressSpace": {
+            "addressPrefixes": [
+              "10.0.0.0/16"
+            ]
+          }
+        },
+        "type": "Microsoft.Network/virtualNetworks"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "dependsOn": [
+          "vnet"
+        ],
+        "name": "vnet/snet",
+        "properties": {
+          "addressPrefix": "10.0.0.0/24"
+        },
+        "type": "Microsoft.Network/virtualNetworks/subnets"
+      },
+      {
+        "apiVersion": "2024-05-01",
+        "dependsOn": [
+          "pe"
+        ],
+        "name": "pe/default",
+        "properties": {
+          "privateDnsZoneConfigs": [
+            {
+              "name": "z0",
+              "properties": {
+                "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.search.windows.net')]"
+              }
+            }
+          ]
+        },
+        "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups"
+      },
+      {
+        "apiVersion": "2024-06-01",
+        "location": "global",
+        "name": "privatelink.search.windows.net",
+        "properties": {},
+        "type": "Microsoft.Network/privateDnsZones"
+      }
+    ]
+  }
+}

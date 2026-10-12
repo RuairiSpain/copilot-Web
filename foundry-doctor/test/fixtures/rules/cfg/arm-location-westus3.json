@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {},
+  "resources": [
+    {"type": "Microsoft.CognitiveServices/accounts", "apiVersion": "2025-06-01", "name": "acct", "location": "westus3", "properties": {}},
+    {"type": "Microsoft.Network/frontDoors", "apiVersion": "2021-06-01", "name": "fd", "location": "global", "properties": {}}
+  ],
+  "outputs": {
+    "AZURE_AI_ACCOUNT_NAME": {"type": "string", "value": "acct"}
+  }
+}
