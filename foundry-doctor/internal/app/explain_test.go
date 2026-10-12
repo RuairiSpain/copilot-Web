@@ -95,7 +95,7 @@ func fakeComparer(l, r model.Environment) (compare.Diff, error) {
 				kind = compare.Different
 			}
 		}
-		d.Keys = append(d.Keys, compare.KeyDiff{Key: k, Kind: kind, LeftFingerprint: "fp-left", RightFingerprint: "fp-right"})
+		d.Keys = append(d.Keys, compare.KeyDiff{Key: k, Kind: kind})
 	}
 	return d, nil
 }
@@ -136,9 +136,6 @@ func TestCompare_Errors(t *testing.T) {
 		"unsafe name":   {app.CompareOptions{Dir: dir, Left: "../dev", Right: "dev", Comparer: cmp}, 2},
 		"bad format":    {app.CompareOptions{Dir: dir, Left: "dev", Right: "dev", Format: "sarif", Comparer: cmp}, 2},
 		"no project":    {app.CompareOptions{Dir: t.TempDir(), Left: "dev", Right: "dev", Comparer: cmp}, 2},
-		"not implemented": {app.CompareOptions{Dir: dir, Left: "dev", Right: "dev", Comparer: func(context.Context, model.Environment, model.Environment) (compare.Diff, error) {
-			return compare.Diff{}, compare.ErrNotImplemented
-		}}, 2},
 		"comparer fails": {app.CompareOptions{Dir: dir, Left: "dev", Right: "dev", Comparer: func(context.Context, model.Environment, model.Environment) (compare.Diff, error) {
 			return compare.Diff{}, errors.New("boom")
 		}}, 4},
@@ -149,7 +146,7 @@ func TestCompare_Errors(t *testing.T) {
 	}
 	// The real comparer is the default.
 	r := compareRun(t, app.CompareOptions{Dir: dir, Left: "dev", Right: "dev"})
-	if r.code != 0 && r.code != 2 {
-		t.Fatalf("default comparer: exit %d", r.code)
+	if r.code != 0 {
+		t.Fatalf("default comparer: exit %d, stderr %q", r.code, r.stderr)
 	}
 }

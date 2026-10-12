@@ -184,6 +184,7 @@ func run(ctx context.Context, opts Options, stdout, stderr io.Writer) *ExitError
 			envNote = fmt.Sprintf("environment %q is not readable; environment-dependent rules are skipped", eff.Environment)
 		}
 	}
+	in.Environments = siblingEnvironments(ctx, azd)
 	if v, verr := azd.Versions(ctx); verr == nil {
 		in.Versions = v
 	}
@@ -430,4 +431,29 @@ func policyHeader(entries []config.PolicyValue) map[string]any {
 		m[e.Key] = v
 	}
 	return m
+}
+
+// maxEnvironments bounds how many sibling environments the cross-environment rules read.
+const maxEnvironments = 50
+
+// siblingEnvironments reads every azd environment visible in the workspace for the cross-environment
+// rules (ENV-001 to ENV-004). An environment whose .env cannot be read is left out, so those rules
+// compare only what they can see. Values stay inside model.Environment, which redacts itself.
+func siblingEnvironments(ctx context.Context, azd model.AzdContext) []model.Environment {
+	names, err := azd.Environments(ctx)
+	if err != nil || len(names) < 2 {
+		return nil
+	}
+	if len(names) > maxEnvironments {
+		names = names[:maxEnvironments]
+	}
+	out := make([]model.Environment, 0, len(names))
+	for _, n := range names {
+		env, eerr := azd.EnvValues(ctx, n)
+		if eerr != nil {
+			continue
+		}
+		out = append(out, env)
+	}
+	return out
 }

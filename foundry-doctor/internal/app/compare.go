@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -80,10 +79,7 @@ func doCompare(ctx context.Context, opts CompareOptions, stdout io.Writer) *Exit
 		return exitErr(sdk.ExitCannotRun, "right environment: %w", err)
 	}
 	diff, err := cmp(ctx, l, r)
-	switch {
-	case errors.Is(err, compare.ErrNotImplemented):
-		return exitErr(sdk.ExitCannotRun, "compare is not available in this build: %w", err)
-	case err != nil:
+	if err != nil {
 		return exitErr(sdk.ExitInternal, "compare environments: %w", err)
 	}
 	out := compareDoc{Left: opts.Left, Right: opts.Right, Keys: []keyLine{}}
