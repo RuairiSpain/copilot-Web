@@ -6,11 +6,12 @@ only the Messages API (POST https://<resource>.services.ai.azure.com/anthropic/v
 requests to Claude are converted here and the answer converted back.
 
 Translated: system/developer messages, text and image content, assistant tool calls, tool results,
-tools, tool_choice, parallel_tool_calls, max_tokens/max_completion_tokens, temperature, top_p,
-stop, stream (with stream_options.include_usage), user (as metadata.user_id), and
+tools, tool_choice, parallel_tool_calls, max_tokens/max_completion_tokens, temperature and top_p
+(only for models that accept them, see sampling_allowed), reasoning_effort (as output_config.effort,
+see effort_for), stop, stream (with stream_options.include_usage), user (as metadata.user_id), and
 response_format json_schema (as output_config.format, Claude's structured outputs).
-Not translated: response_format json_object (no Messages API equivalent: the field is dropped and
-Claude answers in free text), n>1, logprobs, seed, presence/frequency penalties (dropped).
+Not translated: response_format json_object (no Messages API equivalent; stage 1 does not send such
+requests to Claude), n>1, logprobs, seed, presence/frequency penalties (dropped).
 """
 from __future__ import annotations
 
@@ -21,6 +22,29 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
+
+# Claude models that return 400 for temperature/top_p/top_k (removed on Opus 4.7 and later, Fable,
+# Sonnet 5 and the 5.5 models; Sonnet 5.5 and Haiku 5.5 reject any non-default value). Matched by
+# catalog model-name prefix. The parameters are dropped for these models, so callers can always send them.
+NO_SAMPLING = ("claude-opus-4-7", "claude-opus-4-8", "claude-opus-5", "claude-fable", "claude-mythos",
+               "claude-sonnet-5", "claude-haiku-5")
+# output_config.effort: not accepted by Sonnet 4.5 and Haiku 4.5; Opus 4.6 has no "xhigh".
+NO_EFFORT = ("claude-sonnet-4-5", "claude-haiku-4-5")
+NO_XHIGH = ("claude-opus-4-6",)
+EFFORT = {"none": "low", "minimal": "low", "low": "low", "medium": "medium", "high": "high", "xhigh": "xhigh"}
+
+
+def sampling_allowed(model: str) -> bool:
+    return not model.startswith(NO_SAMPLING)
+
+
+def effort_for(model: str, reasoning_effort: Any) -> str | None:
+    """OpenAI reasoning_effort -> Claude output_config.effort, or None when the model takes no effort."""
+    effort = EFFORT.get(str(reasoning_effort).lower()) if reasoning_effort is not None else None
+    if effort is None or model.startswith(NO_EFFORT):
+        return None
+    return "high" if effort == "xhigh" and model.startswith(NO_XHIGH) else effort
+
 
 FINISH_REASONS = {"end_turn": "stop", "stop_sequence": "stop", "max_tokens": "length", "tool_use": "tool_calls",
                   "refusal": "content_filter", "pause_turn": "stop"}
@@ -55,7 +79,10 @@ def _text(content: Any) -> str:
     return "\n".join(b["text"] for b in _content_blocks(content) if b["type"] == "text")
 
 
-def to_messages_request(body: dict[str, Any], deployment: str, default_max_tokens: int) -> dict[str, Any]:
+def to_messages_request(body: dict[str, Any], deployment: str, default_max_tokens: int,
+                        model: str | None = None) -> dict[str, Any]:
+    """`model` is the catalog name, used to decide which optional parameters the model accepts."""
+    model = model or deployment
     system_parts: list[str] = []
     messages: list[dict[str, Any]] = []
 
@@ -95,9 +122,11 @@ def to_messages_request(body: dict[str, Any], deployment: str, default_max_token
     }
     if system_parts:
         request["system"] = "\n\n".join(p for p in system_parts if p)
-    for key in ("temperature", "top_p"):
-        if body.get(key) is not None:
-            request[key] = body[key]
+    if sampling_allowed(model):
+        # Claude rejects temperature and top_p together; temperature wins.
+        for key in ("temperature",) if body.get("temperature") is not None else ("top_p",):
+            if body.get(key) is not None:
+                request[key] = body[key]
     stop = body.get("stop")
     if stop:
         request["stop_sequences"] = [stop] if isinstance(stop, str) else list(stop)
@@ -109,6 +138,9 @@ def to_messages_request(body: dict[str, Any], deployment: str, default_max_token
     if isinstance(fmt, dict) and fmt.get("type") == "json_schema":
         schema = (fmt.get("json_schema") or {}).get("schema") or {"type": "object"}
         request["output_config"] = {"format": {"type": "json_schema", "schema": schema}}
+    effort = effort_for(model, body.get("reasoning_effort"))
+    if effort:
+        request.setdefault("output_config", {})["effort"] = effort
 
     tools = [t.get("function") or {} for t in body.get("tools") or [] if t.get("type", "function") == "function"]
     if tools:

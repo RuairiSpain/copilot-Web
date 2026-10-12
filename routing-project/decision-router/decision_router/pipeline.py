@@ -68,6 +68,17 @@ class ProviderError(Exception):
         self.attempts = attempts
 
 
+# Request parameters a model may refuse without the request being wrong: the router drops them and
+# retries the same model once, so callers can always send them (stream_options is added by the router).
+DROPPABLE_PARAMS = ("temperature", "top_p", "reasoning_effort", "stream_options")
+
+
+def _rejected_params(content: bytes, body: dict[str, Any]) -> list[str]:
+    """The droppable parameters in `body` that a 400 error message names."""
+    text = content.decode("utf-8", "replace").lower()
+    return [p for p in DROPPABLE_PARAMS if p in body and p in text]
+
+
 def _retryable(status: int) -> bool:
     return status in (408, 429) or status >= 500
 
@@ -350,14 +361,16 @@ class RouterPipeline:
         attempts: list[dict[str, Any]] = []
         for name in routed.order:
             entry = routed.catalog.by_name[name]
-            for attempt in range(1, settings.attempts_per_model + 1):
+            send_body, attempt, dropped_any = body, 0, False
+            while attempt < settings.attempts_per_model:
+                attempt += 1
                 remaining = deadline - self._clock()
                 if remaining <= 0:
                     raise RoutingError(504, "deadline_exceeded", "no model answered within the time budget", attempts)
                 t0 = self._clock()
                 record: dict[str, Any] = {"model": name, "attempt": attempt, "status": None}
                 try:
-                    response = await self.chat.send(entry, body, passthrough=routed.passthrough,
+                    response = await self.chat.send(entry, send_body, passthrough=routed.passthrough,
                                                     timeout=min(settings.request_timeout_seconds, remaining),
                                                     stream=stream)
                 except httpx.TimeoutException:
@@ -390,6 +403,16 @@ class RouterPipeline:
                     if not _retryable(response.status_code):
                         content = await response.aread()
                         await response.aclose()
+                        rejected = [] if routed.passthrough else _rejected_params(content, send_body)
+                        if response.status_code == 400 and rejected and not dropped_any:
+                            # Optional sampling/reasoning parameters are accepted from every caller; a model
+                            # that refuses one gets the request again without it, as if it had ignored it.
+                            record.update(outcome="parameter_rejected", dropped=rejected)
+                            attempts.append(record)
+                            send_body = {k: v for k, v in send_body.items() if k not in rejected}
+                            attempt -= 1  # dropping a parameter does not use up one of the model's attempts
+                            dropped_any = True
+                            continue
                         record["outcome"] = "client_error"
                         attempts.append(record)
                         raise ProviderError(response.status_code, content, response.headers.get("content-type"),

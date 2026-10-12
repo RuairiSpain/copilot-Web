@@ -42,7 +42,8 @@ class FakeFoundry:
         self.requests: list[dict[str, Any]] = []
 
     def fail(self, deployment: str, *statuses: int) -> None:
-        """Queue HTTP statuses for a deployment's next calls (0 means a network error)."""
+        """Queue HTTP statuses for a deployment's next calls (0 means a network error). A status can be a
+        (status, message) pair to set the error message."""
         self.failures[deployment].extend(statuses)
 
     def transport(self) -> httpx.MockTransport:
@@ -85,10 +86,12 @@ class FakeFoundry:
         deployment = body.get("model", "")
         queue = self.failures.get(deployment)
         if queue:
-            status = queue.popleft()
+            status, message = (queue.popleft(), "simulated")
+            if isinstance(status, tuple):
+                status, message = status
             if status == 0:
                 raise httpx.ConnectError("simulated network failure", request=request)
-            return httpx.Response(status, json={"error": {"code": str(status), "message": "simulated"}})
+            return httpx.Response(status, json={"error": {"code": str(status), "message": message}})
         served = deployment
         if deployment in self.router_deployments:
             choices = self.router_deployments[deployment]

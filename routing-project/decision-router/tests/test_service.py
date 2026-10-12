@@ -393,3 +393,24 @@ def test_invalid_profile_fails_at_startup(make_pipeline, settings):
     bad = {**settings.profiles, "agent-x": {"compatibility": "new", "routing_constraints": {"models": ["gpt-9"]}}}
     with pytest.raises(ValueError, match="routing profile 'agent-x' is invalid"):
         make_pipeline(profiles=bad)
+
+
+def test_rejected_optional_parameter_is_dropped_and_the_same_model_retried(make_pipeline, settings, fake, tmp_path):
+    fake.decision_responses.append(ranked(["gpt-5.5", "gpt-5.6-terra"]))
+    fake.fail("gpt-5.5", (400, "Unsupported parameter: 'temperature' is not supported with this model."))
+    with client_for(make_pipeline, settings) as c:
+        response = c.post("/v1/chat/completions", json={"messages": USER, "temperature": 0.3,
+                                                        "reasoning_effort": "low"})
+    assert response.status_code == 200 and response.json()["model"] == "gpt-5.5"
+    sent = [r["body"] for r in chat_calls(fake)]
+    assert sent[0]["temperature"] == 0.3 and "temperature" not in sent[1] and sent[1]["reasoning_effort"] == "low"
+    attempts = last_log(tmp_path)["attempts"]
+    assert attempts[0]["outcome"] == "parameter_rejected" and attempts[0]["dropped"] == ["temperature"]
+
+
+def test_other_400s_still_pass_through(make_pipeline, settings, fake):
+    fake.decision_responses.append(ranked(["gpt-5.5", "gpt-5.6-terra"]))
+    fake.fail("gpt-5.5", (400, "content filter triggered"))
+    with client_for(make_pipeline, settings) as c:
+        response = c.post("/v1/chat/completions", json={"messages": USER, "temperature": 0.3})
+    assert response.status_code == 400 and len(chat_calls(fake)) == 1

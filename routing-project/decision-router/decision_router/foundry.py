@@ -53,7 +53,8 @@ class ChatClient:
 
     async def _send_anthropic(self, entry: ModelEntry, body: dict[str, Any], *, timeout: float,
                               stream: bool) -> httpx.Response:
-        payload = anthropic.to_messages_request(body, entry.deployment, self.settings.anthropic_default_max_tokens)
+        payload = anthropic.to_messages_request(body, entry.deployment, self.settings.anthropic_default_max_tokens,
+                                                entry.name)
         request = self._http.build_request("POST", self.url_for(entry), json=payload,
                                            headers=await self._anthropic_headers(), timeout=timeout)
         upstream = await self._http.send(request, stream=stream)
