@@ -214,3 +214,17 @@ was not opened, **Unverified** beyond that header).
 | SARIF | Internal minimal writer validated against the SARIF 2.1.0 schema; go-sarif v3 acceptable fallback |
 | Tests | stdlib `testing` + go-cmp + golden files; no testify requirement |
 | Adapters | PSRule and Checkov and KICS optional; Terrascan dropped |
+
+## 5. Dependencies added in Phase 1 (ADR-011 decision 7)
+
+Added 2026-10-12 by packet APP. Only cobra is a direct dependency; pflag and mousetrap are its requirements.
+Licences were read from the LICENSE files in the module cache. The unused cobra requirements (go-md2man, yaml) are not in the build.
+
+| Module | Version | Purpose | SPDX | Maintenance | Alternatives | Security notes |
+|---|---|---|---|---|---|---|
+| github.com/spf13/cobra | v1.10.2 | Command tree, flags, help and usage text for `cmd/foundry-doctor` (registration only, no business logic) | Apache-2.0 | Active (release 2025-12-03) | stdlib `flag` (no subcommand help, no shell completion); `urfave/cli` (a second dependency with no gain) | No network, no file access, no reflection on user input. Cobra's completion and docs generators are not used. `govulncheck` runs in `verify-phase.sh`. |
+| github.com/spf13/pflag | v1.0.9 | POSIX flags for cobra (indirect) | BSD-3-Clause | Stable | stdlib `flag` | Parses argv only. |
+| github.com/inconshreveable/mousetrap | v1.1.0 | Windows "started from Explorer" detection used by cobra (indirect; compiled on windows only) | Apache-2.0 | Stable, rarely changed | none | Reads the parent process handle on windows. |
+
+Redistribution: the binary carries Apache-2.0 and BSD-3-Clause code. The licence texts belong in the third-party notices (section 3, item 1).
+The dependency-review allow-list (`MIT, Apache-2.0, BSD-3-Clause, Unlicense`) already covers all three.
