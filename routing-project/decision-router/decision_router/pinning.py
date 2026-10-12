@@ -24,15 +24,20 @@ The conversation key is, in order of preference:
 Either way the key also includes the caller's identity, the catalog and the routing mode, so
 callers, profiles and modes never share pins.
 
-Pins live in this process's memory (ROUTER_PIN_TTL_SECONDS after last use, at most
-ROUTER_PIN_MAX_ENTRIES). With several replicas, a conversation keeps its pin only while its
-requests reach the same replica; use session affinity on the load balancer, or accept that a
-replica switch re-routes once and pins again.
+Pins expire ROUTER_PIN_TTL_SECONDS after last use. Where they are kept:
+- by default, in this process's memory (at most ROUTER_PIN_MAX_ENTRIES, least recently used
+  dropped first). With several replicas or worker processes a conversation keeps its pin only
+  while its requests reach the same process;
+- with ROUTER_PIN_STORE_URL=redis://... or rediss://... (Azure Cache for Redis), in Redis, shared
+  by every replica. Reads are awaited; writes are sent in the background. A Redis error never
+  fails a request: a failed read counts as "no pin", so the turn is routed afresh.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
+import logging
 import time
 from collections import OrderedDict
 from collections.abc import Callable
@@ -40,6 +45,7 @@ from dataclasses import dataclass
 from typing import Any
 
 SESSION_HEADER = "x-router-session-id"
+log = logging.getLogger("decision_router.pinning")
 
 
 def _first(messages: list[Any], roles: tuple[str, ...]) -> Any:
@@ -72,7 +78,13 @@ class Pin:
     expires: float
 
 
+def _ranking(model: str, ranking: list[str]) -> list[str]:
+    return [model, *(n for n in ranking if n != model)]
+
+
 class PinStore:
+    """In-process pins."""
+
     def __init__(self, ttl_seconds: float = 3600, max_entries: int = 10_000,
                  clock: Callable[[], float] = time.monotonic):
         self.ttl = ttl_seconds
@@ -80,7 +92,16 @@ class PinStore:
         self._clock = clock
         self._pins: OrderedDict[str, Pin] = OrderedDict()
 
-    def get(self, key: str) -> Pin | None:
+    async def get(self, key: str) -> Pin | None:
+        return self.get_now(key)
+
+    def set_nowait(self, key: str, model: str, ranking: list[str], probabilities: dict[str, float]) -> None:
+        self.set(key, model, ranking, probabilities)
+
+    async def close(self) -> None:
+        pass
+
+    def get_now(self, key: str) -> Pin | None:
         pin = self._pins.get(key)
         if pin is None:
             return None
@@ -93,11 +114,67 @@ class PinStore:
         return pin
 
     def set(self, key: str, model: str, ranking: list[str], probabilities: dict[str, float]) -> None:
-        self._pins[key] = Pin(model, [model, *(n for n in ranking if n != model)], dict(probabilities),
-                              self._clock() + self.ttl)
+        self._pins[key] = Pin(model, _ranking(model, ranking), dict(probabilities), self._clock() + self.ttl)
         self._pins.move_to_end(key)
         while len(self._pins) > self.max_entries:
             self._pins.popitem(last=False)  # least recently used
 
     def __len__(self) -> int:
         return len(self._pins)
+
+
+class RedisPinStore:
+    """Pins shared by every replica, in Redis (key prefix `decision-router:pin:`, sliding TTL)."""
+
+    PREFIX = "decision-router:pin:"
+
+    def __init__(self, url: str, ttl_seconds: float = 3600, client: Any = None):
+        if client is None:
+            import redis.asyncio as redis  # only needed when ROUTER_PIN_STORE_URL is set
+
+            client = redis.from_url(url, socket_timeout=1.0, socket_connect_timeout=1.0)
+        self.redis = client
+        self.ttl = max(1, int(ttl_seconds))
+        self._tasks: set[asyncio.Task] = set()
+
+    async def get(self, key: str) -> Pin | None:
+        try:
+            raw = await self.redis.get(self.PREFIX + key)
+            if raw is None:
+                return None
+            await self.redis.expire(self.PREFIX + key, self.ttl)  # sliding expiry
+            data = json.loads(raw)
+            return Pin(data["model"], list(data["ranking"]), dict(data["probabilities"]), 0.0)
+        except Exception as exc:  # noqa: BLE001 - a store failure must not fail the request
+            log.warning("pin store read failed: %s", exc)
+            return None
+
+    async def set(self, key: str, model: str, ranking: list[str], probabilities: dict[str, float]) -> None:
+        value = json.dumps({"model": model, "ranking": _ranking(model, ranking), "probabilities": probabilities})
+        try:
+            await self.redis.set(self.PREFIX + key, value, ex=self.ttl)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("pin store write failed: %s", exc)
+
+    def set_nowait(self, key: str, model: str, ranking: list[str], probabilities: dict[str, float]) -> None:
+        task = asyncio.get_running_loop().create_task(self.set(key, model, ranking, probabilities))
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
+    async def ping(self) -> bool:
+        try:
+            return bool(await self.redis.ping())
+        except Exception:  # noqa: BLE001
+            return False
+
+    async def close(self) -> None:
+        if self._tasks:
+            await asyncio.gather(*self._tasks, return_exceptions=True)
+        await self.redis.aclose()
+
+
+def build_pin_store(url: str | None, ttl_seconds: float, max_entries: int,
+                    clock: Callable[[], float] = time.monotonic) -> PinStore | RedisPinStore:
+    if url:
+        return RedisPinStore(url, ttl_seconds)
+    return PinStore(ttl_seconds, max_entries, clock=clock)

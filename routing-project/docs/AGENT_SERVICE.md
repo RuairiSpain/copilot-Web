@@ -167,11 +167,19 @@ conversation repeats. Two conversations that start with exactly the same instruc
 first message share a pin; the only effect is that both use the same model. Pins are never
 shared across callers (API key or Entra client), catalogs or routing modes.
 
-**Where pins are kept.** Pins are held in the replica's memory. They expire
-`ROUTER_PIN_TTL_SECONDS` after last use (default 3600), and at most `ROUTER_PIN_MAX_ENTRIES` are
-kept (default 10,000, least recently used dropped first). With several replicas, enable
-session affinity on the load balancer. Otherwise a request that reaches another replica is
-routed once and pinned there.
+**Where pins are kept.** Pins expire `ROUTER_PIN_TTL_SECONDS` after last use (default 3600).
+
+- **Default: in the process's memory**, at most `ROUTER_PIN_MAX_ENTRIES` (default 10,000; least
+  recently used dropped first). With several replicas, a request that reaches another replica is
+  routed once and pinned there, unless the load balancer uses session affinity.
+- **Shared: `ROUTER_PIN_STORE_URL=rediss://:<access key>@<name>.redis.cache.windows.net:6380/0`**
+  (any `redis://` or `rediss://` URL). Every replica reads and writes the same pins, so a
+  conversation stays on its model whichever replica serves it. Reads are awaited with a
+  1-second timeout; writes are sent in the background. A Redis failure never fails a request:
+  a failed read counts as "no pin" and the turn is routed afresh.
+
+Run one worker process per pod (`WEB_CONCURRENCY=1`, the default) and scale with replicas. With
+more workers in one pod, in-memory pins and the Prometheus counters are split between them.
 
 **Seeing it.**
 - The `x-router-pin` response header is `new`, `followed`, `rerouted` or `no_key`.

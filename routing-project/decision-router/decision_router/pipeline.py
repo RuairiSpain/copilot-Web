@@ -28,7 +28,7 @@ from .config import ROUTING_MODES, Settings
 from .decision1 import Decision, Decision1Client, DecisionError, build_state, execution_order
 from .foundry import ChatClient
 from .instructions import InstructionTemplates
-from .pinning import PinStore, conversation_key
+from .pinning import build_pin_store, conversation_key
 from .policy import CallerPolicy, PolicyError, load_policies, policy_for
 from .pricing import PriceTable
 from .stage1 import ConstraintError, Constraints, parse_constraints, parse_cost_band, select
@@ -220,7 +220,7 @@ class RouterPipeline:
         self.prices = prices
         self._sleep = sleep
         self._clock = clock
-        self.pins = PinStore(settings.pin_ttl_seconds, settings.pin_max_entries, clock=clock)
+        self.pins = build_pin_store(settings.pin_store_url, settings.pin_ttl_seconds, settings.pin_max_entries, clock)
         self.templates = InstructionTemplates.load(settings.instructions_path)
         self._check_profiles()
         try:
@@ -328,7 +328,7 @@ class RouterPipeline:
                                f"no model in the '{catalog.compatibility}' catalog passes stage 1; the "
                                f"'{stage1.empty_at}' step removed the last candidates",
                                details={"stage1": stage1.log()})
-        pin_key, pinned, pin_log = self._pin_lookup(prepared, stage1, candidates)
+        pin_key, pinned, pin_log = await self._pin_lookup(prepared, stage1, candidates)
         if pin_log:
             event["pin"] = pin_log
         rendered = self.templates.render(
@@ -388,7 +388,7 @@ class RouterPipeline:
         return Routed(request_id, mode, catalog, candidates, decision, started, event, order, low_confidence,
                       prepared.passthrough, pin_key, rendered.instructions, rendered.criteria)
 
-    def _pin_lookup(self, prepared: Prepared, stage1, candidates: list[ModelEntry]):
+    async def _pin_lookup(self, prepared: Prepared, stage1, candidates: list[ModelEntry]):
         """(key, pin to follow or None, log entry or None) for this request."""
         if not prepared.pin:
             return None, None, None
@@ -400,7 +400,7 @@ class RouterPipeline:
         if key is None:
             return None, None, {"status": "no_key"}
         log: dict[str, Any] = {"key": key[:16], "source": "header" if prepared.session_id else "messages"}
-        pin = self.pins.get(key)
+        pin = await self.pins.get(key)
         if pin is None:
             return key, None, {**log, "status": "new"}
         if pin.model in {m.name for m in candidates}:
@@ -513,7 +513,7 @@ class RouterPipeline:
         if error_code:
             routed.event["error_code"] = error_code
         if routed.pin_key and outcome == "success" and served:
-            self.pins.set(routed.pin_key, served.name, routed.order, routed.decision.probabilities)
+            self.pins.set_nowait(routed.pin_key, served.name, routed.order, routed.decision.probabilities)
             routed.event.setdefault("pin", {})["pinned_to"] = served.name
         self.telemetry.record(routed.event, body)
 
@@ -570,6 +570,7 @@ class RouterPipeline:
                                    response.headers.get("content-type", "text/event-stream"), attempts, chunks())
 
     async def close(self) -> None:
+        await self.pins.close()
         await self.decision.close()
         await self.chat.close()
         await self.decision.auth.close()

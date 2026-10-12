@@ -111,6 +111,7 @@ class Settings:
     pin_default: bool = False
     pin_ttl_seconds: float = 3600.0
     pin_max_entries: int = 10_000
+    pin_store_url: str | None = None  # redis:// or rediss:// to share pins across replicas (pinning.py)
     # model name -> routing profile (defaults in DEFAULT_PROFILES, extended by ROUTER_PROFILES)
     profiles: dict[str, dict[str, Any]] = field(default_factory=lambda: dict(DEFAULT_PROFILES))
 
@@ -160,6 +161,7 @@ class Settings:
             pin_default=_bool("ROUTER_PIN_DEFAULT", False),
             pin_ttl_seconds=float(os.getenv("ROUTER_PIN_TTL_SECONDS", "3600")),
             pin_max_entries=int(os.getenv("ROUTER_PIN_MAX_ENTRIES", "10000")),
+            pin_store_url=os.getenv("ROUTER_PIN_STORE_URL") or None,
         )
         settings.validate()
         return settings
@@ -187,6 +189,8 @@ class Settings:
                 raise ValueError(f"{name} must be positive")
         if self.max_retry_after_seconds < 0:
             raise ValueError("ROUTER_MAX_RETRY_AFTER_SECONDS must not be negative")
+        if self.pin_store_url and not self.pin_store_url.startswith(("redis://", "rediss://")):
+            raise ValueError("ROUTER_PIN_STORE_URL must be a redis:// or rediss:// URL")
         if self.pin_ttl_seconds <= 0 or self.pin_max_entries < 1:
             raise ValueError("ROUTER_PIN_TTL_SECONDS and ROUTER_PIN_MAX_ENTRIES must be positive")
         for name, profile in self.profiles.items():
