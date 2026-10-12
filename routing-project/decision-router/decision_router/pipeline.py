@@ -299,14 +299,21 @@ class RouterPipeline:
                     candidates,
                 )
             except DecisionError as exc:
-                event.update(outcome="decision_failed", error_code=exc.code,
-                             total_latency_ms=round((self._clock() - started) * 1000, 3))
-                self.telemetry.record(event, body)
-                status = 504 if exc.code == "timeout" else 503 if exc.status_code == 429 else 502
-                raise RoutingError(status, "decision_unavailable", f"Decision-1 failed: {exc}") from exc
-            threshold = 0.0 if decision.skipped else self.settings.threshold_for(mode)
-            order, low_confidence = execution_order(decision.ranking, decision.probabilities, threshold, mode,
-                                                    {m.name: m.tier for m in candidates})
+                if not self.settings.decision_fallback:
+                    event.update(outcome="decision_failed", error_code=exc.code,
+                                 total_latency_ms=round((self._clock() - started) * 1000, 3))
+                    self.telemetry.record(event, body)
+                    status = 504 if exc.code == "timeout" else 503 if exc.status_code == 429 else 502
+                    raise RoutingError(status, "decision_unavailable", f"Decision-1 failed: {exc}") from exc
+                # Degraded: stage 1's candidates in price order, cheapest first, without Decision-1's ranking.
+                names = [m.name for m in candidates]
+                decision = Decision(names, names, {n: 0.0 for n in names}, names[0], None, 0.0, skipped=True)
+                event["degraded"] = {"reason": exc.code, "message": str(exc)}
+                order, low_confidence = names, False
+            else:
+                threshold = 0.0 if decision.skipped else self.settings.threshold_for(mode)
+                order, low_confidence = execution_order(decision.ranking, decision.probabilities, threshold, mode,
+                                                        {m.name: m.tier for m in candidates})
         event["decision"] = {
             "pinned": pinned is not None,
             "deployment": self.decision.deployment,

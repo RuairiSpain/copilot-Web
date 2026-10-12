@@ -48,6 +48,7 @@ def _routing_headers(routed: Routed, served: str | None = None) -> dict[str, str
         "x-router-compatibility": routed.catalog.compatibility,
         "x-router-ranking": ",".join(routed.decision.ranking),
         "x-router-low-confidence": str(routed.low_confidence).lower(),
+        "x-router-degraded": "true" if routed.event.get("degraded") else "false",
     }
     if "pin" in routed.event:
         headers["x-router-pin"] = routed.event["pin"].get("status", "")
@@ -155,6 +156,7 @@ def create_app(settings: Settings | None = None, *, pipeline: RouterPipeline | N
                 "ranking": [{"model": name, "probability": decision.probabilities[name]} for name in decision.ranking],
                 "execution_order": routed.order,
                 "low_confidence": routed.low_confidence,
+                "degraded": routed.event.get("degraded"),
                 "pin": routed.event.get("pin"),
                 "decision1_input": {"instructions": routed.instructions,
                                     "fragments": routed.event["instructions"]["fragments"],

@@ -155,7 +155,7 @@ The response carries `x-router-low-confidence: true|false`, and `/v1/route` retu
 | Event | Behaviour |
 |---|---|
 | Decision-1 returns 408, 429, 5xx or a network error | Retried with exponential backoff, honouring `retry-after-ms` / `retry-after`, up to `ROUTER_DECISION_MAX_ATTEMPTS` attempts inside `ROUTER_DECISION_TIMEOUT_SECONDS` |
-| Decision-1 still failing, or 400/401/403/404/422, refusal or malformed answer | `code: decision_unavailable`, status 503 for throttling, 504 for timeout, otherwise 502. No model is called. |
+| Decision-1 still failing, or 400/401/403/404/422, refusal or malformed answer | Degraded: the stage-1 candidates are called in price order, cheapest first, without Decision-1's ranking. The response carries `x-router-degraded: true` and the decision log `degraded` (reason and message). With `ROUTER_DECISION_FALLBACK=false`: `code: decision_unavailable`, status 503 for throttling, 504 for timeout, otherwise 502, and no model is called. |
 | Model returns 408, 429, 5xx or a network error | Retry the same model (`ROUTER_ATTEMPTS_PER_MODEL`, default 2), honouring `retry-after-ms` / `retry-after` up to `ROUTER_MAX_RETRY_AFTER_SECONDS`; then the next ranked model |
 | Model returns 404 (deployment missing) | Next ranked model, no retry |
 | Model returns 401 or 403 | The router's own credentials were refused for that deployment (the caller's are never sent upstream). Next ranked model, no retry; logged as `upstream_auth_error`. If no model answers, 502 `all_models_failed`, never the upstream 401/403 |
@@ -252,6 +252,7 @@ What the report does and does not show:
 | `ROUTER_TOTAL_TIMEOUT_SECONDS` | `90` | Whole request, across fallbacks |
 | `ROUTER_ATTEMPTS_PER_MODEL` | `2` | Attempts per model before the next ranked one |
 | `ROUTER_MAX_RETRY_AFTER_SECONDS` | `10` | Longest `retry-after` the router waits for |
+| `ROUTER_DECISION_FALLBACK` | `true` | When Decision-1 cannot answer, serve the cheapest candidate (degraded) instead of failing the request |
 | `ROUTER_MAX_BODY_BYTES` | `20000000` | Largest request body accepted; larger bodies get 413 |
 | `ROUTER_DECISION_LOG_PATH` | unset | Also write the decision log to this file |
 | `ROUTER_LOG_PROMPTS` | `false` | Include message text in the decision log |

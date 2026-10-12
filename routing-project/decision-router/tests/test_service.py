@@ -290,9 +290,19 @@ def test_retry_after_is_honoured_up_to_the_cap(make_pipeline, settings, fake):
     assert pipe.sleeps == [1.5]
 
 
-def test_decision1_failure_returns_an_error_and_calls_no_model(make_pipeline, settings, fake, tmp_path):
+def test_decision1_failure_is_served_degraded_by_the_cheapest_candidate(make_pipeline, settings, fake, tmp_path):
     fake.decision_responses.append(httpx.Response(401, json={"error": "unauthorized"}))
     with client_for(make_pipeline, settings) as client:
+        response = client.post("/v1/chat/completions", json={"messages": USER, "compatibility": "new"})
+    assert response.status_code == 200 and response.headers["x-router-degraded"] == "true"
+    log = last_log(tmp_path)
+    assert response.json()["model"] == log["candidates"][0] == "Phi-4-mini-instruct"  # cheapest output price
+    assert log["degraded"]["reason"] == "http_error" and log["decision"]["skipped"] is True
+
+
+def test_decision1_failure_returns_an_error_and_calls_no_model(make_pipeline, settings, fake, tmp_path):
+    fake.decision_responses.append(httpx.Response(401, json={"error": "unauthorized"}))
+    with client_for(make_pipeline, settings, decision_fallback=False) as client:
         response = client.post("/v1/chat/completions", json={"messages": USER})
     assert response.status_code == 502 and response.json()["error"]["code"] == "decision_unavailable"
     assert not chat_calls(fake)
@@ -313,7 +323,7 @@ def test_decision1_throttling_is_retried_then_succeeds(make_pipeline, settings, 
 def test_decision1_throttling_that_persists_returns_503(make_pipeline, settings, fake):
     for _ in range(3):
         fake.decision_responses.append(httpx.Response(429, json={}))
-    with client_for(make_pipeline, settings) as client:
+    with client_for(make_pipeline, settings, decision_fallback=False) as client:
         response = client.post("/v1/chat/completions", json={"messages": USER})
     assert response.status_code == 503 and response.json()["error"]["code"] == "decision_unavailable"
     assert not chat_calls(fake)
@@ -321,7 +331,7 @@ def test_decision1_throttling_that_persists_returns_503(make_pipeline, settings,
 
 def test_decision1_retry_after_beyond_the_budget_reports_the_429(make_pipeline, settings, fake):
     fake.decision_responses.append(httpx.Response(429, headers={"retry-after": "60"}, json={}))
-    with client_for(make_pipeline, settings) as client:
+    with client_for(make_pipeline, settings, decision_fallback=False) as client:
         assert client.post("/v1/chat/completions", json={"messages": USER}).status_code == 503
 
 
