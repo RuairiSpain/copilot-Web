@@ -42,7 +42,7 @@ if __name__ == "__main__":
             result = select(catalog, mode, Constraints(), body, settings)
             rendered = templates.render(result.candidates, mode=mode, constraints=Constraints(), cost_band=None,
                                         requirements=result.requirements, body=body,
-                                        chars_per_token=settings.chars_per_token)
+                                        chars_per_token=settings.chars_per_token, tokens=result.tokens)
             request = build_request(settings.decision1_deployment, build_state(body, settings.state_max_chars),
                                     rendered.instructions, rendered.criteria)
             handle.write(json.dumps({"id": row.get("id"), "routing_mode": mode, "request": request,

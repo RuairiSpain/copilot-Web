@@ -146,3 +146,13 @@ def test_invalid_constraints(catalog, raw, message):
 
 def test_region_names_are_normalised(catalog):
     assert parse_constraints({"region": "Sweden Central"}, catalog).region == "swedencentral"
+
+
+def test_images_count_a_fixed_cost_not_their_base64_size(new_catalog, settings):
+    from decision_router.stage1 import IMAGE_TOKENS, estimated_tokens
+    image = {"type": "image_url", "image_url": {"url": "data:image/png;base64," + "A" * 1_000_000}}
+    body = {"messages": [{"role": "user", "content": [{"type": "text", "text": "describe"}, image, image]}]}
+    prompt, _ = estimated_tokens(body, settings.chars_per_token)
+    assert 2 * IMAGE_TOKENS < prompt < 2 * IMAGE_TOKENS + 100
+    result = select(new_catalog, "balanced", Constraints(), body, settings)
+    assert not removed(result, "size") and result.tokens[0] == prompt  # no model dropped for "size"

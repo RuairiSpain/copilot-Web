@@ -23,7 +23,7 @@ FLAGS = ("tools", "structured_output", "image_input", "reasoning", "long_prompt"
          "pin_rerouted", "passthrough")
 PLACEHOLDERS = ("actions", "band_label", "candidate_count", "price_min", "price_max", "tool_names", "image_count",
                 "prompt_tokens", "output_tokens", "previous_model", "pin_reason")
-CRITERIA_PLACEHOLDERS = ("description", "output_price", "price_rank", "candidate_count")
+CRITERIA_PLACEHOLDERS = ("description", "input_price", "output_price", "price_rank", "candidate_count")
 ALWAYS_KEPT = ("base", "mode.")
 
 
@@ -51,8 +51,11 @@ def _fields(text: str) -> set[str]:
 
 
 def _money(value: float) -> str:
-    """$ amounts: whole dollars without decimals, otherwise two decimals (2.5 -> 2.50)."""
-    return f"{value:,.0f}" if value == int(value) else f"{value:,.2f}"
+    """$ amounts: whole dollars without decimals, otherwise two decimals (2.5 -> 2.50), or three when the
+    price has them (0.125 stays 0.125 rather than rounding to 0.12)."""
+    if value == int(value):
+        return f"{value:,.0f}"
+    return f"{value:,.2f}" if round(value, 2) == value else f"{value:,.3f}"
 
 
 def _range(band: CostBand) -> str:
@@ -108,10 +111,10 @@ class InstructionTemplates:
     def facts(self, *, mode: str, candidates: list[ModelEntry], constraints: Constraints,
               cost_band: CostBand | None, requirements: dict[str, str], body: dict[str, Any],
               chars_per_token: float, profile: str | None = None, passthrough: bool = False,
-              pin: dict[str, Any] | None = None) -> dict[str, Any]:
+              pin: dict[str, Any] | None = None, tokens: tuple[int, int] | None = None) -> dict[str, Any]:
         """What stage 1 knows, as condition values and placeholder values."""
         needed = set(requirements) | set(constraints.capabilities)
-        prompt_tokens, output_tokens = estimated_tokens(body, chars_per_token)
+        prompt_tokens, output_tokens = tokens or estimated_tokens(body, chars_per_token)
         prices = [m.output_price for m in candidates if m.output_price is not None]
         tools = [(t.get("function") or {}).get("name") or t.get("name")
                  for t in body.get("tools") or [] if isinstance(t, dict)]
@@ -175,13 +178,18 @@ class InstructionTemplates:
                         self.criteria(candidates), dropped)
 
     def criteria(self, candidates: list[ModelEntry]) -> dict[str, str]:
-        """Option key -> description, with the option's output price and price rank among the options."""
+        """Option key -> description, with the option's prices and its price rank among the options.
+
+        The rank follows `tier` (input price, then output price), the same order the routing modes'
+        price bands use, so it is stated as such: a model can rank above one with a lower output price."""
         ranked = {m.name: i + 1 for i, m in enumerate(sorted(candidates, key=lambda m: m.tier))}
         out = {}
         for m in candidates:
+            priced = m.output_price is not None and m.input_price is not None
             values = {"description": m.description, "price_rank": str(ranked[m.name]),
                       "candidate_count": str(len(candidates)),
-                      "output_price": _money(m.output_price) if m.output_price is not None else None}
-            template = self.criteria_templates["priced" if m.output_price is not None else "unpriced"]
+                      "input_price": _money(m.input_price) if priced else None,
+                      "output_price": _money(m.output_price) if priced else None}
+            template = self.criteria_templates["priced" if priced else "unpriced"]
             out[m.name] = template.format_map(values)
         return out

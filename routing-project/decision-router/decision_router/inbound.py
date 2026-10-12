@@ -118,13 +118,16 @@ class InboundAuth:
         try:
             claims = jwt.decode(token, key, algorithms=["RS256"], audience=list(self.audiences),
                                 issuer=self.issuers, options={"require": ["exp", "iss", "aud"]}, leeway=60)
+        except jwt.ExpiredSignatureError as exc:
+            raise Unauthorized("token expired") from exc
         except jwt.PyJWTError as exc:
-            raise Unauthorized(f"token rejected: {exc}") from exc
+            # The library's message names the failed check; keep it out of the response.
+            raise Unauthorized("token rejected: invalid signature, audience, issuer or claims") from exc
         if claims.get("tid") and claims["tid"] != self.tenant_id:
             raise Unauthorized("token is from another tenant")
         client = str(claims.get("azp") or claims.get("appid") or "")
         if self.allowed_client_ids and client.lower() not in self.allowed_client_ids:
-            raise Unauthorized(f"client {client or '(none)'} is not in ROUTER_ENTRA_ALLOWED_CLIENT_IDS")
+            raise Unauthorized(f"client {client or '(none)'} is not allowed to call this router")
         return client or str(claims.get("oid") or "")
 
     async def _signing_key(self, kid: str | None) -> Any:

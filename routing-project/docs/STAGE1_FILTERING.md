@@ -128,8 +128,11 @@ without `actions` is still the dollar band above. Several actions mean a model m
 | an `image_url` part in `messages` | `image_input: yes` |
 | estimated prompt tokens + `max_completion_tokens` | a big enough context window, an input limit at least as large as the prompt (GPT-5.x models accept 272K of their 400K context, or 922K of 1.05M, as input), and an output limit at least as large as requested |
 
-The token estimate is characters ÷ 4, and deliberately rough. It exists to keep a 300,000-character prompt away from a 16K-context model, not to
-cut close to a limit.
+The token estimate is characters ÷ 4 for text, plus a fixed 1,600 tokens per image. An inline
+base64 image is not counted by its encoded size: a 750 KB image would otherwise count as about
+190,000 tokens and wrongly remove models for size. The estimate is deliberately rough. It exists
+to keep a 300,000-character prompt away from a 16K-context model, not to cut close to a limit.
+It is computed once per request and reused for the instructions Decision-1 receives.
 
 ## Filter order
 

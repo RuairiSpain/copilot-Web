@@ -13,7 +13,7 @@ stage 1   deterministic filter (stage1.py)    lifecycle → operator allow-list 
    ▼
 stage 2   Decision-1 "choice" question        state = rendered conversation
    │      instructions = fixed fragments chosen and filled by stage 1 (instructions.py)
-   │      criteria = candidates + descriptions + output price + price rank among the options
+   │      criteria = candidates + descriptions + input and output price + price rank among the options
    │      ranking = probabilities, highest first (ties → cheaper model)
    ▼
 select    execution order                     highest probability first; if that probability is
@@ -79,7 +79,7 @@ api-key: <key>            or   Authorization: Bearer <Entra token, scope cogniti
  "questions": {"route": {
    "type": "choice",
    "instructions": "Choose the model that should answer ... Cost mode: ...",
-   "criteria": {"gpt-5.4-nano": "Smallest, fastest GPT-5.4 model ... Output price $0.80 per million tokens; 1 of 3 by price among these options (1 is cheapest).",
+   "criteria": {"gpt-5.4-nano": "Smallest, fastest GPT-5.4 model ... Price per million tokens: $0.10 input, $0.80 output; 1 of 3 by price among these options, ordered by input price then output price (1 is cheapest).",
                 "gpt-5.4-mini": "...", "gpt-5.6-terra": "..."}}}}
 
 200 {"model": "microsoft-decision-1", "usage": {"prompt_tokens": 412, ...},
@@ -149,7 +149,9 @@ The response carries `x-router-low-confidence: true|false`, and `/v1/route` retu
 | Decision-1 still failing, or 400/401/403/404/422, refusal or malformed answer | `code: decision_unavailable`, status 503 for throttling, 504 for timeout, otherwise 502. No model is called. |
 | Model returns 408, 429, 5xx or a network error | Retry the same model (`ROUTER_ATTEMPTS_PER_MODEL`, default 2), honouring `retry-after-ms` / `retry-after` up to `ROUTER_MAX_RETRY_AFTER_SECONDS`; then the next ranked model |
 | Model returns 404 (deployment missing) | Next ranked model, no retry |
-| Model returns another 4xx (bad request, content filter, auth) | Passed through to the client unchanged; no fallback, because another model would get the same request |
+| Model returns 401 or 403 | The router's own credentials were refused for that deployment (the caller's are never sent upstream). Next ranked model, no retry; logged as `upstream_auth_error`. If no model answers, 502 `all_models_failed`, never the upstream 401/403 |
+| Model returns another 4xx (bad request, content filter) | Passed through to the client unchanged; no fallback, because another model would get the same request |
+| Request body larger than `ROUTER_MAX_BODY_BYTES` | 413 `request_too_large`, before the body is parsed |
 | All ranked models fail | 502, `code: all_models_failed`, with the attempt list |
 | `ROUTER_TOTAL_TIMEOUT_SECONDS` used up | 504, `code: deadline_exceeded` |
 | Streaming | Fallback is possible only before the first byte |
@@ -239,6 +241,7 @@ What the report does and does not show:
 | `ROUTER_TOTAL_TIMEOUT_SECONDS` | `90` | Whole request, across fallbacks |
 | `ROUTER_ATTEMPTS_PER_MODEL` | `2` | Attempts per model before the next ranked one |
 | `ROUTER_MAX_RETRY_AFTER_SECONDS` | `10` | Longest `retry-after` the router waits for |
+| `ROUTER_MAX_BODY_BYTES` | `20000000` | Largest request body accepted; larger bodies get 413 |
 | `ROUTER_DECISION_LOG_PATH` | unset | Also write the decision log to this file |
 | `ROUTER_LOG_PROMPTS` | `false` | Include message text in the decision log |
 | `ROUTER_API_KEYS` | unset | Comma-separated API keys callers may present (`docs/AGENT_SERVICE.md`) |

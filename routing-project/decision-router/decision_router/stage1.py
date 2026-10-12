@@ -201,12 +201,40 @@ def requirements_from_request(body: dict[str, Any]) -> dict[str, str]:
     return needs
 
 
+# Tokens counted per image instead of its encoded bytes. Providers bill an image by its pixel size,
+# not its base64 length: a large image is roughly 1,100 tokens on GPT models (high detail) and up to
+# about 1,600 on Claude, so 1,600 is the conservative figure.
+IMAGE_TOKENS = 1600
+IMAGE_PART_TYPES = ("image_url", "image", "input_image")
+
+
+def _without_images(messages: list[Any]) -> tuple[list[Any], int]:
+    """The messages with image parts replaced by a marker, and the number of images removed."""
+    images, out = 0, []
+    for message in messages:
+        content = message.get("content") if isinstance(message, dict) else None
+        if isinstance(content, list) and any(isinstance(p, dict) and p.get("type") in IMAGE_PART_TYPES for p in content):
+            parts = []
+            for part in content:
+                if isinstance(part, dict) and part.get("type") in IMAGE_PART_TYPES:
+                    images += 1
+                    parts.append({"type": "image"})
+                else:
+                    parts.append(part)
+            message = {**message, "content": parts}
+        out.append(message)
+    return out, images
+
+
 def estimated_tokens(body: dict[str, Any], chars_per_token: float) -> tuple[int, int]:
-    """(prompt tokens, requested output tokens). A deliberately simple estimate: characters / chars_per_token."""
-    text = (json.dumps(body.get("messages", []), ensure_ascii=False) + json.dumps(body.get("tools") or [])
+    """(prompt tokens, requested output tokens). A deliberately simple estimate: characters / chars_per_token
+    for text, and IMAGE_TOKENS per image (an inline base64 image would otherwise count as its encoded size)."""
+    messages, images = _without_images(body.get("messages") or [])
+    text = (json.dumps(messages, ensure_ascii=False) + json.dumps(body.get("tools") or [])
             + json.dumps(body.get("system") or ""))
     output = body.get("max_completion_tokens") or body.get("max_tokens") or 0
-    return math.ceil(len(text) / chars_per_token), int(output) if isinstance(output, int) else 0
+    return (math.ceil(len(text) / chars_per_token) + images * IMAGE_TOKENS,
+            int(output) if isinstance(output, int) else 0)
 
 
 @dataclass
@@ -215,6 +243,7 @@ class Stage1Result:
     steps: list[dict[str, Any]] = field(default_factory=list)
     requirements: dict[str, str] = field(default_factory=dict)
     empty_at: str | None = None
+    tokens: tuple[int, int] = (0, 0)  # (estimated prompt tokens, requested output tokens), computed once
 
     def log(self) -> dict[str, Any]:
         return {"steps": self.steps, "requirements": self.requirements, "empty_at": self.empty_at}
@@ -295,6 +324,7 @@ def select(catalog: Catalog, mode: str, constraints: Constraints, body: dict[str
         return None
 
     prompt_tokens, output_tokens = estimated_tokens(body, settings.chars_per_token)
+    result.tokens = (prompt_tokens, output_tokens)
     needed_context = max(prompt_tokens + output_tokens, constraints.min_context_tokens or 0)
 
     def size(m: ModelEntry) -> str | None:

@@ -50,7 +50,7 @@ def run(example: dict) -> dict:
         rendered = InstructionTemplates.load(settings.instructions_path).render(
             result.candidates, mode=prepared.mode, constraints=prepared.constraints, cost_band=prepared.cost_band,
             requirements=result.requirements, body=prepared.body, chars_per_token=settings.chars_per_token,
-            profile=prepared.profile, passthrough=prepared.passthrough)
+            profile=prepared.profile, passthrough=prepared.passthrough, tokens=result.tokens)
     return {
         "rendered": rendered,
         "catalog": prepared.catalog, "mode": prepared.mode, "profile": prepared.profile, "pin": prepared.pin, "cost_band": prepared.cost_band,

@@ -93,6 +93,7 @@ class Settings:
     total_timeout_seconds: float = 90.0
     attempts_per_model: int = 2
     max_retry_after_seconds: float = 10.0
+    max_body_bytes: int = 20_000_000  # larger request bodies get 413 before they are parsed
     decision_log_path: Path | None = None
     log_prompts: bool = False
     # Inbound authentication (see inbound.py): API keys and/or Microsoft Entra ID tokens.
@@ -138,6 +139,7 @@ class Settings:
             total_timeout_seconds=float(os.getenv("ROUTER_TOTAL_TIMEOUT_SECONDS", "90")),
             attempts_per_model=int(os.getenv("ROUTER_ATTEMPTS_PER_MODEL", "2")),
             max_retry_after_seconds=float(os.getenv("ROUTER_MAX_RETRY_AFTER_SECONDS", "10")),
+            max_body_bytes=int(os.getenv("ROUTER_MAX_BODY_BYTES", "20000000")),
             decision_log_path=Path(log_path) if log_path else None,
             log_prompts=_bool("ROUTER_LOG_PROMPTS", False),
             api_keys=_list("ROUTER_API_KEYS"),

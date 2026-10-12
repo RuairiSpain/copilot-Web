@@ -86,8 +86,19 @@ def create_app(settings: Settings | None = None, *, pipeline: RouterPipeline | N
         return value[:128] if value else str(uuid.uuid4())
 
     async def read_body(request: Request) -> Any:
+        limit = settings.max_body_bytes
+        too_large = RoutingError(413, "request_too_large", f"request body is larger than {limit:,} bytes")
+        declared = request.headers.get("content-length")
+        if declared and declared.isdigit() and int(declared) > limit:
+            raise too_large
+        chunks, size = [], 0
+        async for chunk in request.stream():  # counted as it arrives, so a body without a length is capped too
+            size += len(chunk)
+            if size > limit:
+                raise too_large
+            chunks.append(chunk)
         try:
-            return await request.json()
+            return json.loads(b"".join(chunks))
         except (json.JSONDecodeError, UnicodeDecodeError) as exc:
             raise RoutingError(400, "invalid_json", "request body is not valid JSON") from exc
 

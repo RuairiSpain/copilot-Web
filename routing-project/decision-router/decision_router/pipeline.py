@@ -156,6 +156,19 @@ class RouterPipeline:
         self._clock = clock
         self.pins = PinStore(settings.pin_ttl_seconds, settings.pin_max_entries, clock=clock)
         self.templates = InstructionTemplates.load(settings.instructions_path)
+        self._check_profiles()
+
+    def _check_profiles(self) -> None:
+        """Fail at startup, not on every request, when a profile names a model, band or mode the catalog lacks."""
+        for name, profile in self.settings.profiles.items():
+            try:
+                catalog = self.catalogs.get(profile.get("compatibility"))
+                if profile.get("routing_mode", catalog.default_mode) not in ROUTING_MODES:
+                    raise ConstraintError(f"routing_mode must be one of {list(ROUTING_MODES)}")
+                parse_constraints(profile.get("routing_constraints"), catalog)
+                parse_cost_band(profile.get("routing_cost_band"), catalog)
+            except (CatalogError, ConstraintError) as exc:
+                raise ValueError(f"routing profile '{name}' is invalid: {exc}") from exc
 
     # ------------------------------------------------------------------ request shape
     def prepare(self, body: Any) -> Prepared:
@@ -232,7 +245,7 @@ class RouterPipeline:
         rendered = self.templates.render(
             candidates, mode=mode, constraints=prepared.constraints, cost_band=prepared.cost_band,
             requirements=stage1.requirements, body=body, chars_per_token=self.settings.chars_per_token,
-            profile=prepared.profile, passthrough=prepared.passthrough, pin=pin_log)
+            profile=prepared.profile, passthrough=prepared.passthrough, pin=pin_log, tokens=stage1.tokens)
         event["instructions"] = {"template_sha256": self.templates.fingerprint, "fragments": rendered.fragments,
                                  "dropped": rendered.dropped, "text": rendered.instructions}
         if pinned:
@@ -337,6 +350,14 @@ class RouterPipeline:
                     if response.status_code == 404:
                         # Deployment missing: retrying the same model cannot help.
                         record["outcome"] = "not_found"
+                        attempts.append(record)
+                        await response.aclose()
+                        break
+                    if response.status_code in (401, 403):
+                        # The router's own credentials were refused (for example a missing role on one
+                        # deployment). The caller's credentials are not involved, so passing this status
+                        # through would mislead them: try the next model, and end in 502 if none answers.
+                        record["outcome"] = "upstream_auth_error"
                         attempts.append(record)
                         await response.aclose()
                         break

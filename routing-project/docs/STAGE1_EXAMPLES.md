@@ -283,7 +283,7 @@ one test request against the deployment, then recording the source in `catalog_s
 }
 ```
 
-**Read from the request:** catalog `new` (23 models), mode `balanced`, estimated ~47 prompt tokens. Requirements: `image_input` (messages contain images).
+**Read from the request:** catalog `new` (23 models), mode `balanced`, estimated ~1,632 prompt tokens. Requirements: `image_input` (messages contain images).
 
 | Step | Removed | Left |
 |---|---|---|
@@ -1592,7 +1592,7 @@ Router settings for this example: `model_allowlist=gpt-5.4-mini,gpt-5.5`.
 }
 ```
 
-**Read from the request:** catalog `new` (23 models), mode `balanced`, estimated ~42 prompt tokens. Requirements: `image_input` (messages contain images).
+**Read from the request:** catalog `new` (23 models), mode `balanced`, estimated ~1,626 prompt tokens. Requirements: `image_input` (messages contain images).
 
 | Step | Removed | Left |
 |---|---|---|

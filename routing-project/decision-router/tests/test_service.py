@@ -355,3 +355,35 @@ def test_health_and_metrics(make_pipeline, settings, fake):
         client.post("/v1/chat/completions", json={"messages": USER})
         metrics = client.get("/metrics").text
     assert "router_requests_total" in metrics and "router_decision_latency_ms_bucket" in metrics
+
+
+def test_upstream_401_or_403_tries_the_next_model_and_never_reaches_the_caller(make_pipeline, settings, fake, tmp_path):
+    fake.decision_responses.extend([ranked(["gpt-5.5", "gpt-5.6-terra"]), ranked(["gpt-5.5", "gpt-5.6-terra"])])
+    with client_for(make_pipeline, settings) as c:
+        fake.fail("gpt-5.5", 403)
+        served = c.post("/v1/chat/completions", json={"messages": USER})
+        assert served.status_code == 200 and served.json()["model"] == "gpt-5.6-terra"
+        assert last_log(tmp_path)["attempts"][0]["outcome"] == "upstream_auth_error"
+        fake.fail("gpt-5.5", 401)
+        fake.fail("gpt-5.6-terra", 401)
+        two = {"models": ["gpt-5.5", "gpt-5.6-terra"]}
+        failed = c.post("/v1/chat/completions", json={"messages": USER, "routing_constraints": two})
+    assert failed.status_code == 502 and failed.json()["error"]["code"] == "all_models_failed"
+
+
+def test_request_body_over_the_limit_gets_413(make_pipeline, settings, fake):
+    from dataclasses import replace
+    small = replace(settings, max_body_bytes=1_000)
+    fake.decision_responses.append(ranked(["gpt-5.5", "gpt-5.6-terra"]))
+    with client_for(make_pipeline, small) as c:
+        big = c.post("/v1/chat/completions", json={"messages": [{"role": "user", "content": "x" * 2_000}]})
+        ok = c.post("/v1/route", json={"messages": USER})
+    assert big.status_code == 413 and big.json()["error"]["code"] == "request_too_large"
+    assert ok.status_code != 413
+
+
+def test_invalid_profile_fails_at_startup(make_pipeline, settings):
+    import pytest
+    bad = {**settings.profiles, "agent-x": {"compatibility": "new", "routing_constraints": {"models": ["gpt-9"]}}}
+    with pytest.raises(ValueError, match="routing profile 'agent-x' is invalid"):
+        make_pipeline(profiles=bad)
