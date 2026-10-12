@@ -1,0 +1,24 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "replicas": { "type": "int" }
+  },
+  "resources": [
+    { "type": "Microsoft.Search/searchServices", "apiVersion": "2025-05-01", "name": "std-3x2", "location": "westeurope", "sku": { "name": "standard" }, "properties": { "replicaCount": 3, "partitionCount": 2 } },
+    { "type": "Microsoft.Search/searchServices", "apiVersion": "2025-05-01", "name": "std-12x3", "location": "westeurope", "sku": { "name": "standard" }, "properties": { "replicaCount": 12, "partitionCount": 3 } },
+    { "type": "Microsoft.Search/searchServices", "apiVersion": "2025-05-01", "name": "s3hd-3", "location": "westeurope", "sku": { "name": "standard3" }, "properties": { "replicaCount": 3, "partitionCount": 3, "hostingMode": "HighDensity" } },
+    { "type": "Microsoft.Search/searchServices", "apiVersion": "2025-05-01", "name": "std-p5", "location": "westeurope", "sku": { "name": "standard" }, "properties": { "replicaCount": 1, "partitionCount": 5 } },
+    { "type": "Microsoft.Search/searchServices", "apiVersion": "2025-05-01", "name": "std-r13", "location": "westeurope", "sku": { "name": "standard" }, "properties": { "replicaCount": 13, "partitionCount": 1 } },
+    { "type": "Microsoft.Search/searchServices", "apiVersion": "2025-05-01", "name": "basic-r4", "location": "westeurope", "sku": { "name": "basic" }, "properties": { "replicaCount": 4, "partitionCount": 1 } },
+    { "type": "Microsoft.Search/searchServices", "apiVersion": "2025-05-01", "name": "std-4x12", "location": "westeurope", "sku": { "name": "standard" }, "properties": { "replicaCount": 4, "partitionCount": 12 } },
+    { "type": "Microsoft.Search/searchServices", "apiVersion": "2025-05-01", "name": "std-hd", "location": "westeurope", "sku": { "name": "standard" }, "properties": { "replicaCount": 1, "partitionCount": 1, "hostingMode": "HighDensity" } },
+    { "type": "Microsoft.Search/searchServices", "apiVersion": "2025-05-01", "name": "s3hd-4", "location": "westeurope", "sku": { "name": "standard3" }, "properties": { "replicaCount": 1, "partitionCount": 4, "hostingMode": "HighDensity" } },
+    { "type": "Microsoft.Search/searchServices", "apiVersion": "2025-05-01", "name": "defaults", "location": "westeurope", "sku": { "name": "standard" }, "properties": {} },
+    { "type": "Microsoft.Search/searchServices", "apiVersion": "2025-05-01", "name": "free-1", "location": "westeurope", "sku": { "name": "free" }, "properties": { "replicaCount": 1, "partitionCount": 1 } },
+    { "type": "Microsoft.Search/searchServices", "apiVersion": "2026-09-01-preview", "name": "serverless-1", "location": "westeurope", "sku": { "name": "serverless" }, "properties": { "replicaCount": 1 } },
+    { "type": "Microsoft.Search/searchServices", "apiVersion": "2025-05-01", "name": "basic-p3", "location": "westeurope", "sku": { "name": "basic" }, "properties": { "replicaCount": 3, "partitionCount": 3 } },
+    { "type": "Microsoft.Search/searchServices", "apiVersion": "2025-05-01", "name": "std-param", "location": "westeurope", "sku": { "name": "standard" }, "properties": { "replicaCount": "[parameters('missing')]", "partitionCount": 2 } },
+    { "type": "Microsoft.Search/searchServices", "apiVersion": "2025-05-01", "name": "std-cond", "condition": "[parameters('c')]", "location": "westeurope", "sku": { "name": "standard" }, "properties": { "replicaCount": 13 } }
+  ]
+}
