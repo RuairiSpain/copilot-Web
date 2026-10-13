@@ -4,13 +4,15 @@ Reads data/<repo>/changes/<week>.csv and writes data/<repo>/summaries/<week>.jso
   {"<product>": {"row_count": n, "generated_at": ..., "provider": ..., "bullets": [
       {"headline": ..., "detail": ..., "impact": "High|Medium|Low", "urls": [...]}]}}
 A product/week is (re)summarised only when its row count changed since the last summary,
-so late changes picked up by the next Thursday scan refresh that week's summary.
+so late changes picked up by the next Thursday scan refresh that week's summary. A summary that
+fell back to the rule-based list because the model call failed is retried on the next run.
 """
 from __future__ import annotations
 
 import json
 import os
 import re
+import time
 
 import requests
 
@@ -62,24 +64,47 @@ def call_llm(cfg: dict, product: str, week: str, rows: list[dict]) -> list[dict]
     else:
         return None
     try:
-        resp = requests.post(url, headers=headers, json=body, timeout=120)
+        resp = post_with_retry(url, headers, body)
         resp.raise_for_status()
         text = resp.json()["choices"][0]["message"]["content"]
-        text = re.sub(r"^```(json)?|```$", "", text.strip(), flags=re.M).strip()
+        text = re.sub(r"^```(json)?|```$", "", text.strip(), flags=re.MULTILINE).strip()
         bullets = json.loads(text).get("bullets", [])
-    except Exception as exc:
+    except Exception as exc:  # any bad response falls back to the rule-based summary
         print(f"  summary call failed for {product} {week}: {exc}")
+        return None
+    if not isinstance(bullets, list):
+        print(f"  summary call for {product} {week} returned no bullet list")
         return None
     allowed = {p["url"] for p in payload_rows}
     clean = []
     for b in bullets[: cfg.get("max_bullets", 8)]:
+        if not isinstance(b, dict):
+            continue
+        urls = [u for u in b.get("urls") or [] if isinstance(u, str)] if isinstance(b.get("urls"), list) else []
+        impact = b.get("impact") if isinstance(b.get("impact"), str) else ""
         clean.append({
             "headline": str(b.get("headline", ""))[:160],
             "detail": str(b.get("detail", ""))[:600],
-            "impact": b.get("impact") if b.get("impact") in {"High", "Medium", "Low"} else "Medium",
-            "urls": [u for u in b.get("urls", []) if u in allowed][:3],
+            "impact": impact if impact in {"High", "Medium", "Low"} else "Medium",
+            "urls": [u for u in urls if u in allowed][:3],
         })
     return clean
+
+
+def post_with_retry(url: str, headers: dict, body: dict, attempts: int = 3) -> requests.Response:
+    """POST, waiting and retrying on rate limits (429) and server errors (5xx)."""
+    for i in range(attempts):
+        resp = requests.post(url, headers=headers, json=body, timeout=120)
+        retryable = resp.status_code == 429 or resp.status_code >= 500
+        if not retryable or i == attempts - 1:
+            return resp
+        try:
+            wait = min(60.0, float(resp.headers.get("Retry-After", "")))
+        except ValueError:
+            wait = 5.0 * 2 ** i
+        print(f"  HTTP {resp.status_code}; retrying in {wait:.0f}s")
+        time.sleep(wait)
+    return resp
 
 
 def rule_based(rows: list[dict], max_bullets: int) -> list[dict]:
@@ -109,15 +134,21 @@ def main() -> None:
             for r in rows:
                 by_product.setdefault(r["product"], []).append(r)
             changed = False
+            wanted = scfg.get("provider", "none")
             for product, items in sorted(by_product.items()):
-                if existing.get(product, {}).get("row_count") == len(items):
+                prev = existing.get(product, {})
+                if prev.get("row_count") == len(items) and not (prev.get("provider") == "rule-based" and wanted != "none"):
                     continue
                 cands = candidate_rows(items, scfg.get("max_rows_per_product", 40))
-                bullets, provider = None, scfg.get("provider", "none")
-                if cands:
-                    bullets = call_llm(scfg, product, week, cands)
-                if bullets is None:
-                    bullets, provider = rule_based(cands, scfg.get("max_bullets", 8)), "rule-based"
+                if not cands:
+                    # Only minor or metadata-only edits this week: nothing to summarise.
+                    bullets, provider = [], "none"
+                else:
+                    bullets, provider = call_llm(scfg, product, week, cands), wanted
+                    if bullets is None:
+                        bullets, provider = rule_based(cands, scfg.get("max_bullets", 8)), "rule-based"
+                if prev.get("row_count") == len(items) and provider == prev.get("provider"):
+                    continue  # retry failed again; keep the existing summary and file untouched
                 order = {"High": 0, "Medium": 1, "Low": 2}
                 bullets.sort(key=lambda b: order.get(b["impact"], 1))  # stable: keeps model ranking within a level
                 existing[product] = {"row_count": len(items), "generated_at": utcnow().isoformat(),

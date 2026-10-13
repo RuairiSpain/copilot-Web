@@ -22,7 +22,15 @@ def main() -> None:
             rows.extend({k: r.get(k, "") for k in ROW_KEYS} for r in read_csv(p))
         for p in sorted((base / "summaries").glob("*.json")):
             for product, s in json.loads(p.read_text(encoding="utf-8")).items():
-                summaries.setdefault(product, {})[p.stem] = s
+                by_week = summaries.setdefault(product, {})
+                if p.stem in by_week:
+                    # The same product can be fed by several repos; show all their bullets for the week.
+                    merged = dict(by_week[p.stem])
+                    merged["row_count"] += s["row_count"]
+                    merged["bullets"] = merged["bullets"] + s["bullets"]
+                    merged["provider"] = ", ".join(dict.fromkeys([merged["provider"], s["provider"]]))
+                    s = merged
+                by_week[p.stem] = s
     for r in rows:
         r["importance"] = int(r["importance"] or 0)
         r["lines_added"] = int(r["lines_added"] or 0)

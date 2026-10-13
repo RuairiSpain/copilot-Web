@@ -17,6 +17,7 @@ import argparse
 import datetime as dt
 import re
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -36,7 +37,7 @@ META_KEYS = re.compile(
 TAG_RULES: list[tuple[str, re.Pattern, int]] = [
     ("breaking-change", re.compile(r"breaking change|no longer supported|will be removed|must (migrate|update|upgrade)|action required|is not backward", re.I), 40),
     ("retirement", re.compile(r"\bretire(d|ment|s)?\b|deprecat|end of (support|life)|\bsunset", re.I), 35),
-    ("ga", re.compile(r"generally available|general availability|\bGA\b", re.I), 25),
+    ("ga", re.compile(r"generally available|general availability|(?-i:\bGA\b)", re.I), 25),
     ("preview", re.compile(r"\b(public |private )?preview\b", re.I), 20),
     ("security", re.compile(r"\bsecurity\b|vulnerab|\bCVE-|managed identity|\bRBAC\b|network isolation|private endpoint|encryption", re.I), 15),
     ("pricing-quota", re.compile(r"\bpric(e|ing)\b|\bbilling\b|\bquota|\brate limit|\blimits?\b|\bTPM\b|\bPTU", re.I), 15),
@@ -49,6 +50,7 @@ GENERIC_SUBJECT = re.compile(
     r"^(learn editor:\s*)?(update|updated|edit|edits|modify|minor|fix|fixes|freshness|refresh|merge)\b.{0,80}$", re.I
 )
 PR_RE = re.compile(r"(?:\(#|pull request #)(\d+)")
+CLONE_MARGIN_DAYS = 45
 
 
 def run(cmd: list[str], cwd: Path | None = None, check: bool = True, input_bytes: bytes | None = None) -> str:
@@ -64,7 +66,9 @@ def git(repo: Path, *args: str, check: bool = True) -> str:
 
 # ---------------------------------------------------------------- repo access
 def clone(repo: str, branch: str, since: dt.datetime, dest: Path) -> Path:
-    shallow = (since - dt.timedelta(days=10)).strftime("%Y-%m-%d")
+    # Commits on a branch keep their own dates, so a branch merged after a long review is older than
+    # the merge. A wide margin keeps those commits in the shallow clone so the range log can see them.
+    shallow = (since - dt.timedelta(days=CLONE_MARGIN_DAYS)).strftime("%Y-%m-%d")
     url = f"https://github.com/{repo}.git"
     run(["git", "clone", "--quiet", "--single-branch", "--branch", branch, "--no-tags",
          f"--shallow-since={shallow}", url, str(dest)])
@@ -94,6 +98,25 @@ def cat_files(repo: Path, specs: list[str]) -> dict[str, str | None]:
         size = int(header.split()[-1])
         out[spec] = data[pos:pos + size].decode("utf-8", errors="replace")
         pos += size + 1
+    return out
+
+
+def pr_by_commit(repo: Path, since_arg: list[str], rng: list[str]) -> dict[str, str]:
+    """Map each commit to the pull request that merged it.
+
+    Branch commits rarely mention their PR; the number is on the "Merge pull request #N" commit.
+    Merges are read oldest first so a commit gets the PR that first brought it in, not a later
+    branch-sync merge that also contains it.
+    """
+    out: dict[str, str] = {}
+    raw = git(repo, "log", "--merges", "--reverse", "--format=%H%x1f%P%x1f%s", *since_arg, *rng)
+    for line in raw.splitlines():
+        _, parents, subject = (line.split("\x1f") + ["", ""])[:3]
+        m, ps = PR_RE.search(subject), parents.split()
+        if not m or len(ps) < 2:
+            continue
+        for sha in git(repo, "rev-list", f"{ps[0]}..{ps[1]}", check=False).split():
+            out.setdefault(sha, m.group(1))
     return out
 
 
@@ -134,7 +157,7 @@ def parse_page(path: str, text: str | None) -> dict:
 
 
 def learn_url(path: str, src: dict) -> str:
-    if path.endswith(("toc.yml", "TOC.yml", ".json")):
+    if path.endswith(("toc.yml", "TOC.yml", ".json")) or "/includes/" in f"/{path}":
         return ""
     base, rule = first_prefix(path, src.get("url_rules", []), "base")
     if not rule:
@@ -152,38 +175,42 @@ def parse_log(raw: str) -> list[dict]:
     for block in raw.split("\x1e")[1:]:
         header, _, body = block.partition("\n")
         sha, parents, date, author, subject = (header.split("\x1f") + [""] * 5)[:5]
-        files, cur = [], None
+        files, cur, in_hunk = [], None, False
         for line in body.split("\n"):
             if line.startswith("diff --git "):
                 m = re.match(r"diff --git a/(.*) b/(.*)$", line)
                 cur = {"old": m.group(1) if m else "", "path": m.group(2) if m else "",
                        "status": "Modified", "added": [], "removed": [], "binary": False}
                 files.append(cur)
+                in_hunk = False
             elif cur is None:
                 continue
+            elif line.startswith("@@"):
+                in_hunk = True
+            elif in_hunk:
+                # Inside a hunk every +/- line is content, including "--- x" or "+++ y".
+                if line.startswith("+"):
+                    cur["added"].append(line[1:])
+                elif line.startswith("-"):
+                    cur["removed"].append(line[1:])
             elif line.startswith("new file mode"):
                 cur["status"] = "Added"
             elif line.startswith("deleted file mode"):
                 cur["status"] = "Deleted"
             elif line.startswith("rename from "):
-                cur["status"] = "Renamed"; cur["old"] = line[12:]
+                cur["status"] = "Renamed"
+                cur["old"] = line[12:]
             elif line.startswith("rename to "):
                 cur["path"] = line[10:]
             elif line.startswith("Binary files"):
                 cur["binary"] = True
-            elif line.startswith("+++") or line.startswith("---") or line.startswith("@@"):
-                continue
-            elif line.startswith("+"):
-                cur["added"].append(line[1:])
-            elif line.startswith("-"):
-                cur["removed"].append(line[1:])
         commits.append({"sha": sha, "parents": parents, "date": date, "author": author,
                         "subject": subject, "files": files})
     return commits
 
 
 def strip_front_matter_lines(lines: list[str]) -> list[str]:
-    return [l for l in lines if l.strip() and not META_KEYS.match(l) and l.strip() != "---"]
+    return [ln for ln in lines if ln.strip() and not META_KEYS.match(ln) and ln.strip() != "---"]
 
 
 def classify(f: dict, path: str, subject: str = "") -> tuple[list[str], int, bool, str]:
@@ -203,29 +230,35 @@ def classify(f: dict, path: str, subject: str = "") -> tuple[list[str], int, boo
     elif f["status"] == "Renamed":
         tags.append("moved-page")
     if "whats-new" in low or "whatsnew" in low or "release-notes" in low:
-        tags.append("whats-new"); score += 20
-    text = "\n".join(added_body if f["status"] != "Deleted" else removed_body)
+        tags.append("whats-new")
+        score += 20
+    body = added_body if f["status"] != "Deleted" else removed_body
+    text = "\n".join(body)
     hits: list[str] = []
     for name, rx, weight in TAG_RULES:
-        found = [l for l in (added_body if f["status"] != "Deleted" else removed_body) if rx.search(l)]
+        found = [ln for ln in body if rx.search(ln)]
         if found:
-            tags.append(name); score += weight
+            tags.append(name)
+            score += weight
             hits.extend(found[:2])
     # The commit message can carry the signal too (e.g. "Retire X page", "GA of Y").
     for name, rx, weight in TAG_RULES[:4]:
         if name not in tags and subject and rx.search(subject):
-            tags.append(name); score += weight // 2
+            tags.append(name)
+            score += weight // 2
     if re.search(r"^```", text, re.M):
         tags.append("code-sample")
     churn = len(f["added"]) + len(f["removed"])
     score += min(20, churn // 10)
     if metadata_only:
-        tags = ["metadata-only"]; score = 0
+        tags = ["metadata-only"]
+        score = 0
     elif churn <= 3 and f["status"] == "Modified" and not hits and "navigation" not in tags:
-        tags.append("minor-edit"); score = min(score, 5)
+        tags.append("minor-edit")
+        score = min(score, 5)
     key = []
-    for l in dict.fromkeys(hits):
-        clean = re.sub(r"[*_`>#|]|\[([^\]]*)\]\([^)]*\)", r"\1", l).strip()
+    for line in dict.fromkeys(hits):
+        clean = re.sub(r"[*_`>#|]|\[([^\]]*)\]\([^)]*\)", r"\1", line).strip()
         if clean:
             key.append(clean[:200])
         if len(key) == 2:
@@ -272,9 +305,16 @@ def scan_source(src: dict, cfg: dict, state: dict, scan_id: str, local: Path | N
                 print(f"[{repo_id}] watermark {last_sha[:8]} not in clone; falling back to --since {since_txt}")
         fmt = "--format=%x1e%H%x1f%P%x1f%cI%x1f%an%x1f%s"
         # Full git history since last sync (includes merges), for the commits CSV.
-        hist = git(repo, "log", fmt, *since_arg, *rng)
-        history = [dict(zip(["sha", "parents", "date", "author", "subject"], b.split("\n")[0].split("\x1f")))
-                   for b in hist.split("\x1e")[1:]]
+        hist = git(repo, "log", "--shortstat", fmt, *since_arg, *rng)
+        history = []
+        for b in hist.split("\x1e")[1:]:
+            head_line, _, rest = b.partition("\n")
+            h = dict(zip(["sha", "parents", "date", "author", "subject"],
+                         (head_line.split("\x1f") + [""] * 5)[:5], strict=True))
+            stat = re.search(r"(\d+) files? changed", rest)  # merges print no stat
+            h["files_changed"] = stat.group(1) if stat else ""
+            history.append(h)
+        prs = pr_by_commit(repo, since_arg, rng)
         # Diffs of non-merge commits, limited to tracked top-level folders.
         tops = sorted({p.split("/")[0] for p in src.get("include", [])})
         raw = git(repo, "log", "--no-merges", "-M", "-p", "--unified=0", "--no-color", fmt,
@@ -302,11 +342,12 @@ def scan_source(src: dict, cfg: dict, state: dict, scan_id: str, local: Path | N
         tags, score, meta_only, key = classify(f, path, c["subject"])
         product, _ = first_prefix(path, src.get("products", []), "product", src.get("default_product", "Other"))
         pr = PR_RE.search(c["subject"])
+        pr_number = pr.group(1) if pr else prs.get(c["sha"], "")
         tracked_per_commit[c["sha"]] = tracked_per_commit.get(c["sha"], 0) + 1
         out.append({
             "scan_id": scan_id, "repo_id": repo_id, "week_start": week_start(c["date"]),
             "commit_date": c["date"], "commit_sha": c["sha"], "commit_url": f"{gh}/commit/{c['sha']}",
-            "pr_number": pr.group(1) if pr else "", "author": c["author"], "commit_subject": c["subject"],
+            "pr_number": pr_number, "author": c["author"], "commit_subject": c["subject"],
             "change_summary": change_summary(c["subject"], f["status"], meta["title"], len(f["added"]),
                                              len(f["removed"]), tags),
             "change_type": f["status"], "file_path": path,
@@ -332,7 +373,7 @@ def scan_source(src: dict, cfg: dict, state: dict, scan_id: str, local: Path | N
     append_csv(base / "commits" / f"{scan_id[:10]}.csv", COMMIT_FIELDS, [
         {"scan_id": scan_id, "repo_id": repo_id, "commit_sha": h["sha"], "parents": h["parents"],
          "commit_date": h["date"], "author": h["author"], "subject": h["subject"],
-         "files_changed": "", "tracked_files_changed": tracked_per_commit.get(h["sha"], 0)}
+         "files_changed": h["files_changed"], "tracked_files_changed": tracked_per_commit.get(h["sha"], 0)}
         for h in history])
     sig = sum(1 for r in out if int(r["importance"]) >= cfg["project"].get("significant_threshold", 30))
     state[repo_id] = {"repo": src["repo"], "branch": src.get("branch", "main"), "last_sha": head,
@@ -352,6 +393,9 @@ def main() -> None:
     cfg, state = load_config(), load_state()
     scan_id = utcnow().isoformat()
     logs = []
+    ids = [s["id"] for s in cfg["sources"]]
+    if args.only and args.only not in ids:
+        ap.error(f"--only {args.only}: unknown source id (known: {', '.join(ids)})")
     for src in cfg["sources"]:
         if args.only and src["id"] != args.only:
             continue
@@ -362,6 +406,8 @@ def main() -> None:
             logs.append({"scan_id": scan_id, "repo_id": src["id"], "run_at": scan_id, "status": f"error: {exc}"[:300]})
     append_csv(DATA_DIR / "scans.csv", SCAN_FIELDS, logs)
     save_state(state)
+    if any(str(log["status"]).startswith("error") for log in logs):
+        sys.exit(1)
 
 
 if __name__ == "__main__":

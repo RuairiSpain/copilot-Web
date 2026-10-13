@@ -1,4 +1,6 @@
-.PHONY: install scan summarise site all test serve
+.PHONY: install install-dev scan summarise site all lint test serve
+install-dev:
+	pip install -r requirements-dev.txt
 install:
 	pip install -r requirements.txt
 scan:
@@ -9,6 +11,9 @@ site:
 	python -m tracker.build_site
 all: scan summarise site
 test:
+	pytest -q
 	bash tests/smoke_test.sh
 serve:
 	python -m http.server -d site 8000
+lint:
+	ruff check .

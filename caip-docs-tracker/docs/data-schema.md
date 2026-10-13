@@ -5,8 +5,8 @@
 |---|---|
 | scan_id | UTC timestamp of the scan that wrote the row |
 | repo_id | Source id from `config/sources.yml` |
-| week_start | Monday of the commit week (YYYY-MM-DD) |
-| commit_date, commit_sha, commit_url, pr_number, author | Commit details |
+| week_start | Monday of the commit week in UTC (YYYY-MM-DD) |
+| commit_date, commit_sha, commit_url, pr_number, author | Commit details. `pr_number` comes from the commit message or from the merge commit that brought the commit in |
 | commit_subject | Original commit message (first line) |
 | change_summary | Cleaned commit message, or a summary generated from the diff when the message is generic |
 | change_type | Added / Modified / Renamed / Deleted |
@@ -23,6 +23,8 @@
 ## `data/<repo>/commits/<scan_date>.csv`
 scan_id, repo_id, commit_sha, parents, commit_date, author, subject, files_changed, tracked_files_changed
 
+`files_changed` is the number of files the commit changed (blank for merge commits); `tracked_files_changed` is the number of change rows written for it.
+
 ## `data/scans.csv`
 scan_id, repo_id, run_at, branch, from_sha, to_sha, since, commits, tracked_changes, significant_changes, status
 
@@ -31,3 +33,5 @@ scan_id, repo_id, run_at, branch, from_sha, to_sha, since, commits, tracked_chan
 
 ## `data/<repo>/summaries/<week_start>.json`
 `{ "<product>": { "row_count", "generated_at", "provider", "bullets": [ { "headline", "detail", "impact", "urls" } ] } }`
+
+`provider` is the configured model provider, `rule-based` when the model was unavailable (retried next run), or `none` when the week had only minor or metadata-only edits (empty `bullets`).

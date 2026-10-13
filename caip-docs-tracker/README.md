@@ -4,6 +4,11 @@ Every **Thursday evening** a GitHub Actions workflow scans Microsoft Learn sourc
 documentation changes since the last run. It saves the changes as CSV files under `data/`, writes a
 ranked AI summary for each product, and publishes a dashboard to GitHub Pages.
 
+This is a sub-project of the `copilot-Web` repository. Its workflows live at the repository root in
+`.github/workflows/caip-docs-tracker-*.yml`, because GitHub only runs workflows from there, and run
+with `caip-docs-tracker/` as the working directory. The design is in the Microsoft Docs Change Tracker
+design document (v0.2); this POC is its Phase 0.
+
 The POC tracks one repository, `MicrosoftDocs/azure-ai-docs`, which covers Foundry, Azure OpenAI,
 AI Search, Machine Learning, Foundry Tools and Agent Framework. To track more Cloud & AI Platforms
 repositories, add them to `config/sources.yml`.
@@ -11,12 +16,13 @@ repositories, add them to `config/sources.yml`.
 ## Project structure
 
 ```
+.github/                         # at the repository root
+├── workflows/
+│   ├── caip-docs-tracker-weekly-scan.yml  # Thursday 18:00 UTC: scan → summarise → build → commit → deploy Pages
+│   └── caip-docs-tracker-ci.yml           # On PR/push touching this folder: ruff, JS syntax, pytest, smoke test
+└── ISSUE_TEMPLATE/caip-docs-tracker-add-source.md
+
 caip-docs-tracker/
-├── .github/
-│   ├── workflows/
-│   │   ├── weekly-scan.yml      # Thursday 18:00 UTC: scan → summarise → build → commit → deploy Pages
-│   │   └── ci.yml               # On PR/push: syntax checks + end-to-end smoke test
-│   └── ISSUE_TEMPLATE/add-source.md
 ├── config/sources.yml           # Repos, paths, URL rules, product mapping, start date, AI model
 ├── tracker/                     # Python pipeline
 │   ├── common.py                #   shared helpers (config, CSV, weeks)
@@ -34,9 +40,11 @@ caip-docs-tracker/
 │   ├── assets/                  #   css + js
 │   └── data/                    #   generated JSON
 ├── docs/                        # architecture.md, data-schema.md
-├── tests/                       # fake docs repo + smoke test
+├── tests/                       # fake docs repo, pytest suite, smoke test
 ├── Makefile
 ├── requirements.txt
+├── requirements-dev.txt         # pytest + ruff
+├── ruff.toml
 └── README.md
 ```
 
@@ -55,6 +63,7 @@ Thursday 18:00 UTC (cron)                                     GitHub Pages
    - Reads every commit between the stored watermark (`state/state.json` → `last_sha`) and the current `HEAD`. On the first run it reads every commit since `project.start_date`.
    - Writes the raw git history to the commits CSV.
    - Writes one row per changed page per commit to the changes CSV, with the page's metadata. Re-runs never write duplicate rows.
+   - Takes the PR number from the commit message or, for commits on a merged branch, from the `Merge pull request #N` commit that brought them in.
    - Saves the new `HEAD` as the watermark.
 2. **Classify.** Each row gets:
    - **Change type:** Added, Modified, Renamed or Deleted.
@@ -64,7 +73,8 @@ Thursday 18:00 UTC (cron)                                     GitHub Pages
    - For each product and week, the up-to-40 most important rows go to an LLM. It returns a bullet list ranked by customer impact, each bullet labelled High, Medium or Low.
    - Bullets can only link to URLs from the input.
    - A product's week is summarised again whenever new rows arrive for it.
-   - If no model is available, a rule-based summary is used instead.
+   - If no model is available, or the model call fails after retrying on rate limits, a rule-based summary is used instead. A rule-based fallback is retried on the next run when a model provider is configured.
+   - A product whose week has only minor or metadata-only edits gets an empty summary and no model call.
 4. **Publish** (`tracker/build_site.py`). Bundles the CSVs into JSON for the static dashboard.
 
 ## Data layout
@@ -100,14 +110,15 @@ importance, key_lines`
 
 ## Set-up (about 10 minutes)
 
-1. Create a new GitHub repository. It can be private, but GitHub Pages on a private repository needs a paid plan. Push this folder to it.
-2. Go to **Settings → Actions → General → Workflow permissions** and select **Read and write permissions**.
+1. The workflows run from this repository (`copilot-Web`). GitHub Pages on a private repository needs a paid plan, and a repository has one Pages site, so the dashboard is published at the repository's Pages URL.
+2. Go to **Settings → Actions → General → Workflow permissions** and select **Read and write permissions**. The weekly workflow commits `caip-docs-tracker/data`, `state` and `site/data` to `main`; if `main` is protected, allow `github-actions[bot]` to push to it.
 3. Go to **Settings → Pages → Build and deployment → Source** and select **GitHub Actions**.
 4. Set the AI summary model, choosing one of these:
    - **GitHub Models (default).** No secret is needed, because the workflow uses its own token with `models: read`. Your organisation must allow GitHub Models.
    - **Azure OpenAI.** Set `summary.provider: "azure-openai"` and add the repository secrets `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY` and `AZURE_OPENAI_DEPLOYMENT`.
-5. Go to **Actions → Weekly docs change scan → Run workflow** to run the first scan straight away. It backfills from `start_date`. After that, the scan runs every Thursday at 18:00 UTC, which is 20:00 in Madrid in summer and 19:00 in winter.
-6. Check the **Check a sample of page URLs** step in the first run's log. If many URLs fail to resolve, adjust `url_rules` in `config/sources.yml`.
+5. Go to **Actions → caip-docs-tracker weekly scan → Run workflow** to run the first scan straight away. It backfills from `start_date`. After that, the scan runs every Thursday at 18:00 UTC, which is 20:00 in Madrid in summer and 19:00 in winter.
+6. If any source fails to scan, the other sources are still summarised and published, and the run is marked failed by its **report** job. Check `data/scans.csv` for the error.
+7. Check the **Check a sample of page URLs** step in the first run's log. If many URLs fail to resolve, adjust `url_rules` in `config/sources.yml`.
 
 ## Configuration (`config/sources.yml`)
 
@@ -121,7 +132,10 @@ importance, key_lines`
 ## Local test
 
 ```bash
-pip install -r requirements.txt
+cd caip-docs-tracker
+pip install -r requirements-dev.txt
+ruff check .
+pytest -q                       # unit tests + scan/summarise/build_site against a fake docs repo
 bash tests/smoke_test.sh        # builds a fake docs repo and runs scan → summarise → build_site
 python -m http.server -d <printed folder>/site 8000
 ```
@@ -129,7 +143,7 @@ python -m http.server -d <printed folder>/site 8000
 ## Known limitations (POC)
 
 - **Product mapping** is based on folder path. `ms.service` is stored on each row if you'd rather map by that.
-- **Learn URLs** are derived from the path. Check them with the URL step and tune `url_rules`.
-- **Weeks** are bucketed by commit date, Monday start. The Thursday scan sees changes up to Thursday evening. Friday-to-Sunday changes are added to that week by the next scan, and the week's summary is refreshed.
+- **Learn URLs** are derived from the path. Check them with the URL step and tune `url_rules`. Files under `includes/` are not pages, so they get no URL.
+- **Weeks** are bucketed by commit date in UTC, Monday start. Commits on a branch keep their own dates, so a branch merged late lands in the weeks it was written in. The Thursday scan sees changes up to Thursday evening. Friday-to-Sunday changes are added to that week by the next scan, and the week's summary is refreshed.
 - **Public mirrors** can lag Microsoft's private source repositories by hours or days.
 - **Content licence:** documentation content is CC BY 4.0. The dashboard shows short evidence lines and links back to the source rather than copying pages.

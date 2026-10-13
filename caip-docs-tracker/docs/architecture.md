@@ -14,7 +14,9 @@
 - **Watermark:** each repo stores `last_sha`. The next run reads `last_sha..HEAD`.
 - **Fallback:** if the watermark commit is missing from the shallow clone, the run reads commits since `last_sync`.
 - **Safe to re-run:** rows are de-duplicated on (commit sha, file path).
-- **Weeks:** rows are bucketed by commit date (Monday start). A week's summary is regenerated when its row count changes.
+- **Pull requests:** a branch commit takes the PR number of the `Merge pull request #N` commit that first brought it in.
+- **Failures:** a failed source is logged to `data/scans.csv` and its watermark is left unchanged; the other sources still run, and the scan exits non-zero at the end.
+- **Weeks:** rows are bucketed by commit date in UTC (Monday start). A week's summary is regenerated when its row count changes.
 
 ## Classification
 - Front-matter-only edits → `metadata-only`, importance 0.

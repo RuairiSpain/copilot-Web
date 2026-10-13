@@ -18,6 +18,8 @@
   ];
   $("#kpis").innerHTML = kpis.map(([l, v, n]) => `<div class="card kpi"><div class="label">${l}</div><div class="value">${v.toLocaleString("en-GB")}</div><div class="note">${esc(n)}</div></div>`).join("");
 
+  // Charts come from a CDN; if it is blocked, still show the KPIs and product cards.
+  if (typeof Chart !== "undefined") {
   new Chart($("#trend"), {type: "line", data: {labels: weeks.map(w => fmtWeek(w).slice(4)), datasets: [
       {label: "All changes", data: meta.series.total, borderColor: "#0f6cbd", backgroundColor: "rgba(15,108,189,.08)", fill: true, tension: .25, pointRadius: 3},
       {label: "Significant", data: meta.series.significant, borderColor: "#c4314b", tension: .25, pointRadius: 3},
@@ -32,12 +34,17 @@
       backgroundColor: topTags.map(([t]) => HOT.has(t) ? "#c4314b" : "#0f6cbd")}]},
     options: {indexAxis: "y", maintainAspectRatio: false, plugins: {legend: {display: false}, title: {display: true, text: "Change categories (all weeks)"}},
       scales: {x: {beginAtZero: true, ticks: {precision: 0}}}}});
+  } else {
+    document.querySelectorAll(".chart-wrap").forEach(el => el.innerHTML = '<p class="muted">Charts could not be loaded.</p>');
+  }
 
   $("#products").innerHTML = meta.products.map(p => {
     const pr = rows.filter(r => r.product === p.name);
     const s = pr.filter(r => r.importance >= thr).length;
     const lw = pr.filter(r => r.week_start === lastWeekWithData).length;
-    const top = (summaries[p.name] && summaries[p.name][lastWeekWithData] && summaries[p.name][lastWeekWithData].bullets[0]) || null;
+    const order = {High: 0, Medium: 1, Low: 2};
+    const bullets = (summaries[p.name] && summaries[p.name][lastWeekWithData] && summaries[p.name][lastWeekWithData].bullets) || [];
+    const top = [...bullets].sort((a, b) => order[a.impact] - order[b.impact])[0] || null;
     return `<a class="card pcard" href="product.html?product=${encodeURIComponent(p.name)}"><div class="name">${esc(p.name)}</div>
       <div class="stats"><div><b>${p.count}</b>changes</div><div><b>${s}</b>significant</div><div><b>${lw}</b>latest week</div></div>
       ${top ? `<div class="note"><span class="badge ${esc(top.impact)}">${esc(top.impact)}</span>${esc(top.headline)}</div>` : ""}</a>`;

@@ -46,10 +46,19 @@
     const order = {High: 0, Medium: 1, Low: 2};
     const items = blocks.flatMap(([p, byWeek]) => byWeek[w].bullets.map((b, i) => ({...b, product: p, i})))
       .sort((a, b) => (order[a.impact] - order[b.impact]) || (a.i - b.i));
+    if (!items.length) { $("#summary").innerHTML = '<p class="muted">Only minor or metadata-only edits this week, so there is nothing to summarise.</p>'; return; }
     $("#summary").innerHTML = `<ol>${items.map(b => `<li><span class="badge ${esc(b.impact)}">${esc(b.impact)}</span>
       ${product === "All" ? `<span class="chip">${esc(b.product)}</span>` : ""}<span class="hl">${esc(b.headline)}</span>
       <div class="det">${esc(b.detail)}</div><div class="links">${(b.urls || []).map(u => `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(u.replace(/^https:\/\/(learn\.microsoft\.com\/en-us|github\.com)/, ""))}</a>`).join("")}</div></li>`).join("")}</ol>
       <p class="note">Model: ${esc([...new Set(blocks.map(([, bw]) => bw[w].provider))].join(", "))} · generated ${fmtDate(blocks[0][1][w].generated_at)}</p>`;
+  }
+
+  // ms.date is MM/DD/YYYY; reorder it to YYYYMMDD so it sorts by date.
+  function sortValue(r, k) {
+    const v = r[k];
+    if (k !== "ms_date") return v;
+    const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(v || "");
+    return m ? m[3] + m[1].padStart(2, "0") + m[2].padStart(2, "0") : String(v || "");
   }
 
   function filtered() {
@@ -67,7 +76,7 @@
         .some(v => (v || "").toLowerCase().includes(q))) return false;
       return true;
     }).sort((a, b) => {
-      const x = a[sortKey], y = b[sortKey];
+      const x = sortValue(a, sortKey), y = sortValue(b, sortKey);
       const c = typeof x === "number" ? x - y : String(x).localeCompare(String(y));
       return asc ? c : -c;
     });
@@ -101,7 +110,7 @@
   $("#product").onchange = () => { product = $("#product").value; history.replaceState(null, "", `?product=${encodeURIComponent(product)}`); tagsOn.clear(); page = 0; renderHeader(); renderTable(); };
   $("#sumweek").onchange = renderSummary;
   $("#prev").onclick = () => { page--; renderTable(); }; $("#next").onclick = () => { page++; renderTable(); };
-  $("#reset").onclick = () => { ["q", "week", "ctype", "topic"].forEach(id => $("#" + id).value = ""); $("#minimp").value = "0"; $("#hideminor").checked = true; tagsOn.clear(); renderHeader(); renderTable(); };
+  $("#reset").onclick = () => { ["q", "week", "ctype", "topic"].forEach(id => $("#" + id).value = ""); $("#minimp").value = "0"; $("#hideminor").checked = true; tagsOn.clear(); page = 0; renderHeader(); renderTable(); };
   $("#export").onclick = () => {
     const cols = ["commit_date", "product", "title", "url", "change_type", "tags", "change_summary", "commit_subject", "commit_url", "pr_number", "author", "ms_topic", "ms_service", "ms_date", "lines_added", "lines_removed", "importance", "file_path"];
     const csv = [cols.join(","), ...filtered().map(r => cols.map(c => `"${String(r[c] ?? "").replace(/"/g, '""')}"`).join(","))].join("\n");

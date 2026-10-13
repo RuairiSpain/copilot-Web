@@ -58,9 +58,12 @@ def parse_iso(value: str) -> dt.datetime:
 
 
 def week_start(value: dt.datetime | dt.date | str) -> str:
-    """ISO week bucket, labelled by its Monday (YYYY-MM-DD)."""
+    """ISO week bucket in UTC, labelled by its Monday (YYYY-MM-DD)."""
     if isinstance(value, str):
         value = parse_iso(value) if "T" in value else dt.date.fromisoformat(value)
+    if isinstance(value, dt.datetime) and value.tzinfo is not None:
+        # Commit dates carry the committer's offset; bucket them in UTC like the start-date filter.
+        value = value.astimezone(dt.timezone.utc)
     d = value.date() if isinstance(value, dt.datetime) else value
     return (d - dt.timedelta(days=d.weekday())).isoformat()
 
