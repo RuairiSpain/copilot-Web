@@ -1,0 +1,82 @@
+name: Weekly docs change scan
+
+on:
+  schedule:
+    # Every Thursday 18:00 UTC = 20:00 Madrid in summer (CEST), 19:00 in winter (CET).
+    - cron: "0 18 * * 4"
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "Scan a single source id (blank = all)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write   # commit data/ and state/ back to the repo
+  models: read      # GitHub Models for the weekly AI summary
+  pages: write
+  id-token: write
+
+concurrency:
+  group: weekly-scan
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Collect changes since last sync
+        run: python -m tracker.scan ${{ inputs.only && format('--only {0}', inputs.only) || '' }}
+
+      - name: Summarise changes per product (AI)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          AZURE_OPENAI_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_DEPLOYMENT }}
+        run: python -m tracker.summarise
+
+      - name: Build dashboard data
+        run: python -m tracker.build_site
+
+      - name: Check a sample of page URLs
+        continue-on-error: true
+        run: python -m tracker.check_urls
+
+      - name: Commit data and watermark
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data state site/data
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Weekly docs scan $(date -u +%Y-%m-%d)"
+            git push
+          fi
+
+      - name: Upload dashboard
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: scan
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

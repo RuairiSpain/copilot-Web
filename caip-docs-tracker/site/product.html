@@ -1,0 +1,34 @@
+<!doctype html><html lang="en-GB"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Product changes · CAIP Docs Change Tracker</title><link rel="stylesheet" href="assets/app.css"></head>
+<body><div id="hdr"></div><main>
+<div class="grid kpis" id="kpis"></div>
+
+<h2>What changed <small id="sumsub"></small></h2>
+<div class="card summary">
+  <div class="filters"><label>Summary week<select id="sumweek"></select></label></div>
+  <div id="summary"></div>
+  <p class="note">AI-generated from the documentation diffs, ranked by likely customer impact. Check the linked page before acting on it.</p>
+</div>
+
+<h2>All changes <small id="count"></small></h2>
+<div class="card">
+  <div class="filters">
+    <label>Search<input type="search" id="q" placeholder="Title, URL, commit message, author, path…"></label>
+    <label>Product<select id="product"></select></label>
+    <label>Week<select id="week"><option value="">All weeks</option></select></label>
+    <label>Change type<select id="ctype"><option value="">Any</option><option>Added</option><option>Modified</option><option>Renamed</option><option>Deleted</option></select></label>
+    <label>Topic type<select id="topic"><option value="">Any</option></select></label>
+    <label>Min importance<select id="minimp"><option value="0">Any</option><option value="10">10+</option><option value="25">25+</option><option value="50">50+</option></select></label>
+    <label style="flex-direction:row;align-items:center;gap:6px;color:var(--ink)"><input type="checkbox" id="hideminor" checked style="min-width:0"> Hide minor &amp; metadata-only</label>
+    <button class="act" id="reset">Reset</button><button class="act" id="export">Export CSV</button>
+  </div>
+  <div class="tagbar" id="tagbar"></div>
+</div>
+<div class="card tablecard" style="margin-top:12px"><table id="tbl"><thead><tr>
+  <th data-k="commit_date">Date</th><th data-k="title">Page</th><th data-k="change_type">Change</th><th data-k="tags">Tags</th>
+  <th data-k="change_summary">Commit summary</th><th data-k="author">Author</th><th data-k="ms_topic">Topic</th>
+  <th data-k="ms_date">ms.date</th><th data-k="lines_added" class="num">Lines</th><th data-k="importance" class="num">Imp.</th>
+</tr></thead><tbody></tbody></table></div>
+<div class="pager"><span id="pinfo"></span><span><button class="act" id="prev">Previous</button> <button class="act" id="next">Next</button></span></div>
+</main>
+<script src="assets/common.js"></script><script src="assets/product.js"></script></body></html>

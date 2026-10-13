@@ -1,0 +1,13 @@
+<!doctype html><html lang="en-GB"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CAIP Docs Change Tracker</title><link rel="stylesheet" href="assets/app.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script></head>
+<body><div id="hdr"></div><main>
+<div class="grid kpis" id="kpis"></div>
+<h2>Changes per week <small>since project start · significant = importance ≥ <span id="thr"></span></small></h2>
+<div class="grid two"><div class="card"><div class="chart-wrap"><canvas id="trend"></canvas></div></div>
+<div class="card"><div class="chart-wrap"><canvas id="tags"></canvas></div></div></div>
+<h2>Products <small>select a product to search and filter its changes</small></h2>
+<div class="grid products" id="products"></div>
+<p class="note">Counts are documentation file changes (one row per changed page per commit), bucketed by commit week (Monday start). Metadata-only edits are counted but excluded from “significant”.</p>
+</main>
+<script src="assets/common.js"></script><script src="assets/overview.js"></script></body></html>

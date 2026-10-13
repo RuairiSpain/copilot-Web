@@ -1,0 +1,46 @@
+:root{--bg:#f5f6f8;--card:#fff;--ink:#1b1f24;--muted:#5b6470;--line:#e3e6ea;--brand:#0f6cbd;--brand2:#7a3fb8;
+--high:#c4314b;--med:#c27c0e;--low:#3a7d44;--chip:#eef3fa;font-family:"Segoe UI",system-ui,-apple-system,sans-serif}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.45}
+a{color:var(--brand);text-decoration:none}a:hover{text-decoration:underline}
+header.top{background:#11233f;color:#fff;padding:18px 28px;display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+header.top h1{margin:0;font-size:20px;font-weight:600}header.top .sub{color:#b9c6da;font-size:12.5px;margin-top:4px}
+header.top a{color:#cfe0ff}
+main{max-width:1320px;margin:0 auto;padding:22px 28px 48px}
+.grid{display:grid;gap:14px}.kpis{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+.kpi .label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+.kpi .value{font-size:28px;font-weight:600;margin-top:4px}.kpi .note{color:var(--muted);font-size:12px}
+h2{font-size:16px;margin:26px 0 10px;font-weight:600}h2 small{color:var(--muted);font-weight:400;font-size:12.5px;margin-left:6px}
+.chart-wrap{position:relative;height:300px}
+.two{grid-template-columns:2fr 1fr}@media(max-width:900px){.two{grid-template-columns:1fr}}
+.products{grid-template-columns:repeat(auto-fill,minmax(250px,1fr))}
+.pcard{display:block;color:inherit}.pcard:hover{border-color:var(--brand);text-decoration:none;box-shadow:0 2px 8px rgba(15,108,189,.12)}
+.pcard .name{font-weight:600;font-size:15px}.pcard .stats{display:flex;gap:16px;margin-top:8px;color:var(--muted);font-size:12.5px}
+.pcard .stats b{color:var(--ink);font-size:16px;display:block}
+.summary ol{margin:6px 0 0;padding-left:22px}.summary li{margin:0 0 10px}
+.summary .hl{font-weight:600}.summary .det{color:#333}.summary .links a{font-size:12px;margin-right:10px}
+.badge{display:inline-block;border-radius:999px;padding:1px 9px;font-size:11.5px;font-weight:600;margin-right:6px;vertical-align:1px}
+.badge.High{background:#fde7ea;color:var(--high)}.badge.Medium{background:#fdf1dc;color:var(--med)}.badge.Low{background:#e5f3e7;color:var(--low)}
+.ct{font-size:11.5px;padding:1px 8px;border-radius:6px;background:#eef0f3;white-space:nowrap}
+.ct.Added{background:#e2f2e6;color:#256a35}.ct.Deleted{background:#fbe4e6;color:#a1243a}.ct.Renamed{background:#ece6f7;color:#5b2d91}
+.chip{display:inline-block;background:var(--chip);color:#234;border-radius:6px;padding:0 7px;font-size:11.5px;margin:1px 3px 1px 0;white-space:nowrap}
+.chip.hot{background:#fde7ea;color:#a1243a}
+.filters{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+.filters label{display:flex;flex-direction:column;font-size:12px;color:var(--muted);gap:3px}
+.filters input,.filters select{font:inherit;padding:6px 8px;border:1px solid #c9ced5;border-radius:6px;background:#fff;min-width:140px}
+.filters input[type=search]{min-width:280px}
+.tagbar{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px}
+.tagbtn{font:inherit;font-size:12px;border:1px solid #c9ced5;background:#fff;border-radius:999px;padding:3px 11px;cursor:pointer}
+.tagbtn.on{background:var(--brand);border-color:var(--brand);color:#fff}
+button.act{font:inherit;border:1px solid var(--brand);color:var(--brand);background:#fff;border-radius:6px;padding:6px 12px;cursor:pointer}
+button.act:hover{background:#eef5fd}
+table{width:100%;border-collapse:collapse;background:#fff}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{position:sticky;top:0;background:#f0f2f5;font-size:12px;color:#38414c;cursor:pointer;user-select:none;white-space:nowrap}
+th.sorted::after{content:" ▾"}th.sorted.asc::after{content:" ▴"}
+td .path{color:var(--muted);font-size:11.5px;word-break:break-all}td .ev{color:var(--muted);font-size:12px;font-style:italic;margin-top:3px}
+td.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.tablecard{padding:0;overflow:auto;max-height:75vh}
+.pager{display:flex;justify-content:space-between;align-items:center;margin-top:10px;color:var(--muted)}
+.muted{color:var(--muted)}.note{font-size:12px;color:var(--muted);margin-top:8px}
+.imp{display:inline-block;min-width:28px;text-align:center;border-radius:6px;padding:0 6px;font-weight:600;font-size:12px}

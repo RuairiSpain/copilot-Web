@@ -1,0 +1,67 @@
+# CAIP Docs Change Tracker - source registry
+# v1 POC: Azure AI docs only. Add more CAIP repos (see design doc Appendix A1) as new entries.
+
+project:
+  name: "CAIP Docs Change Tracker"
+  # First run backfills from this date. The dashboard time series starts here.
+  start_date: "2026-10-01"
+  # Rows with importance >= this value count as "significant" on the dashboard.
+  significant_threshold: 30
+
+summary:
+  # Provider: "github-models" (uses the workflow GITHUB_TOKEN, no extra secret),
+  # "azure-openai" (needs AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY, AZURE_OPENAI_DEPLOYMENT secrets)
+  # or "none" (rule-based summary only).
+  provider: "github-models"
+  model: "openai/gpt-4.1-mini"
+  max_rows_per_product: 40
+  max_bullets: 8
+
+sources:
+  - id: azure-ai-docs
+    repo: MicrosoftDocs/azure-ai-docs
+    branch: main
+    # Only these paths are tracked (fnmatch patterns, ** allowed).
+    include:
+      - "articles/**/*.md"
+      - "articles/**/*.yml"
+      - "agent-framework/**/*.md"
+      - "agent-framework/**/*.yml"
+      - ".whatsnew.json"
+    exclude:
+      - "**/media/**"
+      - "**/includes/**/media/**"
+      - "**/breadcrumb/**"
+      - "zone-pivots/**"
+    # Path -> published Learn URL. First matching prefix wins. VERIFY on first run
+    # (tracker/check_urls.py samples URLs and reports any that do not resolve).
+    url_rules:
+      - prefix: "articles/"
+        base: "https://learn.microsoft.com/en-us/azure/"
+      - prefix: "agent-framework/"
+        base: "https://learn.microsoft.com/en-us/agent-framework/"
+    # Path -> product. First matching prefix wins. Edit names freely; they drive the product pages.
+    products:
+      - prefix: "articles/foundry/openai/"
+        product: "Azure OpenAI"
+      - prefix: "articles/foundry-classic/openai/"
+        product: "Azure OpenAI"
+      - prefix: "articles/foundry-local/"
+        product: "Foundry Local"
+      - prefix: "articles/foundry/"
+        product: "Microsoft Foundry"
+      - prefix: "articles/foundry-classic/"
+        product: "Microsoft Foundry"
+      - prefix: "articles/search/"
+        product: "Azure AI Search"
+      - prefix: "articles/machine-learning/"
+        product: "Azure Machine Learning"
+      - prefix: "articles/ai-services/"
+        product: "Foundry Tools (AI services)"
+      - prefix: "agent-framework/"
+        product: "Agent Framework"
+      - prefix: "articles/open-datasets/"
+        product: "Open Datasets"
+      - prefix: ".whatsnew.json"
+        product: "Microsoft Foundry"
+    default_product: "Other"

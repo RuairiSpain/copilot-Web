@@ -1,0 +1,45 @@
+(async () => {
+  const {meta, rows, summaries} = await loadData();
+  $("#hdr").innerHTML = header(meta);
+  $("#thr").textContent = meta.significant_threshold;
+  const thr = meta.significant_threshold, weeks = meta.weeks, last = weeks[weeks.length - 1];
+  const sig = rows.filter(r => r.importance >= thr);
+  const pages = new Set(rows.map(r => r.file_path)).size;
+  const count = (f) => rows.filter(f).length;
+  const hasTag = (r, t) => r.tags.split(";").includes(t);
+  const lastWeekWithData = [...weeks].reverse().find((w, i) => meta.series.total[weeks.length - 1 - i] > 0) || last;
+  const kpis = [
+    ["Total changes", rows.length, `${pages} pages touched`],
+    ["Significant", sig.length, `${Math.round(100 * sig.length / Math.max(1, rows.length))}% of all changes`],
+    ["Latest week", meta.series.total[weeks.indexOf(lastWeekWithData)] || 0, fmtWeek(lastWeekWithData)],
+    ["New pages", count(r => r.change_type === "Added"), `${count(r => r.change_type === "Deleted")} removed`],
+    ["Retirement / breaking", count(r => hasTag(r, "retirement") || hasTag(r, "breaking-change")), "flagged rows"],
+    ["Preview / GA", count(r => hasTag(r, "preview") || hasTag(r, "ga")), "flagged rows"],
+  ];
+  $("#kpis").innerHTML = kpis.map(([l, v, n]) => `<div class="card kpi"><div class="label">${l}</div><div class="value">${v.toLocaleString("en-GB")}</div><div class="note">${esc(n)}</div></div>`).join("");
+
+  new Chart($("#trend"), {type: "line", data: {labels: weeks.map(w => fmtWeek(w).slice(4)), datasets: [
+      {label: "All changes", data: meta.series.total, borderColor: "#0f6cbd", backgroundColor: "rgba(15,108,189,.08)", fill: true, tension: .25, pointRadius: 3},
+      {label: "Significant", data: meta.series.significant, borderColor: "#c4314b", tension: .25, pointRadius: 3},
+      {label: "Pages touched", data: meta.series.pages, borderColor: "#7a3fb8", borderDash: [5, 4], tension: .25, pointRadius: 2}]},
+    options: {maintainAspectRatio: false, interaction: {mode: "index", intersect: false},
+      plugins: {legend: {position: "bottom"}}, scales: {y: {beginAtZero: true, ticks: {precision: 0}}}}});
+
+  const tagCounts = {};
+  rows.forEach(r => r.tags.split(";").filter(Boolean).forEach(t => tagCounts[t] = (tagCounts[t] || 0) + 1));
+  const topTags = Object.entries(tagCounts).filter(([t]) => t !== "metadata-only" && t !== "minor-edit").sort((a, b) => b[1] - a[1]).slice(0, 10);
+  new Chart($("#tags"), {type: "bar", data: {labels: topTags.map(t => t[0]), datasets: [{label: "Rows", data: topTags.map(t => t[1]),
+      backgroundColor: topTags.map(([t]) => HOT.has(t) ? "#c4314b" : "#0f6cbd")}]},
+    options: {indexAxis: "y", maintainAspectRatio: false, plugins: {legend: {display: false}, title: {display: true, text: "Change categories (all weeks)"}},
+      scales: {x: {beginAtZero: true, ticks: {precision: 0}}}}});
+
+  $("#products").innerHTML = meta.products.map(p => {
+    const pr = rows.filter(r => r.product === p.name);
+    const s = pr.filter(r => r.importance >= thr).length;
+    const lw = pr.filter(r => r.week_start === lastWeekWithData).length;
+    const top = (summaries[p.name] && summaries[p.name][lastWeekWithData] && summaries[p.name][lastWeekWithData].bullets[0]) || null;
+    return `<a class="card pcard" href="product.html?product=${encodeURIComponent(p.name)}"><div class="name">${esc(p.name)}</div>
+      <div class="stats"><div><b>${p.count}</b>changes</div><div><b>${s}</b>significant</div><div><b>${lw}</b>latest week</div></div>
+      ${top ? `<div class="note"><span class="badge ${esc(top.impact)}">${esc(top.impact)}</span>${esc(top.headline)}</div>` : ""}</a>`;
+  }).join("");
+})();
