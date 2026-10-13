@@ -1,4 +1,4 @@
-.PHONY: install install-dev scan summarise site all lint test serve
+.PHONY: install install-dev announcements scan summarise site digest discover all lint test serve
 install-dev:
 	pip install -r requirements-dev.txt
 install:
@@ -9,7 +9,13 @@ summarise:
 	python -m tracker.summarise
 site:
 	python -m tracker.build_site
-all: scan summarise site
+announcements:
+	python -m tracker.announcements
+digest:
+	python -m tracker.digest
+discover:
+	python -m tracker.discover
+all: announcements scan summarise site digest
 test:
 	pytest -q
 	bash tests/smoke_test.sh

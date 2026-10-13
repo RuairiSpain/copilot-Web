@@ -10,6 +10,9 @@
   <p class="note">AI-generated from the documentation diffs, ranked by likely customer impact. Check the linked page before acting on it.</p>
 </div>
 
+<h2>Announcements <small id="annsub"></small></h2>
+<div class="card" id="anns"></div>
+
 <h2>All changes <small id="count"></small></h2>
 <div class="card">
   <div class="filters">
@@ -17,9 +20,11 @@
     <label>Product<select id="product"></select></label>
     <label>Week<select id="week"><option value="">All weeks</option></select></label>
     <label>Change type<select id="ctype"><option value="">Any</option><option>Added</option><option>Modified</option><option>Renamed</option><option>Deleted</option></select></label>
+    <label>Label<select id="label"><option value="">Any</option></select></label>
     <label>Topic type<select id="topic"><option value="">Any</option></select></label>
     <label>Min importance<select id="minimp"><option value="0">Any</option><option value="10">10+</option><option value="25">25+</option><option value="50">50+</option></select></label>
-    <label style="flex-direction:row;align-items:center;gap:6px;color:var(--ink)"><input type="checkbox" id="hideminor" checked style="min-width:0"> Hide minor &amp; metadata-only</label>
+    <label style="flex-direction:row;align-items:center;gap:6px;color:var(--ink)"><input type="checkbox" id="hideminor" checked style="min-width:0"> Hide noise</label>
+    <label style="flex-direction:row;align-items:center;gap:6px;color:var(--ink)"><input type="checkbox" id="silentonly" style="min-width:0"> Silent changes only</label>
     <button class="act" id="reset">Reset</button><button class="act" id="export">Export CSV</button>
   </div>
   <div class="tagbar" id="tagbar"></div>

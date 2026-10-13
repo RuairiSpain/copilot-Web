@@ -6,6 +6,8 @@ mkdir -p articles/foundry/openai articles/search/media articles/machine-learning
 page(){ printf -- "---\ntitle: %s\ndescription: %s\nms.service: %s\nms.topic: %s\nms.date: %s\nauthor: writer1\nms.author: writer1\n---\n\n# %s\n\n%b\n" "$2" "$3" "$4" "$5" "$6" "$2" "$7" > "$1"; }
 page articles/search/vector-search-overview.md "Vector search in Azure AI Search" "Overview of vector search" azure-ai-search concept-article 09/01/2026 "Vector search lets you index embeddings."
 page articles/foundry/openai/models.md "Azure OpenAI models" "Model list" azure-ai-foundry concept-article 09/01/2026 "Models include gpt-4.1."
+page articles/search/legacy-indexer.md "Legacy indexer" "Old indexer" azure-ai-search how-to 09/01/2026 "This indexer is deprecated."
+page articles/search/semantic-ranking.md "Semantic ranking" "Semantic ranking" azure-ai-search concept-article 09/01/2026 "Semantic ranking reorders results.\n\nSee [the overview](overview.md) for details.\n\nIt uses langauge models from Microsoft."
 c "2026-09-20T10:00:00Z" "Initial content"
 page articles/foundry/openai/models.md "Azure OpenAI models" "Model list" azure-ai-foundry concept-article 10/01/2026 "Models include gpt-4.1.\n\n> [!IMPORTANT]\n> gpt-4o version 2024-05-13 will be retired on 15 January 2027. Customers must migrate to gpt-4.1 before this date."
 c "2026-10-01T09:00:00Z" "Announce gpt-4o retirement date (#14001)"
@@ -23,4 +25,22 @@ page articles/ai-services/speech/live-interpreter.md "Live Interpreter" "Live in
 c "2026-10-09T10:00:00Z" "Add Live Interpreter SDK samples"
 git checkout -q main
 GIT_COMMITTER_DATE="2026-10-09T11:00:00Z" git merge -q --no-ff --no-edit feature -m "Merge pull request #14851 from MicrosoftDocs/feature"
+# Rename, delete, a binary file and an untracked file type.
+git mv articles/search/vector-search-overview.md articles/search/vector-search.md
+git rm -q articles/search/legacy-indexer.md
+printf '%%PDF-1.4\0binary' > articles/search/diagram.pdf
+echo notes > articles/search/notes.txt
+c "2026-10-10T09:00:00Z" "Rename vector search article and remove legacy indexer page (#15001)"
+# A TOC and an include file.
+printf -- "- name: Azure AI Search\n  items:\n  - name: Vector search\n    href: vector-search.md\n" > articles/search/toc.yml
+mkdir -p articles/search/includes
+printf "> [!NOTE]\n> The ranker runs per query.\n" > articles/search/includes/ranker-note.md
+c "2026-10-11T09:00:00Z" "Update search TOC and ranker note"
+# Noise: whitespace-only, link-only and typo-sized edits.
+sed -i 's/^Semantic ranking reorders results\.$/Semantic  ranking reorders results. /' articles/search/semantic-ranking.md
+c "2026-10-12T08:00:00Z" "Fix formatting"
+sed -i 's/(overview.md)/(search-what-is-azure-search.md)/' articles/search/semantic-ranking.md
+c "2026-10-12T09:00:00Z" "Fix link"
+sed -i 's/langauge/language/' articles/search/semantic-ranking.md
+c "2026-10-12T10:00:00Z" "Fix typo"
 git log --oneline

@@ -44,3 +44,4 @@ td.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 .pager{display:flex;justify-content:space-between;align-items:center;margin-top:10px;color:var(--muted)}
 .muted{color:var(--muted)}.note{font-size:12px;color:var(--muted);margin-top:8px}
 .imp{display:inline-block;min-width:28px;text-align:center;border-radius:6px;padding:0 6px;font-weight:600;font-size:12px}
+.alist{margin:0;padding-left:18px}.alist li{margin:0 0 6px}

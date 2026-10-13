@@ -29,6 +29,7 @@ jobs:
       - run: ruff check .
       - name: Check dashboard scripts
         run: for f in site/assets/*.js; do node --check "$f"; done
-      - run: pytest -q
+      - name: Tests (fails below 100% line and branch coverage)
+        run: pytest -q
       - name: End-to-end smoke test on a fake docs repo
         run: bash tests/smoke_test.sh

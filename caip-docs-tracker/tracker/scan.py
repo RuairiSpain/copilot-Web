@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import difflib
 import re
 import subprocess
 import sys
@@ -25,7 +26,8 @@ import yaml
 
 from tracker.common import (
     CHANGE_FIELDS, COMMIT_FIELDS, DATA_DIR, SCAN_FIELDS, append_csv, first_prefix,
-    load_config, load_state, parse_iso, path_matches, read_csv, save_state, utcnow, week_start,
+    enabled_sources, load_config, load_state, parse_iso, path_matches, read_csv, resolve_product,
+    save_state, utcnow, week_start,
 )
 
 # ---------------------------------------------------------------- classification rules
@@ -70,8 +72,10 @@ def clone(repo: str, branch: str, since: dt.datetime, dest: Path) -> Path:
     # the merge. A wide margin keeps those commits in the shallow clone so the range log can see them.
     shallow = (since - dt.timedelta(days=CLONE_MARGIN_DAYS)).strftime("%Y-%m-%d")
     url = f"https://github.com/{repo}.git"
-    run(["git", "clone", "--quiet", "--single-branch", "--branch", branch, "--no-tags",
-         f"--shallow-since={shallow}", url, str(dest)])
+    # No working tree and no large blobs (media): the scan reads history and text blobs only.
+    # No branch given: clone the repository's default branch.
+    run(["git", "clone", "--quiet", "--single-branch", *(["--branch", branch] if branch else []), "--no-tags",
+         "--no-checkout", "--filter=blob:limit=1m", f"--shallow-since={shallow}", url, str(dest)])
     return dest
 
 
@@ -213,7 +217,40 @@ def strip_front_matter_lines(lines: list[str]) -> list[str]:
     return [ln for ln in lines if ln.strip() and not META_KEYS.match(ln) and ln.strip() != "---"]
 
 
-def classify(f: dict, path: str, subject: str = "") -> tuple[list[str], int, bool, str]:
+URL_RE = re.compile(r"\]\([^)]*\)|https?://\S+|href=\"[^\"]*\"")
+REDIRECT_RE = re.compile(r"(^|/)(\.openpublishing\.redirection[\w.-]*\.json|redirects?\.(json|ya?ml))$", re.I)
+TYPO_CHARS = 20  # an edit that changes this many characters or fewer, with no keyword, is typo-sized
+LABEL_BY_TAG = [("breaking-change", "Breaking change"), ("retirement", "Retirement"), ("ga", "GA"),
+                ("preview", "Preview"), ("new-page", "New")]
+
+
+def _norm(lines: list[str], pattern: re.Pattern | None = None) -> list[str]:
+    out = [" ".join((pattern.sub(" ", ln) if pattern else ln).split()) for ln in lines]
+    return sorted(ln for ln in out if ln)
+
+
+def changed_chars(removed: list[str], added: list[str]) -> int:
+    a, b = "\n".join(removed), "\n".join(added)
+    ops = difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes()
+    return sum(max(i2 - i1, j2 - j1) for op, i1, i2, j1, j2 in ops if op != "equal")
+
+
+def change_label(tags: list[str]) -> str:
+    for tag, label in LABEL_BY_TAG:
+        if tag in tags:
+            return label
+    return "Doc update"
+
+
+def classify(f: dict, path: str, subject: str = "") -> tuple[list[str], int, bool, str, bool, str]:
+    """Tag a file change and score it.
+
+    Returns (tags, importance 0-100, metadata_only, key evidence lines, noise, change label).
+    Noise (dropped from summaries and digests, hidden on the dashboard by default) is a
+    front-matter-only edit, a whitespace-only or link-only edit, a typo-sized edit, or a redirection
+    file. New, deleted and moved files, what's-new pages, TOC changes and edits with a keyword hit
+    are never noise.
+    """
     added_body = strip_front_matter_lines(f["added"])
     removed_body = strip_front_matter_lines(f["removed"])
     metadata_only = f["status"] == "Modified" and not added_body and not removed_body
@@ -223,6 +260,10 @@ def classify(f: dict, path: str, subject: str = "") -> tuple[list[str], int, boo
     if low.endswith("toc.yml"):
         tags.append("navigation")
         score = 5
+    elif "/includes/" in f"/{low}":
+        # A fragment reused by pages, not a page: never "New page", and weighted like an edit.
+        tags.append("include")
+        score = WEIGHT_BY_TYPE["Modified"]
     elif f["status"] == "Added":
         tags.append("new-page")
     elif f["status"] == "Deleted":
@@ -250,12 +291,23 @@ def classify(f: dict, path: str, subject: str = "") -> tuple[list[str], int, boo
         tags.append("code-sample")
     churn = len(f["added"]) + len(f["removed"])
     score += min(20, churn // 10)
+    keep = f["status"] != "Modified" or hits or {"navigation", "whats-new"} & set(tags)
+    noise = True
     if metadata_only:
-        tags = ["metadata-only"]
-        score = 0
-    elif churn <= 3 and f["status"] == "Modified" and not hits and "navigation" not in tags:
+        tags, score = ["metadata-only"], 0
+    elif REDIRECT_RE.search(path):
+        tags, score = ["redirect"], 0
+    elif keep:
+        noise = False
+    elif _norm(added_body) == _norm(removed_body):
+        tags, score = ["whitespace-only"], 0
+    elif _norm(added_body, URL_RE) == _norm(removed_body, URL_RE):
+        tags, score = ["link-only"], min(score, 3)
+    elif churn <= 3 or changed_chars(removed_body, added_body) <= TYPO_CHARS:
         tags.append("minor-edit")
         score = min(score, 5)
+    else:
+        noise = False
     key = []
     for line in dict.fromkeys(hits):
         clean = re.sub(r"[*_`>#|]|\[([^\]]*)\]\([^)]*\)", r"\1", line).strip()
@@ -263,7 +315,7 @@ def classify(f: dict, path: str, subject: str = "") -> tuple[list[str], int, boo
             key.append(clean[:200])
         if len(key) == 2:
             break
-    return tags, min(100, score), metadata_only, " | ".join(key)
+    return tags, min(100, score), metadata_only, " | ".join(key), noise, change_label(tags)
 
 
 def change_summary(subject: str, status: str, title: str, added: int, removed: int, tags: list[str]) -> str:
@@ -288,12 +340,12 @@ def scan_source(src: dict, cfg: dict, state: dict, scan_id: str, local: Path | N
     start = parse_iso(cfg["project"]["start_date"] + "T00:00:00+00:00")
     last_sync = parse_iso(st["last_sync"]) if st.get("last_sync") else start
     with tempfile.TemporaryDirectory() as tmp:
-        repo = local or clone(src["repo"], src.get("branch", "main"), min(last_sync, utcnow()), Path(tmp) / repo_id)
+        repo = local or clone(src["repo"], src.get("branch", ""), min(last_sync, utcnow()), Path(tmp) / repo_id)
         head = git(repo, "rev-parse", "HEAD").strip()
         last_sha = st.get("last_sha", "")
         if last_sha == head:
             print(f"[{repo_id}] no new commits since {head[:8]}")
-            return {"scan_id": scan_id, "repo_id": repo_id, "run_at": scan_id, "branch": src.get("branch", "main"),
+            return {"scan_id": scan_id, "repo_id": repo_id, "run_at": scan_id, "branch": src.get("branch", ""),
                     "from_sha": last_sha, "to_sha": head, "since": "", "commits": 0, "tracked_changes": 0,
                     "significant_changes": 0, "status": "no-change"}
         if has_commit(repo, last_sha):
@@ -318,7 +370,7 @@ def scan_source(src: dict, cfg: dict, state: dict, scan_id: str, local: Path | N
         # Diffs of non-merge commits, limited to tracked top-level folders.
         tops = sorted({p.split("/")[0] for p in src.get("include", [])})
         raw = git(repo, "log", "--no-merges", "-M", "-p", "--unified=0", "--no-color", fmt,
-                  *since_arg, *rng, "--", *tops)
+                  *since_arg, *rng, "--", *tops, *(f":(exclude,glob){p}" for p in src.get("exclude", [])))
         commits = parse_log(raw)
 
         rows, specs = [], []
@@ -339,8 +391,8 @@ def scan_source(src: dict, cfg: dict, state: dict, scan_id: str, local: Path | N
         meta = parse_page(path, blobs.get(spec))
         if not meta["title"] and path.lower().endswith("toc.yml"):
             meta["title"] = f"Table of contents ({path.rsplit('/', 2)[-2]})"
-        tags, score, meta_only, key = classify(f, path, c["subject"])
-        product, _ = first_prefix(path, src.get("products", []), "product", src.get("default_product", "Other"))
+        tags, score, meta_only, key, noise, label = classify(f, path, c["subject"])
+        product = resolve_product(path, src, meta["ms_service"], cfg)
         pr = PR_RE.search(c["subject"])
         pr_number = pr.group(1) if pr else prs.get(c["sha"], "")
         tracked_per_commit[c["sha"]] = tracked_per_commit.get(c["sha"], 0) + 1
@@ -355,6 +407,7 @@ def scan_source(src: dict, cfg: dict, state: dict, scan_id: str, local: Path | N
             "product": product, "url": learn_url(f["old"] if f["status"] == "Deleted" else path, src),
             **meta, "lines_added": len(f["added"]), "lines_removed": len(f["removed"]),
             "metadata_only": str(meta_only).lower(), "tags": ";".join(tags), "importance": score, "key_lines": key,
+            "noise": str(noise).lower(), "change_label": label,
         })
 
     # Only keep changes on/after the project start date.
@@ -376,10 +429,10 @@ def scan_source(src: dict, cfg: dict, state: dict, scan_id: str, local: Path | N
          "files_changed": h["files_changed"], "tracked_files_changed": tracked_per_commit.get(h["sha"], 0)}
         for h in history])
     sig = sum(1 for r in out if int(r["importance"]) >= cfg["project"].get("significant_threshold", 30))
-    state[repo_id] = {"repo": src["repo"], "branch": src.get("branch", "main"), "last_sha": head,
+    state[repo_id] = {"repo": src["repo"], "branch": src.get("branch", ""), "last_sha": head,
                       "last_sync": utcnow().isoformat(), "last_scan_id": scan_id}
     print(f"[{repo_id}] {len(history)} commits, {written} new change rows ({sig} significant), head {head[:8]}")
-    return {"scan_id": scan_id, "repo_id": repo_id, "run_at": scan_id, "branch": src.get("branch", "main"),
+    return {"scan_id": scan_id, "repo_id": repo_id, "run_at": scan_id, "branch": src.get("branch", ""),
             "from_sha": last_sha, "to_sha": head, "since": since_txt, "commits": len(history),
             "tracked_changes": written, "significant_changes": sig, "status": "ok"}
 
@@ -393,10 +446,11 @@ def main() -> None:
     cfg, state = load_config(), load_state()
     scan_id = utcnow().isoformat()
     logs = []
-    ids = [s["id"] for s in cfg["sources"]]
+    sources = enabled_sources(cfg)
+    ids = [s["id"] for s in sources]
     if args.only and args.only not in ids:
         ap.error(f"--only {args.only}: unknown source id (known: {', '.join(ids)})")
-    for src in cfg["sources"]:
+    for src in sources:
         if args.only and src["id"] != args.only:
             continue
         try:

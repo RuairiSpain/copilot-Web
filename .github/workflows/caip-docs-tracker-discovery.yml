@@ -1,0 +1,50 @@
+name: caip-docs-tracker discovery
+
+# Weekly: find new or renamed documentation repositories (design section 5) and flag stale ones.
+on:
+  schedule:
+    - cron: "0 6 * * 1"   # Monday 06:00 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: caip-docs-tracker-data
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: caip-docs-tracker
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write   # commit config/discovered.yml and data/discovery.json
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: caip-docs-tracker/requirements.txt
+
+      - run: pip install -r requirements.txt
+
+      - name: Discover repositories
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python -m tracker.discover
+
+      - name: Commit the discovery report
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add config/discovered.yml data/discovery.json
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "caip-docs-tracker: weekly repository discovery $(date -u +%Y-%m-%d)"
+            git pull --rebase origin "${GITHUB_REF_NAME}"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi

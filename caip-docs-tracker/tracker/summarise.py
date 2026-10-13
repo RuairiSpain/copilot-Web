@@ -2,7 +2,7 @@
 
 Reads data/<repo>/changes/<week>.csv and writes data/<repo>/summaries/<week>.json:
   {"<product>": {"row_count": n, "generated_at": ..., "provider": ..., "bullets": [
-      {"headline": ..., "detail": ..., "impact": "High|Medium|Low", "urls": [...]}]}}
+      {"headline": ..., "detail": ..., "impact": "High|Medium|Low", "label": ..., "urls": [...]}]}}
 A product/week is (re)summarised only when its row count changed since the last summary,
 so late changes picked up by the next Thursday scan refresh that week's summary. A summary that
 fell back to the rule-based list because the model call failed is retried on the next run.
@@ -12,11 +12,8 @@ from __future__ import annotations
 import json
 import os
 import re
-import time
 
-import requests
-
-from tracker.common import DATA_DIR, load_config, read_csv, utcnow
+from tracker.common import DATA_DIR, LABELS, enabled_sources, http_request, is_true, load_config, read_csv, utcnow
 
 SYSTEM = (
     "You are a Microsoft cloud solution architect writing a weekly change digest for customer-facing "
@@ -24,13 +21,15 @@ SYSTEM = (
     "ignore cosmetic edits, and return the most important changes as bullets ranked by customer impact "
     "(breaking changes, retirements and deprecations, GA, security, pricing/quota, new capabilities or models, "
     "previews, then notable guidance updates). Only use facts present in the input; do not speculate. "
+    'Label each bullet with exactly one type: Breaking change, Retirement, GA, Preview, New or Doc update. '
     'Respond with JSON only: {"bullets":[{"headline":"<=12 words","detail":"1-2 sentences on what changed '
-    'and why a customer should care","impact":"High|Medium|Low","urls":["<url from input>"]}]}'
+    'and why a customer should care","impact":"High|Medium|Low","label":"<type>","urls":["<url from input>"]}]}'
 )
 
 
 def candidate_rows(rows: list[dict], limit: int) -> list[dict]:
-    keep = [r for r in rows if r["metadata_only"] != "true" and "minor-edit" not in r["tags"].split(";")]
+    keep = [r for r in rows if not is_true(r.get("noise")) and r["metadata_only"] != "true"
+            and "minor-edit" not in r["tags"].split(";")]
     keep.sort(key=lambda r: int(r["importance"] or 0), reverse=True)
     return keep[:limit]
 
@@ -39,7 +38,7 @@ def call_llm(cfg: dict, product: str, week: str, rows: list[dict]) -> list[dict]
     provider = cfg.get("provider", "github-models")
     payload_rows = [{
         "title": r["title"], "url": r["url"] or r["commit_url"], "change": r["change_type"],
-        "tags": r["tags"], "summary": r["change_summary"], "evidence": r["key_lines"],
+        "tags": r["tags"], "label": r.get("change_label", ""), "summary": r["change_summary"], "evidence": r["key_lines"],
         "lines": f"+{r['lines_added']}/-{r['lines_removed']}", "importance": r["importance"],
     } for r in rows]
     messages = [
@@ -64,7 +63,7 @@ def call_llm(cfg: dict, product: str, week: str, rows: list[dict]) -> list[dict]
     else:
         return None
     try:
-        resp = post_with_retry(url, headers, body)
+        resp = http_request("POST", url, headers=headers, json=body, timeout=120)
         resp.raise_for_status()
         text = resp.json()["choices"][0]["message"]["content"]
         text = re.sub(r"^```(json)?|```$", "", text.strip(), flags=re.MULTILINE).strip()
@@ -82,29 +81,15 @@ def call_llm(cfg: dict, product: str, week: str, rows: list[dict]) -> list[dict]
             continue
         urls = [u for u in b.get("urls") or [] if isinstance(u, str)] if isinstance(b.get("urls"), list) else []
         impact = b.get("impact") if isinstance(b.get("impact"), str) else ""
+        label = b.get("label") if b.get("label") in LABELS else "Doc update"
         clean.append({
             "headline": str(b.get("headline", ""))[:160],
             "detail": str(b.get("detail", ""))[:600],
             "impact": impact if impact in {"High", "Medium", "Low"} else "Medium",
+            "label": label,
             "urls": [u for u in urls if u in allowed][:3],
         })
     return clean
-
-
-def post_with_retry(url: str, headers: dict, body: dict, attempts: int = 3) -> requests.Response:
-    """POST, waiting and retrying on rate limits (429) and server errors (5xx)."""
-    for i in range(attempts):
-        resp = requests.post(url, headers=headers, json=body, timeout=120)
-        retryable = resp.status_code == 429 or resp.status_code >= 500
-        if not retryable or i == attempts - 1:
-            return resp
-        try:
-            wait = min(60.0, float(resp.headers.get("Retry-After", "")))
-        except ValueError:
-            wait = 5.0 * 2 ** i
-        print(f"  HTTP {resp.status_code}; retrying in {wait:.0f}s")
-        time.sleep(wait)
-    return resp
 
 
 def rule_based(rows: list[dict], max_bullets: int) -> list[dict]:
@@ -115,6 +100,7 @@ def rule_based(rows: list[dict], max_bullets: int) -> list[dict]:
             "headline": r["title"] or r["file_path"],
             "detail": r["change_summary"].rstrip(".") + "." + (f" Evidence: \"{r['key_lines']}\"" if r["key_lines"] else ""),
             "impact": "High" if imp >= 50 else "Medium" if imp >= 25 else "Low",
+            "label": r.get("change_label") or "Doc update",
             "urls": [r["url"] or r["commit_url"]],
         })
     return out
@@ -123,7 +109,7 @@ def rule_based(rows: list[dict], max_bullets: int) -> list[dict]:
 def main() -> None:
     cfg = load_config()
     scfg = cfg.get("summary", {})
-    for src in cfg["sources"]:
+    for src in enabled_sources(cfg):
         base = DATA_DIR / src["id"]
         for csv_path in sorted((base / "changes").glob("*.csv")):
             week = csv_path.stem

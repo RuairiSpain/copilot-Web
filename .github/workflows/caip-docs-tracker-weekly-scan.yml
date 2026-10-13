@@ -11,8 +11,9 @@ on:
         required: false
         default: ""
 
+# Shared with the discovery workflow: both commit to main, so they run one at a time.
 concurrency:
-  group: caip-docs-tracker-weekly-scan
+  group: caip-docs-tracker-data
   cancel-in-progress: false
 
 defaults:
@@ -22,12 +23,12 @@ defaults:
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120   # 11 repositories; azure-docs alone is large
     permissions:
       contents: write   # commit data/ and state/ back to the repo
       models: read      # GitHub Models for the weekly AI summary
     outputs:
-      scan_outcome: ${{ steps.scan.outcome }}
+      failed: ${{ steps.feeds.outcome == 'failure' || steps.scan.outcome == 'failure' || steps.digest.outcome == 'failure' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -40,10 +41,16 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      # A failed source is recorded in data/scans.csv and the other sources still run. The step
-      # is allowed to fail so their data is still summarised, committed and published; the
-      # "Report scan failures" job then marks the run as failed.
-      - name: Collect changes since last sync
+      # Steps that can fail for one source, feed or subscriber are allowed to fail so the rest is
+      # still summarised, committed and published; the "report" job then marks the run as failed.
+      - name: Collect announcements (Azure Updates, blogs)
+        id: feeds
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python -m tracker.announcements
+
+      - name: Collect documentation changes since last sync
         id: scan
         continue-on-error: true
         env:
@@ -65,11 +72,26 @@ jobs:
         continue-on-error: true
         run: python -m tracker.check_urls
 
+      # Subscribers whose secrets are not set are archived under data/digests but not sent.
+      - name: Send weekly digests
+        id: digest
+        continue-on-error: true
+        env:
+          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+          LOGIC_APP_URL: ${{ secrets.LOGIC_APP_URL }}
+          DIGEST_PHASE0_TO: ${{ secrets.DIGEST_PHASE0_TO }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SMTP_FROM: ${{ secrets.SMTP_FROM }}
+        run: python -m tracker.digest --send
+
       - name: Commit data and watermark
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data state site/data
+          git add data state site/data site/feeds
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else
@@ -99,9 +121,9 @@ jobs:
 
   report:
     needs: [scan, deploy]
-    if: ${{ always() && needs.scan.outputs.scan_outcome == 'failure' }}
+    if: ${{ always() && needs.scan.outputs.failed == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - run: |
-          echo "::error::At least one source failed to scan. See the 'Collect changes since last sync' step and data/scans.csv."
+          echo "::error::A feed, source or digest failed. See the announcements, scan and digest steps (and data/scans.csv)."
           exit 1

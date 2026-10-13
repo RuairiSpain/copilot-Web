@@ -1,5 +1,5 @@
 (async () => {
-  const {meta, rows, summaries} = await loadData();
+  const {meta, rows, summaries, announcements} = await loadData();
   const params = new URLSearchParams(location.search);
   let product = params.get("product") || "All";
   const thr = meta.significant_threshold, PAGE = 50;
@@ -10,12 +10,14 @@
   $("#product").value = product;
   const topics = [...new Set(rows.map(r => r.ms_topic).filter(Boolean))].sort();
   $("#topic").innerHTML += topics.map(t => opt(t)).join("");
+  $("#label").innerHTML += (meta.labels || []).map(l => opt(l)).join("");
 
   function scoped() { return product === "All" ? rows : rows.filter(r => r.product === product); }
 
   function renderHeader() {
     const title = product === "All" ? "All products" : product;
     $("#hdr").innerHTML = header(meta, ` · ${esc(title)}`);
+    renderAnnouncements();
     document.title = `${title} · CAIP Docs Change Tracker`;
     const pr = scoped(), weeks = [...new Set(pr.map(r => r.week_start))].sort().reverse();
     $("#week").innerHTML = opt("", "All weeks") + weeks.map(w => opt(w, fmtWeek(w))).join("");
@@ -36,6 +38,16 @@
         `<button class="tagbtn ${tagsOn.has(t) ? "on" : ""}" data-t="${esc(t)}">${esc(t)} <span class="muted">${c}</span></button>`).join("");
     $("#tagbar").querySelectorAll(".tagbtn").forEach(b => b.onclick = () => {
       const t = b.dataset.t; tagsOn.has(t) ? tagsOn.delete(t) : tagsOn.add(t); b.classList.toggle("on"); page = 0; renderTable(); });
+  }
+
+  function renderAnnouncements() {
+    const mine = announcements.filter(a => product === "All" || a.products.split(";").includes(product));
+    const p = meta.products.find(x => x.name === product);
+    $("#annsub").innerHTML = `· ${mine.length} matched` + (p ? ` · <a href="feeds/${esc(p.slug)}.xml">RSS for ${esc(product)}</a>` : ' · <a href="feeds/all.xml">RSS</a>');
+    $("#anns").innerHTML = mine.length ? `<ul class="alist">${mine.slice(0, 20).map(a =>
+      `<li>${labelBadge(a.label)}<a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.title)}</a>
+        <span class="muted">· ${fmtDate(a.published)} · ${a.doc_changes || 0} matching doc changes</span></li>`).join("")}</ul>`
+      : '<p class="muted">No announcements matched to this product yet.</p>';
   }
 
   function renderSummary() {
@@ -63,10 +75,12 @@
 
   function filtered() {
     const q = $("#q").value.trim().toLowerCase(), wk = $("#week").value, ct = $("#ctype").value, tp = $("#topic").value;
-    const mi = +$("#minimp").value, hide = $("#hideminor").checked;
+    const mi = +$("#minimp").value, hide = $("#hideminor").checked, lb = $("#label").value, silentOnly = $("#silentonly").checked;
     return scoped().filter(r => {
       const tags = r.tags.split(";");
-      if (hide && (r.metadata_only === "true" || tags.includes("minor-edit"))) return false;
+      if (hide && (r.noise === "true" || r.metadata_only === "true" || tags.includes("minor-edit"))) return false;
+      if (lb && r.change_label !== lb) return false;
+      if (silentOnly && !r.silent) return false;
       if (wk && r.week_start !== wk) return false;
       if (ct && r.change_type !== ct) return false;
       if (tp && r.ms_topic !== tp) return false;
@@ -91,7 +105,9 @@
       <td>${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.title || r.file_path)}</a>` : esc(r.title || r.file_path)}
         <div class="path">${esc(r.file_path)}${r.old_path ? ` (from ${esc(r.old_path)})` : ""}</div>
         ${product === "All" ? `<span class="chip">${esc(r.product)}</span>` : ""}</td>
-      <td><span class="ct ${esc(r.change_type)}">${esc(r.change_type)}</span></td>
+      <td><span class="ct ${esc(r.change_type)}">${esc(r.change_type)}</span><div style="margin-top:4px">${labelBadge(r.change_label)}</div>
+        ${r.silent ? '<div class="note" title="No announcement for this product within 14 days">silent</div>' : ""}
+        ${(r.announcements || []).map(a => `<div class="note"><a href="${esc(a.url)}" target="_blank" rel="noopener" title="${esc(a.title)}">announced</a></div>`).join("")}</td>
       <td>${r.tags.split(";").filter(Boolean).map(t => `<span class="chip ${HOT.has(t) ? "hot" : ""}">${esc(t)}</span>`).join("")}</td>
       <td>${esc(r.change_summary)} <a href="${esc(r.commit_url)}" target="_blank" rel="noopener" title="${esc(r.commit_subject)}">${esc(r.commit_sha.slice(0, 7))}</a>
         ${r.pr_number ? ` · PR #${esc(r.pr_number)}` : ""}${r.key_lines ? `<div class="ev">“${esc(r.key_lines)}”</div>` : ""}</td>
@@ -106,18 +122,19 @@
 
   document.querySelectorAll("th").forEach(th => th.onclick = () => {
     const k = th.dataset.k; if (sortKey === k) asc = !asc; else { sortKey = k; asc = false; } renderTable(); });
-  ["q", "week", "ctype", "topic", "minimp", "hideminor"].forEach(id => $("#" + id).addEventListener("input", () => { page = 0; renderTable(); }));
+  ["q", "week", "ctype", "topic", "minimp", "hideminor", "label", "silentonly"].forEach(id => $("#" + id).addEventListener("input", () => { page = 0; renderTable(); }));
   $("#product").onchange = () => { product = $("#product").value; history.replaceState(null, "", `?product=${encodeURIComponent(product)}`); tagsOn.clear(); page = 0; renderHeader(); renderTable(); };
   $("#sumweek").onchange = renderSummary;
   $("#prev").onclick = () => { page--; renderTable(); }; $("#next").onclick = () => { page++; renderTable(); };
-  $("#reset").onclick = () => { ["q", "week", "ctype", "topic"].forEach(id => $("#" + id).value = ""); $("#minimp").value = "0"; $("#hideminor").checked = true; tagsOn.clear(); page = 0; renderHeader(); renderTable(); };
+  $("#reset").onclick = () => { ["q", "week", "ctype", "topic", "label"].forEach(id => $("#" + id).value = ""); $("#minimp").value = "0"; $("#hideminor").checked = true; $("#silentonly").checked = false; tagsOn.clear(); page = 0; renderHeader(); renderTable(); };
   $("#export").onclick = () => {
-    const cols = ["commit_date", "product", "title", "url", "change_type", "tags", "change_summary", "commit_subject", "commit_url", "pr_number", "author", "ms_topic", "ms_service", "ms_date", "lines_added", "lines_removed", "importance", "file_path"];
+    const cols = ["commit_date", "product", "title", "url", "change_type", "change_label", "silent", "tags", "change_summary", "commit_subject", "commit_url", "pr_number", "author", "ms_topic", "ms_service", "ms_date", "lines_added", "lines_removed", "importance", "file_path"];
     const csv = [cols.join(","), ...filtered().map(r => cols.map(c => `"${String(r[c] ?? "").replace(/"/g, '""')}"`).join(","))].join("\n");
     const a = Object.assign(document.createElement("a"), {href: URL.createObjectURL(new Blob([csv], {type: "text/csv"})), download: `changes-${product}.csv`});
     a.click();
   };
   renderHeader();
-  ["q", "week", "ctype", "topic", "minimp"].forEach(id => { if (params.get(id)) $("#" + id).value = params.get(id); });
+  ["q", "week", "ctype", "topic", "minimp", "label"].forEach(id => { if (params.get(id)) $("#" + id).value = params.get(id); });
+  if (params.get("silent") === "1") $("#silentonly").checked = true;
   renderTable();
 })();

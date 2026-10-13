@@ -1,0 +1,24 @@
+# Weekly digest subscribers (tracker/digest.py). Each subscriber gets what is new since their last digest.
+#
+#   products:        list of product names as shown on the dashboard, or ["*"] for all
+#   labels:          optional filter: Breaking change, Retirement, GA, Preview, New, Doc update
+#   min_importance:  doc changes below this are left out (default: project.significant_threshold)
+#   max_items:       cap on doc changes and announcements per digest (default 25)
+#   include_announcements: default true
+#   channel: teams   webhook_env: env var holding a Teams "Workflows" webhook URL
+#   channel: email   transport: logic-app (logic_app_env, default LOGIC_APP_URL) or smtp (SMTP_* env vars)
+#                    to: [addresses] or to_env: env var holding comma-separated addresses
+#
+# Keep webhook URLs and addresses in repository secrets (exposed to the workflow as env vars), not here.
+subscribers:
+  - id: caip-all
+    name: CAIP architects
+    products: ["*"]
+    channel: teams
+    webhook_env: TEAMS_WEBHOOK_URL
+  - id: phase0-ai-apim
+    name: Foundry, AI Search and API Management
+    products: ["Microsoft Foundry", "Azure OpenAI", "Azure AI Search", "API Management"]
+    channel: email
+    transport: logic-app
+    to_env: DIGEST_PHASE0_TO

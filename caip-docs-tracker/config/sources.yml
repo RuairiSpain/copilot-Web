@@ -1,12 +1,21 @@
-# CAIP Docs Change Tracker - source registry
-# v1 POC: Azure AI docs only. Add more CAIP repos (see design doc Appendix A1) as new entries.
+# CAIP Docs Change Tracker - source registry (v1: Cloud & AI Platforms, design doc Appendix A1).
+#
+# Paths, URL rules and product names for repositories other than azure-ai-docs were written from the
+# repositories' known layouts and have NOT been checked against a live scan. On the first run, check the
+# "Check a sample of page URLs" step and the product names on the dashboard, and tune them here.
+# Entries with `enabled: false` are kept for reference (design status "Check" or opt-in); switch them on
+# when confirmed. Sources found by tracker/discover.py are written to config/discovered.yml.
 
 project:
   name: "CAIP Docs Change Tracker"
   # First run backfills from this date. The dashboard time series starts here.
   start_date: "2026-10-01"
-  # Rows with importance >= this value count as "significant" on the dashboard.
+  # Rows with importance >= this value count as "significant" (dashboard, feeds, digests).
   significant_threshold: 30
+  # A doc change and an announcement for the same product this many days apart (either side) are linked.
+  correlation_window_days: 14
+  # Published dashboard URL, used for links in digests and RSS feeds.
+  site_url: "https://ruairispain.github.io/copilot-Web/"
 
 summary:
   # Provider: "github-models" (uses the workflow GITHUB_TOKEN, no extra secret),
@@ -16,6 +25,104 @@ summary:
   model: "openai/gpt-4.1-mini"
   max_rows_per_product: 40
   max_bullets: 8
+
+# Canonical product name -> other names used by feeds (Azure Updates categories) and in titles.
+# Doc-change products and announcement products are matched on these canonical names.
+product_aliases:
+  "Microsoft Foundry": ["Azure AI Foundry", "AI Foundry", "Foundry Agent Service", "Azure AI Foundry Agent Service"]
+  "Azure OpenAI": ["Azure OpenAI Service", "Azure OpenAI in Foundry Models"]
+  "Foundry Local": []
+  "Azure AI Search": ["Azure Cognitive Search", "AI Search"]
+  "Azure Machine Learning": []
+  "Foundry Tools (AI services)": ["Azure AI services", "Azure AI Speech", "Azure AI Language", "Azure AI Vision",
+                                  "Azure AI Document Intelligence", "Azure AI Translator", "Azure AI Content Safety",
+                                  "Foundry Tools"]
+  "Agent Framework": ["Microsoft Agent Framework"]
+  "API Management": ["Azure API Management", "APIM"]
+  "Azure App Service": ["App Service"]
+  "Azure Functions": []
+  "Azure Container Apps": []
+  "Azure Kubernetes Service": ["Azure Kubernetes Service (AKS)", "AKS"]
+  "Azure Logic Apps": []
+  "Azure Storage": ["Azure Blob Storage", "Azure Files", "Azure Disk Storage"]
+  "Azure Virtual Network": ["Virtual Network"]
+  "Azure IoT Hub": ["IoT Hub"]
+  "Azure Key Vault": ["Key Vault"]
+  "Virtual Machines": ["Azure Virtual Machines"]
+  "Azure Cosmos DB": ["Cosmos DB"]
+  "Azure Database for PostgreSQL": []
+  "Azure Database for MySQL": []
+  "Azure SQL": ["Azure SQL Database", "Azure SQL Managed Instance"]
+  "SQL Server": []
+  "Microsoft Fabric": []
+  "Azure Monitor": []
+  "Azure Arc": []
+  "Azure Container Registry": []
+  "Azure Local": ["Azure Stack HCI"]
+  "Azure Developer CLI": ["azd"]
+  "Azure Architecture Center": []
+
+# Optional: map a page's ms.service front-matter value to a product (used after a source's `products`
+# prefixes and before its `folder_products`).
+ms_service_products:
+  azure-ai-foundry: "Microsoft Foundry"
+  azure-ai-openai: "Azure OpenAI"
+  azure-ai-search: "Azure AI Search"
+  azure-machine-learning: "Azure Machine Learning"
+  azure-api-management: "API Management"
+
+# Layer 1: announcements. kind: rss | atom | github-discussions. `product` is used for items that name
+# no known product (for example a product's own blog).
+feeds:
+  - id: azure-updates
+    kind: rss
+    url: "https://www.microsoft.com/releasecommunications/api/v2/azure/rss"
+  - id: foundry-devblog
+    kind: rss
+    url: "https://devblogs.microsoft.com/foundry/feed/"
+    product: "Microsoft Foundry"
+  # The Foundry "What's New" discussions live in an organisation discussions repository; set its name
+  # (owner/repo behind github.com/orgs/microsoft-foundry/discussions) and switch it on. Needs GITHUB_TOKEN.
+  - id: foundry-discussions
+    kind: github-discussions
+    owner: microsoft-foundry
+    repo: "discussions"
+    product: "Microsoft Foundry"
+    enabled: false
+  # Architecture Center publishes an Atom feed of new and updated articles; confirm the URL and switch it on.
+  # Its changelog.md is already covered by scanning the architecture-center repository.
+  - id: architecture-center-feed
+    kind: atom
+    url: "https://learn.microsoft.com/en-us/azure/architecture/feed.atom"
+    product: "Azure Architecture Center"
+    enabled: false
+
+# Phase 2: tracker/discover.py lists the organisation's repositories weekly.
+discovery:
+  org: MicrosoftDocs
+  pushed_within_days: 30
+  stale_days: 30
+  # Repository name patterns that are in CAIP scope; v2 (Microsoft 365, Security, Business Applications) is excluded.
+  include: ["azure-*", "fabric-*", "sql-*", "architecture-center", "well-architected", "cloud-adoption-framework"]
+  exclude: ["*-pr", "azure-docs-sdk-*", "azure-docs-powershell*", "azure-docs-cli*", "azure-devops-docs",
+            "*-archive", "*-archived"]
+  # Learn landing pages whose original_content_git_url names the repository a product is published from.
+  learn_pages:
+    - {product: "API Management", url: "https://learn.microsoft.com/en-us/azure/api-management/api-management-key-concepts"}
+    - {product: "Azure AI Search", url: "https://learn.microsoft.com/en-us/azure/search/search-what-is-azure-search"}
+    - {product: "Microsoft Foundry", url: "https://learn.microsoft.com/en-us/azure/ai-foundry/what-is-azure-ai-foundry"}
+    - {product: "Azure Kubernetes Service", url: "https://learn.microsoft.com/en-us/azure/aks/what-is-aks"}
+    - {product: "Azure Functions", url: "https://learn.microsoft.com/en-us/azure/azure-functions/functions-overview"}
+  # true: discovered repositories are scanned straight away; false: they are listed for review first.
+  auto_add: false
+
+x-defaults:
+  articles: &articles
+    include: ["articles/**/*.md", "articles/**/*.yml"]
+    exclude: &exclude ["**/media/**", "**/includes/**/media/**", "**/breadcrumb/**", "zone-pivots/**"]
+  azure-url: &azure-url
+    url_rules:
+      - {prefix: "articles/", base: "https://learn.microsoft.com/en-us/azure/"}
 
 sources:
   - id: azure-ai-docs
@@ -28,40 +135,224 @@ sources:
       - "agent-framework/**/*.md"
       - "agent-framework/**/*.yml"
       - ".whatsnew.json"
-    exclude:
-      - "**/media/**"
-      - "**/includes/**/media/**"
-      - "**/breadcrumb/**"
-      - "zone-pivots/**"
-    # Path -> published Learn URL. First matching prefix wins. VERIFY on first run
-    # (tracker/check_urls.py samples URLs and reports any that do not resolve).
+    exclude: *exclude
+    # Path -> published Learn URL. First matching prefix wins.
     url_rules:
-      - prefix: "articles/"
-        base: "https://learn.microsoft.com/en-us/azure/"
-      - prefix: "agent-framework/"
-        base: "https://learn.microsoft.com/en-us/agent-framework/"
-    # Path -> product. First matching prefix wins. Edit names freely; they drive the product pages.
+      - {prefix: "articles/", base: "https://learn.microsoft.com/en-us/azure/"}
+      - {prefix: "agent-framework/", base: "https://learn.microsoft.com/en-us/agent-framework/"}
+    # Path -> product. First matching prefix wins.
     products:
-      - prefix: "articles/foundry/openai/"
-        product: "Azure OpenAI"
-      - prefix: "articles/foundry-classic/openai/"
-        product: "Azure OpenAI"
-      - prefix: "articles/foundry-local/"
-        product: "Foundry Local"
-      - prefix: "articles/foundry/"
-        product: "Microsoft Foundry"
-      - prefix: "articles/foundry-classic/"
-        product: "Microsoft Foundry"
-      - prefix: "articles/search/"
-        product: "Azure AI Search"
-      - prefix: "articles/machine-learning/"
-        product: "Azure Machine Learning"
-      - prefix: "articles/ai-services/"
-        product: "Foundry Tools (AI services)"
-      - prefix: "agent-framework/"
-        product: "Agent Framework"
-      - prefix: "articles/open-datasets/"
-        product: "Open Datasets"
-      - prefix: ".whatsnew.json"
-        product: "Microsoft Foundry"
+      - {prefix: "articles/foundry/openai/", product: "Azure OpenAI"}
+      - {prefix: "articles/foundry-classic/openai/", product: "Azure OpenAI"}
+      - {prefix: "articles/foundry-local/", product: "Foundry Local"}
+      - {prefix: "articles/foundry/", product: "Microsoft Foundry"}
+      - {prefix: "articles/foundry-classic/", product: "Microsoft Foundry"}
+      - {prefix: "articles/ai-foundry/", product: "Microsoft Foundry"}
+      - {prefix: "articles/search/", product: "Azure AI Search"}
+      - {prefix: "articles/machine-learning/", product: "Azure Machine Learning"}
+      - {prefix: "articles/ai-services/", product: "Foundry Tools (AI services)"}
+      - {prefix: "agent-framework/", product: "Agent Framework"}
+      - {prefix: "articles/open-datasets/", product: "Open Datasets"}
+      - {prefix: ".whatsnew.json", product: "Microsoft Foundry"}
     default_product: "Other"
+
+  - id: azure-docs
+    repo: MicrosoftDocs/azure-docs
+    <<: [*articles, *azure-url]
+    # Most Azure services: the product is the folder under articles/, renamed where the folder name is cryptic.
+    folder_products:
+      prefix: "articles/"
+      name_prefix: "Azure "
+      names:
+        api-management: "API Management"
+        app-service: "Azure App Service"
+        azure-functions: "Azure Functions"
+        container-apps: "Azure Container Apps"
+        aks: "Azure Kubernetes Service"
+        logic-apps: "Azure Logic Apps"
+        storage: "Azure Storage"
+        virtual-network: "Azure Virtual Network"
+        iot-hub: "Azure IoT Hub"
+        key-vault: "Azure Key Vault"
+        service-bus-messaging: "Azure Service Bus"
+        event-grid: "Azure Event Grid"
+        event-hubs: "Azure Event Hubs"
+        frontdoor: "Azure Front Door"
+        expressroute: "Azure ExpressRoute"
+        vpn-gateway: "Azure VPN Gateway"
+        static-web-apps: "Azure Static Web Apps"
+        azure-cache-for-redis: "Azure Cache for Redis"
+    default_product: "Azure (other)"
+
+  - id: azure-compute-docs
+    repo: MicrosoftDocs/azure-compute-docs
+    <<: [*articles, *azure-url]
+    folder_products:
+      prefix: "articles/"
+      name_prefix: "Azure "
+      names:
+        virtual-machines: "Virtual Machines"
+        virtual-machine-scale-sets: "Virtual Machine Scale Sets"
+        batch: "Azure Batch"
+    default_product: "Azure compute (other)"
+
+  - id: azure-databases-docs
+    repo: MicrosoftDocs/azure-databases-docs
+    <<: [*articles, *azure-url]
+    folder_products:
+      prefix: "articles/"
+      name_prefix: "Azure "
+      names:
+        cosmos-db: "Azure Cosmos DB"
+        postgresql: "Azure Database for PostgreSQL"
+        mysql: "Azure Database for MySQL"
+        documentdb: "Azure DocumentDB"
+    default_product: "Azure databases (other)"
+
+  - id: azure-management-docs
+    repo: MicrosoftDocs/azure-management-docs
+    <<: [*articles, *azure-url]
+    folder_products:
+      prefix: "articles/"
+      name_prefix: "Azure "
+      names:
+        azure-arc: "Azure Arc"
+        container-registry: "Azure Container Registry"
+        copilot: "Azure Copilot"
+    default_product: "Azure management (other)"
+
+  - id: azure-monitor-docs
+    repo: MicrosoftDocs/azure-monitor-docs
+    <<: [*articles, *azure-url]
+    folder_products:
+      prefix: "articles/"
+      name_prefix: "Azure "
+      names:
+        azure-monitor: "Azure Monitor"
+        advisor: "Azure Advisor"
+        service-health: "Azure Service Health"
+        chaos-studio: "Azure Chaos Studio"
+    default_product: "Azure Monitor"
+
+  - id: azure-stack-docs
+    repo: MicrosoftDocs/azure-stack-docs
+    include: ["**/*.md", "**/*.yml"]
+    exclude: *exclude
+    url_rules:
+      - {prefix: "azure-local/", base: "https://learn.microsoft.com/en-us/azure/azure-local/"}
+      - {prefix: "azure-stack/", base: "https://learn.microsoft.com/en-us/azure-stack/"}
+      - {prefix: "AKS-Arc/", base: "https://learn.microsoft.com/en-us/azure/aks/aksarc/"}
+    folder_products:
+      prefix: ""
+      names:
+        azure-local: "Azure Local"
+        azure-stack: "Azure Stack"
+        AKS-Arc: "AKS on Azure Local"
+        azure-managed-lustre: "Azure Managed Lustre"
+        operator-nexus: "Azure Operator Nexus"
+    default_product: "Azure hybrid (other)"
+
+  - id: azure-dev-docs
+    repo: MicrosoftDocs/azure-dev-docs
+    include: ["articles/**/*.md", "articles/**/*.yml", ".whatsnew.json"]
+    exclude: *exclude
+    url_rules:
+      - {prefix: "articles/", base: "https://learn.microsoft.com/en-us/azure/developer/"}
+    folder_products:
+      prefix: "articles/"
+      names:
+        azure-developer-cli: "Azure Developer CLI"
+        azure-mcp-server: "Azure MCP Server"
+    default_product: "Azure developer guides"
+
+  - id: architecture-center
+    repo: MicrosoftDocs/architecture-center
+    include: ["docs/**/*.md", "docs/**/*.yml", "**/changelog.md"]
+    exclude: *exclude
+    url_rules:
+      - {prefix: "docs/", base: "https://learn.microsoft.com/en-us/azure/architecture/"}
+    default_product: "Azure Architecture Center"
+
+  - id: fabric-docs
+    repo: MicrosoftDocs/fabric-docs
+    include: ["docs/**/*.md", "docs/**/*.yml"]
+    exclude: *exclude
+    url_rules:
+      - {prefix: "docs/", base: "https://learn.microsoft.com/en-us/fabric/"}
+    default_product: "Microsoft Fabric"
+
+  - id: sql-docs
+    repo: MicrosoftDocs/sql-docs
+    include: ["docs/**/*.md", "docs/**/*.yml", "azure-sql/**/*.md", "azure-sql/**/*.yml"]
+    exclude: *exclude
+    url_rules:
+      - {prefix: "azure-sql/", base: "https://learn.microsoft.com/en-us/azure/azure-sql/"}
+      - {prefix: "docs/", base: "https://learn.microsoft.com/en-us/sql/"}
+    products:
+      - {prefix: "azure-sql/", product: "Azure SQL"}
+    default_product: "SQL Server"
+
+  # ---- Optional / to confirm (design status "Check" or low value) ----
+  - id: azure-docs-sdk-dotnet
+    repo: MicrosoftDocs/azure-docs-sdk-dotnet
+    enabled: false   # SDK reference: low value, high volume
+    include: ["**/*.md"]
+    exclude: *exclude
+    default_product: "Azure SDK reference"
+  - id: azure-docs-sdk-java
+    repo: MicrosoftDocs/azure-docs-sdk-java
+    enabled: false
+    include: ["**/*.md"]
+    exclude: *exclude
+    default_product: "Azure SDK reference"
+  - id: azure-docs-sdk-python
+    repo: MicrosoftDocs/azure-docs-sdk-python
+    enabled: false
+    include: ["**/*.md"]
+    exclude: *exclude
+    default_product: "Azure SDK reference"
+  - id: azure-docs-sdk-node
+    repo: MicrosoftDocs/azure-docs-sdk-node
+    enabled: false
+    include: ["**/*.md"]
+    exclude: *exclude
+    default_product: "Azure SDK reference"
+  - id: windowsserverdocs
+    repo: MicrosoftDocs/windowsserverdocs
+    enabled: false   # confirm whether Windows Server is in CAIP scope
+    include: ["WindowsServerDocs/**/*.md", "WindowsServerDocs/**/*.yml"]
+    exclude: *exclude
+    url_rules:
+      - {prefix: "WindowsServerDocs/", base: "https://learn.microsoft.com/en-us/windows-server/"}
+    default_product: "Windows Server"
+  - id: powerbi-docs
+    repo: MicrosoftDocs/powerbi-docs
+    enabled: false   # confirm scope (Power BI is now part of Microsoft Fabric)
+    include: ["powerbi-docs/**/*.md", "powerbi-docs/**/*.yml"]
+    exclude: *exclude
+    url_rules:
+      - {prefix: "powerbi-docs/", base: "https://learn.microsoft.com/en-us/power-bi/"}
+    default_product: "Power BI"
+  - id: azure-iot-docs
+    repo: MicrosoftDocs/azure-iot-docs
+    enabled: false   # candidate, not yet confirmed
+    <<: [*articles, *azure-url]
+    default_product: "Azure IoT"
+  - id: azure-networking-docs
+    repo: MicrosoftDocs/azure-networking-docs
+    enabled: false   # candidate, not yet confirmed
+    <<: [*articles, *azure-url]
+    folder_products: {prefix: "articles/", name_prefix: "Azure "}
+    default_product: "Azure networking"
+  - id: well-architected
+    repo: MicrosoftDocs/well-architected
+    enabled: false   # candidate, not yet confirmed
+    include: ["**/*.md", "**/*.yml"]
+    exclude: *exclude
+    default_product: "Azure Well-Architected Framework"
+  - id: cloud-adoption-framework
+    repo: MicrosoftDocs/cloud-adoption-framework
+    enabled: false   # candidate, not yet confirmed
+    include: ["**/*.md", "**/*.yml"]
+    exclude: *exclude
+    default_product: "Cloud Adoption Framework"

@@ -8,6 +8,10 @@
 <div class="card"><div class="chart-wrap"><canvas id="tags"></canvas></div></div></div>
 <h2>Products <small>select a product to search and filter its changes</small></h2>
 <div class="grid products" id="products"></div>
-<p class="note">Counts are documentation file changes (one row per changed page per commit), bucketed by commit week (Monday start). Metadata-only edits are counted but excluded from “significant”.</p>
+<h2>Latest announcements <small>Azure Updates and product blogs, labelled and matched to products</small></h2>
+<div class="card" id="announcements"></div>
+<h2>Subscribe <small>RSS feeds of significant changes and announcements, per product</small></h2>
+<div class="card note" id="feeds"></div>
+<p class="note">Counts are documentation file changes (one row per changed page per commit), bucketed by commit week (Monday start). Noise (metadata-only, whitespace-only, link-only and typo-sized edits) is counted but excluded from “significant”. A silent change is a significant change with no announcement for the same product within 14 days.</p>
 </main>
 <script src="assets/common.js"></script><script src="assets/overview.js"></script></body></html>
