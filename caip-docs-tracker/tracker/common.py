@@ -21,6 +21,7 @@ STATE_PATH = ROOT / "state" / "state.json"
 FEED_STATE_PATH = ROOT / "state" / "feeds.json"
 DIGEST_STATE_PATH = ROOT / "state" / "digests.json"
 DATA_DIR = ROOT / "data"
+CACHE_DIR = ROOT / "cache"  # working files shared between steps of one run; not committed
 SITE_DIR = ROOT / "site"
 
 CHANGE_FIELDS = [
@@ -188,6 +189,11 @@ def slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "x"
 
 
+def page_cache_path(repo_id: str, sha: str, path: str) -> Path:
+    """Where scan.py keeps the text of a large-edit page for summarise.py."""
+    return CACHE_DIR / "pages" / repo_id / f"{sha[:12]}-{slug(path)}.md"
+
+
 # ---------------------------------------------------------------- CSV
 def append_csv(path: Path, fields: list[str], rows: list[dict]) -> None:
     if not rows:
@@ -231,16 +237,32 @@ def env_flag(name: str) -> bool:
     return is_true(os.environ.get(name, ""))
 
 
+def large_edits_enabled() -> bool:
+    """Whether large edits are summarised from the whole page (env TRACKER_LARGE_EDITS=off disables it)."""
+    return os.environ.get("TRACKER_LARGE_EDITS", "").strip().lower() not in {"off", "0", "false", "no", "disabled"}
+
+
 # ---------------------------------------------------------------- HTTP
 USER_AGENT = "caip-docs-tracker (+https://github.com/RuairiSpain/copilot-Web)"
 
 
-def http_request(method: str, url: str, *, attempts: int = 3, timeout: float = 60, **kwargs) -> requests.Response:
-    """Send a request, waiting and retrying on rate limits (429) and server errors (5xx)."""
+IDEMPOTENT = {"GET", "HEAD", "OPTIONS"}
+
+
+def http_request(method: str, url: str, *, attempts: int = 3, timeout: float = 60, retry_5xx: bool | None = None,
+                 **kwargs) -> requests.Response:
+    """Send a request, waiting and retrying on rate limits (429) and, for reads, server errors (5xx).
+
+    A 429 means the server did not process the request, so it is safe to repeat for any method. A 5xx
+    after a POST may come after the server acted (a Teams post that was delivered behind a gateway
+    timeout), so by default only GET/HEAD/OPTIONS retry on 5xx; pass retry_5xx=True for a POST that is
+    safe to repeat, such as a model call.
+    """
     headers = {"User-Agent": USER_AGENT, **(kwargs.pop("headers", None) or {})}
+    retry_5xx = method.upper() in IDEMPOTENT if retry_5xx is None else retry_5xx
     for i in range(attempts - 1):
         resp = requests.request(method, url, headers=headers, timeout=timeout, **kwargs)
-        if resp.status_code != 429 and resp.status_code < 500:
+        if resp.status_code != 429 and not (retry_5xx and resp.status_code >= 500):
             return resp
         try:
             wait = min(60.0, float(resp.headers.get("Retry-After", "")))

@@ -25,6 +25,9 @@ summary:
   model: "openai/gpt-4.1-mini"
   max_rows_per_product: 40
   max_bullets: 8
+  # A week that fell back to the rule-based summary is retried with the model on later runs, but only
+  # for this many recent weeks.
+  retry_weeks: 4
 
 # Canonical product name -> other names used by feeds (Azure Updates categories) and in titles.
 # Doc-change products and announcement products are matched on these canonical names.

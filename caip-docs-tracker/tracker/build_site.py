@@ -5,6 +5,7 @@ Writes site/data/{meta,changes,summaries,announcements}.json and one RSS feed pe
 """
 from __future__ import annotations
 
+import datetime as dt
 import email.utils
 import json
 from collections import Counter
@@ -63,8 +64,10 @@ def main() -> None:
         # Rows written before the noise filter existed: treat metadata-only and minor edits as noise.
         if not r["noise"]:
             r["noise"] = str(is_true(r["metadata_only"]) or "minor-edit" in r["tags"].split(";")).lower()
+        # commit_date keeps the committer's UTC offset, so it does not sort as text; commit_utc does.
+        r["commit_utc"] = parse_iso(r["commit_date"]).astimezone(dt.timezone.utc).isoformat()
     correlate(rows, announcements, thr, cfg["project"].get("correlation_window_days", 14))
-    rows.sort(key=lambda r: r["commit_date"], reverse=True)
+    rows.sort(key=lambda r: r["commit_utc"], reverse=True)
     announcements.sort(key=lambda a: a["published"], reverse=True)
     weeks = weeks_between(cfg["project"]["start_date"], utcnow().date().isoformat())
     total = Counter(r["week_start"] for r in rows)

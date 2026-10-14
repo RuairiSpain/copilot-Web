@@ -65,9 +65,11 @@
       <p class="note">Model: ${esc([...new Set(blocks.map(([, bw]) => bw[w].provider))].join(", "))} · generated ${fmtDate(blocks[0][1][w].generated_at)}</p>`;
   }
 
-  // ms.date is MM/DD/YYYY; reorder it to YYYYMMDD so it sorts by date.
+  // Dates sort by time: commit_date carries the committer's UTC offset (use commit_utc), and ms.date is
+  // MM/DD/YYYY (reorder it to YYYYMMDD).
   function sortValue(r, k) {
     const v = r[k];
+    if (k === "commit_date") return r.commit_utc || v;
     if (k !== "ms_date") return v;
     const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(v || "");
     return m ? m[3] + m[1].padStart(2, "0") + m[2].padStart(2, "0") : String(v || "");

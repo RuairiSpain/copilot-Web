@@ -120,3 +120,26 @@ def test_github_headers(monkeypatch):
     assert "Authorization" not in common.github_headers()
     monkeypatch.setenv("GITHUB_TOKEN", "t")
     assert common.github_headers()["Authorization"] == "Bearer t"
+
+
+def test_http_request_does_not_repeat_unsafe_posts_on_5xx(http):
+    http.add("POST", "https://teams/hook", FakeResponse(502), FakeResponse(200))
+    assert common.http_request("POST", "https://teams/hook").status_code == 502
+    assert len(http.calls) == 1
+    http.add("POST", "https://model/", FakeResponse(503), FakeResponse(200))
+    assert common.http_request("POST", "https://model/", retry_5xx=True).status_code == 200
+    http.add("POST", "https://limited/", FakeResponse(429), FakeResponse(200))
+    assert common.http_request("POST", "https://limited/").status_code == 200  # 429: not processed, safe to repeat
+    http.add("GET", "https://get/", FakeResponse(500), FakeResponse(200))
+    assert common.http_request("GET", "https://get/", retry_5xx=False).status_code == 500
+
+
+def test_large_edit_switch_and_page_cache_path(project, monkeypatch):
+    assert common.large_edits_enabled()
+    for value in ("off", "OFF ", "0", "false", "no", "disabled"):
+        monkeypatch.setenv("TRACKER_LARGE_EDITS", value)
+        assert not common.large_edits_enabled()
+    monkeypatch.setenv("TRACKER_LARGE_EDITS", "summarise")
+    assert common.large_edits_enabled()
+    p = common.page_cache_path("azure-docs", "0123456789abcdef", "articles/a b/C.md")
+    assert p == project / "cache" / "pages" / "azure-docs" / "0123456789ab-articles-a-b-c-md.md"

@@ -91,3 +91,13 @@ def test_check_urls(project, http, monkeypatch, capsys):
     assert check_urls.main() == 2
     out = capsys.readouterr().out
     assert "404  https://learn/missing" in out and "dns failure" in out and "1/3 sampled URLs resolved" in out
+
+
+def test_rows_sort_by_utc_time(project, monkeypatch):
+    rows = [change(commit_sha="early", commit_date="2026-10-06T01:00:00+00:00"),
+            change(commit_sha="late", commit_date="2026-10-05T23:00:00-07:00")]  # 06:00 UTC on 6 Oct
+    common.write_csv(project / "data" / "azure-ai-docs" / "changes" / "2026-10-05.csv", common.CHANGE_FIELDS, rows)
+    assert run_main(build_site, monkeypatch) == 0
+    out = json.loads((project / "site" / "data" / "changes.json").read_text())
+    assert [r["commit_sha"] for r in out] == ["late", "early"]
+    assert out[0]["commit_utc"] == "2026-10-06T06:00:00+00:00"

@@ -66,5 +66,6 @@ The rendered digest, whether or not it was sent.
 "stale": [ { "repo", "reason" } ], "learn": [ { "product", "url", "repo", "configured" | "error" } ] }`
 
 ## `site/data/` (built, not edited)
-`meta.json`, `changes.json` (rows plus `announcements` and `silent` from the correlator), `summaries.json`,
+`meta.json`, `changes.json` (rows plus `announcements` and `silent` from the correlator, and `commit_utc`, the
+commit time in UTC that the dashboard sorts on), `summaries.json`,
 `announcements.json` (plus `doc_changes`). `site/feeds/all.xml` and `site/feeds/<product-slug>.xml` are RSS 2.0.

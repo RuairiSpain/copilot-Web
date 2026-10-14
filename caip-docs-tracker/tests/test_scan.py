@@ -53,11 +53,24 @@ def test_cat_files(fake_repo, monkeypatch):
     assert scan.cat_files(fake_repo, ["abc:x"]) == {"abc:x": None}
 
 
-def test_pr_by_commit_skips_merges_without_a_pr(monkeypatch):
-    outputs = iter(["m1\x1fa b\x1fMerge pull request #7 from x/y\nm2\x1fa\x1fMerge pull request #8 from x/z\n"
-                    "m3\x1fa b\x1fMerge branch 'main'\n", "c1\nc2\n"])
-    monkeypatch.setattr(scan, "git", lambda *a, **k: next(outputs))
-    assert scan.pr_by_commit(None, [], ["HEAD"]) == {"c1": "7", "c2": "7"}
+def h(sha: str, parents: str, subject: str = "work") -> dict:
+    return {"sha": sha, "parents": parents, "subject": subject}
+
+
+def test_pr_by_commit_from_history():
+    # Newest first, as git log prints it.  main: m0 - M1 - M2 - M3 (HEAD)
+    #   M1 merges PR #7 (c1, c2); M2 merges a branch-sync without a PR number (c3);
+    #   M3 merges PR #9 (c4, which itself merged main into the branch through s1).
+    history = [
+        h("M3", "M2 c4", "Merge pull request #9 from x/b"),
+        h("c4", "s1"), h("s1", "c5 M1", "Merge branch 'main' into b"), h("c5", "m0"),
+        h("M2", "M1 c3", "Merge branch 'release'"), h("c3", "M1"),
+        h("M1", "m0 c2", "Merge pull request #7 from x/a"), h("c2", "c1"), h("c1", "m0"),
+        h("odd", "M1", "Merge pull request #8 with one parent"),
+        h("m0", "outside"),
+    ]
+    assert scan.pr_by_commit(history, "M3") == {"c1": "7", "c2": "7", "c4": "9", "s1": "9", "c5": "9"}
+    assert scan.pr_by_commit([], "x") == {}
 
 
 # ---------------------------------------------------------------- page metadata and URLs
@@ -225,17 +238,19 @@ def test_scan_end_to_end(project, fake_repo, monkeypatch):
 
 
 def test_scan_falls_back_to_since_when_watermark_is_missing(project, fake_repo, monkeypatch):
-    common.save_state({"azure-ai-docs": {"last_sha": "f" * 40, "last_sync": "2026-10-09T12:00:00+00:00"}})
+    # The last scan ran on 20 Nov, after every commit in the repository, but its watermark is gone. Reading
+    # only commits dated after 20 Nov would find nothing; the fallback looks back as far as the clone goes.
+    common.save_state({"azure-ai-docs": {"last_sha": "f" * 40, "last_sync": "2026-11-20T12:00:00+00:00"}})
     assert run_main(scan, monkeypatch, "--only", "azure-ai-docs", "--repo-path", f"azure-ai-docs={fake_repo}") == 0
-    assert {r["commit_subject"] for r in rows_of(project)} == {
-        "Rename vector search article and remove legacy indexer page (#15001)", "Update search TOC and ranker note",
-        "Fix formatting", "Fix link", "Fix typo"}
-    assert common.read_csv(project / "data" / "scans.csv")[-1]["since"] == "2026-10-09T12:00:00+00:00"
+    assert common.read_csv(project / "data" / "scans.csv")[-1]["since"] == "2026-10-06T12:00:00+00:00"
+    subjects = {r["commit_subject"] for r in rows_of(project)}
+    assert "Add Live Interpreter SDK samples" in subjects and "Fix typo" in subjects
+    assert "Add agentic retrieval GA article (#14010)" not in subjects  # dated 2 Oct, before the window
     # Re-running from scratch writes no duplicate rows.
     common.save_state({})
     before = len(rows_of(project))
     assert run_main(scan, monkeypatch, "--only", "azure-ai-docs", "--repo-path", f"azure-ai-docs={fake_repo}") == 0
-    assert len(rows_of(project)) == 13 and before == 7
+    assert len(rows_of(project)) == 13 and before == 10
 
 
 def test_scan_clones_when_no_local_path(project, fake_repo, monkeypatch):
@@ -260,3 +275,101 @@ def test_scan_records_failures_and_exits_non_zero(project, monkeypatch):
 
 def test_scan_rejects_unknown_source(project, monkeypatch):
     assert run_main(scan, monkeypatch, "--only", "nope") == 2
+
+
+# ---------------------------------------------------------------- review fixes: paths, front matter, large edits
+def test_unquote_and_header_paths():
+    assert scan.unquote_path('"a/q\\"x\\303\\251.md"') == 'a/q"xé.md'
+    assert scan.unquote_path("a/a b/c.md\t") == "a/a b/c.md"
+    assert scan.header_paths('"a/q\\"x.md" "b/q\\"x.md"') == ('q"x.md', 'q"x.md')
+    assert scan.header_paths("a/dir b/x.md b/dir b/x.md") == ("dir b/x.md", "dir b/x.md")
+    assert scan.header_paths("a/old.md b/new.md") == ("old.md", "new.md")
+    assert scan.header_paths("nonsense") == ("", "")
+    assert scan._strip_side("/dev/null", "a") == "/dev/null"
+
+
+def test_parse_log_real_git_paths_and_line_numbers(tmp_path):
+    """Spaces (git adds a tab), " b/" inside a path, C-quoted names and renames, from real git output."""
+    repo = tmp_path / "r"
+    repo.mkdir()
+    subprocess.run(["bash", "-c", r"""
+        set -e; git init -q -b main; git config user.email t@t; git config user.name t
+        mkdir -p "dir b" docs
+        printf -- '---\ntitle: T\nms.date: 01/01/2026\n---\n# H\n\nline\n' > "dir b/page one.md"
+        printf 'y\n' > 'q"x.md'
+        printf 'keep this text long enough to be detected as a rename\nmore text here\nand more\n' > docs/old.md
+        git add -A; git commit -qm init
+        printf -- '---\ntitle: T\nms.date: 02/02/2026\n---\n# H\n\nline\ntitle: in the body\n' > "dir b/page one.md"
+        printf 'y2\n' > 'q"x.md'
+        git mv docs/old.md 'docs/new "name".md'
+        git add -A; git commit -qm two
+    """], cwd=repo, check=True)
+    raw = scan.git(repo, "log", "-1", "-M", "-p", "--unified=0", "--no-color", "--format=%x1e%H%x1f%P%x1f%cI%x1f%an%x1f%s")
+    files = {f["path"]: f for f in scan.parse_log(raw)[0]["files"]}
+    assert set(files) == {"dir b/page one.md", 'q"x.md', 'docs/new "name".md'}
+    page = files["dir b/page one.md"]
+    assert page["added"] == ["ms.date: 02/02/2026", "title: in the body"] and page["added_ln"] == [3, 8]
+    assert page["removed"] == ["ms.date: 01/01/2026"] and page["removed_ln"] == [3]
+    renamed = files['docs/new "name".md']
+    assert renamed["status"] == "Renamed" and renamed["old"] == "docs/old.md"
+    # With the front matter ending on line 4, the ms.date change is metadata but "title:" on line 8 is content.
+    body = scan.strip_front_matter_lines(page["added"], page["added_ln"], fm_end=4)
+    assert body == ["title: in the body"]
+    tags, *_rest, noise, _label = scan.classify(page, "dir b/page one.md", "two", fm_new=4, fm_old=4)
+    assert "metadata-only" not in tags
+
+
+def test_parse_log_deleted_file_paths():
+    raw = log_block("diff --git a/x y.md b/x y.md\ndeleted file mode 100644\n--- a/x y.md\t\n+++ /dev/null\n@@ -1 +0,0 @@\n-bye\n"
+                    "diff --git a/n.md b/n.md\nnew file mode 100644\n--- /dev/null\n+++ b/n.md\n@@ -0,0 +1 @@\n+hi\n"
+                    "diff --git a/z.md b/z.md\n@@ garbage @@\n+line\n")
+    files = scan.parse_log(raw)[0]["files"]
+    assert (files[0]["old"], files[0]["path"], files[0]["removed_ln"]) == ("x y.md", "x y.md", [1])
+    assert (files[1]["old"], files[1]["path"], files[1]["added_ln"]) == ("n.md", "n.md", [1])
+    assert files[2]["added_ln"] == [0]
+
+
+def test_front_matter_end_and_yaml_metadata():
+    assert scan.front_matter_end("---\ntitle: x\n---\nbody") == 3
+    assert scan.front_matter_end("---\ntitle: never closed") == 0
+    assert scan.front_matter_end("# no front matter") == 0 and scan.front_matter_end(None) == 0
+    yml = ["title: Visible hub title", "  ms.date: 01/01/2026", "", "  author: someone"]
+    assert scan.strip_front_matter_lines(yml, markdown=False) == ["title: Visible hub title"]
+    change_yml = {"status": "Modified", "added": ["title: New hub title", "x", "y", "z"], "removed": ["title: Old hub title", "x", "y", "w"],
+                  "added_ln": [1, 2, 3, 4], "removed_ln": [1, 2, 3, 4], "binary": False}
+    assert scan.classify(change_yml, "articles/index.yml")[2] is False  # not metadata-only
+
+
+def test_large_edits(monkeypatch):
+    lines_new = [f"new sentence number {i} about the service" for i in range(150)]
+    lines_old = [f"old sentence number {i} about the service" for i in range(150)]
+    big = change(lines_new, lines_old)
+    tags, *_rest, noise, _ = scan.classify(big, "articles/a.md")
+    assert "large-edit" in tags and not noise
+    monkeypatch.setenv("TRACKER_LARGE_EDITS", "off")
+    assert "large-edit" not in scan.classify(big, "articles/a.md")[0]
+    monkeypatch.delenv("TRACKER_LARGE_EDITS")
+    monkeypatch.setenv("TRACKER_LARGE_EDIT_LINES", "1000")
+    assert "large-edit" not in scan.classify(big, "articles/a.md")[0]
+    monkeypatch.setenv("TRACKER_LARGE_EDIT_LINES", "not a number")
+    assert scan.large_edit_lines() == scan.DEFAULT_LARGE_EDIT_LINES
+    # A large edit is never compared character by character, even when it is only a few characters apart.
+    monkeypatch.setenv("TRACKER_LARGE_EDIT_LINES", "3")
+    near = change(["It uses language models.", "a", "b", "c"], ["It uses langauge models.", "a", "b", "d"])
+    assert scan.classify(near, "articles/a.md")[4] is False
+    assert scan.change_summary("Update a.md", "Modified", "T", 200, 180, ["large-edit"]) == 'Large edit: "T" (+200/-180 lines)'
+
+
+def test_changed_chars_skips_long_or_unequal_text():
+    assert scan.changed_chars(["short"], ["a much longer line of replacement text here"]) == len("a much longer line of replacement text here")
+    long = "x" * 15_000
+    assert scan.changed_chars([long], [long + "y"]) == 15_001
+
+
+def test_scan_caches_large_edit_pages(project, fake_repo, monkeypatch):
+    monkeypatch.setenv("TRACKER_LARGE_EDIT_LINES", "2")
+    assert run_main(scan, monkeypatch, "--only", "azure-ai-docs", "--repo-path", f"azure-ai-docs={fake_repo}") == 0
+    row = next(r for r in rows_of(project) if r["file_path"] == "articles/foundry/openai/models.md")
+    assert "large-edit" in row["tags"].split(";")
+    cached = common.page_cache_path("azure-ai-docs", row["commit_sha"], row["file_path"]).read_text()
+    assert cached.startswith("# Azure OpenAI models") and "ms.date" not in cached

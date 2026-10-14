@@ -14,8 +14,10 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import codecs
 import datetime as dt
 import difflib
+import os
 import re
 import subprocess
 import sys
@@ -26,8 +28,8 @@ import yaml
 
 from tracker.common import (
     CHANGE_FIELDS, COMMIT_FIELDS, DATA_DIR, SCAN_FIELDS, append_csv, first_prefix,
-    enabled_sources, load_config, load_state, parse_iso, path_matches, read_csv, resolve_product,
-    save_state, utcnow, week_start,
+    enabled_sources, large_edits_enabled, load_config, load_state, page_cache_path, parse_iso, path_matches, read_csv,
+    resolve_product, save_state, utcnow, week_start,
 )
 
 # ---------------------------------------------------------------- classification rules
@@ -105,22 +107,31 @@ def cat_files(repo: Path, specs: list[str]) -> dict[str, str | None]:
     return out
 
 
-def pr_by_commit(repo: Path, since_arg: list[str], rng: list[str]) -> dict[str, str]:
-    """Map each commit to the pull request that merged it.
+def pr_by_commit(history: list[dict], head: str) -> dict[str, str]:
+    """Map each commit to the pull request that merged it, using the history already read (no git calls).
 
-    Branch commits rarely mention their PR; the number is on the "Merge pull request #N" commit.
-    Merges are read oldest first so a commit gets the PR that first brought it in, not a later
-    branch-sync merge that also contains it.
+    Branch commits rarely mention their PR; the number is on the "Merge pull request #N" commit. For each
+    such merge, oldest first, walk back from its second parent until reaching the main line (the
+    first-parent chain from HEAD) or a commit an earlier merge already claimed. A commit therefore gets
+    the PR that first brought it in, not a later branch-sync merge that also contains it.
     """
+    parents = {h["sha"]: h["parents"].split() for h in history}
+    mainline, sha = set(), head
+    while sha in parents and sha not in mainline:
+        mainline.add(sha)
+        sha = (parents[sha] or [""])[0]
     out: dict[str, str] = {}
-    raw = git(repo, "log", "--merges", "--reverse", "--format=%H%x1f%P%x1f%s", *since_arg, *rng)
-    for line in raw.splitlines():
-        _, parents, subject = (line.split("\x1f") + ["", ""])[:3]
-        m, ps = PR_RE.search(subject), parents.split()
+    for h in reversed(history):  # history is newest first
+        m, ps = PR_RE.search(h["subject"]), h["parents"].split()
         if not m or len(ps) < 2:
             continue
-        for sha in git(repo, "rev-list", f"{ps[0]}..{ps[1]}", check=False).split():
-            out.setdefault(sha, m.group(1))
+        stack = [ps[1]]
+        while stack:
+            sha = stack.pop()
+            if sha in out or sha in mainline or sha not in parents:
+                continue
+            out[sha] = m.group(1)
+            stack.extend(parents[sha])
     return out
 
 
@@ -173,39 +184,84 @@ def learn_url(path: str, src: dict) -> str:
 
 
 # ---------------------------------------------------------------- diff parsing
+HUNK_RE = re.compile(r"^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@")
+
+
+def unquote_path(value: str) -> str:
+    """A path as git prints it in a diff -> the plain path. Git C-quotes paths with special characters
+    ("a/q\"x.md") and puts a tab after a path that contains a space."""
+    value = value.rstrip("\t")
+    if len(value) >= 2 and value[0] == value[-1] == '"':
+        return codecs.escape_decode(value[1:-1].encode("utf-8"))[0].decode("utf-8", errors="replace")
+    return value
+
+
+def _strip_side(value: str, side: str) -> str:
+    value = unquote_path(value)
+    return value[2:] if value.startswith(side + "/") else value
+
+
+def header_paths(rest: str) -> tuple[str, str]:
+    """(old, new) from the part of a 'diff --git' line after the command. Only a first guess: the
+    '---'/'+++' and 'rename from/to' lines that follow are exact and override it."""
+    quoted = re.fullmatch(r'("(?:[^"\\]|\\.)*") ("(?:[^"\\]|\\.)*")', rest)
+    if quoted:
+        return _strip_side(quoted.group(1), "a"), _strip_side(quoted.group(2), "b")
+    half = (len(rest) - 1) // 2
+    if len(rest) % 2 and rest[half] == " " and rest[2:half] == rest[half + 3:]:
+        return rest[2:half], rest[half + 3:]  # the same path on both sides, even with " b/" in it
+    m = re.match(r"a/(.*) b/(.*)$", rest)
+    return (m.group(1), m.group(2)) if m else ("", "")
+
+
 def parse_log(raw: str) -> list[dict]:
-    """Parse `git log -p --unified=0` output produced with our \x1e/\x1f format."""
+    """Parse `git log -p --unified=0` output produced with our \x1e/\x1f format.
+
+    Each file gets its changed lines and their line numbers (added: in the new file, removed: in the
+    old file), so callers can tell front matter from body text.
+    """
     commits = []
     for block in raw.split("\x1e")[1:]:
         header, _, body = block.partition("\n")
         sha, parents, date, author, subject = (header.split("\x1f") + [""] * 5)[:5]
-        files, cur, in_hunk = [], None, False
+        files, cur, in_hunk, old_ln, new_ln = [], None, False, 0, 0
         for line in body.split("\n"):
             if line.startswith("diff --git "):
-                m = re.match(r"diff --git a/(.*) b/(.*)$", line)
-                cur = {"old": m.group(1) if m else "", "path": m.group(2) if m else "",
-                       "status": "Modified", "added": [], "removed": [], "binary": False}
+                old, path = header_paths(line[len("diff --git "):])
+                cur = {"old": old, "path": path, "status": "Modified", "added": [], "removed": [],
+                       "added_ln": [], "removed_ln": [], "binary": False}
                 files.append(cur)
                 in_hunk = False
             elif cur is None:
                 continue
             elif line.startswith("@@"):
+                m = HUNK_RE.match(line)
+                old_ln, new_ln = (int(m.group(1)), int(m.group(2))) if m else (0, 0)
                 in_hunk = True
             elif in_hunk:
                 # Inside a hunk every +/- line is content, including "--- x" or "+++ y".
                 if line.startswith("+"):
                     cur["added"].append(line[1:])
+                    cur["added_ln"].append(new_ln)
+                    new_ln += 1
                 elif line.startswith("-"):
                     cur["removed"].append(line[1:])
+                    cur["removed_ln"].append(old_ln)
+                    old_ln += 1
+            elif line.startswith("--- "):
+                if line[4:] != "/dev/null":
+                    cur["old"] = _strip_side(line[4:], "a")
+            elif line.startswith("+++ "):
+                cur["path"] = cur["old"] if line[4:] == "/dev/null" else _strip_side(line[4:], "b")
             elif line.startswith("new file mode"):
                 cur["status"] = "Added"
             elif line.startswith("deleted file mode"):
                 cur["status"] = "Deleted"
             elif line.startswith("rename from "):
                 cur["status"] = "Renamed"
-                cur["old"] = line[12:]
+                cur["old"] = unquote_path(line[12:])
             elif line.startswith("rename to "):
-                cur["path"] = line[10:]
+                cur["path"] = unquote_path(line[10:])
             elif line.startswith("Binary files"):
                 cur["binary"] = True
         commits.append({"sha": sha, "parents": parents, "date": date, "author": author,
@@ -213,13 +269,49 @@ def parse_log(raw: str) -> list[dict]:
     return commits
 
 
-def strip_front_matter_lines(lines: list[str]) -> list[str]:
-    return [ln for ln in lines if ln.strip() and not META_KEYS.match(ln) and ln.strip() != "---"]
+# Keys that are metadata wherever they appear (also in a YAML page's `metadata:` block).
+PURE_META = re.compile(
+    r"^\s*(ms\.[\w-]+|author|manager|reviewer|ROBOTS|ai-usage|update-frequency|monikerRange)\s*:.*$", re.I)
+FRONT_MATTER_SCAN = 200  # front matter longer than this many lines is not looked for
+
+
+def front_matter_end(text: str | None) -> int:
+    """Line number (1-based) of the '---' that closes a Markdown page's front matter; 0 if it has none."""
+    if not text or not text.startswith("---"):
+        return 0
+    for i, line in enumerate(text.split("\n")[1:FRONT_MATTER_SCAN], start=2):
+        if line.strip() == "---":
+            return i
+    return 0
+
+
+def strip_front_matter_lines(lines: list[str], linenos: list[int] | None = None, fm_end: int = 0,
+                             markdown: bool = True) -> list[str]:
+    """The changed lines that are page content: blank lines and metadata are dropped.
+
+    In Markdown, only lines inside the front matter (line number <= fm_end) are metadata, so a
+    "title:" line in a YAML code sample is content. Without line numbers every line is treated as
+    possible front matter. In YAML pages only pure metadata keys (ms.*, author, ...) are metadata;
+    their title and description are visible text.
+    """
+    out = []
+    for i, ln in enumerate(lines):
+        if not ln.strip():
+            continue
+        if markdown:
+            in_front_matter = linenos is None or linenos[i] <= fm_end
+            if in_front_matter and (META_KEYS.match(ln) or ln.strip() == "---"):
+                continue
+        elif PURE_META.match(ln):
+            continue
+        out.append(ln)
+    return out
 
 
 URL_RE = re.compile(r"\]\([^)]*\)|https?://\S+|href=\"[^\"]*\"")
 REDIRECT_RE = re.compile(r"(^|/)(\.openpublishing\.redirection[\w.-]*\.json|redirects?\.(json|ya?ml))$", re.I)
 TYPO_CHARS = 20  # an edit that changes this many characters or fewer, with no keyword, is typo-sized
+DEFAULT_LARGE_EDIT_LINES = 200
 LABEL_BY_TAG = [("breaking-change", "Breaking change"), ("retirement", "Retirement"), ("ga", "GA"),
                 ("preview", "Preview"), ("new-page", "New")]
 
@@ -229,10 +321,26 @@ def _norm(lines: list[str], pattern: re.Pattern | None = None) -> list[str]:
     return sorted(ln for ln in out if ln)
 
 
+TYPO_TEXT_LIMIT = 20_000  # characters; longer text is never compared character by character
+
+
 def changed_chars(removed: list[str], added: list[str]) -> int:
+    """Characters changed between the removed and added text. The comparison takes time that grows
+    with the square of the text length, so it is skipped (returning a large number) when the answer
+    cannot be typo-sized: the lengths differ by more than TYPO_CHARS or the text is very long."""
     a, b = "\n".join(removed), "\n".join(added)
+    if abs(len(a) - len(b)) > TYPO_CHARS or len(a) + len(b) > TYPO_TEXT_LIMIT:
+        return max(len(a), len(b))
     ops = difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes()
     return sum(max(i2 - i1, j2 - j1) for op, i1, i2, j1, j2 in ops if op != "equal")
+
+
+def large_edit_lines() -> int:
+    """Changed lines above which an edit is "large" (env TRACKER_LARGE_EDIT_LINES, default 200)."""
+    try:
+        return max(1, int(os.environ.get("TRACKER_LARGE_EDIT_LINES", "")))
+    except ValueError:
+        return DEFAULT_LARGE_EDIT_LINES
 
 
 def change_label(tags: list[str]) -> str:
@@ -242,7 +350,8 @@ def change_label(tags: list[str]) -> str:
     return "Doc update"
 
 
-def classify(f: dict, path: str, subject: str = "") -> tuple[list[str], int, bool, str, bool, str]:
+def classify(f: dict, path: str, subject: str = "", fm_new: int = 0, fm_old: int = 0
+             ) -> tuple[list[str], int, bool, str, bool, str]:
     """Tag a file change and score it.
 
     Returns (tags, importance 0-100, metadata_only, key evidence lines, noise, change label).
@@ -250,9 +359,15 @@ def classify(f: dict, path: str, subject: str = "") -> tuple[list[str], int, boo
     front-matter-only edit, a whitespace-only or link-only edit, a typo-sized edit, or a redirection
     file. New, deleted and moved files, what's-new pages, TOC changes and edits with a keyword hit
     are never noise.
+
+    fm_new / fm_old are the line numbers closing the front matter of the new and old page (0: none);
+    they decide which changed lines are metadata. A modified page with more changed lines than
+    large_edit_lines() is tagged "large-edit" (unless TRACKER_LARGE_EDITS=off), so the summariser reads
+    the whole page instead of the diff.
     """
-    added_body = strip_front_matter_lines(f["added"])
-    removed_body = strip_front_matter_lines(f["removed"])
+    markdown = path.lower().endswith(".md")
+    added_body = strip_front_matter_lines(f["added"], f.get("added_ln"), fm_new, markdown)
+    removed_body = strip_front_matter_lines(f["removed"], f.get("removed_ln"), fm_old, markdown)
     metadata_only = f["status"] == "Modified" and not added_body and not removed_body
     tags: list[str] = []
     score = WEIGHT_BY_TYPE.get(f["status"], 8)
@@ -291,6 +406,7 @@ def classify(f: dict, path: str, subject: str = "") -> tuple[list[str], int, boo
         tags.append("code-sample")
     churn = len(f["added"]) + len(f["removed"])
     score += min(20, churn // 10)
+    large = churn > large_edit_lines()
     keep = f["status"] != "Modified" or hits or {"navigation", "whats-new"} & set(tags)
     noise = True
     if metadata_only:
@@ -303,11 +419,13 @@ def classify(f: dict, path: str, subject: str = "") -> tuple[list[str], int, boo
         tags, score = ["whitespace-only"], 0
     elif _norm(added_body, URL_RE) == _norm(removed_body, URL_RE):
         tags, score = ["link-only"], min(score, 3)
-    elif churn <= 3 or changed_chars(removed_body, added_body) <= TYPO_CHARS:
+    elif churn <= 3 or (not large and changed_chars(removed_body, added_body) <= TYPO_CHARS):
         tags.append("minor-edit")
         score = min(score, 5)
     else:
         noise = False
+    if large and not noise and f["status"] == "Modified" and large_edits_enabled():
+        tags.append("large-edit")
     key = []
     for line in dict.fromkeys(hits):
         clean = re.sub(r"[*_`>#|]|\[([^\]]*)\]\([^)]*\)", r"\1", line).strip()
@@ -327,10 +445,23 @@ def change_summary(subject: str, status: str, title: str, added: int, removed: i
         return f'Navigation (TOC) updated: {title} (+{added}/-{removed} lines)'
     if "metadata-only" in tags:
         return f'Metadata-only edit to "{title or "untitled"}" (e.g. ms.date, author)'
-    verb = {"Added": "New page", "Deleted": "Removed page", "Renamed": "Moved page"}.get(status, "Edited")
-    extra = [t for t in tags if t not in {"new-page", "removed-page", "moved-page", "minor-edit"}]
+    verb = {"Added": "New page", "Deleted": "Removed page", "Renamed": "Moved page"}.get(
+        status, "Large edit" if "large-edit" in tags else "Edited")
+    extra = [t for t in tags if t not in {"new-page", "removed-page", "moved-page", "minor-edit", "large-edit"}]
     s = f'{verb}: "{title or "untitled"}" (+{added}/-{removed} lines)'
     return s + (f"; mentions {', '.join(extra)}" if extra else "")
+
+
+PAGE_CHARS = 15_000  # how much of a large-edit page is kept for the summariser
+
+
+def cache_page(repo_id: str, sha: str, path: str, text: str | None, fm_end: int) -> None:
+    """Keep the page body (front matter dropped) of a large edit for summarise.py, outside data/ so
+    it is never committed or published."""
+    body = "\n".join((text or "").split("\n")[fm_end:]).strip()
+    target = page_cache_path(repo_id, sha, path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(body[:PAGE_CHARS], encoding="utf-8")
 
 
 # ---------------------------------------------------------------- main scan
@@ -351,13 +482,16 @@ def scan_source(src: dict, cfg: dict, state: dict, scan_id: str, local: Path | N
         if has_commit(repo, last_sha):
             rng, since_arg, since_txt = [f"{last_sha}..{head}"], [], ""
         else:
-            since_txt = last_sync.isoformat()
+            # --since filters on commit dates, and branch commits keep their own (older) dates, so look
+            # back as far as the clone goes. Rows already written are de-duplicated below.
+            since_txt = max(start, last_sync - dt.timedelta(days=CLONE_MARGIN_DAYS)).isoformat() if last_sha \
+                else last_sync.isoformat()
             rng, since_arg = [head], [f"--since={since_txt}"]
             if last_sha:
                 print(f"[{repo_id}] watermark {last_sha[:8]} not in clone; falling back to --since {since_txt}")
         fmt = "--format=%x1e%H%x1f%P%x1f%cI%x1f%an%x1f%s"
         # Full git history since last sync (includes merges), for the commits CSV.
-        hist = git(repo, "log", "--shortstat", fmt, *since_arg, *rng)
+        hist = git(repo, "log", "--topo-order", "--shortstat", fmt, *since_arg, *rng)
         history = []
         for b in hist.split("\x1e")[1:]:
             head_line, _, rest = b.partition("\n")
@@ -366,7 +500,7 @@ def scan_source(src: dict, cfg: dict, state: dict, scan_id: str, local: Path | N
             stat = re.search(r"(\d+) files? changed", rest)  # merges print no stat
             h["files_changed"] = stat.group(1) if stat else ""
             history.append(h)
-        prs = pr_by_commit(repo, since_arg, rng)
+        prs = pr_by_commit(history, head)
         # Diffs of non-merge commits, limited to tracked top-level folders.
         tops = sorted({p.split("/")[0] for p in src.get("include", [])})
         raw = git(repo, "log", "--no-merges", "-M", "-p", "--unified=0", "--no-color", fmt,
@@ -380,18 +514,25 @@ def scan_source(src: dict, cfg: dict, state: dict, scan_id: str, local: Path | N
                 if f["binary"] or not path_matches(path, src.get("include")) or path_matches(path, src.get("exclude")):
                     continue
                 spec = f"{c['sha']}^:{f['old']}" if f["status"] == "Deleted" else f"{c['sha']}:{path}"
-                specs.append(spec)
-                rows.append((c, f, spec))
+                # The old Markdown page too, to find where its front matter ended.
+                old_spec = f"{c['sha']}^:{f['old']}" if f["status"] in ("Modified", "Renamed") and path.endswith(".md") else ""
+                specs += [spec, old_spec] if old_spec else [spec]
+                rows.append((c, f, spec, old_spec))
         blobs = cat_files(repo, sorted(set(specs)))
 
     out, tracked_per_commit = [], {}
     gh = f"https://github.com/{src['repo']}"
-    for c, f, spec in rows:
+    for c, f, spec, old_spec in rows:
         path = f["path"]
-        meta = parse_page(path, blobs.get(spec))
+        text = blobs.get(spec)
+        meta = parse_page(path, text)
         if not meta["title"] and path.lower().endswith("toc.yml"):
             meta["title"] = f"Table of contents ({path.rsplit('/', 2)[-2]})"
-        tags, score, meta_only, key, noise, label = classify(f, path, c["subject"])
+        fm_new = front_matter_end(text) if f["status"] != "Deleted" else 0
+        fm_old = front_matter_end(text if f["status"] == "Deleted" else blobs.get(old_spec))
+        tags, score, meta_only, key, noise, label = classify(f, path, c["subject"], fm_new, fm_old)
+        if "large-edit" in tags:
+            cache_page(repo_id, c["sha"], path, text, fm_new)
         product = resolve_product(path, src, meta["ms_service"], cfg)
         pr = PR_RE.search(c["subject"])
         pr_number = pr.group(1) if pr else prs.get(c["sha"], "")

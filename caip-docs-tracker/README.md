@@ -53,7 +53,7 @@ Monday 06:00 UTC, `caip-docs-tracker discovery`: `discover.py` writes `data/disc
 ### Noise filter and labels
 
 Changes are tagged (`breaking-change`, `retirement`, `ga`, `preview`, `security`, `pricing-quota`, `models`, `region`,
-`api-sdk`, `new-page`, `removed-page`, `moved-page`, `navigation`, `include`, `whats-new`, `code-sample`) and scored 0–100.
+`api-sdk`, `new-page`, `removed-page`, `moved-page`, `navigation`, `include`, `whats-new`, `code-sample`, `large-edit`) and scored 0–100.
 
 A change is **noise** when it touches only metadata (`ms.date`, `author`, and so on), whitespace or links, when it is typo-sized (20 characters or fewer, with no keyword), or when it is a redirection file.
 
@@ -64,6 +64,15 @@ The following are never noise:
 - edits that contain a keyword such as "preview", "generally available", "retire", "deprecat" or "breaking"
 
 Noise rows are kept in the CSVs, but summaries and digests leave them out, and the dashboard hides them by default.
+
+Metadata is decided by line position. In a Markdown page, only changed lines inside the front matter count as metadata, so a `title:` line in a YAML code sample is content. In a YAML page, only pure metadata keys (`ms.*`, `author` and so on) count; its `title` and `description` are visible text.
+
+**Large edits.** A modified page with more changed lines than `TRACKER_LARGE_EDIT_LINES` (default 200) is a large edit:
+- It is never compared character by character, so a big rewrite cannot slow the scan.
+- It is tagged `large-edit`, and the scan keeps the page text in `cache/`. This folder is not committed or published.
+- The summariser is sent the whole page (up to 6,000 characters each, at most 5 pages per model call) and asked to summarise what the page now says, not the diff.
+
+Set `TRACKER_LARGE_EDITS=off` to turn this off; large edits are then summarised from the diff like any other edit. Both settings are environment variables. In the weekly workflow they come from the repository variables of the same names.
 
 Every change and every announcement gets one of the design's labels: **Breaking change, Retirement, GA, Preview, New, Doc update**.
 
@@ -83,7 +92,10 @@ Every change and every announcement gets one of the design's labels: **Breaking 
 
 - **What is summarised:** for each product and week, up to 40 of the most important non-noise rows go to the model. The model returns bullets ranked by customer impact, each with an impact level and a label. Bullets can only link to URLs that were in the input.
 - **Providers:** GitHub Models (the default) or Azure OpenAI.
-- **When the model is unavailable:** a rule-based list is used instead, and the summary is retried on the next run. Rate limits (429) and server errors (5xx) are retried with backoff.
+- **When the model is unavailable:** a rule-based list is used instead.
+  - The summary is retried on later runs, but only for the last `summary.retry_weeks` weeks (default 4).
+  - A run stops calling the model after 3 failed calls in a row.
+  - Rate limits (429) and server errors (5xx) are retried with backoff.
 - **Weeks with only noise:** no model call is made, and the summary is empty.
 
 ### Digests (`digest.py`)
@@ -96,6 +108,8 @@ Every change and every announcement gets one of the design's labels: **Breaking 
   - Teams: an Adaptive Card posted to a Teams "Workflows" webhook.
   - Email: an HTTP-triggered Logic App, or SMTP.
 - **Secrets:** they come from environment variables named in `config/subscriptions.yml`. If a subscriber's secret is not set, their digest is archived but not sent, and the run does not fail.
+- **No repeats:** the weekly workflow sends digests only after the week's data is committed. It then commits the record of what was sent (`state/digests.json`), retrying the push, so a failed push cannot make next week's digest repeat this week's items.
+- **No duplicate posts:** delivery requests are not retried on server errors, because a webhook can post the card and still answer 502. Only rate limits (429) are retried.
 
 ### Discovery (`discover.py`)
 
@@ -151,6 +165,9 @@ Every change and every announcement gets one of the design's labels: **Breaking 
   - `feeds`, `discovery`
   - `sources`: for each source, `include`/`exclude` patterns, `url_rules`, `products`, `folder_products`, `default_product`, and `enabled` (default true)
 - **`config/subscriptions.yml`:** the digest subscribers; the format is documented at the top of the file.
+- **Environment variables** (repository variables in the weekly workflow):
+  - `TRACKER_LARGE_EDIT_LINES` (default 200): the changed-line count above which an edit counts as large.
+  - `TRACKER_LARGE_EDITS` (default `summarise`): set it to `off` to summarise large edits from the diff instead of the whole page.
 - **`config/discovered.yml`:** written by discovery. To tune a source block, copy it into `sources.yml`, which takes precedence.
 
 ## Local use

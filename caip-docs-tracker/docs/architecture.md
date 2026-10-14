@@ -11,7 +11,7 @@ Weekly scan (Thursday 18:00 UTC, `.github/workflows/caip-docs-tracker-weekly-sca
 | 3. Summarise | `tracker/summarise.py` | Change CSVs | `data/<repo>/summaries/<week>.json` |
 | 4. Build site | `tracker/build_site.py` + `correlate.py` + `store.py` | Changes, summaries, announcements | `site/data/*.json`, `site/feeds/*.xml` |
 | 5. Check URLs | `tracker/check_urls.py` | Change CSVs | Log only |
-| 6. Digests | `tracker/digest.py --send` | Changes, summaries, announcements, `config/subscriptions.yml`, `state/digests.json` | Teams / email, `data/digests/<date>/*` |
+| 6. Digests (after the data commit) | `tracker/digest.py --send`, then the digest record is committed with retries | Changes, summaries, announcements, `config/subscriptions.yml`, `state/digests.json` | Teams / email, `data/digests/<date>/*` |
 | 7. Publish | GitHub Actions | `site/` | GitHub Pages |
 
 Discovery (Monday 06:00 UTC, `caip-docs-tracker-discovery.yml`): `tracker/discover.py` → `data/discovery.json`,
@@ -44,6 +44,10 @@ Discovery (Monday 06:00 UTC, `caip-docs-tracker-discovery.yml`): `tracker/discov
   ga, preview, security, pricing-quota, models, region, api-sdk; plus structural tags (new-page, removed-page,
   moved-page, navigation, include, whats-new, code-sample).
 - Importance = change-type weight + tag weights + size, capped at 100. Noise scores 0–5.
+- Front matter is found by line number (from the diff's hunk headers), so only Markdown front-matter lines
+  count as metadata.
+- Large edits (more than `TRACKER_LARGE_EDIT_LINES` changed lines) skip the character diff and, unless
+  `TRACKER_LARGE_EDITS=off`, are summarised from the whole page cached in `cache/`.
 - Label = the first of Breaking change, Retirement, GA, Preview, New (new page) that applies, else Doc update.
 
 ## Roadmap

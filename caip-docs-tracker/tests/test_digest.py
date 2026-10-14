@@ -208,3 +208,11 @@ def test_main_smtp_errors_are_failures(project, monkeypatch):
     monkeypatch.setenv("SMTP_HOST", "smtp.x.com")
     seed(project, [change()], [], None, [{"id": "m", "channel": "email", "transport": "smtp", "to": ["a@x.com"]}])
     assert run_main(digest, monkeypatch, "--send") == 1
+
+
+def test_highlights_take_the_highest_impact_bullets():
+    merged = {"Microsoft Foundry": {"2026-10-05": {"bullets": [
+        {"headline": f"low {i}", "detail": "", "impact": "Low"} for i in range(3)] + [
+        {"headline": "retirement", "detail": "", "impact": "High"}, {"headline": "odd", "detail": ""}]}}}
+    ctx = digest.build({"id": "s"}, CFG, [change(product="Microsoft Foundry")], [], merged, "2026-10-01")
+    assert [h["headline"] for h in ctx["highlights"]] == ["retirement", "odd", "low 0"]

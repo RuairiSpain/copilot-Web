@@ -27,6 +27,11 @@ jobs:
     permissions:
       contents: write   # commit data/ and state/ back to the repo
       models: read      # GitHub Models for the weekly AI summary
+    env:
+      # Large edits (more changed lines than TRACKER_LARGE_EDIT_LINES) are summarised from the whole page;
+      # set the repository variable TRACKER_LARGE_EDITS to "off" to summarise them from the diff instead.
+      TRACKER_LARGE_EDITS: ${{ vars.TRACKER_LARGE_EDITS || 'summarise' }}
+      TRACKER_LARGE_EDIT_LINES: ${{ vars.TRACKER_LARGE_EDIT_LINES || '200' }}
     outputs:
       failed: ${{ steps.feeds.outcome == 'failure' || steps.scan.outcome == 'failure' || steps.digest.outcome == 'failure' }}
     steps:
@@ -72,21 +77,6 @@ jobs:
         continue-on-error: true
         run: python -m tracker.check_urls
 
-      # Subscribers whose secrets are not set are archived under data/digests but not sent.
-      - name: Send weekly digests
-        id: digest
-        continue-on-error: true
-        env:
-          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
-          LOGIC_APP_URL: ${{ secrets.LOGIC_APP_URL }}
-          DIGEST_PHASE0_TO: ${{ secrets.DIGEST_PHASE0_TO }}
-          SMTP_HOST: ${{ secrets.SMTP_HOST }}
-          SMTP_PORT: ${{ secrets.SMTP_PORT }}
-          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
-          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-          SMTP_FROM: ${{ secrets.SMTP_FROM }}
-        run: python -m tracker.digest --send
-
       - name: Commit data and watermark
         run: |
           git config user.name  "github-actions[bot]"
@@ -101,13 +91,52 @@ jobs:
             git push origin "HEAD:${GITHUB_REF_NAME}"
           fi
 
+      # Digests go out only after the data is safely committed (this step does not run if the commit
+      # above failed). Subscribers whose secrets are not set are archived under data/digests but not sent.
+      - name: Send weekly digests
+        id: digest
+        continue-on-error: true
+        env:
+          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+          LOGIC_APP_URL: ${{ secrets.LOGIC_APP_URL }}
+          DIGEST_PHASE0_TO: ${{ secrets.DIGEST_PHASE0_TO }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SMTP_FROM: ${{ secrets.SMTP_FROM }}
+        run: python -m tracker.digest --send
+
+      # The record of what was sent must reach main, or next week's digest repeats it: retry the push.
+      - name: Commit the digest record
+        if: ${{ always() && steps.digest.outcome != 'skipped' }}
+        run: |
+          git add state/digests.json data/digests
+          if git diff --cached --quiet; then
+            echo "No digest record to commit"
+            exit 0
+          fi
+          git commit -m "caip-docs-tracker: weekly digests $(date -u +%Y-%m-%d)"
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}"; then
+              exit 0
+            fi
+            echo "Push attempt ${attempt} failed; retrying"
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 10))
+          done
+          echo "::error::Could not save state/digests.json; next week's digests will repeat this week's items."
+          exit 1
+
       - name: Upload dashboard
+        if: ${{ !cancelled() }}   # publish even if the digest record could not be pushed
         uses: actions/upload-pages-artifact@v3
         with:
           path: caip-docs-tracker/site
 
   deploy:
     needs: scan
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     permissions:
       pages: write

@@ -103,3 +103,51 @@ def test_main_caches_retries_and_skips(project, http, monkeypatch):
     run_main(summarise, monkeypatch)
     run_main(summarise, monkeypatch)  # provider none: a rule-based summary is final
     assert summary(project, "2026-10-12")["Azure OpenAI"]["provider"] == "rule-based"
+
+
+def test_large_edit_rows_send_the_whole_page(project, http, monkeypatch):
+    monkeypatch.setenv("GITHUB_TOKEN", "t")
+    http.add("POST", "https://models.github.ai/", reply('{"bullets": []}'))
+    rows = []
+    for i in range(7):
+        r = dict(ROW, tags="large-edit", repo_id="azure-ai-docs", commit_sha=f"sha{i}", file_path=f"a{i}.md")
+        path = common.page_cache_path("azure-ai-docs", f"sha{i}", f"a{i}.md")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("The page now says " + "x" * 10_000)
+        rows.append(r)
+    rows.append(dict(ROW, tags="large-edit", repo_id="azure-ai-docs", commit_sha="nocache", file_path="z.md"))
+    summarise.call_llm({"provider": "github-models"}, "P", "w", rows)
+    sent = json.loads(http.calls[-1]["json"]["messages"][1]["content"].split("Changes (JSON):\n", 1)[1])
+    pages = [r.get("page", "") for r in sent]
+    assert sum(1 for p in pages if p) == summarise.MAX_PAGES_PER_CALL
+    assert all(len(p) == summarise.PAGE_PROMPT_CHARS for p in pages if p) and pages[-1] == ""
+    assert "large edit" in http.calls[-1]["json"]["messages"][0]["content"]
+    monkeypatch.setenv("TRACKER_LARGE_EDITS", "off")
+    assert summarise.page_text(rows[0]) == ""
+    assert summarise.page_text(dict(ROW)) == ""
+
+
+def test_rule_based_large_edit_mentions_the_page():
+    out = summarise.rule_based([dict(ROW, tags="large-edit", description="How to deploy agents")], 8)
+    assert out[0]["detail"].endswith("The page now covers: How to deploy agents")
+    assert "covers" not in summarise.rule_based([dict(ROW, tags="large-edit", description="")], 8)[0]["detail"]
+
+
+def test_retries_are_limited_to_recent_weeks_and_stop_after_failures(project, http, monkeypatch):
+    set_config(project, lambda c: c["summary"].update(retry_weeks=2))
+    this_week = common.week_start(common.utcnow())
+    old_week = "2026-01-05"
+    products = ["A", "B", "C", "D", "E"]
+    write_week(project, this_week, [dict(ROW, product=p) for p in products])
+    write_week(project, old_week, [dict(ROW, product="Old")])
+    run_main(summarise, monkeypatch)  # no token: everything rule-based
+    monkeypatch.setenv("GITHUB_TOKEN", "t")
+    http.add("POST", "https://models.github.ai/", FakeResponse(401))
+    run_main(summarise, monkeypatch)
+    # The old week is outside the retry window; this week stops after MAX_MODEL_FAILURES failed calls.
+    assert len(http.calls) == summarise.MAX_MODEL_FAILURES
+    assert summary(project, old_week)["Old"]["provider"] == "rule-based"
+    http.routes.clear()
+    http.add("POST", "https://models.github.ai/", reply('{"bullets": []}'))
+    run_main(summarise, monkeypatch)
+    assert {summary(project, this_week)[p]["provider"] for p in products} == {"github-models"}

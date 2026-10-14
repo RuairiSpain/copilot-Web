@@ -33,6 +33,7 @@ from tracker.correlate import correlate
 from tracker.store import load_announcements, load_changes, load_summaries
 
 FIRST_DIGEST_DAYS = 7
+IMPACT_ORDER = {"High": 0, "Medium": 1, "Low": 2}
 CARD_LIMIT = 25_000  # Teams rejects cards much over 28 KB
 AI_NOTE = "Highlights are AI-generated from the documentation diffs. Check the linked page before acting on them."
 
@@ -66,7 +67,9 @@ def build(sub: dict, cfg: dict, rows: list[dict], announcements: list[dict], sum
     for product in sorted({r["product"] for r in picked}):
         weeks = sorted(w for w in summaries.get(product, {}) if w in {r["week_start"] for r in picked if r["product"] == product})
         if weeks:
-            for b in summaries[product][weeks[-1]]["bullets"][:3]:
+            # Bullets merged from several repos are not in impact order; sort before taking the top 3.
+            bullets = sorted(summaries[product][weeks[-1]]["bullets"], key=lambda b: IMPACT_ORDER.get(b.get("impact"), 1))
+            for b in bullets[:3]:
                 highlights.append({**b, "product": product, "week": weeks[-1]})
     by_product: dict[str, list[dict]] = defaultdict(list)
     for r in picked[:limit]:

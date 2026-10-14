@@ -20,7 +20,7 @@ PATHS = {
     "CONFIG_PATH": "config/sources.yml", "DISCOVERED_PATH": "config/discovered.yml",
     "SUBSCRIPTIONS_PATH": "config/subscriptions.yml", "STATE_PATH": "state/state.json",
     "FEED_STATE_PATH": "state/feeds.json", "DIGEST_STATE_PATH": "state/digests.json",
-    "DATA_DIR": "data", "SITE_DIR": "site",
+    "DATA_DIR": "data", "SITE_DIR": "site", "CACHE_DIR": "cache",
 }
 
 
@@ -83,7 +83,7 @@ def project(tmp_path, monkeypatch):
                 monkeypatch.setattr(mod, name, tmp_path / rel)
     for var in ("GITHUB_TOKEN", "AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_API_KEY", "AZURE_OPENAI_DEPLOYMENT",
                 "TEAMS_WEBHOOK_URL", "LOGIC_APP_URL", "DIGEST_PHASE0_TO", "SMTP_HOST", "SMTP_FROM",
-                "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_PORT"):
+                "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_PORT", "TRACKER_LARGE_EDITS", "TRACKER_LARGE_EDIT_LINES"):
         monkeypatch.delenv(var, raising=False)
     return tmp_path
 
