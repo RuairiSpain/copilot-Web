@@ -1,5 +1,5 @@
 id: FND-CFG-008
-version: 1
+version: 2
 group: CFG
 title: "MCP tools use allow lists"
 description: >-
@@ -96,3 +96,4 @@ notes: >-
   is therefore product-opinion, restricted to the literal direct-inline shape, and omission is
   Uncertain rather than a violation. The exact extension package versions reviewed are recorded in
   compatibility; immutable repository revisions were unavailable.
+  A project with nothing the rule applies to skips with the not-applicable reason head, not input-unavailable.

@@ -279,3 +279,8 @@ but has no successful run evidence. azd JSON discovery shapes remain unverified.
 4. Verify PSRule invocation end to end on Linux with PowerShell 7.4 (not run here: no `pwsh` in this environment).
 5. Run Checkov (`pip install checkov==3.3.22`) and KICS binary against a Foundry Bicep sample to confirm rule coverage
    before agreeing any adapter ID mapping (this document only verified flags and formats from documentation).
+
+## azure.yaml `requiredVersions.azd` (2026-10-15)
+
+The vendored azd schema states that a project fails to load when the running azd is outside the range, and gives `>= 0.6.0-beta.3` as its only example. The range grammar is not
+documented there and no azd parser source was read, so Foundry Doctor does not evaluate the range (ADR-004 Amendment 2). Verify the grammar before implementing the error finding.

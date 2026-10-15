@@ -1,5 +1,5 @@
 id: FND-CFG-011
-version: 2
+version: 3
 group: CFG
 title: "Preview/retired fields are version-aware"
 description: >-
@@ -112,3 +112,6 @@ notes: >-
   checks beyond the documented minimums (azure.ai.agents beta.8, azure.ai.projects beta.4, azd 1.27.1, voice azd 1.32.0)
   stay out of the table until sourced. Mixed severities (deprecated versus ignored fields) are collapsed into one
   per-profile severity; a per-finding downgrade for deprecated-but-working constructs is an implementation choice.
+  requiredVersions.extensions: comma- and space-separated constraints are accepted. A floor above the highest tested
+  version is reported as uncertain (not verified). A floor below the tested minimum is informational and does not make
+  the rule inconclusive.

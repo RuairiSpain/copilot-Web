@@ -95,3 +95,13 @@ Review findings Azure N12/N13 and Foundry N13/N19 compared the tiers with the co
 | `unsupported-host` | **Not implemented.** Rules decide applicability per service host and skip with their own reason. No `FND-SYS-UNSUPPORTED-HOST` finding is emitted. | The host list in the schema is `examples`, not an enum; no rule yet needs a host allow-list. ADR-009 keeps the reserved ID. |
 | `invalid-azure-yaml` | Unparseable azure.yaml stops the run with an error naming the parse problem and exit 2 (`ErrUnavailable`). No `FND-SYS-INVALID-AZURE-YAML` finding is emitted and no rule runs. | Exit 2 is the contract for "validation could not run" (PRD section 7, ADR-010 decision 2); a finding would add no information because there is nothing to report on. |
 | Extension versions (`azure.ai.*`) | Not detected; ranges in the catalogue are not compared. The report cannot claim these rules passed for the installed extension. | Extension detection needs `azd extension list` output that is not yet verified. |
+
+## Amendment 2 (2026-10-15): `requiredVersions.azd` error finding stays unimplemented (Foundry lead R10)
+
+Decision 5 says an unsatisfied `requiredVersions.azd` is reported as an error finding. Verified from the vendored azd schema (`schemas/vendor/azd/azure.yaml.json`): the property description reads
+"A range of supported versions of `azd` for this project. If the version of `azd` is outside this range, the project will fail to load. Optional (allows all versions if absent)."
+and the only example is `>= 0.6.0-beta.3`. The schema fixes that an unmet range makes the project fail to load, so the consequence would be platform-basis.
+It does not define the grammar: operators, whitespace, `||` alternatives, wildcards and pre-release ordering are not stated, and no azd source file defining the range parser was read.
+A hand-written parser would assert an unverified product fact, and a wrong parse would produce a false platform error in every profile. The finding is therefore **not implemented in Phase 1**.
+Behaviour is unchanged from Amendment 1: the range is evidence only and is quoted in the report header when azd is not detected. Revisit when the azd range parser or its documentation is read and pinned in
+`docs/tool-compatibility.md`. The Decision 5 bullet on `requiredVersions.azd` is a target, not Phase 1 behaviour.

@@ -1,5 +1,5 @@
 id: FND-CFG-004
-version: 2
+version: 3
 group: CFG
 title: "Prompt model or hosted source/image is valid"
 description: >-
@@ -131,3 +131,6 @@ notes: >-
   the schema and flags it only when project is absent in both. The generic "project and image together are invalid"
   statement in the schema applies to host containerapp only and is not applied here. The image reference
   format is not documented beyond an example and is not validated (no tag-pinning claim is made).
+  Quantity forms: only cpu as a plain decimal and memory with Ki, Mi, Gi or Ti suffixes are range-checked. The schema
+  patterns also accept cpu with an m suffix, memory with decimal suffixes (k, M, G, T, P, E), Pi/Ei and bare numbers; how
+  the service reads those is not verified, so they are reported as uncertain, never as out of range.

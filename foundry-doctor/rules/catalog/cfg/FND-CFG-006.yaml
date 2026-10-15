@@ -1,5 +1,5 @@
 id: FND-CFG-006
-version: 2
+version: 3
 group: CFG
 title: "Every variable has an environment or infrastructure producer"
 description: >-
@@ -131,3 +131,9 @@ notes: >-
   is not present). The producer rule for outputs is therefore a "likely" signal. ${VAR:-default} is verified
   only from extension source, not from Learn. Normalisation of the service name in AGENT_<SERVICE>_* is described
   as "normalized" without a specification.
+  Producers: AZURE_ENV_NAME, AZURE_SUBSCRIPTION_ID and AZURE_RESOURCE_GROUP count as azd-set. AZURE_LOCATION,
+  AZURE_TENANT_ID, AZURE_PRINCIPAL_ID and AZURE_PRINCIPAL_TYPE are azd-defined names the source does not say are always
+  set, so a missing one is uncertain. AGENT_<SERVICE>_{NAME,VERSION,ENDPOINT,RESPONSES_ENDPOINT,INVOCATIONS_ENDPOINT,
+  INVOCATIONS_WS_ENDPOINT} are producers for azure.ai.agent services only; any other AGENT_* name is uncertain. A key
+  with an empty value is not a producer and is uncertain. Without a usable environment the rule skips with
+  input-unavailable and a named reason: no-environment-selected, env-file-missing or default-environment-not-found.

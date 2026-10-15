@@ -202,14 +202,6 @@ func walkYAML(n *yaml.Node, keys []string, cmds *[]string, flat *strings.Builder
 	}
 }
 
-var reAzdDeploy = regexp.MustCompile(`(?i)(^|[\s;&|(` + "`" + `])azd\s+(provision|deploy|up)\b`)
-
-// invokesAzd reports whether a shell command text runs azd provision, deploy or
-// up on a non-comment line.
-func invokesAzd(cmd string) bool {
-	return matchLines(cmd, reAzdDeploy)
-}
-
 func matchLines(cmd string, re *regexp.Regexp) bool {
 	for _, line := range strings.Split(cmd, "\n") {
 		if strings.HasPrefix(strings.TrimSpace(line), "#") {

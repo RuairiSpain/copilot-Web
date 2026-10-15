@@ -28,7 +28,7 @@ func evalCFG008(in *sdk.Input) sdk.Result {
 			}
 			continue
 		}
-		for _, t := range items(s.get("tools")) {
+		for ti, t := range items(s.get("tools")) {
 			if child(t, "$ref") != nil {
 				skips = append(skips, s.Name+": tool definition comes from $ref")
 				continue
@@ -49,7 +49,7 @@ func evalCFG008(in *sdk.Input) sdk.Result {
 			}
 			names := refNames(allowed)
 			if len(names) == 0 {
-				fs = append(fs, finding(d, s, allowed, "direct inline MCP tool has an empty allowed_tools list"))
+				fs = append(fs, finding(d, s, allowed, fmt.Sprintf("mcp-allowed-tools-empty:tools[%d]", ti), "direct inline MCP tool has an empty allowed_tools list"))
 				continue
 			}
 			nonEmpty := false
@@ -68,7 +68,7 @@ func evalCFG008(in *sdk.Input) sdk.Result {
 	}
 	if !evaluated {
 		if len(skips) == 0 {
-			return skip(sdk.SkipInputUnavailable)
+			return skip(sdk.SkipNotApplicable + ": project has no direct inline MCP tools")
 		}
 		return skip(strings.Join(skips, "; "))
 	}
@@ -97,7 +97,7 @@ func evalCFG009(in *sdk.Input) sdk.Result {
 	}
 	if !st.evaluated {
 		if len(st.skips) == 0 {
-			return skip(sdk.SkipInputUnavailable)
+			return skip(sdk.SkipNotApplicable + ": project has no recurring routine triggers")
 		}
 		return skip(strings.Join(st.skips, "; "))
 	}
@@ -145,11 +145,11 @@ func checkRoutineTrigger(d document, s service, key, trig *yaml.Node, st *cfgSta
 		}
 		st.evaluated = true
 		if expr == nil {
-			st.fs = append(st.fs, finding(d, s, cronNode, fmt.Sprintf("trigger %q cron_expression %q is not a valid 5-field cron expression", key.Value, cron)))
+			st.fs = append(st.fs, finding(d, s, cronNode, "cron-invalid:"+key.Value, fmt.Sprintf("trigger %q cron_expression %q is not a valid 5-field cron expression", key.Value, cron)))
 			return
 		}
 		if minGap < 5 {
-			st.fs = append(st.fs, finding(d, s, cronNode, fmt.Sprintf("trigger %q cron_expression %q fires more often than every five minutes", key.Value, cron)))
+			st.fs = append(st.fs, finding(d, s, cronNode, "cron-too-frequent:"+key.Value, fmt.Sprintf("trigger %q cron_expression %q fires more often than every five minutes", key.Value, cron)))
 		}
 	case "schedule":
 		if child(trig, "cron_expression") != nil {
@@ -163,12 +163,17 @@ func checkRoutineTrigger(d document, s service, key, trig *yaml.Node, st *cfgSta
 func evalCFG010(in *sdk.Input) sdk.Result {
 	var fs []sdk.Finding
 	evaluated := false
-	if d, okd := loadDoc(in); okd {
+	d, loaded := loadDoc(in)
+	if loaded {
 		for _, s := range serviceList(d) {
 			if s.Host != hostProject {
 				continue
 			}
-			for _, dep := range items(s.get("deployments")) {
+			for di, dep := range items(s.get("deployments")) {
+				depKey := str(dep, "name")
+				if depKey == "" || containsRef(depKey) {
+					depKey = fmt.Sprintf("deployments[%d]", di)
+				}
 				model := child(dep, "model")
 				name := strings.ToLower(strings.TrimSpace(str(model, "name")))
 				if strings.Contains(name, "router") {
@@ -181,7 +186,7 @@ func evalCFG010(in *sdk.Input) sdk.Result {
 				}
 				evaluated = true
 				if version == "" || looksUnpinnedVersion(version) {
-					fs = append(fs, finding(d, s, versionNode, "deployment model.version is empty or unpinned"))
+					fs = append(fs, finding(d, s, versionNode, "deployment-version-unpinned:"+depKey, "deployment model.version is empty or unpinned"))
 				}
 			}
 		}
@@ -199,6 +204,7 @@ func evalCFG010(in *sdk.Input) sdk.Result {
 			v, vok := armGetString(r.Properties, "model", "version")
 			if !vok || strings.TrimSpace(v) == "" || looksUnpinnedVersion(v) {
 				fs = append(fs, sdk.Finding{
+					Key:      "deployment-version-unpinned",
 					Resource: sdk.ResourceRef{Type: r.Type, Name: r.Name},
 					Location: r.Location,
 					Evidence: "deployment model.version is empty or unpinned",
@@ -207,6 +213,7 @@ func evalCFG010(in *sdk.Input) sdk.Result {
 			if opt, ok := armGetString(r.Properties, "versionUpgradeOption"); ok {
 				if !strings.HasPrefix(strings.TrimSpace(opt), "[") && strings.EqualFold(strings.TrimSpace(opt), "OnceNewDefaultVersionAvailable") {
 					fs = append(fs, sdk.Finding{
+						Key:      "upgrade-option-once-new-default",
 						Resource: sdk.ResourceRef{Type: r.Type, Name: r.Name},
 						Location: r.Location,
 						Evidence: "deployment versionUpgradeOption is OnceNewDefaultVersionAvailable",
@@ -214,6 +221,7 @@ func evalCFG010(in *sdk.Input) sdk.Result {
 				}
 			} else {
 				fs = append(fs, sdk.Finding{
+					Key:      "upgrade-option-absent",
 					Resource: sdk.ResourceRef{Type: r.Type, Name: r.Name},
 					Location: r.Location,
 					Evidence: "deployment versionUpgradeOption is absent",
@@ -225,7 +233,10 @@ func evalCFG010(in *sdk.Input) sdk.Result {
 		return ok(fs)
 	}
 	if !evaluated {
-		return skip(sdk.SkipInputUnavailable)
+		if !loaded && (in == nil || in.ARM == nil) {
+			return skip(sdk.SkipInputUnavailable)
+		}
+		return skip(sdk.SkipNotApplicable + ": project declares no model deployments")
 	}
 	return sdk.Result{}
 }

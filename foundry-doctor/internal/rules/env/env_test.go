@@ -59,8 +59,9 @@ func TestRules(t *testing.T) {
 		{"001 distinct", "FND-ENV-001", prov{{Name: "d", Subscription: "s", ResourceGroup: "a"}, {Name: "p", Subscription: "s", ResourceGroup: "b"}}, nil, false, "", 0, ""},
 		{"001 distinct subscriptions same group", "FND-ENV-001", prov{{Name: "d", Subscription: "s1", ResourceGroup: "a"}, {Name: "p", Subscription: "s2", ResourceGroup: "a"}}, nil, false, "", 0, ""},
 		{"001 literal top-level rg", "FND-ENV-001", prov{{Name: "d", Subscription: "s", ResourceGroup: "a", LiteralRGAt: []string{"resourceGroup"}}, {Name: "p", Subscription: "s", ResourceGroup: "b"}}, nil, false, "", 1, "(resourceGroup)"},
-		{"001 literal service rg", "FND-ENV-001", prov{{Name: "d", Subscription: "s", ResourceGroup: "a", LiteralRGAt: []string{"services.web.resourceGroup"}}, {Name: "p", Subscription: "s", ResourceGroup: "b"}}, nil, false, "", 1, "services.web.resourceGroup"},
-		{"001 single env skips", "FND-ENV-001", prov{{Name: "d"}}, nil, true, sdk.SkipInputUnavailable, 0, ""},
+		{"001 literal service rg is uncertain", "FND-ENV-001", prov{{Name: "d", Subscription: "s", ResourceGroup: "a", LiteralRGAt: []string{"services.web.resourceGroup"}}, {Name: "p", Subscription: "s", ResourceGroup: "b"}}, nil, true, "services.web.resourceGroup; the azd schema does not say", 0, ""},
+		{"001 literal top-level and service rg", "FND-ENV-001", prov{{Name: "d", Subscription: "s", ResourceGroup: "a", LiteralRGAt: []string{"resourceGroup", "services.web.resourceGroup"}}, {Name: "p", Subscription: "s", ResourceGroup: "b"}}, nil, false, "", 1, "(resourceGroup)"},
+		{"001 single env is not applicable", "FND-ENV-001", prov{{Name: "d"}}, nil, true, sdk.SkipNotApplicable, 0, ""},
 		{"001 no provider skips", "FND-ENV-001", nil, nil, true, sdk.SkipInputUnavailable, 0, ""},
 		{"001 no resource group is uncertain", "FND-ENV-001", prov{{Name: "d", Subscription: "s"}, {Name: "p", Subscription: "s", ResourceGroup: "b"}}, nil, true, "environment d: no AZURE_SUBSCRIPTION_ID or AZURE_RESOURCE_GROUP", 0, ""},
 		{"001 no subscription is uncertain", "FND-ENV-001", prov{{Name: "d", ResourceGroup: "a"}, {Name: "p", ResourceGroup: "a"}}, nil, true, "no AZURE_SUBSCRIPTION_ID", 0, ""},
@@ -89,6 +90,23 @@ func TestRules(t *testing.T) {
 		{"003 no prod visible is uncertain", "FND-ENV-003", prov{{Name: "d", ResourceGroup: "a"}, {Name: "q", ResourceGroup: "b"}}, pol{TierPolicyKey: map[string]any{"d": "dev", "q": "test"}}, true, "no visible environment is configured as prod", 0, ""},
 		{"003 unreadable prod is uncertain", "FND-ENV-003", prov{{Name: "d", ResourceGroup: "a"}, {Name: "p", Status: StatusUnparseable}}, tiersPol, true, "environment p: .env unparseable", 0, ""},
 
+		{"002 single env is not applicable", "FND-ENV-002", prov{{Name: "d"}}, nil, true, sdk.SkipNotApplicable, 0, ""},
+		{"003 single env is not applicable", "FND-ENV-003", prov{{Name: "d"}}, nil, true, sdk.SkipNotApplicable, 0, ""},
+		{"004 single env is not applicable", "FND-ENV-004", prov{{Name: "d"}}, nil, true, sdk.SkipNotApplicable, 0, ""},
+		{"004 no environments is not applicable", "FND-ENV-004", prov{}, nil, true, sdk.SkipNotApplicable, 0, ""},
+
+		// Digested values keep the shape classified before digesting (R3).
+		{"003 digested resource id shared under KEYVAULT key", "FND-ENV-003", prov{
+			{Name: "d", Values: vals("AZURE_KEYVAULT_ID", "sha256:abc"), Shapes: map[string]Shape{"AZURE_KEYVAULT_ID": ShapeResourceID}},
+			{Name: "p", Values: vals("AZURE_KEYVAULT_ID", "sha256:abc"), Shapes: map[string]Shape{"AZURE_KEYVAULT_ID": ShapeResourceID}}}, tiersPol, false, "", 1, "prod environment p shares resource identifier"},
+		{"003 digested plain secret is not a target", "FND-ENV-003", prov{
+			{Name: "d", ResourceGroup: "a", Values: vals("API_KEY", "sha256:abc")}, {Name: "p", ResourceGroup: "b", Values: vals("API_KEY", "sha256:abc")}}, tiersPol, false, "", 0, ""},
+		{"002 digested resource id under KEY name", "FND-ENV-002", prov{
+			{Name: "d", Values: vals("AZURE_ENV_NAME", "d", "AZURE_KEYVAULT_ID", "sha256:abc"), Shapes: map[string]Shape{"AZURE_KEYVAULT_ID": ShapeResourceID}},
+			{Name: "p", Values: vals("AZURE_ENV_NAME", "p", "AZURE_KEYVAULT_ID", "sha256:abc"), Shapes: map[string]Shape{"AZURE_KEYVAULT_ID": ShapeResourceID}}}, nil, false, "", 1, "AZURE_KEYVAULT_ID"},
+		{"002 digested plain secret is not reported", "FND-ENV-002", prov{
+			{Name: "d", Values: vals("AZURE_ENV_NAME", "d", "API_KEY", "sha256:abc")}, {Name: "p", Values: vals("AZURE_ENV_NAME", "p", "API_KEY", "sha256:abc")}}, nil, false, "", 0, ""},
+
 		{"004 only in", "FND-ENV-004", prov{{Name: "d", Values: vals("A", "1")}, {Name: "p", Values: map[string]string{}}}, nil, false, "", 1, "only in d"},
 		{"004 secret by name", "FND-ENV-004", prov{{Name: "d", Values: vals("API_KEY", "s1")}, {Name: "p", Values: vals("API_KEY", "s2")}}, nil, false, "", 1, "differs between"},
 		{"004 same", "FND-ENV-004", prov{{Name: "d", Values: vals("A", "1")}, {Name: "p", Values: vals("A", "1")}}, nil, false, "", 0, ""},
@@ -107,7 +125,7 @@ func TestRules(t *testing.T) {
 				if !strings.Contains(res.Skipped.Reason, tc.wantReason) {
 					t.Fatalf("reason %q lacks %q", res.Skipped.Reason, tc.wantReason)
 				}
-				if tc.wantReason != sdk.SkipInputUnavailable && !strings.HasPrefix(res.Skipped.Reason, report.UncertainPrefix) && !strings.HasPrefix(res.Skipped.Reason, sdk.SkipProfileKeyPrefix) {
+				if tc.wantReason != sdk.SkipInputUnavailable && tc.wantReason != sdk.SkipNotApplicable && !strings.HasPrefix(res.Skipped.Reason, report.UncertainPrefix) && !strings.HasPrefix(res.Skipped.Reason, sdk.SkipProfileKeyPrefix) {
 					t.Fatalf("reason %q is neither uncertain nor a named input skip", res.Skipped.Reason)
 				}
 			}
@@ -178,7 +196,7 @@ func TestClassify(t *testing.T) {
 		{"FOO", "x", classNone},
 	}
 	for _, tc := range tests {
-		if got := classify(tc.k, tc.v); got != tc.want {
+		if got := classify(tc.k, Environment{}.shapeOf(tc.k, tc.v)); got != tc.want {
 			t.Errorf("classify(%s)=%d want %d", tc.k, got, tc.want)
 		}
 	}
@@ -200,6 +218,29 @@ func TestRegisteredIDsInCatalogue(t *testing.T) {
 	for _, r := range Register() {
 		if !ids[r.ID()] {
 			t.Errorf("%s not phase 1 in catalogue", r.ID())
+		}
+	}
+}
+
+func TestClassifyShape(t *testing.T) {
+	tests := []struct {
+		v    string
+		want Shape
+	}{
+		{"/subscriptions/1/resourceGroups/r/providers/Microsoft.KeyVault/vaults/kv", ShapeResourceID},
+		{"https://a.services.ai.azure.com/api/projects/p", ShapeFoundryEndpoint},
+		{"https://kv.vault.azure.net/", ShapeEndpoint},
+		{"https://kv.vault.azure.net/?sig=abc", ShapePlain},
+		{"https://user:pw@kv.vault.azure.net/", ShapePlain},
+		{"Endpoint=https://x.azure.com;Key=abc", ShapePlain},
+		{"http://x.azure.com", ShapePlain},
+		{"https://example.com", ShapePlain},
+		{"sk-abcdef", ShapePlain},
+		{"", ShapePlain},
+	}
+	for _, tc := range tests {
+		if got := ClassifyShape(tc.v); got != tc.want {
+			t.Errorf("ClassifyShape(%q)=%q want %q", tc.v, got, tc.want)
 		}
 	}
 }

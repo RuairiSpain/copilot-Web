@@ -1,5 +1,5 @@
 id: FND-ENV-001
-version: 2
+version: 3
 group: ENV
 title: "Environments do not unintentionally share resource groups"
 description: >-
@@ -31,9 +31,11 @@ evidence:
     values. The effective group of an environment follows azd's order: service resourceGroup, then project
     resourceGroup (each used only when non-blank after substitution), then AZURE_RESOURCE_GROUP; both candidates are
     still compared because the provisioning scope reads AZURE_RESOURCE_GROUP. Report two environments whose
-    subscription and resource group names are equal (case-insensitive), and report each resourceGroup literal that
-    contains no variable reference (top-level, and per service, named in the evidence) when more than one environment
-    exists. Environments that are not locally present are not guessed. An environment whose .env is missing,
+    subscription and resource group names are equal (case-insensitive), and report the top-level resourceGroup when it
+    is a literal with no variable reference and more than one environment exists. A literal services.<name>.resourceGroup
+    is reported as an uncertain skip naming the service, not as a finding: the azd schema describes it only as the group
+    that contains the resource and no source says it defeats environment isolation. With fewer than two environments
+    the rule is not applicable (skip not-applicable). Environments that are not locally present are not guessed. An environment whose .env is missing,
     unreadable, over 256 KiB, holds more than 2000 keys or does not parse with the godotenv grammar, and an
     environment with no AZURE_SUBSCRIPTION_ID or AZURE_RESOURCE_GROUP, is named in an uncertain skip when no finding
     is produced; the rule never passes on such input.

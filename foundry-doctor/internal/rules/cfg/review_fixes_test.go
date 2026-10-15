@@ -75,8 +75,8 @@ func TestCFG004ContainerResources(t *testing.T) {
 		{name: "cpu 64 fails", id: "FND-CFG-004", yaml: hosted(res("64", "")), want: 1, contains: "container.resources.cpu"},
 		{name: "cpu above 4 fails", id: "FND-CFG-004", yaml: hosted(res("4.5", "")), want: 1, contains: "cpu"},
 		{name: "cpu below 0.25 fails", id: "FND-CFG-004", yaml: hosted(res("0.1", "")), want: 1, contains: "cpu"},
-		{name: "cpu 500m passes", id: "FND-CFG-004", yaml: hosted(res("500m", ""))},
-		{name: "cpu 100m fails", id: "FND-CFG-004", yaml: hosted(res("100m", "")), want: 1, contains: "cpu"},
+		{name: "cpu 500m is uncertain", id: "FND-CFG-004", yaml: hosted(res("500m", "")), skip: uncertainPrefix + "a: container.resources.cpu"},
+		{name: "cpu 100m is uncertain, not out of range", id: "FND-CFG-004", yaml: hosted(res("100m", "")), skip: uncertainPrefix},
 		{name: "cpu 4 passes", id: "FND-CFG-004", yaml: hosted(res("4", ""))},
 		{name: "cpu not a quantity fails", id: "FND-CFG-004", yaml: hosted(res("lots", "")), want: 1, contains: "cpu"},
 		{name: "memory 512Mi passes", id: "FND-CFG-004", yaml: hosted(res("", "512Mi"))},
@@ -162,13 +162,14 @@ func TestCFG001RequiredVersionConstraints(t *testing.T) {
 	runReviewCases(t, []reviewCase{
 		{name: "latest", id: "FND-CFG-001", yaml: ver("latest")},
 		{name: "floor equals tested", id: "FND-CFG-001", yaml: ver(">=1.0.0-beta.18")},
-		{name: "floor above tested", id: "FND-CFG-001", yaml: ver(">=1.0.0")},
+		{name: "floor above tested is noted", id: "FND-CFG-001", yaml: ver(">=1.0.0"), skip: uncertainPrefix + "requiredVersions.extensions.azure.ai.agents requires versions above"},
 		{name: "exact tested", id: "FND-CFG-001", yaml: ver("=1.0.0-beta.18")},
 		{name: "bare tested", id: "FND-CFG-001", yaml: ver("1.0.0-beta.18")},
 		{name: "spaced range containing tested", id: "FND-CFG-001", yaml: ver(">= 1.0.0-beta.18 < 2.0.0")},
-		{name: "tilde above tested", id: "FND-CFG-001", yaml: ver("~1.0.0")},
-		{name: "floor below tested range is uncertain, not an error", id: "FND-CFG-001", yaml: ver(">=1.0.0-beta.10"),
-			skip: uncertainPrefix + "requiredVersions.extensions.azure.ai.agents allows versions below"},
+		{name: "tilde above tested is noted", id: "FND-CFG-001", yaml: ver("~1.0.0"), skip: "requires versions above"},
+		{name: "comma separated constraint is parsed", id: "FND-CFG-001", yaml: ver(">=1.0.0-beta.18, <2.0.0")},
+		{name: "comma separated floor above tested is noted", id: "FND-CFG-001", yaml: ver(">=1.0.0, <2.0.0"), skip: "requires versions above", notInSkip: "cannot be parsed"},
+		{name: "floor below tested range is info only and does not skip the rule", id: "FND-CFG-001", yaml: ver(">=1.0.0-beta.10")},
 		{name: "ceiling below tested range", id: "FND-CFG-001", yaml: ver("<1.0.0-beta.12"),
 			skip: uncertainPrefix + "requiredVersions.extensions.azure.ai.agents excludes the tested range"},
 		{name: "ceiling exclusive at tested", id: "FND-CFG-001", yaml: ver(">=1.0.0-beta.1 <1.0.0-beta.18"),
@@ -221,7 +222,7 @@ func TestVersionConstraintParsing(t *testing.T) {
 func TestCFG011VersionNotesAreNotErrors(t *testing.T) {
 	y := "name: app\nservices:\n  a:\n    host: azure.ai.agent\n    kind: prompt\nrequiredVersions:\n  extensions:\n    azure.ai.agents: \">=1.0.0-beta.2\"\n"
 	runReviewCases(t, []reviewCase{
-		{name: "floor below documented minimum is uncertain", id: "FND-CFG-011", yaml: y, skip: uncertainPrefix},
+		{name: "floor below documented minimum is info only", id: "FND-CFG-011", yaml: y},
 		{name: "no constraint is clean", id: "FND-CFG-011", yaml: "services:\n  a:\n    host: azure.ai.agent\n    kind: prompt\n"},
 	})
 }
@@ -233,9 +234,10 @@ func TestCFG006(t *testing.T) {
 	}
 	withOutputs := armOutStub{[]string{"SOMETHING_ELSE"}}
 	runReviewCases(t, []reviewCase{
-		{name: "tenant id is azd defined", id: "FND-CFG-006", yaml: y("${AZURE_TENANT_ID}"), p: env(nil), arm: withOutputs},
-		{name: "principal id is azd defined", id: "FND-CFG-006", yaml: y("${AZURE_PRINCIPAL_ID}"), p: env(nil), arm: withOutputs},
-		{name: "principal type is azd defined", id: "FND-CFG-006", yaml: y("${AZURE_PRINCIPAL_TYPE}"), p: env(nil), arm: withOutputs},
+		{name: "tenant id is not always produced", id: "FND-CFG-006", yaml: y("${AZURE_TENANT_ID}"), p: env(nil), arm: withOutputs, skip: uncertainPrefix + "${AZURE_TENANT_ID}"},
+		{name: "principal id is not always produced", id: "FND-CFG-006", yaml: y("${AZURE_PRINCIPAL_ID}"), p: env(nil), arm: withOutputs, skip: uncertainPrefix},
+		{name: "principal type is not always produced", id: "FND-CFG-006", yaml: y("${AZURE_PRINCIPAL_TYPE}"), p: env(nil), arm: withOutputs, skip: uncertainPrefix},
+		{name: "tenant id present in env passes", id: "FND-CFG-006", yaml: y("${AZURE_TENANT_ID}"), p: env(map[string]string{"AZURE_TENANT_ID": "t"}), arm: withOutputs},
 		{name: "registry endpoint is infra dependent and uncertain", id: "FND-CFG-006", yaml: y("${AZURE_CONTAINER_REGISTRY_ENDPOINT}"), p: env(nil), arm: withOutputs,
 			skip: uncertainPrefix + "${AZURE_CONTAINER_REGISTRY_ENDPOINT}"},
 		{name: "registry endpoint in env passes", id: "FND-CFG-006", yaml: y("${AZURE_CONTAINER_REGISTRY_ENDPOINT}"), p: env(map[string]string{"AZURE_CONTAINER_REGISTRY_ENDPOINT": "x"}), arm: withOutputs},

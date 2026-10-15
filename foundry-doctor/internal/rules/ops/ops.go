@@ -880,14 +880,20 @@ func eval007(in *sdk.Input, p Providers) sdk.Result {
 	// pipeline file exists, so only pipeline files count.
 	base, hasGit := gitRoot(p.Root)
 	scan := scanPipelines(base)
+	unfollowed := false
 	for _, f := range scan.Files {
 		for _, c := range f.Commands {
-			if invokesAzd(c) {
+			switch scanShellForAzd(c) {
+			case shellFound:
 				return sdk.Result{}
+			case shellUncertain:
+				unfollowed = true
 			}
 		}
 	}
 	switch {
+	case unfollowed:
+		return sdk.Result{Skipped: &sdk.Skip{Reason: "uncertain: a pipeline run step uses shell constructs that were not followed (heredoc, function, eval or sh -c, computed azd arguments), so it may invoke azd provision, deploy or up"}}
 	case len(scan.Files) > 0:
 		return sdk.Result{Skipped: &sdk.Skip{Reason: "uncertain: no pipeline run step invokes azd provision, deploy or up; other deployment tools are valid and other CI systems are not detected"}}
 	case scan.Skipped > 0:

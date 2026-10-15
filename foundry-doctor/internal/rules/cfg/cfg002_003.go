@@ -36,7 +36,7 @@ func evalCFG002(in *sdk.Input) sdk.Result {
 		}
 		k := key{proj, name}
 		if first, dup := seen[k]; dup {
-			fs = append(fs, finding(d, s, s.get("name"),
+			fs = append(fs, finding(d, s, s.get("name"), "duplicate-agent-name",
 				fmt.Sprintf("agent name %q in project %q is also declared by service %q", name, proj, first.Name)))
 			continue
 		}
@@ -55,7 +55,9 @@ func evalCFG003(in *sdk.Input) sdk.Result {
 	var fs []sdk.Finding
 	var notes []string
 	for _, s := range svcs {
-		add := func(n *yaml.Node, f string, a ...any) { fs = append(fs, finding(d, s, n, fmt.Sprintf(f, a...))) }
+		add := func(key string, n *yaml.Node, f string, a ...any) {
+			fs = append(fs, finding(d, s, n, key, fmt.Sprintf(f, a...)))
+		}
 		switch {
 		case s.Host == hostAgent:
 			for _, r := range refNames(s.get("toolboxes")) {
@@ -63,9 +65,9 @@ func evalCFG003(in *sdk.Input) sdk.Result {
 				switch {
 				case containsRef(r.Name):
 				case !found || t.Host != hostToolbox:
-					add(r.Node, "toolboxes entry %q is not an azure.ai.toolbox service", r.Name)
+					add("toolbox-not-service:"+r.Name, r.Node, "toolboxes entry %q is not an azure.ai.toolbox service", r.Name)
 				case !s.usesName(r.Name):
-					add(r.Node, "toolboxes entry %q is not listed in uses", r.Name)
+					add("toolbox-not-in-uses:"+r.Name, r.Node, "toolboxes entry %q is not listed in uses", r.Name)
 				}
 			}
 			if s.isPromptAgent() {
@@ -95,10 +97,10 @@ func cfg003Conn(d document, s service, all map[string]service, r nameAt) []sdk.F
 	}
 	c, found := all[r.Name]
 	if !found || c.Host != hostConnection {
-		return []sdk.Finding{finding(d, s, r.Node, fmt.Sprintf("connection %q is not an azure.ai.connection service", r.Name))}
+		return []sdk.Finding{finding(d, s, r.Node, "connection-not-service:"+r.Name, fmt.Sprintf("connection %q is not an azure.ai.connection service", r.Name))}
 	}
 	if s.Host == hostAgent && !s.usesName(r.Name) {
-		return []sdk.Finding{finding(d, s, r.Node, fmt.Sprintf("connection %q is not listed in uses", r.Name))}
+		return []sdk.Finding{finding(d, s, r.Node, "connection-not-in-uses:"+r.Name, fmt.Sprintf("connection %q is not listed in uses", r.Name))}
 	}
 	return nil
 }
@@ -110,12 +112,12 @@ func cfg003Voice(d document, s service, all map[string]service) []sdk.Finding {
 	}
 	t, found := all[scalar(eng)]
 	if !found || t.Host != hostAgent || t.isPromptAgent() || t.isVoiceAgent() {
-		return []sdk.Finding{finding(d, s, eng, fmt.Sprintf("conversationEngine %q is not a hosted azure.ai.agent service", scalar(eng)))}
+		return []sdk.Finding{finding(d, s, eng, "conversation-engine-not-hosted", fmt.Sprintf("conversationEngine %q is not a hosted azure.ai.agent service", scalar(eng)))}
 	}
 	sp, _ := projectOf(s, all)
 	tp, _ := projectOf(t, all)
 	if sp.Name != tp.Name {
-		return []sdk.Finding{finding(d, s, eng, fmt.Sprintf("conversationEngine %q is in a different project", scalar(eng)))}
+		return []sdk.Finding{finding(d, s, eng, "conversation-engine-other-project", fmt.Sprintf("conversationEngine %q is in a different project", scalar(eng)))}
 	}
 	return nil
 }
@@ -160,7 +162,7 @@ func cfg003Memory(d document, s service, all map[string]service, notes *[]string
 		if n == nil || v == "" || containsRef(v) || names[v] {
 			continue
 		}
-		fs = append(fs, finding(d, s, n, fmt.Sprintf("%s %q does not match a deployment in project %q", k, v, p.Name)))
+		fs = append(fs, finding(d, s, n, "memory-model:"+k, fmt.Sprintf("%s %q does not match a deployment in project %q", k, v, p.Name)))
 	}
 	sort.SliceStable(fs, func(i, j int) bool { return fs[i].Location.Line < fs[j].Location.Line })
 	return fs

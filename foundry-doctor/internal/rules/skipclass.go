@@ -43,6 +43,14 @@ var byDesignHeads = []string{
 	"environment-not-classified-as-dev",
 	"non-foundry-backend-host",
 	"no-supported-fixed-capacity-resources",
+	// "Nothing to check" heads: the project has no resource the rule applies to.
+	"project-has-no-agent-services",
+	"no-emit-token-metric-policy",
+	"no-resilience-objective-declared",
+	"no-access-requirement-declared",
+	"backend-does-not-target-foundry-or-azure-openai",
+	"schedule-null",
+	"no-split-skill-in-project; no-explicit-query-definitions",
 }
 
 // byDesignInputDetails lists input-unavailable details that mean "the project

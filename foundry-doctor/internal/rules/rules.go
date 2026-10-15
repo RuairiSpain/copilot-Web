@@ -306,45 +306,68 @@ func NeedsARMOnly(cr catalog.Rule) bool {
 		!slices.Contains(cr.Inputs, "azure.yaml") && !slices.Contains(cr.Inputs, "azd-env")
 }
 
-// resolveFingerprintCollisions handles findings that share a fingerprint
-// (ADR-008). Findings with identical evidence are duplicates and one is kept.
-// Findings with different evidence mean the rule did not set Finding.Key: each
-// gets a key derived from its redacted evidence so the fingerprints differ, and
-// a diagnostic names the rule. It returns the findings and the diagnostics.
+// resolveFingerprintCollisions applies the ADR-008 (amendment 2) rules.
+//
+// A finding whose rule set no Finding.Key gets a Key derived from the finding
+// itself: "auto:<line>:<column>:<12 hex of SHA-256 of the redacted evidence>".
+// The derivation never looks at other findings, so a fingerprint does not
+// change when a sibling appears or disappears. A diagnostic names every rule
+// whose key-less findings would otherwise have shared a fingerprint.
+//
+// Only exact duplicates (same fingerprint, location and evidence) merge.
+// Findings with equal fingerprints but different location or evidence are all
+// kept; if a rule set a Key that failed to separate them, a diagnostic says so.
 func resolveFingerprintCollisions(fs []sdk.Finding) ([]sdk.Finding, []string) {
-	groups := map[string][]int{}
-	for i, f := range fs {
-		groups[f.Fingerprint] = append(groups[f.Fingerprint], i)
-	}
-	drop := map[int]bool{}
-	var diags []string
-	for _, idx := range groups {
-		if len(idx) < 2 {
+	base := map[string]map[string]bool{} // base fingerprint -> distinct identities
+	for _, f := range fs {
+		if f.Key != "" {
 			continue
 		}
-		seen := map[string]int{}
-		for _, i := range idx {
-			if _, dup := seen[fs[i].Evidence]; dup {
-				drop[i] = true
-				continue
-			}
-			seen[fs[i].Evidence] = i
+		if base[f.Fingerprint] == nil {
+			base[f.Fingerprint] = map[string]bool{}
 		}
-		if len(seen) < 2 {
+		base[f.Fingerprint][fmt.Sprintf("%d:%d:%s", f.Location.Line, f.Location.Column, f.Evidence)] = true
+	}
+	diagSet := map[string]bool{}
+	for i := range fs {
+		f := &fs[i]
+		if f.Key != "" {
 			continue
 		}
-		for ev, i := range seen {
-			sum := sha256.Sum256([]byte(ev))
-			fs[i].Key += "#ev:" + hex.EncodeToString(sum[:])[:12]
-			fs[i].Fingerprint = findings.Fingerprint(fs[i])
+		if len(base[f.Fingerprint]) > 1 {
+			diagSet[fmt.Sprintf("%s: findings share a fingerprint because the rule sets no Finding.Key; fingerprints were derived from location and evidence", f.RuleID)] = true
 		}
-		diags = append(diags, fmt.Sprintf("%s: findings share a fingerprint because the rule sets no Finding.Key; fingerprints were derived from evidence", fs[idx[0]].RuleID))
+		sum := sha256.Sum256([]byte(f.Evidence))
+		f.Key = fmt.Sprintf("auto:%d:%d:%s", f.Location.Line, f.Location.Column, hex.EncodeToString(sum[:])[:12])
+		f.Fingerprint = findings.Fingerprint(*f)
 	}
+	type ident struct {
+		fp, ev string
+		loc    sdk.Location
+	}
+	seen := map[ident]bool{}
+	keyedLocs := map[string]map[string]bool{}
 	out := make([]sdk.Finding, 0, len(fs))
-	for i, f := range fs {
-		if !drop[i] {
-			out = append(out, f)
+	for _, f := range fs {
+		id := ident{f.Fingerprint, f.Evidence, f.Location}
+		if seen[id] {
+			continue
 		}
+		seen[id] = true
+		out = append(out, f)
+		if !strings.HasPrefix(f.Key, "auto:") {
+			if keyedLocs[f.Fingerprint] == nil {
+				keyedLocs[f.Fingerprint] = map[string]bool{}
+			}
+			keyedLocs[f.Fingerprint][fmt.Sprintf("%v|%s", f.Location, f.Evidence)] = true
+			if len(keyedLocs[f.Fingerprint]) > 1 {
+				diagSet[fmt.Sprintf("%s: findings share a fingerprint although the rule sets Finding.Key; the Key does not separate them", f.RuleID)] = true
+			}
+		}
+	}
+	diags := make([]string, 0, len(diagSet))
+	for d := range diagSet {
+		diags = append(diags, d)
 	}
 	slices.Sort(diags)
 	return out, diags

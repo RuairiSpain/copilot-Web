@@ -1,5 +1,5 @@
 id: FND-ENV-003
-version: 2
+version: 3
 group: ENV
 title: "Prod does not reference non-prod resource IDs"
 description: >-
@@ -29,7 +29,10 @@ evidence:
     tier). Extract ARM resource IDs, endpoint host names and resource group names from its .env values, azure.yaml
     after substitution for that environment, and parameter files. Report any that reference the resource group, subscription
     and resource name, or endpoint host of an environment configured as non-prod. Matching is exact on normalised IDs;
-    no naming heuristics are applied.
+    no naming heuristics are applied. Values under secret-looking key names (for example AZURE_KEYVAULT_ID) are digested
+    before the rule runs; the value shape (resource ID or bare endpoint URL) is classified first and carried next to the
+    digest, so a shared Key Vault resource ID is reported whatever the key is called. Actual secret shapes stay
+    digested and never appear in evidence. With fewer than two environments the rule is not applicable.
   confidence: certain
 recommendation: >-
   Point the production environment at production resources, or provision the dependency in production. Re-run provisioning
