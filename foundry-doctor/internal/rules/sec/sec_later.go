@@ -37,7 +37,7 @@ type yamlAny interface {
 func evalSEC005(in *sdk.Input) sdk.Result {
 	vaults := ofType(in, typeKeyVault)
 	if len(vaults) == 0 {
-		return unavailable()
+		return notApplicable()
 	}
 	set := foundrylink.Collect(in.ARM)
 	var a acc
@@ -48,20 +48,20 @@ func evalSEC005(in *sdk.Input) sdk.Result {
 		}
 		seen = true
 		if st := boolState(r.Properties, "enableSoftDelete"); st == isFalse {
-			a.add(r, "enableSoftDelete is false")
+			a.addKey(r, "enableSoftDelete", "enableSoftDelete is false")
 		}
 		if st := boolState(r.Properties, "enablePurgeProtection"); st != isTrue {
 			if st == expr {
 				a.unresolved = true
 			} else {
-				a.add(r, "enablePurgeProtection is not true")
+				a.addKey(r, "enablePurgeProtection", "enablePurgeProtection is not true")
 			}
 		}
 		if st := boolState(r.Properties, "enableRbacAuthorization"); st != isTrue {
 			if st == expr {
 				a.unresolved = true
 			} else {
-				a.add(r, "enableRbacAuthorization is not true")
+				a.addKey(r, "enableRbacAuthorization", "enableRbacAuthorization is not true")
 			}
 		}
 	}
@@ -150,7 +150,7 @@ func evalSEC007(in *sdk.Input) sdk.Result {
 		return skip("uncertain: custom RAI policy exists only outside the scanned template or uses an unresolved name")
 	}
 	if !seen {
-		return unavailable()
+		return notApplicable()
 	}
 	return sdk.Result{}
 }
@@ -158,7 +158,7 @@ func evalSEC007(in *sdk.Input) sdk.Result {
 func evalSEC008(in *sdk.Input) sdk.Result {
 	relevant := relevantDefenderPlans(in)
 	if len(relevant) == 0 {
-		return unavailable()
+		return notApplicable()
 	}
 	pricings := map[string]sdk.ARMResource{}
 	for _, r := range ofType(in, typePricing) {
@@ -256,7 +256,7 @@ func evalSEC010(in *sdk.Input) sdk.Result {
 		if a.scopeUncertain || a.conditional {
 			return a.result()
 		}
-		return unavailable()
+		return notApplicable()
 	}
 	return sdk.Result{Findings: fs}
 }
@@ -300,7 +300,7 @@ func evalSEC011(in *sdk.Input) sdk.Result {
 		if uncertain {
 			return skip(foundrylink.SkipConditional)
 		}
-		return unavailable()
+		return notApplicable()
 	}
 	return sdk.Result{Findings: fs}
 }
@@ -337,7 +337,7 @@ func evalSEC013(in *sdk.Input) sdk.Result {
 	policies := append(append(ofType(in, typeAPIMServicePolicy), ofType(in, typeAPIMAPIPolicy)...), ofType(in, typeAPIMOperationPolicy)...)
 	if len(policies) == 0 {
 		if len(llmAPIs) == 0 {
-			return unavailable()
+			return notApplicable()
 		}
 		return skip("uncertain: APIM policy XML is not available in the scanned template")
 	}

@@ -102,6 +102,13 @@ func presence(r sdk.ARMResource) armexpr.Presence {
 	return armexpr.PresenceOf(r.Conditional, r.Condition, r.Looped)
 }
 
+// addKey adds a finding with a stable Key separating several findings of one
+// rule on one resource.
+func (a *acc) addKey(r sdk.ARMResource, key, evidence string) {
+	a.add(r, evidence)
+	a.fs[len(a.fs)-1].Key = key
+}
+
 func (a *acc) add(r sdk.ARMResource, evidence string) {
 	a.fs = append(a.fs, sdk.Finding{
 		Resource: sdk.ResourceRef{Type: r.Type, Name: r.Name},
@@ -119,7 +126,7 @@ func (a *acc) result() sdk.Result {
 	case a.conditional:
 		return skip(foundrylink.SkipConditional)
 	case !a.seen:
-		return skip(sdk.SkipInputUnavailable)
+		return skip(sdk.SkipNotApplicable + ": no applicable resources in the compiled template")
 	case a.unresolved:
 		return skip(SkipUnresolved)
 	}
@@ -306,23 +313,23 @@ func evalIDN003(in *sdk.Input) sdk.Result {
 		case ptExpr:
 			a.unresolved = true
 		case !ptPresent || pt == "":
-			a.add(r, "principalType is not set; set it explicitly to avoid replication-delay failures")
+			a.addKey(r, "principalType", "principalType is not set; set it explicitly to avoid replication-delay failures")
 		}
 		if ptPresent && !ptExpr && apiTooOld(r.APIVersion) {
-			a.add(r, fmt.Sprintf("apiVersion %q may not support principalType (earliest preview 2018-09-01-preview, first stable 2022-04-01); this finding is low confidence, verify the API version", r.APIVersion))
+			a.addKey(r, "apiVersion", fmt.Sprintf("apiVersion %q may not support principalType (earliest preview 2018-09-01-preview, first stable 2022-04-01); this finding is low confidence, verify the API version", r.APIVersion))
 		}
 		pid, pidPresent, pidExpr := strOf(r.Properties, "principalId")
 		switch {
 		case pidExpr:
 			if armexpr.ReadsClientID(r.Properties["principalId"].(string)) {
-				a.add(r, "principalId expression reads a clientId/applicationId; an object (principal) ID is required")
+				a.addKey(r, "principalId", "principalId expression reads a clientId/applicationId; an object (principal) ID is required")
 			} else {
 				a.unresolved = true
 			}
 		case !pidPresent:
-			a.add(r, "principalId is not set")
+			a.addKey(r, "principalId", "principalId is not set")
 		case !guidRe.MatchString(pid):
-			a.add(r, "principalId literal is not a GUID object ID")
+			a.addKey(r, "principalId", "principalId literal is not a GUID object ID")
 		}
 	}
 	return a.result()
@@ -385,11 +392,11 @@ func evalIDN006(in *sdk.Input) sdk.Result {
 		case issExpr:
 			a.unresolved = true
 		case !issPresent:
-			a.add(r, "issuer is not set")
+			a.addKey(r, "issuer", "issuer is not set")
 		default:
 			u, err := url.Parse(iss)
 			if err != nil || u.Scheme != "https" || u.Host == "" {
-				a.add(r, "issuer is not an https URL with a host")
+				a.addKey(r, "issuer", "issuer is not an https URL with a host")
 			}
 		}
 		switch {
@@ -397,10 +404,10 @@ func evalIDN006(in *sdk.Input) sdk.Result {
 			a.unresolved = true
 			continue
 		case !subPresent || strings.TrimSpace(sub) == "":
-			a.add(r, "subject is empty")
+			a.addKey(r, "subject", "subject is empty")
 			continue
 		case strings.ContainsAny(sub, "*?"):
-			a.add(r, "subject contains a wildcard character; federated credential subjects are matched exactly")
+			a.addKey(r, "subject", "subject contains a wildcard character; federated credential subjects are matched exactly")
 			continue
 		}
 		if issExpr || !issPresent {
@@ -410,11 +417,11 @@ func evalIDN006(in *sdk.Input) sdk.Result {
 		case err != nil || u.Host == "":
 		case strings.EqualFold(strings.TrimRight(iss, "/"), githubIssuer):
 			if !ghSubjectRe.MatchString(sub) {
-				a.add(r, "GitHub Actions subject must start with repo:{owner}/{repo}:")
+				a.addKey(r, "subject", "GitHub Actions subject must start with repo:{owner}/{repo}:")
 			}
 		case strings.HasSuffix(strings.ToLower(u.Hostname()), aksIssuerSuffix):
 			if !aksSubjRe.MatchString(sub) {
-				a.add(r, "AKS subject must be system:serviceaccount:{namespace}:{serviceaccount}")
+				a.addKey(r, "subject", "AKS subject must be system:serviceaccount:{namespace}:{serviceaccount}")
 			}
 		}
 	}

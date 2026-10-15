@@ -165,10 +165,10 @@ func (r net002) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 			pes, unres := pesFor(in.ARM, target, d.group)
 			o.evaluated++
 			if pa != "disabled" {
-				o.add(target, fmt.Sprintf("%s (%s) publicNetworkAccess is %q, expected Disabled", d.label, d.key, pa))
+				o.addKey(target, "publicNetworkAccess", fmt.Sprintf("%s (%s) publicNetworkAccess is %q, expected Disabled", d.label, d.key, pa))
 			}
 			if len(pes) == 0 && !unres {
-				o.add(target, fmt.Sprintf("%s (%s) has no private endpoint with group ID %q in the template", d.label, d.key, d.group))
+				o.addKey(target, "privateEndpoint", fmt.Sprintf("%s (%s) has no private endpoint with group ID %q in the template", d.label, d.key, d.group))
 			}
 		}
 	}
@@ -393,7 +393,7 @@ func (r net003) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 					o.skip(pe.Name + ": a privateDnsZoneId is not resolvable, so zone " + w + " cannot be confirmed")
 					continue
 				}
-				o.add(pe, "zone group lacks expected private DNS zone "+w)
+				o.addKey(pe, "zone:"+w, "zone group lacks expected private DNS zone "+w)
 				continue
 			}
 			var zone *sdk.ARMResource
@@ -445,7 +445,7 @@ func (r net003) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 			case linkUncertain:
 				o.skip(w + ": a virtual network link may connect the endpoint network but is conditional or cannot be correlated")
 			default:
-				o.add(*zone, "private DNS zone has no virtualNetworkLinks entry for the endpoint virtual network of "+pe.Name)
+				o.addKey(*zone, "vnetLink:"+nameKey(refOf(pe).Segments), "private DNS zone has no virtualNetworkLinks entry for the endpoint virtual network of "+pe.Name)
 			}
 		}
 	}
@@ -497,7 +497,7 @@ func (r net004) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 				}
 			}
 			if !delegated {
-				o.add(a, "agent subnet is not delegated to Microsoft.App/environments")
+				o.addKey(a, "delegation", "agent subnet is not delegated to Microsoft.App/environments")
 			}
 			var prefixes []string
 			if s, ok := str(sn.props, "addressPrefix"); ok {
@@ -513,11 +513,11 @@ func (r net004) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 					continue
 				}
 				if n, ok := prefixLen(p); ok && n > 27 {
-					o.add(a, fmt.Sprintf("agent subnet prefix %s is smaller than /27", p))
+					o.addKey(a, "prefix:"+p, fmt.Sprintf("agent subnet prefix %s is smaller than /27", p))
 				}
 			}
 			if len(sn.name) > 63 && !isExpr(sn.name) {
-				o.add(a, "agent subnet name exceeds 63 bytes")
+				o.addKey(a, "subnetName", "agent subnet name exceeds 63 bytes")
 			}
 			for oi, other := range accounts {
 				if oi == ai || presence(other) == armexpr.NotDeployed {
@@ -525,7 +525,7 @@ func (r net004) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 				}
 				for _, oinj := range injections(other) {
 					if oinj.agent && sameSubnet(in.ARM, oinj.subnet, inj.subnet) {
-						o.add(a, "agent subnet is shared with account "+other.Name)
+						o.addKey(a, "shared:"+nameKey(refOf(other).Segments), "agent subnet is shared with account "+other.Name)
 					}
 				}
 			}
@@ -615,7 +615,7 @@ func (r net007) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 		ips := arr(a.Properties, "networkAcls", "ipRules")
 		vns := arr(a.Properties, "networkAcls", "virtualNetworkRules")
 		if len(ips) == 0 && len(vns) == 0 {
-			o.add(a, "restricted mode (defaultAction Deny) has no ipRules or virtualNetworkRules")
+			o.addKey(a, "ipRules", "restricted mode (defaultAction Deny) has no ipRules or virtualNetworkRules")
 			continue
 		}
 		for _, e := range ips {
@@ -624,7 +624,7 @@ func (r net007) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 				continue
 			}
 			if !isIPv4OrCIDR(v) {
-				o.add(a, fmt.Sprintf("ipRules value %q is not an IPv4 address or CIDR", v))
+				o.addKey(a, "ipRule:"+v, fmt.Sprintf("ipRules value %q is not an IPv4 address or CIDR", v))
 			}
 		}
 	}

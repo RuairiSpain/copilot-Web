@@ -1,5 +1,5 @@
 id: FND-SEC-006
-version: 1
+version: 2
 group: SEC
 title: Firewall rules reject private/open ranges
 description: IP firewall rules on Foundry-related resources must not contain open ranges (0.0.0.0/0, or 0.0.0.0

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/armexpr"
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/foundrylink"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
 
@@ -232,6 +233,8 @@ func evalIDN004(in *sdk.Input) sdk.Result {
 		return sdk.Result{Findings: a.fs}
 	case a.unresolved:
 		return skip(SkipUnresolved)
+	case a.conditional:
+		return skip(foundrylink.SkipConditional)
 	case evaluated:
 		return sdk.Result{}
 	case excludedOnly:

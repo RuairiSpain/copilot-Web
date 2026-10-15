@@ -16,7 +16,7 @@ import (
 
 // SkipOutOfScope is the skip reason used when resources exist but none is in
 // Foundry scope (FND-SEC-002, FND-SEC-003).
-const SkipOutOfScope = "out-of-foundry-scope"
+const SkipOutOfScope = sdk.SkipNotApplicable + ": out-of-foundry-scope"
 
 // SkipUnresolved is the skip reason used when a decisive value is an
 // unresolved ARM expression and no finding could be established.
@@ -70,6 +70,11 @@ func (r fn) Evaluate(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 	return r.f(in), nil
 }
 
+// notApplicable is the by-design skip: the template has nothing the rule checks.
+func notApplicable() sdk.Result {
+	return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipNotApplicable + ": no applicable resources in the compiled template"}}
+}
+
 func unavailable() sdk.Result {
 	return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable}}
 }
@@ -96,9 +101,16 @@ func (a *acc) add(r sdk.ARMResource, evidence string) {
 	})
 }
 
-// addRec adds a finding with a rule-specific recommendation.
-func (a *acc) addRec(r sdk.ARMResource, evidence, recommendation string) {
+// addKey adds a finding with a stable Key that separates several findings of
+// one rule on one resource (the property path or sub-check name).
+func (a *acc) addKey(r sdk.ARMResource, key, evidence string) {
 	a.add(r, evidence)
+	a.fs[len(a.fs)-1].Key = key
+}
+
+// addRec adds a finding with a rule-specific recommendation.
+func (a *acc) addRec(r sdk.ARMResource, key, evidence, recommendation string) {
+	a.addKey(r, key, evidence)
 	a.fs[len(a.fs)-1].Recommendation = recommendation
 }
 
@@ -246,7 +258,7 @@ func evalSEC001(in *sdk.Input) sdk.Result {
 		}
 	}
 	if !seen && !a.scopeUncertain && !a.conditional {
-		return unavailable()
+		return notApplicable()
 	}
 	return a.result()
 }
@@ -266,7 +278,7 @@ func linkOf(a *acc, set foundrylink.Set, r sdk.ARMResource) bool {
 func evalSEC002(in *sdk.Input) sdk.Result {
 	svcs := ofType(in, typeSearch)
 	if len(svcs) == 0 {
-		return unavailable()
+		return notApplicable()
 	}
 	set := foundrylink.Collect(in.ARM)
 	var a acc
@@ -303,7 +315,7 @@ func evalSEC002(in *sdk.Input) sdk.Result {
 func evalSEC003(in *sdk.Input) sdk.Result {
 	dbs := ofType(in, typeCosmos)
 	if len(dbs) == 0 {
-		return unavailable()
+		return notApplicable()
 	}
 	set := foundrylink.Collect(in.ARM)
 	var a acc
@@ -330,7 +342,7 @@ func evalSEC003(in *sdk.Input) sdk.Result {
 func evalSEC004(in *sdk.Input) sdk.Result {
 	stores := ofType(in, typeStorage)
 	if len(stores) == 0 {
-		return unavailable()
+		return notApplicable()
 	}
 	var a acc
 	keyed := foundrylink.CollectWhere(in.ARM, usesKeyAuth)
@@ -346,20 +358,20 @@ func evalSEC004(in *sdk.Input) sdk.Result {
 		default:
 			ev := "properties.allowSharedKeyAccess is not false (shared key access enabled)"
 			if keyed.Classify(r) == foundrylink.NotLinked {
-				a.add(r, ev)
+				a.addKey(r, "allowSharedKeyAccess", ev)
 			} else {
-				a.addRec(r, ev, sharedKeyRecommendation+" "+keyAuthWarning)
+				a.addRec(r, "allowSharedKeyAccess", ev, sharedKeyRecommendation+" "+keyAuthWarning)
 			}
 		}
 		switch boolState(p, "allowBlobPublicAccess") {
 		case isTrue:
-			a.add(r, "properties.allowBlobPublicAccess is true (anonymous blob access allowed)")
+			a.addKey(r, "allowBlobPublicAccess", "properties.allowBlobPublicAccess is true (anonymous blob access allowed)")
 		case expr:
 			a.unresolved = true
 		}
 		switch boolState(p, "supportsHttpsTrafficOnly") {
 		case isFalse:
-			a.add(r, "properties.supportsHttpsTrafficOnly is false")
+			a.addKey(r, "supportsHttpsTrafficOnly", "properties.supportsHttpsTrafficOnly is false")
 		case expr:
 			a.unresolved = true
 		}
@@ -368,9 +380,9 @@ func evalSEC004(in *sdk.Input) sdk.Result {
 		case st == expr:
 			a.unresolved = true
 		case st == absent:
-			a.add(r, "properties.minimumTlsVersion is absent (older TLS versions may be accepted)")
+			a.addKey(r, "minimumTlsVersion", "properties.minimumTlsVersion is absent (older TLS versions may be accepted)")
 		case st == isTrue && (strings.EqualFold(v, "TLS1_0") || strings.EqualFold(v, "TLS1_1")):
-			a.add(r, "properties.minimumTlsVersion is "+v)
+			a.addKey(r, "minimumTlsVersion", "properties.minimumTlsVersion is "+v)
 		}
 	}
 	return a.result()
@@ -473,17 +485,17 @@ func evalSEC006(in *sdk.Input) sdk.Result {
 				}
 				switch {
 				case allAddr:
-					a.add(r, "IP rule "+val+" opens the resource to all addresses")
+					a.addKey(r, "ipRule:"+val, "IP rule "+val+" opens the resource to all addresses")
 				case azureWide:
-					a.add(r, "IP rule "+val+" allows all Azure datacenter IPs")
+					a.addKey(r, "ipRule:"+val, "IP rule "+val+" allows all Azure datacenter IPs")
 				case overlaps(val, sp.private):
-					a.add(r, "IP rule "+val+" is a private or non-routable range that the service does not enforce")
+					a.addKey(r, "ipRule:"+val, "IP rule "+val+" is a private or non-routable range that the service does not enforce")
 				}
 			}
 		}
 	}
 	if !seen {
-		return unavailable()
+		return notApplicable()
 	}
 	return a.result()
 }

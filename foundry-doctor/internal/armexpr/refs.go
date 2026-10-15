@@ -237,7 +237,7 @@ func ParseRef(s string) Ref {
 		return Ref{Opaque: true}
 	}
 	if c.Fn == "reference" && len(c.Args) >= 1 {
-		return ParseRef(c.Args[0])
+		return ParseRef("[" + c.Args[0] + "]")
 	}
 	if !resourceIDFns[c.Fn] {
 		return Ref{Opaque: true}
@@ -403,7 +403,10 @@ func RoleDefinitionGUID(def string) (string, bool) {
 	if !IsExpression(def) {
 		i := strings.LastIndex(def, "/")
 		g := def[i+1:]
-		return strings.ToLower(g), guidRe.MatchString(g)
+		if !guidRe.MatchString(g) {
+			return "", false
+		}
+		return strings.ToLower(g), true
 	}
 	c, ok := ParseCall(def)
 	if !ok || c.Suffix != "" || len(c.Args) == 0 {

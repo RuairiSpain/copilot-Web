@@ -1,5 +1,5 @@
 id: FND-SEC-010
-version: 1
+version: 2
 group: SEC
 title: Customer-managed keys informational
 description: Informational summary of whether customer-managed key (CMK) encryption is configured on the Foundry

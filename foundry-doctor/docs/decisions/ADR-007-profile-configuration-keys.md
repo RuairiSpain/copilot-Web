@@ -52,6 +52,18 @@ requirement or a fact. The PRD does not name the keys, so each rule left them op
 | `policy.cost.devMaxCosmosThroughput` | integer (RU/s) | FND-COST-002, Cosmos sub-check | that sub-check is skipped |
 | `policy.cost.productionSizedSkuExemptions` | list of resource names or IDs | FND-COST-002 | `[]` |
 
+### Amendment (Phase 1 review fix): additional network keys
+
+The config schema (`schemas/config.schema.json`) also accepts three network keys that FND-NET-003 reads. They refine, and never replace, the keys above:
+
+| Key | Type | Used by | When absent |
+|---|---|---|---|
+| `policy.network.dnsManagedByPolicy` | boolean | FND-NET-003 | `false`. Legacy alias of `policy.managedByAzurePolicy` containing `private-dns-zone-group`; either one makes the rule skip with `policy-managed`. |
+| `policy.network.centralDns` | boolean | FND-NET-003 | `false`. `true` declares hub-owned or resolver-based DNS; the rule skips with `central-dns`. |
+| `policy.network.cloud` | `public` \| `usgov` \| `china` | FND-NET-003 | the cloud is inferred from literal resource regions; if it cannot be inferred the rule skips. |
+
+Rules read effective-policy keys relative to `policy:` (for example `network.publicAccess`, `managedByAzurePolicy`); the `policy.` prefix in this document is the YAML path, not part of the lookup key. FND-NET-003 honours `policy.managedByAzurePolicy` (`private-dns-zone-group`). FND-NET-001 reads `policy.network.publicAccess` and, for `entra-only` and `allowed`, states in the finding evidence that public access is declared deliberate; the engine, not the rule, applies the severity change (see the hand-off for the open engine item).
+
 `policy.network.publicAccess` is the only key that changes a finding without being a pre-condition. `entra-only` and `allowed` lower the
 severity of FND-NET-001 for a deliberately public account to `warning` and `info`; they never skip it. FND-NET-002 depends only on the account's own
 settings and ignores the key.

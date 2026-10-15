@@ -70,15 +70,15 @@ func (r net006) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 				o.evaluated++
 				switch {
 				case !withinAny(p, supported):
-					o.add(a, "agent subnet prefix "+cidr+" is not in RFC 1918 or RFC 6598 (100.64.0.0/10) address space")
+					o.addKey(a, "prefix:"+cidr, "agent subnet prefix "+cidr+" is not in RFC 1918 or RFC 6598 (100.64.0.0/10) address space")
 				case intersectsAny(p, reserved):
-					o.add(a, "agent subnet prefix "+cidr+" intersects a reserved range")
+					o.addKey(a, "prefix:"+cidr, "agent subnet prefix "+cidr+" intersects a reserved range")
 				}
 			}
 			for _, p := range spaces[nameKey(refOf(sn.vnet).Segments)] {
 				if intersectsAny(p, reserved) {
 					o.evaluated++
-					o.add(sn.vnet, "virtual network address space "+p.String()+" intersects a reserved range")
+					o.addKey(sn.vnet, "addressSpace:"+p.String(), "virtual network address space "+p.String()+" intersects a reserved range")
 				}
 			}
 		}
@@ -250,14 +250,16 @@ func (r net011) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 				continue
 			}
 			nsg, _ := str(props, "networkSecurityGroup", "id")
-			if nsg == "" {
+			if nsg != "" {
 				o.evaluated++
+			} else {
 				switch {
 				case agentSubnets[vkey+"/"+lc(name)]:
 					o.skip(name + ": uncertain: NSG support for the agent subnet is not verified")
 				case agentUnresolved:
 					o.skip(name + ": uncertain: an agent subnet injection could not be resolved, so this subnet may be the agent subnet")
 				default:
+					o.evaluated++
 					o.add(sdk.ARMResource{Type: "Microsoft.Network/virtualNetworks/subnets", Name: v.Name + "/" + name}, "subnet has no networkSecurityGroup association")
 				}
 			}

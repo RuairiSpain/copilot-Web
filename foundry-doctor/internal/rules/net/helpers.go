@@ -349,7 +349,7 @@ func parseSubnetRef(id string) (subnetRef, bool) {
 	if armexpr.IsExpression(id) {
 		if c, ok := armexpr.ParseCall(id); ok && c.Fn == "reference" && len(c.Args) > 0 {
 			if mm := subnetIdxRe.FindStringSubmatch(c.Suffix); mm != nil {
-				v := armexpr.ParseRef(c.Args[0])
+				v := armexpr.ParseRef("[" + c.Args[0] + "]")
 				if v.Opaque || (v.Type != "" && v.Type != tVNet) {
 					return subnetRef{}, false
 				}
@@ -475,11 +475,18 @@ func (o *outcome) add(r sdk.ARMResource, evidence string) {
 	o.findings = append(o.findings, sdk.Finding{Resource: ref(r), Location: r.Location, Evidence: evidence})
 }
 
+// addKey adds a finding with a stable Key separating several findings of one
+// rule on one resource.
+func (o *outcome) addKey(r sdk.ARMResource, key, evidence string) {
+	o.add(r, evidence)
+	o.findings[len(o.findings)-1].Key = key
+}
+
 func (o *outcome) skip(reason string) { o.skips = append(o.skips, reason) }
 
 func (o *outcome) result() sdk.Result {
 	if len(o.findings) == 0 && o.evaluated == 0 {
-		reason := "no applicable resources in the compiled template"
+		reason := sdk.SkipNotApplicable + ": no applicable resources in the compiled template"
 		if len(o.skips) > 0 {
 			sort.Strings(o.skips)
 			reason = strings.Join(o.skips, "; ")

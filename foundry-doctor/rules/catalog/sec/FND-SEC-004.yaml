@@ -1,5 +1,5 @@
 id: FND-SEC-004
-version: 1
+version: 2
 group: SEC
 title: Storage shared key/anonymous access disabled; HTTPS/TLS required
 description: >-

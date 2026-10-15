@@ -32,7 +32,7 @@ func TestLaterRules(t *testing.T) {
 		{
 			name:     "sec005 purge protection",
 			id:       "FND-SEC-005",
-			in:       &sdk.Input{ARM: model{res(typeKeyVault, "kv", props{"enableSoftDelete": true, "enablePurgeProtection": false, "enableRbacAuthorization": true})}},
+			in:       &sdk.Input{ARM: model{res(typeKeyVault, "kv", props{"enableSoftDelete": true, "enablePurgeProtection": false, "enableRbacAuthorization": true}), res(typeAccounts+"/connections", "acct/kvconn", props{"metadata": props{"ResourceId": "kv"}})}},
 			findings: 1, contains: "enablePurgeProtection",
 		},
 		{
