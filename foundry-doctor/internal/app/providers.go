@@ -167,6 +167,21 @@ func (s *envStore) Selected() (string, bool) {
 	return s.src.Environment, true
 }
 
+// SelectionReason implements cfg.EnvSelection. It says why Selected reports
+// false: no environment chosen, the chosen environment's .env file is
+// missing or unusable, or the chosen environment is not a directory under .azure.
+func (s *envStore) SelectionReason() string {
+	s.load()
+	name := s.src.Environment
+	if name == "" {
+		return "no-environment-selected"
+	}
+	if _, ok := s.byEn[name]; !ok {
+		return "default-environment-not-found"
+	}
+	return "env-file-missing"
+}
+
 // Values implements cfg.EnvView.
 func (s *envStore) Values() map[string]string {
 	s.load()
