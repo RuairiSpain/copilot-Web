@@ -202,6 +202,13 @@ type ARMResource struct {
 	Zones []string
 	// Kind is the resource "kind" (for example AIServices); empty when absent.
 	Kind string
+	// Conditional is true when the resource has an `if (...)` condition.
+	// Condition holds the raw condition expression ("" when unconditional).
+	// A literal "false" means the resource is not deployed.
+	Conditional bool
+	Condition   string
+	// Looped is true when the resource is deployed through a `for` copy loop.
+	Looped bool
 	// SKUName is the resource sku.name when present and literal; empty otherwise.
 	SKUName string
 	// SKU is the top-level resource "sku" object (name, capacity, tier, ...).

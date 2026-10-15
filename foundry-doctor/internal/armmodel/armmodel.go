@@ -122,6 +122,7 @@ func toResource(r bicep.Resource, node map[string]any, bl bicep.Location) sdk.AR
 		}
 	}
 	res.Kind = str(node["kind"])
+	res.Conditional, res.Condition, res.Looped = r.Conditional, r.Condition, r.Copy != nil
 	if sku, ok := node["sku"].(map[string]any); ok {
 		res.SKU = sku
 		if n := str(sku["name"]); n != "" && !strings.HasPrefix(n, "[") {
