@@ -82,3 +82,16 @@ Foundry azd projects can have no `infra/` folder. Foundry Doctor's Bicep adapter
   command passed against the exact pinned clone and workflow-pinned Python dependencies.
 - Where azd records the default environment (`.azure/config.json` field names) and `.azure/<env>/config.json` schema (docs mention the files; fields not read).
 - Alpha-schema gating specifics.
+
+## Amendment 1 (2026-10-15): Phase 1 implementation status of the Decision 5 tiers
+
+Review findings Azure N12/N13 and Foundry N13/N19 compared the tiers with the code.
+
+| Tier (Decision 5) | Phase 1 behaviour | Reason |
+|---|---|---|
+| `synthetic-infrastructure` skip (Decision 3) | Implemented in the engine (ADR-012 Amendment 1). | |
+| Unknown azd version | Rules with an azd range skip as `azd-version-unknown` (was `input-unavailable`) with `MissingCapability: azd version`. The version comes from `--azd-version`, then `FOUNDRY_DOCTOR_AZD_VERSION`, then `azd version --output json`. The report header prints `versions not detected: azd`. | ADR-010 decision 10. |
+| `requiredVersions.azd` | Read as evidence only: when azd is not detected and azure.yaml declares it, the header note quotes it. It never replaces the installed version and never passes a version-gated rule. The error finding for an unsatisfied range is **not implemented**. | The range grammar that azd accepts is not verified in `docs/tool-compatibility.md`; a hand-written range parser would assert an unverified product fact. azd itself refuses to load the project when the range is unmet (see Findings). Revisit when the grammar is verified. |
+| `unsupported-host` | **Not implemented.** Rules decide applicability per service host and skip with their own reason. No `FND-SYS-UNSUPPORTED-HOST` finding is emitted. | The host list in the schema is `examples`, not an enum; no rule yet needs a host allow-list. ADR-009 keeps the reserved ID. |
+| `invalid-azure-yaml` | Unparseable azure.yaml stops the run with an error naming the parse problem and exit 2 (`ErrUnavailable`). No `FND-SYS-INVALID-AZURE-YAML` finding is emitted and no rule runs. | Exit 2 is the contract for "validation could not run" (PRD section 7, ADR-010 decision 2); a finding would add no information because there is nothing to report on. |
+| Extension versions (`azure.ai.*`) | Not detected; ranges in the catalogue are not compared. The report cannot claim these rules passed for the installed extension. | Extension detection needs `azd extension list` output that is not yet verified. |

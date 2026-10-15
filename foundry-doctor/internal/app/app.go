@@ -24,6 +24,7 @@ import (
 	costreport "github.com/ruairispain/copilot-web/foundry-doctor/internal/cost/report"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/findings"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/report"
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/rules"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
 
@@ -71,16 +72,19 @@ type Outcome struct {
 	Skips []sdk.Skip
 	// FailOn is the failure threshold.
 	FailOn sdk.Severity
-	// Strict turns any skipped check into exit 3.
+	// Strict turns a skip that hid a check into exit 3. By-design skips do not
+	// (rules.ClassifySkip, ADR-010 decision 9).
 	Strict bool
 }
 
 // ExitCode applies PRD section 7. Precedence: required-skip (2) over strict
 // skip (3) over findings (1) over success (0). Internal errors (4) are
-// decided by ExitCodeForError before an Outcome exists.
+// decided by ExitCodeForError before an Outcome exists. Strict applies only
+// when a skip hid a check; every skip is still reported.
 func ExitCode(o Outcome) int {
 	return report.ClassifyExit(report.Outcome{
-		Findings: o.Findings, FailOn: o.FailOn, Strict: o.Strict, Skipped: o.Skips,
+		Findings: o.Findings, FailOn: o.FailOn, Skipped: o.Skips,
+		Strict: o.Strict && rules.AnyHiddenCheck(o.Skips),
 	})
 }
 
@@ -118,6 +122,8 @@ type ConfigRequest struct {
 	Rules       []string
 	Baseline    string
 	Suppress    string
+	// AzdVersion is the --azd-version flag value, empty when unset.
+	AzdVersion string
 }
 
 // Settings is the effective, merged configuration.
@@ -128,11 +134,14 @@ type Settings struct {
 	// Exclude holds selectors removed from Rules.
 	Exclude []string
 	// Policy is the effective policy flattened to dotted keys (ADR-007).
-	Policy       map[string]any
-	Rules        []string // selectors after merging flags over config
-	Baseline     string
-	Suppressions string
-	AzdVersion   string
+	Policy map[string]any
+	// BicepRequired is true when validation.bicep is "required" for the
+	// profile: a missing Bicep CLI or a compile failure then exits 2.
+	BicepRequired bool
+	Rules         []string // selectors after merging flags over config
+	Baseline      string
+	Suppressions  string
+	AzdVersion    string
 }
 
 // ConfigResolver resolves flags > environment > repo config > profile.
@@ -140,6 +149,18 @@ type Settings struct {
 type ConfigResolver interface {
 	Resolve(ctx context.Context, req ConfigRequest) (Settings, error)
 }
+
+// ErrBicepFailed marks an ARM model that could not be produced although the
+// project has Bicep or ARM input: the Bicep CLI is missing or unsupported, the
+// compile failed, or the compiled template could not be read. It always
+// accompanies ErrARMUnavailable. When validation.bicep is required it maps to
+// exit 2; otherwise it is a warning.
+var ErrBicepFailed = errors.New("bicep validation failed")
+
+// ErrNoInfrastructure marks a project with no Bicep or ARM entry on disk
+// (synthetic infrastructure, ADR-004). It accompanies ErrARMUnavailable. It is
+// not a failure: ARM-only rules are skipped with synthetic-infrastructure.
+var ErrNoInfrastructure = errors.New("no on-disk infrastructure")
 
 // ErrARMUnavailable marks an ARM model that could not be produced (Bicep CLI
 // missing or unsupported, compile errors, no entry file). The pipeline warns on
@@ -163,6 +184,8 @@ type RunInput struct {
 	Selectors   []string
 	Exclude     []string
 	Local       bool
+	// Synthetic is true when the project has no on-disk infrastructure.
+	Synthetic bool
 	// Source is the discovered project, for providers that need the layout
 	// and azd environments.
 	Source    Source
@@ -178,6 +201,11 @@ type RunOutput struct {
 	// Evaluated lists the rule IDs that ran. Optional; the preflight
 	// readiness summary falls back to every FND-DEP rule when it is empty.
 	Evaluated []string
+	// Notes are run-level statements for the report header, for example
+	// "versions not detected: azd".
+	Notes []string
+	// Diagnostics are engine-level problems (fingerprint collisions).
+	Diagnostics []string
 }
 
 // Engine runs the selected rules.
@@ -200,6 +228,8 @@ type Report struct {
 	Findings    []sdk.Finding
 	Skipped     []sdk.Skip
 	ExitCode    int
+	// Notes are printed in the console and Markdown report header.
+	Notes []string
 	// Readiness is set by the preflight command only.
 	Readiness *report.Readiness
 }
@@ -254,6 +284,8 @@ type DoctorRequest struct {
 	Strict      bool
 	Format      string
 	Out         string
+	// AzdVersion supplies the azd version when azd is not on PATH.
+	AzdVersion string
 }
 
 // CostInput is the advisory estimator input.
@@ -318,7 +350,7 @@ func Doctor(ctx context.Context, svc Services, req DoctorRequest, stdout io.Writ
 func doctor(ctx context.Context, svc Services, req DoctorRequest, stdout io.Writer) (int, error) {
 	set, err := svc.Config.Resolve(ctx, ConfigRequest{
 		Dir: req.Dir, Profile: req.Profile,
-		Rules: req.Rules, Baseline: req.Baseline, Suppress: req.Suppress,
+		Rules: req.Rules, Baseline: req.Baseline, Suppress: req.Suppress, AzdVersion: req.AzdVersion,
 	})
 	if err != nil {
 		return 0, fmt.Errorf("resolve config: %w", err)
@@ -345,12 +377,17 @@ func doctor(ctx context.Context, svc Services, req DoctorRequest, stdout io.Writ
 	}
 
 	var arm sdk.ARMModel
+	synthetic := false
 	if svc.ARM != nil {
 		arm, err = svc.ARM.Load(ctx, src)
 		switch {
 		case err == nil:
 		case errors.Is(err, ErrARMUnavailable) && ctx.Err() == nil:
 			arm = nil
+			if set.BicepRequired && errors.Is(err, ErrBicepFailed) {
+				return 0, fmt.Errorf("%w: validation.bicep is required for profile %s: %w", ErrUnavailable, set.Profile, err)
+			}
+			synthetic = errors.Is(err, ErrNoInfrastructure)
 			if svc.Stderr != nil {
 				_, _ = fmt.Fprintf(svc.Stderr, "warning: %s; Bicep-dependent rules are skipped\n", findings.Redact(err.Error()))
 			}
@@ -361,7 +398,7 @@ func doctor(ctx context.Context, svc Services, req DoctorRequest, stdout io.Writ
 
 	out, err := svc.Engine.Run(ctx, RunInput{
 		Profile: set.Profile, Environment: set.Environment, AzdVersion: set.AzdVersion,
-		Selectors: set.Rules, Exclude: set.Exclude, Local: req.Local, Source: src,
+		Selectors: set.Rules, Exclude: set.Exclude, Local: req.Local, Source: src, Synthetic: synthetic,
 		AzureYAML: doc, ARM: arm, Policy: MapPolicy(set.Policy),
 	})
 	if err != nil {
@@ -409,7 +446,16 @@ func doctor(ctx context.Context, svc Services, req DoctorRequest, stdout io.Writ
 	// The exit code is part of the report, so classify before rendering.
 	code := ExitCode(Outcome{Findings: shown, Skips: skips, FailOn: req.FailOn, Strict: req.Strict})
 	var buf bytes.Buffer
-	rep := Report{Profile: set.Profile, Environment: set.Environment, Policy: set.Policy, Findings: shown, Skipped: skips, ExitCode: code}
+	notes := slices.Concat(out.Notes, SkipSummaryNotes(skips))
+	if svc.Stderr != nil {
+		for _, d := range out.Diagnostics {
+			_, _ = fmt.Fprintf(svc.Stderr, "warning: %s\n", findings.Redact(d))
+		}
+		for _, n := range out.Notes {
+			_, _ = fmt.Fprintf(svc.Stderr, "warning: %s\n", findings.Redact(n))
+		}
+	}
+	rep := Report{Profile: set.Profile, Environment: set.Environment, Policy: set.Policy, Findings: shown, Skipped: skips, ExitCode: code, Notes: notes}
 	if err := svc.Reporter.Render(&buf, req.Format, rep); err != nil {
 		return 0, fmt.Errorf("render %s report: %w", req.Format, err)
 	}
