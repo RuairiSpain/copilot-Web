@@ -1,5 +1,5 @@
 id: FND-OPS-006
-version: 1
+version: 2
 group: OPS
 title: Log retention meets policy
 description: >-
@@ -41,8 +41,8 @@ evidence:
     that matter (AzureDiagnostics for Foundry resource logs; the App* tables for traces). Compare the effective total retention
     (totalRetentionInDays, or retentionInDays when total is -1 or absent, or the workspace default) with the minimum days
     declared in the profile per environment. Report: effective retention below the minimum; a value outside the documented
-    ranges (analytics retention 4-730 days, total retention 4-4383 days per table); retention 30 with features.immediatePurgeDataOn30Days
-    true when the profile requires more. Control plane: read the same properties from the deployed workspace. With no minimum
+    ranges (analytics retention 4-730 days, total retention 4-4383 days per table); retention 30 with the boolean features.immediatePurgeDataOn30Days
+    true when the profile requires more (an expression value is skipped). Control plane: read the same properties from the deployed workspace. With no minimum
     declared in the profile, or a workspace that cannot be resolved, the rule is skipped, not passed.
   confidence: likely
 recommendation: >-

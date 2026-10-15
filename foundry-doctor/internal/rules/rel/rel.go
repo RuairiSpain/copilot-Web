@@ -54,6 +54,7 @@ type outcome struct {
 	findings []sdk.Finding
 	skips    []string
 	notes    []string
+	v        *view
 }
 
 func (o *outcome) add(r sdk.ARMResource, evidence string) {
@@ -108,19 +109,6 @@ func unique(in []string) []string {
 	return out
 }
 
-func byType(in *sdk.Input, typ string) []sdk.ARMResource {
-	var out []sdk.ARMResource
-	if in == nil || in.ARM == nil {
-		return nil
-	}
-	for _, r := range in.ARM.Resources() {
-		if strings.EqualFold(r.Type, typ) {
-			out = append(out, r)
-		}
-	}
-	return out
-}
-
 func number(v any) (float64, bool) {
 	switch x := v.(type) {
 	case float64:
@@ -153,12 +141,12 @@ func mapProp(m map[string]any, key string) map[string]any {
 
 func unresolved(v string) bool {
 	v = strings.TrimSpace(v)
-	return v == "" || strings.HasPrefix(v, "[")
+	return v == "" || isExpr(v)
 }
 
 func eval001(in *sdk.Input) sdk.Result {
-	o := &outcome{}
-	for _, r := range byType(in, typeSearch) {
+	o := newOutcome(in)
+	for _, r := range o.of(typeSearch) {
 		if strings.EqualFold(r.SKUName, "free") {
 			o.skips = append(o.skips, r.Name+": free-tier-search-sla-not-applicable")
 			continue
@@ -184,8 +172,8 @@ var redundantStorage = map[string]bool{
 }
 
 func eval002(in *sdk.Input) sdk.Result {
-	o := &outcome{}
-	for _, r := range byType(in, typeStorage) {
+	o := newOutcome(in)
+	for _, r := range o.of(typeStorage) {
 		sku := strings.ToLower(strings.TrimSpace(r.SKUName))
 		if sku == "" {
 			o.notes = append(o.notes, r.Name+": storage sku.name is unresolved")
@@ -204,8 +192,8 @@ func eval002(in *sdk.Input) sdk.Result {
 }
 
 func eval003(in *sdk.Input) sdk.Result {
-	o := &outcome{}
-	for _, r := range byType(in, typeCosmos) {
+	o := newOutcome(in)
+	for _, r := range o.of(typeCosmos) {
 		locations, ok := r.Properties["locations"].([]any)
 		if !ok || len(locations) == 0 {
 			o.notes = append(o.notes, r.Name+": Cosmos locations are unavailable")
@@ -234,40 +222,187 @@ func eval003(in *sdk.Input) sdk.Result {
 	return o.result()
 }
 
-func eval004(in *sdk.Input) sdk.Result {
-	targets := []sdk.ARMResource{}
-	targets = append(targets, byType(in, typeFoundry)...)
-	targets = append(targets, byType(in, typeCosmos)...)
-	targets = append(targets, byType(in, typeSearch)...)
-	targets = append(targets, byType(in, typeStorage)...)
-	if len(targets) == 0 {
-		return sdk.Result{}
+// lockCover classifies how one lock relates to the deployment resource group and
+// to a target resource.
+type lockCover int
+
+const (
+	coverNone lockCover = iota
+	coverYes
+	coverUnknown
+)
+
+// splitCall splits "fn(a, b(c), 'd,e')" into the function name and its top-level
+// arguments. ok is false when s is not a single function call.
+func splitCall(s string) (fn string, args []string, ok bool) {
+	s = strings.TrimSpace(s)
+	open := strings.IndexByte(s, '(')
+	if open <= 0 || !strings.HasSuffix(s, ")") {
+		return "", nil, false
 	}
-	locks := byType(in, typeLock)
+	fn = strings.TrimSpace(s[:open])
+	inner := s[open+1 : len(s)-1]
+	depth, start, inQuote := 0, 0, false
+	for i := 0; i < len(inner); i++ {
+		switch c := inner[i]; {
+		case c == '\'':
+			inQuote = !inQuote
+		case inQuote:
+		case c == '(' || c == '[':
+			depth++
+		case c == ')' || c == ']':
+			depth--
+			if depth < 0 {
+				return "", nil, false
+			}
+		case c == ',' && depth == 0:
+			args = append(args, strings.TrimSpace(inner[start:i]))
+			start = i + 1
+		}
+	}
+	if depth != 0 || inQuote {
+		return "", nil, false
+	}
+	if last := strings.TrimSpace(inner[start:]); last != "" || len(args) > 0 {
+		args = append(args, last)
+	}
+	return fn, args, true
+}
+
+func quoted(arg string) (string, bool) {
+	a := strings.TrimSpace(arg)
+	if len(a) >= 2 && a[0] == '\'' && a[len(a)-1] == '\'' && !strings.Contains(a[1:len(a)-1], "'") {
+		return a[1 : len(a)-1], true
+	}
+	return "", false
+}
+
+// lockCoversGroup reports whether a lock's scope is the deployment resource
+// group. The input carries no deployment resource-group name, so only a
+// scope-less lock (it applies to the deployment scope) and resourceGroup().id
+// are provably that group; any other resource-group scope is unknown.
+func lockCoversGroup(scope string) lockCover {
+	s := strings.TrimSpace(scope)
+	switch {
+	case s == "":
+		return coverYes
+	case isExpr(s):
+		switch normExpr(s) {
+		case "resourcegroup().id":
+			return coverYes
+		}
+		if strings.HasPrefix(normExpr(s), "resourcegroup(") || strings.HasPrefix(normExpr(s), "subscription") {
+			return coverUnknown
+		}
+		return coverNone
+	}
+	low := strings.ToLower(s)
+	if strings.Contains(low, "/resourcegroups/") && !strings.Contains(low, "/providers/") {
+		return coverUnknown
+	}
+	return coverNone
+}
+
+// lockCoversResource reports whether the lock scope names resource r. Expression
+// names are compared by normalised text of the last resourceId argument; a
+// comparison that cannot be proven is coverUnknown.
+func lockCoversResource(scope string, r sdk.ARMResource) lockCover {
+	s := strings.TrimSpace(scope)
+	if s == "" {
+		return coverNone
+	}
+	if !isExpr(s) {
+		if isExpr(r.Name) {
+			return coverUnknown
+		}
+		want := strings.ToLower("/providers/" + r.Type + "/" + lastSeg(r.Name))
+		if strings.HasSuffix(strings.ToLower(s), want) {
+			return coverYes
+		}
+		return coverNone
+	}
+	body := strings.TrimSpace(s)
+	body = strings.TrimSpace(body[1 : len(body)-1])
+	fn, args, ok := splitCall(body)
+	if !ok || !strings.EqualFold(fn, "resourceid") {
+		return coverUnknown
+	}
+	for i, a := range args {
+		q, ok := quoted(a)
+		if !ok || !strings.Contains(q, "/") || !strings.Contains(strings.SplitN(q, "/", 2)[0], ".") {
+			continue
+		}
+		if !strings.EqualFold(q, r.Type) {
+			return coverNone
+		}
+		names := args[i+1:]
+		if len(names) != 1 {
+			return coverUnknown
+		}
+		nq, nameLit := quoted(names[0])
+		switch {
+		case nameLit && !isExpr(r.Name):
+			if strings.EqualFold(nq, lastSeg(r.Name)) {
+				return coverYes
+			}
+			return coverNone
+		case !nameLit && isExpr(r.Name) && normExpr(names[0]) == normExpr(r.Name):
+			return coverYes
+		}
+		return coverUnknown
+	}
+	return coverUnknown
+}
+
+func eval004(in *sdk.Input) sdk.Result {
+	o := newOutcome(in)
+	targets := []sdk.ARMResource{}
+	targets = append(targets, o.of(typeFoundry)...)
+	targets = append(targets, o.of(typeCosmos)...)
+	targets = append(targets, o.of(typeSearch)...)
+	targets = append(targets, o.of(typeStorage)...)
+	if len(targets) == 0 {
+		return o.result()
+	}
+	locks := o.of(typeLock)
 	if len(locks) == 0 {
+		if o.hasUncertain(typeLock) {
+			return o.result()
+		}
 		return sdk.Result{Skipped: &sdk.Skip{Reason: "uncertain: no lock resources are declared in the template and locks can be applied later or at parent scope"}}
 	}
-	rgCovered := false
+	groupCovered, unknown := false, false
 	covered := map[string]bool{}
 	for _, lock := range locks {
-		level := strings.TrimSpace(fmt.Sprint(mapProp(lock.Properties, "properties")["level"]))
-		if level == "" {
-			level = strings.TrimSpace(fmt.Sprint(lock.Properties["level"]))
+		level := ""
+		if s, ok := mapProp(lock.Properties, "properties")["level"].(string); ok {
+			level = strings.TrimSpace(s)
+		} else if s, ok := lock.Properties["level"].(string); ok {
+			level = strings.TrimSpace(s)
+		}
+		if isExpr(level) {
+			unknown = true
+			continue
 		}
 		if !strings.EqualFold(level, "CanNotDelete") && !strings.EqualFold(level, "ReadOnly") {
 			continue
 		}
-		scope := strings.ToLower(strings.TrimSpace(lock.Scope))
-		if scope != "" && strings.Contains(scope, "/resourcegroups/") && !strings.Contains(scope, "/providers/") {
-			rgCovered = true
+		switch lockCoversGroup(lock.Scope) {
+		case coverYes:
+			groupCovered = true
+		case coverUnknown:
+			unknown = true
 		}
 		for _, r := range targets {
-			if scope != "" && (strings.Contains(scope, strings.ToLower("/providers/"+r.Type+"/")) || strings.HasSuffix(scope, strings.ToLower("/"+lastSeg(r.Name)))) {
+			switch lockCoversResource(lock.Scope, r) {
+			case coverYes:
 				covered[strings.ToLower(r.Type+"|"+r.Name)] = true
+			case coverUnknown:
+				unknown = true
 			}
 		}
 	}
-	if rgCovered {
+	if groupCovered {
 		return sdk.Result{}
 	}
 	var missing []string
@@ -277,14 +412,21 @@ func eval004(in *sdk.Input) sdk.Result {
 		}
 	}
 	if len(missing) > 0 {
-		return sdk.Result{Skipped: &sdk.Skip{Reason: "uncertain: delete locks may exist outside the template for " + strings.Join(missing, ", ")}}
+		reason := "uncertain: delete locks may exist outside the template for "
+		if unknown {
+			reason = "uncertain: a lock scope could not be correlated with the deployment resource group or the resource for "
+		}
+		return sdk.Result{Skipped: &sdk.Skip{Reason: reason + strings.Join(missing, ", ")}}
+	}
+	if len(o.notes) > 0 {
+		return o.result()
 	}
 	return sdk.Result{}
 }
 
 func eval005(in *sdk.Input) sdk.Result {
-	o := &outcome{}
-	for _, r := range byType(in, typeSearch) {
+	o := newOutcome(in)
+	for _, r := range o.of(typeSearch) {
 		sku := strings.ToLower(strings.TrimSpace(r.SKUName))
 		if sku == "free" || sku == "serverless" {
 			o.skips = append(o.skips, r.Name+": search tier has no documented sizing constraints for this rule")
@@ -332,7 +474,7 @@ func eval005(in *sdk.Input) sdk.Result {
 
 func eval006(in *sdk.Input) sdk.Result {
 	snap := runtimegw.BuildSnapshot(in)
-	o := &outcome{}
+	o := newOutcome(in)
 	seen := false
 	raw := map[string]sdk.ARMResource{}
 	for _, r := range in.ARM.Resources() {
@@ -387,8 +529,8 @@ func eval006(in *sdk.Input) sdk.Result {
 }
 
 func eval008(in *sdk.Input) sdk.Result {
-	o := &outcome{}
-	deploys := byType(in, typeDeployment)
+	o := newOutcome(in)
+	deploys := o.of(typeDeployment)
 	index := map[string]sdk.ARMResource{}
 	for _, r := range deploys {
 		index[strings.ToLower(r.Name)] = r
@@ -413,6 +555,10 @@ func eval008(in *sdk.Input) sdk.Result {
 			sibling, ok = index[strings.ToLower(spill)]
 		}
 		if !ok {
+			if o.hasUncertain(typeDeployment) {
+				o.notes = append(o.notes, r.Name+": spilloverDeploymentName may refer to a conditional or looped deployment")
+				continue
+			}
 			o.add(r, "spilloverDeploymentName does not resolve to a deployment in the same account")
 			continue
 		}
@@ -420,6 +566,10 @@ func eval008(in *sdk.Input) sdk.Result {
 			o.add(r, "spilloverDeploymentName must refer to a standard deployment, not another provisioned deployment")
 		}
 		if !sameModel(r, sibling) {
+			if modelHasExpr(r) || modelHasExpr(sibling) {
+				o.notes = append(o.notes, r.Name+": model identity contains an unresolved expression")
+				continue
+			}
 			o.add(r, "spilloverDeploymentName does not target the same model and version")
 		}
 	}
@@ -433,9 +583,13 @@ func eval009(in *sdk.Input) sdk.Result {
 	if !slaRequired && !zoneRequired && !regionalRequired {
 		return sdk.Result{Skipped: &sdk.Skip{Reason: "no-resilience-objective-declared"}}
 	}
-	o := &outcome{}
-	for _, r := range byType(in, typeAPIM) {
+	o := newOutcome(in)
+	for _, r := range o.of(typeAPIM) {
 		sku := strings.TrimSpace(r.SKUName)
+		if sku == "" {
+			o.notes = append(o.notes, r.Name+": APIM sku.name is unresolved")
+			continue
+		}
 		if slaRequired && strings.EqualFold(sku, "Developer") {
 			o.add(r, "Developer tier has no SLA and does not satisfy the declared API gateway objective")
 		}
@@ -470,6 +624,16 @@ func lastSeg(name string) string {
 		return name[i+1:]
 	}
 	return name
+}
+
+func modelHasExpr(r sdk.ARMResource) bool {
+	m, _ := r.Properties["model"].(map[string]any)
+	for _, k := range []string{"format", "name", "version"} {
+		if s, ok := m[k].(string); ok && isExpr(s) {
+			return true
+		}
+	}
+	return false
 }
 
 func sameModel(a, b sdk.ARMResource) bool {

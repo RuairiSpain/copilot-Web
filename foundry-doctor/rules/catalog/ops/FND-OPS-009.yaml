@@ -1,5 +1,5 @@
 id: FND-OPS-009
-version: 1
+version: 2
 group: OPS
 title: "Data-residency regions and deployment SKU"
 description: >-
@@ -33,8 +33,8 @@ evidence:
     documented scope - GlobalStandard, GlobalProvisionedManaged and GlobalBatch are global; DataZoneStandard,
     DataZoneProvisionedManaged and DataZoneBatch are data zone; Standard and ProvisionedManaged are regional (geography);
     DeveloperTier has no data residency guarantee. Report a deployment whose scope is broader than the declared
-    requirement (for example GlobalStandard when a data zone or geography is required), a DeveloperTier deployment in an
-    environment that declares any requirement, and a deployment account, Search, Storage or Cosmos location (AZURE_LOCATION
+    requirement (for example GlobalStandard when a data zone or geography is required), a DeveloperTier deployment when the declared
+    scope (dataResidency.scope) is not global, and a deployment account, Search, Storage or Cosmos location (AZURE_LOCATION
     or resource location) outside the declared allowed regions. A SKU name outside the table is reported as uncertain and
     not as a violation, because the specification types sku.name as a free string. Phase 2, control plane - confirm the
     deployed SKU and account location with the deployments API. Foundry Doctor does not hard-code which regions belong to

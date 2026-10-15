@@ -1,5 +1,5 @@
 id: FND-COST-001
-version: 1
+version: 2
 group: COST
 title: Budget and alerts exist
 description: >-
@@ -38,12 +38,16 @@ evidence:
     Phase 2, offline - in the compiled ARM template, a Microsoft.Consumption/budgets extension resource at subscription
     or resource-group scope with properties.category Cost, a positive amount, a timeGrain, a timePeriod.startDate, and a
     notifications object that contains at least one entry with enabled true, an operator, a threshold (a percentage between
-    0 and 1000 per the specification) and a contact (contactEmails, contactRoles or contactGroups; contactGroups are accepted
-    only at subscription or resource-group scope). Report - no budget resource; budget scope that does not contain the Foundry
-    resource group; no enabled notification; no Forecasted notification (thresholdType Forecasted) as a separate lower-severity
-    finding; more than five notifications (the dictionary allows up to five). Phase 7, control plane - list budgets on the
-    subscription and resource group with the Budgets API and apply the same checks. A budget managed outside the repository
-    is reported as skipped unless the control plane is available. Budget amounts are never judged.
+    0 and 1000 per the specification) and a contact (contactEmails, contactRoles or contactGroups). Report - a budget in the
+    template with no enabled notification; a budget with no Forecasted notification (thresholdType Forecasted); more than
+    five notifications (the dictionary allows up to five). Resources whose Bicep condition is the literal false are not
+    deployed and are ignored; a non-literal condition, a copy loop, or a contact list, enabled flag or thresholdType that is
+    an unresolved ARM expression (a string starting with [ that is not [[) makes the result uncertain, never a finding.
+    Offline, a template that declares no budget is reported as skipped (budget-managed-outside-repository), because a
+    budget is a subscription or resource-group object that is commonly created outside the project repository; the
+    template does not show the scope a budget applies to, so scope is not evaluated offline. Phase 7, control plane - list
+    budgets on the subscription and resource group with the Budgets API, report when none exists, and apply the same
+    checks. Budget amounts are never judged.
   confidence: likely
 recommendation: >-
   Add a Microsoft.Consumption/budgets resource for the subscription or resource group with an actual-cost notification (for
@@ -126,14 +130,15 @@ implementation:
 testability: Phase 2 is offline against fixture ARM JSON; phase 7 uses a recorded Budgets API list. No spend data is read.
 tests:
   positive:
-  - no-budget-in-template
   - budget-without-enabled-notification
-  - budget-scope-excludes-foundry-resource-group
   - budget-has-no-forecasted-notification
   negative:
   - subscription-budget-with-actual-and-forecasted-notifications
   - resource-group-budget-with-action-group
   skipped:
+  - no-budget-in-template
+  - budget-condition-false-or-unresolved
+  - contact-emails-unresolved-expression
   - budget-managed-outside-repository
   - control-plane-unavailable
   - dev-profile

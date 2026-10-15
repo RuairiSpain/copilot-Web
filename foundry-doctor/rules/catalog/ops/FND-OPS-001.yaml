@@ -1,5 +1,5 @@
 id: FND-OPS-001
-version: 1
+version: 2
 group: OPS
 title: Diagnostic settings to Log Analytics
 description: >-
@@ -37,7 +37,10 @@ evidence:
   description: >-
     Offline: in the compiled ARM template, for each in-scope resource (Microsoft.CognitiveServices/accounts, Microsoft.CognitiveServices/accounts/projects,
     Microsoft.Search/searchServices, Microsoft.ApiManagement/service, Microsoft.Storage/storageAccounts/blobServices, Microsoft.DocumentDB/databaseAccounts)
-    find a Microsoft.Insights/diagnosticSettings resource whose scope resolves to it, whose properties.workspaceId resolves
+    find a Microsoft.Insights/diagnosticSettings resource whose scope resolves to it (names are compared literally; when
+    names are ARM expressions the normalised text of the last resourceId argument is compared, and a scope that cannot be
+    correlated is uncertain, never a finding; resources with a literal-false condition are ignored and non-literal conditions
+    are uncertain), whose properties.workspaceId resolves
     to a Microsoft.OperationalInsights/workspaces resource or a non-empty resource ID, and whose properties.logs has at
     least one enabled entry that uses categoryGroup allLogs or audit, or a category listed for that resource type in the
     Azure Monitor supported-logs reference (accounts: Audit, RequestResponse, Trace, AzureOpenAIRequestUsage, ManagedNetworkEvent;
