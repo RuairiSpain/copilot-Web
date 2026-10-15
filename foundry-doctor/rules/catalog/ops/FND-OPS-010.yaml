@@ -1,5 +1,5 @@
 id: FND-OPS-010
-version: 1
+version: 2
 group: OPS
 title: "Model allow/deny lists remain consistent"
 description: >-
@@ -36,7 +36,8 @@ evidence:
     definition documents that asset IDs and publisher names are case-sensitive; a policy parameter that is empty while its
     effect is Deny (the definition then blocks every model, because both lists are empty). Phase 8 adds model router
     deployments - the models the router can select are evaluated against the same lists. Control plane - read the
-    policy assignment and its compliance state. Unresolved parameters are skipped, never passed.
+    policy assignment and its compliance state. A deployment whose model format, name or version contains an ARM expression, or whose Bicep condition is non-literal,
+    is skipped, never passed; a literal-false condition means the deployment is ignored.
   confidence: likely
 recommendation: >-
   Keep one source of truth for approved models, mirror it in the policy assignment parameters allowedPublishers and

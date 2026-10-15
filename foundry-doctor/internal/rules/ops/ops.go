@@ -7,8 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -203,24 +201,11 @@ func policyInt(in *sdk.Input, key string) (int, bool) {
 	}
 }
 
-func unresolvedString(s string) bool { return strings.HasPrefix(strings.TrimSpace(s), "[") }
+func unresolvedString(s string) bool { return isExpr(s) }
 
-func byType(in *sdk.Input, typ string) []sdk.ARMResource {
-	if in == nil || in.ARM == nil {
-		return nil
-	}
+func foundryAccounts(v *view, o *outcome) []sdk.ARMResource {
 	var out []sdk.ARMResource
-	for _, r := range in.ARM.Resources() {
-		if strings.EqualFold(r.Type, typ) {
-			out = append(out, r)
-		}
-	}
-	return out
-}
-
-func foundryAccounts(in *sdk.Input) []sdk.ARMResource {
-	var out []sdk.ARMResource
-	for _, r := range byType(in, "Microsoft.CognitiveServices/accounts") {
+	for _, r := range v.of(o, "Microsoft.CognitiveServices/accounts") {
 		if strings.EqualFold(r.Kind, "AIServices") || strings.EqualFold(r.Kind, "OpenAI") {
 			out = append(out, r)
 		}
@@ -258,6 +243,22 @@ func getString(m map[string]any, path ...string) (string, bool) {
 	return s, ok
 }
 
+func getBool(m map[string]any, path ...string) (bool, bool) {
+	var cur any = m
+	for _, p := range path {
+		mm, ok := cur.(map[string]any)
+		if !ok {
+			return false, false
+		}
+		cur, ok = mm[p]
+		if !ok {
+			return false, false
+		}
+	}
+	b, ok := cur.(bool)
+	return b, ok
+}
+
 func getArray(m map[string]any, path ...string) []any {
 	var cur any = m
 	for _, p := range path {
@@ -274,27 +275,11 @@ func getArray(m map[string]any, path ...string) []any {
 	return a
 }
 
-func repoFiles(root string, rels ...string) map[string]string {
-	out := map[string]string{}
-	if root == "" {
-		return out
-	}
-	for _, rel := range rels {
-		base := filepath.Join(root, rel)
-		_ = filepath.Walk(base, func(path string, info os.FileInfo, err error) error {
-			if err != nil || info == nil || info.IsDir() {
-				return nil
-			}
-			b, err := os.ReadFile(path)
-			if err == nil {
-				out[filepath.ToSlash(strings.TrimPrefix(path, root+string(os.PathSeparator)))] = string(b)
-			}
-			return nil
-		})
-	}
-	return out
-}
-
+// supportedLogs lists the log categories per resource type from the Azure Monitor
+// supported-logs reference, for example
+// https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-cognitiveservices-accounts-logs
+// (companion pages exist per resource type; see the FND-OPS-001 sources, verified
+// 2026-10-04). Categories are lower-cased for comparison.
 var supportedLogs = map[string]map[string]bool{
 	"Microsoft.CognitiveServices/accounts":           {"audit": true, "requestresponse": true, "trace": true, "azureopenairequestusage": true, "managednetworkevent": true},
 	"Microsoft.CognitiveServices/accounts/projects":  {"audit": true, "trace": true},
@@ -302,6 +287,134 @@ var supportedLogs = map[string]map[string]bool{
 	"Microsoft.ApiManagement/service":                {"gatewaylogs": true, "gatewayllmlogs": true, "gatewaymcplogs": true, "websocketconnectionlogs": true, "developerportalauditlogs": true},
 	"Microsoft.Storage/storageAccounts/blobServices": {"storageread": true, "storagewrite": true, "storagedelete": true},
 	"Microsoft.DocumentDB/databaseAccounts":          {"dataplanerequests": true, "controlplanerequests": true, "queryruntimestatistics": true, "partitionkeystatistics": true, "partitionkeyruconsumption": true},
+}
+
+type match int
+
+const (
+	matchNo match = iota
+	matchYes
+	matchUnknown
+)
+
+// scopeMatch decides whether diagnostic setting ds applies to resource r by
+// comparing names. When names are ARM expressions it compares the normalised
+// expression text of the last resourceId argument; any comparison that cannot
+// be proven either way is matchUnknown, never matchNo.
+func scopeMatch(ds, r sdk.ARMResource) match {
+	if strings.TrimSpace(ds.Scope) == "" {
+		return childMatch(ds.Name, r.Name)
+	}
+	if !isExpr(ds.Scope) {
+		if isExpr(r.Name) {
+			return matchUnknown
+		}
+		if refMatches(ds.Scope, r.Name) {
+			return matchYes
+		}
+		return matchNo
+	}
+	fn, args, ok := splitCall(exprBody(ds.Scope))
+	if !ok || !strings.EqualFold(fn, "resourceid") {
+		return matchUnknown
+	}
+	typeIdx := -1
+	for i, a := range args {
+		if q, ok := quoted(a); ok && strings.Contains(q, "/") && strings.Contains(strings.SplitN(q, "/", 2)[0], ".") {
+			typeIdx = i
+			break
+		}
+	}
+	if typeIdx < 0 {
+		return matchUnknown
+	}
+	typ, _ := quoted(args[typeIdx])
+	if !strings.EqualFold(typ, r.Type) {
+		return matchNo
+	}
+	names := args[typeIdx+1:]
+	if len(names) != strings.Count(r.Type, "/") {
+		return matchUnknown
+	}
+	if !isExpr(r.Name) {
+		segs := strings.Split(r.Name, "/")
+		if len(segs) != len(names) {
+			return matchUnknown
+		}
+		result := matchYes
+		for i, a := range names {
+			q, ok := quoted(a)
+			switch {
+			case !ok:
+				result = matchUnknown
+			case !strings.EqualFold(q, segs[i]):
+				return matchNo
+			}
+		}
+		return result
+	}
+	if nameExprEquals(r.Name, names) {
+		return matchYes
+	}
+	return matchUnknown
+}
+
+// nameExprEquals compares a resource-name expression with the name arguments of a
+// resourceId call: a single argument must have identical normalised text; several
+// arguments must equal the arguments of format('{0}/{1}', ...).
+func nameExprEquals(name string, args []string) bool {
+	if len(args) == 1 {
+		return normExpr(name) == normExpr(args[0])
+	}
+	fn, fargs, ok := splitCall(exprBody(name))
+	if !ok || !strings.EqualFold(fn, "format") || len(fargs) != len(args)+1 {
+		return false
+	}
+	if q, ok := quoted(fargs[0]); !ok || strings.Count(q, "/") != len(args)-1 {
+		return false
+	}
+	for i, a := range args {
+		if normExpr(a) != normExpr(fargs[i+1]) {
+			return false
+		}
+	}
+	return true
+}
+
+// childMatch handles a diagnostic setting declared as a child ("<parent>/<name>").
+func childMatch(dsName, rName string) match {
+	if !isExpr(dsName) && !isExpr(rName) {
+		if childOf(dsName, rName) {
+			return matchYes
+		}
+		return matchNo
+	}
+	if isExpr(dsName) && isExpr(rName) {
+		if fn, fargs, ok := splitCall(exprBody(dsName)); ok && strings.EqualFold(fn, "format") && len(fargs) > 1 {
+			for _, a := range fargs[1:] {
+				if normExpr(a) == normExpr(rName) {
+					return matchYes
+				}
+			}
+		}
+	}
+	return matchUnknown
+}
+
+// isWorkspaceRef reports whether an expression is a resourceId() call for a
+// Microsoft.OperationalInsights/workspaces resource, which is the documented
+// workspaceId destination shape.
+func isWorkspaceRef(ws string) bool {
+	fn, args, ok := splitCall(exprBody(ws))
+	if !ok || !strings.EqualFold(fn, "resourceid") {
+		return false
+	}
+	for _, a := range args {
+		if q, ok := quoted(a); ok && strings.EqualFold(q, "Microsoft.OperationalInsights/workspaces") {
+			return true
+		}
+	}
+	return false
 }
 
 func eval001(in *sdk.Input, _ Providers) sdk.Result {
@@ -312,64 +425,100 @@ func eval001(in *sdk.Input, _ Providers) sdk.Result {
 		return sdk.Result{Skipped: &sdk.Skip{Reason: "policy-managed"}}
 	}
 	o := &outcome{}
-	targets := []sdk.ARMResource{}
-	for _, typ := range []string{
+	v := newView(in)
+	targets := v.of(o,
 		"Microsoft.CognitiveServices/accounts",
 		"Microsoft.CognitiveServices/accounts/projects",
 		"Microsoft.Search/searchServices",
 		"Microsoft.ApiManagement/service",
 		"Microsoft.Storage/storageAccounts/blobServices",
 		"Microsoft.DocumentDB/databaseAccounts",
-	} {
-		targets = append(targets, byType(in, typ)...)
-	}
-	settings := byType(in, "Microsoft.Insights/diagnosticSettings")
+	)
+	const dsType = "Microsoft.Insights/diagnosticSettings"
+	settings := v.of(o, dsType)
+	uncertainSettings := v.hasUncertain(dsType)
 	for _, r := range targets {
-		matched := 0
+		matched, unknown, good := 0, 0, 0
+		var problems []string
 		for _, ds := range settings {
-			if !(refMatches(ds.Scope, r.Name) || childOf(ds.Name, r.Name)) {
+			switch scopeMatch(ds, r) {
+			case matchNo:
+				continue
+			case matchUnknown:
+				unknown++
 				continue
 			}
 			matched++
 			ws, _ := getString(ds.Properties, "workspaceId")
 			if ws == "" {
-				o.add(r, "diagnostic setting has no Log Analytics workspace destination")
+				problems = append(problems, "diagnostic setting has no Log Analytics workspace destination")
 				continue
 			}
-			if unresolvedString(ws) {
+			if unresolvedString(ws) && !isWorkspaceRef(ws) {
 				o.skips = append(o.skips, r.Name+": workspaceId is unresolved")
+				good++
+				continue
+			}
+			if s, ok := ds.Properties["logs"].(string); ok && isExpr(s) {
+				o.skips = append(o.skips, r.Name+": logs is unresolved")
+				good++
 				continue
 			}
 			logs := getArray(ds.Properties, "logs")
 			if len(logs) == 0 {
-				o.add(r, "diagnostic setting has metrics only")
+				problems = append(problems, "diagnostic setting has metrics only")
 				continue
 			}
-			okLog := false
+			okLog, logUnresolved := false, false
+			var dsProblems []string
 			for _, raw := range logs {
 				m, _ := raw.(map[string]any)
+				if s, ok := m["enabled"].(string); ok && isExpr(s) {
+					logUnresolved = true
+					continue
+				}
 				enabled, _ := m["enabled"].(bool)
 				if !enabled {
 					continue
 				}
-				if cg, _ := m["categoryGroup"].(string); strings.EqualFold(cg, "allLogs") || strings.EqualFold(cg, "audit") {
+				cg, _ := m["categoryGroup"].(string)
+				cat, _ := m["category"].(string)
+				switch {
+				case isExpr(cg) || isExpr(cat):
+					logUnresolved = true
+				case strings.EqualFold(cg, "allLogs") || strings.EqualFold(cg, "audit"):
 					okLog = true
-					continue
-				}
-				if cat, _ := m["category"].(string); supportedLogs[r.Type][strings.ToLower(cat)] {
+				case supportedLogs[r.Type][strings.ToLower(cat)]:
 					okLog = true
-				} else if cat != "" {
-					o.add(r, "diagnostic setting uses unsupported log category "+cat)
+				case cat != "":
+					dsProblems = append(dsProblems, "diagnostic setting uses unsupported log category "+cat)
 				}
 			}
-			if !okLog {
-				o.add(r, "diagnostic setting has no enabled supported logs")
+			switch {
+			case logUnresolved:
+				o.skips = append(o.skips, r.Name+": log category or enabled flag is unresolved")
+				good++
+			case !okLog:
+				problems = append(problems, "diagnostic setting has no enabled supported logs")
+			default:
+				good++
 			}
+			problems = append(problems, dsProblems...)
 		}
-		if matched == 0 {
+		switch {
+		case matched == 0 && (unknown > 0 || uncertainSettings):
+			o.notes = append(o.notes, r.Name+": diagnostic setting scope cannot be correlated with the resource")
+		case matched == 0:
 			o.add(r, "resource has no diagnostic setting to Log Analytics")
-		} else if matched > 5 {
-			o.add(r, "resource has more than five diagnostic settings")
+		case good == 0 && (unknown > 0 || uncertainSettings):
+			o.notes = append(o.notes, r.Name+": an uncorrelated diagnostic setting may satisfy the rule")
+		default:
+			for _, p := range problems {
+				o.add(r, p)
+			}
+			if matched > 5 {
+				o.add(r, "resource has more than five diagnostic settings")
+			}
 		}
 	}
 	return o.result()
@@ -383,14 +532,16 @@ func eval003(in *sdk.Input, _ Providers) sdk.Result {
 	if in.ARM == nil {
 		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable}}
 	}
-	accounts := foundryAccounts(in)
-	if len(accounts) == 0 {
-		return sdk.Result{}
-	}
 	o := &outcome{}
+	v := newView(in)
+	accounts := foundryAccounts(v, o)
+	if len(accounts) == 0 {
+		return o.result()
+	}
 	hasServiceHealth := false
 	hasMetrics := false
-	for _, r := range in.ARM.Resources() {
+	alertTypes := []string{"Microsoft.Insights/activityLogAlerts", "Microsoft.Insights/metricAlerts", "Microsoft.Insights/scheduledQueryRules"}
+	for _, r := range v.of(o, alertTypes...) {
 		b, _ := json.Marshal(r.Properties)
 		body := strings.ToLower(string(b))
 		switch r.Type {
@@ -406,10 +557,10 @@ func eval003(in *sdk.Input, _ Providers) sdk.Result {
 			}
 		}
 	}
-	if !hasServiceHealth {
+	if !hasServiceHealth && !v.hasUncertain("Microsoft.Insights/activityLogAlerts") {
 		o.add(accounts[0], "no Service Health alert definition was found")
 	}
-	if !hasMetrics {
+	if !hasMetrics && !v.hasUncertain("Microsoft.Insights/metricAlerts", "Microsoft.Insights/scheduledQueryRules") {
 		o.add(accounts[0], "no Foundry model metric alert or scheduled query rule with an action group was found")
 	}
 	return o.result()
@@ -465,10 +616,12 @@ func eval004(in *sdk.Input, _ Providers) sdk.Result {
 			scope[strings.ToLower(s)] = true
 		}
 	}
-	for _, r := range in.ARM.Resources() {
-		if !scope[strings.ToLower(r.Type)] {
-			continue
-		}
+	scopeList := make([]string, 0, len(scope))
+	for s := range scope {
+		scopeList = append(scopeList, s)
+	}
+	slices.Sort(scopeList)
+	for _, r := range newView(in).of(o, scopeList...) {
 		if len(r.Tags) == 0 {
 			o.skips = append(o.skips, r.Name+": tags are unavailable")
 			continue
@@ -519,7 +672,13 @@ func eval005(in *sdk.Input, _ Providers) sdk.Result {
 		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable}}
 	}
 	o := &outcome{}
-	for _, r := range in.ARM.Resources() {
+	namedTypes := []string{
+		"Microsoft.Storage/storageAccounts", "Microsoft.Search/searchServices", "Microsoft.DocumentDB/databaseAccounts",
+		"Microsoft.KeyVault/vaults", "Microsoft.ApiManagement/service", "Microsoft.ContainerRegistry/registries",
+		"Microsoft.Insights/components", "Microsoft.App/containerApps", "Microsoft.CognitiveServices/accounts/projects",
+		"Microsoft.CognitiveServices/accounts",
+	}
+	for _, r := range newView(in).of(o, namedTypes...) {
 		name := r.Name
 		if unresolvedString(name) {
 			o.skips = append(o.skips, r.Type+": name is unresolved")
@@ -588,8 +747,11 @@ func eval006(in *sdk.Input, _ Providers) sdk.Result {
 		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipMissingPolicyKey("logRetention.minimumDays")}}
 	}
 	o := &outcome{}
-	workspaces := byType(in, "Microsoft.OperationalInsights/workspaces")
+	workspaces := newView(in).of(o, "Microsoft.OperationalInsights/workspaces")
 	if len(workspaces) == 0 {
+		if len(o.notes) > 0 {
+			return o.result()
+		}
 		return sdk.Result{Skipped: &sdk.Skip{Reason: "workspace-is-existing-resource-not-in-template"}}
 	}
 	for _, ws := range workspaces {
@@ -615,35 +777,62 @@ func eval006(in *sdk.Input, _ Providers) sdk.Result {
 		if ret < 4 || ret > 730 {
 			o.add(ws, "workspace retentionInDays is outside the documented analytics range")
 		}
-		if purge, _ := getString(ws.Properties, "features", "immediatePurgeDataOn30Days"); strings.EqualFold(purge, "true") && minDays > 30 {
+		// features.immediatePurgeDataOn30Days is a boolean in the workspace schema.
+		purge, purgeOK := getBool(ws.Properties, "features", "immediatePurgeDataOn30Days")
+		if s, isStr := getString(ws.Properties, "features", "immediatePurgeDataOn30Days"); isStr && isExpr(s) {
+			o.skips = append(o.skips, ws.Name+": immediatePurgeDataOn30Days is unresolved")
+		} else if purgeOK && purge && minDays > 30 {
 			o.add(ws, "immediate purge on 30 days conflicts with the configured retention minimum")
 		}
 	}
 	return o.result()
 }
 
+// azureYAMLLocation anchors repository-level findings on azure.yaml.
+func azureYAMLLocation(in *sdk.Input) sdk.Location {
+	if in != nil && in.AzureYAML != nil {
+		if p := in.AzureYAML.Path(); p != "" {
+			return sdk.Location{File: p}
+		}
+	}
+	return sdk.Location{File: "azure.yaml"}
+}
+
+const pipelineSearched = ".github/workflows, .azdo/pipelines and .azuredevops/pipelines (.yml and .yaml)"
+
 func eval007(in *sdk.Input, p Providers) sdk.Result {
 	if profileTier(in.Profile) == "dev" {
 		return sdk.Result{Skipped: &sdk.Skip{Reason: "dev-profile"}}
 	}
-	root := docRoot(in)
-	if provider := yScalar(yChild(yChild(root, "pipeline"), "provider")); provider == "github" || provider == "azdo" {
-		return sdk.Result{}
-	}
 	if p.Root == "" {
 		return sdk.Result{Skipped: &sdk.Skip{Reason: "repository-root-not-available"}}
 	}
-	files := repoFiles(p.Root, ".github/workflows", ".azdo/pipelines", ".azuredevops/pipelines")
-	if len(files) == 0 {
-		return sdk.Result{Findings: []sdk.Finding{{Evidence: "no supported CI/CD pipeline definition was found in the repository"}}}
-	}
-	for _, body := range files {
-		if strings.Contains(strings.ToLower(body), "azd ") {
-			return sdk.Result{}
+	// The azure.yaml pipeline: section is configuration, not evidence that a
+	// pipeline file exists, so only pipeline files count.
+	base, hasGit := gitRoot(p.Root)
+	scan := scanPipelines(base)
+	for _, f := range scan.Files {
+		for _, c := range f.Commands {
+			if invokesAzd(c) {
+				return sdk.Result{}
+			}
 		}
 	}
-	return sdk.Result{Skipped: &sdk.Skip{Reason: "uncertain: ci-system-other-than-github-or-azure-pipelines or repository workflow does not invoke azd explicitly"}}
+	switch {
+	case len(scan.Files) > 0:
+		return sdk.Result{Skipped: &sdk.Skip{Reason: "uncertain: no pipeline run step invokes azd provision, deploy or up; other deployment tools are valid and other CI systems are not detected"}}
+	case scan.Skipped > 0:
+		return sdk.Result{Skipped: &sdk.Skip{Reason: "uncertain: pipeline files exist but were not read (symlink, oversize, invalid YAML or file-count cap)"}}
+	case !hasGit:
+		return sdk.Result{Skipped: &sdk.Skip{Reason: "uncertain: no .git directory was found above the project, so only the project directory was searched for pipeline files"}}
+	}
+	return sdk.Result{Findings: []sdk.Finding{{
+		Location: azureYAMLLocation(in),
+		Evidence: "no CI/CD pipeline definition was found in " + pipelineSearched + " from the repository root; other CI systems are not detected",
+	}}}
 }
+
+var reEvalRun = regexp.MustCompile(`(?i)(^|[\s;&|(` + "`" + `])azd\s+ai\s+agent\s+eval\s+run\b`)
 
 func eval008(in *sdk.Input, p Providers) sdk.Result {
 	if profileTier(in.Profile) == "dev" {
@@ -664,34 +853,62 @@ func eval008(in *sdk.Input, p Providers) sdk.Result {
 		return sdk.Result{Skipped: &sdk.Skip{Reason: "repository-root-not-available"}}
 	}
 	o := &outcome{}
-	evalPath := filepath.Join(p.Root, "eval.yaml")
-	if _, err := os.Stat(evalPath); err != nil {
-		o.findings = append(o.findings, sdk.Finding{Evidence: "eval.yaml is missing from the repository root"})
-		return o.result()
+	loc := azureYAMLLocation(in)
+	addF := func(l sdk.Location, ev string) {
+		o.findings = append(o.findings, sdk.Finding{Location: l, Evidence: ev})
 	}
-	body, _ := os.ReadFile(evalPath)
-	text := strings.ToLower(string(body))
-	if !strings.Contains(text, "evaluators") {
-		o.findings = append(o.findings, sdk.Finding{Evidence: "eval.yaml does not declare evaluators"})
+	body, ok, skipped := readRootFile(p.Root, "eval.yaml")
+	switch {
+	case skipped:
+		o.skips = append(o.skips, "eval.yaml exists but was not read (symlink, oversize or unreadable)")
+	case !ok:
+		addF(sdk.Location{File: "eval.yaml"}, "eval.yaml is missing from the project directory")
+	default:
+		var doc yaml.Node
+		if err := yaml.Unmarshal(body, &doc); err != nil || len(doc.Content) == 0 {
+			o.skips = append(o.skips, "eval.yaml is not valid YAML")
+			break
+		}
+		top := doc.Content[0]
+		if ev := yChild(top, "evaluators"); ev == nil || (ev.Kind != yaml.AliasNode && len(ev.Content) == 0 && strings.TrimSpace(ev.Value) == "") {
+			addF(sdk.Location{File: "eval.yaml"}, "eval.yaml does not declare evaluators")
+		}
+		if yChild(top, "dataset") == nil && yChild(top, "dataset_file") == nil {
+			addF(sdk.Location{File: "eval.yaml"}, "eval.yaml does not declare a dataset reference")
+		}
 	}
-	if !strings.Contains(text, "dataset") {
-		o.findings = append(o.findings, sdk.Finding{Evidence: "eval.yaml does not declare a dataset reference"})
-	}
-	files := repoFiles(p.Root, ".github/workflows", ".azdo/pipelines", ".azuredevops/pipelines")
+	base, hasGit := gitRoot(p.Root)
+	scan := scanPipelines(base)
 	found := false
-	for _, body := range files {
-		lower := strings.ToLower(body)
-		idxEval := strings.Index(lower, "azd ai agent eval run")
-		if idxEval < 0 {
+	for _, f := range scan.Files {
+		runs := false
+		for _, c := range f.Commands {
+			if matchLines(c, reEvalRun) {
+				runs = true
+				break
+			}
+		}
+		if !runs {
 			continue
 		}
 		found = true
-		if idxProd := strings.Index(lower, "production"); idxProd >= 0 && idxEval > idxProd {
-			o.findings = append(o.findings, sdk.Finding{Evidence: "pipeline runs azd ai agent eval run only after a production marker"})
+		idxEval := -1
+		if m := reEvalRun.FindStringIndex(f.Flat); m != nil {
+			idxEval = m[0]
+		}
+		if idxProd := strings.Index(f.Flat, "production"); idxProd >= 0 && idxEval > idxProd {
+			addF(sdk.Location{File: f.Path}, "pipeline runs azd ai agent eval run only after a production marker")
 		}
 	}
 	if !found {
-		o.findings = append(o.findings, sdk.Finding{Evidence: "no repository pipeline step runs azd ai agent eval run"})
+		switch {
+		case scan.Skipped > 0:
+			o.skips = append(o.skips, "pipeline files exist but were not read (symlink, oversize, invalid YAML or file-count cap)")
+		case len(scan.Files) == 0 && !hasGit:
+			o.skips = append(o.skips, "no .git directory was found above the project, so only the project directory was searched for pipeline files")
+		default:
+			addF(loc, "no pipeline run step runs azd ai agent eval run in "+pipelineSearched)
+		}
 	}
 	return o.result()
 }
@@ -706,6 +923,10 @@ func eval009(in *sdk.Input, _ Providers) sdk.Result {
 		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipMissingPolicyKey("dataResidency.scope")}}
 	}
 	scope, _ := scopeAny.(string)
+	scope = strings.ToLower(strings.TrimSpace(scope))
+	if in.ARM == nil {
+		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable}}
+	}
 	skuAllow := map[string]bool{}
 	for _, s := range policyStrings(in, "dataResidency.deploymentSkus") {
 		skuAllow[strings.ToLower(s)] = true
@@ -715,12 +936,15 @@ func eval009(in *sdk.Input, _ Providers) sdk.Result {
 		allowedRegion[strings.ToLower(strings.ReplaceAll(s, " ", ""))] = true
 	}
 	o := &outcome{}
-	for _, r := range byType(in, "Microsoft.CognitiveServices/accounts/deployments") {
+	v := newView(in)
+	for _, r := range v.of(o, "Microsoft.CognitiveServices/accounts/deployments") {
 		sku := strings.ToLower(r.SKUName)
 		switch {
 		case sku == "":
 			o.skips = append(o.skips, r.Name+": sku.name is unresolved")
-		case strings.EqualFold(r.SKUName, "DeveloperTier"):
+		case sku == "developertier" && scope != "global":
+			// DeveloperTier is outside any residency guarantee; with a global
+			// scope requirement there is nothing to violate.
 			o.add(r, "DeveloperTier has no documented data residency guarantee")
 		case len(skuAllow) > 0 && !skuAllow[sku]:
 			o.add(r, "deployment SKU is outside the configured residency SKU allow-list")
@@ -730,16 +954,13 @@ func eval009(in *sdk.Input, _ Providers) sdk.Result {
 			o.add(r, "deployment SKU is not a data-zone SKU under a declared data-zone requirement")
 		}
 	}
-	for _, r := range in.ARM.Resources() {
-		switch r.Type {
-		case "Microsoft.CognitiveServices/accounts", "Microsoft.Search/searchServices", "Microsoft.Storage/storageAccounts", "Microsoft.DocumentDB/databaseAccounts":
-			if r.Region == "" || unresolvedString(r.Region) {
-				o.skips = append(o.skips, r.Name+": resource location is unresolved")
-				continue
-			}
-			if len(allowedRegion) > 0 && !allowedRegion[strings.ToLower(strings.ReplaceAll(r.Region, " ", ""))] {
-				o.add(r, "resource location is outside the declared residency region list")
-			}
+	for _, r := range v.of(o, "Microsoft.CognitiveServices/accounts", "Microsoft.Search/searchServices", "Microsoft.Storage/storageAccounts", "Microsoft.DocumentDB/databaseAccounts") {
+		if r.Region == "" || unresolvedString(r.Region) {
+			o.skips = append(o.skips, r.Name+": resource location is unresolved")
+			continue
+		}
+		if len(allowedRegion) > 0 && !allowedRegion[strings.ToLower(strings.ReplaceAll(r.Region, " ", ""))] {
+			o.add(r, "resource location is outside the declared residency region list")
 		}
 	}
 	return o.result()
@@ -774,11 +995,20 @@ func eval010(in *sdk.Input, _ Providers) sdk.Result {
 			o.findings = append(o.findings, sdk.Finding{Evidence: "model allow and deny lists overlap on " + a})
 		}
 	}
-	for _, r := range byType(in, "Microsoft.CognitiveServices/accounts/deployments") {
-		props := r.Properties
-		model, _ := props["model"].(map[string]any)
-		id := modelID(fmt.Sprint(model["format"]), fmt.Sprint(model["name"]), fmt.Sprint(model["version"]))
-		if unresolvedString(id) || id == "/" {
+	v := newView(in)
+	for _, r := range v.of(o, "Microsoft.CognitiveServices/accounts/deployments") {
+		model, _ := r.Properties["model"].(map[string]any)
+		format, _ := model["format"].(string)
+		name, _ := model["name"].(string)
+		version, _ := model["version"].(string)
+		// Compiled Bicep keeps parameters as expressions; any expression in
+		// format, name or version makes the model identity unknown.
+		if isExpr(format) || isExpr(name) || isExpr(version) {
+			o.skips = append(o.skips, r.Name+": deployment model format, name or version is an unresolved expression")
+			continue
+		}
+		id := modelID(format, name, version)
+		if id == "/" {
 			o.skips = append(o.skips, r.Name+": deployment model is unresolved")
 			continue
 		}
@@ -789,7 +1019,7 @@ func eval010(in *sdk.Input, _ Providers) sdk.Result {
 			o.add(r, "deployed model is not allowed by the configured allow list")
 		}
 	}
-	for _, r := range byType(in, "Microsoft.Authorization/policyAssignments") {
+	for _, r := range v.of(o, "Microsoft.Authorization/policyAssignments") {
 		id, _ := getString(r.Properties, "policyDefinitionId")
 		if !strings.Contains(strings.ToLower(id), "aafe3651-cb78-4f68-9f81-e7e41509110f") {
 			continue

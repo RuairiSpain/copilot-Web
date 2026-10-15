@@ -1,5 +1,5 @@
 id: FND-REL-004
-version: 1
+version: 2
 group: REL
 title: Delete locks on stateful services
 description: The Foundry account and the customer-managed state stores it depends on (Cosmos DB, AI Search, Storage) should
@@ -30,7 +30,9 @@ compatibility:
   notes: "No azd dependency: reads compiled ARM JSON or ARM control plane Microsoft.Authorization/locks 2020-05-01 / 2020-05-01: stable) - resources/resource-manager/Microsoft.Authorization/locks/stable//locks.json."
 evidence:
   description: 'Compiled ARM: a Microsoft.Authorization/locks resource with properties.level ''CanNotDelete'' (or ''ReadOnly'',
-    which is stricter) whose scope or parent is the resource or an enclosing resource group. Live: list locks at the resource,
+    which is stricter) whose scope is the resource, or the deployment resource group (a lock without a scope, or scope resourceGroup().id,
+    in the same template). The input carries no deployment resource-group name, so a lock on a literally named or
+    otherwise computed resource group is uncertain. Live: list locks at the resource,
     resource group and subscription (requires Microsoft.Authorization/locks/read). Locks inherit down from parent scopes and
     the most restrictive applies. Finding: none of Microsoft.CognitiveServices/accounts, Microsoft.DocumentDB/databaseAccounts,
     Microsoft.Search/searchServices, Microsoft.Storage/storageAccounts used by the project is covered. A lock created outside
