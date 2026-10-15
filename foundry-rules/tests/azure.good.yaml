@@ -1,0 +1,27 @@
+name: good-project
+services:
+  ai-project:
+    host: azure.ai.project
+  github-conn:
+    host: azure.ai.connection
+    uses: [ai-project]
+  agent-tools:
+    host: azure.ai.toolbox
+    uses: [ai-project, github-conn]
+    tools:
+      - type: mcp
+        connection: github-conn
+        allowed_tools: [search_issues, get_issue]
+  triage:
+    host: azure.ai.agent
+    project: src/triage
+    uses: [ai-project, github-conn, agent-tools]
+    kind: hosted
+    name: triage-agent
+    toolboxes: [agent-tools]
+  summarizer:
+    host: azure.ai.agent
+    project: src/summarizer
+    uses: [ai-project]
+    kind: hosted
+    name: summarizer-agent

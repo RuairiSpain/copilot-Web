@@ -1,0 +1,55 @@
+[
+  {
+    "type": "Microsoft.Search/searchServices",
+    "apiVersion": "2025-05-01",
+    "name": "search-size-a",
+    "location": "westeurope",
+    "sku": {
+      "name": "standard"
+    },
+    "properties": {
+      "replicaCount": 3,
+      "partitionCount": 5
+    }
+  },
+  {
+    "type": "Microsoft.Search/searchServices",
+    "apiVersion": "2025-05-01",
+    "name": "search-size-b",
+    "location": "westeurope",
+    "sku": {
+      "name": "basic"
+    },
+    "properties": {
+      "replicaCount": 4,
+      "partitionCount": 1
+    }
+  },
+  {
+    "type": "Microsoft.Search/searchServices",
+    "apiVersion": "2025-05-01",
+    "name": "search-size-c",
+    "location": "westeurope",
+    "sku": {
+      "name": "standard"
+    },
+    "properties": {
+      "replicaCount": 12,
+      "partitionCount": 4
+    }
+  },
+  {
+    "type": "Microsoft.Search/searchServices",
+    "apiVersion": "2025-05-01",
+    "name": "search-size-d",
+    "location": "westeurope",
+    "sku": {
+      "name": "standard"
+    },
+    "properties": {
+      "replicaCount": 2,
+      "partitionCount": 2,
+      "hostingMode": "HighDensity"
+    }
+  }
+]
