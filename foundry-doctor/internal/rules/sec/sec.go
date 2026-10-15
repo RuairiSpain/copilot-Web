@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
+	"sort"
 	"strings"
 
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/armexpr"
@@ -91,6 +92,19 @@ type acc struct {
 	// conditional: a resource that would be evaluated may not be deployed
 	// (reason foundrylink.SkipConditional).
 	conditional bool
+	// notes names resources that could not be evaluated. When a rule has
+	// findings, they are appended to the first finding so the unevaluated
+	// resources stay visible (review M3; sdk.Result has no skip list).
+	notes []string
+}
+
+// note records why r was not evaluated.
+func (a *acc) note(r sdk.ARMResource, why string) {
+	n := r.Name
+	if len(n) > 60 {
+		n = n[:57] + "..."
+	}
+	a.notes = append(a.notes, n+": "+why)
 }
 
 func (a *acc) add(r sdk.ARMResource, evidence string) {
@@ -119,6 +133,7 @@ func (a *acc) addRec(r sdk.ARMResource, key, evidence, recommendation string) {
 func (a *acc) maybe(r sdk.ARMResource) bool {
 	if presence(r) == armexpr.MaybeDeployed {
 		a.conditional = true
+		a.note(r, foundrylink.SkipConditional+": deployed only under a condition or loop the template cannot resolve")
 		return true
 	}
 	return false
@@ -127,6 +142,17 @@ func (a *acc) maybe(r sdk.ARMResource) bool {
 // result: findings win; otherwise uncertainty skips; otherwise pass.
 func (a *acc) result() sdk.Result {
 	if len(a.fs) > 0 {
+		notes := append([]string(nil), a.notes...)
+		if a.scopeUncertain {
+			notes = append(notes, foundrylink.SkipScopeUncertain+": a resource may be Foundry-related but could not be correlated")
+		}
+		if a.unresolved && len(notes) == 0 {
+			notes = append(notes, SkipUnresolved+": a decisive value is an unresolved expression")
+		}
+		if len(notes) > 0 {
+			sort.Strings(notes)
+			a.fs[0].Evidence += fmt.Sprintf(" [note: %d resource check(s) not evaluated by this rule: %s]", len(notes), strings.Join(notes, "; "))
+		}
 		return sdk.Result{Findings: a.fs}
 	}
 	switch {
@@ -452,8 +478,19 @@ func overlaps(r string, blocked []netip.Prefix) bool {
 func evalSEC006(in *sdk.Input) sdk.Result {
 	var a acc
 	seen := false
+	set := foundrylink.Collect(in.ARM)
 	for _, sp := range ipSpecs() {
 		for _, r := range ofType(in, sp.typ) {
+			// Only Foundry-related resources are in scope: a Foundry account
+			// (kind AIServices) or a Cosmos DB, Key Vault, Search or Storage
+			// resource that a Foundry connection or capability host links to.
+			if sp.typ == typeAccounts {
+				if !strings.EqualFold(r.Kind, "AIServices") {
+					continue
+				}
+			} else if !linkOf(&a, set, r) {
+				continue
+			}
 			seen = true
 			if a.maybe(r) {
 				continue
@@ -464,6 +501,7 @@ func evalSEC006(in *sdk.Input) sdk.Result {
 			}
 			if unresolved(v) {
 				a.unresolved = true
+				a.note(r, "ipRules is an unresolved expression")
 				continue
 			}
 			list, _ := v.([]any)
@@ -472,6 +510,7 @@ func evalSEC006(in *sdk.Input) sdk.Result {
 				val, st := str(m, sp.key)
 				if st == expr {
 					a.unresolved = true
+					a.note(r, "an ipRules value is an unresolved expression")
 					continue
 				}
 				if st != isTrue {
@@ -494,7 +533,10 @@ func evalSEC006(in *sdk.Input) sdk.Result {
 			}
 		}
 	}
-	if !seen {
+	if !seen && !a.scopeUncertain && !a.conditional {
+		if len(ofType(in, typeStorage))+len(ofType(in, typeCosmos))+len(ofType(in, typeKeyVault))+len(ofType(in, typeSearch)) > 0 {
+			return skip(SkipOutOfScope)
+		}
 		return notApplicable()
 	}
 	return a.result()

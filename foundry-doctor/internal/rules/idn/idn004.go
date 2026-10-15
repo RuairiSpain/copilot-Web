@@ -3,6 +3,7 @@ package idn
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/armexpr"
@@ -135,6 +136,55 @@ func evalCondition(r sdk.ARMResource) (condVerdict, string) {
 	return condRestrictive, ""
 }
 
+// variableLookup is implemented by an ARM model that exposes the compiled
+// template's literal variables. The current armmodel does not, so a role
+// definition ID held in variables('x') is reported as unresolved with that
+// real cause; when a model offers the lookup the literal is substituted.
+type variableLookup interface {
+	Variable(name string) (any, bool)
+}
+
+var variablesCallRe = regexp.MustCompile(`(?i)variables\(\s*'([^']*)'\s*\)`)
+
+// resolveRoleDefinition returns the role definition GUID. When it cannot, why
+// names the real cause.
+func resolveRoleDefinition(in *sdk.Input, def string) (guid, why string, ok bool) {
+	if g, ok := armexpr.RoleDefinitionGUID(def); ok {
+		return g, "", true
+	}
+	if !armexpr.IsExpression(def) {
+		return "", "roleDefinitionId is not a role definition GUID", false
+	}
+	names := variablesCallRe.FindAllStringSubmatch(def, -1)
+	if len(names) == 0 {
+		return "", "roleDefinitionId is an expression that does not end in a literal role GUID", false
+	}
+	lookup, canLookup := in.ARM.(variableLookup)
+	resolved := def
+	for _, m := range names {
+		if !canLookup {
+			return "", "roleDefinitionId reads variables('" + m[1] + "') and the compiled template variables are not available to the rule", false
+		}
+		v, found := lookup.Variable(m[1])
+		lit, isStr := v.(string)
+		if !found || !isStr || armexpr.IsExpression(lit) {
+			return "", "roleDefinitionId reads variables('" + m[1] + "') which is not a literal string", false
+		}
+		resolved = strings.ReplaceAll(resolved, m[0], "'"+lit+"'")
+	}
+	if g, ok := armexpr.RoleDefinitionGUID(resolved); ok {
+		return g, "", true
+	}
+	return "", "roleDefinitionId does not resolve to a literal role GUID after substituting variables", false
+}
+
+func scopeDescription(scope string) string {
+	if strings.TrimSpace(scope) == "" {
+		return "deployment scope"
+	}
+	return fmt.Sprintf("scope %q", scope)
+}
+
 func evalIDN004(in *sdk.Input) sdk.Result {
 	var a acc
 	apps := appIdentityResources(in)
@@ -142,6 +192,11 @@ func evalIDN004(in *sdk.Input) sdk.Result {
 	evaluated := false
 	excludedOnly := false
 	missingData := false
+	var reasons []string
+	why := func(r sdk.ARMResource, msg string) {
+		a.unres(r, msg)
+		reasons = append(reasons, msg)
+	}
 	for _, r := range ofType(in, typeRoleAssign) {
 		if a.maybe(r) {
 			continue
@@ -154,10 +209,10 @@ func evalIDN004(in *sdk.Input) sdk.Result {
 		// Compiled Bicep writes subscriptionResourceId('...roleDefinitions',
 		// '<guid>') (or extensionResourceId / format); the last literal GUID
 		// is the role. A role that is not a literal GUID cannot be judged.
-		role, ok := armexpr.RoleDefinitionGUID(def)
+		role, msg, ok := resolveRoleDefinition(in, def)
 		if !ok {
 			if armexpr.IsExpression(def) {
-				a.unresolved = true
+				why(r, msg)
 			}
 			continue
 		}
@@ -174,30 +229,39 @@ func evalIDN004(in *sdk.Input) sdk.Result {
 		default:
 			continue
 		}
+		// Classify the principal first: a principalId that provably is a
+		// Foundry identity is evaluated whether or not principalType is set.
 		pt, ptPresent, ptExpr := strOf(r.Properties, "principalType")
-		if ptExpr || !ptPresent {
-			a.unresolved = true // cannot tell whether the principal is an application identity
-			continue
+		pid, pidPresent, _ := strOf(r.Properties, "principalId")
+		if v, ok := r.Properties["principalId"].(string); ok && unresolved(v) {
+			pid = v
 		}
-		switch pt {
-		case "AgentServicePrincipal", "AgentUser":
-		case "ServicePrincipal":
-			pid, pidPresent, _ := strOf(r.Properties, "principalId")
-			if v, ok := r.Properties["principalId"].(string); ok && unresolved(v) {
-				pid = v
-			}
+		provableApp := pidPresent && classifyPrincipal(pid, apps) == principalApp
+		switch {
+		case !ptExpr && (pt == "AgentServicePrincipal" || pt == "AgentUser"):
+		case !ptExpr && ptPresent && pt != "ServicePrincipal" && pt != "":
+			continue // human and group principals are out of scope
+		default: // ServicePrincipal, not set, or an unresolved expression
 			if pidPresent && excluded[strings.ToLower(strings.TrimSpace(pid))] {
 				excludedOnly = true
 				continue
 			}
-			// A principal that cannot be tied to an application identity may be a
-			// deployment identity; that is uncertain, never a failure.
-			if !pidPresent || classifyPrincipal(pid, apps) != principalApp {
-				a.unresolved = true
+			// A principal that cannot be tied to an application identity may be
+			// a deployment identity or a person; that is uncertain, never a
+			// failure.
+			if !provableApp {
+				switch {
+				case !pidPresent:
+					why(r, "principalId is not set")
+				case ptExpr:
+					why(r, "principalType is an unresolved expression and principalId is not a provable Foundry identity")
+				case !ptPresent || pt == "":
+					why(r, "principalType is not set and principalId is not a provable Foundry identity")
+				default:
+					why(r, "principalId is not a provable Foundry identity (it may be a deployment identity)")
+				}
 				continue
 			}
-		default:
-			continue // human and group principals are out of scope
 		}
 		// An empty scope is the deployment scope (resource group, subscription
 		// or management group), which is broad. Expressions are classified by
@@ -205,34 +269,37 @@ func evalIDN004(in *sdk.Input) sdk.Result {
 		// resourceId() calls).
 		lvl := armexpr.ClassifyScope(r.Scope)
 		if lvl == armexpr.ScopeUnknown {
-			a.unresolved = true
+			why(r, "scope is an expression that cannot be classified")
 			continue
 		}
 		evaluated = true
 		var condNote string
 		if role == roleUAA || role == roleRBACAdmin {
-			switch v, why := evalCondition(r); v {
+			switch v, cwhy := evalCondition(r); v {
 			case condRestrictive:
 				continue
 			case condUncertain:
-				a.unresolved = true
+				why(r, "condition cannot be evaluated: "+cwhy)
 				continue
 			case condIneffective:
-				condNote = "; condition is ineffective: " + why
+				condNote = "; condition is ineffective: " + cwhy
 			}
 		}
 		switch {
 		case lvl == armexpr.ScopeBroad:
-			a.add(r, fmt.Sprintf("%s granted to an application identity at broad scope %q%s", name, r.Scope, condNote))
+			a.addKey(r, "scope:"+role, fmt.Sprintf("%s granted to an application identity at broad %s%s", name, scopeDescription(r.Scope), condNote))
 		case lvl == armexpr.ScopeResource && role != roleContributor:
-			a.add(r, fmt.Sprintf("%s granted to an application identity at resource scope %q%s", name, r.Scope, condNote))
+			a.addKey(r, "scope:"+role, fmt.Sprintf("%s granted to an application identity at resource %s%s", name, scopeDescription(r.Scope), condNote))
 		}
+		// Contributor at a single Foundry resource is deliberately not reported
+		// (catalogue product decision): it is evaluated and compliant here.
 	}
 	switch {
 	case len(a.fs) > 0:
-		return sdk.Result{Findings: a.fs}
+		return sdk.Result{Findings: withNotes(a.fs, a.notes)}
 	case a.unresolved:
-		return skip(SkipUnresolved)
+		sort.Strings(reasons)
+		return skip(SkipUnresolved + ": " + strings.Join(dedupe(reasons), "; "))
 	case a.conditional:
 		return skip(foundrylink.SkipConditional)
 	case evaluated:
@@ -244,6 +311,16 @@ func evalIDN004(in *sdk.Input) sdk.Result {
 	default:
 		return sdk.Result{}
 	}
+}
+
+func dedupe(s []string) []string {
+	var out []string
+	for i, x := range s {
+		if i == 0 || x != s[i-1] {
+			out = append(out, x)
+		}
+	}
+	return out
 }
 
 func configuredDeploymentPrincipals(in *sdk.Input) map[string]bool {

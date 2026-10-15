@@ -1,5 +1,5 @@
 id: FND-IDN-003
-version: 2
+version: 3
 group: IDN
 title: "Role assignments use object IDs and principalType"
 description: >-
@@ -126,6 +126,7 @@ tests:
   uncertain:
     - agent-identity-principal-type-choice
 notes: >-
+  Review M8: a client ID read through a .clientId, .appId or .applicationId property access is reported with the full wording; a parameter or variable that only has a client-ID-like name is reported as a name match that needs verification (the engine takes confidence from the catalogue, so the distinction is in the evidence text).
   Unverified: whether omitting principalType always fails; the sources say the assignment "can fail
   in some cases" because of replication delay, so the omission is flagged as a reliability risk, not
   a certain failure. The 2022-04-01 spec shows a default of User for principalType; the rule does not

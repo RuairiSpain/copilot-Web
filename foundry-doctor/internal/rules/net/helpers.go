@@ -3,6 +3,7 @@
 package net
 
 import (
+	"fmt"
 	"net/netip"
 	"regexp"
 	"sort"
@@ -277,6 +278,24 @@ type injection struct {
 	agent   bool
 }
 
+// injectionsUncertain reports whether networkInjections is present but is an
+// ARM expression (for example a ternary over a parameter that yields an array
+// or null()), so the injection list cannot be read from the compiled template.
+func injectionsUncertain(r sdk.ARMResource) bool {
+	v, ok := get(r.Properties, "networkInjections")
+	if !ok {
+		return false
+	}
+	s, isStr := v.(string)
+	return isStr && unresolved(s)
+}
+
+// uncertainInjectionReason is the skip text for an expression-valued
+// networkInjections. It has no by-design head, so `--strict` still sees it.
+func uncertainInjectionReason(r sdk.ARMResource) string {
+	return r.Name + ": uncertain: networkInjections is an ARM expression the template cannot resolve (parameter file needed), so the agent subnet injection is unknown"
+}
+
 func injections(r sdk.ARMResource) []injection {
 	var out []injection
 	for _, v := range arr(r.Properties, "networkInjections") {
@@ -500,6 +519,12 @@ func (o *outcome) result() sdk.Result {
 		}
 		return a.Evidence < b.Evidence
 	})
+	// sdk.Result cannot carry skips next to findings, so the first finding
+	// names the resources that were not evaluated (review M3).
+	if len(o.skips) > 0 && len(o.findings) > 0 {
+		sort.Strings(o.skips)
+		o.findings[0].Evidence += fmt.Sprintf(" [note: %d resource check(s) not evaluated by this rule: %s]", len(o.skips), strings.Join(o.skips, "; "))
+	}
 	return sdk.Result{Findings: o.findings}
 }
 

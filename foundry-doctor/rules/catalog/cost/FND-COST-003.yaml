@@ -1,5 +1,5 @@
 id: FND-COST-003
-version: 1
+version: 2
 group: COST
 title: Gateway token limits exist
 description: >-
@@ -107,6 +107,7 @@ tests:
   - policy-uses-expressions-or-unresolved-fragment
   - phase-8-gateway-rules-not-enabled
 notes: >-
+  Findings carry a Finding.Key per sub-check so fingerprints are stable.
   Product opinion: the documentation describes the policy but does not require it. Unverified - the older azure-openai-token-limit
   policy name and its attribute parity (the llm-token-limit page was the only token-limit page found in the clone); availability
   per APIM tier beyond the page's availability include (Developer, Basic, Standard, Premium, Basic v2, Standard v2, Premium

@@ -136,6 +136,10 @@ func (r net002) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 			o.skip(a.Name + ": account is not private; rule applies to the private standard-agent setup only")
 			continue
 		}
+		if injectionsUncertain(a) {
+			o.skip(uncertainInjectionReason(a))
+			continue
+		}
 		if isManagedNetwork(a) {
 			o.skip(a.Name + ": managed-network mode is out of scope")
 			continue
@@ -301,13 +305,33 @@ func (r net003) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 	if policyBool(in, "network.centralDns") {
 		return sdk.Result{Skipped: &sdk.Skip{RuleID: r.ID(), Reason: "central-dns: DNS declared as centrally managed in policy"}}, nil
 	}
+	scope := newFoundryScope(in.ARM)
+	// The cloud is needed only when a private endpoint is in scope. With none,
+	// the rule does not apply (not-applicable); with an in-scope endpoint and
+	// no determinable cloud, the missing policy key is the real cause.
+	inScope, maybeInScope := false, false
+	for _, pe := range byType(in.ARM, tPE) {
+		for _, c := range peConns(pe) {
+			switch scope.classify(c.target) {
+			case foundrylink.Linked:
+				inScope = true
+			case foundrylink.Uncertain:
+				maybeInScope = true
+			}
+		}
+	}
+	if !inScope && !maybeInScope {
+		return sdk.Result{Skipped: &sdk.Skip{RuleID: r.ID(), Reason: sdk.SkipNotApplicable + ": no private endpoint targets the Foundry account or a linked store"}}, nil
+	}
 	cloud := detectCloud(in)
 	if cloud == "" {
-		return sdk.Result{Skipped: &sdk.Skip{RuleID: r.ID(), Reason: "cloud undeterminable: set policy.network.cloud to public, usgov or china"}}, nil
+		if !inScope {
+			return sdk.Result{Skipped: &sdk.Skip{RuleID: r.ID(), Reason: foundrylink.SkipScopeUncertain + ": a private endpoint may target a Foundry resource but its target cannot be correlated"}}, nil
+		}
+		return sdk.Result{Skipped: &sdk.Skip{RuleID: r.ID(), Reason: "profile-key-missing:network.cloud: private endpoints are in scope but the cloud cannot be determined from literal regions; set policy.network.cloud to public, usgov or china", MissingCapability: "policy network.cloud"}}, nil
 	}
 	zonesFor := expectedZones[cloud]
 	o := &outcome{id: r.ID()}
-	scope := newFoundryScope(in.ARM)
 	zoneGroups := byType(in.ARM, tZoneGroup)
 	zones := byType(in.ARM, tZone)
 	links := byType(in.ARM, tZoneLink)
@@ -476,6 +500,10 @@ func (r net004) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 		if !o.usable(a) {
 			continue
 		}
+		if injectionsUncertain(a) {
+			o.skip(uncertainInjectionReason(a))
+			continue
+		}
 		for _, inj := range injections(a) {
 			if !inj.agent || inj.subnet == "" {
 				continue
@@ -544,6 +572,10 @@ func (r net005) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 	o := &outcome{id: r.ID()}
 	for _, a := range foundryAccounts(in.ARM) {
 		if !o.usable(a) {
+			continue
+		}
+		if injectionsUncertain(a) {
+			o.skip(uncertainInjectionReason(a))
 			continue
 		}
 		for _, inj := range injections(a) {

@@ -1,5 +1,5 @@
 id: FND-NET-004
-version: 2
+version: 3
 group: NET
 title: "Agent subnet delegation and sizing"
 description: >-
@@ -120,6 +120,7 @@ tests:
     - use-microsoft-managed-network
     - subnet-id-is-parameter
 notes: >-
+  Review B3: an expression-valued networkInjections makes the rule uncertain, not not-applicable.
   Docs disagree on one point that does not affect this rule: the troubleshooting text still names a
   172/192-only range error while the limitations name 10.0.0.0/8 as supported (see FND-NET-006). The
   /27 minimum is stated in networking-options and the virtual-networks article; the deep dive warns

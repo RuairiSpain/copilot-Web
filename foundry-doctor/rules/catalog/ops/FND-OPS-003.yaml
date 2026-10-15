@@ -1,5 +1,5 @@
 id: FND-OPS-003
-version: 1
+version: 2
 group: OPS
 title: Baseline alerts exist
 description: >-
@@ -145,6 +145,7 @@ tests:
   - alerts-managed-at-subscription-level-outside-repo
   - control-plane-unavailable
 notes: >-
+  Findings carry a Finding.Key (serviceHealthAlert, modelMetricAlert) so fingerprints are stable.
   Product opinion: the Foundry article tells users how to create these alerts but does not say that a deployment without
   them is invalid, and no source defines a canonical baseline set. Unverified: the exact activity log alert condition property
   layout for a stable API version (only a preview example for ServiceHealth was read), and scheduledQueryRules property

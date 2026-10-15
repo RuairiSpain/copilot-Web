@@ -1,5 +1,5 @@
 id: FND-NET-011
-version: 2
+version: 3
 group: NET
 title: "NSG/DDoS recommendations"
 description: >-
@@ -149,6 +149,7 @@ tests:
   uncertain:
     - agent-subnet-without-nsg
 notes: >-
+  Review B3 and M11: subnets declared as Microsoft.Network/virtualNetworks/subnets child resources are checked as well as inline subnets, and an expression-valued networkInjections makes every subnet without a network security group uncertain because it may be the agent subnet.
   Basis is the Well-Architected security pillar through PSRule's SE:06 tag; the platform does not
   require either control for Foundry. Unverified: whether an NSG on the agent subnet
   (delegated to Microsoft.App/environments) is supported or required, and whether the private

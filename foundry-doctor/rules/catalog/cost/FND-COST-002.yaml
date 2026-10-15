@@ -1,5 +1,5 @@
 id: FND-COST-002
-version: 2
+version: 3
 group: COST
 title: Dev avoids production-sized fixed SKUs
 description: >-
@@ -158,6 +158,7 @@ tests:
   - sku-value-is-unresolved-parameter
   - no-cosmos-limit-in-profile
 notes: >-
+  Findings carry a Finding.Key per sub-check so fingerprints are stable.
   Product opinion: no source defines production-sized. Unverified - minimum PTU quantities per model (documented as varying
   by model and not read); whether Standard, StandardV2 or BasicV2 APIM tiers are appropriate for dev (only Premium and Isolated
   are flagged); Cosmos DB account-level versus container-level throughput resources in Bicep (only the throughputSettings

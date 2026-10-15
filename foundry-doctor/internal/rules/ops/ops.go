@@ -13,6 +13,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/config"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
 
@@ -69,6 +70,13 @@ func (o *outcome) add(r sdk.ARMResource, evidence string) {
 	})
 }
 
+// addKey adds a finding with a stable Key that separates several findings of
+// one rule on one resource (a sub-check or tag name).
+func (o *outcome) addKey(r sdk.ARMResource, key, evidence string) {
+	o.add(r, evidence)
+	o.findings[len(o.findings)-1].Key = key
+}
+
 func (o *outcome) result() sdk.Result {
 	if len(o.findings) > 0 {
 		slices.SortFunc(o.findings, func(a, b sdk.Finding) int {
@@ -80,6 +88,18 @@ func (o *outcome) result() sdk.Result {
 			}
 			return strings.Compare(a.Evidence, b.Evidence)
 		})
+		// sdk.Result cannot carry skips next to findings, so the first finding
+		// names the resources that were not evaluated (review M3).
+		var unevaluated []string
+		unevaluated = append(unevaluated, o.skips...)
+		for _, n := range o.notes {
+			unevaluated = append(unevaluated, "uncertain: "+n)
+		}
+		if len(unevaluated) > 0 {
+			slices.Sort(unevaluated)
+			unevaluated = unique(unevaluated)
+			o.findings[0].Evidence += fmt.Sprintf(" [note: %d resource check(s) not evaluated by this rule: %s]", len(unevaluated), strings.Join(unevaluated, "; "))
+		}
 		return sdk.Result{Findings: o.findings}
 	}
 	if len(o.skips) > 0 {
@@ -558,12 +578,69 @@ func eval003(in *sdk.Input, _ Providers) sdk.Result {
 		}
 	}
 	if !hasServiceHealth && !v.hasUncertain("Microsoft.Insights/activityLogAlerts") {
-		o.add(accounts[0], "no Service Health alert definition was found")
+		o.addKey(accounts[0], "serviceHealthAlert", "no Service Health alert definition was found")
 	}
 	if !hasMetrics && !v.hasUncertain("Microsoft.Insights/metricAlerts", "Microsoft.Insights/scheduledQueryRules") {
-		o.add(accounts[0], "no Foundry model metric alert or scheduled query rule with an action group was found")
+		o.addKey(accounts[0], "modelMetricAlert", "no Foundry model metric alert or scheduled query rule with an action group was found")
 	}
 	return o.result()
+}
+
+// tagRequirement is one entry of the tags.required policy key.
+type tagRequirement struct {
+	Name   string
+	Format string
+}
+
+// tagRequirements reads tags.required. The effective policy stores
+// []config.TagRequirement; maps and anonymous structs are accepted for other
+// Policy implementations.
+func tagRequirements(v any) []tagRequirement {
+	var reqs []tagRequirement
+	switch xs := v.(type) {
+	case []config.TagRequirement:
+		for _, x := range xs {
+			reqs = append(reqs, tagRequirement{Name: x.Name, Format: x.Format})
+		}
+	case []any:
+		for _, x := range xs {
+			switch t := x.(type) {
+			case config.TagRequirement:
+				reqs = append(reqs, tagRequirement{Name: t.Name, Format: t.Format})
+			case map[string]any:
+				name, format := firstString(t, "Name", "name"), firstString(t, "Format", "format")
+				reqs = append(reqs, tagRequirement{Name: name, Format: format})
+			}
+		}
+	case []struct{ Name, Format string }:
+		for _, x := range xs {
+			reqs = append(reqs, tagRequirement{Name: x.Name, Format: x.Format})
+		}
+	}
+	out := reqs[:0]
+	for _, r := range reqs {
+		if strings.TrimSpace(r.Name) != "" {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+func firstString(m map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if s, ok := m[k].(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+// tagExpressionReporter is implemented by an ARM model that can tell a
+// resource whose tags property is an ARM expression (tags: tags) from one that
+// declares no tags. The armmodel keeps only object-valued tags, so without this
+// the two are indistinguishable and an empty Tags map is reported as uncertain.
+type tagExpressionReporter interface {
+	TagsAreExpression(sdk.ARMResource) bool
 }
 
 func eval004(in *sdk.Input, _ Providers) sdk.Result {
@@ -579,29 +656,7 @@ func eval004(in *sdk.Input, _ Providers) sdk.Result {
 	if !ok {
 		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipMissingPolicyKey("tags.required")}}
 	}
-	type tagReq struct {
-		Name   string
-		Format string
-	}
-	var reqs []tagReq
-	switch xs := reqsAny.(type) {
-	case []any:
-		for _, x := range xs {
-			if m, ok := x.(map[string]any); ok {
-				reqs = append(reqs, tagReq{Name: fmt.Sprint(m["Name"]), Format: fmt.Sprint(m["Format"])})
-				if reqs[len(reqs)-1].Name == "<nil>" {
-					reqs[len(reqs)-1].Name = fmt.Sprint(m["name"])
-				}
-				if reqs[len(reqs)-1].Format == "<nil>" {
-					reqs[len(reqs)-1].Format = fmt.Sprint(m["format"])
-				}
-			}
-		}
-	case []struct{ Name, Format string }:
-		for _, x := range xs {
-			reqs = append(reqs, tagReq{Name: x.Name, Format: x.Format})
-		}
-	}
+	reqs := tagRequirements(reqsAny)
 	if len(reqs) == 0 {
 		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipMissingPolicyKey("tags.required")}}
 	}
@@ -621,33 +676,47 @@ func eval004(in *sdk.Input, _ Providers) sdk.Result {
 		scopeList = append(scopeList, s)
 	}
 	slices.Sort(scopeList)
+	reporter, canTell := in.ARM.(tagExpressionReporter)
 	for _, r := range newView(in).of(o, scopeList...) {
 		if len(r.Tags) == 0 {
-			o.skips = append(o.skips, r.Name+": tags are unavailable")
+			switch {
+			case !canTell:
+				o.notes = append(o.notes, r.Name+": tags are absent or expression-valued and the ARM model does not distinguish the two")
+			case reporter.TagsAreExpression(r):
+				o.notes = append(o.notes, r.Name+": tags is an ARM expression that the template cannot resolve")
+			default:
+				for _, req := range reqs {
+					o.addKey(r, "missing:"+strings.ToLower(req.Name), "resource has no tags; required tag "+req.Name+" is missing")
+				}
+			}
 			continue
 		}
 		lowered := map[string]string{}
 		for k, v := range r.Tags {
 			lowered[strings.ToLower(k)] = fmt.Sprint(v)
 			if len(k) > 512 || (strings.EqualFold(r.Type, "Microsoft.Storage/storageAccounts") && len(k) > 128) {
-				o.add(r, "tag name exceeds documented limit")
+				o.addKey(r, "tagNameLimit:"+strings.ToLower(k), "tag name exceeds documented limit")
 			}
 			if len(fmt.Sprint(v)) > 256 {
-				o.add(r, "tag value exceeds documented limit")
+				o.addKey(r, "tagValueLimit:"+strings.ToLower(k), "tag value exceeds documented limit")
 			}
 		}
 		if len(lowered) > 50 {
-			o.add(r, "resource has more than fifty tags")
+			o.addKey(r, "tagCount", "resource has more than fifty tags")
 		}
 		for _, req := range reqs {
 			val, ok := lowered[strings.ToLower(req.Name)]
 			if !ok {
-				o.add(r, "missing required tag "+req.Name)
+				o.addKey(r, "missing:"+strings.ToLower(req.Name), "missing required tag "+req.Name)
+				continue
+			}
+			if isExpr(val) {
+				o.notes = append(o.notes, r.Name+": tag "+req.Name+" value is an ARM expression")
 				continue
 			}
 			if req.Format != "" {
 				if re, err := regexp.Compile(req.Format); err == nil && !re.MatchString(val) {
-					o.add(r, "tag "+req.Name+" value does not match configured format")
+					o.addKey(r, "format:"+strings.ToLower(req.Name), "tag "+req.Name+" value does not match configured format")
 				}
 			}
 		}
@@ -732,7 +801,7 @@ func eval005(in *sdk.Input, _ Providers) sdk.Result {
 			}
 		}
 		if bad != "" {
-			o.add(r, bad)
+			o.addKey(r, "name", bad)
 		}
 	}
 	return o.result()

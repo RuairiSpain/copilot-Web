@@ -1,5 +1,5 @@
 id: FND-OPS-004
-version: 1
+version: 2
 group: OPS
 title: "Required tags exist"
 description: >-
@@ -125,6 +125,7 @@ tests:
     - tags-depend-on-unresolved-parameter
     - resource-type-does-not-support-tags
 notes: >-
+  Review M1: tags.required is read as the effective-policy []TagRequirement type. A resource that declares no tags fails for each required tag; an expression-valued tags property or tag value is uncertain. The ARM model must report expression-valued tags (an optional TagsAreExpression method); a model that cannot tell the two cases apart yields an uncertain skip, never a failure.
   Product opinion: no source says which tags are required; only the limits and the case rules are platform facts.
   Unverified: which resource types support tags (tag-support.md was not read for each type; the rule skips types
   that the template shows without a tags property in the schema). The azd convention tags azd-env-name on the resource

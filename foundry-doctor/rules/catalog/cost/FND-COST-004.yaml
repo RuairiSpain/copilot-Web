@@ -1,5 +1,5 @@
 id: FND-COST-004
-version: 1
+version: 2
 group: COST
 title: "Informational monthly fixed-capacity estimate"
 description: >-
@@ -106,6 +106,7 @@ tests:
     - meter-not-in-supported-catalogue
     - sku-or-capacity-unresolved-parameter
 notes: >-
+  Findings carry a Finding.Key per sub-check so fingerprints are stable.
   Informational only (PRD section 15). Marked product opinion because there is no platform rule to verify; the capacity drivers
   and property names are verified from the specifications. Unverified - the Azure Retail Prices API contract (endpoint,
   filtering, versions, meter and SKU naming) because Learn and prices.azure.com are blocked here; the mapping from each sku to a

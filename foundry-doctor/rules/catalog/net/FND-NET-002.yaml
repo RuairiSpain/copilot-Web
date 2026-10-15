@@ -1,5 +1,5 @@
 id: FND-NET-002
-version: 2
+version: 3
 group: NET
 title: Dependent services public access/default-deny/private endpoints
 description: >-
@@ -149,6 +149,7 @@ tests:
   - dependent-resource-id-unresolvable-parameter
   - legacy-capability-host-connection-not-resolvable-offline
 notes: >-
+  Review B3: an expression-valued networkInjections (for example a ternary over a parameter, as in Microsoft sample 15) makes the rule uncertain, not not-applicable.
   The Foundry source explicitly says to verify Disabled for the three stores; less restrictive firewall combinations are
   not accepted as equivalent. Unverified: Defender/Advisor mappings; their empty arrays mean unresearched. The Foundry doc says the agent state stores are required
   for the standard setup; platform-managed data resources (networking-options) are an alternative, in which case there are

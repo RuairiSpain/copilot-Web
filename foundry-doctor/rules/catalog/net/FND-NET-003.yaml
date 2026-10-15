@@ -1,5 +1,5 @@
 id: FND-NET-003
-version: 2
+version: 3
 group: NET
 title: Private endpoint DNS zone groups and VNet links
 description: >-
@@ -167,6 +167,7 @@ tests:
   - custom-dns-server-declared-in-config
   - dine-policy-manages-dns-zone-group
 notes: >-
+  Review M6: the rule is not-applicable when no private endpoint targets the Foundry account or a linked store, and skips as profile-key-missing:network.cloud when an endpoint is in scope and the cloud cannot be determined from literal regions.
   Unverified: DNS zone names for sovereign clouds were read from the Private Link table only for the services listed
   there (Foundry Government lists a single cognitiveservices zone); the docs' own statement that DNS zone groups are
   optional when custom DNS is used is why confidence is likely and basis is reliability, not platform. Zone names

@@ -1,5 +1,5 @@
 id: FND-OPS-005
-version: 1
+version: 2
 group: OPS
 title: Resource-name provider constraints
 description: >-
@@ -159,6 +159,7 @@ tests:
   - name-from-uniqueString-without-known-length
   - resource-type-not-in-table
 notes: >-
+  Findings carry a Finding.Key so fingerprints are stable.
   Platform basis, error in every profile, applies only to violations that every source read rejects, as described in the
   evidence. Not enforced because the sources disagree or are silent - Foundry account names with underscore or period (the
   specification pattern allows them, the naming-rules reference says alphanumerics and hyphens, start and end alphanumeric,

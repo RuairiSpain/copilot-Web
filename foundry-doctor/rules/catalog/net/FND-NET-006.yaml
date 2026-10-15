@@ -1,5 +1,5 @@
 id: FND-NET-006
-version: 2
+version: 3
 group: NET
 title: "Private address space and overlap"
 description: >-
@@ -108,6 +108,7 @@ tests:
     - on-premises-ranges-unknown
     - managed-virtual-network-mode
 notes: >-
+  Review B3: an expression-valued networkInjections makes the rule uncertain, not not-applicable.
   PRD ambiguity and documentation conflicts to resolve with the Foundry owner before implementation:
   (1) one deep-dive article disagrees about CGNAT support (the rule follows the limitations page), (2) the deep dive says 172.16.0.0/12 "covers 172.16.x.x through 172.31.x.x" while
   the limitations reserve 172.30.0.0/16 and 172.31.0.0/16 inside it, (3) the troubleshooting section

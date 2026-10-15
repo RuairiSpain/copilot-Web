@@ -1,5 +1,5 @@
 id: FND-COST-001
-version: 2
+version: 3
 group: COST
 title: Budget and alerts exist
 description: >-
@@ -143,6 +143,7 @@ tests:
   - control-plane-unavailable
   - dev-profile
 notes: >-
+  Findings carry a Finding.Key per sub-check so fingerprints are stable.
   Product opinion: the platform documentation describes how to create budgets but no source requires one. Unverified - the
   contact requirement per scope (the specification marks contactEmails required while its description allows an action group
   at subscription and resource group scope, so the rule accepts either); whether an extension resource budget scoped to

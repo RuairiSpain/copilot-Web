@@ -184,7 +184,7 @@ func TestRules(t *testing.T) {
 		{name: "004 contributor resource scope passes", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(sp(roleContributor, "ServicePrincipal"), resSc, "")}},
 		{name: "004 human ignored", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(sp(roleOwner, "User"), subsc, "")}},
 		{name: "004 non-privileged role", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(sp("5e0bd9bd-7b93-4f28-af87-19fc36ad61bd", "ServicePrincipal"), subsc, "")}},
-		{name: "004 missing principalType skips", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(sp(roleOwner, ""), subsc, "")}, skip: SkipUnresolved},
+		{name: "004 missing principalType on a provable Foundry identity is evaluated", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(sp(roleOwner, ""), subsc, "")}, findings: 1, contains: "Owner"},
 		{name: "004 resourceGroup().id scope is broad", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(sp(roleOwner, "ServicePrincipal"), "[resourceGroup().id]", "")}, findings: 1},
 		{name: "004 empty scope is the deployment scope", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(sp(roleOwner, "ServicePrincipal"), "", "")}, findings: 1},
 		{name: "004 parameter scope skips", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(sp(roleOwner, "ServicePrincipal"), "[parameters('scope')]", "")}, skip: SkipUnresolved},
@@ -203,7 +203,8 @@ func TestRules(t *testing.T) {
 		}()}, skip: "conditional-resource"},
 		{name: "004 expression role skips", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(props{"roleDefinitionId": "[variables('r')]", "principalType": "ServicePrincipal"}, subsc, "")}, skip: SkipUnresolved},
 		{name: "004 unknown scope shape skips", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(sp(roleOwner, "ServicePrincipal"), "/weird", "")}, skip: SkipUnresolved},
-		{name: "004 finding beats skip", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(sp(roleOwner, ""), subsc, ""), ra(sp(roleOwner, "ServicePrincipal"), subsc, "")}, findings: 1},
+		{name: "004 two privileged assignments to one identity", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(sp(roleOwner, ""), subsc, ""), ra(sp(roleOwner, "ServicePrincipal"), subsc, "")}, findings: 2},
+		{name: "004 finding beats skip", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(props{"roleDefinitionId": rdef(roleOwner), "principalId": "[parameters('p')]"}, subsc, ""), ra(sp(roleOwner, "ServicePrincipal"), subsc, "")}, findings: 1, contains: "not evaluated"},
 		{name: "004 no role id", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(props{}, subsc, "")}, skip: sdk.SkipInputUnavailable},
 		{name: "004 pipeline principal not flagged", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(props{"roleDefinitionId": rdef(roleContributor), "principalId": "99999999-2222-3333-4444-555555555555", "principalType": "ServicePrincipal"}, rg, "")}, skip: SkipUnresolved},
 		{name: "004 pipeline principal alongside app clean", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(sp(roleContributor, "ServicePrincipal"), rg, ""), ra(props{"roleDefinitionId": rdef(roleOwner), "principalId": "99999999-2222-3333-4444-555555555555", "principalType": "ServicePrincipal"}, rg, "")}, findings: 1},
@@ -248,7 +249,7 @@ func TestRules(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			out := run(t, c.rule, &sdk.Input{ARM: model(c.res)})
 			if c.skip != "" {
-				if out.Skipped == nil || out.Skipped.Reason != c.skip || len(out.Findings) != 0 {
+				if out.Skipped == nil || (out.Skipped.Reason != c.skip && !strings.HasPrefix(out.Skipped.Reason, c.skip+":")) || len(out.Findings) != 0 {
 					t.Fatalf("want skip %q, got %+v", c.skip, out)
 				}
 				return

@@ -47,6 +47,10 @@ func (r net006) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 		if !o.usable(a) {
 			continue
 		}
+		if injectionsUncertain(a) {
+			o.skip(uncertainInjectionReason(a))
+			continue
+		}
 		for _, inj := range injections(a) {
 			if inj.managed || !inj.agent || inj.subnet == "" {
 				continue
@@ -225,6 +229,10 @@ func (r net011) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 	agentSubnets := map[string]bool{}
 	agentUnresolved := false
 	for _, a := range foundryAccounts(in.ARM) {
+		if injectionsUncertain(a) {
+			agentUnresolved = true
+			o.skip(uncertainInjectionReason(a))
+		}
 		for _, inj := range injections(a) {
 			if !inj.agent || inj.managed {
 				continue
@@ -237,6 +245,25 @@ func (r net011) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 			agentSubnets[nameKey(refOf(sn.vnet).Segments)+"/"+lc(sn.name)] = true
 		}
 	}
+	checkSubnet := func(vkey, vnetName, name string, props map[string]any) {
+		if exemptSubnet(name, props) {
+			return
+		}
+		nsg, _ := str(props, "networkSecurityGroup", "id")
+		if nsg != "" {
+			o.evaluated++
+			return
+		}
+		switch {
+		case agentSubnets[vkey+"/"+lc(name)]:
+			o.skip(name + ": uncertain: NSG support for the agent subnet is not verified")
+		case agentUnresolved:
+			o.skip(name + ": uncertain: an agent subnet injection could not be resolved, so this subnet may be the agent subnet")
+		default:
+			o.evaluated++
+			o.add(sdk.ARMResource{Type: "Microsoft.Network/virtualNetworks/subnets", Name: vnetName + "/" + name}, "subnet has no networkSecurityGroup association")
+		}
+	}
 	for _, v := range byType(in.ARM, tVNet) {
 		if !o.usable(v) {
 			continue
@@ -245,25 +272,23 @@ func (r net011) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 		for _, raw := range arr(v.Properties, "subnets") {
 			sm := asMap(raw)
 			name, _ := str(sm, "name")
-			props := asMap(sm["properties"])
-			if exemptSubnet(name, props) {
-				continue
-			}
-			nsg, _ := str(props, "networkSecurityGroup", "id")
-			if nsg != "" {
-				o.evaluated++
-			} else {
-				switch {
-				case agentSubnets[vkey+"/"+lc(name)]:
-					o.skip(name + ": uncertain: NSG support for the agent subnet is not verified")
-				case agentUnresolved:
-					o.skip(name + ": uncertain: an agent subnet injection could not be resolved, so this subnet may be the agent subnet")
-				default:
-					o.evaluated++
-					o.add(sdk.ARMResource{Type: "Microsoft.Network/virtualNetworks/subnets", Name: v.Name + "/" + name}, "subnet has no networkSecurityGroup association")
-				}
-			}
+			checkSubnet(vkey, v.Name, name, asMap(sm["properties"]))
 		}
+	}
+	// Subnets declared as Microsoft.Network/virtualNetworks/subnets resources.
+	for _, sres := range byType(in.ARM, tSubnet) {
+		if !o.usable(sres) {
+			continue
+		}
+		segs := refOf(sres).Segments
+		if len(segs) < 2 {
+			o.skip(sres.Name + ": uncertain: subnet resource name has no virtual network parent segment")
+			continue
+		}
+		vkey := nameKey(segs[:len(segs)-1])
+		last := segs[len(segs)-1].Text
+		vnetName := strings.TrimSuffix(sres.Name, "/"+last)
+		checkSubnet(vkey, vnetName, last, sres.Properties)
 	}
 	for _, pip := range byType(in.ARM, tPublicIP) {
 		if !o.usable(pip) {

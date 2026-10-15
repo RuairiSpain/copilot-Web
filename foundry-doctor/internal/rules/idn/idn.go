@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/armexpr"
@@ -86,6 +87,35 @@ type acc struct {
 	// scopeUncertain: whether the resource is in the rule's scope could not be
 	// decided from the template.
 	scopeUncertain bool
+	// notes records, per resource, why a resource could not be evaluated. It is
+	// appended to the first finding when the rule has findings, so partially
+	// evaluated rules never hide the unevaluated resources (review M3).
+	notes []string
+}
+
+// unres records that r could not be evaluated because of an unresolved value.
+func (a *acc) unres(r sdk.ARMResource, why string) {
+	a.unresolved = true
+	a.notes = append(a.notes, SkipUnresolved+": "+shortName(r.Name)+": "+why)
+}
+
+// shortName bounds a resource name (often a long guid() expression) for notes.
+func shortName(n string) string {
+	if len(n) > 60 {
+		return n[:57] + "..."
+	}
+	return n
+}
+
+// withNotes attaches the unevaluated-resource note to the first finding.
+func withNotes(fs []sdk.Finding, notes []string) []sdk.Finding {
+	if len(fs) == 0 || len(notes) == 0 {
+		return fs
+	}
+	sorted := append([]string(nil), notes...)
+	sort.Strings(sorted)
+	fs[0].Evidence += fmt.Sprintf(" [note: %d resource check(s) not evaluated by this rule: %s]", len(sorted), strings.Join(sorted, "; "))
+	return fs
 }
 
 // maybe reports (and records) that r is deployed only under a condition or
@@ -93,6 +123,7 @@ type acc struct {
 func (a *acc) maybe(r sdk.ARMResource) bool {
 	if presence(r) == armexpr.MaybeDeployed {
 		a.conditional = true
+		a.notes = append(a.notes, foundrylink.SkipConditional+": "+shortName(r.Name)+": deployed only under a condition or loop the template cannot resolve")
 		return true
 	}
 	return false
@@ -120,7 +151,7 @@ func (a *acc) add(r sdk.ARMResource, evidence string) {
 func (a *acc) result() sdk.Result {
 	switch {
 	case len(a.fs) > 0:
-		return sdk.Result{Findings: a.fs}
+		return sdk.Result{Findings: withNotes(a.fs, a.notes)}
 	case a.scopeUncertain:
 		return skip(foundrylink.SkipScopeUncertain)
 	case a.conditional:
@@ -195,6 +226,7 @@ func evalIDN001(in *sdk.Input) sdk.Result {
 			continue
 		case foundrylink.OwnsMaybe:
 			a.scopeUncertain = true
+			a.notes = append(a.notes, foundrylink.SkipScopeUncertain+": "+shortName(r.Name)+": the template cannot show whether this account owns projects or deployments")
 			continue
 		}
 		if a.maybe(r) {
@@ -228,7 +260,7 @@ func checkIdentity(a *acc, r sdk.ARMResource) {
 	t, present, isExpr := strOf(r.Identity, "type")
 	switch {
 	case isExpr:
-		a.unresolved = true
+		a.unres(r, "identity.type is an unresolved expression")
 		return
 	case !present || strings.EqualFold(strings.TrimSpace(t), "None") || strings.TrimSpace(t) == "":
 		a.add(r, fmt.Sprintf("identity.type is %q; managed identity is not enabled", t))
@@ -238,7 +270,7 @@ func checkIdentity(a *acc, r sdk.ARMResource) {
 		uai, ok := r.Identity["userAssignedIdentities"]
 		switch {
 		case ok && unresolved(uai):
-			a.unresolved = true
+			a.unres(r, "userAssignedIdentities is an unresolved expression")
 		case !ok || uai == nil:
 			a.add(r, fmt.Sprintf("identity.type %q requires a non-empty userAssignedIdentities map", t))
 		default:
@@ -311,7 +343,7 @@ func evalIDN003(in *sdk.Input) sdk.Result {
 		pt, ptPresent, ptExpr := strOf(r.Properties, "principalType")
 		switch {
 		case ptExpr:
-			a.unresolved = true
+			a.unres(r, "principalType is an unresolved expression")
 		case !ptPresent || pt == "":
 			a.addKey(r, "principalType", "principalType is not set; set it explicitly to avoid replication-delay failures")
 		}
@@ -321,10 +353,14 @@ func evalIDN003(in *sdk.Input) sdk.Result {
 		pid, pidPresent, pidExpr := strOf(r.Properties, "principalId")
 		switch {
 		case pidExpr:
-			if armexpr.ReadsClientID(r.Properties["principalId"].(string)) {
-				a.addKey(r, "principalId", "principalId expression reads a clientId/applicationId; an object (principal) ID is required")
-			} else {
-				a.unresolved = true
+			expr, _ := r.Properties["principalId"].(string)
+			switch clientIDMatch(expr) {
+			case clientIDProperty:
+				a.addKey(r, "principalId", "principalId expression reads a clientId/applicationId property; an object (principal) ID is required")
+			case clientIDNameOnly:
+				a.addKey(r, "principalId", "principalId expression uses a parameter or variable whose name suggests a clientId/applicationId (name match only, so confidence is likely rather than certain); verify that it holds an object (principal) ID")
+			default:
+				a.unres(r, "principalId is an unresolved expression")
 			}
 		case !pidPresent:
 			a.addKey(r, "principalId", "principalId is not set")
@@ -333,6 +369,31 @@ func evalIDN003(in *sdk.Input) sdk.Result {
 		}
 	}
 	return a.result()
+}
+
+type clientIDKind int
+
+const (
+	clientIDNone clientIDKind = iota
+	// clientIDProperty: the expression reads a .clientId/.appId/.applicationId
+	// property, which is certain.
+	clientIDProperty
+	// clientIDNameOnly: only a parameter or variable name looks like a client ID.
+	clientIDNameOnly
+)
+
+var identCallStripRe = regexp.MustCompile(`(?i)(?:parameters|variables)\(\s*'[^']*'\s*\)`)
+
+// clientIDMatch separates a property access from a name-only match by testing
+// the expression with its parameters()/variables() calls removed.
+func clientIDMatch(expr string) clientIDKind {
+	if !armexpr.ReadsClientID(expr) {
+		return clientIDNone
+	}
+	if armexpr.ReadsClientID(identCallStripRe.ReplaceAllString(expr, "x")) {
+		return clientIDProperty
+	}
+	return clientIDNameOnly
 }
 
 // apiTooOld reports whether a role assignment API version is too old for
@@ -390,7 +451,7 @@ func evalIDN006(in *sdk.Input) sdk.Result {
 		sub, subPresent, subExpr := strOf(r.Properties, "subject")
 		switch {
 		case issExpr:
-			a.unresolved = true
+			a.unres(r, "issuer is an unresolved expression")
 		case !issPresent:
 			a.addKey(r, "issuer", "issuer is not set")
 		default:
@@ -401,7 +462,7 @@ func evalIDN006(in *sdk.Input) sdk.Result {
 		}
 		switch {
 		case subExpr:
-			a.unresolved = true
+			a.unres(r, "subject is an unresolved expression")
 			continue
 		case !subPresent || strings.TrimSpace(sub) == "":
 			a.addKey(r, "subject", "subject is empty")

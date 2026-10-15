@@ -1,0 +1,104 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.48.1.52935",
+      "templateHash": "13162335245218412243"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    },
+    "someUser": {
+      "type": "string"
+    }
+  },
+  "variables": {
+    "ownerRoleId": "8e3af657-a8ff-443c-a75c-2fe8c4bcb635",
+    "contributorRoleId": "b24988ac-6180-42a0-ab88-20f7382dd24c"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.CognitiveServices/accounts",
+      "apiVersion": "2025-06-01",
+      "name": "aiservices",
+      "location": "[parameters('location')]",
+      "kind": "AIServices",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "sku": {
+        "name": "S0"
+      },
+      "properties": {
+        "customSubDomainName": "aiservices"
+      }
+    },
+    {
+      "type": "Microsoft.CognitiveServices/accounts/projects",
+      "apiVersion": "2025-06-01",
+      "name": "[format('{0}/{1}', 'aiservices', 'proj')]",
+      "location": "[parameters('location')]",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {},
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', 'aiservices')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "name": "[guid(resourceGroup().id, 'owner-notype')]",
+      "properties": {
+        "principalId": "[reference(resourceId('Microsoft.CognitiveServices/accounts/projects', 'aiservices', 'proj'), '2025-06-01', 'full').identity.principalId]",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '8e3af657-a8ff-443c-a75c-2fe8c4bcb635')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts/projects', 'aiservices', 'proj')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "name": "[guid(resourceGroup().id, 'owner-var')]",
+      "properties": {
+        "principalId": "[reference(resourceId('Microsoft.CognitiveServices/accounts', 'aiservices'), '2025-06-01', 'full').identity.principalId]",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('ownerRoleId'))]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', 'aiservices')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.CognitiveServices/accounts', 'aiservices')]",
+      "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', 'aiservices'), 'contrib')]",
+      "properties": {
+        "principalId": "[reference(resourceId('Microsoft.CognitiveServices/accounts/projects', 'aiservices', 'proj'), '2025-06-01', 'full').identity.principalId]",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('contributorRoleId'))]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', 'aiservices')]",
+        "[resourceId('Microsoft.CognitiveServices/accounts/projects', 'aiservices', 'proj')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "name": "[guid(resourceGroup().id, 'owner-unknown')]",
+      "properties": {
+        "principalId": "[parameters('someUser')]",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '8e3af657-a8ff-443c-a75c-2fe8c4bcb635')]"
+      }
+    }
+  ]
+}

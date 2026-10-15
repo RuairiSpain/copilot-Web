@@ -1,5 +1,5 @@
 id: FND-SEC-006
-version: 2
+version: 3
 group: SEC
 title: Firewall rules reject private/open ranges
 description: IP firewall rules on Foundry-related resources must not contain open ranges (0.0.0.0/0, or 0.0.0.0
@@ -105,4 +105,4 @@ tests:
 testability: Deterministic CIDR parsing on ARM JSON; no network access needed.
 notes: 'Mixed basis: private ranges on Storage/Cosmos are platform-documented, open ranges are a security judgement.
   Kept as basis security (non-platform) so dev can be warning; the catalogue schema forces error in every profile
-  if platform were listed. Raised as a PRD ambiguity.'
+  if platform were listed. Raised as a PRD ambiguity. Review M9: the rule evaluates only Foundry accounts (kind AIServices) and the Cosmos DB, Key Vault, Search and Storage resources that a Foundry connection or capability host links to; other resources are out of scope.'

@@ -1,5 +1,5 @@
 id: FND-NET-005
-version: 2
+version: 3
 group: NET
 title: "Private-mode VNet/region consistency"
 description: >-
@@ -103,6 +103,7 @@ tests:
     - location-is-unresolved-parameter
     - managed-virtual-network-mode
 notes: >-
+  Review B3: an expression-valued networkInjections makes the agent-subnet region check uncertain, not not-applicable.
   The Private Link page states the endpoint-and-VNet constraint as a deployment requirement; whether
   ARM enforces it with a specific error was not read, so only the documented constraint is encoded.
   Unverified: the Foundry docs say the Foundry resource must match the VNet region but do not say

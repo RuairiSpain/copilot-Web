@@ -1,5 +1,5 @@
 id: FND-IDN-004
-version: 2
+version: 3
 group: IDN
 title: "No broad Owner/Contributor for application identities"
 description: >-
@@ -41,8 +41,8 @@ evidence:
     Administrator f58310d9-a9f6-439a-9e8d-f62e7b41a168. Fail when such an assignment targets an
     application identity at subscription, management group or resource group scope. Report Owner,
     User Access Administrator and Role Based Access Control Administrator at resource scope as the
-    same failure. Report Contributor at the scope of a single Foundry resource as info with the
-    reason that narrower Foundry roles exist.     A condition is recorded as evidence and its semantics must be evaluated. A condition that cannot
+    same failure. Contributor at the scope of a single Foundry resource is
+    evaluated and not reported (the engine fixes finding severity from this catalogue, so an info finding cannot be emitted).     A condition is recorded as evidence and its semantics must be evaluated. A condition that cannot
     be evaluated makes the result uncertain. For Role Based Access Control Administrator, evaluate
     the effective delegated role IDs, principal types or principal IDs and scopes allowed by the
     condition; a verified restrictive condition can make the assignment least-privileged, while an
@@ -149,9 +149,10 @@ tests:
     - identity-is-both-application-and-deployment
     - rbac-administrator-with-unresolved-condition
 notes: >-
+  Review M2 and M10: the principal is classified first, so a role assignment without principalType whose principalId is provably a Foundry identity is evaluated; the skip reason names the real cause. A role definition ID held in variables() is resolved only when the ARM model exposes the compiled variables, otherwise the reason says so. The scope of an assignment without a scope property is printed as the deployment scope. Contributor at the scope of one Foundry resource is evaluated and not reported: the engine sets finding severity from the catalogue, so an info finding cannot be emitted by the rule; this replaces the earlier info report.
   Unverified: Defender for Cloud (Defender CSPM permission management) recommendations about
   overprivileged identities; no Defender reference was in the local sources. Product decision inside
-  a verified rule: Contributor at the scope of a single Foundry resource is reported as info, not a
+  a verified rule: Contributor at the scope of a single Foundry resource is not reported, not a
   failure, because the Foundry sources themselves list Contributor as the minimum role for several
   tools and the CI/CD quickstart. Foundry Owner (c883944f-8b7b-4483-af10-35834be79c4a) and Foundry
   Account Owner (e47c6f54-e4a2-4754-9501-8e0985b135e1) are broad Foundry roles; they are not in the
