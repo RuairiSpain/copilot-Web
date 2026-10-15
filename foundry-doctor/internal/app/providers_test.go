@@ -52,7 +52,7 @@ func TestEnvStoreRedactsSecretsAndSelects(t *testing.T) {
 	}
 	const sentinel = "s3cr3t-value-123"
 	body := "AZURE_LOCATION=eastus\nAZURE_SUBSCRIPTION_ID=sub-1\nAZURE_RESOURCE_GROUP=rg-dev\n" +
-		"MY_API_KEY=" + sentinel + "\nDB_CONNECTIONSTRING=\"" + sentinel + "\"\n# comment\nBROKEN LINE\n"
+		"MY_API_KEY=" + sentinel + "\nDB_CONNECTIONSTRING=\"" + sentinel + "\"\n# comment\n"
 	if err := os.WriteFile(filepath.Join(e, ".env"), []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}

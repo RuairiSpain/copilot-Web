@@ -1,8 +1,6 @@
 package app
 
 import (
-	"bufio"
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -89,36 +87,59 @@ type envStore struct {
 	src  Source
 	view sdk.AzureYAMLView
 
-	once sync.Once
-	envs []env.Environment
-	byEn map[string]map[string]string
+	once   sync.Once
+	envs   []env.Environment
+	byEn   map[string]map[string]string
+	status map[string]env.Status
+}
+
+// literalResourceGroups lists the azure.yaml locations whose resourceGroup is
+// a non-empty literal without a variable reference: the top-level key and the
+// key of each service.
+func literalResourceGroups(view sdk.AzureYAMLView) []string {
+	if view == nil {
+		return nil
+	}
+	var at []string
+	literal := func(path ...string) bool {
+		v, _, ok := view.Lookup(path...)
+		return ok && strings.TrimSpace(v) != "" && !strings.Contains(v, "${")
+	}
+	if literal("resourceGroup") {
+		at = append(at, "resourceGroup")
+	}
+	for _, n := range view.ServiceNames() {
+		if literal("services", n, "resourceGroup") {
+			at = append(at, "services."+n+".resourceGroup")
+		}
+	}
+	return at
 }
 
 func (s *envStore) load() {
 	s.once.Do(func() {
 		s.byEn = map[string]map[string]string{}
+		s.status = map[string]env.Status{}
 		if s.src.Dir == "" {
 			return
 		}
-		root, err := os.OpenRoot(s.src.Dir)
-		if err != nil {
-			return
-		}
-		defer root.Close()
 		names := slices.Clone(s.src.Environments)
 		slices.Sort(names)
-		literalRG := false
-		if s.view != nil {
-			if v, _, ok := s.view.Lookup("resourceGroup"); ok {
-				literalRG = v != "" && !strings.Contains(v, "${")
-			}
+		root, rootErr := os.OpenRoot(s.src.Dir)
+		if rootErr == nil {
+			defer root.Close()
 		}
+		literalRG := literalResourceGroups(s.view)
 		for _, n := range names {
-			vals := readEnvFile(root, path.Join(project.AzureDir, n, ".env"))
+			vals, st := map[string]string{}, env.StatusUnreadable
+			if rootErr == nil {
+				vals, st = readEnvFile(root, path.Join(project.AzureDir, n, ".env"))
+			}
 			s.byEn[n] = vals
+			s.status[n] = st
 			s.envs = append(s.envs, env.Environment{
 				Name: n, Subscription: vals["AZURE_SUBSCRIPTION_ID"], ResourceGroup: vals["AZURE_RESOURCE_GROUP"],
-				LiteralRGInYAML: literalRG, Values: vals,
+				LiteralRGAt: literalRG, Status: st, Values: vals,
 			})
 		}
 	})
@@ -136,7 +157,7 @@ func (s *envStore) Selected() (string, bool) {
 	if s.src.Environment == "" {
 		return "", false
 	}
-	if _, ok := s.byEn[s.src.Environment]; !ok {
+	if _, ok := s.byEn[s.src.Environment]; !ok || s.status[s.src.Environment] != env.StatusOK {
 		return "", false
 	}
 	return s.src.Environment, true
@@ -167,46 +188,47 @@ func digest(v string) string {
 	return "sha256:" + hex.EncodeToString(h[:8])
 }
 
-// readEnvFile parses KEY=VALUE lines. It returns an empty map when the file is
-// missing, unreadable, not regular or too large.
-func readEnvFile(root *os.Root, rel string) map[string]string {
-	out := map[string]string{}
+// readEnvFile parses an azd .env file with the godotenv v1.5.1 grammar
+// (project.ParseDotEnv). It returns the status of the file with the values:
+// anything other than env.StatusOK comes with an empty map, because a partial
+// view would let a comparison pass on missing data. Secret-looking values are
+// replaced by a digest after parsing, so variable expansion sees real values.
+func readEnvFile(root *os.Root, rel string) (map[string]string, env.Status) {
+	none := map[string]string{}
 	f, err := root.Open(rel)
 	if err != nil {
-		return out
+		if errors.Is(err, fs.ErrNotExist) {
+			return none, env.StatusMissing
+		}
+		return none, env.StatusUnreadable
 	}
 	defer f.Close()
-	if fi, err := f.Stat(); err != nil || !fi.Mode().IsRegular() || fi.Size() > maxEnvFileBytes {
-		return out
+	fi, err := f.Stat()
+	if err != nil || !fi.Mode().IsRegular() {
+		return none, env.StatusUnreadable
+	}
+	if fi.Size() > maxEnvFileBytes {
+		return none, env.StatusOversize
 	}
 	data, err := io.ReadAll(io.LimitReader(f, maxEnvFileBytes+1))
-	if err != nil || len(data) > maxEnvFileBytes {
-		return out
+	if err != nil {
+		return none, env.StatusUnreadable
 	}
-	sc := bufio.NewScanner(bytes.NewReader(data))
-	sc.Buffer(make([]byte, 0, 4096), 64<<10)
-	for sc.Scan() && len(out) < maxEnvKeys {
-		line := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(sc.Text()), "\ufeff"))
-		line = strings.TrimSpace(strings.TrimPrefix(line, "export "))
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		k, v, ok := strings.Cut(line, "=")
-		k = strings.TrimSpace(k)
-		if !ok || k == "" || strings.ContainsAny(k, " \t") {
-			continue
-		}
-		v = strings.TrimSpace(v)
-		if len(v) >= 2 && (v[0] == '"' && v[len(v)-1] == '"' || v[0] == '\'' && v[len(v)-1] == '\'') {
-			v = v[1 : len(v)-1]
-		}
+	if len(data) > maxEnvFileBytes {
+		return none, env.StatusOversize
+	}
+	parsed, err := project.ParseDotEnv(data)
+	if err != nil {
+		return none, env.StatusUnparseable
+	}
+	if len(parsed) > maxEnvKeys {
+		return none, env.StatusTruncated
+	}
+	delete(parsed, "") // godotenv yields an empty key for a last line without separator
+	for k, v := range parsed {
 		if v != "" && secretishKey(k) {
-			v = digest(v)
+			parsed[k] = digest(v)
 		}
-		out[k] = v
 	}
-	return out
+	return parsed, env.StatusOK
 }
-
-var _ = errors.Is
-var _ = fs.ErrNotExist
