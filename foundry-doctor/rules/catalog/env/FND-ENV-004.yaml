@@ -1,5 +1,5 @@
 id: FND-ENV-004
-version: 1
+version: 2
 group: ENV
 title: "Informational difference summary"
 description: >-
@@ -89,10 +89,14 @@ tests:
     - identical-environments
   skipped:
     - single-environment-visible
+    - env-file-missing-or-unparseable-uncertain
 notes: >-
   Product opinion; this rule emits a summary, not pass/fail findings. The "foundry-doctor compare" command name in the
   fix example is a placeholder for the product command and the public namespace is decided by ADR-003. Phase 1 fact
   check (2026-10-05): azd lists every subdirectory of .azure as an environment, sorted by name, whether or not it
   holds a .env file (LocalFileDataStore.List), and marks the one named by the defaultEnvironment value of
-  .azure/config.json as default. The compare view should mark the default environment but never treat it as the
+  .azure/config.json as default. Version 2 (2026-10-15): an environment whose .env is missing, unreadable, over-size,
+  truncated or unparseable is named in an uncertain skip when no difference is found, so absent data never reads as
+  "no differences"; project discovery reads defaultEnvironment (at most 100 environment directories) to select the
+  environment for the FND-CFG rules. The compare view should mark the default environment but never treat it as the
   baseline.
