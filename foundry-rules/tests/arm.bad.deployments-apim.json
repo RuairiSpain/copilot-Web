@@ -1,0 +1,54 @@
+[
+  {
+    "type": "Microsoft.CognitiveServices/accounts/deployments",
+    "apiVersion": "2026-05-01",
+    "name": "foundrybad01/chat-ptu",
+    "sku": {
+      "name": "GlobalProvisionedManaged",
+      "capacity": 100
+    },
+    "properties": {
+      "model": {
+        "format": "OpenAI",
+        "name": "gpt-4o-mini",
+        "version": "latest"
+      },
+      "versionUpgradeOption": "OnceNewDefaultVersionAvailable"
+    }
+  },
+  {
+    "type": "Microsoft.ApiManagement/service",
+    "apiVersion": "2025-09-01-preview",
+    "name": "apim-foundry-bad",
+    "location": "westeurope",
+    "sku": {
+      "name": "Basic",
+      "capacity": 1
+    },
+    "properties": {
+      "publisherEmail": "a@example.invalid",
+      "publisherName": "x",
+      "virtualNetworkType": "External"
+    }
+  },
+  {
+    "type": "Microsoft.ApiManagement/service",
+    "apiVersion": "2025-09-01-preview",
+    "name": "apim-foundry-dev",
+    "location": "westeurope",
+    "sku": {
+      "name": "Premium",
+      "capacity": 2
+    },
+    "properties": {}
+  },
+  {
+    "type": "Microsoft.ApiManagement/service/backends",
+    "apiVersion": "2025-09-01-preview",
+    "name": "apim-foundry-bad/foundry-backend",
+    "properties": {
+      "url": "https://foundrybad01.openai.azure.com/openai",
+      "protocol": "http"
+    }
+  }
+]

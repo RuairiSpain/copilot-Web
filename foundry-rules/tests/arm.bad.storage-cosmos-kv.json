@@ -1,0 +1,68 @@
+[
+  {
+    "type": "Microsoft.Storage/storageAccounts",
+    "apiVersion": "2026-06-01",
+    "name": "stfoundrybad01",
+    "location": "westeurope",
+    "kind": "StorageV2",
+    "sku": {
+      "name": "Standard_LRS"
+    },
+    "properties": {
+      "allowSharedKeyAccess": true,
+      "allowBlobPublicAccess": true,
+      "minimumTlsVersion": "TLS1_0",
+      "networkAcls": {
+        "defaultAction": "Deny",
+        "ipRules": [
+          {
+            "value": "0.0.0.0/0"
+          },
+          {
+            "value": "10.1.0.0/16"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "Microsoft.DocumentDB/databaseAccounts",
+    "apiVersion": "2025-10-15",
+    "name": "cosmos-foundry-bad",
+    "location": "westeurope",
+    "kind": "GlobalDocumentDB",
+    "properties": {
+      "databaseAccountOfferType": "Standard",
+      "locations": [
+        {
+          "locationName": "westeurope",
+          "failoverPriority": 0,
+          "isZoneRedundant": false
+        }
+      ],
+      "ipRules": [
+        {
+          "ipAddressOrRange": "0.0.0.0"
+        },
+        {
+          "ipAddressOrRange": "100.64.0.0/10"
+        }
+      ]
+    }
+  },
+  {
+    "type": "Microsoft.KeyVault/vaults",
+    "apiVersion": "2026-05-15",
+    "name": "kv-foundry-bad",
+    "location": "westeurope",
+    "properties": {
+      "tenantId": "00000000-0000-0000-0000-000000000000",
+      "sku": {
+        "family": "A",
+        "name": "standard"
+      },
+      "enableSoftDelete": true,
+      "enablePurgeProtection": false
+    }
+  }
+]
