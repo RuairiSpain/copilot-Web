@@ -278,7 +278,7 @@ func (projectAdapter) Load(ctx context.Context, dir string, in Inputs) (Source, 
 	}
 	return Source{
 		AzureYAML: p.AzureYAMLData, AzureYAMLAt: p.AzureYAML, InfraPath: p.InfraPath,
-		Environment: p.Environment, Warnings: p.Warnings, Dir: dir, Environments: p.Environments,
+		Environment: p.Environment, DefaultEnvironment: p.DefaultEnvironment, Warnings: p.Warnings, Dir: dir, Environments: p.Environments,
 	}, nil
 }
 

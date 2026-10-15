@@ -23,7 +23,7 @@ var (
 	// Matched as whole `_`-delimited tokens, never as substrings: ACCOUNT
 	// contains COUNT and PROFILE contains FILE, and neither is excluded.
 	nonSecretTokens = map[string]bool{"LIMIT": true, "LIMITS": true, "COUNT": true, "SIZE": true,
-		"FILE": true, "ROTATION": true, "TOKENS": true}
+		"FILE": true, "ROTATION": true, "TOKENS": true, "DAYS": true}
 	// Only a signature makes a SAS query string a credential; sv is the
 	// signed-version selector.
 	sensQuery = map[string]bool{"sig": true, "token": true}
@@ -35,8 +35,18 @@ func isSecretKey(k string) bool {
 	if !secretKeyRe.MatchString(k) {
 		return false
 	}
-	for _, tok := range strings.FieldsFunc(strings.ToUpper(k), func(r rune) bool { return r == '_' || r == '-' || r == '.' }) {
-		if nonSecretTokens[tok] {
+	toks := strings.FieldsFunc(strings.ToUpper(k), func(r rune) bool { return r == '_' || r == '-' || r == '.' })
+	// A quantity or file-location token excludes the name only when it comes
+	// after the last credential word (API_KEY_FILE, KEY_ROTATION_DAYS,
+	// MAX_TOKENS). FILE_SECRET still names a credential.
+	last := -1
+	for i, tok := range toks {
+		if secretKeyRe.MatchString(tok) || (tok == "STRING" && i > 0 && toks[i-1] == "CONNECTION") {
+			last = i
+		}
+	}
+	for i, tok := range toks {
+		if nonSecretTokens[tok] && i >= last {
 			return false
 		}
 	}
@@ -229,6 +239,9 @@ const (
 	reasonNoEnvironmentSelected      = "no-environment-selected"
 	reasonEnvFileMissing             = "env-file-missing"
 	reasonDefaultEnvironmentNotFound = "default-environment-not-found"
+	reasonEnvFileUnreadable          = "env-file-unreadable"
+	reasonEnvFileUnparseable         = "env-file-unparseable"
+	reasonEnvFileOversize            = "env-file-oversize"
 )
 
 // EnvSelection is optionally implemented by an EnvView to say why no
@@ -250,7 +263,8 @@ func envSkip(p Providers) (sdk.Result, bool) {
 	reason := reasonNoEnvironmentSelected
 	if es, isSel := p.Env.(EnvSelection); isSel && p.Env != nil {
 		switch r := es.SelectionReason(); r {
-		case reasonEnvFileMissing, reasonDefaultEnvironmentNotFound, reasonNoEnvironmentSelected:
+		case reasonEnvFileMissing, reasonDefaultEnvironmentNotFound, reasonNoEnvironmentSelected,
+			reasonEnvFileUnreadable, reasonEnvFileUnparseable, reasonEnvFileOversize:
 			reason = r
 		}
 	}

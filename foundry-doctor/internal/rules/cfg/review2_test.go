@@ -320,3 +320,14 @@ func TestVersionNotes(t *testing.T) {
 		})
 	}
 }
+
+func TestIsSecretKeyTokenOrder(t *testing.T) {
+	for name, want := range map[string]bool{
+		"API_KEY": true, "FILE_SECRET": true, "STORAGE_ACCOUNT_KEY": true, "PROFILE_PASSWORD": true,
+		"API_KEY_FILE": false, "KEY_ROTATION_DAYS": false, "TOKEN_LIMIT": false, "MAX_TOKENS": false, "SECRET_COUNT": false,
+	} {
+		if got := isSecretKey(name); got != want {
+			t.Errorf("isSecretKey(%q) = %v, want %v", name, got, want)
+		}
+	}
+}

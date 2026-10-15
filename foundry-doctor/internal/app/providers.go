@@ -174,12 +174,24 @@ func (s *envStore) SelectionReason() string {
 	s.load()
 	name := s.src.Environment
 	if name == "" {
+		if s.src.DefaultEnvironment != "" {
+			return "default-environment-not-found"
+		}
 		return "no-environment-selected"
 	}
 	if _, ok := s.byEn[name]; !ok {
 		return "default-environment-not-found"
 	}
-	return "env-file-missing"
+	switch s.status[name] {
+	case env.StatusMissing:
+		return "env-file-missing"
+	case env.StatusUnparseable:
+		return "env-file-unparseable"
+	case env.StatusOversize, env.StatusTruncated:
+		return "env-file-oversize"
+	default:
+		return "env-file-unreadable"
+	}
 }
 
 // Values implements cfg.EnvView.

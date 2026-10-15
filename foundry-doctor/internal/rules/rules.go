@@ -317,6 +317,17 @@ func NeedsARMOnly(cr catalog.Rule) bool {
 // Only exact duplicates (same fingerprint, location and evidence) merge.
 // Findings with equal fingerprints but different location or evidence are all
 // kept; if a rule set a Key that failed to separate them, a diagnostic says so.
+// stableEvidence drops the trailing "[note: ... not evaluated ...]" that rules
+// append to their first finding. The note depends on other resources, so it
+// must not feed a derived key: an unrelated unresolved resource would change
+// the fingerprint of a finding that did not change.
+func stableEvidence(ev string) string {
+	if i := strings.Index(ev, " [note: "); i >= 0 {
+		return ev[:i]
+	}
+	return ev
+}
+
 func resolveFingerprintCollisions(fs []sdk.Finding) ([]sdk.Finding, []string) {
 	base := map[string]map[string]bool{} // base fingerprint -> distinct identities
 	for _, f := range fs {
@@ -326,7 +337,7 @@ func resolveFingerprintCollisions(fs []sdk.Finding) ([]sdk.Finding, []string) {
 		if base[f.Fingerprint] == nil {
 			base[f.Fingerprint] = map[string]bool{}
 		}
-		base[f.Fingerprint][fmt.Sprintf("%d:%d:%s", f.Location.Line, f.Location.Column, f.Evidence)] = true
+		base[f.Fingerprint][fmt.Sprintf("%d:%d:%s", f.Location.Line, f.Location.Column, stableEvidence(f.Evidence))] = true
 	}
 	diagSet := map[string]bool{}
 	for i := range fs {
@@ -337,7 +348,7 @@ func resolveFingerprintCollisions(fs []sdk.Finding) ([]sdk.Finding, []string) {
 		if len(base[f.Fingerprint]) > 1 {
 			diagSet[fmt.Sprintf("%s: findings share a fingerprint because the rule sets no Finding.Key; fingerprints were derived from location and evidence", f.RuleID)] = true
 		}
-		sum := sha256.Sum256([]byte(f.Evidence))
+		sum := sha256.Sum256([]byte(stableEvidence(f.Evidence)))
 		f.Key = fmt.Sprintf("auto:%d:%d:%s", f.Location.Line, f.Location.Column, hex.EncodeToString(sum[:])[:12])
 		f.Fingerprint = findings.Fingerprint(*f)
 	}

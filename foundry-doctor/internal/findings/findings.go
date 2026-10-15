@@ -17,10 +17,12 @@ import (
 // (ADR-008). Version 2 added Finding.Key; version 3 derives a Key for key-less findings from the finding itself (ADR-008 amendment 2).
 const FingerprintVersion = "v3"
 
-// Fingerprint returns a stable identity for a finding. It deliberately omits
-// line, column and evidence so unrelated edits do not invalidate baselines,
-// and never includes evidence text (which may be sensitive). Key separates two
-// findings of one rule on one resource.
+// Fingerprint returns a stable identity for a finding. The function itself
+// reads no line, column or evidence; only Key separates two findings of one
+// rule on one resource. A rule that sets a stable Key keeps its baseline entries
+// across unrelated edits. A rule that sets none gets an engine-derived Key
+// ("auto:<line>:<column>:<hash of evidence>", ADR-008 Amendment 2), and then
+// the fingerprint does change when that line or the evidence wording changes.
 func Fingerprint(f sdk.Finding) string {
 	h := sha256.New()
 	fmt.Fprintf(h, "%s\x00%s\x00%d\x00%s\x00%s\x00%s\x00%s\x00%s",

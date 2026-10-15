@@ -101,7 +101,9 @@ type Source struct {
 	AzureYAMLAt string // repo-relative, slash-separated path of azure.yaml
 	InfraPath   string // repo-relative infra directory, may be empty
 	Environment string // azd environment name, may be empty
-	Warnings    []string
+	// DefaultEnvironment is defaultEnvironment from .azure/config.json, if any.
+	DefaultEnvironment string
+	Warnings           []string
 	// Dir is the project directory the paths above are relative to.
 	Dir string
 	// Environments lists the azd environments found under .azure.

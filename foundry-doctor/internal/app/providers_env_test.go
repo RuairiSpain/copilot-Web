@@ -247,3 +247,36 @@ func TestReadEnvFileShapes(t *testing.T) {
 		t.Fatalf("vals=%v", vals)
 	}
 }
+
+func TestSelectionReasonDistinguishesCauses(t *testing.T) {
+	mk := func(src Source, envs map[string]*string) *envStore {
+		dir := envProject(t, envs)
+		src.Dir = dir
+		for name := range envs {
+			src.Environments = append(src.Environments, name)
+		}
+		return &envStore{src: src}
+	}
+	cases := []struct {
+		name string
+		src  Source
+		envs map[string]*string
+		want string
+	}{
+		{"none", Source{}, map[string]*string{"dev": str("A=1\n")}, "no-environment-selected"},
+		{"default names no directory", Source{DefaultEnvironment: "nope"}, map[string]*string{"dev": str("A=1\n")}, "default-environment-not-found"},
+		{"selected env file missing", Source{Environment: "dev"}, map[string]*string{"dev": nil}, "env-file-missing"},
+		{"selected env file unparseable", Source{Environment: "dev"}, map[string]*string{"dev": str("A=\"unterminated\n")}, "env-file-unparseable"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			s := mk(c.src, c.envs)
+			if _, ok := s.Selected(); ok {
+				t.Fatal("Selected() = true, want false")
+			}
+			if got := s.SelectionReason(); got != c.want {
+				t.Errorf("SelectionReason() = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
