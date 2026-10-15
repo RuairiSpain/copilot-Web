@@ -26,8 +26,8 @@ compatibility:
   azd: '>=1.34.2 <=1.36.0-beta.1'
   extensions: {}
   apiVersions:
-  - Microsoft.Authorization permissions 2022-04-01
-  - Microsoft.Authorization roleAssignments 2022-04-01
+  - { plane: management, provider: Microsoft.Authorization, resourceType: permissions, version: '2022-04-01' }
+  - { plane: management, provider: Microsoft.Authorization, resourceType: roleAssignments, version: '2022-04-01' }
   preview: true
   notes: >-
     azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects
@@ -96,6 +96,7 @@ sources:
     the principal lacks roleAssignments/write on the subscription. The only built-in check listed.
 overlap:
   decision: adapt
+  provisional: true
   coverage: partial
   rationale: >-
     azd already runs a local check for roleAssignments/write on the subscription (warning, only when the snapshot has role
@@ -103,12 +104,19 @@ overlap:
     actions, Microsoft.Resources/deployments/*, resource-group scope, or the uncertain-versus-missing distinction. Foundry
     Doctor takes the idea and adds Foundry-aware required-action derivation from the compiled template and an explicit uncertain
     outcome. No PSRule, Policy, Defender, Advisor or Checkov rule evaluates the deployer's permissions.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/dep

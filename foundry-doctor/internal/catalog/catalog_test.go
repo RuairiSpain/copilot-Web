@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 )
 
 const goodVerified = `id: FND-SEC-001
@@ -21,15 +23,19 @@ basis: [security]
 category: must-have
 pillar: security
 severity: {dev: warning, test: error, prod: error}
-compatibility: {apiVersions: ["2026-09-01"]}
+compatibility:
+  apiVersions:
+    - {plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts, version: "2026-09-01"}
 evidence: {description: "disableLocalAuth is true", confidence: certain}
 recommendation: Disable local auth.
+fix: Set the verified property in the deployment source.
 sources:
   - url: https://learn.microsoft.com/example
     lastVerified: "2026-10-04"
 overlap: {decision: native, coverage: partial, rationale: "No Foundry-specific check exists."}
 implementation: {owner: native, package: internal/rules/sec}
-tests: {positive: [local auth enabled], negative: [local auth disabled]}
+tests: {positive: [local auth enabled], negative: [local auth disabled], skipped: [input unavailable]}
+testability: Deterministic with the required input.
 `
 
 const seedSEC = "id: FND-SEC-001\nversion: 1\ngroup: SEC\ntitle: t\nstatus: proposed\nphases: [\"1\"]\n"
@@ -70,12 +76,17 @@ func TestValidate(t *testing.T) {
 		wantErr string // substring; empty means valid
 	}{
 		{"verified rule is valid", goodVerified, Options{}, ""},
+		{"uncertain scenario is allowed", with(t, "skipped: [input unavailable]}", "skipped: [input unavailable], uncertain: [evidence is inconclusive]}"), Options{}, ""},
 		{"proposed ok without gate", seedSEC, Options{}, ""},
 		{"proposed fails phase0 gate", seedSEC, Options{Phase0Gate: true}, "still proposed"},
 		{"verified without source", with(t, "sources:\n  - url: https://learn.microsoft.com/example\n    lastVerified: \"2026-10-04\"\n", ""), Options{}, "needs at least one source"},
 		{"malformed date", with(t, "2026-10-04", "20x6-1x-0y"), Options{}, "valid YYYY-MM-DD date"},
 		{"impossible date", with(t, "2026-10-04", "2026-13-45"), Options{}, "valid YYYY-MM-DD date"},
-		{"non-https source", with(t, "https://learn", "http://learn"), Options{}, "must be https"},
+		{"non-https source", with(t, "https://learn", "http://learn"), Options{}, "absolute https URL"},
+		{"malformed source URL", with(t, "https://learn.microsoft.com/example", "https://"), Options{}, "absolute https URL"},
+		{"source URL user information", with(t, "https://learn.microsoft.com/example", "https://user@learn.microsoft.com/example"), Options{}, "without user information"},
+		{"unknown origin system", with(t, "overlap:", "origins: [{system: other, id: check-a}]\noverlap:"), Options{}, `origins[0].system must be "xf"`},
+		{"missing origin id", with(t, "overlap:", "origins: [{system: xf, id: \"\"}]\noverlap:"), Options{}, "origins[0].id is required"},
 		{"platform rule must be error everywhere", with(t, "basis: [security]", "basis: [platform]"), Options{}, "platform-basis rules must be error"},
 		{"bad decision", with(t, "decision: native", "decision: maybe"), Options{}, "overlap.decision"},
 		{"empty rationale", with(t, `rationale: "No Foundry-specific check exists."`, `rationale: ""`), Options{}, "overlap.rationale is required"},
@@ -99,13 +110,18 @@ func TestValidate(t *testing.T) {
 		{"bad confidence", with(t, "confidence: certain", "confidence: sure"), Options{}, "evidence.confidence"},
 		{"empty evidence", with(t, `description: "disableLocalAuth is true"`, `description: ""`), Options{}, "evidence.description is required"},
 		{"empty recommendation", with(t, "recommendation: Disable local auth.", `recommendation: ""`), Options{}, "recommendation is required"},
+		{"empty fix", with(t, "fix: Set the verified property in the deployment source.", `fix: ""`), Options{}, "fix is required"},
+		{"empty testability", with(t, "testability: Deterministic with the required input.", `testability: ""`), Options{}, "testability is required"},
 		{"empty description", with(t, "description: Local (key) authentication must be disabled on Foundry accounts.", `description: ""`), Options{}, "description is required"},
-		{"no negative test", with(t, "negative: [local auth disabled]", "negative: []"), Options{}, "tests.positive and tests.negative"},
+		{"no positive test", with(t, "positive: [local auth enabled]", "positive: []"), Options{}, "tests.positive, tests.negative and tests.skipped"},
+		{"no negative test", with(t, "negative: [local auth disabled]", "negative: []"), Options{}, "tests.positive, tests.negative and tests.skipped"},
+		{"no skipped test", with(t, "skipped: [input unavailable]", "skipped: []"), Options{}, "tests.positive, tests.negative and tests.skipped"},
 		{"no package", with(t, "package: internal/rules/sec", `package: ""`), Options{}, "implementation.package is required"},
-		{"no compatibility", with(t, `compatibility: {apiVersions: ["2026-09-01"]}`, "compatibility: {}"), Options{}, "compatibility must name"},
+		{"no compatibility", with(t, "compatibility:\n  apiVersions:\n    - {plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts, version: \"2026-09-01\"}", "compatibility: {}"), Options{}, "compatibility must name"},
 		{"bad owner", with(t, "owner: native", "owner: nobody"), Options{}, "implementation.owner must be one of"},
 		{"dropped needs drop decision", with(t, "status: verified", "status: dropped"), Options{}, "dropped rule must have overlap.decision drop"},
 	}
+
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			rules, err := load(t, one(tc.content))
@@ -120,6 +136,352 @@ func TestValidate(t *testing.T) {
 				t.Fatalf("error = %v, want substring %q", err, tc.wantErr)
 			}
 		})
+	}
+}
+
+func TestValidateRejectsFutureLastVerified(t *testing.T) {
+	rules, err := load(t, one(goodVerified))
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = Validate(rules, Options{Now: time.Date(2026, 10, 3, 0, 0, 0, 0, time.UTC)})
+	if err == nil || !strings.Contains(err.Error(), "must not be in the future") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestVersionRangeSemantics(t *testing.T) {
+	tests := []struct {
+		name     string
+		rng      VersionRange
+		version  string
+		valid    bool
+		contains bool
+	}{
+		{"exact", VersionRange{Exact: "1.2.3"}, "1.2.3+build.4", true, true},
+		{"inclusive prerelease endpoints", VersionRange{Minimum: "1.2.3-beta.1", Maximum: "1.2.3", IncludeMinimum: true, IncludeMaximum: true}, "1.2.3-beta.2", true, true},
+		{"exclusive lower", VersionRange{Minimum: "1.2.3", Maximum: "2.0.0"}, "1.2.3", true, false},
+		{"reversed", VersionRange{Minimum: "2.0.0", Maximum: "1.0.0"}, "1.5.0", false, false},
+		{"equal excluded", VersionRange{Minimum: "1.0.0", Maximum: "1.0.0", IncludeMinimum: true}, "1.0.0", false, false},
+		{"missing maximum", VersionRange{Minimum: "1.0.0"}, "1.0.0", false, false},
+		{"invalid leading zero", VersionRange{Exact: "01.0.0"}, "1.0.0", false, false},
+		{"invalid prerelease leading zero", VersionRange{Exact: "1.0.0-01"}, "1.0.0-1", false, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := validVersionRange(tc.rng); got != tc.valid {
+				t.Fatalf("validVersionRange() = %v, want %v", got, tc.valid)
+			}
+			if got := tc.rng.Contains(tc.version); got != tc.contains {
+				t.Fatalf("Contains(%q) = %v, want %v", tc.version, got, tc.contains)
+			}
+		})
+	}
+}
+
+func TestStructuredVersionRangeLoadsAndUnknownFieldFails(t *testing.T) {
+	structured := with(t, "compatibility:\n  apiVersions:\n    - {plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts, version: \"2026-09-01\"}", `compatibility:
+  azd: {minimum: 1.2.3-beta.1, maximum: 1.2.3, includeMinimum: true, includeMaximum: true}
+  preview: true`)
+	rules, err := load(t, one(structured))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Validate(rules, Options{}); err != nil || !rules[0].Compatibility.Azd.Contains("1.2.3-beta.2") {
+		t.Fatalf("structured range: rules=%+v error=%v", rules, err)
+	}
+	_, err = load(t, one(strings.Replace(structured, "minimum:", "minimumTypo:", 1)))
+	if err == nil || !strings.Contains(err.Error(), "minimumTypo") {
+		t.Fatalf("unknown structured field error = %v", err)
+	}
+}
+
+func TestAPIVersionValidation(t *testing.T) {
+	const base = `compatibility:
+  apiVersions:
+    - {plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts, version: "2026-09-01"}`
+	tests := []struct {
+		name    string
+		value   string
+		wantErr string
+	}{
+		{"management", base, ""},
+		{"management operation", `compatibility:
+  apiVersions:
+    - {plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts/deployments, operation: listKeys, version: "2026-09-01"}`, ""},
+		{"data", `compatibility:
+  apiVersions:
+    - {plane: data, service: search, endpointFamily: indexes/documents, operation: query, version: "2026-09-01"}`, ""},
+		{"preview", `compatibility:
+  apiVersions:
+    - {plane: data, service: search, endpointFamily: indexes, version: "2026-09-01-preview"}
+  preview: true`, ""},
+		{"preview flag required", `compatibility:
+  apiVersions:
+    - {plane: data, service: search, endpointFamily: indexes, version: "2026-09-01-preview"}`, "compatibility.preview must be true"},
+		{"preview true remains allowed for stable", base + "\n  preview: true", ""},
+		{"unknown plane", `compatibility:
+  apiVersions:
+    - {plane: control, provider: Microsoft.CognitiveServices, resourceType: accounts, version: "2026-09-01"}`, "plane must be management|data"},
+		{"missing management provider", `compatibility:
+  apiVersions:
+    - {plane: management, resourceType: accounts, version: "2026-09-01"}`, "requires one provider"},
+		{"missing management target", `compatibility:
+  apiVersions:
+    - {plane: management, provider: Microsoft.CognitiveServices, version: "2026-09-01"}`, "requires one resourceType"},
+		{"management forbids data target", `compatibility:
+  apiVersions:
+    - {plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts, service: search, endpointFamily: indexes, version: "2026-09-01"}`, "forbids service and endpointFamily"},
+		{"missing data service", `compatibility:
+  apiVersions:
+    - {plane: data, endpointFamily: indexes, version: "2026-09-01"}`, "requires one service"},
+		{"missing data target", `compatibility:
+  apiVersions:
+    - {plane: data, service: search, version: "2026-09-01"}`, "requires one endpointFamily"},
+		{"data forbids management target", `compatibility:
+  apiVersions:
+    - {plane: data, service: search, endpointFamily: indexes, provider: Microsoft.Search, resourceType: searchServices, version: "2026-09-01"}`, "forbids provider and resourceType"},
+		{"free form provider", `compatibility:
+  apiVersions:
+    - {plane: management, provider: "Microsoft Search service", resourceType: accounts, version: "2026-09-01"}`, "requires one provider"},
+		{"combined resources", `compatibility:
+  apiVersions:
+    - {plane: management, provider: Microsoft.Search, resourceType: "searchServices, indexes", version: "2026-09-01"}`, "requires one resourceType"},
+		{"combined operations", `compatibility:
+  apiVersions:
+    - {plane: data, service: search, endpointFamily: indexes, operation: "create or update", version: "2026-09-01"}`, "one machine-readable operation"},
+		{"range is not exact", `compatibility:
+  apiVersions:
+    - {plane: data, service: search, endpointFamily: indexes, version: ">=2026-09-01"}`, "version must be an exact"},
+		{"malformed version", `compatibility:
+  apiVersions:
+    - {plane: data, service: search, endpointFamily: indexes, version: "2026-9-1"}`, "version must be an exact"},
+		{"impossible version", `compatibility:
+  apiVersions:
+    - {plane: data, service: search, endpointFamily: indexes, version: "2026-02-30"}`, "version must be an exact"},
+		{"zero year", `compatibility:
+  apiVersions:
+    - {plane: data, service: search, endpointFamily: indexes, version: "0000-09-01"}`, "version must be an exact"},
+		{"unknown suffix", `compatibility:
+  apiVersions:
+    - {plane: data, service: search, endpointFamily: indexes, version: "2026-09-01-beta"}`, "version must be an exact"},
+		{"duplicate tuple", base + `
+    - {plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts, version: "2026-09-01"}`, "duplicates apiVersions[0]"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			rules, err := load(t, one(with(t, base, tc.value)))
+			if err != nil {
+				t.Fatalf("load: %v", err)
+			}
+			err = Validate(rules, Options{})
+			if (tc.wantErr == "") != (err == nil) || err != nil && !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("error = %v, want substring %q", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestAPIVersionYAMLIsStrict(t *testing.T) {
+	const prefix = "compatibility:\n  apiVersions:\n    - "
+	tests := []struct {
+		name    string
+		mapping string
+		want    string
+	}{
+		{"legacy scalar", `"Microsoft.CognitiveServices/accounts 2026-09-01"`, "cannot unmarshal"},
+		{"bare version scalar", `"2026-09-01"`, "cannot unmarshal"},
+		{"unknown nested field", `{plane: data, service: search, endpointFamily: indexes, apiVersion: "2026-09-01"}`, "field apiVersion not found"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := load(t, one(with(t,
+				"compatibility:\n  apiVersions:\n    - {plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts, version: \"2026-09-01\"}",
+				prefix+tc.mapping)))
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %v, want substring %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestSelectAPIVersionExact(t *testing.T) {
+	management := APIVersion{
+		Plane: APIPlaneManagement, Provider: "Microsoft.CognitiveServices",
+		ResourceType: "accounts", Version: "2026-09-01",
+	}
+	managementOperation := management
+	managementOperation.Operation = "listKeys"
+	data := APIVersion{
+		Plane: APIPlaneData, Service: "search", EndpointFamily: "indexes",
+		Operation: "query", Version: "2026-09-01-preview",
+	}
+	versions := []APIVersion{management, managementOperation, data}
+	tests := []struct {
+		name   string
+		target APIVersion
+		want   bool
+	}{
+		{"management exact", management, true},
+		{"operation exact", managementOperation, true},
+		{"data exact", data, true},
+		{"omitted operation is exact absence", management, true},
+		{"operation is not wildcard", APIVersion{Plane: management.Plane, Provider: management.Provider, ResourceType: management.ResourceType, Operation: "delete", Version: management.Version}, false},
+		{"plane mismatch", APIVersion{Plane: APIPlaneData, Service: "Microsoft.CognitiveServices", EndpointFamily: "accounts", Version: management.Version}, false},
+		{"provider mismatch", APIVersion{Plane: management.Plane, Provider: "Microsoft.Search", ResourceType: management.ResourceType, Version: management.Version}, false},
+		{"target mismatch", APIVersion{Plane: management.Plane, Provider: management.Provider, ResourceType: "accounts/deployments", Version: management.Version}, false},
+		{"service mismatch", APIVersion{Plane: data.Plane, Service: "openai", EndpointFamily: data.EndpointFamily, Operation: data.Operation, Version: data.Version}, false},
+		{"endpoint mismatch", APIVersion{Plane: data.Plane, Service: data.Service, EndpointFamily: "documents", Operation: data.Operation, Version: data.Version}, false},
+		{"version mismatch", APIVersion{Plane: management.Plane, Provider: management.Provider, ResourceType: management.ResourceType, Version: "2026-08-01"}, false},
+		{"partial target", APIVersion{Plane: APIPlaneManagement, Provider: management.Provider, Version: management.Version}, false},
+		{"unknown plane", APIVersion{Plane: "control", Provider: management.Provider, ResourceType: management.ResourceType, Version: management.Version}, false},
+		{"malformed version", APIVersion{Plane: management.Plane, Provider: management.Provider, ResourceType: management.ResourceType, Version: "latest"}, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := SelectAPIVersion(versions, tc.target)
+			if ok != tc.want {
+				t.Fatalf("SelectAPIVersion() ok = %v, want %v (got %+v)", ok, tc.want, got)
+			}
+			if ok && got != tc.target {
+				t.Fatalf("SelectAPIVersion() = %+v, want %+v", got, tc.target)
+			}
+			if methodGot, methodOK := (Compatibility{APIVersions: versions}).SelectAPIVersion(tc.target); methodOK != ok || methodGot != got {
+				t.Fatalf("Compatibility.SelectAPIVersion() = (%+v, %v), want (%+v, %v)", methodGot, methodOK, got, ok)
+			}
+		})
+	}
+	if got, ok := SelectAPIVersion([]APIVersion{management, {}}, management); ok || got != (APIVersion{}) {
+		t.Fatalf("invalid candidate must fail closed, got (%+v, %v)", got, ok)
+	}
+	if got, ok := SelectAPIVersion([]APIVersion{management, management}, management); ok || got != (APIVersion{}) {
+		t.Fatalf("duplicate candidates must fail closed, got (%+v, %v)", got, ok)
+	}
+	if management.Matches(managementOperation) || !management.Matches(management) || (APIVersion{}).Matches(APIVersion{}) {
+		t.Fatal("Matches must require valid, exact tuples including operation")
+	}
+}
+
+func TestPerToolOverlapResearch(t *testing.T) {
+	structured := with(t,
+		"overlap: {decision: native, coverage: partial, rationale: \"No Foundry-specific check exists.\"}",
+		`overlap:
+  research:
+    psrule: {state: searched-match, matches: [Azure.Example]}
+    azurePolicy: {state: searched-none}
+    defender: {state: unresearched}
+    advisor: {state: unresearched}
+    bicepLinter: {state: searched-none}
+    checkov: {state: searched-none}
+  decision: native
+  provisional: true
+  coverage: partial
+  rationale: No Foundry-specific check exists.`)
+	rules, err := load(t, one(structured))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Validate(rules, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	o := rules[0].Overlap
+	if got := o.ToolResearch("psrule"); got.State != ResearchSearchedMatch || !slices.Equal(got.Matches, []string{"Azure.Example"}) {
+		t.Fatalf("psrule research = %+v", got)
+	}
+	if o.ToolResearch("defender").State != ResearchUnresearched ||
+		o.ToolResearch("advisor").State != ResearchUnresearched || !o.DecisionIsProvisional() {
+		t.Fatalf("empty Defender/Advisor must remain unresearched with a provisional decision: %+v", o)
+	}
+	matrix := OverlapMatrix(rules)
+	for _, want := range []string{"Decision | Provisional |", "searched-match: `Azure.Example`", "searched-none", "unresearched"} {
+		if !strings.Contains(matrix, want) {
+			t.Fatalf("structured matrix lacks %q:\n%s", want, matrix)
+		}
+	}
+
+	// The current rule packet remains loadable during migration. Only a
+	// non-empty legacy list proves searched-match; an empty list is unknown.
+	legacy := Overlap{Decision: "native", PSRule: []string{"Azure.Example"}}
+	if got := legacy.ToolResearch("psrule"); got.State != ResearchSearchedMatch || len(got.Matches) != 1 {
+		t.Fatalf("legacy match = %+v", got)
+	}
+	if legacy.ToolResearch("defender").State != ResearchUnresearched || !legacy.DecisionIsProvisional() {
+		t.Fatalf("legacy empty tool state/provisional decision is wrong: %+v", legacy)
+	}
+}
+
+func TestPerToolOverlapResearchRejectsInvalidAndUnknownInput(t *testing.T) {
+	base := with(t,
+		"overlap: {decision: native, coverage: partial, rationale: \"No Foundry-specific check exists.\"}",
+		`overlap:
+  research:
+    psrule: {state: searched-none}
+    azurePolicy: {state: searched-none}
+    defender: {state: unresearched}
+    advisor: {state: unresearched}
+    bicepLinter: {state: searched-none}
+    checkov: {state: searched-none}
+  decision: native
+  provisional: true
+  coverage: partial
+  rationale: No Foundry-specific check exists.`)
+	tests := []struct {
+		name, old, replacement, want string
+	}{
+		{"match missing IDs", "psrule: {state: searched-none}", "psrule: {state: searched-match}", "requires at least one match"},
+		{"no-match has IDs", "psrule: {state: searched-none}", "psrule: {state: searched-none, matches: [x]}", "forbids matches"},
+		{"unknown state", "psrule: {state: searched-none}", "psrule: {state: guessed}", "must be searched-match|searched-none|unresearched"},
+		{"unknown nested field", "psrule: {state: searched-none}", "psrule: {state: searched-none, result: x}", "field result not found"},
+		{"old scalar is rejected", `research:
+    psrule: {state: searched-none}
+    azurePolicy: {state: searched-none}
+    defender: {state: unresearched}
+    advisor: {state: unresearched}
+    bicepLinter: {state: searched-none}
+    checkov: {state: searched-none}`, "research: searched", "cannot unmarshal"},
+		{"unresearched needs provisional decision", "  provisional: true\n", "", "provisional must be true"},
+		{"new and old matches conflict", "  decision: native\n", "  psrule: [legacy]\n  decision: native\n", "legacy matches cannot be combined"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			rules, err := load(t, one(strings.Replace(base, tc.old, tc.replacement, 1)))
+			if err == nil {
+				err = Validate(rules, Options{})
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %v, want %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestTestScenarioContractLoadsAllOutcomes(t *testing.T) {
+	content := with(t, "tests: {positive: [local auth enabled], negative: [local auth disabled], skipped: [input unavailable]}",
+		"tests: {positive: [violation produces finding], negative: [compliant produces no finding], skipped: [capability unavailable], uncertain: [evidence inconclusive]}")
+	rules, err := load(t, one(content))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := rules[0].Tests
+	if !slices.Equal(got.Positive, []string{"violation produces finding"}) ||
+		!slices.Equal(got.Negative, []string{"compliant produces no finding"}) ||
+		!slices.Equal(got.Skipped, []string{"capability unavailable"}) ||
+		!slices.Equal(got.Uncertain, []string{"evidence inconclusive"}) {
+		t.Fatalf("test outcome contract was not preserved: %+v", got)
+	}
+}
+
+func TestOriginInventory(t *testing.T) {
+	rules := []Rule{
+		{ID: "FND-CFG-001", Origins: []Origin{{System: "xf", ID: "check-a"}}},
+		{ID: "FND-CFG-002", Origins: []Origin{{System: "xf", ID: "check-b"}}},
+	}
+	if err := ValidateOriginInventory(rules, []Origin{{System: "xf", ID: "check-a"}, {System: "xf", ID: "check-b"}}); err != nil {
+		t.Fatal(err)
+	}
+	err := ValidateOriginInventory(rules, []Origin{{System: "xf", ID: "check-a"}, {System: "xf", ID: "missing"}})
+	if err == nil || !strings.Contains(err.Error(), "unreviewed origin xf:check-b") || !strings.Contains(err.Error(), "xf:missing is not mapped") {
+		t.Fatalf("error = %v", err)
 	}
 }
 
@@ -268,6 +630,43 @@ func TestLoadHonoursContext(t *testing.T) {
 	_, err := Load(ctx, mapFS(one(goodVerified)), "rules/catalog")
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("error = %v, want context.Canceled", err)
+	}
+}
+
+type cancelAfterReadFS struct {
+	fs.FS
+	cancel context.CancelFunc
+}
+
+func (f cancelAfterReadFS) Open(name string) (fs.File, error) {
+	file, err := f.FS.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	info, err := file.Stat()
+	if err != nil || info.IsDir() {
+		return file, err
+	}
+	return &cancelAfterReadFile{File: file, cancel: f.cancel}, nil
+}
+
+type cancelAfterReadFile struct {
+	fs.File
+	cancel context.CancelFunc
+}
+
+func (f *cancelAfterReadFile) Read(p []byte) (int, error) {
+	n, err := f.File.Read(p)
+	f.cancel()
+	return n, err
+}
+
+func TestLoadHonoursCancellationAfterFileRead(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	fsys := cancelAfterReadFS{FS: mapFS(one(goodVerified)), cancel: cancel}
+	_, err := Load(ctx, fsys, "rules/catalog")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want context.Canceled after read", err)
 	}
 }
 

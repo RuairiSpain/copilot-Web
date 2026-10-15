@@ -25,8 +25,8 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.Authorization/policyAssignments 2025-01-01"
-    - "Microsoft.PolicyInsights policyStates 2024-10-01"
+    - { plane: management, provider: Microsoft.Authorization, resourceType: policyAssignments, version: "2025-01-01" }
+    - { plane: management, provider: Microsoft.PolicyInsights, resourceType: policyStates, version: "2024-10-01" }
   preview: false
   notes: "No azd dependency: ARM control plane read Microsoft.Authorization/policyAssignments 2025-01-01 / 2025-01-01: stable, properties.enforcementMode Default|DoNotEnforce|Enroll) - resources/resource-manager/Microsoft.Authorization/policy/stable//policyAssignments.json. Microsoft.PolicyInsights policyStates 2024-10-01 / 2024-10-01: stable, queryResults / summarize; fetched from main branch openapi.json) - specification/policyinsights/resource-manager/Microsoft.PolicyInsights/PolicyInsights/stable//openapi.json."
 evidence:
@@ -52,30 +52,39 @@ sources:
   note: policyStates queryResults and summarize paths; PolicyState.complianceState is a free string in the spec.
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: PSRule Azure.Policy.* rules lint policy assignment descriptors and waiver expiry (not coverage of mapped
     definitions), and Defender regulatory compliance is a different data set. No tool correlates 'which Foundry
     Doctor security rules have a backing policy assignment'. Native is the evidence assembly over ARM APIs; whether
     an environment should be covered is product opinion, so status is product-opinion.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/policy
 tests:
   positive:
-  - mapped definitions all assigned in Default mode passes
-  negative:
   - mapped definition not assigned reports a coverage gap
   - assignment with DoNotEnforce reports not enforced
+  negative:
+  - mapped definitions all assigned in Default mode passes
   skipped:
   - no Policy Reader permission is skipped
   - Bicep-only mode is skipped (assignments live outside the template)
-  - 'uncertain: initiative that cannot be expanded is reported uncertain'
+  uncertain:
+  - initiative cannot be expanded
 testability: Deterministic given the ARM reads; Skipped without Policy Reader.
 notes: PolicyState.complianceState values were not enumerated in the spec definition; do not hard-code them without
   reading the API response schema or docs.

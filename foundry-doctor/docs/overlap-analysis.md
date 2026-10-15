@@ -7,12 +7,12 @@ Azure Advisor, the Bicep linter and Checkov. Generated from `rules/catalog/`. Th
 each decision is in the rule's `overlap.rationale`; per-group research notes, unverified items and
 proposed new rules are in `docs/overlap/`.
 
-An empty Defender or Advisor cell means "not verified", not "no equivalent", unless the rule's own
-notes say otherwise. A rule with no decision yet is counted as unresearched.
+Each tool cell records searched-match, searched-none, or unresearched. A decision is provisional
+when marked provisional or when any configured tool remains unresearched.
 
 ## Decisions by group
 
-| Group | reuse | wrap | adapt | native | drop | unresearched | total |
+| Group | reuse | wrap | adapt | native | drop | no decision | total |
 |---|---|---|---|---|---|---|---|
 | CFG | 0 | 0 | 3 | 9 | 0 | 0 | 12 |
 | COST | 0 | 0 | 0 | 4 | 0 | 0 | 4 |
@@ -30,113 +30,113 @@ notes say otherwise. A rule with no decision yet is counted as unresearched.
 
 ## Per-rule matrix
 
-| Rule | Decision | Coverage | PSRule | Azure Policy | Bicep linter | Checkov | Defender | Advisor |
-|---|---|---|---|---|---|---|---|---|
-| FND-CFG-001 | adapt | partial | - | - | - | - | - | - |
-| FND-CFG-002 | native | none | - | - | - | - | - | - |
-| FND-CFG-003 | native | partial | - | - | - | - | - | - |
-| FND-CFG-004 | native | none | - | - | - | - | - | - |
-| FND-CFG-005 | adapt | partial | `Azure.Deployment.SecureParameter`, `Azure.Deployment.SecureValue`, `Azure.Deployment.SecretLeak`, `Azure.Deployment.OutputSecretValue` | - | `secure-secrets-in-params`, `secure-parameter-default`, `outputs-should-not-contain-secrets` | `CKV_AZURE_131`, `CKV_SECRET_6` | - | - |
-| FND-CFG-006 | native | partial | - | - | - | - | - | - |
-| FND-CFG-007 | native | none | - | - | - | - | - | - |
-| FND-CFG-008 | native | none | - | - | - | - | - | - |
-| FND-CFG-009 | native | none | - | - | - | - | - | - |
-| FND-CFG-010 | native | none | - | - | - | - | - | - |
-| FND-CFG-011 | native | none | - | - | - | - | - | - |
-| FND-CFG-012 | adapt | partial | `Azure.Resource.AllowedRegions`, `Azure.Template.ResourceLocation`, `Azure.Template.UseLocationParameter` | `e56962a6-4747-49cd-b67b-bf8b01975c4c`, `e765b5de-1225-4ba3-bd56-1ac6695af988` | `no-hardcoded-location`, `explicit-values-for-loc-params` | - | - | - |
-| FND-COST-001 | native | none | - | - | - | - | - | - |
-| FND-COST-002 | native | none | - | - | - | - | - | - |
-| FND-COST-003 | native | none | - | - | - | - | - | - |
-| FND-COST-004 | native | none | - | - | - | - | - | - |
-| FND-DEP-001 | native | none | - | - | - | - | - | - |
-| FND-DEP-002 | native | none | - | - | - | - | - | - |
-| FND-DEP-003 | adapt | partial | - | - | - | - | - | - |
-| FND-DEP-004 | native | none | - | - | - | - | - | - |
-| FND-DEP-005 | native | none | - | - | - | - | - | - |
-| FND-DEP-006 | native | none | - | - | - | - | - | - |
-| FND-DEP-007 | adapt | partial | `Azure.KeyVault.Name`, `Azure.Storage.Name`, `Azure.Search.Name`, `Azure.APIM.Name`, `Azure.Cosmos.AccountName`, `Azure.ACR.Name` | - | - | - | - | - |
-| FND-DEP-008 | native | partial | - | - | - | - | - | - |
-| FND-DEP-009 | adapt | partial | - | `e56962a6-4747-49cd-b67b-bf8b01975c4c`, `e765b5de-1225-4ba3-bd56-1ac6695af988` | - | - | - | - |
-| FND-DEP-010 | native | none | - | - | - | - | - | - |
-| FND-DEP-011 | native | partial | - | - | - | - | - | - |
-| FND-DEP-012 | adapt | partial | - | - | - | - | - | - |
-| FND-ENV-001 | native | none | - | - | - | - | - | - |
-| FND-ENV-002 | native | none | - | - | - | - | - | - |
-| FND-ENV-003 | native | none | - | - | - | - | - | - |
-| FND-ENV-004 | native | none | - | - | - | - | - | - |
-| FND-GW-001 | native | none | - | - | - | - | - | - |
-| FND-GW-002 | native | none | - | - | - | - | - | - |
-| FND-GW-003 | native | none | - | - | - | - | - | - |
-| FND-GW-004 | native | none | - | - | - | - | - | - |
-| FND-GW-005 | native | partial | `Azure.APIM.ManagedIdentity` | `c15dcc82-b93c-4dcb-9332-fbf121685b54` | - | - | - | - |
-| FND-GW-006 | native | none | - | - | - | - | - | - |
-| FND-IDN-001 | adapt | partial | `Azure.AI.ManagedIdentity`, `Azure.ContainerApp.ManagedIdentity`, `Azure.AppService.ManagedIdentity` | `fe3fd216-4f83-4fc1-8984-2bbec80a3418 (Cognitive Services accounts should use a managed identity)` | - | `CKV_AZURE_238` | - | - |
-| FND-IDN-002 | native | none | - | - | - | - | - | - |
-| FND-IDN-003 | native | none | - | - | - | - | - | - |
-| FND-IDN-004 | native | none | - | - | - | - | - | - |
-| FND-IDN-005 | adapt | partial | - | `4f11b553-d42e-4e3a-89be-32ca364cad4c (A maximum of 3 owners should be designated for your subscription)`, `09024ccc-0c5f-475e-9457-b7c0d9ed487b (There should be more than one owner assigned to your subscription)`, `339353f6-2387-4a45-abe4-7f529d121046 (Guest accounts with owner permissions on Azure resources should be removed)`, `0cfea604-3201-4e14-88fc-fae4c427a6c5 (Blocked accounts with owner permissions on Azure resources should be removed)`, `25237d14-4a47-4cb6-bc7c-8bbdd4671f31 (Azure role assignment management should be restricted to Microsoft Entra Privileged Identity Management)` | - | - | `assessment 6f90a6d6-d4d6-0794-0ec1-98fa77878c2e (maximum of 3 owners; from policy 4f11b553)`, `assessment 2c79b4af-f830-b61e-92b9-63dfa30f16e4 (more than one owner; from policy 09024ccc)`, `assessment 20606e75-05c4-48c0-9d97-add6daa2109a (guest accounts with owner permissions; from policy 339353f6)`, `assessment 050ac097-3dda-4d24-ab6d-82568e7a50cf (blocked accounts with owner permissions; from policy 0cfea604)` | - |
-| FND-IDN-006 | adapt | partial | - | `2571b7c3-3056-4a61-b00a-9bc5232234f5 ([Preview] Managed Identity Federated Credentials should be from allowed issuer types)`, `fd1a8e20-2c4f-4a6c-9354-b58d786d9a1f ([Preview] Managed Identity Federated Credentials from GitHub should be from trusted repository owners)`, `ae62c456-33de-4dc8-b100-7ce9028a7d99 ([Preview] Managed Identity Federated Credentials from Azure Kubernetes should be from trusted sources)` | - | - | - | - |
-| FND-IQ-001 | native | none | - | - | - | - | - | - |
-| FND-IQ-002 | native | none | - | - | - | - | - | - |
-| FND-IQ-003 | native | none | - | - | - | - | - | - |
-| FND-IQ-004 | native | none | - | - | - | - | - | - |
-| FND-IQ-005 | native | none | - | - | - | - | - | - |
-| FND-IQ-006 | native | none | - | - | - | - | - | - |
-| FND-IQ-007 | native | none | - | - | - | - | - | - |
-| FND-IQ-008 | adapt | partial | `Azure.Search.ManagedIdentity` | `6300012e-e9a4-4649-b41f-a85f5c43be91` | - | - | - | - |
-| FND-IQ-009 | native | none | - | - | - | - | - | - |
-| FND-IQ-010 | native | none | - | - | - | - | - | - |
-| FND-IQ-011 | native | none | - | - | - | - | - | - |
-| FND-IQ-012 | native | none | - | - | - | - | - | - |
-| FND-NET-001 | adapt | partial | `Azure.AI.PublicAccess`, `Azure.AI.PrivateEndpoints` | `037eea7a-bd0a-46c5-9a66-03aea78705d3 (Azure AI Services resources should restrict network access)`, `d6759c02-b87f-42b7-892e-71b3f471d782 (Azure AI Services resources should use Azure Private Link)`, `47ba1dd7-28d9-4b07-a8d5-9813bed64e0c (Configure Cognitive Services accounts to disable public network access)`, `db630ad5-52e9-4f4d-9c44-53912fe40053 (Configure Cognitive Services accounts with private endpoints)` | - | `CKV_AZURE_134` | - | - |
-| FND-NET-002 | adapt | partial | `Azure.Storage.Firewall`, `Azure.KeyVault.Firewall`, `Azure.Cosmos.PublicAccess`, `Azure.ACR.Firewall` | `ee980b6d-0eca-4501-8d54-f6290fd512c3 (Azure AI Search services should disable public network access)`, `b2982f36-99f2-4db5-8eff-283140c09693 (Storage accounts should disable public network access)`, `797b37f7-06b8-444c-b1ad-fc62867f335a (Azure Cosmos DB should disable public network access)`, `405c5871-3e91-4644-8a63-58e19d68ff5b (Azure Key Vault should disable public network access)`, `0fdf0491-d080-4575-b627-ad0e843cba0f (Public network access should be disabled for Container registries)` | - | `CKV_AZURE_35`, `CKV_AZURE_101`, `CKV_AZURE_109`, `CKV_AZURE_189` | - | - |
-| FND-NET-003 | native | partial | - | `c4bc6f10-cb41-49eb-b000-d5ab82e2a091 (Configure Cognitive Services accounts to use private DNS zones)`, `fbc14a67-53e4-4932-abcc-2049c6706009 (Configure Azure AI Search services to use private DNS zones)`, `a63cc0bd-cda4-4178-b705-37dc439d3e0f (Configure CosmosDB accounts to use private DNS zones)`, `75973700-529f-4de2-b794-fb9b6781b6b0 (Configure a private DNS Zone ID for blob groupID)`, `ac673a9a-f77d-4846-b2d8-a57f8e1c01d4 (Configure Azure Key Vaults to use private DNS zones)` | - | - | - | - |
-| FND-NET-004 | native | none | - | - | - | - | - | - |
-| FND-NET-005 | native | none | - | - | - | - | - | - |
-| FND-NET-006 | native | none | - | - | - | - | - | - |
-| FND-NET-007 | adapt | partial | `Azure.AI.PublicAccess` | `037eea7a-bd0a-46c5-9a66-03aea78705d3 (Azure AI Services resources should restrict network access)` | - | `CKV_AZURE_134` | - | - |
-| FND-NET-008 | adapt | partial | `Azure.Search.SKU` | `a049bf77-880b-470f-ba6d-9f21c530cf83 (Azure AI Search service should use a SKU that supports private link)` | - | - | - | - |
-| FND-NET-009 | adapt | partial | - | `73ef9241-5d81-4cd4-b483-8443d1730fe5 (API Management service should use a SKU that supports virtual networks)`, `ef619a2c-cc4d-4d03-b2ba-8c94a834d85b (API Management services should use a virtual network)` | - | `CKV_AZURE_107`, `CKV_AZURE_174` | - | - |
-| FND-NET-010 | adapt | partial | - | `0fc55270-f8bf-4feb-b7b8-5e7e7eacc6a6 (Azure Monitor Private Link Scope should use private link)`, `a499fed8-bcc8-4195-b154-641f14743757 (Azure Monitor Private Link Scope should block access to non private link resources)`, `bec5db8e-c4e3-40f9-a545-e0bd00065c82 (Configure Azure Monitor Private Link Scope to block access to non private link resources)`, `e8185402-357b-4768-8058-f620bc0ae6b5 (Configure Azure Monitor Private Link Scopes with private endpoints)`, `437914ee-c176-4fff-8986-7e05eb971365 (Configure Azure Monitor Private Link Scope to use private DNS zones)`, `1bc02227-0cb6-4e11-8f53-eb0b22eab7e8 (Application Insights components should block log ingestion and querying from public networks)`, `6c53d030-cc64-46f0-906d-2bc061cd1334 (Log Analytics workspaces should block log ingestion and querying from public networks)` | - | - | - | - |
-| FND-NET-011 | adapt | partial | `Azure.VNET.UseNSGs`, `Azure.NSG.AnyInboundSource` | `e71308d3-144b-4262-b144-efdc3cc90517 (Subnets should be associated with a Network Security Group)`, `94de2ad3-e0c1-4caf-ad78-5d47bbc83d3d (Virtual networks should be protected by Azure DDoS Protection)`, `a7aca53f-2ed4-4466-a25e-0b45ade68efd (Azure DDoS Protection should be enabled)`, `752154a7-1e0f-45c6-a880-ac75a7e4f648 (Public IP addresses should have resource logs enabled for Azure DDoS Protection)` | - | `CKV_AZURE_9`, `CKV_AZURE_10`, `CKV_AZURE_160` | `assessment eade5b56-eefd-444f-95c8-23f29e5d93cb (subnets should be associated with a network security group; from policy e71308d3)`, `assessment e3de1cc0-f4dd-3b34-e496-8b5381ba2d70 (Azure DDoS Protection should be enabled; from policy a7aca53f)` | - |
-| FND-OPS-001 | adapt | partial | - | `55d1f543-d1b0-4811-9663-d6d0dbc6326d`, `1b4d1c4e-934c-4703-944c-27c82c06bebb`, `8def4bdd-4362-4ed6-a26f-7bf8f2c58839`, `b4330a05-a843-4bc8-bf9a-cacce50c67f4`, `567c93f7-3661-494f-a30f-0a94d9bfebf8`, `68ba9fc9-71b9-4e6f-9cf5-ecc07722324c`, `b4fe1a3b-0715-4c6c-a5ea-ffc33cf823cb` | - | - | - | - |
-| FND-OPS-002 | native | none | `Azure.AppInsights.Workspace` | `d550e854-df1a-4de9-bf44-cd894b39a95e` | - | - | - | - |
-| FND-OPS-003 | adapt | partial | `Azure.Monitor.ServiceHealth` | `98903777-a9f6-47f5-90a9-acaf62ab01a8`, `b954148f-4c11-4c38-8221-be76711e194a` | - | - | - | - |
-| FND-OPS-004 | adapt | partial | `Azure.Resource.RequiredTags`, `Azure.Resource.UseTags`, `Azure.Group.RequiredTags`, `Azure.Subscription.RequiredTags` | `871b6d14-10aa-478d-b590-94f262ecfa99`, `1e30110a-5ceb-460c-a204-c1c3969c6d62`, `96670d01-0a4d-4649-9c89-2d3abc0a5025`, `8ce3da23-7156-49e4-b145-24f95f9dcb46` | - | - | - | - |
-| FND-OPS-005 | adapt | partial | `Azure.Storage.Name`, `Azure.APIM.Name`, `Azure.Search.Name`, `Azure.Cosmos.AccountName`, `Azure.KeyVault.Name`, `Azure.ACR.Name`, `Azure.Log.Name`, `Azure.AppInsights.Name`, `Azure.ContainerApp.Name`, `Azure.Group.Name`, `Azure.AI.FoundryNaming` | - | `BCP334`, `BCP335` | - | - | - |
-| FND-OPS-006 | adapt | partial | - | - | - | `CKV_AZURE_37` | - | - |
-| FND-OPS-007 | native | none | - | - | - | - | - | - |
-| FND-OPS-008 | native | none | - | - | - | - | - | - |
-| FND-OPS-009 | adapt | partial | `Azure.Resource.AllowedRegions` | `e56962a6-4747-49cd-b67b-bf8b01975c4c`, `0473574d-2d43-4217-aefe-941fcdf7e684` | - | - | - | - |
-| FND-OPS-010 | adapt | partial | - | `aafe3651-cb78-4f68-9f81-e7e41509110f`, `8791d062-ba96-4c34-b604-8538f7e30ca0` | - | - | - | - |
-| FND-REL-001 | adapt | partial | `Azure.Search.QuerySLA`, `Azure.Search.IndexSLA` | - | - | `CKV_AZURE_209`, `CKV_AZURE_208` | - | - |
-| FND-REL-002 | adapt | partial | `Azure.Storage.UseReplication` | `bf045164-79ba-4215-8f95-f8048dc1780b` | - | - | - | - |
-| FND-REL-003 | adapt | partial | `Azure.Cosmos.AvailabilityZone`, `Azure.Cosmos.ContinuousBackup` | - | - | - | - | - |
-| FND-REL-004 | native | none | - | - | - | - | - | - |
-| FND-REL-005 | native | none | - | - | - | - | - | - |
-| FND-REL-006 | native | none | - | - | - | - | - | - |
-| FND-REL-007 | native | none | - | - | - | - | - | - |
-| FND-REL-008 | native | none | - | - | - | - | - | - |
-| FND-REL-009 | adapt | partial | `Azure.APIM.AvailabilityZone`, `Azure.APIM.MultiRegion` | - | - | - | - | - |
-| FND-RUN-001 | adapt | partial | - | - | - | - | - | - |
-| FND-RUN-002 | native | none | `Azure.AI.PrivateEndpoints` | `c4bc6f10-cb41-49eb-b000-d5ab82e2a091` | - | - | - | - |
-| FND-RUN-003 | native | partial | - | - | - | - | - | - |
-| FND-RUN-004 | native | none | - | - | - | - | - | - |
-| FND-RUN-005 | adapt | partial | - | - | - | - | - | - |
-| FND-RUN-006 | native | none | `Azure.Search.IndexSLA`, `Azure.Search.QuerySLA` | - | - | - | - | - |
-| FND-RUN-007 | native | partial | - | `1b4d1c4e-934c-4703-944c-27c82c06bebb`, `b4330a05-a843-4bc8-bf9a-cacce50c67f4`, `55d1f543-d1b0-4811-9663-d6d0dbc6326d`, `08ba64b8-738f-4918-9686-730d2ed79c7d` | - | - | - | - |
-| FND-RUN-008 | adapt | partial | - | - | - | - | - | - |
-| FND-SEC-001 | adapt | partial | `Azure.AI.DisableLocalAuth` | `71ef260a-8f18-47b7-abcb-62d0673d94dc`, `14de9e63-1b31-492e-a5a3-c3f7fd57f555`, `55eff01b-f2bd-4c32-9203-db285f709d30` | - | `CKV_AZURE_236` | - | - |
-| FND-SEC-002 | adapt | partial | - | `6300012e-e9a4-4649-b41f-a85f5c43be91`, `4eb216f2-9dba-4979-86e6-5d7e63ce3b75`, `d45520cb-31ca-44ba-8da2-fcf914608544` | - | - | - | - |
-| FND-SEC-003 | adapt | partial | `Azure.Cosmos.NoSQLLocalAuth` | `5450f5bd-9c72-4390-a9c4-a7aba4edfdd2`, `dc2d41d1-4ab1-4666-a3e1-3d51c43e0049` | - | `CKV_AZURE_140` | - | - |
-| FND-SEC-004 | adapt | partial | `Azure.Storage.LocalAuth`, `Azure.Storage.BlobPublicAccess`, `Azure.Storage.MinTLS`, `Azure.Storage.SecureTransfer` | `8c6a50c6-9ffd-4ae7-986f-5fa6111f9a54`, `4fa4b6c0-31ca-4c0d-b10d-24b96f62a751`, `13502221-8df0-4414-9937-de9c5c4e396b`, `fe83a0eb-a853-422d-aac2-1bffd182c5d0`, `404c3081-a854-4457-ae30-26a93ef643f9`, `f81e3117-0093-4b17-8a60-82363134f0eb` | - | `CKV_AZURE_59`, `CKV_AZURE_34`, `CKV_AZURE_44`, `CKV_AZURE_3` | - | - |
-| FND-SEC-005 | reuse | full | `Azure.KeyVault.SoftDelete`, `Azure.KeyVault.PurgeProtect`, `Azure.KeyVault.RBAC` | `1e66c121-a66a-4b1f-9b83-0fd99bf0fc2d`, `0b60c0b2-2dc2-4e1c-b5c9-abbed971de53`, `12d4fa5e-1f9f-4c21-97a9-b99b3c6611b5` | - | `CKV_AZURE_111`, `CKV_AZURE_110`, `CKV_AZURE_42` | - | - |
-| FND-SEC-006 | native | partial | - | `12339a85-a25c-4f17-9f82-4766f13f5c4c` | - | - | - | - |
-| FND-SEC-007 | native | partial | - | `af253d37-136a-42f8-a1fc-30010c083d41`, `f3a9c2e0-7b4d-4d8f-9c3a-2e1f6b9a8d4e`, `c1ad46c6-37f8-4af0-9c71-c208375c87dd`, `930f48f9-f07e-427c-9494-52603581c6a9`, `595f98a5-b562-4ab6-b9c8-2ff9f39a3f7c`, `9224c1cc-34fc-44f1-ad08-5c4b079c9ce6` | - | - | - | - |
-| FND-SEC-008 | adapt | partial | `Azure.Defender.Storage`, `Azure.Defender.KeyVault`, `Azure.Defender.CosmosDb` | `c2c0c6d8-007b-4a48-8d9b-3539bddd8e87`, `7e92882a-2f8a-4991-9bc4-d3147d40abb0`, `0e6763cc-5078-4e64-889d-ff4d9a839047`, `640d2586-54d2-465f-877f-9ffc1d2109f4`, `adbe85b5-83e6-4350-ab58-bf3a4f736e5e` | - | `CKV_AZURE_84`, `CKV_AZURE_87` | `Microsoft.Security/pricings (AI, StorageAccounts, KeyVaults, CosmosDbs)` | - |
-| FND-SEC-009 | native | none | - | - | - | - | - | - |
-| FND-SEC-010 | adapt | partial | - | `67121cc7-ff39-4ab8-b7e3-95b84dab487d`, `76a56461-9dc0-40f0-82f5-2453283afa2f`, `356da939-f20a-4bb9-86f8-5db445b0e354`, `1f905d99-2ab7-462c-a6b0-f709acca6c8f`, `6fac406b-40ca-413b-bf8e-0bf964659c25` | - | `CKV_AZURE_100` | - | - |
-| FND-SEC-011 | native | none | - | - | - | - | - | - |
-| FND-SEC-012 | native | none | - | - | - | - | - | - |
-| FND-SEC-013 | native | none | - | - | - | - | - | - |
-| FND-SEC-014 | wrap | full | - | - | `outputs-should-not-contain-secrets` | - | - | - |
+| Rule | Decision | Provisional | Coverage | PSRule | Azure Policy | Bicep linter | Checkov | Defender | Advisor |
+|---|---|---|---|---|---|---|---|---|---|
+| FND-CFG-001 | adapt | true | partial | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-CFG-002 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-CFG-003 | native | true | partial | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-CFG-004 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-CFG-005 | adapt | true | partial | searched-match: `Azure.Deployment.SecureParameter`, `Azure.Deployment.SecureValue`, `Azure.Deployment.SecretLeak`, `Azure.Deployment.OutputSecretValue` | unresearched | searched-match: `secure-secrets-in-params`, `secure-parameter-default`, `outputs-should-not-contain-secrets`, `use-secure-value-for-secure-inputs` | searched-match: `CKV_AZURE_131`, `CKV_SECRET_6` | unresearched | unresearched |
+| FND-CFG-006 | native | true | partial | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-CFG-007 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-CFG-008 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-CFG-009 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-CFG-010 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-CFG-011 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-CFG-012 | adapt | true | partial | searched-match: `Azure.Resource.AllowedRegions`, `Azure.Template.ResourceLocation`, `Azure.Template.UseLocationParameter` | searched-match: `e56962a6-4747-49cd-b67b-bf8b01975c4c`, `e765b5de-1225-4ba3-bd56-1ac6695af988` | searched-match: `no-hardcoded-location`, `explicit-values-for-loc-params` | unresearched | unresearched | unresearched |
+| FND-COST-001 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-COST-002 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-COST-003 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-COST-004 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-DEP-001 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-DEP-002 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-DEP-003 | adapt | true | partial | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-DEP-004 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-DEP-005 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-DEP-006 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-DEP-007 | adapt | true | partial | searched-match: `Azure.KeyVault.Name`, `Azure.Storage.Name`, `Azure.Search.Name`, `Azure.APIM.Name`, `Azure.Cosmos.AccountName`, `Azure.ACR.Name` | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-DEP-008 | native | true | partial | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-DEP-009 | adapt | true | partial | unresearched | searched-match: `e56962a6-4747-49cd-b67b-bf8b01975c4c`, `e765b5de-1225-4ba3-bd56-1ac6695af988` | unresearched | unresearched | unresearched | unresearched |
+| FND-DEP-010 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-DEP-011 | native | true | partial | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-DEP-012 | adapt | true | partial | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-ENV-001 | native | false | none | searched-none | searched-none | searched-none | searched-none | searched-none | searched-none |
+| FND-ENV-002 | native | false | none | searched-none | searched-none | searched-none | searched-none | searched-none | searched-none |
+| FND-ENV-003 | native | false | none | searched-none | searched-none | searched-none | searched-none | searched-none | searched-none |
+| FND-ENV-004 | native | false | none | searched-none | searched-none | searched-none | searched-none | searched-none | searched-none |
+| FND-GW-001 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-GW-002 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-GW-003 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-GW-004 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-GW-005 | native | true | partial | searched-match: `Azure.APIM.ManagedIdentity` | searched-match: `c15dcc82-b93c-4dcb-9332-fbf121685b54` | unresearched | unresearched | unresearched | unresearched |
+| FND-GW-006 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-IDN-001 | adapt | true | partial | searched-match: `Azure.AI.ManagedIdentity`, `Azure.ContainerApp.ManagedIdentity`, `Azure.AppService.ManagedIdentity` | searched-match: `fe3fd216-4f83-4fc1-8984-2bbec80a3418 (Cognitive Services accounts should use a managed identity)` | unresearched | searched-match: `CKV_AZURE_238` | unresearched | unresearched |
+| FND-IDN-002 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-IDN-003 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-IDN-004 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-IDN-005 | adapt | true | partial | unresearched | searched-match: `4f11b553-d42e-4e3a-89be-32ca364cad4c (A maximum of 3 owners should be designated for your subscription)`, `09024ccc-0c5f-475e-9457-b7c0d9ed487b (There should be more than one owner assigned to your subscription)`, `339353f6-2387-4a45-abe4-7f529d121046 (Guest accounts with owner permissions on Azure resources should be removed)`, `0cfea604-3201-4e14-88fc-fae4c427a6c5 (Blocked accounts with owner permissions on Azure resources should be removed)`, `25237d14-4a47-4cb6-bc7c-8bbdd4671f31 (Azure role assignment management should be restricted to Microsoft Entra Privileged Identity Management)` | unresearched | unresearched | searched-match: `assessment 6f90a6d6-d4d6-0794-0ec1-98fa77878c2e (maximum of 3 owners; from policy 4f11b553)`, `assessment 2c79b4af-f830-b61e-92b9-63dfa30f16e4 (more than one owner; from policy 09024ccc)`, `assessment 20606e75-05c4-48c0-9d97-add6daa2109a (guest accounts with owner permissions; from policy 339353f6)`, `assessment 050ac097-3dda-4d24-ab6d-82568e7a50cf (blocked accounts with owner permissions; from policy 0cfea604)` | unresearched |
+| FND-IDN-006 | adapt | true | partial | unresearched | searched-match: `2571b7c3-3056-4a61-b00a-9bc5232234f5 ([Preview] Managed Identity Federated Credentials should be from allowed issuer types)`, `fd1a8e20-2c4f-4a6c-9354-b58d786d9a1f ([Preview] Managed Identity Federated Credentials from GitHub should be from trusted repository owners)`, `ae62c456-33de-4dc8-b100-7ce9028a7d99 ([Preview] Managed Identity Federated Credentials from Azure Kubernetes should be from trusted sources)` | unresearched | unresearched | unresearched | unresearched |
+| FND-IQ-001 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-IQ-002 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-IQ-003 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-IQ-004 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-IQ-005 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-IQ-006 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-IQ-007 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-IQ-008 | adapt | true | partial | searched-match: `Azure.Search.ManagedIdentity` | searched-match: `6300012e-e9a4-4649-b41f-a85f5c43be91` | unresearched | unresearched | unresearched | unresearched |
+| FND-IQ-009 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-IQ-010 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-IQ-011 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-IQ-012 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-NET-001 | adapt | true | partial | searched-match: `Azure.AI.PublicAccess`, `Azure.AI.PrivateEndpoints` | searched-match: `037eea7a-bd0a-46c5-9a66-03aea78705d3 (Azure AI Services resources should restrict network access)`, `d6759c02-b87f-42b7-892e-71b3f471d782 (Azure AI Services resources should use Azure Private Link)`, `47ba1dd7-28d9-4b07-a8d5-9813bed64e0c (Configure Cognitive Services accounts to disable public network access)`, `db630ad5-52e9-4f4d-9c44-53912fe40053 (Configure Cognitive Services accounts with private endpoints)` | unresearched | searched-match: `CKV_AZURE_134` | unresearched | unresearched |
+| FND-NET-002 | adapt | true | partial | searched-match: `Azure.Storage.Firewall`, `Azure.Cosmos.PublicAccess` | searched-match: `ee980b6d-0eca-4501-8d54-f6290fd512c3 (Azure AI Search services should disable public network access)`, `b2982f36-99f2-4db5-8eff-283140c09693 (Storage accounts should disable public network access)`, `797b37f7-06b8-444c-b1ad-fc62867f335a (Azure Cosmos DB should disable public network access)` | unresearched | searched-match: `CKV_AZURE_35`, `CKV_AZURE_101` | unresearched | unresearched |
+| FND-NET-003 | native | true | partial | unresearched | searched-match: `c4bc6f10-cb41-49eb-b000-d5ab82e2a091 (Configure Cognitive Services accounts to use private DNS zones)`, `fbc14a67-53e4-4932-abcc-2049c6706009 (Configure Azure AI Search services to use private DNS zones)`, `a63cc0bd-cda4-4178-b705-37dc439d3e0f (Configure CosmosDB accounts to use private DNS zones)`, `75973700-529f-4de2-b794-fb9b6781b6b0 (Configure a private DNS Zone ID for blob groupID)`, `ac673a9a-f77d-4846-b2d8-a57f8e1c01d4 (Configure Azure Key Vaults to use private DNS zones)` | unresearched | unresearched | unresearched | unresearched |
+| FND-NET-004 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-NET-005 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-NET-006 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-NET-007 | adapt | true | partial | searched-match: `Azure.AI.PublicAccess` | searched-match: `037eea7a-bd0a-46c5-9a66-03aea78705d3 (Azure AI Services resources should restrict network access)` | unresearched | searched-match: `CKV_AZURE_134` | unresearched | unresearched |
+| FND-NET-008 | adapt | true | partial | searched-match: `Azure.Search.SKU` | searched-match: `a049bf77-880b-470f-ba6d-9f21c530cf83 (Azure AI Search service should use a SKU that supports private link)` | unresearched | unresearched | unresearched | unresearched |
+| FND-NET-009 | adapt | true | partial | unresearched | searched-match: `73ef9241-5d81-4cd4-b483-8443d1730fe5 (API Management service should use a SKU that supports virtual networks)`, `ef619a2c-cc4d-4d03-b2ba-8c94a834d85b (API Management services should use a virtual network)` | unresearched | searched-match: `CKV_AZURE_107`, `CKV_AZURE_174` | unresearched | unresearched |
+| FND-NET-010 | adapt | true | partial | unresearched | searched-match: `0fc55270-f8bf-4feb-b7b8-5e7e7eacc6a6 (Azure Monitor Private Link Scope should use private link)`, `a499fed8-bcc8-4195-b154-641f14743757 (Azure Monitor Private Link Scope should block access to non private link resources)`, `bec5db8e-c4e3-40f9-a545-e0bd00065c82 (Configure Azure Monitor Private Link Scope to block access to non private link resources)`, `e8185402-357b-4768-8058-f620bc0ae6b5 (Configure Azure Monitor Private Link Scopes with private endpoints)`, `437914ee-c176-4fff-8986-7e05eb971365 (Configure Azure Monitor Private Link Scope to use private DNS zones)`, `1bc02227-0cb6-4e11-8f53-eb0b22eab7e8 (Application Insights components should block log ingestion and querying from public networks)`, `6c53d030-cc64-46f0-906d-2bc061cd1334 (Log Analytics workspaces should block log ingestion and querying from public networks)` | unresearched | unresearched | unresearched | unresearched |
+| FND-NET-011 | adapt | true | partial | searched-match: `Azure.VNET.UseNSGs`, `Azure.NSG.AnyInboundSource` | searched-match: `e71308d3-144b-4262-b144-efdc3cc90517 (Subnets should be associated with a Network Security Group)`, `94de2ad3-e0c1-4caf-ad78-5d47bbc83d3d (Virtual networks should be protected by Azure DDoS Protection)`, `a7aca53f-2ed4-4466-a25e-0b45ade68efd (Azure DDoS Protection should be enabled)`, `752154a7-1e0f-45c6-a880-ac75a7e4f648 (Public IP addresses should have resource logs enabled for Azure DDoS Protection)` | unresearched | searched-match: `CKV_AZURE_9`, `CKV_AZURE_10`, `CKV_AZURE_160` | searched-match: `assessment eade5b56-eefd-444f-95c8-23f29e5d93cb (subnets should be associated with a network security group; from policy e71308d3)`, `assessment e3de1cc0-f4dd-3b34-e496-8b5381ba2d70 (Azure DDoS Protection should be enabled; from policy a7aca53f)` | unresearched |
+| FND-OPS-001 | adapt | true | partial | unresearched | searched-match: `55d1f543-d1b0-4811-9663-d6d0dbc6326d`, `1b4d1c4e-934c-4703-944c-27c82c06bebb`, `8def4bdd-4362-4ed6-a26f-7bf8f2c58839`, `b4330a05-a843-4bc8-bf9a-cacce50c67f4`, `567c93f7-3661-494f-a30f-0a94d9bfebf8`, `68ba9fc9-71b9-4e6f-9cf5-ecc07722324c`, `b4fe1a3b-0715-4c6c-a5ea-ffc33cf823cb` | unresearched | unresearched | unresearched | unresearched |
+| FND-OPS-002 | native | true | none | searched-match: `Azure.AppInsights.Workspace` | searched-match: `d550e854-df1a-4de9-bf44-cd894b39a95e` | unresearched | unresearched | unresearched | unresearched |
+| FND-OPS-003 | adapt | true | partial | searched-match: `Azure.Monitor.ServiceHealth` | searched-match: `98903777-a9f6-47f5-90a9-acaf62ab01a8`, `b954148f-4c11-4c38-8221-be76711e194a` | unresearched | unresearched | unresearched | unresearched |
+| FND-OPS-004 | adapt | true | partial | searched-match: `Azure.Resource.RequiredTags`, `Azure.Resource.UseTags`, `Azure.Group.RequiredTags`, `Azure.Subscription.RequiredTags` | searched-match: `871b6d14-10aa-478d-b590-94f262ecfa99`, `1e30110a-5ceb-460c-a204-c1c3969c6d62`, `96670d01-0a4d-4649-9c89-2d3abc0a5025`, `8ce3da23-7156-49e4-b145-24f95f9dcb46` | unresearched | unresearched | unresearched | unresearched |
+| FND-OPS-005 | adapt | true | partial | searched-match: `Azure.Storage.Name`, `Azure.APIM.Name`, `Azure.Search.Name`, `Azure.Cosmos.AccountName`, `Azure.KeyVault.Name`, `Azure.ACR.Name`, `Azure.Log.Name`, `Azure.AppInsights.Name`, `Azure.ContainerApp.Name`, `Azure.Group.Name`, `Azure.AI.FoundryNaming` | unresearched | searched-match: `BCP334`, `BCP335` | unresearched | unresearched | unresearched |
+| FND-OPS-006 | adapt | true | partial | unresearched | unresearched | unresearched | searched-match: `CKV_AZURE_37` | unresearched | unresearched |
+| FND-OPS-007 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-OPS-008 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-OPS-009 | adapt | true | partial | searched-match: `Azure.Resource.AllowedRegions` | searched-match: `e56962a6-4747-49cd-b67b-bf8b01975c4c`, `0473574d-2d43-4217-aefe-941fcdf7e684` | unresearched | unresearched | unresearched | unresearched |
+| FND-OPS-010 | adapt | true | partial | unresearched | searched-match: `aafe3651-cb78-4f68-9f81-e7e41509110f`, `8791d062-ba96-4c34-b604-8538f7e30ca0` | unresearched | unresearched | unresearched | unresearched |
+| FND-REL-001 | adapt | true | partial | searched-match: `Azure.Search.QuerySLA`, `Azure.Search.IndexSLA` | unresearched | unresearched | searched-match: `CKV_AZURE_209`, `CKV_AZURE_208` | unresearched | unresearched |
+| FND-REL-002 | adapt | true | partial | searched-match: `Azure.Storage.UseReplication` | searched-match: `bf045164-79ba-4215-8f95-f8048dc1780b` | unresearched | unresearched | unresearched | unresearched |
+| FND-REL-003 | adapt | true | partial | searched-match: `Azure.Cosmos.AvailabilityZone`, `Azure.Cosmos.ContinuousBackup` | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-REL-004 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-REL-005 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-REL-006 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-REL-007 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-REL-008 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-REL-009 | adapt | true | partial | searched-match: `Azure.APIM.AvailabilityZone`, `Azure.APIM.MultiRegion` | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-RUN-001 | adapt | true | partial | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-RUN-002 | native | true | none | searched-match: `Azure.AI.PrivateEndpoints` | searched-match: `c4bc6f10-cb41-49eb-b000-d5ab82e2a091` | unresearched | unresearched | unresearched | unresearched |
+| FND-RUN-003 | native | true | partial | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-RUN-004 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-RUN-005 | adapt | true | partial | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-RUN-006 | native | true | none | searched-match: `Azure.Search.IndexSLA`, `Azure.Search.QuerySLA` | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-RUN-007 | native | true | partial | unresearched | searched-match: `1b4d1c4e-934c-4703-944c-27c82c06bebb`, `b4330a05-a843-4bc8-bf9a-cacce50c67f4`, `55d1f543-d1b0-4811-9663-d6d0dbc6326d`, `08ba64b8-738f-4918-9686-730d2ed79c7d` | unresearched | unresearched | unresearched | unresearched |
+| FND-RUN-008 | adapt | true | partial | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-SEC-001 | adapt | true | partial | searched-match: `Azure.AI.DisableLocalAuth` | searched-match: `71ef260a-8f18-47b7-abcb-62d0673d94dc`, `14de9e63-1b31-492e-a5a3-c3f7fd57f555`, `55eff01b-f2bd-4c32-9203-db285f709d30` | unresearched | searched-match: `CKV_AZURE_236` | unresearched | unresearched |
+| FND-SEC-002 | adapt | true | partial | unresearched | searched-match: `6300012e-e9a4-4649-b41f-a85f5c43be91`, `4eb216f2-9dba-4979-86e6-5d7e63ce3b75`, `d45520cb-31ca-44ba-8da2-fcf914608544` | unresearched | unresearched | unresearched | unresearched |
+| FND-SEC-003 | adapt | true | partial | searched-match: `Azure.Cosmos.NoSQLLocalAuth` | searched-match: `5450f5bd-9c72-4390-a9c4-a7aba4edfdd2`, `dc2d41d1-4ab1-4666-a3e1-3d51c43e0049` | unresearched | searched-match: `CKV_AZURE_140` | unresearched | unresearched |
+| FND-SEC-004 | adapt | true | partial | searched-match: `Azure.Storage.LocalAuth`, `Azure.Storage.BlobPublicAccess`, `Azure.Storage.MinTLS`, `Azure.Storage.SecureTransfer` | searched-match: `8c6a50c6-9ffd-4ae7-986f-5fa6111f9a54`, `4fa4b6c0-31ca-4c0d-b10d-24b96f62a751`, `13502221-8df0-4414-9937-de9c5c4e396b`, `fe83a0eb-a853-422d-aac2-1bffd182c5d0`, `404c3081-a854-4457-ae30-26a93ef643f9`, `f81e3117-0093-4b17-8a60-82363134f0eb` | unresearched | searched-match: `CKV_AZURE_59`, `CKV_AZURE_34`, `CKV_AZURE_44`, `CKV_AZURE_3` | unresearched | unresearched |
+| FND-SEC-005 | reuse | true | full | searched-match: `Azure.KeyVault.SoftDelete`, `Azure.KeyVault.PurgeProtect`, `Azure.KeyVault.RBAC` | searched-match: `1e66c121-a66a-4b1f-9b83-0fd99bf0fc2d`, `0b60c0b2-2dc2-4e1c-b5c9-abbed971de53`, `12d4fa5e-1f9f-4c21-97a9-b99b3c6611b5` | unresearched | searched-match: `CKV_AZURE_111`, `CKV_AZURE_110`, `CKV_AZURE_42` | unresearched | unresearched |
+| FND-SEC-006 | native | true | partial | unresearched | searched-match: `12339a85-a25c-4f17-9f82-4766f13f5c4c` | unresearched | unresearched | unresearched | unresearched |
+| FND-SEC-007 | native | true | partial | unresearched | searched-match: `af253d37-136a-42f8-a1fc-30010c083d41`, `f3a9c2e0-7b4d-4d8f-9c3a-2e1f6b9a8d4e`, `c1ad46c6-37f8-4af0-9c71-c208375c87dd`, `930f48f9-f07e-427c-9494-52603581c6a9`, `595f98a5-b562-4ab6-b9c8-2ff9f39a3f7c`, `9224c1cc-34fc-44f1-ad08-5c4b079c9ce6` | unresearched | unresearched | unresearched | unresearched |
+| FND-SEC-008 | adapt | true | partial | searched-match: `Azure.Defender.Storage`, `Azure.Defender.KeyVault`, `Azure.Defender.CosmosDb` | searched-match: `c2c0c6d8-007b-4a48-8d9b-3539bddd8e87`, `7e92882a-2f8a-4991-9bc4-d3147d40abb0`, `0e6763cc-5078-4e64-889d-ff4d9a839047`, `640d2586-54d2-465f-877f-9ffc1d2109f4`, `adbe85b5-83e6-4350-ab58-bf3a4f736e5e` | unresearched | searched-match: `CKV_AZURE_84`, `CKV_AZURE_87` | searched-match: `Microsoft.Security/pricings (AI, StorageAccounts, KeyVaults, CosmosDbs)` | unresearched |
+| FND-SEC-009 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-SEC-010 | adapt | true | partial | unresearched | searched-match: `67121cc7-ff39-4ab8-b7e3-95b84dab487d`, `76a56461-9dc0-40f0-82f5-2453283afa2f`, `356da939-f20a-4bb9-86f8-5db445b0e354`, `1f905d99-2ab7-462c-a6b0-f709acca6c8f`, `6fac406b-40ca-413b-bf8e-0bf964659c25` | unresearched | searched-match: `CKV_AZURE_100` | unresearched | unresearched |
+| FND-SEC-011 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-SEC-012 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-SEC-013 | native | true | none | unresearched | unresearched | unresearched | unresearched | unresearched | unresearched |
+| FND-SEC-014 | wrap | true | full | unresearched | unresearched | searched-match: `outputs-should-not-contain-secrets` | unresearched | unresearched | unresearched |

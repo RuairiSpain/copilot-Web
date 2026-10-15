@@ -1,0 +1,42 @@
+# Foundry Doctor WAF developer detail
+
+> Detailed control evidence for remediation. This report is scoped to available evidence and does not claim complete WAF compliance.
+
+- Profile: `foundry-test`
+- Decision: Proceed with conditions\.
+
+## Security
+
+### Managed identities used — FAIL
+
+- Rule: `FND-IDN-001`
+- Mandatory: true
+- Costly recommendation: false
+- Source: <https://learn.microsoft.com/example> (`2026-10-05`)
+- Recommendation: Use managed identity\.
+- Fix: `identity: { type: 'SystemAssigned' }`
+- Evidence:
+  - identity is missing at `infra/main.bicep:10:2`
+
+## Reliability
+
+### DR strategy question — QUESTION
+
+- Rule: `FND-REL-007`
+- Mandatory: false
+- Costly recommendation: false
+- Review question: Has the team recorded a disaster recovery strategy?
+- WARA references: `dff62efe`
+- Evidence: no finding or skip record was present.
+
+## Operations
+
+### Telemetry sink exists — UNKNOWN
+
+- Rule: `FND-OPS-002`
+- Mandatory: false
+- Costly recommendation: false
+- Recommendation basis: project opinion
+- Evidence:
+  - skipped: input\-unavailable
+

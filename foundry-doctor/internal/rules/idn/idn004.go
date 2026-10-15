@@ -1,151 +1,262 @@
 package idn
 
 import (
-	"context"
 	"fmt"
+	"regexp"
 	"strings"
 
-	"github.com/ruairispain/copilot-web/foundry-doctor/internal/model"
-	"github.com/ruairispain/copilot-web/foundry-doctor/internal/rules"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
 
-// idn004 implements FND-IDN-004: no broad Owner/Contributor for application identities.
-type idn004 struct{ meta }
+var (
+	guidEqualsRe = regexp.MustCompile(`(?i)GuidEquals\s*\{([^}]*)\}`)
+	guidInRe     = regexp.MustCompile(`(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`)
+)
 
-func newIDN004() rules.Rule { return idn004{meta{"FND-IDN-004", 1}} }
+type principalClass int
 
-// privilegedRole is one privileged administrator role of the catalogue (Azure built-in roles reference).
-type privilegedRole struct {
-	slug, name  string
-	conditional bool // an ABAC condition downgrades the finding (documentation recommends conditions)
-	narrowOK    bool // allowed at the scope of a single resource
-}
+const (
+	principalUnknown principalClass = iota
+	principalApp
+)
 
-var privilegedRoles = map[string]privilegedRole{
-	"8e3af657-a8ff-443c-a75c-2fe8c4bcb635": {slug: "owner", name: "Owner"},
-	"b24988ac-6180-42a0-ab88-20f7382dd24c": {slug: "contributor", name: "Contributor", narrowOK: true},
-	"18d7d88d-d35e-4fb5-a5c3-7773c20a72d9": {slug: "user-access-administrator", name: "User Access Administrator", conditional: true},
-	"f58310d9-a9f6-439a-9e8d-f62e7b41a168": {slug: "rbac-administrator", name: "Role Based Access Control Administrator", conditional: true},
-}
-
-func (r idn004) Evaluate(ctx context.Context, in *model.Input) ([]rules.Result, error) {
-	if res, stop := armGuard(r, in); stop {
-		return res, nil
-	}
-	t := in.ARM
-	var out []rules.Result
-	for _, ra := range t.ResourcesOfType(typeRoleAssign) {
-		if err := ctx.Err(); err != nil {
-			return nil, fmt.Errorf("FND-IDN-004: %w", err)
+// appIdentityResources returns the template resources whose identity is an
+// application identity (Foundry account/project and declared workloads).
+func appIdentityResources(in *sdk.Input) []sdk.ARMResource {
+	var out []sdk.ARMResource
+	for _, r := range ofType(in, typeAccounts, typeProjects, typeContainer, typeSites, typeSlots) {
+		if len(r.Identity) == 0 {
+			continue
 		}
-		out = append(out, r.check(t, ra)...)
+		if t, _, _ := strOf(r.Identity, "type"); strings.EqualFold(t, "None") {
+			continue
+		}
+		out = append(out, r)
 	}
-	out = append(out, liveSkip(r, "live role assignments at subscription, resource group and Foundry scopes are not read in offline mode"))
-	return out, nil
+	return out
 }
 
-// appKind classifies the principal of an assignment.
-type appKind struct {
-	app, deploy, known bool
-	desc               string
-}
-
-func classifyPrincipal(t *model.ARMTemplate, p principal) appKind {
-	if p.kind != principalRef || p.field != fieldObjectID || len(p.cands) == 0 {
-		return appKind{}
+// classifyPrincipal correlates a role assignment principalId to an application
+// identity declared in the template. Anything it cannot prove is unknown.
+func classifyPrincipal(pid string, apps []sdk.ARMResource) principalClass {
+	lp := strings.ToLower(strings.TrimSpace(pid))
+	if lp == "" {
+		return principalUnknown
 	}
-	k := appKind{known: true}
-	for _, c := range p.cands {
-		switch {
-		case p.system && (isType(c, typeAccount) || isType(c, typeProject) || isType(c, typeContainerAp) || isType(c, typeSite) || isType(c, typeSlot)):
-			k.app = true
-			k.desc = c.Type + " " + c.Name
-		case isType(c, typeUAMI):
-			if attachedToApp(t, c) {
-				k.app = true
-				k.desc = "user-assigned identity " + c.Name
+	isExpr := strings.HasPrefix(lp, "[")
+	for _, r := range apps {
+		if !isExpr {
+			if v, ok, e := strOf(r.Identity, "principalId"); ok && !e && strings.EqualFold(v, lp) {
+				return principalApp
 			}
-			if hasFederatedCredential(t, c) {
-				k.deploy = true
-				if k.desc == "" {
-					k.desc = "user-assigned identity " + c.Name
+			continue
+		}
+		if !strings.Contains(lp, "principalid") {
+			continue
+		}
+		if strings.Contains(lp, "'"+strings.ToLower(r.Type)+"'") && nameSegmentsIn(lp, r.Name) {
+			return principalApp
+		}
+		if ua, ok := r.Identity["userAssignedIdentities"].(map[string]any); ok {
+			for k := range ua {
+				if !unresolved(k) && strings.Contains(lp, strings.ToLower(k)) {
+					return principalApp
 				}
 			}
 		}
 	}
-	return k
+	return principalUnknown
 }
 
-func attachedToApp(t *model.ARMTemplate, u model.Resource) bool {
-	for _, typ := range []string{typeAccount, typeProject, typeContainerAp, typeSite, typeSlot} {
-		for _, a := range t.ResourcesOfType(typ) {
-			if containsRes(attachedIdentities(t, a), u) {
-				return true
+func nameSegmentsIn(lexpr, name string) bool {
+	if name == "" || unresolved(name) {
+		return false
+	}
+	for _, seg := range strings.Split(name, "/") {
+		if !strings.Contains(lexpr, "'"+strings.ToLower(seg)+"'") {
+			return false
+		}
+	}
+	return true
+}
+
+type condVerdict int
+
+const (
+	condNone        condVerdict = iota // no condition present
+	condRestrictive                    // verified to delegate only non-privileged roles
+	condIneffective                    // evaluated and does not restrict effectively
+	condUncertain                      // cannot be evaluated
+)
+
+// evalCondition evaluates an ABAC condition on a role-assignment-writing role.
+// It verifies the standard constrained-delegation shape: a GuidEquals set over
+// the requested role definition for write and over the resource role
+// definition for delete, containing no privileged administrator role.
+func evalCondition(r sdk.ARMResource) (condVerdict, string) {
+	cond, present, isExpr := strOf(r.Properties, "condition")
+	if !present || (!isExpr && strings.TrimSpace(cond) == "") {
+		return condNone, ""
+	}
+	if isExpr {
+		return condUncertain, "condition is an unresolved expression"
+	}
+	ver, _, verExpr := strOf(r.Properties, "conditionVersion")
+	if verExpr {
+		return condUncertain, "conditionVersion is an unresolved expression"
+	}
+	if ver != "2.0" {
+		return condUncertain, fmt.Sprintf("conditionVersion %q is not 2.0", ver)
+	}
+	sets := guidEqualsRe.FindAllStringSubmatch(cond, -1)
+	if len(sets) == 0 {
+		return condUncertain, "condition has no role definition GUID set that can be evaluated"
+	}
+	lc := strings.ToLower(cond)
+	for _, s := range sets {
+		for _, g := range guidInRe.FindAllString(s[1], -1) {
+			switch strings.ToLower(g) {
+			case roleOwner, roleContributor, roleUAA, roleRBACAdmin:
+				return condIneffective, "condition allows delegating privileged role " + strings.ToLower(g)
 			}
 		}
 	}
-	return false
+	if !strings.Contains(lc, "@request[microsoft.authorization/roleassignments:roledefinitionid]") ||
+		!strings.Contains(lc, "roleassignments/write") {
+		return condIneffective, "condition does not constrain the role definition of role assignment writes"
+	}
+	if !strings.Contains(lc, "roleassignments/delete") ||
+		!strings.Contains(lc, "@resource[microsoft.authorization/roleassignments:roledefinitionid]") {
+		return condIneffective, "condition does not constrain the role definition of role assignment deletes"
+	}
+	return condRestrictive, ""
 }
 
-// hasFederatedCredential reports whether a federated credential is declared under the identity, the signal the
-// rule uses for a deployment (pipeline) identity.
-func hasFederatedCredential(t *model.ARMTemplate, u model.Resource) bool {
-	fics := t.ResourcesOfType(typeFIC)
-	uSegs := nameSegments(u.Name)
-	for _, f := range fics {
-		fSegs := nameSegments(f.Name)
-		if len(fSegs) >= 2 && len(uSegs) >= 1 && nameKey(fSegs[0]) == nameKey(uSegs[len(uSegs)-1]) {
-			return true
+func evalIDN004(in *sdk.Input) sdk.Result {
+	var a acc
+	apps := appIdentityResources(in)
+	excluded := configuredDeploymentPrincipals(in)
+	evaluated := false
+	excludedOnly := false
+	missingData := false
+	for _, r := range ofType(in, typeRoleAssign) {
+		def, present, isExpr := strOf(r.Properties, "roleDefinitionId")
+		if !present {
+			missingData = true
+			continue
+		}
+		if isExpr {
+			a.unresolved = true
+			continue
+		}
+		role := roleGUID(def)
+		var name string
+		switch role {
+		case roleOwner:
+			name = "Owner"
+		case roleContributor:
+			name = "Contributor"
+		case roleUAA:
+			name = "User Access Administrator"
+		case roleRBACAdmin:
+			name = "Role Based Access Control Administrator"
+		default:
+			continue
+		}
+		pt, ptPresent, ptExpr := strOf(r.Properties, "principalType")
+		if ptExpr || !ptPresent {
+			a.unresolved = true // cannot tell whether the principal is an application identity
+			continue
+		}
+		switch pt {
+		case "AgentServicePrincipal", "AgentUser":
+		case "ServicePrincipal":
+			pid, pidPresent, _ := strOf(r.Properties, "principalId")
+			if v, ok := r.Properties["principalId"].(string); ok && unresolved(v) {
+				pid = v
+			}
+			if pidPresent && excluded[strings.ToLower(strings.TrimSpace(pid))] {
+				excludedOnly = true
+				continue
+			}
+			// A principal that cannot be tied to an application identity may be a
+			// deployment identity; that is uncertain, never a failure.
+			if !pidPresent || classifyPrincipal(pid, apps) != principalApp {
+				a.unresolved = true
+				continue
+			}
+		default:
+			continue // human and group principals are out of scope
+		}
+		if unresolved(r.Scope) || r.Scope == "" {
+			a.unresolved = true
+			continue
+		}
+		evaluated = true
+		lvl := classifyScope(r.Scope)
+		if lvl == scopeUnknown {
+			a.unresolved = true
+			continue
+		}
+		var condNote string
+		if role == roleUAA || role == roleRBACAdmin {
+			switch v, why := evalCondition(r); v {
+			case condRestrictive:
+				continue
+			case condUncertain:
+				a.unresolved = true
+				continue
+			case condIneffective:
+				condNote = "; condition is ineffective: " + why
+			}
+		}
+		switch {
+		case lvl == scopeBroad:
+			a.add(r, fmt.Sprintf("%s granted to an application identity at broad scope %q%s", name, r.Scope, condNote))
+		case lvl == scopeResource && role != roleContributor:
+			a.add(r, fmt.Sprintf("%s granted to an application identity at resource scope %q%s", name, r.Scope, condNote))
 		}
 	}
-	return len(fics) > 0 && len(t.ResourcesOfType(typeUAMI)) == 1
+	switch {
+	case len(a.fs) > 0:
+		return sdk.Result{Findings: a.fs}
+	case a.unresolved:
+		return skip(SkipUnresolved)
+	case evaluated:
+		return sdk.Result{}
+	case excludedOnly:
+		return skip(sdk.SkipInputUnavailable)
+	case missingData:
+		return skip(sdk.SkipInputUnavailable)
+	default:
+		return sdk.Result{}
+	}
 }
 
-func (r idn004) check(t *model.ARMTemplate, ra model.Resource) []rules.Result {
-	rawRole, _ := rawString(ra, "properties", "roleDefinitionId")
-	guid, ok, _ := roleGUIDText(rawRole)
-	role, priv := privilegedRoles[guid]
-	if ok && !priv {
-		return nil
+func configuredDeploymentPrincipals(in *sdk.Input) map[string]bool {
+	out := map[string]bool{}
+	if in == nil || in.Policy == nil {
+		return out
 	}
-	p := resolvePrincipal(t, ra)
-	k := classifyPrincipal(t, p)
-	if !k.known {
-		if !ok {
-			return nil
-		}
-		return []rules.Result{skipRes(r, ra, rules.ReasonUnresolvedValue("principal"),
-			fmt.Sprintf("%s is assigned to a principal that cannot be tied to an identity of the template; whether it is an application identity is unknown", role.name), "resolved principal")}
-	}
-	if !k.app {
-		return []rules.Result{rules.Pass()}
-	}
+	v, ok := in.Policy.Get("identity.deploymentPrincipalIds")
 	if !ok {
-		return []rules.Result{skipRes(r, ra, rules.ReasonUnresolvedValue("role-definition"),
-			"the role definition ID of an assignment to an application identity is not a literal", "resolved role definition ID")}
+		return out
 	}
-	if k.deploy {
-		return []rules.Result{uncertain(r, ra, "application-and-deployment-identity", "/properties/principalId",
-			fmt.Sprintf("%s is assigned to %s, which runs the workload and also carries a federated credential (a pipeline signal); it cannot be told whether it is a deployment identity", role.name, k.desc), rec004, fix004)}
+	switch ids := v.(type) {
+	case []string:
+		for _, id := range ids {
+			if s := strings.ToLower(strings.TrimSpace(id)); s != "" {
+				out[s] = true
+			}
+		}
+	case []any:
+		for _, id := range ids {
+			if s, ok := id.(string); ok {
+				if s = strings.ToLower(strings.TrimSpace(s)); s != "" {
+					out[s] = true
+				}
+			}
+		}
 	}
-	scope, present := scopeOf(ra)
-	if present && scope.kind == idUnknown {
-		return []rules.Result{uncertain(r, ra, role.slug+"-scope-unknown", "/scope",
-			fmt.Sprintf("%s is assigned to %s at a scope the rule cannot classify", role.name, k.desc), rec004, fix004)}
-	}
-	if role.narrowOK && scope.kind == idResource {
-		return []rules.Result{rules.Pass()}
-	}
-	if cond, has := rawString(ra, "properties", "condition"); role.conditional && has && strings.TrimSpace(cond) != "" {
-		return []rules.Result{rules.Pass()}
-	}
-	where, sk := "the deployment scope (resource group or wider)", "deployment"
-	if present {
-		where = scope.describe() + " scope"
-		sk = scope.keyName()
-	}
-	key := role.slug + "-" + sk
-	return []rules.Result{fail(r, ra, key, "/properties/roleDefinitionId",
-		fmt.Sprintf("%s (%s) is assigned to application identity %s at %s", role.name, guid, k.desc, where), rec004, fix004, sdk.ConfidenceLikely)}
+	return out
 }

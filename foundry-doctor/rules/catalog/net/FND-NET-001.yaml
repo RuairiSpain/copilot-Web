@@ -27,8 +27,8 @@ compatibility:
   azd: ''
   extensions: {}
   apiVersions:
-  - Microsoft.CognitiveServices/accounts 2026-09-01
-  - Microsoft.CognitiveServices/accounts 2026-07-15-preview
+  - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts, version: '2026-09-01' }
+  - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts, version: '2026-07-15-preview' }
   preview: true
   notes: >-
     Not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked) Microsoft.CognitiveServices/accounts
@@ -98,6 +98,7 @@ sources:
   note: Private endpoint group ID account; projects inherit the account network posture.
 overlap:
   decision: adapt
+  provisional: true
   coverage: partial
   rationale: >-
     PSRule Azure.AI.PublicAccess and Azure.AI.PrivateEndpoints, built-in policies "Azure AI Services resources should restrict
@@ -106,19 +107,29 @@ overlap:
     endpoint (an account with public access disabled and no endpoint is unreachable), awareness of projects behind the account,
     and per-profile severity (public access accepted in dev). Evidence differs: a single property versus a property plus
     endpoint state. Defender for Cloud and Advisor equivalents were not verifiable from the local sources.
-  psrule:
-  - Azure.AI.PublicAccess
-  - Azure.AI.PrivateEndpoints
-  azurePolicy:
-  - 037eea7a-bd0a-46c5-9a66-03aea78705d3 (Azure AI Services resources should restrict network access)
-  - d6759c02-b87f-42b7-892e-71b3f471d782 (Azure AI Services resources should use Azure Private Link)
-  - 47ba1dd7-28d9-4b07-a8d5-9813bed64e0c (Configure Cognitive Services accounts to disable public network access)
-  - db630ad5-52e9-4f4d-9c44-53912fe40053 (Configure Cognitive Services accounts with private endpoints)
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov:
-  - CKV_AZURE_134
+  research:
+    psrule:
+      state: searched-match
+      matches:
+      - Azure.AI.PublicAccess
+      - Azure.AI.PrivateEndpoints
+    azurePolicy:
+      state: searched-match
+      matches:
+      - 037eea7a-bd0a-46c5-9a66-03aea78705d3 (Azure AI Services resources should restrict network access)
+      - d6759c02-b87f-42b7-892e-71b3f471d782 (Azure AI Services resources should use Azure Private Link)
+      - 47ba1dd7-28d9-4b07-a8d5-9813bed64e0c (Configure Cognitive Services accounts to disable public network access)
+      - db630ad5-52e9-4f4d-9c44-53912fe40053 (Configure Cognitive Services accounts with private endpoints)
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: searched-match
+      matches:
+      - CKV_AZURE_134
 implementation:
   owner: native
   package: internal/rules/net
@@ -130,10 +141,10 @@ tests:
   - account-public-enabled-default-allow-in-prod
   - account-public-disabled-no-private-endpoint
   - account-public-disabled-endpoint-pending-live
+  - dev-profile-public-account-reports-info
   negative:
   - account-public-disabled-with-account-groupid-endpoint
   - account-restricted-mode-with-ip-rules
-  - dev-profile-public-account-reports-info
   skipped:
   - private-endpoint-defined-in-another-template
   - account-resource-id-is-parameter-and-no-arm-access

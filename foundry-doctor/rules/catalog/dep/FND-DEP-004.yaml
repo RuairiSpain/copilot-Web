@@ -27,7 +27,7 @@ compatibility:
   extensions:
     azure.ai.projects: '>=1.0.0-beta.13 <=1.0.0-beta.13'
   apiVersions:
-  - Microsoft.CognitiveServices 2026-09-01
+  - { plane: management, provider: Microsoft.CognitiveServices, resourceType: locations/models, version: '2026-09-01' }
   preview: true
   notes: >-
     azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects
@@ -85,17 +85,25 @@ sources:
     model list --location.
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     No PSRule, Policy, Defender, Advisor or Checkov rule checks that a declared model, version and SKU is offered in a location;
     PSRule validates resource configuration, not catalogue availability. Foundry Doctor value is correlating azure.yaml
     and Bicep deployments with the live regional catalogue.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/dep
@@ -108,9 +116,9 @@ tests:
   - sku-not-offered-for-model
   - model-lifecycle-deprecated
   - sku-deprecation-date-in-past
+  - model-deprecating-future-date-warning-only
   negative:
   - model-version-and-sku-listed
-  - model-deprecating-future-date-warning-only
   skipped:
   - no-azure-credential-available
   - location-unresolved-in-azd-environment

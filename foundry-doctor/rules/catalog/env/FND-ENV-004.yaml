@@ -25,9 +25,8 @@ compatibility:
 evidence:
   description: >-
     Compute the key-level difference of two or more .azure/<env>/.env files and the azure.yaml after per-environment
-    substitution. Output lists key names with one of: only-in-A, only-in-B, differs, same. Values are not printed and not
-    hashed: a key is reported only by name with the outcome (differs or same). Phase 1 compares .env files only; the
-    azure.yaml after per-environment substitution is not diffed.
+    substitution. Output lists key names with one of: only-in-A, only-in-B, differs, same. Values are not printed;
+    differing values are shown as salted hash fingerprints, and keys that look secret-bearing are shown by name only.
   confidence: certain
 recommendation: >-
   Review the summary before promoting a release; use azd env get-values per environment for the details you are
@@ -36,7 +35,7 @@ fix: |
   foundry-doctor compare --env dev --env prod
 sources:
   - url: https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview
-    lastVerified: "2026-10-04"
+    lastVerified: "2026-10-05"
     verifiedVia: refs/azd-docs/articles/azure-developer-cli/environments-overview.md
     note: Environment layout (.azure/<env>/.env) that the comparison reads.
   - url: https://github.com/Azure/azure-dev/blob/azure-dev-cli_1.35.0/cli/azd/pkg/environment/local_file_data_store.go
@@ -61,15 +60,23 @@ sources:
       .azure/<name>/.env and .azure/<name>/config.json.
 overlap:
   decision: native
+  provisional: false
   coverage: none
   rationale: >-
     Environment comparison is the product's compare command; nothing in PSRule, Policy, Defender or Advisor does it.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: searched-none
+    azurePolicy:
+      state: searched-none
+    defender:
+      state: searched-none
+    advisor:
+      state: searched-none
+    bicepLinter:
+      state: searched-none
+    checkov:
+      state: searched-none
 implementation:
   owner: native
   package: internal/rules/env

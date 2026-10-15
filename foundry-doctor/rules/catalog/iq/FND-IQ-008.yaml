@@ -22,9 +22,9 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Search data plane 2026-04-01"
-    - "Search data plane 2026-08-01-preview"
-    - "Foundry project connection API 2025-10-01-preview"
+    - { plane: data, service: AzureAISearch, endpointFamily: knowledgesources, version: "2026-04-01" }
+    - { plane: data, service: AzureAISearch, endpointFamily: knowledgesources, version: "2026-08-01-preview" }
+    - { plane: data, service: MicrosoftFoundry, endpointFamily: connections, version: "2025-10-01-preview" }
   preview: true
   notes: "Foundry project connection API 2025-10-01-preview: RemoteTool, ProjectManagedIdentity; doc example."
 evidence:
@@ -77,6 +77,7 @@ sources:
     note: RemoteTool connection with authType ProjectManagedIdentity; role-based access recommended for production, key-based as fallback.
 overlap:
   decision: adapt
+  provisional: true
   coverage: partial
   rationale: >-
     PSRule Azure.Search.ManagedIdentity only checks that the Search service has an identity, and the Azure
@@ -84,12 +85,23 @@ overlap:
     inspects the connection strings and key parameters of knowledge sources, vectorizers or Foundry project
     connections, which is the Foundry-specific evidence. Reuse the identity check, add the per-connection
     classification natively.
-  psrule: ["Azure.Search.ManagedIdentity"]
-  azurePolicy: ["6300012e-e9a4-4649-b41f-a85f5c43be91"]
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: searched-match
+      matches:
+      - 'Azure.Search.ManagedIdentity'
+    azurePolicy:
+      state: searched-match
+      matches:
+      - '6300012e-e9a4-4649-b41f-a85f5c43be91'
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/iq

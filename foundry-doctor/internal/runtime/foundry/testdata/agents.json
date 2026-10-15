@@ -1,0 +1,9 @@
+{
+  "data": [
+    {
+      "name": "support-agent",
+      "latestVersion": "v2",
+      "instructions": "PROMPT_SENTINEL_TEXT"
+    }
+  ]
+}

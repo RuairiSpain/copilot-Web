@@ -1,0 +1,5 @@
+version: 1
+profile: foundry-dev
+policy:
+  environments:
+    development: [dev]

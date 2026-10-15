@@ -20,8 +20,8 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.Resources/deployments whatIf 2025-04-01"
-    - "Microsoft.Resources/deployments whatIf 2026-06-01"
+    - { plane: management, provider: Microsoft.Resources, resourceType: deployments, operation: whatIf, version: "2025-04-01" }
+    - { plane: management, provider: Microsoft.Resources, resourceType: deployments, operation: whatIf, version: "2026-06-01" }
   preview: false
   notes: "Not verified. azd supports provision preview (azd provision --preview, per extension-framework.md), which routes through the same validation call as other paths; exact azd version not pinned. Microsoft.Resources/deployments whatIf 2025-04-01 / 2026-06-01: stable; also present in the clone."
 evidence:
@@ -51,26 +51,34 @@ sources:
     note: azd provision --preview is mentioned (lifecycle events are not fired).
 overlap:
   decision: adapt
+  provisional: true
   coverage: partial
   rationale: >-
     ARM what-if and azd provision --preview already show the difference between a template and the deployed state at
     deployment time, but not as a continuous, Foundry-property-scoped drift report and not tied to rule fingerprints.
     The idea is adapted; no PSRule, Policy, Defender, Advisor, Checkov or Bicep linter equivalent exists for deployed
     versus compiled comparison.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/run
 tests:
   positive:
-    - deployed property equals compiled value for every inspected property
-  negative:
     - deployed publicNetworkAccess differs from the compiled template value
+  negative:
+    - deployed property equals compiled value for every inspected property
   skipped:
     - no compiled ARM JSON available
     - caller cannot read the deployed resource

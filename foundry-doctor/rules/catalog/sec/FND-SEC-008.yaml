@@ -25,7 +25,7 @@ compatibility:
   azd: ''
   extensions: {}
   apiVersions:
-  - Microsoft.Security/pricings 2026-07-01
+  - { plane: management, provider: Microsoft.Security, resourceType: pricings, version: '2026-07-01' }
   preview: false
   notes: >-
     No azd dependency: ARM control plane read Microsoft.Security/pricings 2026-07-01 / 2026-07-01: stable) - security/resource-manager/Microsoft.Security/Security/stable//pricings.json.
@@ -64,6 +64,7 @@ sources:
   note: Plan names StorageAccounts, KeyVaults, CosmosDbs.
 overlap:
   decision: adapt
+  provisional: true
   coverage: partial
   rationale: >-
     PSRule has Azure.Defender.Storage, KeyVault, CosmosDb, Api, Cspm, Arm and others (no AI plan rule in the reviewed clone);
@@ -71,36 +72,48 @@ overlap:
     Checkov has CKV_AZURE_84 and 87. Each is a fixed per-plan check. Foundry Doctor adds relevance: it derives which plans
     matter from the resource types present (cross-resource correlation) and flags the AI plan that PSRule lacks, with cost-aware
     info severity in dev.
-  psrule:
-  - Azure.Defender.Storage
-  - Azure.Defender.KeyVault
-  - Azure.Defender.CosmosDb
-  azurePolicy:
-  - c2c0c6d8-007b-4a48-8d9b-3539bddd8e87
-  - 7e92882a-2f8a-4991-9bc4-d3147d40abb0
-  - 0e6763cc-5078-4e64-889d-ff4d9a839047
-  - 640d2586-54d2-465f-877f-9ffc1d2109f4
-  - adbe85b5-83e6-4350-ab58-bf3a4f736e5e
-  defender:
-  - Microsoft.Security/pricings (AI, StorageAccounts, KeyVaults, CosmosDbs)
-  advisor: []
-  bicepLinter: []
-  checkov:
-  - CKV_AZURE_84
-  - CKV_AZURE_87
+  research:
+    psrule:
+      state: searched-match
+      matches:
+      - Azure.Defender.Storage
+      - Azure.Defender.KeyVault
+      - Azure.Defender.CosmosDb
+    azurePolicy:
+      state: searched-match
+      matches:
+      - c2c0c6d8-007b-4a48-8d9b-3539bddd8e87
+      - 7e92882a-2f8a-4991-9bc4-d3147d40abb0
+      - 0e6763cc-5078-4e64-889d-ff4d9a839047
+      - 640d2586-54d2-465f-877f-9ffc1d2109f4
+      - adbe85b5-83e6-4350-ab58-bf3a4f736e5e
+    defender:
+      state: searched-match
+      matches:
+      - Microsoft.Security/pricings (AI, StorageAccounts, KeyVaults, CosmosDbs)
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: searched-match
+      matches:
+      - CKV_AZURE_84
+      - CKV_AZURE_87
 implementation:
   owner: native
   package: internal/rules/sec
 tests:
   positive:
-  - AI plan Standard with a Foundry account present passes
-  negative:
   - AI plan Free with a Foundry account present fails
   - KeyVaults plan Free with a vault present fails
+  negative:
+  - AI plan Standard with a Foundry account present passes
   skipped:
   - no Security Reader permission is skipped
   - Bicep-only mode with no pricings resource is skipped (subscription state unknown)
-  - 'uncertain: pricing inherited from a management group scope that cannot be read is uncertain'
+  uncertain:
+  - pricing inherited from a management group scope that cannot be read
 testability: >-
   Deterministic given a pricings read; Skipped without control-plane access. Bicep mode can only inspect pricings resources
   declared in the template.

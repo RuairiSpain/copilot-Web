@@ -3,289 +3,274 @@ package main
 import (
 	"bytes"
 	"context"
-	"io"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/ruairispain/copilot-web/foundry-doctor/internal/engine"
-	"github.com/ruairispain/copilot-web/foundry-doctor/internal/model"
-	"github.com/ruairispain/copilot-web/foundry-doctor/internal/rules"
-	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/app"
 )
 
-type fake struct {
-	id string
-	fn func(r rules.Rule) []rules.Result
-}
-
-func (f fake) ID() string   { return f.id }
-func (f fake) Version() int { return 1 }
-func (f fake) Evaluate(context.Context, *model.Input) ([]rules.Result, error) {
-	return f.fn(f), nil
-}
-
-func catalogue(t *testing.T) *engine.Catalogue {
-	t.Helper()
-	pass := func(rules.Rule) []rules.Result { return []rules.Result{rules.Pass()} }
-	c, err := engine.NewCatalogue(context.Background(), []rules.Rule{
-		fake{"FND-CFG-001", func(r rules.Rule) []rules.Result {
-			return []rules.Result{rules.Fail(rules.NewFinding(r, sdk.ResourceRef{Kind: "service", Name: "api"}, "e", ""))}
-		}},
-		fake{"FND-CFG-002", pass},
-		fake{"FND-NET-001", pass}, // needs ARM: skipped on a project without infrastructure
-		fake{"FND-ENV-002", func(rules.Rule) []rules.Result { panic("boom") }},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return c
-}
-
-func testDeps(t *testing.T, dir string) deps {
-	t.Helper()
-	return deps{
-		Dir: dir, Now: func() time.Time { return time.Date(2026, 10, 12, 0, 0, 0, 0, time.UTC) },
-		Getenv: func(string) string { return "" }, IsTTY: func(io.Writer) bool { return false },
-		Version: "v0.0.0-test", Commit: "abc", Date: "2026-10-12", Catalogue: catalogue(t),
-	}
-}
+const minimalAzureYAML = "name: demo\nservices:\n  api:\n    host: containerapp\n    project: ./src\n"
 
 func project(t *testing.T) string {
 	t.Helper()
-	dir, _ := filepath.EvalSymlinks(t.TempDir())
-	if err := os.WriteFile(filepath.Join(dir, "azure.yaml"), []byte("name: sample\nservices:\n  api:\n    host: containerapp\n    project: ./src\n"), 0o644); err != nil {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "azure.yaml"), []byte(minimalAzureYAML), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return dir
 }
 
-func exec(t *testing.T, d deps, args ...string) (code int, stdout, stderr string) {
+func projectWithConfig(t *testing.T, config string) string {
+	t.Helper()
+	dir := project(t)
+	cfgDir := filepath.Join(dir, ".foundry-doctor")
+	if err := os.MkdirAll(cfgDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte(config), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func exec(t *testing.T, args ...string) (int, string, string) {
 	t.Helper()
 	var out, errb bytes.Buffer
-	code = execute(context.Background(), args, &out, &errb, d)
+	// Offline: no Azure credentials are present or required.
+	t.Setenv("AZURE_CLIENT_SECRET", "")
+	t.Setenv("FOUNDRY_DOCTOR_ENVIRONMENT", "")
+	t.Setenv("AZURE_ENV_NAME", "")
+	code := run(context.Background(), args, &out, &errb, app.DefaultServices(&errb))
 	return code, out.String(), errb.String()
 }
 
-func TestExitCodes_0(t *testing.T) {
-	d := testDeps(t, project(t))
-	if code, out, errs := exec(t, d, "doctor", "--rules", "FND-CFG-002"); code != 0 || !strings.Contains(out, "foundry-doctor v0.0.0-test") {
-		t.Fatalf("exit %d\n%s%s", code, out, errs)
-	}
-}
-
-func TestExitCodes_1(t *testing.T) {
-	d := testDeps(t, project(t))
-	if code, out, errs := exec(t, d, "doctor", "--rules", "FND-CFG-001"); code != 1 || !strings.Contains(out, "FND-CFG-001") {
-		t.Fatalf("exit %d\n%s%s", code, out, errs)
-	}
-}
-
-func TestExitCodes_2(t *testing.T) {
-	empty, _ := filepath.EvalSymlinks(t.TempDir())
-	for name, tc := range map[string]struct {
-		dir  string
+func TestExitCodes(t *testing.T) {
+	dir := project(t)
+	tests := []struct {
+		name string
 		args []string
+		want int
 	}{
-		"no project":      {empty, []string{"doctor"}},
-		"bad profile":     {project(t), []string{"doctor", "--profile", "staging"}},
-		"unknown flag":    {project(t), []string{"doctor", "--nope"}},
-		"unknown command": {project(t), []string{"frobnicate"}},
-		"extra argument":  {project(t), []string{"doctor", "extra"}},
-		"explain no arg":  {project(t), []string{"explain"}},
-		"explain unknown": {project(t), []string{"explain", "FND-NOPE-999"}},
-		"compare one arg": {project(t), []string{"compare", "dev"}},
-	} {
-		d := testDeps(t, tc.dir)
-		if code, _, errs := exec(t, d, tc.args...); code != 2 || errs == "" {
-			t.Errorf("%s: exit %d stderr %q", name, code, errs)
-		}
+		{"offline all skipped optional", []string{"doctor", "--local", "--dir", dir}, 0},
+		{"strict skip", []string{"doctor", "--local", "--strict", "--dir", dir}, 3},
+		{"explicit rule lacking input cannot run", []string{"doctor", "--local", "--rules", "FND-NET-001", "--dir", dir}, 2},
+		{"missing azure.yaml", []string{"doctor", "--local", "--dir", t.TempDir()}, 2},
+		{"bad format", []string{"doctor", "--format", "xml", "--dir", dir}, 2},
+		{"bad severity", []string{"doctor", "--min-severity", "loud", "--dir", dir}, 2},
+		{"bad profile", []string{"doctor", "--profile", "staging", "--dir", dir}, 2},
+		{"fail-on below min-severity", []string{"doctor", "--min-severity", "error", "--fail-on", "info", "--dir", dir}, 2},
+		{"unknown flag", []string{"doctor", "--nope"}, 2},
+		{"unknown selector", []string{"doctor", "--rules", "bogus", "--dir", dir}, 2},
+		{"missing explicit baseline", []string{"doctor", "--baseline", "nope.json", "--dir", dir}, 2},
+		{"explain unknown", []string{"explain", "FND-NOPE-999"}, 2},
+		{"explain no arg", []string{"explain"}, 2},
+		{"unknown command", []string{"frobnicate"}, 2},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got, _, errs := exec(t, tc.args...); got != tc.want {
+				t.Fatalf("exit = %d, want %d (stderr=%q)", got, tc.want, errs)
+			}
+		})
 	}
 }
 
-func TestExitCodes_3(t *testing.T) {
-	d := testDeps(t, project(t))
-	if code, _, errs := exec(t, d, "doctor", "--rules", "FND-NET-001", "--strict"); code != 3 {
-		t.Fatalf("exit %d %s", code, errs)
-	}
-	if code, _, _ := exec(t, d, "doctor", "--rules", "FND-NET-001"); code != 0 {
-		t.Fatalf("without --strict: exit %d", code)
-	}
-}
-
-func TestExitCodes_4(t *testing.T) {
-	d := testDeps(t, project(t))
-	if code, _, errs := exec(t, d, "doctor", "--rules", "FND-ENV-002"); code != 4 || !strings.Contains(errs, "FND-ENV-002") {
-		t.Fatalf("exit %d %s", code, errs)
-	}
-	// 4 beats 1.
-	if code, _, _ := exec(t, d, "doctor", "--rules", "FND-ENV-002,FND-CFG-001"); code != 4 {
-		t.Fatalf("precedence: exit %d", code)
-	}
-}
-
-func TestFlags_OutNotOutput(t *testing.T) {
-	d := testDeps(t, project(t))
-	code, _, errs := exec(t, d, "doctor", "--output", "x.json")
-	if code != 2 || !strings.Contains(errs, "unknown flag: --output") {
-		t.Fatalf("exit %d %q", code, errs)
-	}
-	out := filepath.Join(d.Dir, "r.json")
-	if code, _, errs := exec(t, d, "doctor", "--rules", "FND-CFG-002", "--format", "json", "--out", out); code != 0 {
-		t.Fatalf("exit %d %s", code, errs)
-	}
-	if _, err := os.Stat(out); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestRejectedLaterPhaseFlags(t *testing.T) {
-	d := testDeps(t, project(t))
-	for _, f := range []string{"--preflight", "--runtime", "--security", "--what-if", "--export-tool-config", "--llm-explain"} {
-		code, out, errs := exec(t, d, "doctor", f, "--rules", "FND-CFG-002")
-		if code != 2 || !strings.Contains(errs, f+": not available in this version") || out != "" {
-			t.Errorf("%s: exit %d stdout %q stderr %q", f, code, out, errs)
-		}
-	}
-	// --local is accepted, explicitly or not.
-	if code, _, errs := exec(t, d, "doctor", "--local", "--rules", "FND-CFG-002"); code != 0 {
-		t.Fatalf("--local: exit %d %s", code, errs)
-	}
-	// The flags stay in the help text so it is stable.
-	_, help, _ := exec(t, d, "doctor", "--help")
-	for _, f := range []string{"--preflight", "--runtime", "--security", "--what-if", "--export-tool-config", "--llm-explain"} {
-		contains(t, "help", help, f)
-	}
-}
-
-func contains(t *testing.T, name, got string, want ...string) {
-	t.Helper()
-	for _, w := range want {
-		if !strings.Contains(got, w) {
-			t.Errorf("%s lacks %q:\n%s", name, w, got)
-		}
-	}
-}
-
-func TestHelpHasExamples(t *testing.T) {
-	d := testDeps(t, project(t))
-	for _, cmd := range []string{"doctor", "explain", "compare", "version"} {
-		code, out, _ := exec(t, d, cmd, "--help")
-		if code != 0 {
-			t.Fatalf("%s --help: exit %d", cmd, code)
-		}
-		contains(t, cmd+" help", out, "Examples:", "foundry-doctor "+cmd)
-	}
-	code, out, _ := exec(t, d, "--help")
-	contains(t, "root help", out, "doctor", "explain", "compare", "version", "Exit codes:", "--debug", "--no-color")
+func TestHelpAndFlags(t *testing.T) {
+	code, out, _ := exec(t, "doctor", "--help")
 	if code != 0 {
-		t.Fatalf("exit %d", code)
+		t.Fatalf("help exit = %d", code)
 	}
-	if code, out, _ := exec(t, d, "help", "doctor"); code != 0 || !strings.Contains(out, "Examples:") {
-		t.Fatalf("help doctor: %d", code)
+	for _, f := range []string{"--profile", "--local", "--rules", "--min-severity", "--fail-on",
+		"--baseline", "--suppressions", "--strict", "--format", "--out"} {
+		if !strings.Contains(out, f) {
+			t.Errorf("doctor help missing %s", f)
+		}
 	}
-	if code, out, _ := exec(t, d); code != 0 || !strings.Contains(out, "Available Commands") {
-		t.Fatalf("bare invocation prints help: %d", code)
+	// -o and -e are reserved by azd and must not be declared as shorthands.
+	for _, bad := range []string{" -o,", " -e,", "--environment"} {
+		if strings.Contains(out, bad) {
+			t.Errorf("doctor help must not declare %q", bad)
+		}
+	}
+	for _, cmd := range []string{"annotate", "explain", "compare"} {
+		if c, _, _ := exec(t, cmd, "--help"); c != 0 {
+			t.Errorf("%s --help exit = %d", cmd, c)
+		}
+	}
+	if c, explainHelp, _ := exec(t, "explain", "--help"); c != 0 || !strings.Contains(explainHelp, "--llm-explain") {
+		t.Fatalf("explain help missing llm flags: exit=%d out=%q", c, explainHelp)
 	}
 }
 
-func TestVersion(t *testing.T) {
-	d := testDeps(t, project(t))
-	want := "foundry-doctor v0.0.0-test (commit abc, built 2026-10-12)\n"
-	for _, args := range [][]string{{"--version"}, {"version"}} {
-		if code, out, _ := exec(t, d, args...); code != 0 || out != want {
-			t.Errorf("%v: %d %q", args, code, out)
+func TestOutputFormatsAreDeterministic(t *testing.T) {
+	dir := project(t)
+	for _, f := range []string{"console", "json", "markdown", "sarif"} {
+		t.Run(f, func(t *testing.T) {
+			c1, o1, _ := exec(t, "doctor", "--local", "--format", f, "--dir", dir)
+			c2, o2, _ := exec(t, "doctor", "--local", "--format", f, "--dir", dir)
+			if c1 != 0 || c2 != 0 {
+				t.Fatalf("exit %d/%d", c1, c2)
+			}
+			if o1 != o2 || o1 == "" {
+				t.Fatalf("non-deterministic or empty %s output", f)
+			}
+		})
+	}
+}
+
+func TestOutFile(t *testing.T) {
+	dir := project(t)
+	out := filepath.Join(t.TempDir(), "sub", "r.json")
+	code, stdout, _ := exec(t, "doctor", "--local", "--format", "json", "--out", out, "--dir", dir)
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	if stdout != "" {
+		t.Errorf("stdout should be empty when --out is used, got %q", stdout)
+	}
+	if b, err := os.ReadFile(out); err != nil || len(b) == 0 {
+		t.Fatalf("out file: %v len=%d", err, len(b))
+	}
+}
+
+func TestExplainRealCatalogue(t *testing.T) {
+	code, out, errs := exec(t, "explain", "FND-CFG-001")
+	if code != 0 || !strings.Contains(out, "FND-CFG-001") {
+		t.Fatalf("exit=%d out=%q err=%q", code, out, errs)
+	}
+}
+
+func TestExplainLLMFallbackIsNonFatal(t *testing.T) {
+	code, out, errs := exec(t, "explain", "FND-CFG-001", "--llm-explain", "--audience", "owner")
+	if code != 0 || !strings.Contains(out, "Deterministic rule documentation remains authoritative") {
+		t.Fatalf("exit=%d out=%q err=%q", code, out, errs)
+	}
+}
+
+func TestCompare(t *testing.T) {
+	dir := project(t)
+	if code, _, errs := exec(t, "compare", "dev", "prod", "--dir", dir); code != 0 {
+		t.Fatalf("compare exit=%d err=%q", code, errs)
+	}
+	if code, _, _ := exec(t, "compare", "dev"); code != 2 {
+		t.Fatalf("compare with one arg exit=%d, want 2", code)
+	}
+	dir = projectWithConfig(t, `version: 1
+policy:
+  environments:
+    tiers:
+      dev: dev
+      prod: prod
+environments:
+  prod:
+    policy:
+      network:
+        publicAccess: allowed
+`)
+	if code, _, errs := exec(t, "compare", "dev", "prod", "--dir", dir, "--fail-on-diff"); code != 1 {
+		t.Fatalf("compare fail-on-diff exit=%d err=%q", code, errs)
+	}
+}
+
+func TestVersionCommand(t *testing.T) {
+	code, out, errs := exec(t, "version")
+	if code != 0 || errs != "" {
+		t.Fatalf("exit=%d err=%q", code, errs)
+	}
+	for _, want := range []string{"foundry-doctor", ".foundry-doctor/config.yaml", "minimum azd: 1.34.2", "minimum bicep: 0.48.1"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("version output missing %q: %q", want, out)
 		}
 	}
 }
 
-func TestNonInteractive(t *testing.T) {
-	// No command reads standard input: a closed or empty stdin must not matter, and nothing prompts.
-	d := testDeps(t, project(t))
-	done := make(chan int, 1)
-	go func() { c, _, _ := exec(t, d, "doctor", "--rules", "FND-CFG-002"); done <- c }()
-	select {
-	case c := <-done:
-		if c != 0 {
-			t.Fatalf("exit %d", c)
+func TestAnnotate(t *testing.T) {
+	dir := project(t)
+	out := "review\\sample.review"
+	if code, _, errs := exec(t, "annotate", "--out", out, "--dir", dir); code != 0 && code != 1 {
+		t.Fatalf("annotate exit=%d err=%q", code, errs)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "review", "sample.review", "annotations-manifest.json")); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, _ := exec(t, "annotate", "--format", "review", "--dir", dir); code != 2 {
+		t.Fatalf("annotate without out exit=%d, want 2", code)
+	}
+	if code, _, errs := exec(t, "annotate", "--format", "github", "--dir", dir); code != 0 || errs != "" {
+		t.Fatalf("github annotate exit=%d err=%q", code, errs)
+	}
+	if code, out, errs := exec(t, "annotate", "--format", "sarif", "--dir", dir); code != 0 && code != 1 {
+		t.Fatalf("sarif annotate exit=%d err=%q", code, errs)
+	} else {
+		var v map[string]any
+		if err := json.Unmarshal([]byte(out), &v); err != nil {
+			t.Fatalf("invalid sarif json: %v\n%s", err, out)
 		}
-	case <-time.After(30 * time.Second):
-		t.Fatal("the command blocked")
-	}
-}
-
-func TestColor(t *testing.T) {
-	d := testDeps(t, project(t))
-	d.IsTTY = func(io.Writer) bool { return true }
-	args := []string{"doctor", "--rules", "FND-CFG-001"}
-	if _, out, _ := exec(t, d, args...); !strings.Contains(out, "\x1b[") {
-		t.Fatal("a terminal gets colour")
-	}
-	if _, out, _ := exec(t, d, append(args, "--no-color")...); strings.Contains(out, "\x1b[") {
-		t.Fatal("--no-color ignored")
-	}
-	d.Getenv = func(k string) string {
-		if k == "NO_COLOR" {
-			return "1"
+		if v["version"] != "2.1.0" {
+			t.Fatalf("sarif version = %v", v["version"])
 		}
-		return ""
-	}
-	if _, out, _ := exec(t, d, args...); strings.Contains(out, "\x1b[") {
-		t.Fatal("NO_COLOR ignored")
-	}
-	d.Getenv, d.IsTTY = nil, nil
-	if _, out, _ := exec(t, d, args...); strings.Contains(out, "\x1b[") {
-		t.Fatal("no terminal, no colour")
 	}
 }
 
-func TestOsDeps(t *testing.T) {
-	d := osDeps()
-	if d.Dir == "" || d.Now == nil || d.Getenv == nil || d.Version == "" {
-		t.Fatalf("%+v", d)
-	}
-	f, err := os.Create(filepath.Join(t.TempDir(), "f"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-	if d.IsTTY(f) {
-		t.Fatal("a regular file is not a terminal")
-	}
-	if d.IsTTY(&bytes.Buffer{}) {
-		t.Fatal("a buffer is not a terminal")
-	}
-}
-
-func TestExplainAndCompareCommands(t *testing.T) {
-	d := testDeps(t, project(t))
-	if code, out, _ := exec(t, d, "explain", "FND-CFG-001"); code != 0 || !strings.Contains(out, "FND-CFG-001") {
-		t.Fatalf("explain: %d", code)
-	}
-	if code, out, _ := exec(t, d, "explain", "FND-CFG-001", "--format", "markdown"); code != 0 || !strings.HasPrefix(out, "# FND-CFG-001") {
-		t.Fatalf("explain markdown: %d", code)
-	}
-	if err := os.MkdirAll(filepath.Join(d.Dir, ".azure", "dev"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(d.Dir, ".azure", "dev", ".env"), []byte("A=1\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	// compare reaches the application layer; whatever the comparer says, an unknown environment is exit 2.
-	if code, _, _ := exec(t, d, "compare", "dev", "ghost"); code != 2 {
-		t.Fatalf("compare unknown: %d", code)
+func TestGraphSourceFormats(t *testing.T) {
+	for _, format := range []string{"mermaid", "json", "markdown", "dot", "html"} {
+		t.Run(format, func(t *testing.T) {
+			code, out, errs := exec(t, "graph", "--source", "--dir", sample("good"), "--format", format)
+			if code != 0 {
+				t.Fatalf("exit=%d err=%q", code, errs)
+			}
+			if strings.TrimSpace(out) == "" {
+				t.Fatal("graph output is empty")
+			}
+			if format == "json" {
+				var v map[string]any
+				if err := json.Unmarshal([]byte(out), &v); err != nil {
+					t.Fatalf("invalid json: %v\n%s", err, out)
+				}
+			}
+		})
 	}
 }
 
-func TestRootHasNoStrayBusinessLogic(t *testing.T) {
-	// main.go only wires the process; the check is structural: the file stays tiny.
-	b, err := os.ReadFile("main.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if n := strings.Count(string(b), "\n"); n > 25 {
-		t.Fatalf("main.go has %d lines; keep it to wiring", n)
+func TestCostOfflineFormats(t *testing.T) {
+	for _, format := range []string{"console", "json", "markdown"} {
+		t.Run(format, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), "cost-fixed")
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			files := map[string]string{
+				"azure.yaml":                        minimalAzureYAML,
+				filepath.Join("infra", "main.json"): `{"$schema":"https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#","contentVersion":"1.0.0.0","resources":[]}`,
+			}
+			for rel, body := range files {
+				dst := filepath.Join(dir, rel)
+				if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(dst, []byte(body), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var out, errb bytes.Buffer
+			code := run(context.Background(), []string{
+				"cost", "--dir", dir, "--offline", "--format", format,
+			}, &out, &errb, noBicep(&errb))
+			if code != 0 {
+				t.Fatalf("exit=%d err=%q", code, errb.String())
+			}
+			if strings.TrimSpace(out.String()) == "" {
+				t.Fatal("cost output is empty")
+			}
+			if format == "json" {
+				var v map[string]any
+				if err := json.Unmarshal(out.Bytes(), &v); err != nil {
+					t.Fatalf("invalid json: %v\n%s", err, out.String())
+				}
+			}
+		})
 	}
 }

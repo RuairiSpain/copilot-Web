@@ -1,5 +1,5 @@
 id: FND-IQ-009
-version: 1
+version: 2
 group: IQ
 title: Document-level access control configured when required
 description: >-
@@ -27,9 +27,12 @@ compatibility:
   azd: ''
   extensions: {}
   apiVersions:
-  - 2026-08-01-preview
-  - 2026-05-01-preview
-  - '2026-04-01'
+  - { plane: data, service: AzureAISearch, endpointFamily: knowledgebases, version: '2026-08-01-preview' }
+  - { plane: data, service: AzureAISearch, endpointFamily: knowledgesources, version: '2026-08-01-preview' }
+  - { plane: data, service: AzureAISearch, endpointFamily: knowledgebases, version: '2026-05-01-preview' }
+  - { plane: data, service: AzureAISearch, endpointFamily: knowledgesources, version: '2026-05-01-preview' }
+  - { plane: data, service: AzureAISearch, endpointFamily: knowledgebases, version: '2026-04-01' }
+  - { plane: data, service: AzureAISearch, endpointFamily: knowledgesources, version: '2026-04-01' }
   preview: true
   notes: >-
     API 2026-08-01-preview: ingestionPermissionOptions documented for retrieval enforcement. API 2026-05-01-preview: property
@@ -42,7 +45,9 @@ evidence:
     is empty or absent; fail when assetStore is also set; fail when the call API version is 2026-04-01; and fail when the
     Foundry MCP tool or project connection has no header forwarding for x-ms-query-source-authorization. Values must be
     in the spec enum userIds, groupIds, rbacScope, sensitivityLabels. Remote sources (remoteSharePoint, fabricDataAgent,
-    fabricOntology, workIQ) enforce permissions at the source and are not assessed. Report names and paths only.
+    fabricOntology, workIQ) enforce permissions at the source and are not assessed. The alternate header
+    x-ms-query-work-iq-source-authorization is reserved for Work IQ scenarios and never counts as pass evidence for the
+    indexed-source checks in this rule. Report names and paths only.
   confidence: likely
 recommendation: >-
   Recreate the indexed knowledge source with ingestionPermissionOptions that match your source (for example userIds, groupIds,
@@ -84,16 +89,24 @@ sources:
     enum)
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     No external tool models Foundry IQ permission ingestion or the correlation between a knowledge source, its index permission
     metadata and the agent connection header. Defender for Cloud and Azure Policy have no equivalent control.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/iq
@@ -119,4 +132,6 @@ notes: >-
   writes the label option as sensitivityLabel while the data-plane spec enum is sensitivityLabels; the spec is used and
   the mismatch is listed under Unverified. Relabelled product-opinion after the Phase 0 Foundry lead review: "when required"
   has no platform definition and no project setting declares the requirement, so the check can only run when the profile
-  states it. A decision on where that declaration lives (profile key) is needed before Phase 8.
+  states it. The Work IQ-specific header name stays out of pass evidence here because Microsoft Learn documents
+  x-ms-query-source-authorization for these indexed and remote-SharePoint retrieval paths. A decision on where that
+  declaration lives (profile key) is needed before Phase 8.

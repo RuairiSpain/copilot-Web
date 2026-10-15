@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/foundry-doctor/graph.schema.json",
+  "title": "Foundry Doctor graph output",
+  "type": "object",
+  "required": ["schemaVersion", "mode", "nodes", "edges", "summary"],
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1" },
+    "mode": { "type": "string", "enum": ["source", "deployed", "combined"] },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "kind", "origin"],
+        "properties": {
+          "id": { "type": "string" },
+          "label": { "type": "string" },
+          "kind": { "type": "string" },
+          "origin": { "type": "string", "enum": ["local", "azure", "both", "external", "missing", "collapsed"] },
+          "type": { "type": "string" },
+          "name": { "type": "string" },
+          "resource": { "type": "string" },
+          "source": {
+            "type": "object",
+            "properties": {
+              "file": { "type": "string" },
+              "line": { "type": "integer", "minimum": 0 },
+              "column": { "type": "integer", "minimum": 0 }
+            },
+            "additionalProperties": true
+          },
+          "external": { "type": "boolean" },
+          "missing": { "type": "boolean" },
+          "collapsed": { "type": "boolean" },
+          "findings": { "type": "integer", "minimum": 0 },
+          "baselined": { "type": "integer", "minimum": 0 },
+          "severity": { "type": "string", "enum": ["info", "warning", "error"] },
+          "unhealthy": { "type": "boolean" },
+          "health": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["from", "to", "kind"],
+        "properties": {
+          "from": { "type": "string" },
+          "to": { "type": "string" },
+          "kind": { "type": "string" },
+          "external": { "type": "boolean" },
+          "missing": { "type": "boolean" },
+          "collapsed": { "type": "boolean" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["mode", "nodeCount", "edgeCount"],
+      "properties": {
+        "mode": { "type": "string", "enum": ["source", "deployed", "combined"] },
+        "nodeCount": { "type": "integer", "minimum": 0 },
+        "edgeCount": { "type": "integer", "minimum": 0 },
+        "collapsedNodes": { "type": "integer", "minimum": 0 },
+        "collapsedEdges": { "type": "integer", "minimum": 0 },
+        "unmatchedFindings": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

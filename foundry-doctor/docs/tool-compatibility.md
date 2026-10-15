@@ -8,13 +8,16 @@ publication date by hours or days. Anything not verified is marked **Unverified*
 
 "Minimum version" values are proposals for Foundry Doctor (FD) and are labelled **verified floor** when a primary source
 states the floor, or **proposed** when it is a recommendation that Phase 1 must confirm with a spike.
+The table is structured research input, not a declaration that Foundry Doctor currently supports every listed tool.
+No adapter compatibility claim is complete until a pinned-version executable fixture proves invocation, structured-output
+parsing, external exit-code translation, redaction and missing-tool behaviour.
 
 ## 1. Summary
 
 | Tool | Current stable (verified) | Tag / upload date | Proposed minimum for FD | FD dependency class |
 |---|---|---|---|---|
 | azd | 1.35.0 (`cli/azd/v1.35.0`); `main` is at 1.36.0-beta.1 | 2026-09-30 | 1.34.2 (proposed; see 2.1) | Required when running as azd extension; optional for standalone CLI |
-| Bicep CLI | 0.48.1 (`v0.48.1`) | 2026-09-29 | Hard floor 0.4.451 (PSRule); FD floor proposed at tested version, see 2.2 | Required for Bicep checks (exit 2 if missing) |
+| Bicep CLI | 0.48.1 (`v0.48.1`) | 2026-09-29 | Current FD contract 0.48.1; hard floor 0.4.451 is PSRule-only, see 2.2 | Required when a requested Bicep check cannot otherwise run (exit 2); otherwise check is explicitly skipped |
 | azd Foundry/AI agent extension | `azure.ai.agents` 1.0.0-beta.18 (beta, not GA) | 2026-09-30 (CHANGELOG) | Not required; detect only | Optional (detect and report version) |
 | PSRule for Azure | v1.47.0 stable; v1.48.0-B0228 pre-release | 2026-01-08 / 2026-06-22 | 1.47.0 (proposed) | Optional adapter |
 | PSRule (engine module) | v2.9.0 stable; v3.0.0-B0783 pre-release | 2023-06-08 / 2026-04-28 | 2.9.0 (verified floor: `modules.json`) | Optional (via PSRule for Azure) |
@@ -51,17 +54,18 @@ states the floor, or **proposed** when it is a recommendation that Phase 1 must 
   (`docs/extensions/contract-versioning.md`). Use `pkg/azdext/contracts/v1` only; beta-only services must not be relied on.
 - **Missing-tool behaviour**: when FD runs as an extension azd is by definition present. Standalone, `azd` absence is
   reported as "azd not found: environment and extension checks skipped" (an explicit skipped-check entry, never a pass).
-  It is exit 2 only when the user requested a check that needs azd (for example `--source azd-env`). Below the minimum
+  It is exit 2 only when the resolved configuration requests a check that needs azd environment data. Below the minimum
   version: report the detected and required versions and exit 2 for requested azd-dependent checks.
 
 ### 2.2 Bicep CLI
 
-- **Version**: `v0.48.1`, tag commit 2026-09-29; main HEAD 2026-10-02. Repo `Azure/bicep`, MIT.
-  `docs/decisions/ADR-002-bicep-analysis.md` tested 0.47.16, which is one minor behind; re-test on 0.48.1
-  before release.
+- **Version**: current contract `v0.48.1`, tag commit 2026-09-29; main HEAD 2026-10-02. Repo
+  `Azure/bicep`, MIT. `docs/decisions/ADR-002-bicep-analysis.md` retains historical 0.47.16
+  execution evidence. CI is configured to install and test 0.48.1, but no successful tagged CI run
+  is evidenced; the local Windows ARM64 tagged 0.48.1 command passed.
 - **Minimum**: verified floor 0.4.451 (PSRule for Azure `docs/en/setup/setup-bicep.md`). That is a floor for PSRule
-  expansion, not for FD diagnostics. Proposed FD floor: the lowest version in the CI test matrix, to be pinned in ADR-002
-  follow-up (the ADR requires CI to pin a version). **Unverified**: the earliest Bicep version that supports the flags
+  expansion, not for FD diagnostics. The current FD contract is 0.48.1; no lower supported FD
+  version is established. **Unverified**: the earliest Bicep version that supports the flags
   FD relies on (`--diagnostics-format sarif`, `--stdout`, `jsonrpc`).
 - **Non-interactive invocation** (flags confirmed in `src/Bicep.Cli` constants and `docs/experimental/docs-commands.md`):
   `bicep --version`; `bicep build <file> --stdout [--no-restore] [--diagnostics-format sarif]`;
@@ -131,7 +135,8 @@ states the floor, or **proposed** when it is a recommendation that Phase 1 must 
 - **Missing-tool behaviour**: `advanced.psrule.enabled: auto` (PRD config): if `pwsh` or the module is absent, emit an
   explicit "adapter unavailable: PSRule (reason)" entry in the report and in SARIF notifications, mark mapped checks
   skipped, continue native rules, exit 0/1 as usual. `enabled: true` with the tool missing: exit **2**. With `--strict`
-  and any skipped check: exit **3** (PRD exit code table).
+  and any skipped check: exit **3** (PRD exit code table). Findings alone are exit 1; inability to run a
+  required requested check is exit 2.
 
 ### 2.5 Checkov
 
@@ -146,8 +151,9 @@ states the floor, or **proposed** when it is a recommendation that Phase 1 must 
   sarif`; repeatable. JSON and SARIF are documented. Checkov JSON shape is widely used but has no formal schema:
   **semi-stable**. Check IDs `CKV_AZURE_*` are stable.
 - **Exit codes**: 0 pass, 1 failed checks (`Hard and soft fail.md`); `--soft-fail` forces 0; exit 2 is a crash/integration
-  failure (`--no-fail-on-crash` forces 0 instead). FD must map Checkov exit 2 to adapter failure (FD exit 4 or 2 by
-  policy), never to "no findings".
+  failure (`--no-fail-on-crash` forces 0 instead). FD maps Checkov 1 to parsed findings (FD exit 1 if they meet the
+  threshold). If explicitly requested Checkov cannot start or a required input/permission is unavailable, FD exits 2.
+  If Checkov starts but violates the expected structured-output protocol, FD exits 4. It is never mapped to "no findings".
 - **Prerequisites**: Python 3.9+ with pip (`pip install checkov==x.y.z`), or the Docker image. No .NET or PowerShell.
 - **Missing-tool behaviour**: disabled by default (`advanced.checkov.enabled: false`). When enabled and absent: exit 2.
   When `auto` is added later: explicit "adapter unavailable" entry, never a silent skip.
@@ -182,7 +188,8 @@ See section 4. Short answer: **archived, do not integrate**.
   a flag in automation (`az login` is interactive). `az version -o json` returns the CLI and core module versions
   (output shape from general knowledge; **Unverified** against the repo here).
 - **Output**: `-o json` is the stable contract (documented across the CLI); `table`/`tsv` are for humans.
-- **Missing-tool behaviour**: absent is informational unless the user selected `--auth az` or the Bicep fallback; then exit 2.
+- **Missing-tool behaviour**: absent is informational unless the resolved configuration explicitly requires
+  Azure CLI authentication or the Azure CLI Bicep fallback; then exit 2. No corresponding product CLI flag is committed yet.
 
 ### 2.9 Graphviz
 
@@ -210,7 +217,8 @@ See section 4. Short answer: **archived, do not integrate**.
 - **Output stability**: Mermaid syntax changes across majors (v10 to v12 changed several diagram types). Restrict FD output
   to `flowchart` with plain IDs and quoted labels, and add a golden-file test for the syntax. GitHub renders Mermaid natively
   in Markdown, so no tool is needed for the primary use case.
-- **Missing-tool behaviour**: not applicable to emission. If `--render` is requested without Node/mmdc: exit 2.
+- **Missing-tool behaviour**: not applicable to emission. If a future image-rendering option is explicitly requested
+  without Node/mmdc, it must return exit 2; no `--render` flag is currently part of the command contract.
 
 ## 3. Missing-tool behaviour required by the PRD
 
@@ -219,13 +227,13 @@ PRD sources: section 1 ("Optional adapters report missing tools rather than sile
 input/dependency/authentication/permissions unavailable, 3 skipped with `--strict`, 4 internal or adapter protocol
 failure), and Phase 1 ("Report skipped checks explicitly; never convert skipped to pass").
 
-Proposed uniform contract (to be recorded in an ADR before Phase 1 coding):
+Uniform contract (ADR-001 and ADR-008):
 
 | Situation | Behaviour | Exit code |
 |---|---|---|
 | Required dependency (Bicep when Bicep checks requested, or `validation.bicep: required`) missing or below minimum | Error naming tool, detected version, required version, install hint. No partial pass. | 2 |
 | Optional adapter enabled `auto` and missing | Report entry `adapter-unavailable` with reason; dependent checks `skipped`; native rules still run. | per findings (0/1); 3 with `--strict` |
-| Optional adapter explicitly enabled (`enabled: true`, `--adapter x`) and missing | Same as required. | 2 |
+| Optional adapter explicitly enabled (`enabled: true` in configuration) and missing | Same as required. | 2 |
 | Adapter present but crashes or emits unparseable output | Adapter protocol failure with captured stderr (redacted). | 4 |
 | Adapter present and exits with its "findings found" code (Checkov 1, KICS 20-60) | Normal path; parse output. | per FD findings |
 | Version below minimum | Treat as missing, with detected version in the message. | 2 (required) / skipped + 3 under `--strict` (optional) |
@@ -233,6 +241,19 @@ Proposed uniform contract (to be recorded in an ADR before Phase 1 coding):
 
 The report must carry a `tools` section (name, path, detected version, status `ok|missing|too-old|failed`, purpose) in
 JSON and as SARIF `invocations[].toolExecutionNotifications`, so CI consumers can distinguish "passed" from "not run".
+
+### Compatibility evidence required before an adapter is called supported
+
+For each tool/version/platform tuple, retain a redacted fixture containing the exact command, detected version,
+stdout/stderr channels, native exit code and structured output. Contract tests must demonstrate at least: no findings,
+findings, malformed output, timeout/crash, missing tool and unsupported version. The adapter maps native rule IDs to
+catalogue `FND-*` IDs through catalogue overlap metadata; prose mappings alone are provisional. Required executable
+permissions are the ability to launch the local tool and read the selected project files. Azure-backed checks separately
+list ARM/data-plane actions and report missing permission as unavailable/skipped rather than passed.
+
+No such complete fixture set exists yet for PSRule, Checkov or KICS. The historical Bicep spike
+covers a subset of the transport contract at 0.47.16; the current 0.48.1 tagged test passed locally and is configured
+but has no successful run evidence. azd JSON discovery shapes remain unverified.
 
 ## 4. Terrascan assessment
 
@@ -243,14 +264,16 @@ JSON and as SARIF `invocations[].toolExecutionNotifications`, so CI consumers ca
 - **Azure/ARM coverage**: the README lists "Scanning of Azure Resource Manager (ARM)" and Azure policies, but with no
   Bicep support and no maintenance, its Azure/Foundry/Cognitive Services content cannot be current (Foundry projects,
   `Microsoft.CognitiveServices/accounts/projects`, agent services all post-date its last release).
-- **Recommendation**: do not build or document a Terrascan adapter; drop it from the overlap matrix as `drop` with reason
-  "archived 2025-11; no Bicep; no Foundry coverage". The same adapter slot is better used for KICS or Checkov. If a user
+- **Recommendation**: do not build or document a Terrascan adapter. The current catalogue schema has no Terrascan
+  mapping field, so exclusion is recorded here and in ADR-001 rather than hand-edited into the generated overlap matrix.
+  The same adapter slot is better used for KICS or Checkov. If a user
   asks, support only through the generic SARIF-import adapter (`advanced.adapters`) with a warning.
 
 ## 5. Open items for Phase 1 spikes
 
-1. Confirm `bicep build --stdout --diagnostics-format sarif` and `bicep lint --diagnostics-format sarif` write SARIF to which
-   stream and what exit codes they return on warning-only runs (ADR-002 covers text/jsonrpc; SARIF not probed there).
+1. Revalidate at the selected current Bicep version that `build --stdout --diagnostics-format sarif` writes SARIF to
+   stderr and `lint --diagnostics-format sarif` writes it to stdout, as ADR-002 observed at 0.47.16; add a warning-only
+   exit-code fixture.
 2. Pick and justify the Bicep minimum from a CI version matrix (suggest oldest and newest supported).
 3. Verify `azd extension list --installed --output json` shape and `azd version --output json`.
 4. Verify PSRule invocation end to end on Linux with PowerShell 7.4 (not run here: no `pwsh` in this environment).

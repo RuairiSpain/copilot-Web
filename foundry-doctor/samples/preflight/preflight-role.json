@@ -1,0 +1,31 @@
+{
+  "Name": "Foundry Doctor Preflight Reader (sample)",
+  "IsCustom": true,
+  "Description": "Sample least-privilege role for foundry-doctor preflight. Read actions plus the POST-read actions listed in docs/permissions-matrix.md. No write actions. Soft-deleted listing and name-check actions are provider-specific and unverified; add them per docs/preflight.md. Review before assigning.",
+  "Actions": [
+    "Microsoft.Resources/subscriptions/read",
+    "Microsoft.Resources/subscriptions/providers/read",
+    "Microsoft.Resources/subscriptions/resources/read",
+    "Microsoft.Authorization/locks/read",
+    "Microsoft.Network/virtualNetworks/read",
+    "Microsoft.Network/virtualNetworks/subnets/read",
+    "Microsoft.Authorization/roleAssignments/read",
+    "Microsoft.Authorization/roleDefinitions/read",
+    "Microsoft.Authorization/denyAssignments/read",
+    "Microsoft.Authorization/policyAssignments/read",
+    "Microsoft.Authorization/policyExemptions/read",
+    "Microsoft.CognitiveServices/locations/models/read",
+    "Microsoft.CognitiveServices/locations/usages/read",
+    "Microsoft.PolicyInsights/checkPolicyRestrictions/read",
+    "Microsoft.Resources/subscriptions/locations/read",
+    "Microsoft.Resources/deployments/read",
+    "Microsoft.Authorization/permissions/read",
+    "Microsoft.Resources/deployments/whatIf/action"
+  ],
+  "NotActions": [],
+  "DataActions": [],
+  "NotDataActions": [],
+  "AssignableScopes": [
+    "/subscriptions/<subscription-id>"
+  ]
+}

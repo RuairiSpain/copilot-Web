@@ -7,215 +7,62 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ruairispain/copilot-web/foundry-doctor/internal/bicep"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/catalog"
-	"github.com/ruairispain/copilot-web/foundry-doctor/internal/config"
-	"github.com/ruairispain/copilot-web/foundry-doctor/internal/engine"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/findings"
-	"github.com/ruairispain/copilot-web/foundry-doctor/internal/report/markdown"
-	"github.com/ruairispain/copilot-web/foundry-doctor/internal/rules"
-	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
 
-func redactLine(s string) string {
-	return strings.Join(strings.Fields(findings.Redact(s)), " ")
-}
+// catalogExplainer renders catalogue rules.
+type catalogExplainer struct{ rules []catalog.Rule }
 
-// doc is the format-neutral content of an explanation: ordered label/value pairs.
-type doc struct {
-	title  string
-	fields [][2]string
-}
+// NewExplainer returns an Explainer over catalogue rules.
+func NewExplainer(rules []catalog.Rule) Explainer { return catalogExplainer{rules: rules} }
 
-func (d *doc) add(label, value string) {
-	if strings.TrimSpace(value) != "" {
-		d.fields = append(d.fields, [2]string{label, strings.TrimSpace(value)})
+// Explain implements Explainer. Unknown IDs are a usage error.
+func (e catalogExplainer) Explain(_ context.Context, ruleID, format string, w io.Writer) error {
+	i := slices.IndexFunc(e.rules, func(r catalog.Rule) bool { return strings.EqualFold(r.ID, ruleID) })
+	if i < 0 {
+		return Usagef("unknown rule %q; run `foundry-doctor doctor --help` for selectors", findings.Redact(ruleID))
 	}
-}
-
-// Explain prints the catalogue entry of one rule (PRD section 4: explain). Exit 2 for an unknown rule or format.
-func Explain(ctx context.Context, opts ExplainOptions, stdout, stderr io.Writer) error {
-	ee := explain(ctx, opts, stdout)
-	if ee == nil {
-		return nil
-	}
-	fmt.Fprintf(stderr, "error: %s\n", ee.Err)
-	return ee
-}
-
-func explain(ctx context.Context, opts ExplainOptions, stdout io.Writer) *ExitError {
-	format := opts.Format
-	if format == "" {
-		format = "console"
-	}
-	if format != "console" && format != "markdown" {
-		return exitErr(sdk.ExitCannotRun, "--format %q is not supported by explain: use console or markdown", format)
-	}
-	cat := opts.Catalogue
-	if cat == nil {
-		var err error
-		if cat, err = engine.DefaultCatalogue(ctx); err != nil {
-			return exitErr(sdk.ExitInternal, "load the rule catalogue: %w", err)
-		}
-	}
-	id := strings.TrimSpace(opts.RuleID)
-	var d doc
-	switch {
-	case engine.IsSystemID(strings.ToUpper(id)):
-		sd, ok := systemDoc(strings.ToUpper(id))
-		if !ok {
-			return exitErr(sdk.ExitCannotRun, "unknown rule %q: it is not a reserved engine ID", id)
-		}
-		d = sd
-	case engine.IsBicepID(id):
-		d = bicepDoc(id)
-	default:
-		e, ok := cat.Registry.Get(strings.ToUpper(id))
-		if !ok {
-			return exitErr(sdk.ExitCannotRun, "unknown rule %q: run `doctor` to see the IDs in a report, or read docs/rule-catalog.md", id)
-		}
-		d = ruleDoc(e)
-	}
-	var sb strings.Builder
+	r := e.rules[i]
+	h := "%s\n"
+	sec := func(title string) string { return title + ":" }
+	bullet := "  - "
 	if format == "markdown" {
-		renderMarkdown(&sb, d)
-	} else {
-		renderConsole(&sb, d)
+		h = "# %s\n"
+		sec = func(title string) string { return "**" + title + "**" }
+		bullet = "- "
 	}
-	if _, err := io.WriteString(stdout, sb.String()); err != nil {
-		return exitErr(sdk.ExitCannotRun, "write to stdout: %w", err)
+	var b strings.Builder
+	fmt.Fprintf(&b, h, mdEsc(r.ID+" "+r.Title, format))
+	fmt.Fprintf(&b, "\n%s %s (version %d, %s)\n", sec("Status"), r.Status, r.Version, r.Category)
+	fmt.Fprintf(&b, "%s %s\n", sec("Pillar"), r.Pillar)
+	fmt.Fprintf(&b, "%s %s\n", sec("Basis"), strings.Join(r.Basis, ", "))
+	fmt.Fprintf(&b, "%s dev=%s test=%s prod=%s\n", sec("Severity"), r.Severity.Dev, r.Severity.Test, r.Severity.Prod)
+	if !r.Compatibility.Azd.Empty() {
+		fmt.Fprintf(&b, "%s azd %s\n", sec("Compatibility"), r.Compatibility.Azd.String())
 	}
-	return nil
+	for _, s := range []struct{ t, v string }{
+		{"What it checks", r.Description}, {"Evidence", r.Evidence.Description},
+		{"Recommendation", r.Recommendation}, {"Fix", r.Fix}, {"Notes", r.Notes},
+	} {
+		if strings.TrimSpace(s.v) != "" {
+			fmt.Fprintf(&b, "\n%s\n%s\n", sec(s.t), mdEsc(strings.TrimSpace(s.v), format))
+		}
+	}
+	if len(r.Sources) > 0 {
+		fmt.Fprintf(&b, "\n%s\n", sec("Sources"))
+		for _, s := range r.Sources {
+			fmt.Fprintf(&b, "%s%s (verified %s)\n", bullet, s.URL, s.LastVerified)
+		}
+	}
+	_, err := io.WriteString(w, findings.Redact(b.String()))
+	return err
 }
 
-func systemDoc(id string) (doc, bool) {
-	for _, s := range engine.SystemDiagnostics() {
-		if s.ID == id {
-			d := doc{title: id + "  engine diagnostic"}
-			d.add("Meaning", s.Meaning)
-			d.add("Severity", string(s.Severity)+" in every profile")
-			d.add("Owner", "engine (ADR-009)")
-			d.add("Baseline", "never baselined; fix the cause")
-			return d, true
-		}
+// mdEsc escapes Markdown control characters in markdown output only.
+func mdEsc(s, format string) string {
+	if format != "markdown" {
+		return s
 	}
-	return doc{}, false
-}
-
-func bicepDoc(id string) doc {
-	code := strings.TrimPrefix(id, "bicep/")
-	d := doc{title: id + "  Bicep compiler diagnostic"}
-	d.add("Meaning", "The Bicep compiler or linter reported "+code+". The doctor passes the diagnostic through with the severity the compiler gave it.")
-	d.add("Docs", bicep.DocsURL(code))
-	d.add("Owner", "Bicep CLI (adapter)")
-	return d
-}
-
-func ruleDoc(e rules.Entry) doc {
-	m := e.Meta
-	d := doc{title: m.ID + "  " + m.Title}
-	d.add("Version", fmt.Sprint(m.Version))
-	d.add("Status", string(m.Status))
-	d.add("Group", m.Group)
-	d.add("Category", m.Category)
-	d.add("Pillar", m.Pillar)
-	d.add("Basis", strings.Join(m.Basis, ", "))
-	var sev []string
-	for _, p := range config.ProfileNames() {
-		s, err := rules.SeverityFor(m, p)
-		if err != nil {
-			sev = append(sev, p+"=unknown")
-			continue
-		}
-		sev = append(sev, p+"="+string(s))
-	}
-	d.add("Severity", strings.Join(sev, ", "))
-	d.add("Rationale", m.Description)
-	d.add("Inputs", strings.Join(m.Inputs, ", "))
-	d.add("Evidence", m.Evidence.Description)
-	d.add("Evidence confidence", m.Evidence.Confidence)
-	d.add("Remediation", m.Recommendation)
-	d.add("Fix", m.Fix)
-	if len(m.Sources) > 0 {
-		d.add("Docs", m.Sources[0].URL)
-	}
-	last := ""
-	for _, s := range m.Sources {
-		last = max(last, s.LastVerified)
-	}
-	d.add("Last verified", last)
-	owner := m.Implementation.Owner
-	if m.Implementation.Package != "" {
-		owner += " (" + m.Implementation.Package + ")"
-	}
-	d.add("Owner", owner)
-	if !e.Executable() {
-		d.add("Build", "this build has no Go implementation of the rule; it is reported as skipped")
-	}
-	d.add("Decision", m.Overlap.Decision)
-	d.add("Overlap", m.Overlap.Rationale)
-	c := m.Compatibility
-	d.add("Compatible azd", c.Azd)
-	keys := make([]string, 0, len(c.Extensions))
-	for k := range c.Extensions {
-		keys = append(keys, k)
-	}
-	slices.Sort(keys)
-	for _, k := range keys {
-		d.add("Compatible extension "+k, c.Extensions[k])
-	}
-	d.add("API versions", strings.Join(c.APIVersions, ", "))
-	if c.Preview {
-		d.add("Preview", "verified against prerelease tooling")
-	}
-	d.add("Compatibility notes", c.Notes)
-	for i, s := range m.Sources {
-		line := s.URL
-		if s.LastVerified != "" {
-			line += " (verified " + s.LastVerified + ")"
-		}
-		if s.VerifiedVia != "" {
-			line += " via " + s.VerifiedVia
-		}
-		if s.Note != "" {
-			line += ": " + s.Note
-		}
-		d.add(fmt.Sprintf("Source %d", i+1), line)
-	}
-	d.add("Notes", m.Notes)
-	switch m.Status {
-	case catalog.StatusProposed:
-		d.add("Unverified", "the rule is proposed and not yet researched against a primary source")
-	case catalog.StatusProductOpinion:
-		d.add("Unverified", "product opinion: no platform source states this requirement")
-	}
-	return d
-}
-
-func renderConsole(sb *strings.Builder, d doc) {
-	sb.WriteString(d.title + "\n")
-	for _, f := range d.fields {
-		if strings.Contains(f[1], "\n") {
-			sb.WriteString(f[0] + ":\n")
-			for _, l := range strings.Split(f[1], "\n") {
-				sb.WriteString("    " + l + "\n")
-			}
-			continue
-		}
-		fmt.Fprintf(sb, "%s: %s\n", f[0], f[1])
-	}
-}
-
-func renderMarkdown(sb *strings.Builder, d doc) {
-	sb.WriteString("# " + markdown.Escape(d.title) + "\n\n")
-	for _, f := range d.fields {
-		switch f[0] {
-		case "Fix":
-			sb.WriteString("\n**Fix**\n\n```yaml\n" + f[1] + "\n```\n\n")
-		case "Rationale", "Evidence", "Remediation", "Notes", "Overlap", "Compatibility notes":
-			sb.WriteString("\n**" + f[0] + "**\n\n" + f[1] + "\n\n")
-		default:
-			sb.WriteString("- **" + f[0] + "**: " + strings.Join(strings.Fields(f[1]), " ") + "\n")
-		}
-	}
+	return strings.NewReplacer("|", `\|`, "<", "&lt;", ">", "&gt;", "`", "\\`").Replace(s)
 }

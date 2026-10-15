@@ -1,0 +1,5 @@
+version: 1
+rules:
+  exclude:
+    - FND-OPS-007
+    - FND-OPS-008

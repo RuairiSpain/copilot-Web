@@ -25,7 +25,7 @@ compatibility:
   azd: '>=1.34.2 <=1.36.0-beta.1'
   extensions: {}
   apiVersions:
-  - Microsoft.Resources providers 2025-04-01
+  - { plane: management, provider: Microsoft.Resources, resourceType: providers, version: '2025-04-01' }
   preview: true
   notes: >-
     azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects
@@ -85,18 +85,26 @@ sources:
   note: Microsoft.Resources/subscriptions/providers/read and Microsoft.Resources/providers/read action names.
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     No PSRule, Azure Policy, Bicep linter or Checkov rule checks subscription-level provider registration. The Foundry value
     is correlating the compiled template, the azure.yaml services and the network-secured agent prerequisites with the subscription
     state. azd's server-side preflight (provision.preflight, ValidatePreflight) may also surface this, but the azd design
     document read does not list what it checks.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/dep

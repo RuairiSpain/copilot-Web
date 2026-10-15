@@ -3,10 +3,10 @@ version: 1
 group: CFG
 title: "Cron expressions are valid"
 description: >-
-  Recurring routine triggers must carry a valid 5-field cron expression whose interval is at least
-  five minutes, and a time_zone that is a valid IANA or Windows time zone identifier. The azure.ai.routine
-  schema and the Learn reference name the trigger type and cron key differently (see notes); the rule accepts
-  the documented spellings.
+  In the reviewed azure.ai.routines 1.0.0-beta.8 schema shape, a trigger whose type is recurring and
+  whose schedule key is cron_expression must carry a valid 5-field cron expression with an interval
+  of at least five minutes. Other type/key spellings and time_zone requirements conflict across the
+  reviewed sources and are not treated as equivalent.
 status: verified
 phases: ["later"]
 inputs: ["azure.yaml"]
@@ -26,22 +26,26 @@ compatibility:
   notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from a changelog and was not verified. Extension ranges are exactly the versions whose schemas or source were read; widen them in Phase 1 by reading older tags."
 evidence:
   description: >-
-    For triggers of type schedule or recurring, read cron_expression (or cron) and check it has exactly five
-    fields with valid ranges, evaluate the next firings over a week and report an interval below five
-    minutes, and check time_zone against the IANA tz database and the Windows zone list. Expressions
-    containing ${VAR} are skipped.
-  confidence: certain
+    Only for a trigger with literal type recurring and literal cron_expression, check exactly five
+    fields with documented numeric ranges and evaluate the next firings over a fixed week to report
+    an interval below five minutes. A ${VAR} expression is skipped. A schedule trigger, a cron key,
+    missing time_zone, or an otherwise unknown preview shape is Uncertain rather than silently
+    normalized. If time_zone is present on the proven shape, validate it against the bundled,
+    versioned IANA and Windows identifier data; unknown identifiers are Uncertain because the
+    reviewed azure.yaml schema does not constrain that field.
+  confidence: likely
 recommendation: >-
   Use a standard five-field cron expression that fires no more often than every five minutes and set
   time_zone to a valid identifier.
 fix: |
+  # Partial routine fragment using the azure.ai.routines 1.0.0-beta.8 schema spelling.
   services:
     daily-summary:
       host: azure.ai.routine
       uses: [summarizer]
       triggers:
         weekday-morning:
-          type: schedule
+          type: recurring
           cron_expression: "0 7 * * 1-5"
           time_zone: UTC
       action:
@@ -54,40 +58,57 @@ sources:
     note: "Schedule trigger: 5-field cron expression, minimum interval five minutes, time_zone IANA or Windows identifier."
   - url: https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/extensions/azure.ai.routines/schemas/azure.ai.routine.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.routines/schemas/azure.ai.routine.json
-    note: Trigger keys cron_expression, type recurring/timer; cron string only, no format constraint.
+    verifiedVia: >-
+      refs/azure-dev/cli/azd/extensions/azure.ai.routines/schemas/azure.ai.routine.json from
+      azure.ai.routines 1.0.0-beta.8; immutable repository revision unavailable
+    note: >-
+      Versioned schema evidence: trigger key cron_expression and type recurring/timer; cron is a string with no format
+      constraint.
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     The azd schemas only type cron as a string. No external tool validates Foundry routine schedules.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/cfg
 testability: Fully offline; deterministic cron evaluation with a fixed reference date in tests.
 tests:
   positive:
-    - six-field-cron
-    - every-minute-cron
-    - invalid-time-zone
-    - field-out-of-range
+    - recurring-cron-expression-with-six-fields-reports-a-violation
+    - recurring-cron-expression-every-minute-reports-a-violation
+    - recurring-cron-expression-field-out-of-range-reports-a-violation
   negative:
-    - weekday-morning-utc
-    - every-five-minutes
+    - recurring-weekday-morning-five-field-expression-produces-no-finding
+    - recurring-every-five-minutes-produces-no-finding
   skipped:
     - cron-from-env-reference
-    - non-schedule-trigger
+    - trigger-type-other-than-recurring-or-the-disputed-schedule-shape
+  uncertain:
+    - trigger-type-schedule-with-cron-expression
+    - recurring-trigger-with-cron-key
+    - missing-time-zone-under-conflicting-documentation
+    - time-zone-not-in-bundled-versioned-identifier-data
 notes: >-
   Unverified, preview inconsistencies: the Learn trigger table uses type schedule and cron_expression, the azd manifest
   example on the same page uses key cron, the azd routine schema lists type recurring (and the CLI example uses
   --trigger recurring), and agents/schemas/Routine.json uses cron under type schedule. Learn marks time_zone required
   in the REST field table but the azd example says omit it to interpret cron in UTC. Which spellings azd accepts in
-  azure.yaml is not confirmed; the rule accepts all of them and treats a missing time_zone as UTC with an info note.
+  azure.yaml is not confirmed; the rule enforces only recurring plus cron_expression and reports the
+  other spellings and missing time_zone as Uncertain.
   Cron dialect details beyond five fields (names such as MON, the L and # extensions) are not documented and are not
   assumed; expressions using them are reported uncertain.

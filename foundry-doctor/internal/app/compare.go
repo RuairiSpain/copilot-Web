@@ -5,113 +5,162 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"reflect"
+	"sort"
 	"strings"
 
-	"github.com/ruairispain/copilot-web/foundry-doctor/internal/compare"
-	"github.com/ruairispain/copilot-web/foundry-doctor/internal/model"
-	"github.com/ruairispain/copilot-web/foundry-doctor/internal/project"
-	"github.com/ruairispain/copilot-web/foundry-doctor/internal/report/markdown"
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/findings"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
 
-// Comparer compares two environments. internal/compare.Environments is the default.
-type Comparer func(ctx context.Context, left, right model.Environment) (compare.Diff, error)
+// mapPolicy adapts a flattened dotted-key map to sdk.Policy.
+type mapPolicy map[string]any
 
-// keyLine is what compare prints about one key: the name and the kind of difference, never a value and never
-// a value fingerprint (a hash of a short value can be guessed).
-type keyLine struct {
-	Key  string           `json:"key"`
-	Kind compare.DiffKind `json:"kind"`
+// MapPolicy returns a read-only sdk.Policy over a flattened policy map. A nil
+// map yields a policy with no keys.
+func MapPolicy(m map[string]any) sdk.Policy { return mapPolicy(m) }
+
+// Get implements sdk.Policy.
+func (p mapPolicy) Get(key string) (any, bool) {
+	v, ok := p[key]
+	if !ok {
+		if alt, okAlt := strings.CutPrefix(key, "policy."); okAlt {
+			v, ok = p[alt]
+		} else {
+			v, ok = p["policy."+key]
+		}
+	}
+	return v, ok
 }
 
-type compareDoc struct {
-	Left  string    `json:"left"`
-	Right string    `json:"right"`
-	Keys  []keyLine `json:"keys"`
+// Difference is one policy key that differs between two environments.
+type Difference struct {
+	Key   string `json:"key"`
+	Left  any    `json:"left,omitempty"`
+	Right any    `json:"right,omitempty"`
+	// Presence is "both", "left-only" or "right-only".
+	Presence string `json:"presence"`
 }
 
-// Compare lists the environment keys that differ between two azd environments of the project
-// (.azure/<name>/.env). Values are never printed. The exit code is 0 whenever the comparison ran: a
-// difference between environments is information, not a failure.
-func Compare(ctx context.Context, opts CompareOptions, stdout, stderr io.Writer) error {
-	ee := doCompare(ctx, opts, stdout)
-	if ee == nil {
-		return nil
-	}
-	fmt.Fprintf(stderr, "error: %s\n", ee.Err)
-	return ee
+// Comparison is the result of an offline environment compare.
+type Comparison struct {
+	Left         string       `json:"left"`
+	Right        string       `json:"right"`
+	LeftProfile  string       `json:"leftProfile"`
+	RightProfile string       `json:"rightProfile"`
+	Differences  []Difference `json:"differences"`
 }
 
-func doCompare(ctx context.Context, opts CompareOptions, stdout io.Writer) *ExitError {
-	format := opts.Format
-	if format == "" {
-		format = "console"
-	}
-	switch format {
-	case "console", "json", "markdown":
-	default:
-		return exitErr(sdk.ExitCannotRun, "--format %q is not supported by compare: use console, json or markdown", format)
-	}
-	cmp := opts.Comparer
-	if cmp == nil {
-		cmp = compare.Environments
-	}
-	start := opts.Dir
-	if start == "" {
-		start = "."
-	}
-	disc, err := project.Discover(ctx, start)
-	if err != nil {
-		return exitErr(sdk.ExitCannotRun, "find the project: %w", err)
-	}
-	azd, err := project.NewStandaloneAzdContext(disc.Project.Root)
-	if err != nil {
-		return exitErr(sdk.ExitCannotRun, "open the project: %w", err)
-	}
-	defer azd.Close()
+// CompareRequest mirrors the compare flags.
+type CompareRequest struct {
+	Dir        string
+	Left       string
+	Right      string
+	Format     string
+	Out        string
+	FailOnDiff bool
+}
 
-	l, err := azd.EnvValues(ctx, opts.Left)
-	if err != nil {
-		return exitErr(sdk.ExitCannotRun, "left environment: %w", err)
+// CompareSettings diffs two flattened policy maps deterministically.
+func CompareSettings(left, right map[string]any) []Difference {
+	keys := map[string]struct{}{}
+	for k := range left {
+		keys[k] = struct{}{}
 	}
-	r, err := azd.EnvValues(ctx, opts.Right)
-	if err != nil {
-		return exitErr(sdk.ExitCannotRun, "right environment: %w", err)
+	for k := range right {
+		keys[k] = struct{}{}
 	}
-	diff, err := cmp(ctx, l, r)
-	if err != nil {
-		return exitErr(sdk.ExitInternal, "compare environments: %w", err)
+	sorted := make([]string, 0, len(keys))
+	for k := range keys {
+		sorted = append(sorted, k)
 	}
-	out := compareDoc{Left: opts.Left, Right: opts.Right, Keys: []keyLine{}}
-	for _, k := range diff.Keys {
-		out.Keys = append(out.Keys, keyLine{Key: k.Key, Kind: k.Kind})
+	sort.Strings(sorted)
+	diffs := []Difference{}
+	for _, k := range sorted {
+		l, lok := left[k]
+		r, rok := right[k]
+		switch {
+		case lok && rok:
+			if !reflect.DeepEqual(l, r) {
+				diffs = append(diffs, Difference{Key: k, Left: l, Right: r, Presence: "both"})
+			}
+		case lok:
+			diffs = append(diffs, Difference{Key: k, Left: l, Presence: "left-only"})
+		default:
+			diffs = append(diffs, Difference{Key: k, Right: r, Presence: "right-only"})
+		}
+	}
+	return diffs
+}
+
+// Compare resolves two environments offline and prints their policy
+// differences. It never needs Azure credentials. Differences are informational
+// and exit 0 unless FailOnDiff is set; unresolved environments are exit 2.
+func Compare(ctx context.Context, svc Services, req CompareRequest, stdout io.Writer) (int, error) {
+	code, err := compare(ctx, svc, req, stdout)
+	if err != nil {
+		return ExitCodeForError(err), err
+	}
+	return code, nil
+}
+
+func compare(ctx context.Context, svc Services, req CompareRequest, stdout io.Writer) (int, error) {
+	if req.Format == "" {
+		req.Format = "console"
+	}
+	if req.Format != "console" && req.Format != "json" {
+		return 0, Usagef("invalid --format %q for compare (want console or json)", req.Format)
+	}
+	if req.Left == "" || req.Right == "" {
+		return 0, Usagef("compare needs two environment names")
+	}
+	if req.Dir == "" {
+		req.Dir = "."
+	}
+	l, err := svc.Config.Resolve(ctx, ConfigRequest{Dir: req.Dir, Environment: req.Left})
+	if err != nil {
+		return 0, fmt.Errorf("resolve environment %q: %w", req.Left, err)
+	}
+	r, err := svc.Config.Resolve(ctx, ConfigRequest{Dir: req.Dir, Environment: req.Right})
+	if err != nil {
+		return 0, fmt.Errorf("resolve environment %q: %w", req.Right, err)
+	}
+	cmp := Comparison{
+		Left: req.Left, Right: req.Right,
+		LeftProfile: l.Profile, RightProfile: r.Profile,
+		Differences: CompareSettings(l.Policy, r.Policy),
 	}
 	var sb strings.Builder
-	switch format {
-	case "json":
-		b, merr := json.MarshalIndent(out, "", "  ")
-		if merr != nil {
-			return exitErr(sdk.ExitInternal, "encode: %w", merr)
+	if req.Format == "json" {
+		b, err := json.MarshalIndent(cmp, "", "  ")
+		if err != nil {
+			return 0, fmt.Errorf("marshal comparison: %w", err)
 		}
 		sb.Write(b)
-		sb.WriteString("\n")
-	case "markdown":
-		fmt.Fprintf(&sb, "# Environment comparison: %s and %s\n\n", markdown.Escape(out.Left), markdown.Escape(out.Right))
-		sb.WriteString("Values are never shown.\n\n| Key | Difference |\n| --- | --- |\n")
-		for _, k := range out.Keys {
-			fmt.Fprintf(&sb, "| %s | %s |\n", markdown.Escape(k.Key), k.Kind)
+		sb.WriteByte('\n')
+	} else {
+		fmt.Fprintf(&sb, "Compare %s (profile %s) with %s (profile %s)\n", req.Left, l.Profile, req.Right, r.Profile)
+		if len(cmp.Differences) == 0 {
+			sb.WriteString("No policy differences.\n")
 		}
-	default:
-		fmt.Fprintf(&sb, "Comparing %s with %s (values are never shown)\n", out.Left, out.Right)
-		for _, k := range out.Keys {
-			fmt.Fprintf(&sb, "  %-12s %s\n", k.Kind, k.Key)
-		}
-		if len(out.Keys) == 0 {
-			sb.WriteString("  no keys\n")
+		for _, d := range cmp.Differences {
+			fmt.Fprintf(&sb, "  %s: %s -> %s\n", d.Key, render(d.Left, d.Presence == "right-only"), render(d.Right, d.Presence == "left-only"))
 		}
 	}
-	if _, err := io.WriteString(stdout, sb.String()); err != nil {
-		return exitErr(sdk.ExitCannotRun, "write to stdout: %w", err)
+	code := ExitOK
+	if req.FailOnDiff && len(cmp.Differences) > 0 {
+		code = ExitFindings
 	}
-	return nil
+	return code, svc.emit(req.Out, []byte(findings.Redact(sb.String())), stdout)
+}
+
+func render(v any, absent bool) string {
+	if absent {
+		return "(unset)"
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return fmt.Sprint(v)
+	}
+	return string(b)
 }

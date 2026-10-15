@@ -1,0 +1,6 @@
+version: 1
+profile: foundry-prod
+policy:
+  disasterRecovery:
+    declared: true
+    reference: https://contoso.example/dr-plan

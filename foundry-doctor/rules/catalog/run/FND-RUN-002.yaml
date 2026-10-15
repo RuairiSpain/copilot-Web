@@ -25,7 +25,8 @@ compatibility:
   azd: ''
   extensions: {}
   apiVersions:
-  - Microsoft.Network/privateDnsZones and virtualNetworkLinks 2018-09-01
+  - { plane: management, provider: Microsoft.Network, resourceType: privateDnsZones, version: '2018-09-01' }
+  - { plane: management, provider: Microsoft.Network, resourceType: privateDnsZones/virtualNetworkLinks, version: '2018-09-01' }
   preview: false
   notes: >-
     No azd dependency: DNS lookup and ARM reads; no azd behaviour dependency Microsoft.Network/privateDnsZones and virtualNetworkLinks
@@ -77,6 +78,7 @@ sources:
   note: Private DNS zones keep name resolution inside the VNet for storage, database and Key Vault private endpoints.
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     Azure Policy c4bc6f10 (Configure Cognitive Services accounts to use private DNS zones) configures zone group association;
@@ -85,23 +87,32 @@ overlap:
     vantage point, and refusing to Pass elsewhere, is the Foundry Doctor value. azd ai agent doctor has no DNS check. Evidence
     difference is total: PSRule Azure.AI.PrivateEndpoints checks that a private endpoint exists and the Azure Policy built-in
     is a DeployIfNotExists that configures DNS zones; neither tests resolution.
-  psrule:
-  - Azure.AI.PrivateEndpoints
-  azurePolicy:
-  - c4bc6f10-cb41-49eb-b000-d5ab82e2a091
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: searched-match
+      matches:
+      - Azure.AI.PrivateEndpoints
+    azurePolicy:
+      state: searched-match
+      matches:
+      - c4bc6f10-cb41-49eb-b000-d5ab82e2a091
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/run
 tests:
   positive:
-  - declared in-VNet vantage point and every FQDN resolves to a private IP
-  negative:
   - declared in-VNet vantage point and the Search FQDN resolves to a public IP
   - declared in-VNet vantage point and the zone has no VNet link
+  negative:
+  - declared in-VNet vantage point and every FQDN resolves to a private IP
   skipped:
   - vantage point is outside the VNet or not declared
   - no private endpoint is configured for the dependency

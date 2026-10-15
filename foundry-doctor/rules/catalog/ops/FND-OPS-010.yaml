@@ -21,7 +21,7 @@ compatibility:
   azd: ">=1.34.2 <=1.36.0-beta.1"
   extensions: {}
   apiVersions:
-    - "2026-09-01"
+    - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts/deployments, version: "2026-09-01" }
   preview: true
   notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from a changelog and was not verified."
 evidence:
@@ -63,6 +63,7 @@ sources:
     note: Model router honors the same policy; a model router deployment with an unapproved model is rejected with a policy violation across REST, CLI and ARM templates. Page ms.date 08/19/2026.
 overlap:
   decision: adapt
+  provisional: true
   coverage: partial
   rationale: >-
     The built-in Azure Policy definitions aafe3651-cb78-4f68-9f81-e7e41509110f (approved models) and
@@ -72,14 +73,22 @@ overlap:
     as a preflight and consistency check against the declared policy parameters, and does not replace the enforcement.
     The Azure Policy Allowed resource types definitions (a08ec900-254a-4555-9bf5-e42af04b5c5c, 6c112d4e-5bc7-47ae-a041-ea2d9dccd749)
     work on resource types, not models, and are not mapped.
-  psrule: []
-  azurePolicy:
-    - aafe3651-cb78-4f68-9f81-e7e41509110f
-    - 8791d062-ba96-4c34-b604-8538f7e30ca0
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: searched-match
+      matches:
+        - aafe3651-cb78-4f68-9f81-e7e41509110f
+        - 8791d062-ba96-4c34-b604-8538f7e30ca0
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/ops

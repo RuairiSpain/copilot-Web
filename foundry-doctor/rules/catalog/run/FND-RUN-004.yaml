@@ -20,8 +20,8 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.CognitiveServices accounts/deployments 2026-09-01"
-    - "Microsoft.Insights/metrics 2024-02-01"
+    - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts/deployments, version: "2026-09-01" }
+    - { plane: management, provider: Microsoft.Insights, resourceType: metrics, version: "2024-02-01" }
   preview: false
   notes: "No azd dependency: ARM and Azure Monitor reads; no azd behaviour dependency Microsoft.CognitiveServices accounts/deployments 2026-09-01: stable. Microsoft.Insights/metrics 2024-02-01: stable."
 evidence:
@@ -74,6 +74,7 @@ sources:
     note: Provisioned utilization at or above 100 percent returns 429.
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     No PSRule rule, Azure Policy definition or Checkov check inspects deployment runtime state or 429 metrics; they are
@@ -81,22 +82,29 @@ overlap:
     the clones. azd ai agent doctor removed its model-deployments check as producing false failures (CHANGELOG entry
     for PR 8394), so there is no Microsoft equivalent to reuse. The doctor's value is correlating the deployments the
     project actually uses with their runtime signal.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/run
 tests:
   positive:
-    - all used deployments Succeeded and zero 429 in the window
-  negative:
     - deployment provisioningState Failed
     - 429 total above threshold for one deployment
     - provisioned utilization at 100 percent
+  negative:
+    - all used deployments Succeeded and zero 429 in the window
   skipped:
     - caller cannot read metrics
     - deployment is not used by the project (out of scope)

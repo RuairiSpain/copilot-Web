@@ -22,8 +22,8 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "2026-04-01"
-    - "2026-08-01-preview"
+    - { plane: data, service: AzureAISearch, endpointFamily: indexers, version: "2026-04-01" }
+    - { plane: data, service: AzureAISearch, endpointFamily: knowledgesources, version: "2026-08-01-preview" }
   preview: true
   notes: "API 2026-04-01: indexer schedule; IndexingSchedule type. API 2026-08-01-preview: knowledge source ingestionParameters.ingestionSchedule."
 evidence:
@@ -58,14 +58,22 @@ sources:
     verifiedVia: refs/rest-api-specs/specification/search/data-plane/Search/models-service.tsp (IndexingSchedule has interval duration and startTime utcDateTime) and models-knowledgebase.tsp (ingestionSchedule of type IndexingSchedule)
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: No PSRule, Policy, Defender or Advisor control inspects Search indexer or knowledge source schedules.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/iq

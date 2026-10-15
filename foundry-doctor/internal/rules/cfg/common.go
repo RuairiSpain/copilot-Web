@@ -1,279 +1,349 @@
+// Package cfg implements the Phase 1 FND-CFG-* rules. All checks are static
+// over azure.yaml (and optional, injected project/environment views); none
+// call Azure.
 package cfg
 
 import (
-	"fmt"
-	"slices"
+	"context"
+	"regexp"
+	"strconv"
 	"strings"
 
-	"github.com/ruairispain/copilot-web/foundry-doctor/internal/model"
-	"github.com/ruairispain/copilot-web/foundry-doctor/internal/rules"
+	"go.yaml.in/yaml/v3"
+
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/azureyaml"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
 
-// Hosts of the azure.ai.* extensions that the rules of this group read.
+// Hosts used by the Foundry azd extensions.
 const (
-	hostProject       = "azure.ai.project"
-	hostAgent         = "azure.ai.agent"
-	hostConnection    = "azure.ai.connection"
-	hostToolbox       = "azure.ai.toolbox"
-	hostRoutine       = "azure.ai.routine"
-	hostLegacyFoundry = "microsoft.foundry"
+	hostAgent      = "azure.ai.agent"
+	hostProject    = "azure.ai.project"
+	hostConnection = "azure.ai.connection"
+	hostToolbox    = "azure.ai.toolbox"
 )
 
-// Named capabilities a skipped check reports.
-const (
-	capParsedYAML = "parsed azure.yaml"
-	capRefFile    = "$ref file contents"
-	capFileTree   = "project file tree"
-)
-
-// run collects the results of one Evaluate call.
-type run struct {
-	r     rules.Rule
-	in    *model.Input
-	out   []rules.Result
-	skips map[skipKey][]string
+// Layout answers questions about the project directory. It is optional:
+// rules that need it skip the dependent checks when it is nil.
+type Layout interface {
+	DirExists(rel string) bool
+	FileExists(rel string) bool
 }
 
-type skipKey struct{ reason, missing string }
-
-func newRun(r rules.Rule, in *model.Input) *run {
-	return &run{r: r, in: in, skips: map[skipKey][]string{}}
+// EnvView exposes the selected azd environment's variables. Values must never
+// be logged or placed in evidence.
+type EnvView interface {
+	// Selected reports the selected environment name; ok is false when none.
+	Selected() (name string, ok bool)
+	// Values returns the .env key/value pairs of the selected environment.
+	Values() map[string]string
 }
 
-// yamlMissing reports whether azure.yaml was not parsed.
-func yamlMissing(in *model.Input) bool { return in == nil || in.AzureYAML == nil }
-
-// skipNoYAML is the single result of a rule whose input azure.yaml is unavailable.
-func skipNoYAML(r rules.Rule) []rules.Result {
-	return []rules.Result{rules.SkipFor(r, rules.ReasonNotApplicable, "azure.yaml was not parsed; see the engine diagnostics", capParsedYAML, sdk.ResourceRef{})}
+// Providers carries the optional views a coordinator can supply.
+type Providers struct {
+	Layout Layout
+	Env    EnvView
 }
 
-func (x *run) file() string {
-	if x.in != nil && x.in.AzureYAML != nil {
-		return x.in.AzureYAML.File
+// document is the richer view of *azureyaml.Document the rules consume.
+type document interface {
+	sdk.AzureYAMLView
+	Root() *yaml.Node
+	Diagnostics() []azureyaml.Diagnostic
+}
+
+func skip(reason string) sdk.Result {
+	return sdk.Result{Skipped: &sdk.Skip{Reason: reason}}
+}
+
+func loadDoc(in *sdk.Input) (document, bool) {
+	if in == nil || in.AzureYAML == nil {
+		return nil, false
 	}
-	return ""
-}
-
-func (x *run) loc(p model.Pos) sdk.Location {
-	return sdk.Location{File: x.file(), Line: p.Line, Column: p.Column}
-}
-
-// finding adds a fail (or uncertain) result.
-func (x *run) finding(status sdk.Status, res sdk.ResourceRef, loc sdk.Location, key string, conf sdk.Confidence, evidence, rec, fix string) {
-	f := rules.NewFinding(x.r, res, evidence, rec)
-	f.Location, f.Key, f.Fix, f.Confidence = loc, key, fix, conf
-	if status == sdk.StatusUncertain {
-		x.out = append(x.out, rules.Uncertain(f))
-		return
+	d, ok := in.AzureYAML.(document)
+	if !ok || d.Root() == nil {
+		return nil, false
 	}
-	x.out = append(x.out, rules.Fail(f))
+	return d, true
 }
 
-func (x *run) fail(res sdk.ResourceRef, loc sdk.Location, key string, conf sdk.Confidence, evidence, rec, fix string) {
-	x.finding(sdk.StatusFail, res, loc, key, conf, evidence, rec, fix)
-}
-
-func (x *run) uncertain(res sdk.ResourceRef, loc sdk.Location, key, evidence, rec, fix string) {
-	x.finding(sdk.StatusUncertain, res, loc, key, sdk.ConfidenceUncertain, evidence, rec, fix)
-}
-
-// skip records a skipped check. Skips with the same reason and capability are merged into one result
-// that lists the affected names.
-func (x *run) skip(reason, missing, name string) {
-	k := skipKey{reason, missing}
-	if !slices.Contains(x.skips[k], name) {
-		x.skips[k] = append(x.skips[k], name)
-	}
-}
-
-// done returns the results in a deterministic order. With no finding and no skip it returns one pass.
-func (x *run) done() []rules.Result {
-	res := slices.Clone(x.out)
-	keys := make([]skipKey, 0, len(x.skips))
-	for k := range x.skips {
-		keys = append(keys, k)
-	}
-	slices.SortFunc(keys, func(a, b skipKey) int {
-		return strings.Compare(a.reason+"|"+a.missing, b.reason+"|"+b.missing)
-	})
-	for _, k := range keys {
-		names := slices.Clone(x.skips[k])
-		slices.Sort(names)
-		detail := fmt.Sprintf("%d item(s)", len(names))
-		shown := names
-		if len(shown) > 10 {
-			shown = shown[:10]
-		}
-		if len(shown) > 0 && shown[0] != "" {
-			detail += ": " + strings.Join(shown, ", ")
-		}
-		res = append(res, rules.SkipFor(x.r, k.reason, detail, k.missing, sdk.ResourceRef{}))
-	}
-	if len(res) == 0 {
-		return []rules.Result{rules.Pass()}
-	}
-	slices.SortStableFunc(res, func(a, b rules.Result) int { return strings.Compare(sortKey(a), sortKey(b)) })
-	// A finding repeated for the same resource and key is reported once.
-	out := make([]rules.Result, 0, len(res))
-	for i, r := range res {
-		if i > 0 && r.Finding != nil && sortKey(res[i-1]) == sortKey(r) {
-			continue
-		}
-		out = append(out, r)
-	}
-	return out
-}
-
-func sortKey(r rules.Result) string {
-	switch {
-	case r.Finding != nil:
-		f := r.Finding
-		return "0|" + f.Key + "|" + f.Resource.Kind + "|" + f.Resource.Name + "|" + f.Resource.Pointer
-	case r.Skip != nil:
-		return "1|" + r.Skip.Reason + "|" + r.Skip.MissingCapability
-	}
-	return "2"
-}
-
-// ---- azure.yaml helpers ----
-
-func svcRef(s model.Service) sdk.ResourceRef {
-	return sdk.ResourceRef{Kind: "service", Type: s.Host, Name: s.Name}
-}
-
-func projectRef(ay *model.AzureYAML) sdk.ResourceRef {
-	return sdk.ResourceRef{Kind: "project", Name: ay.Name}
-}
-
-func sortedServices(ay *model.AzureYAML) []model.Service {
-	out := slices.Clone(ay.Services)
-	slices.SortStableFunc(out, func(a, b model.Service) int { return strings.Compare(a.Name, b.Name) })
-	return out
-}
-
-// scalar returns the text of a scalar node.
-func scalar(n *model.Node) (string, bool) {
-	if n == nil || n.Kind != model.NodeScalar {
-		return "", false
-	}
-	return n.Value, true
-}
-
-// field returns the scalar text at path below the service body, and the node.
-func field(s model.Service, path ...string) (string, *model.Node) {
-	n := s.Node.Lookup(path...)
-	v, _ := scalar(n)
-	return v, n
-}
-
-func hasField(s model.Service, path ...string) bool { return s.Node.Lookup(path...) != nil }
-
-// hasRefFile reports whether the service body is (partly) held in a $ref file the reader does not follow.
-func hasRefFile(s model.Service) bool { return hasField(s, "$ref") }
-
-func kindOf(s model.Service) string { v, _ := field(s, "kind"); return v }
-
-func blank(s string) bool { return strings.TrimSpace(s) == "" }
-
-// hasRef reports whether s holds a ${...} reference, so its final value is known only after expansion.
-func hasRef(s string) bool { return strings.Contains(s, "${") }
-
-// seqItems returns the items of a sequence node.
-func seqItems(n *model.Node) []*model.Node {
-	if n == nil || n.Kind != model.NodeSequence {
+func child(n *yaml.Node, key string) *yaml.Node {
+	if n == nil || n.Kind != yaml.MappingNode {
 		return nil
 	}
-	return n.Children
-}
-
-// nameOf reads an item that is either a scalar name or a mapping with a name key.
-func nameOf(n *model.Node) (string, bool) {
-	if v, ok := scalar(n); ok {
-		return v, true
-	}
-	if n != nil && n.Kind == model.NodeMapping {
-		return scalar(n.Lookup("name"))
-	}
-	return "", false
-}
-
-func posOf(n *model.Node, fallback model.Pos) model.Pos {
-	if n == nil {
-		return fallback
-	}
-	if n.KeyPos.Line > 0 {
-		return n.KeyPos
-	}
-	if n.Pos.Line > 0 {
-		return n.Pos
-	}
-	return fallback
-}
-
-func serviceByName(ay *model.AzureYAML) map[string]model.Service {
-	m := make(map[string]model.Service, len(ay.Services))
-	for _, s := range ay.Services {
-		if _, dup := m[s.Name]; !dup {
-			m[s.Name] = s
+	var found *yaml.Node
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		if n.Content[i].Value == key {
+			found = n.Content[i+1]
 		}
 	}
-	return m
+	return found
 }
 
-func usesName(s model.Service, name string) bool {
-	for _, u := range s.Uses {
-		if u.Name == name {
+func has(n *yaml.Node, key string) bool { return child(n, key) != nil }
+
+func scalar(n *yaml.Node) string {
+	if n == nil || n.Kind != yaml.ScalarNode {
+		return ""
+	}
+	return n.Value
+}
+
+func str(n *yaml.Node, key string) string { return strings.TrimSpace(scalar(child(n, key))) }
+
+type pair struct{ Key, Val *yaml.Node }
+
+func pairs(n *yaml.Node) []pair {
+	if n == nil || n.Kind != yaml.MappingNode {
+		return nil
+	}
+	var out []pair
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		out = append(out, pair{n.Content[i], n.Content[i+1]})
+	}
+	return out
+}
+
+func items(n *yaml.Node) []*yaml.Node {
+	if n == nil || n.Kind != yaml.SequenceNode {
+		return nil
+	}
+	return n.Content
+}
+
+type nameAt struct {
+	Name string
+	Node *yaml.Node
+}
+
+// refNames returns names from a scalar, a sequence of scalars, or a sequence
+// of mappings with a name key.
+func refNames(n *yaml.Node) []nameAt {
+	if n == nil {
+		return nil
+	}
+	if n.Kind == yaml.ScalarNode {
+		return []nameAt{{strings.TrimSpace(n.Value), n}}
+	}
+	var out []nameAt
+	for _, it := range items(n) {
+		switch it.Kind {
+		case yaml.ScalarNode:
+			out = append(out, nameAt{strings.TrimSpace(it.Value), it})
+		case yaml.MappingNode:
+			if nm := child(it, "name"); nm != nil {
+				out = append(out, nameAt{strings.TrimSpace(scalar(nm)), nm})
+			}
+		}
+	}
+	return out
+}
+
+type service struct {
+	Name string
+	Node *yaml.Node
+	Host string
+	Key  *yaml.Node
+}
+
+func (s service) get(key string) *yaml.Node { return child(s.Node, key) }
+func (s service) str(key string) string     { return str(s.Node, key) }
+func (s service) kind() string              { return strings.ToLower(s.str("kind")) }
+
+func (s service) isPromptAgent() bool { return s.Host == hostAgent && s.kind() == "prompt" }
+func (s service) isVoiceAgent() bool {
+	return s.Host == hostAgent && (s.kind() == "voice" || s.kind() == "prompt-voice")
+}
+func (s service) isHostedAgent() bool {
+	return s.Host == hostAgent && !s.isPromptAgent() && !s.isVoiceAgent()
+}
+
+func (s service) uses() []string {
+	var out []string
+	for _, n := range refNames(s.get("uses")) {
+		out = append(out, n.Name)
+	}
+	return out
+}
+
+func (s service) usesName(name string) bool {
+	for _, u := range s.uses() {
+		if u == name {
 			return true
 		}
 	}
 	return false
 }
 
-// usedProjects returns the azure.ai.project services the service lists in uses, sorted by name.
-func usedProjects(by map[string]model.Service, s model.Service) []model.Service {
-	var out []model.Service
-	for _, u := range s.Uses {
-		if p, ok := by[u.Name]; ok && p.Host == hostProject {
-			out = append(out, p)
+func serviceList(d document) []service {
+	var out []service
+	for _, p := range pairs(child(d.Root(), "services")) {
+		if p.Val.Kind != yaml.MappingNode {
+			continue
 		}
+		out = append(out, service{Name: p.Key.Value, Node: p.Val, Host: str(p.Val, "host"), Key: p.Key})
 	}
-	slices.SortFunc(out, func(a, b model.Service) int { return strings.Compare(a.Name, b.Name) })
-	return slices.CompactFunc(out, func(a, b model.Service) bool { return a.Name == b.Name })
+	return out
 }
 
-// deployments returns the deployment names declared by the projects an agent uses. why is non-empty when
-// the absence of a name cannot be proven offline.
-func deployments(by map[string]model.Service, s model.Service) (names map[string]bool, why string) {
-	names = map[string]bool{}
-	projects := usedProjects(by, s)
-	if len(projects) == 0 {
-		return names, "no-project-in-uses"
+func byName(svcs []service) map[string]service {
+	m := make(map[string]service, len(svcs))
+	for _, s := range svcs {
+		m[s.Name] = s
 	}
-	for _, p := range projects {
-		if v, _ := field(p, "endpoint"); !blank(v) {
-			why = "existing-project-endpoint"
-		}
-		for _, it := range seqItems(p.Node.Lookup("deployments")) {
-			if it.Kind == model.NodeMapping && it.Lookup("$ref") != nil {
-				why = "deployments-ref-file"
-				continue
-			}
-			n, ok := scalar(it.Lookup("name"))
-			switch {
-			case !ok:
-			case hasRef(n):
-				why = "deployment-name-reference"
-			default:
-				names[n] = true
-			}
-		}
-	}
-	return names, why
+	return m
 }
 
-// reservedEnv reports whether an environment key uses a prefix the Foundry extensions own.
-func reservedEnv(key string) bool {
-	return strings.HasPrefix(key, "FOUNDRY_") || strings.HasPrefix(key, "AGENT_")
+// projectOf returns the azure.ai.project service the service uses (or is).
+func projectOf(s service, all map[string]service) (service, bool) {
+	if s.Host == hostProject {
+		return s, true
+	}
+	for _, u := range s.uses() {
+		if p, ok := all[u]; ok && p.Host == hostProject {
+			return p, true
+		}
+	}
+	return service{}, false
+}
+
+func loc(d document, n *yaml.Node) sdk.Location {
+	l := sdk.Location{File: d.Path()}
+	if n != nil {
+		l.Line, l.Column = n.Line, n.Column
+	}
+	return l
+}
+
+// finding builds a finding anchored at n (or the service key when n is nil).
+func finding(d document, s service, n *yaml.Node, evidence string) sdk.Finding {
+	if n == nil {
+		n = s.Key
+	}
+	f := sdk.Finding{Location: loc(d, n), Evidence: evidence}
+	if s.Name != "" {
+		f.Resource = sdk.ResourceRef{Type: s.Host, Name: s.Name}
+	}
+	return f
+}
+
+func ok(fs []sdk.Finding) sdk.Result { return sdk.Result{Findings: fs} }
+
+var varName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// varRefs extracts plain ${VAR} references. It ignores ${{...}} expressions,
+// $${VAR} escapes and ${VAR:-default} inline defaults.
+func varRefs(s string) []string {
+	var out []string
+	for i := 0; i < len(s); i++ {
+		if s[i] != '$' {
+			continue
+		}
+		if i+1 < len(s) && s[i+1] == '$' {
+			i++
+			continue
+		}
+		if strings.HasPrefix(s[i:], "${{") {
+			if end := strings.Index(s[i:], "}}"); end >= 0 {
+				i += end + 1
+			}
+			continue
+		}
+		if !strings.HasPrefix(s[i:], "${") {
+			continue
+		}
+		end := strings.IndexByte(s[i:], '}')
+		if end < 0 {
+			return out
+		}
+		name := s[i+2 : i+end]
+		i += end
+		if varName.MatchString(name) {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+func containsRef(s string) bool { return strings.Contains(s, "${") }
+
+// isWholeRef reports whether the entire value is a single ${VAR} or ${{...}}.
+func isWholeRef(s string) bool {
+	s = strings.TrimSpace(s)
+	if strings.HasPrefix(s, "${{") && strings.HasSuffix(s, "}}") {
+		return strings.Count(s, "${{") == 1
+	}
+	if strings.HasPrefix(s, "${") && strings.HasSuffix(s, "}") {
+		return strings.Count(s, "${") == 1 && strings.Count(s, "}") == 1
+	}
+	return false
+}
+
+// walkScalars calls fn for every scalar with its dotted path and map key.
+func walkScalars(n *yaml.Node, path string, fn func(path, key string, v *yaml.Node)) {
+	if n == nil {
+		return
+	}
+	switch n.Kind {
+	case yaml.MappingNode:
+		for _, p := range pairs(n) {
+			sub := path + "." + p.Key.Value
+			if p.Val.Kind == yaml.ScalarNode {
+				fn(sub, p.Key.Value, p.Val)
+			} else {
+				walkScalars(p.Val, sub, fn)
+			}
+		}
+	case yaml.SequenceNode:
+		for i, it := range n.Content {
+			sub := path + "[" + strconv.Itoa(i) + "]"
+			if it.Kind == yaml.ScalarNode {
+				fn(sub, "", it)
+			} else {
+				walkScalars(it, sub, fn)
+			}
+		}
+	}
+}
+
+type rule struct {
+	id   string
+	eval func(*sdk.Input) sdk.Result
+}
+
+type cfgState struct {
+	fs        []sdk.Finding
+	skips     []string
+	evaluated bool
+}
+
+func (r rule) ID() string { return r.id }
+func (r rule) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
+	res := r.eval(in)
+	if res.Skipped != nil {
+		res.Skipped.RuleID = r.id
+	}
+	return res, nil
+}
+
+// Register returns all Phase 1 CFG rules without optional providers. Checks
+// that need a layout or environment view are skipped.
+func Register() []sdk.Rule { return RegisterWith(Providers{}) }
+
+// RegisterWith returns all Phase 1 CFG rules using the supplied providers.
+func RegisterWith(p Providers) []sdk.Rule {
+	return []sdk.Rule{
+		rule{"FND-CFG-001", evalCFG001},
+		rule{"FND-CFG-002", evalCFG002},
+		rule{"FND-CFG-003", evalCFG003},
+		rule{"FND-CFG-004", func(in *sdk.Input) sdk.Result { return evalCFG004(in, p) }},
+		rule{"FND-CFG-005", evalCFG005},
+		rule{"FND-CFG-006", func(in *sdk.Input) sdk.Result { return evalCFG006(in, p) }},
+		rule{"FND-CFG-007", evalCFG007},
+		rule{"FND-CFG-008", evalCFG008},
+		rule{"FND-CFG-009", evalCFG009},
+		rule{"FND-CFG-010", evalCFG010},
+		rule{"FND-CFG-011", evalCFG011},
+		rule{"FND-CFG-012", func(in *sdk.Input) sdk.Result { return evalCFG012(in, p) }},
+	}
 }

@@ -46,14 +46,14 @@ func Markdown(rules []Rule) string {
 	fmt.Fprintf(&b, "\n## Phase 1 MVP set (%d rules)\n\nRules whose phases include 1, including those shared with a later phase. The PRD target is 35 to 40.\n\n", len(mvp))
 	b.WriteString("| Rule | Title | Phases | Status | Decision |\n|---|---|---|---|---|\n")
 	for _, r := range mvp {
-		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s |\n", esc(r.ID), esc(r.Title), esc(strings.Join(r.Phases, "/")), r.Status, esc(dash(r.Overlap.Decision)))
+		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s |\n", esc(r.ID), esc(r.Title), esc(strings.Join(r.Phases, "/")), esc(string(r.Status)), esc(dash(r.Overlap.Decision)))
 	}
 
 	group := ""
 	for _, r := range sorted {
 		if r.Group != group {
 			group = r.Group
-			fmt.Fprintf(&b, "\n## %s\n\n| Rule | Title | Phase | Status | Decision | dev/test/prod | Source |\n|---|---|---|---|---|---|---|\n", group)
+			fmt.Fprintf(&b, "\n## %s\n\n| Rule | Title | Phase | Status | Decision | dev/test/prod | Source |\n|---|---|---|---|---|---|---|\n", esc(group))
 		}
 		sev := "-"
 		if r.Severity.Dev != "" {
@@ -61,7 +61,7 @@ func Markdown(rules []Rule) string {
 		}
 		src := "-"
 		if len(r.Sources) > 0 {
-			src = fmt.Sprintf("[link](<%s>) (%s)", strings.NewReplacer(">", "%3E", "<", "%3C", "|", "%7C", "\n", "").Replace(r.Sources[0].URL), esc(r.Sources[0].LastVerified))
+			src = fmt.Sprintf("[link](<%s>) (%s)", linkDestination(r.Sources[0].URL), esc(r.Sources[0].LastVerified))
 		} else if r.Status == StatusProductOpinion {
 			src = "product opinion"
 		}
@@ -69,9 +69,57 @@ func Markdown(rules []Rule) string {
 		if dec == "" {
 			dec = "-"
 		}
-		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s | %s |\n", esc(r.ID), esc(r.Title), esc(strings.Join(r.Phases, "/")), r.Status, esc(dec), esc(sev), src)
+		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s | %s |\n", esc(r.ID), esc(r.Title), esc(strings.Join(r.Phases, "/")), esc(string(r.Status)), esc(dec), esc(sev), src)
 	}
 	return b.String()
 }
 
-func esc(s string) string { return strings.ReplaceAll(strings.ReplaceAll(s, "|", "\\|"), "\n", " ") }
+func esc(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r == '&':
+			b.WriteString("&amp;")
+		case r == '<':
+			b.WriteString("&lt;")
+		case r == '>':
+			b.WriteString("&gt;")
+		case r == '|':
+			b.WriteString("&#124;")
+		case r == '`':
+			b.WriteString("&#96;")
+		case r == '\\':
+			b.WriteString("&#92;")
+		case unsafeFormatRune(r):
+			b.WriteString("&#xfffd;")
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+func linkDestination(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r == '&':
+			b.WriteString("&amp;")
+		case unsafeFormatRune(r):
+			b.WriteString("%EF%BF%BD")
+		case r == '<', r == '>', r == '|', r == '`', r == '\\':
+			for _, c := range []byte(string(r)) {
+				fmt.Fprintf(&b, "%%%02X", c)
+			}
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+func unsafeFormatRune(r rune) bool {
+	return r < 0x20 || r >= 0x7f && r <= 0x9f ||
+		r >= 0x202a && r <= 0x202e || r >= 0x2066 && r <= 0x2069 ||
+		r == 0x200e || r == 0x200f || r == 0x061c
+}

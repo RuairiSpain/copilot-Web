@@ -39,7 +39,7 @@ fix: |
   AZURE_AI_PROJECT_ENDPOINT=https://prod-account.services.ai.azure.com/api/projects/prod-project
 sources:
   - url: https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview
-    lastVerified: "2026-10-04"
+    lastVerified: "2026-10-05"
     verifiedVia: refs/azd-docs/articles/azure-developer-cli/environments-overview.md
     note: Environments are isolated configurations for development, testing and production (context only).
   - url: https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/extensions/azure.ai.projects/schemas/azure.ai.project.json
@@ -68,16 +68,24 @@ sources:
       .azure/<name>/.env and .azure/<name>/config.json.
 overlap:
   decision: native
+  provisional: false
   coverage: none
   rationale: >-
     PSRule for Azure, Azure Policy and Defender judge a resource on its own; none can tell that a prod environment points at
     a sibling dev environment. The environment tier mapping and cross-file correlation is the value.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: searched-none
+    azurePolicy:
+      state: searched-none
+    defender:
+      state: searched-none
+    advisor:
+      state: searched-none
+    bicepLinter:
+      state: searched-none
+    checkov:
+      state: searched-none
 implementation:
   owner: native
   package: internal/rules/env

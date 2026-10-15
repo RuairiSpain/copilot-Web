@@ -1,0 +1,130 @@
+{
+  "framework": "azure-waf",
+  "profile": "foundry-prod",
+  "decision": "Proceed with conditions.",
+  "limitations": [
+    "Not a certification."
+  ],
+  "controls": {
+    "fail": [
+      {
+        "controlId": "",
+        "ruleId": "FND-IDN-001",
+        "title": "Failed control",
+        "pillar": "security",
+        "state": "FAIL",
+        "mandatory": false,
+        "costly": false,
+        "projectOpinion": false,
+        "findings": [
+          {
+            "ruleId": "",
+            "ruleVersion": 0,
+            "severity": "",
+            "resource": {},
+            "location": {},
+            "evidence": "identity missing",
+            "fingerprint": ""
+          }
+        ],
+        "evaluated": false
+      }
+    ],
+    "pass": [
+      {
+        "controlId": "",
+        "ruleId": "FND-OPS-001",
+        "title": "Passed control",
+        "pillar": "operations",
+        "state": "PASS",
+        "mandatory": false,
+        "costly": false,
+        "projectOpinion": false,
+        "evaluated": false
+      }
+    ],
+    "question": [
+      {
+        "controlId": "",
+        "ruleId": "FND-REL-007",
+        "title": "Question control",
+        "pillar": "reliability",
+        "state": "QUESTION",
+        "mandatory": false,
+        "costly": false,
+        "projectOpinion": false,
+        "evaluated": false
+      }
+    ],
+    "skipped": [
+      {
+        "controlId": "",
+        "ruleId": "FND-OPS-002",
+        "title": "Skipped control",
+        "pillar": "operations",
+        "state": "SKIPPED",
+        "mandatory": false,
+        "costly": false,
+        "projectOpinion": false,
+        "skipped": [
+          {
+            "ruleId": "",
+            "reason": "input-unavailable"
+          }
+        ],
+        "evaluated": false
+      }
+    ],
+    "warning": [
+      {
+        "controlId": "",
+        "ruleId": "FND-SEC-011",
+        "title": "Suppressed control",
+        "pillar": "security",
+        "state": "WARNING",
+        "mandatory": false,
+        "costly": false,
+        "projectOpinion": false,
+        "findings": [
+          {
+            "ruleId": "",
+            "ruleVersion": 0,
+            "severity": "",
+            "resource": {},
+            "location": {},
+            "evidence": "accepted",
+            "suppressed": {
+              "reason": "tracked",
+              "owner": "team"
+            },
+            "fingerprint": ""
+          }
+        ],
+        "evaluated": false
+      },
+      {
+        "controlId": "",
+        "ruleId": "FND-NET-010",
+        "title": "Baselined control",
+        "pillar": "security",
+        "state": "WARNING",
+        "mandatory": false,
+        "costly": false,
+        "projectOpinion": false,
+        "findings": [
+          {
+            "ruleId": "",
+            "ruleVersion": 0,
+            "severity": "",
+            "resource": {},
+            "location": {},
+            "evidence": "old debt",
+            "baselined": true,
+            "fingerprint": ""
+          }
+        ],
+        "evaluated": false
+      }
+    ]
+  }
+}

@@ -1,5 +1,10 @@
 # Phase 1 review: Azure black belt
 
+> **Scope note (2026-10-15).** This review examined the implementation archived on branch `claude/foundry-doctor-phase-1-core-archive`
+> (commit `2b1c135`), which was replaced on this branch by the implementation already merged to `main` (PR #18). The findings below name
+> files of the archived code. They are kept as an independent checklist: re-check each one against `main`'s rules before relying on it.
+
+
 Reviewer: `azure-black-belt` (independent; did not write the code). Date: 2026-10-14. Verdict on the first submission: **REJECT**.
 Scope: Azure integration correctness of SEC, NET, IDN, OPS-004/005/009/010, REL-005 and COST-002 rules, the ARM normaliser, the graph, and ADR-006/007/012.
 Method: realistic Bicep compiled with Bicep 0.47.16 and run through the built binary (fixtures were under the reviewer's scratchpad; the shapes are described below).

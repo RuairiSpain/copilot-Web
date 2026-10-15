@@ -1,5 +1,10 @@
 # Phase 1 review: Foundry lead
 
+> **Scope note (2026-10-15).** This review examined the implementation archived on branch `claude/foundry-doctor-phase-1-core-archive`
+> (commit `2b1c135`), which was replaced on this branch by the implementation already merged to `main` (PR #18). The findings below name
+> files of the archived code. They are kept as an independent checklist: re-check each one against `main`'s rules before relying on it.
+
+
 Reviewer: `foundry-lead` (independent; did not write the code). Date: 2026-10-12. Verdict on the first submission: **REJECT**.
 Scope: azure.yaml handling, project and environment discovery, `.env` handling, synthetic infrastructure, and the CFG, ENV, COST-002 and OPS-007 rules.
 

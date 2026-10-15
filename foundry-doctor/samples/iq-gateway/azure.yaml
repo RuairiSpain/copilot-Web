@@ -1,0 +1,9 @@
+name: iq-gateway-sample
+services:
+  iq:
+    host: azure.ai.connection
+    target: https://sample-search.search.windows.net/knowledgebases/sample-kb/mcp
+    authType: ProjectManagedIdentity
+    # UNVERIFIED: this sample keeps the documented header name only.
+    headers:
+      x-ms-query-source-authorization: "{user_token}"

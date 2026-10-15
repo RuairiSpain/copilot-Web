@@ -24,7 +24,7 @@ compatibility:
   azd: '>=1.34.2 <=1.36.0-beta.1'
   extensions: {}
   apiVersions:
-  - Microsoft.Resources subscriptions 2022-12-01
+  - { plane: management, provider: Microsoft.Resources, resourceType: subscriptions, version: '2022-12-01' }
   preview: true
   notes: >-
     azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects
@@ -86,17 +86,25 @@ sources:
   note: 'Reader role definition: actions */read.'
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     No PSRule, Azure Policy, Defender for Cloud, Advisor, Bicep linter or Checkov rule compares an azd environment with
     the subscription's tenant; they analyse resources, not the deployment session. azd itself prompts for a subscription,
     but no azd document read states that it validates the tenant match.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/dep

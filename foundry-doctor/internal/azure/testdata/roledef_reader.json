@@ -1,0 +1,1 @@
+{"properties":{"roleName":"Reader","permissions":[{"actions":["*/read"],"notActions":[],"dataActions":[],"notDataActions":[]}]}}

@@ -2,7 +2,7 @@ FOUNDRY DOCTOR
 Implementation-Ready Product Requirements Document
 Azure Developer CLI extension and standalone Foundry rule platformGo implementation • phased one-shot Claude Code execution
 | Document field | Value |
-| Status | Approved architecture and phased implementation baseline |
+| Status | Architecture baseline; Phase 0 reopened for documented remediation (2026-10-05) |
 | Audience | Claude Code implementation agents, maintainers, reviewers and Foundry platform teams |
 | Primary implementation | Go azd extension with a reusable standalone CLI core |
 | Primary command namespace | azd foundry |
@@ -18,7 +18,7 @@ The product differentiator is not generic tool orchestration. It is the versione
 - One command for local validation: azd foundry doctor.
 - A preflight mode for deployment readiness: azd foundry doctor --preflight.
 - A runtime diagnosis mode: azd foundry doctor --runtime.
-- Environment comparison: azd foundry doctor --compare dev prod.
+- Environment comparison: azd foundry compare dev prod.
 - Offline rule explanation: azd foundry explain FND-IDN-002.
 - WAF assessments with owner, developer and security evidence outputs.
 - Adoption support through baselines, expiring suppressions and stable CI exit codes.
@@ -43,7 +43,25 @@ The product differentiator is not generic tool orchestration. It is the versione
 | Advanced user | Use organisation-specific low-level tools | Escape hatch for PSRule, Checkov, Bicep and policy configuration. |
 
 # 4. Command Surface
-azd foundry doctor [--profile dev|test|prod] [--local] [--preflight] [--runtime]                   [--security] [--rules <selector>] [--min-severity <level>]                   [--baseline <file>] [--suppressions <file>] [--strict]                   [--format console|json|markdown|sarif] [--output <path>]azd foundry explain <rule-id> [--format console|markdown]azd foundry compare <left-env> <right-env> [--format ...]azd foundry assess waf [--profile ...] [--llm-explain] [--evidence-pack]azd foundry graph [--source|--deployed|--combined] [--format mermaid|json|html]azd foundry annotate --profile test|prod --output <review-dir>azd foundry cost [--profile ...] [--currency EUR]azd foundry scaffold [--from-findings <report.json>]
+```
+azd foundry doctor [--profile dev|test|prod] [--local] [--preflight] [--runtime]
+                   [--security] [--rules <selector>] [--min-severity <level>]
+                   [--fail-on <level>] [--baseline <file>] [--suppressions <file>]
+                   [--what-if] [--export-tool-config <dir>] [--strict]
+                   [--format console|json|markdown|sarif] [--out <path>]
+azd foundry explain <rule-id> [--format console|markdown]
+azd foundry compare <left-env> <right-env> [--format ...] [--out <path>]
+azd foundry assess waf [--profile ...] [--llm-explain] [--evidence-pack] [--out <path>]
+azd foundry graph [--source|--deployed|--combined] [--format mermaid|json|html] [--out <path>]
+azd foundry annotate --profile test|prod --out <review-dir>
+azd foundry cost [--profile ...] [--currency EUR] [--out <path>]
+azd foundry scaffold [--from-findings <report.json>] [--out <path>]
+```
+`--out` is the Foundry Doctor file/directory destination. The azd extension SDK reserves
+`-o/--output` for azd's output-format contract, so Foundry Doctor does not redeclare it. Environment
+comparison is a separate `compare` command, not a doctor mode. The product commands above are planned
+unless a phase hand-off explicitly records their implementation. The Phase 0 `rulecatalog` utility
+has its own documented command surface and is not a product command.
 If the selected azd extension namespace conflicts with a first-party command discovered during Phase 0, retain the same internal command model and rename the public prefix to azd guard or foundry-doctor. Namespace resolution is a Phase 0 release gate.
 # 5. System Architecture
 flowchart LR  CLI[azd foundry / standalone CLI] --> CFG[Unified config resolver]  CFG --> SRC[Source acquisition]  SRC --> AY[azure.yaml AST]  SRC --> BC[Bicep adapter]  BC --> ARM[Compiled ARM model]  AY --> CORR[Correlation graph]  ARM --> CORR  CORR --> ENGINE[Native Go rule engine]  ENGINE --> FIND[Normalised findings]  CFG --> ADAPTERS[Optional external adapters]  ADAPTERS --> FIND  FIND --> BASE[Baseline and suppression filter]  BASE --> REPORT[Console JSON SARIF Markdown HTML]  AZ[Azure SDK control plane] --> CORR  DP[Selected data-plane adapters] --> CORR  LLM[Optional LLM explainer] --> REPORT
@@ -80,12 +98,29 @@ type Finding struct {  RuleID string  RuleVersion int  Severity Severity  Catego
 | 3 | At least one check was skipped and --strict was specified. |
 | 4 | Internal error or adapter protocol failure. |
 
+Exit classification is based on the run outcome, not an external tool's numeric code. In particular,
+**1 always means findings** and **2 always means the requested validation could not run**. If findings
+exist but a required input/dependency/authentication/permission is unavailable, exit 2 takes precedence;
+if only optional checks are skipped, findings retain exit 1 unless `--strict` makes the result exit 3.
+External exit codes are translated at the adapter boundary and must never reverse the meanings of 1 and 2.
+
 # 8. Phase 0 - Research, overlap analysis and technical spikes
 Purpose: establish the evidence-backed rule strategy and prove the risky integration points before implementation.
 ## Purpose and context
 Phase 0 prevents duplication of lower-level tools and validates the architectural assumptions that most affect implementation. The output is an approved, sourced rule catalogue and a set of executable prototypes. No production CLI feature work starts until this gate is complete.
+
+**Current gate status (reopened 2026-10-05): not complete.** The catalogue utility and metadata
+contracts exist, but the original hand-off did not establish every item claimed by this section.
+The remediation record is ADR-008 and `docs/development/hand-offs/phase-0.md`. Prior review approvals
+and test results are historical evidence, not proof that the current tree passes.
+The current catalogue split is 82 verified and 26 product-opinion rules. The 85/23 split in the
+original Phase 0 record is historical. Current local checks are recorded in the hand-off, but the
+Windows ARM64 race check and tagged spikes lack local results, and no successful current CI run is
+evidenced. The current Bicep compatibility contract is 0.48.1; 0.47.16 is historical spike evidence.
 ## Dependencies and phase hand-off
-- No code dependency. Uses the agreed draft catalogue and existing XF rule/test assets as inputs.
+- No production-code dependency. The agreed draft catalogue is present. The stated 59 XF-origin
+  rule/test assets have not been located in this repository, so XF provenance and test reuse remain
+  provisional rather than completed inputs.
 - Produces the canonical rule IDs, ownership decisions, documentation links and version compatibility matrix consumed by every later phase.
 - Produces Bicep/source-map and azd namespace spike results that unblock package design.
 ## Microsoft and GitHub tool integrations
@@ -100,13 +135,16 @@ Phase 0 prevents duplication of lower-level tools and validates the architectura
 | WARA/WAF guidance | Separate machine-verifiable rules from review questions. | Use sourced guidance, never claim complete compliance. |
 
 ## Functional scope
-- Inventory the 108 proposed rules and 59 XF-origin checks.
+- Inventory the 108 proposed rules. Inventory the 59 XF-origin checks only after their authoritative
+  source assets are supplied; until then record the missing evidence and do not infer XF coverage from
+  matching titles.
 - For every rule record: source, current Microsoft documentation URL, last verified date, existing-tool coverage, decision (reuse/wrap/adapt/native/drop), environment severities and testability.
 - Discover beneficial new rules for developers and product development managers, including deployment feasibility, supportability, schema lifecycle, release readiness and cost visibility.
 - Run Bicep source-map spike on root templates, modules, loops, conditions and generated infrastructure.
 - Run azure.yaml-only spike for projects where azd synthesises infrastructure.
 - Confirm public command namespace and packaging constraints.
-- Document licences and redistribution conditions for every dependency.
+- Document licences and redistribution conditions for every selected dependency. A manual inventory is
+  provisional until transitive dependencies and release artefacts are scanned and required notices are produced.
 ## Command flow
 Research agents -> source matrix -> rule overlap decision -> architecture decision records                         |                         +-> Bicep source-map spike                         +-> azure.yaml-only spike                         +-> namespace/package spike                         v                 approved rule-catalog v1
 ## Go packages and implementation responsibilities
@@ -138,6 +176,13 @@ Research agents -> source matrix -> rule overlap decision -> architecture decisi
 - Bicep source mapping is either proven for MVP or documented as a deferred limitation.
 - No unresolved namespace conflict.
 - The revised MVP contains 35-40 high-value rules.
+- The synthetic-infrastructure schema spike has been run with its optional dependencies and a pinned
+  azure-dev clone, and both positive and deliberately invalid fixtures behave as documented; otherwise it
+  is explicitly recorded as not run.
+- XF-origin coverage is traceable to the authoritative 59 assets, or the assets' absence is an open gate
+  rather than a completed inventory.
+- Licence evidence includes the selected direct and transitive dependency graph, scanner output and notice
+  obligations for distributable artefacts; a hand-written direct-dependency inventory alone is not completion.
 ## Key risks and mitigations
 | Risk | Mitigation |
 | Documentation changes during development | Store lastVerified and compatible version ranges in every rule pack. |
@@ -785,7 +830,7 @@ orchestrator  -> research/source agents  -> architecture/contracts agent  -> par
 | Documentation agent | Generate user, maintainer and rule documentation from source metadata. |
 
 ## Claude Code phase prompt contract
-For the selected phase:1. Read this PRD, all ADRs, current rule catalogue and prior phase hand-off.2. Inspect the repository before planning changes.3. Launch the prescribed specialist agents in parallel where dependencies permit.4. Produce a concrete implementation plan mapped to Definition of Done.5. Implement production code, tests, samples, docs and release artefacts.6. Run all local acceptance commands.7. Obtain independent reviews from:   a. Foundry lead architect/developer persona;   b. Azure black belt persona for integration, security, networking, WAF/WARA.8. Resolve findings or record an ADR with evidence.9. Produce phase hand-off: changed artefacts, commands run, test evidence, known limitations and next-phase prerequisites.10. Do not mark the phase complete unless every DoD item is met or explicitly waived in an ADR.
+For the selected phase:1. Read this PRD, all ADRs, current rule catalogue and prior phase hand-off.2. Inspect the repository before planning changes.3. Launch the prescribed specialist agents in parallel where dependencies permit.4. Produce a concrete implementation plan mapped to Definition of Done.5. Implement production code, tests, samples, docs and release artefacts.6. Run all local acceptance commands.7. Obtain independent reviews from:   a. Foundry lead architect/developer persona;   b. Azure black belt persona for integration, security, networking, WAF/WARA.8. Resolve findings or record an ADR with evidence.9. Produce phase hand-off: changed artefacts, commands run, test evidence, known limitations and next-phase prerequisites.10. Do not mark the phase complete unless every DoD item is met. An ADR may change a contract or record a consciously accepted risk, but it is not evidence that an unrun or failing acceptance gate passed.
 # 20. Agreed Rule Catalogue and Phase Allocation
 The complete draft catalogue remains subject to Phase 0 verification. The following list is the agreed implementation scope and ordering. Rule titles are stable identifiers; exact property names, documentation links and adapter ownership must be finalised in Phase 0.
 ## CFG - configuration correctness
@@ -935,7 +980,8 @@ The complete draft catalogue remains subject to Phase 0 verification. The follow
 # 21. Phase Dependency Map
 Phase 0 Research and spikes   |   +--> Phase 1 Offline rule platform MVP          |          +--> Phase 2 Azure preflight/control plane          |      |          |      +--> Phase 3 Runtime/data plane          |      |      |          |      |      +--> Phase 8 IQ and gateway deep validation          |      |          |      +--> Phase 7 Cost intelligence          |          +--> Phase 4 WAF and evidence reporting          |      |          |      +--> Phase 9 Optional LLM narrative          |          +--> Phase 5 Graph outputs          |          +--> Phase 6 Annotated review copies
 # 22. Global Definition of Done
-- All phase-specific DoD items pass.
+- All applicable phase-specific DoD items pass in the current tree. Historical results and waivers do not
+  count as a passing current gate; unavailable checks are recorded as skipped.
 - All rule facts used by implementation have a verified source and lastVerified date.
 - Two independent expert reviews completed: Foundry lead and Azure black belt.
 - No unresolved critical/high security findings in the implementation.
@@ -945,6 +991,9 @@ Phase 0 Research and spikes   |   +--> Phase 1 Offline rule platform MVP        
 - Cross-platform release artefacts, checksums, SBOM, signatures and provenance are produced.
 - Sample projects cover azure.yaml-only, Bicep-backed, public, private and existing-resource patterns as appropriate to the phase.
 - Phase hand-off document records test commands, evidence, limitations and next-phase prerequisites.
+- The final acceptance run uses the repository's strict gate when the phase contains Go code. A strict run
+  that reports any skipped gate is not a pass. If prerequisites make strict execution impossible, the phase
+  remains open and the hand-off records the exact skipped checks.
 # 23. Key Risks Register
 | Risk | Likelihood | Impact | Owner/Mitigation |
 | Preview Foundry schemas change | High | High | Versioned provider adapters and rule packs; compatibility gate. |

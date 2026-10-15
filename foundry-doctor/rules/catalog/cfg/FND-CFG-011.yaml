@@ -38,38 +38,56 @@ evidence:
 recommendation: >-
   Move to the unified service-level shape: put env on the agent service, use kind voice, use host
   azure.ai.project instead of microsoft.foundry, drop fields the hosted-agent create request ignores, and declare
-  requiredVersions for the extensions.
+  requiredVersions for extension versions verified by this catalogue. Do not infer a field's
+  introduction version from the current schema.
 fix: |
   requiredVersions:
     extensions:
-      azure.ai.agents: ">=1.0.0-beta.8"
-      azure.ai.projects: ">=1.0.0-beta.4"
+      azure.ai.agents: ">=1.0.0-beta.18"
+      azure.ai.projects: ">=1.0.0-beta.13"
   services:
+    ai-project:
+      host: azure.ai.project
     my-agent:
       host: azure.ai.agent
+      project: src/my-agent
+      uses: [ai-project]
+      kind: hosted
       env:
         MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME: ${MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME}
 sources:
   - url: https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/azure-yaml-reference.md
+    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/azure-yaml-reference.md (ms.date 09/17/2026)
     note: Extension compatibility, legacy configuration migration, metadata and schema limitations, reserved prefixes, preview banner.
   - url: https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-dev/schemas/v1.0/azure.yaml.json
-    note: config deprecated on azure.ai.agent; microsoft.foundry legacy host comment.
+    verifiedVia: refs/azure-dev/schemas/v1.0/azure.yaml.json from the azd 1.36.0-beta.1 clone; immutable repository revision unavailable
+    note: Versioned schema evidence for agent project/host and service-level env; config deprecated on azure.ai.agent; microsoft.foundry legacy host comment.
+  - url: https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json from azure.ai.agents 1.0.0-beta.18; immutable repository revision unavailable
+    note: Versioned extension schema evidence for the required project, host, kind and service-level env fields used by the fix.
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     Schema lifecycle awareness of the azure.ai.* preview surface exists only in the azd schemas and docs; JSON
     Schema validation (FND-CFG-001) does not flag deprecated-but-valid constructs. No other tool covers it.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/cfg

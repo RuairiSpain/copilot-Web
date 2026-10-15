@@ -1,0 +1,26 @@
+{
+  "summary": "The assessed scope shows a small set of high-priority platform controls that should be remediated before promotion.",
+  "sections": [
+    {
+      "heading": "Identity first",
+      "summary": "Prioritize managed identity adoption because it removes credential handling risk across the deployment path.",
+      "actions": [
+        "Enable managed identity for the Foundry resource and dependent workloads.",
+        "Re-run deterministic validation after the identity change."
+      ],
+      "ruleIds": [
+        "FND-IDN-001"
+      ]
+    },
+    {
+      "heading": "Reduce exposed surface",
+      "summary": "Address the current public network posture before treating the environment as production-ready.",
+      "actions": [
+        "Move to the intended private endpoint posture or document the accepted exception."
+      ],
+      "ruleIds": [
+        "FND-NET-001"
+      ]
+    }
+  ]
+}

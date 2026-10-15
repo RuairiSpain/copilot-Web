@@ -3,55 +3,51 @@ version: 1
 group: OPS
 title: "Application Insights connected"
 description: >-
-  The Foundry project (or its parent account) should have a connection of category AppInsights that points to an
-  Application Insights resource, so that Foundry server-side tracing and hosted-agent telemetry have a destination.
+  When a workload explicitly requires Foundry server-side tracing, hosted-agent telemetry, or an
+  Application Insights observability destination, the Foundry project (or its parent account) should
+  have a connection of category AppInsights that points to an Application Insights resource.
   Foundry documents that server-side tracing is enabled after an Application Insights resource is connected, and that
   hosted agents receive the APPLICATIONINSIGHTS_CONNECTION_STRING setting only when project monitoring is configured.
-status: verified
+  Foundry does not document an Application Insights connection as mandatory for every production project.
+status: product-opinion
 phases: ["4"]
-inputs: ["bicep-arm", "azure.yaml", "control-plane"]
-basis: ["operations", "waf"]
-category: must-have
+inputs: ["control-plane"]
+basis: ["operations", "waf", "opinion"]
+category: nice-to-have
 pillar: operations
 severity:
   dev: info
   test: warning
-  prod: error
+  prod: warning
 compatibility:
-  azd: ">=1.34.2 <=1.36.0-beta.1"
-  extensions:
-    azure.ai.connections: ">=1.0.0-beta.9 <=1.0.0-beta.9"
+  azd: ""
+  extensions: {}
   apiVersions:
-    - "2026-09-01"
-  preview: true
-  notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from a changelog and was not verified. Extension ranges are exactly the versions whose schemas or source were read; widen them in Phase 1 by reading older tags."
+    - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts/projects/connections, operation: list, version: "2026-09-01" }
+  preview: false
+  notes: "Control-plane inventory only. Resource=Microsoft.CognitiveServices/accounts/projects/connections; plane=control; API=2026-09-01."
 evidence:
   description: >-
-    Offline: in the compiled ARM template, a Microsoft.CognitiveServices/accounts/projects/connections or
-    Microsoft.CognitiveServices/accounts/connections resource whose properties.category equals AppInsights
-    (AppInsights is a member of the ConnectionCategory enumeration in the 2026-09-01 specification), whose target or
-    metadata resolves to a Microsoft.Insights/components resource in the same deployment; or an azure.yaml service
-    with host azure.ai.connection and category AppInsights that uses the azure.ai.project service. Report: no
-    AppInsights connection for a project that has an agent service or model deployments; more than one AppInsights
-    connection on the same scope (Foundry returns an error that only one connection per category is allowed in the
-    traces setup troubleshooting table); the referenced component is not workspace-based (no
-    WorkspaceResourceId) when it is defined in the same template. Control plane: list the project connections and
-    confirm one AppInsights category entry exists. Credentials are never read.
-  confidence: likely
+    First read the profile's explicit observability/server-tracing requirement. With no such
+    requirement, skip: environment name or production status alone does not imply one. When required,
+    list deployed project connections through the control plane and inspect category only; credentials and connection
+    metadata are never requested or retained. Report no AppInsights category connection for an in-scope project, or
+    more than one at the same scope. Do not infer the linked component from target or metadata and do not inspect
+    compiled ARM or azure.yaml: no primary source reviewed here verifies that authoring shape. If connections cannot
+    be listed, skip. If category is present but the destination cannot be established without credentials or
+    undocumented metadata, report the category check as compliant and leave destination health to runtime evidence.
+  confidence: certain
 recommendation: >-
-  Connect an Application Insights resource to the Foundry project (a connection with category AppInsights) and link
-  the Application Insights component to a Log Analytics workspace. Keep exactly one AppInsights connection per scope.
+  If server-side tracing or hosted-agent telemetry is a declared requirement, connect an Application
+  Insights resource to the Foundry project (a connection with category AppInsights) and link the
+  component to a Log Analytics workspace. Keep exactly one AppInsights connection per scope. Choose
+  sampling, retention and daily-cap settings deliberately: telemetry ingestion and retention incur
+  cost, so a project that does not require this observability path should not be forced to enable it.
 fix: |
-  resource aiConn 'Microsoft.CognitiveServices/accounts/projects/connections@2026-09-01' = {
-    parent: project
-    name: 'appinsights'
-    properties: {
-      category: 'AppInsights'
-      target: appInsights.id
-      authType: 'ApiKey'
-      credentials: { key: appInsights.properties.ConnectionString }
-    }
-  }
+  # Safe remediation (no unverified ARM wiring):
+  # In the Foundry portal, open the project, Monitoring, and connect the intended
+  # workspace-based Application Insights resource. Re-run the live inventory and
+  # verify exactly one project connection whose category is AppInsights.
 sources:
   - url: https://learn.microsoft.com/azure/foundry/observability/how-to/trace-agent-setup
     lastVerified: "2026-10-04"
@@ -65,12 +61,20 @@ sources:
     lastVerified: "2026-10-04"
     verifiedVia: refs/azure-ai-docs/articles/foundry/observability/how-to/trace-ingestion-entra-authentication.md
     note: Troubleshooting row - only one connection per category (AppInsights) is allowed.
+  - url: https://learn.microsoft.com/azure/azure-monitor/logs/data-retention-configure
+    lastVerified: "2026-10-04"
+    verifiedVia: refs/azure-monitor-docs/articles/azure-monitor/logs/data-retention-configure.md
+    note: >-
+      Azure Monitor retention guidance states that retention beyond the included period is billed;
+      this supports presenting the observability requirement as a cost-versus-retention choice, not
+      as an unconditional production requirement. Page ms.date 09/02/2026.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
     lastVerified: "2026-10-04"
     verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
     note: ConnectionCategory enumeration contains AppInsights; connections exist under accounts and accounts/projects.
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: >-
     No PSRule rule, Azure Policy definition or Bicep linter rule checks the Foundry project to Application Insights
@@ -78,36 +82,45 @@ overlap:
     duplicated: PSRule Azure.AppInsights.Workspace (workspace-based component) and Azure Policy
     d550e854-df1a-4de9-bf44-cd894b39a95e (component must be linked to a Log Analytics workspace). The Foundry-specific
     value is the correlation between the project, its agents and the connection.
-  psrule: [Azure.AppInsights.Workspace]
-  azurePolicy: [d550e854-df1a-4de9-bf44-cd894b39a95e]
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: searched-match
+      matches:
+      - 'Azure.AppInsights.Workspace'
+    azurePolicy:
+      state: searched-match
+      matches:
+      - 'd550e854-df1a-4de9-bf44-cd894b39a95e'
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/ops
 testability: >-
-  Offline against fixture ARM JSON and azure.yaml; the control-plane variant uses a recorded connection list with
-  credentials stripped.
+  Deterministic against a recorded control-plane connection list with credentials and metadata stripped.
 tests:
   positive:
-    - project-with-agent-and-no-appinsights-connection
-    - two-appinsights-connections-on-one-project
-    - connection-target-component-not-workspace-based
+    - declared-server-tracing-requirement-and-no-appinsights-connection-reports-a-finding
+    - declared-observability-requirement-and-two-appinsights-connections-reports-a-finding
   negative:
-    - project-connection-category-appinsights
-    - azure-yaml-appinsights-connection-service-uses-project
+    - declared-server-tracing-requirement-and-one-project-connection-category-appinsights-produces-no-finding
   skipped:
-    - existing-project-endpoint-only
-    - connection-target-is-unresolved-parameter
-    - control-plane-unavailable
+    - no-explicit-observability-or-server-tracing-requirement
+    - control-plane-unavailable-while-the-requirement-is-declared
+  uncertain:
+    - project-scope-cannot-be-distinguished-from-account-scope
 notes: >-
-  Basis is operational guidance. The Well-Architected guidance text itself was not read (the source repository is not public). Foundry documents the consequence of a missing connection (no server-side traces) but
-  not that it is an invalid configuration, so no platform basis is claimed. Unverified: the exact ARM property that
-  carries the component resource ID for category AppInsights (target versus metadata.ResourceId) was not confirmed from
-  a Learn article; the fix example uses target as the generic connection property and must be checked against a
-  recorded deployment before the rule is implemented. authType and credentials shape for AppInsights is documented
-  for azure.yaml (field key) only. The azure.yaml reference lists connection categories only as examples
-  (CustomKeys, ApiKey, AzureOpenAI, CognitiveSearch, RemoteTool); AppInsights appears in the hosted-agent placeholder
-  table but not in the azure.host azure.ai.connection example, so the azure.yaml detection path is confidence likely. Trace data retention follows the connected component and workspace (see FND-OPS-006).
+  This is a product opinion conditioned on an explicit workload requirement. The Well-Architected
+  guidance text itself was not read (the source repository is not public). Foundry documents the
+  consequence of a missing connection (no server-side traces) but not that it is an invalid
+  configuration or a production error, so no platform basis is claimed. Application Insights and
+  Log Analytics ingestion and retention create a cost tradeoff. The unverified ARM target/metadata,
+  authType, credentials and azure.yaml claims were removed from evidence and remediation. Trace data retention follows
+  the connected component and workspace (see FND-OPS-006). Defender and Advisor are unresearched; the native overlap
+  decision is provisional until their catalogues are searched.

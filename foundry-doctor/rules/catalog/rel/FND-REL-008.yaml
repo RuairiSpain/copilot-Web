@@ -26,8 +26,8 @@ compatibility:
   azd: ""
   extensions: {}
   apiVersions:
-    - "Microsoft.CognitiveServices/accounts/deployments 2026-05-01"
-    - "Microsoft.CognitiveServices/accounts/deployments 2024-10-01"
+    - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts/deployments, version: "2026-05-01" }
+    - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts/deployments, version: "2024-10-01" }
   preview: false
   notes: "No azd dependency: reads compiled ARM JSON or ARM control plane Microsoft.CognitiveServices/accounts/deployments 2026-05-01 / 2024-10-01: stable) - properties.spilloverDeploymentName in cognitiveservices.json; Learn REST example uses."
 evidence:
@@ -62,25 +62,33 @@ sources:
   note: WARA 0c193899-da60-4a52-b4a0-77d75ac8c5c5 (PAYG instance to manage overflow), pgVerified true.
 overlap:
   decision: native
+  provisional: true
   coverage: none
   rationale: No PSRule for Azure rule, Azure Policy built-in, Checkov check or Advisor recommendation was found for spilloverDeploymentName.
     WARA 0c193899 is the matching recommendation but WARA is a query-based recommendation set, not a Foundry Doctor input.
     Foundry-specific correlation (deployment SKU, same-account standard deployment of the same model) is the value.
-  psrule: []
-  azurePolicy: []
-  defender: []
-  advisor: []
-  bicepLinter: []
-  checkov: []
+  research:
+    psrule:
+      state: unresearched
+    azurePolicy:
+      state: unresearched
+    defender:
+      state: unresearched
+    advisor:
+      state: unresearched
+    bicepLinter:
+      state: unresearched
+    checkov:
+      state: unresearched
 implementation:
   owner: native
   package: internal/rules/rel
 tests:
   positive:
-  - provisioned deployment with spilloverDeploymentName naming an existing standard deployment of the same model passes
-  negative:
   - GlobalProvisionedManaged deployment without spilloverDeploymentName reports missing spillover
   - spilloverDeploymentName names a deployment that does not exist in the account
+  negative:
+  - provisioned deployment with spilloverDeploymentName naming an existing standard deployment of the same model passes
   skipped:
   - 'standard (non-provisioned) deployment: out of scope'
   - 'no control-plane access in live mode: skipped with the missing capability'

@@ -65,7 +65,7 @@ cannot spawn subagents, so the main session coordinates; the
 2. Run `go-implementer` agents in parallel, one package set each, in worktrees.
 3. Integrate, then run `scripts/claude/verify-phase.sh`.
 4. Independent reviews (read-only agents): `foundry-lead` and `azure-black-belt` every
-   phase. `go-principal-engineer` and `security-reviewer` are deferred to Phase 9 (ADR-013).
+   phase. `go-principal-engineer` and `security-reviewer` are deferred to Phase 9 (ADR-014).
 5. Fix findings or record an ADR with evidence.
 6. Write the hand-off from `docs/development/hand-offs/TEMPLATE.md`.
 
