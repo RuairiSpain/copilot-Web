@@ -10,6 +10,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/findings"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
 
@@ -17,10 +18,22 @@ var (
 	secretAuth = map[string]bool{"apikey": true, "customkeys": true, "pat": true, "accesskey": true,
 		"accountkey": true, "sas": true, "usernamepassword": true, "oauth2": true}
 	secretKeyRe = regexp.MustCompile(`(?i)(key|secret|token|password|pwd|connection[_-]?string)`)
-	sensQuery   = map[string]bool{"sig": true, "sv": true, "token": true}
+	// Names that look secret-bearing by substring but describe a quantity,
+	// a rotation setting or a file location, not a credential.
+	nonSecretNameRe = regexp.MustCompile(`(?i)(limit|count|rotation|size|file)`)
+	// Only a signature makes a SAS query string a credential; sv is the
+	// signed-version selector.
+	sensQuery = map[string]bool{"sig": true, "token": true}
+	// Literal secret shapes beyond findings.Redact.
+	secretShapeRe = regexp.MustCompile(`\bsk-[A-Za-z0-9_-]{16,}`)
 )
 
-func isSecretKey(k string) bool { return secretKeyRe.MatchString(k) }
+func isSecretKey(k string) bool { return secretKeyRe.MatchString(k) && !nonSecretNameRe.MatchString(k) }
+
+// secretShaped reports whether a literal has the shape of a credential.
+func secretShaped(v string) bool {
+	return findings.Redact(v) != v || secretShapeRe.MatchString(v)
+}
 
 func evalCFG005(in *sdk.Input) sdk.Result {
 	d, okd := loadDoc(in)
@@ -28,17 +41,29 @@ func evalCFG005(in *sdk.Input) sdk.Result {
 		return skip(sdk.SkipInputUnavailable)
 	}
 	var fs []sdk.Finding
+	var notes []string
 	for _, s := range serviceList(d) {
 		if s.Host == hostConnection && secretAuth[strings.ToLower(s.str("authType"))] {
 			for _, p := range pairs(s.get("credentials")) {
-				if v := scalar(p.Val); v != "" && !isWholeRef(v) {
+				shape, _ := classifyValue(scalar(p.Val))
+				switch shape {
+				case shapeLiteral:
 					fs = append(fs, finding(d, s, p.Val, fmt.Sprintf("credentials.%s is a literal; use a ${VAR} reference", p.Key.Value)))
+				case shapeDefaultLiteral:
+					fs = append(fs, finding(d, s, p.Val, fmt.Sprintf("credentials.%s has a literal default; remove the default after :-", p.Key.Value)))
+				case shapeMixed:
+					notes = append(notes, fmt.Sprintf("%s: credentials.%s mixes literal text and a reference", s.Name, p.Key.Value))
 				}
 			}
 		}
 		for _, p := range pairs(s.get("env")) {
-			if v := scalar(p.Val); v != "" && isSecretKey(p.Key.Value) && !containsRef(v) {
-				fs = append(fs, finding(d, s, p.Val, fmt.Sprintf("env.%s looks secret-bearing but is a literal", p.Key.Value)))
+			shape, lit := classifyValue(scalar(p.Val))
+			named := isSecretKey(p.Key.Value)
+			switch {
+			case (shape == shapeLiteral || shape == shapeDefaultLiteral) && secretShaped(lit):
+				fs = append(fs, finding(d, s, p.Val, fmt.Sprintf("env.%s holds a literal with the shape of a credential", p.Key.Value)))
+			case named && shape != shapeEmpty && shape != shapeRef:
+				notes = append(notes, fmt.Sprintf("%s: env.%s looks secret-bearing by name only", s.Name, p.Key.Value))
 			}
 		}
 		for _, u := range urlFields(s) {
@@ -53,7 +78,7 @@ func evalCFG005(in *sdk.Input) sdk.Result {
 			}
 		}
 	}
-	return ok(fs)
+	return withNotes(fs, notes)
 }
 
 // urlFields returns URL-bearing scalar nodes of a service in stable order.
@@ -158,15 +183,27 @@ func evalCFG011(in *sdk.Input) sdk.Result {
 			}
 		}
 	}
-	for _, e := range requiredVersionsBelow(d.Root(), cfg011MinVersions) {
-		fs = append(fs, sdk.Finding{Location: loc(d, e.Node),
-			Evidence: fmt.Sprintf("requiredVersions.extensions.%s %q is below documented %s", e.Name, scalar(e.Node), cfg011MinVersions[e.Name])})
-	}
-	return ok(fs)
+	return withNotes(fs, noteTexts(requiredVersionNotes(d.Resolved(), cfg011MinVersions)))
 }
 
-var standardVars = map[string]bool{"AZURE_ENV_NAME": true, "AZURE_LOCATION": true,
-	"AZURE_SUBSCRIPTION_ID": true, "AZURE_RESOURCE_GROUP": true}
+// Variable names azd core defines as environment keys (azd source,
+// cli/azd/pkg/environment/environment.go). These are producers by definition.
+var standardVars = map[string]bool{
+	"AZURE_ENV_NAME": true, "AZURE_LOCATION": true, "AZURE_SUBSCRIPTION_ID": true,
+	"AZURE_RESOURCE_GROUP": true, "AZURE_TENANT_ID": true,
+	"AZURE_PRINCIPAL_ID": true, "AZURE_PRINCIPAL_TYPE": true,
+}
+
+// Names azd also defines in the same source but that only exist when the
+// infrastructure or host provides them. They are not known producers; a
+// missing one is uncertain, not an error.
+var infraDependentVars = map[string]bool{
+	"AZURE_CONTAINER_REGISTRY_ENDPOINT":               true,
+	"AZURE_CONTAINER_APPS_ENVIRONMENT_DEFAULT_DOMAIN": true,
+	"AZURE_APP_SERVICE_DASHBOARD_URI":                 true,
+	"AZURE_AKS_CLUSTER_NAME":                          true,
+	"AZD_PLATFORM_TYPE":                               true,
+}
 
 func evalCFG006(in *sdk.Input, p Providers) sdk.Result {
 	d, okd := loadDoc(in)
@@ -180,12 +217,21 @@ func evalCFG006(in *sdk.Input, p Providers) sdk.Result {
 	for k := range p.Env.Values() {
 		have[k] = true
 	}
-	// Bicep/ARM outputs are an additional producer class; azd maps template
-	// outputs to environment values of the same name.
-	if o, isOut := in.ARM.(sdk.ARMOutputs); isOut {
-		for _, out := range o.Outputs() {
-			have[out.Name] = true
-			have[strings.ToUpper(out.Name)] = true
+	// Bicep/ARM outputs are an additional producer class. Without a compiled
+	// model, or with a model that exposes no outputs, the set of outputs is
+	// unknown and an unresolved name cannot be called undefined.
+	outputsKnown := false
+	outputOnly := map[string]bool{}
+	if in.ARM != nil {
+		if o, isOut := in.ARM.(sdk.ARMOutputs); isOut {
+			outputsKnown = true
+			for _, out := range o.Outputs() {
+				for _, n := range []string{out.Name, strings.ToUpper(out.Name)} {
+					if !have[n] {
+						outputOnly[n] = true
+					}
+				}
+			}
 		}
 	}
 	for _, s := range serviceList(d) {
@@ -195,22 +241,28 @@ func evalCFG006(in *sdk.Input, p Providers) sdk.Result {
 		}
 	}
 	var fs []sdk.Finding
+	var notes []string
 	seen := map[string]bool{}
-	walkScalars(d.Root(), "", func(path, _ string, v *yaml.Node) {
+	walkScalars(d.Resolved(), "", func(path, _ string, v *yaml.Node) {
 		for _, name := range varRefs(v.Value) {
-			if !have[name] && !standardVars[name] && !seen[name] {
-				seen[name] = true
+			if have[name] || standardVars[name] || seen[name] {
+				continue
+			}
+			seen[name] = true
+			switch {
+			case outputOnly[name]:
+				notes = append(notes, fmt.Sprintf("${%s} is produced by a template output that is not in the environment yet (provision has not written it)", name))
+			case infraDependentVars[name]:
+				notes = append(notes, fmt.Sprintf("${%s} is an azd-defined name that only exists when the infrastructure provides it", name))
+			case !outputsKnown:
+				notes = append(notes, fmt.Sprintf("${%s} is not in the environment and no compiled template outputs are available to check", name))
+			default:
 				fs = append(fs, sdk.Finding{Location: loc(d, v), Evidence: fmt.Sprintf("%s references ${%s} which no producer defines", path, name)})
 			}
 		}
 	})
-	for k := range p.Env.Values() {
-		if strings.HasPrefix(k, "FOUNDRY_") || strings.HasPrefix(k, "AGENT_") {
-			fs = append(fs, sdk.Finding{Evidence: "environment key " + k + " uses a reserved prefix"})
-		}
-	}
 	sort.SliceStable(fs, func(i, j int) bool { return fs[i].Evidence < fs[j].Evidence })
-	return ok(fs)
+	return withNotes(fs, notes)
 }
 
 func evalCFG012(in *sdk.Input, p Providers) sdk.Result {

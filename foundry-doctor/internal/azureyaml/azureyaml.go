@@ -25,6 +25,7 @@ type Diagnostic struct {
 type Document struct {
 	path        string
 	root        *yaml.Node
+	resolved    *yaml.Node
 	diagnostics []Diagnostic
 }
 
@@ -56,6 +57,7 @@ func Parse(data []byte, path string) (*Document, error) {
 	}
 	d := &Document{path: path, root: root.Content[0]}
 	d.checkDuplicates(d.root, nil, 0)
+	d.resolve()
 	d.checkUses()
 	sort.SliceStable(d.diagnostics, func(i, j int) bool {
 		a, b := d.diagnostics[i].Location, d.diagnostics[j].Location
@@ -72,6 +74,14 @@ func (d *Document) Path() string { return d.path }
 
 // Root returns the lossless root mapping node.
 func (d *Document) Root() *yaml.Node { return d.root }
+
+// Resolved returns a copy of the root mapping in which every alias is
+// replaced by a copy of its anchor and every merge key (<<) is expanded.
+// Explicit keys win over merged keys; earlier merge sources win over later
+// ones. Nodes keep the line and column of the node they were copied from.
+// Expansion is bounded; when the bound is hit the remaining aliases are left
+// unexpanded and a diagnostic is recorded.
+func (d *Document) Resolved() *yaml.Node { return d.resolved }
 
 // Diagnostics returns structural problems found at parse time.
 func (d *Document) Diagnostics() []Diagnostic {
@@ -111,6 +121,104 @@ func (d *Document) checkDuplicates(n *yaml.Node, trail []string, depth int) {
 	}
 }
 
+const (
+	maxResolvedNodes = 100000
+	maxResolveDepth  = 64
+)
+
+type resolver struct {
+	budget  int
+	tripped bool
+}
+
+func (d *Document) resolve() {
+	r := &resolver{budget: maxResolvedNodes}
+	d.resolved = r.node(d.root, 0)
+	if r.tripped {
+		d.diagnostics = append(d.diagnostics, Diagnostic{
+			Message:  "alias expansion limit exceeded; aliases and merge keys beyond the limit are not resolved",
+			Location: d.loc(d.root),
+		})
+	}
+}
+
+func isMergeKey(k *yaml.Node) bool {
+	return k.Kind == yaml.ScalarNode && k.Tag == "!!merge"
+}
+
+func (r *resolver) node(n *yaml.Node, depth int) *yaml.Node {
+	if n == nil {
+		return nil
+	}
+	if r.budget <= 0 || depth > maxResolveDepth {
+		r.tripped = true
+		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!null", Value: "", Line: n.Line, Column: n.Column}
+	}
+	r.budget--
+	switch n.Kind {
+	case yaml.AliasNode:
+		return r.node(n.Alias, depth+1)
+	case yaml.MappingNode:
+		out := &yaml.Node{Kind: yaml.MappingNode, Tag: n.Tag, Style: n.Style, Line: n.Line, Column: n.Column}
+		seen := map[string]int{}
+		put := func(k, v *yaml.Node) {
+			if i, dup := seen[k.Value]; dup {
+				out.Content[i+1] = v // last explicit duplicate wins, as in child()
+				return
+			}
+			seen[k.Value] = len(out.Content)
+			out.Content = append(out.Content, k, v)
+		}
+		var merged [][2]*yaml.Node
+		for i := 0; i+1 < len(n.Content); i += 2 {
+			k, v := n.Content[i], n.Content[i+1]
+			if isMergeKey(k) {
+				for _, src := range r.mergeSources(v, depth+1) {
+					for j := 0; j+1 < len(src.Content); j += 2 {
+						merged = append(merged, [2]*yaml.Node{src.Content[j], src.Content[j+1]})
+					}
+				}
+				continue
+			}
+			put(r.node(k, depth+1), r.node(v, depth+1))
+		}
+		for _, m := range merged {
+			if _, explicit := seen[m[0].Value]; !explicit {
+				put(m[0], m[1])
+			}
+		}
+		return out
+	case yaml.SequenceNode, yaml.DocumentNode:
+		out := &yaml.Node{Kind: n.Kind, Tag: n.Tag, Style: n.Style, Line: n.Line, Column: n.Column}
+		for _, c := range n.Content {
+			out.Content = append(out.Content, r.node(c, depth+1))
+		}
+		return out
+	}
+	cp := *n
+	cp.Anchor = ""
+	return &cp
+}
+
+// mergeSources returns the resolved mappings named by a merge value: a single
+// mapping or alias, or a sequence of them. Non-mappings are ignored.
+func (r *resolver) mergeSources(v *yaml.Node, depth int) []*yaml.Node {
+	rv := r.node(v, depth)
+	switch rv.Kind {
+	case yaml.MappingNode:
+		return []*yaml.Node{rv}
+	case yaml.SequenceNode:
+		var out []*yaml.Node
+		for _, c := range rv.Content {
+			if c.Kind == yaml.MappingNode {
+				out = append(out, c)
+			}
+		}
+		return out
+	}
+	return nil
+}
+
 func child(n *yaml.Node, key string) *yaml.Node {
 	if n == nil {
 		return nil
@@ -147,10 +255,10 @@ func keys(n *yaml.Node) []string {
 }
 
 // ServiceNames returns the sorted names under services.
-func (d *Document) ServiceNames() []string { return keys(child(d.root, "services")) }
+func (d *Document) ServiceNames() []string { return keys(child(d.resolved, "services")) }
 
 // ResourceNames returns the sorted names under resources.
-func (d *Document) ResourceNames() []string { return keys(child(d.root, "resources")) }
+func (d *Document) ResourceNames() []string { return keys(child(d.resolved, "resources")) }
 
 // Lookup returns the scalar text at path and its location. Non-scalar nodes
 // report ok=false; use LookupAny for those.
@@ -169,7 +277,7 @@ func (d *Document) Lookup(path ...string) (string, sdk.Location, bool) {
 // LookupAny walks path through mappings and returns the decoded value and the
 // location of the value node.
 func (d *Document) LookupAny(path ...string) (any, sdk.Location, bool) {
-	n := d.root
+	n := d.resolved
 	for _, p := range path {
 		n = child(n, p)
 		if n == nil {
@@ -188,7 +296,7 @@ func (d *Document) LookupAny(path ...string) (any, sdk.Location, bool) {
 
 // Uses returns the uses references of a service in document order.
 func (d *Document) Uses(service string) []Ref {
-	svc := child(child(d.root, "services"), service)
+	svc := child(child(d.resolved, "services"), service)
 	u := child(svc, "uses")
 	if u == nil || u.Kind != yaml.SequenceNode {
 		return nil

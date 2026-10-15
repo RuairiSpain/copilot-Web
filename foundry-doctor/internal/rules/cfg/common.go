@@ -6,6 +6,7 @@ package cfg
 import (
 	"context"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -48,7 +49,7 @@ type Providers struct {
 // document is the richer view of *azureyaml.Document the rules consume.
 type document interface {
 	sdk.AzureYAMLView
-	Root() *yaml.Node
+	Resolved() *yaml.Node
 	Diagnostics() []azureyaml.Diagnostic
 }
 
@@ -61,7 +62,7 @@ func loadDoc(in *sdk.Input) (document, bool) {
 		return nil, false
 	}
 	d, ok := in.AzureYAML.(document)
-	if !ok || d.Root() == nil {
+	if !ok || d.Resolved() == nil {
 		return nil, false
 	}
 	return d, true
@@ -177,7 +178,7 @@ func (s service) usesName(name string) bool {
 
 func serviceList(d document) []service {
 	var out []service
-	for _, p := range pairs(child(d.Root(), "services")) {
+	for _, p := range pairs(child(d.Resolved(), "services")) {
 		if p.Val.Kind != yaml.MappingNode {
 			continue
 		}
@@ -228,6 +229,29 @@ func finding(d document, s service, n *yaml.Node, evidence string) sdk.Finding {
 }
 
 func ok(fs []sdk.Finding) sdk.Result { return sdk.Result{Findings: fs} }
+
+// uncertainPrefix starts the Skip.Reason of an inconclusive outcome. It
+// matches the prefix the report layer reads as "uncertain".
+const uncertainPrefix = "uncertain: "
+
+// withNotes returns the findings when there are any. Without findings, notes
+// make the rule inconclusive: the result is a skip with an uncertain reason,
+// never a pass.
+func withNotes(fs []sdk.Finding, notes []string) sdk.Result {
+	if len(fs) > 0 || len(notes) == 0 {
+		return ok(fs)
+	}
+	seen := map[string]bool{}
+	var uniq []string
+	for _, n := range notes {
+		if !seen[n] {
+			seen[n] = true
+			uniq = append(uniq, n)
+		}
+	}
+	sort.Strings(uniq)
+	return skip(uncertainPrefix + strings.Join(uniq, "; "))
+}
 
 var varName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
