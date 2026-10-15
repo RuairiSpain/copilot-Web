@@ -95,3 +95,32 @@ func FuzzRedact(f *testing.F) {
 		}
 	})
 }
+
+func TestFingerprintKeyDiscriminates(t *testing.T) {
+	a := sdk.Finding{RuleID: "FND-CFG-005", RuleVersion: 1, Resource: sdk.ResourceRef{Name: "web"}, Location: sdk.Location{File: "azure.yaml", Line: 3}, Key: "env.API_URL"}
+	b := a
+	b.Key = "env.DB_URL"
+	b.Location.Line = 40
+	if Fingerprint(a) == Fingerprint(b) {
+		t.Fatal("two findings of one rule on one service with different keys must differ")
+	}
+	c := a
+	c.Location.Line = 77
+	c.Evidence = "reworded"
+	if Fingerprint(a) != Fingerprint(c) {
+		t.Fatal("same key must be stable across line moves and evidence rewording")
+	}
+}
+
+func TestFingerprintFrozenValue(t *testing.T) {
+	// Pins the v2 canonical form. Changing it invalidates every baseline and
+	// needs an ADR-008 amendment and a new FingerprintVersion.
+	f := sdk.Finding{RuleID: "FND-CFG-005", RuleVersion: 1, Resource: sdk.ResourceRef{Type: "Services", Name: "web"}, Location: sdk.Location{File: "Azure.yaml"}, Key: "env.API_URL"}
+	const want = "fba47d64eafd72c973f31d384f6e4975"
+	if got := Fingerprint(f); got != want {
+		t.Fatalf("fingerprint = %s, want %s", got, want)
+	}
+	if FingerprintVersion != "v2" {
+		t.Fatalf("FingerprintVersion = %s", FingerprintVersion)
+	}
+}

@@ -20,6 +20,7 @@ import (
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/bicep"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/catalog"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/config"
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/findings"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/project"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/report"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/rules"
@@ -120,8 +121,16 @@ type armLoader struct {
 	runner bicep.Runner
 }
 
+// unavailablef reports a model that could not be produced for a reason that is
+// not a Bicep failure.
 func unavailablef(format string, a ...any) error {
 	return fmt.Errorf("%w: %s", ErrARMUnavailable, fmt.Sprintf(format, a...))
+}
+
+// bicepFailedf reports a Bicep CLI, compile or template-read failure on a
+// project that has Bicep or ARM input.
+func bicepFailedf(format string, a ...any) error {
+	return fmt.Errorf("%w: %w: %s", ErrARMUnavailable, ErrBicepFailed, fmt.Sprintf(format, a...))
 }
 
 func (l armLoader) Load(ctx context.Context, src Source) (sdk.ARMModel, error) {
@@ -146,7 +155,7 @@ func (l armLoader) Load(ctx context.Context, src Source) (sdk.ARMModel, error) {
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
 			}
-			return nil, unavailablef("%s", bicepReason(err))
+			return nil, bicepFailedf("%s", bicepReason(err))
 		}
 		comp := bicep.Compiler{Tool: tool, Runner: l.runner, Root: src.Dir}
 		res, err := comp.Compile(ctx, filepath.Join(src.Dir, filepath.FromSlash(entry)))
@@ -154,14 +163,14 @@ func (l armLoader) Load(ctx context.Context, src Source) (sdk.ARMModel, error) {
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
 			}
-			return nil, unavailablef("%s", bicepReason(err))
+			return nil, bicepFailedf("%s", bicepReason(err))
 		}
 		if !res.OK {
-			return nil, unavailablef("%s failed to compile (%d diagnostics)", entry, len(res.Diagnostics))
+			return nil, bicepFailedf("%s failed to compile (%d diagnostics)", entry, len(res.Diagnostics))
 		}
 		m, err := armmodel.FromARM(res.ARM, armmodel.Options{Entry: entry})
 		if err != nil {
-			return nil, unavailablef("cannot read compiled ARM template")
+			return nil, bicepFailedf("cannot read compiled ARM template")
 		}
 		return rawModel{Model: m, raw: res.ARM}, nil
 	}
@@ -169,11 +178,14 @@ func (l armLoader) Load(ctx context.Context, src Source) (sdk.ARMModel, error) {
 	data, err := readRegularFile(root, jsonEntry)
 	_ = root.Close()
 	if err != nil {
-		return nil, unavailablef("%s or %s not found", entry, jsonEntry)
+		if doc, perr := azureyaml.Parse(src.AzureYAML, src.AzureYAMLAt); perr == nil && hasInfraLayers(doc) {
+			return nil, unavailablef("%s or %s not found; infra.layers is not read", entry, jsonEntry)
+		}
+		return nil, fmt.Errorf("%w: %w: %s or %s not found", ErrARMUnavailable, ErrNoInfrastructure, entry, jsonEntry)
 	}
 	m, err := armmodel.FromARM(data, armmodel.Options{Entry: jsonEntry})
 	if err != nil {
-		return nil, unavailablef("cannot read ARM JSON template %s", jsonEntry)
+		return nil, bicepFailedf("cannot read ARM JSON template %s", jsonEntry)
 	}
 	return rawModel{Model: m, raw: data}, nil
 }
@@ -330,9 +342,13 @@ func (c configAdapter) Resolve(_ context.Context, r ConfigRequest) (Settings, er
 
 	set := Settings{
 		Profile: eff.Profile.Name, Environment: eff.Environment,
-		Inputs: Inputs{AzureYAML: eff.Inputs.AzureYAML, InfraPath: eff.Inputs.InfraPath, Environment: eff.Environment},
-		Policy: map[string]any(eff.Policy),
-		Rules:  slices.Clone(eff.Rules.Include), Exclude: slices.Clone(eff.Rules.Exclude),
+		Inputs:        Inputs{AzureYAML: eff.Inputs.AzureYAML, InfraPath: eff.Inputs.InfraPath, Environment: eff.Environment},
+		Policy:        map[string]any(eff.Policy),
+		BicepRequired: eff.Validation.Bicep == config.ModeRequired,
+		Rules:         slices.Clone(eff.Rules.Include), Exclude: slices.Clone(eff.Rules.Exclude),
+	}
+	if set.AzdVersion, err = azdVersionOverride(r.AzdVersion, c.getenv(EnvAzdVersion)); err != nil {
+		return Settings{}, err
 	}
 	if len(r.Rules) > 0 {
 		set.Rules = slices.Clone(r.Rules)
@@ -464,6 +480,11 @@ func (reportAdapter) Render(w io.Writer, format string, r Report) error {
 	if err != nil {
 		return Usagef("%s", err)
 	}
+	if len(r.Notes) > 0 && (f == report.FormatConsole || f == report.FormatMarkdown) {
+		if err := writeNotes(w, f, r.Notes); err != nil {
+			return err
+		}
+	}
 	return report.Write(w, f, r.Findings, report.Run{
 		ToolVersion: ToolVersion, Profile: r.Profile, Skipped: r.Skipped, ExitCode: r.ExitCode,
 		Readiness: r.Readiness,
@@ -494,15 +515,73 @@ func (e engineAdapter) Run(ctx context.Context, in RunInput) (RunOutput, error) 
 	if err != nil {
 		return RunOutput{}, err
 	}
-	eng := &rules.Engine{Catalog: cat, Registry: reg, Selector: sel, Required: required}
+	eng := &rules.Engine{Catalog: cat, Registry: reg, Selector: sel, Required: required, Synthetic: in.Synthetic}
+	azdv := e.azdVersion(ctx, in)
 	rep, err := eng.Run(ctx, &sdk.Input{
-		Profile: in.Profile, Environment: in.Environment, AzdVersion: e.azdVersion(ctx, in),
+		Profile: in.Profile, Environment: in.Environment, AzdVersion: azdv,
 		AzureYAML: in.AzureYAML, ARM: withPhase8Snapshot(ctx, in), Policy: in.Policy,
 	})
 	if err != nil {
 		return RunOutput{}, err
 	}
-	return RunOutput{Findings: rep.Findings, Skipped: rep.Skipped}, nil
+	var notes []string
+	if azdv == "" {
+		notes = append(notes, VersionsNotDetectedNote(in.AzureYAML))
+	}
+	return RunOutput{Findings: rep.Findings, Skipped: rep.Skipped, Notes: notes, Diagnostics: rep.Diagnostics}, nil
+}
+
+// EnvAzdVersion names the environment variable that supplies the azd version
+// when `azd` is not on PATH (ADR-010 decision 9).
+const EnvAzdVersion = "FOUNDRY_DOCTOR_AZD_VERSION"
+
+// azdVersionOverride returns the user-supplied azd version: the flag value, then
+// the environment variable. A value that is not a semantic version is a usage
+// error so a typo never silently disables the version gate.
+func azdVersionOverride(flagVal, envVal string) (string, error) {
+	v, src := strings.TrimSpace(flagVal), "--azd-version"
+	if v == "" {
+		v, src = strings.TrimSpace(envVal), EnvAzdVersion
+	}
+	if v == "" {
+		return "", nil
+	}
+	v = strings.TrimPrefix(v, "v")
+	if m := semverRE.FindString(v); m == "" || m != v {
+		return "", Usagef("%s %q is not a semantic version such as 1.35.0", src, v)
+	}
+	return v, nil
+}
+
+// VersionsNotDetectedNote is the report header line printed when the azd
+// version is unknown. When azure.yaml declares requiredVersions.azd the
+// declaration is quoted as evidence of the intended version; it is not used to
+// pass version-gated rules, because it is a requirement, not the installed version.
+func VersionsNotDetectedNote(doc sdk.AzureYAMLView) string {
+	note := "versions not detected: azd (version-gated rules are skipped as azd-version-unknown; use --azd-version or " + EnvAzdVersion + ")"
+	if doc != nil {
+		if v, _, ok := doc.Lookup("requiredVersions", "azd"); ok && strings.TrimSpace(v) != "" {
+			note += "; azure.yaml requires azd " + findings.Redact(strings.TrimSpace(v))
+		}
+	}
+	return note
+}
+
+// SkipSummaryNotes returns report header lines that summarise skips needing
+// attention: checks that need compiled infrastructure (ADR-012 decision 3).
+func SkipSummaryNotes(skips []sdk.Skip) []string {
+	var ids []string
+	for _, s := range skips {
+		if rules.ReasonHead(s.Reason) == sdk.SkipSyntheticInfrastructure {
+			ids = append(ids, s.RuleID)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	slices.Sort(ids)
+	return []string{fmt.Sprintf("%d checks need compiled infrastructure and were skipped (%s): %s",
+		len(ids), sdk.SkipSyntheticInfrastructure, strings.Join(ids, ", "))}
 }
 
 // azdVersion prefers an explicitly configured version and otherwise probes the
@@ -571,4 +650,22 @@ func matchIDs(cat []catalog.Rule, pattern string) ([]string, error) {
 		return nil, Usagef("rule selector %q matches no rules", pattern)
 	}
 	return ids, nil
+}
+
+// writeNotes prints run-level notes before a console or Markdown report.
+// JSON and SARIF carry the same facts in their skipped entries.
+func writeNotes(w io.Writer, f report.Format, notes []string) error {
+	var b strings.Builder
+	for _, n := range notes {
+		if f == report.FormatMarkdown {
+			b.WriteString("> Note: " + findings.Redact(n) + "\n")
+		} else {
+			b.WriteString("note: " + findings.Redact(n) + "\n")
+		}
+	}
+	if f == report.FormatMarkdown {
+		b.WriteString("\n")
+	}
+	_, err := io.WriteString(w, b.String())
+	return err
 }
