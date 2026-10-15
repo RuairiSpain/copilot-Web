@@ -1,0 +1,6 @@
+name: project-with-path
+services:
+  ai-project:
+    host: azure.ai.project
+    project: ./src/ai-project
+    image: example/ai:1

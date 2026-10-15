@@ -1,0 +1,6 @@
+name: arm-json
+infra:
+  path: infra
+services:
+  web:
+    host: appservice

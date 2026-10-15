@@ -1,0 +1,9 @@
+name: prompt-agent
+services:
+  ai-project:
+    host: azure.ai.project
+  helper:
+    host: azure.ai.agent
+    project: src/helper
+    uses: [ai-project]
+    kind: prompt

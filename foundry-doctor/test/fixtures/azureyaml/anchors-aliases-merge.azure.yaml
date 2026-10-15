@@ -1,0 +1,9 @@
+name: anchors
+services:
+  base: &base
+    host: containerapp
+    project: src/base
+  derived:
+    <<: *base
+    project: src/derived
+  copy: *base

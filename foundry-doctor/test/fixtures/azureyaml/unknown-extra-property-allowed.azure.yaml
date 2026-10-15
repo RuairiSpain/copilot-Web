@@ -1,0 +1,6 @@
+name: extras
+x-custom-top-level: kept
+services:
+  ai-project:
+    host: azure.ai.project
+    somethingNew: true

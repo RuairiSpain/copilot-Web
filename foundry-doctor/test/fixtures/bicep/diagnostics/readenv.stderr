@@ -1,0 +1,1 @@
+{{DIR}}/readenv.bicepparam(4,39) : Error BCP427: Environment variable "FD_FIXTURE_VALUE" does not exist and there's no default value set. [https://aka.ms/bicep/core-diagnostics#BCP427]

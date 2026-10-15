@@ -1,0 +1,12 @@
+name: voice-unsupported
+services:
+  ai-project:
+    host: azure.ai.project
+  talker:
+    host: azure.ai.agent
+    project: src/talker
+    uses: [ai-project]
+    kind: voice
+    modelType: hosted_agent
+    targetAgent:
+      name: other

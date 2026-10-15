@@ -1,0 +1,6 @@
+name: hosts
+services:
+  mystery:
+    host: example.custom.host
+  nohost:
+    project: src/nohost

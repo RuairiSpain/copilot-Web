@@ -1,0 +1,2 @@
+{{DIR}}/secure-output.bicep(8,21) : Warning outputs-should-not-contain-secrets: Outputs should not contain secrets. Found possible secret: function 'listKeys' [https://aka.ms/bicep/linter-diagnostics#outputs-should-not-contain-secrets]
+{{DIR}}/secure-output.bicep(11,26) : Warning outputs-should-not-contain-secrets: Outputs should not contain secrets. Found possible secret: secure value 'pw' [https://aka.ms/bicep/linter-diagnostics#outputs-should-not-contain-secrets]

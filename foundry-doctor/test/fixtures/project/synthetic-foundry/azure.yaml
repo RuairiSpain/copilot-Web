@@ -1,0 +1,6 @@
+name: synthetic-foundry
+infra:
+  provider: microsoft.foundry
+services:
+  proj:
+    host: azure.ai.project

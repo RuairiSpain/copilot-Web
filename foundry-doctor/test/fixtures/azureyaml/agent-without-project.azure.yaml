@@ -1,0 +1,8 @@
+name: agent-no-project
+services:
+  ai-project:
+    host: azure.ai.project
+  triage:
+    host: azure.ai.agent
+    uses: [ai-project]
+    kind: hosted

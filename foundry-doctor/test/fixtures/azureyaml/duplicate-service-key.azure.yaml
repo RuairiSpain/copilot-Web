@@ -1,0 +1,8 @@
+name: dup-services
+services:
+  api:
+    host: containerapp
+    project: src/api
+  api:
+    host: containerapp
+    project: src/api2
