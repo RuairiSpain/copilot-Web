@@ -57,18 +57,18 @@ type outcome struct {
 	v        *view
 }
 
-func (o *outcome) add(r sdk.ARMResource, evidence string) {
-	o.findings = append(o.findings, sdk.Finding{
-		Resource: sdk.ResourceRef{Type: r.Type, Name: r.Name},
-		Location: r.Location,
-		Evidence: evidence,
-	})
+// add records a finding for r. key is a stable per-check discriminator: a rule
+// can report several checks on one resource and the fingerprint must tell them
+// apart without the runner deriving a key from evidence.
+func (o *outcome) add(r sdk.ARMResource, key, evidence string) {
+	o.addRes(r.Type, r.Name, r.Location, key, evidence)
 }
 
-func (o *outcome) addRes(typ, name string, loc sdk.Location, evidence string) {
+func (o *outcome) addRes(typ, name string, loc sdk.Location, key, evidence string) {
 	o.findings = append(o.findings, sdk.Finding{
 		Resource: sdk.ResourceRef{Type: typ, Name: name},
 		Location: loc,
+		Key:      key,
 		Evidence: evidence,
 	})
 }
@@ -157,7 +157,7 @@ func eval001(in *sdk.Input) sdk.Result {
 			continue
 		}
 		if replicas < 2 {
-			o.add(r, "billable Search service has fewer than two replicas and does not meet the documented query SLA posture")
+			o.add(r, "billable-search-service-fewer-two-replicas", "billable Search service has fewer than two replicas and does not meet the documented query SLA posture")
 		}
 	}
 	return o.result()
@@ -183,7 +183,7 @@ func eval002(in *sdk.Input) sdk.Result {
 			continue
 		}
 		if strings.HasSuffix(sku, "_lrs") {
-			o.add(r, "storage account uses single-zone local redundancy")
+			o.add(r, "storage-account-uses-single-zone-local", "storage account uses single-zone local redundancy")
 			continue
 		}
 		o.notes = append(o.notes, r.Name+": storage sku.name is not in the verified redundancy mapping")
@@ -206,7 +206,7 @@ func eval003(in *sdk.Input) sdk.Result {
 					continue
 				}
 				if !zr {
-					o.add(r, "Cosmos account location is not zone redundant")
+					o.add(r, "cosmos-account-location-zone-redundant", "Cosmos account location is not zone redundant")
 				}
 			}
 		}
@@ -216,7 +216,7 @@ func eval003(in *sdk.Input) sdk.Result {
 		case "":
 			o.notes = append(o.notes, r.Name+": Cosmos backupPolicy.type is unresolved")
 		default:
-			o.add(r, "Cosmos account is not configured for continuous backup")
+			o.add(r, "cosmos-account-configured-continuous-backup", "Cosmos account is not configured for continuous backup")
 		}
 	}
 	return o.result()
@@ -287,14 +287,17 @@ func lockCoversGroup(scope string) lockCover {
 	case s == "":
 		return coverYes
 	case isExpr(s):
-		switch normExpr(s) {
-		case "resourcegroup().id":
+		n := normExpr(s)
+		switch {
+		case n == "resourcegroup().id":
 			return coverYes
+		case strings.HasPrefix(n, "resourceid(") || strings.HasPrefix(n, "extensionresourceid(") || strings.HasPrefix(n, "subscriptionresourceid("):
+			// A resourceId-style call names a resource, never the group.
+			return coverNone
 		}
-		if strings.HasPrefix(normExpr(s), "resourcegroup(") || strings.HasPrefix(normExpr(s), "subscription") {
-			return coverUnknown
-		}
-		return coverNone
+		// A parameter, variable, format() or any other expression has a value
+		// the template cannot show: it may well be the resource group.
+		return coverUnknown
 	}
 	low := strings.ToLower(s)
 	if strings.Contains(low, "/resourcegroups/") && !strings.Contains(low, "/providers/") {
@@ -446,23 +449,23 @@ func eval005(in *sdk.Input) sdk.Result {
 		switch partitions {
 		case 1, 2, 3, 4, 6, 12:
 		default:
-			o.add(r, "Search partitionCount is outside the documented allowed set")
+			o.add(r, "search-partitioncount-outside-documented-allowed-set", "Search partitionCount is outside the documented allowed set")
 		}
 		if replicas > 12 {
-			o.add(r, "Search replicaCount exceeds the documented maximum of 12")
+			o.add(r, "search-replicacount-exceeds-documented-maximum-12", "Search replicaCount exceeds the documented maximum of 12")
 		}
 		if sku == "basic" && replicas > 3 {
-			o.add(r, "Basic Search tier replicaCount exceeds the documented maximum of 3")
+			o.add(r, "basic-search-tier-replicacount-exceeds-documented", "Basic Search tier replicaCount exceeds the documented maximum of 3")
 		}
 		if sku != "basic" && replicas*partitions > 36 {
-			o.add(r, "Search replicas multiplied by partitions exceeds the documented 36 search-unit maximum")
+			o.add(r, "search-replicas-multiplied-partitions-exceeds-documented", "Search replicas multiplied by partitions exceeds the documented 36 search-unit maximum")
 		}
 		if strings.EqualFold(hosting, "HighDensity") {
 			if sku != "standard3" {
-				o.add(r, "HighDensity hosting mode is documented only for the standard3 tier")
+				o.add(r, "highdensity-hosting-mode-documented-only-standard3", "HighDensity hosting mode is documented only for the standard3 tier")
 			}
 			if partitions > 3 {
-				o.add(r, "HighDensity hosting mode supports at most three partitions")
+				o.add(r, "highdensity-hosting-mode-supports-most-three", "HighDensity hosting mode supports at most three partitions")
 			}
 		}
 		if sku == "basic" && partitions > 1 {
@@ -518,7 +521,7 @@ func eval006(in *sdk.Input) sdk.Result {
 			cb := mapProp(r.Properties, "circuitBreaker")
 			rules, _ := cb["rules"].([]any)
 			if len(rules) == 0 && !hasRetry {
-				o.addRes("Microsoft.ApiManagement/service/backends", b.Name, b.SourceLocation, "Foundry-targeting backend has neither a circuit breaker rule nor retry policy evidence")
+				o.addRes("Microsoft.ApiManagement/service/backends", b.Name, b.SourceLocation, "backend-no-circuit-breaker-retry", "Foundry-targeting backend has neither a circuit breaker rule nor retry policy evidence")
 			}
 		}
 	}
@@ -543,7 +546,7 @@ func eval008(in *sdk.Input) sdk.Result {
 		}
 		spill := strings.TrimSpace(fmt.Sprint(r.Properties["spilloverDeploymentName"]))
 		if spill == "" {
-			o.add(r, "provisioned deployment has no spilloverDeploymentName; request-level spillover may exist but is not visible offline")
+			o.add(r, "provisioned-deployment-spilloverdeploymentname-request-level-spillover", "provisioned deployment has no spilloverDeploymentName; request-level spillover may exist but is not visible offline")
 			continue
 		}
 		if unresolved(spill) {
@@ -559,18 +562,18 @@ func eval008(in *sdk.Input) sdk.Result {
 				o.notes = append(o.notes, r.Name+": spilloverDeploymentName may refer to a conditional or looped deployment")
 				continue
 			}
-			o.add(r, "spilloverDeploymentName does not resolve to a deployment in the same account")
+			o.add(r, "spilloverdeploymentname-resolve-deployment-same-account", "spilloverDeploymentName does not resolve to a deployment in the same account")
 			continue
 		}
 		if strings.Contains(strings.ToLower(sibling.SKUName), "provisioned") {
-			o.add(r, "spilloverDeploymentName must refer to a standard deployment, not another provisioned deployment")
+			o.add(r, "spilloverdeploymentname-must-refer-standard-deployment-another", "spilloverDeploymentName must refer to a standard deployment, not another provisioned deployment")
 		}
 		if !sameModel(r, sibling) {
 			if modelHasExpr(r) || modelHasExpr(sibling) {
 				o.notes = append(o.notes, r.Name+": model identity contains an unresolved expression")
 				continue
 			}
-			o.add(r, "spilloverDeploymentName does not target the same model and version")
+			o.add(r, "spilloverdeploymentname-target-same-model-version", "spilloverDeploymentName does not target the same model and version")
 		}
 	}
 	return o.result()
@@ -591,21 +594,21 @@ func eval009(in *sdk.Input) sdk.Result {
 			continue
 		}
 		if slaRequired && strings.EqualFold(sku, "Developer") {
-			o.add(r, "Developer tier has no SLA and does not satisfy the declared API gateway objective")
+			o.add(r, "developer-tier-sla-satisfy-declared-api", "Developer tier has no SLA and does not satisfy the declared API gateway objective")
 		}
 		if zoneRequired {
 			if strings.EqualFold(sku, "StandardV2") {
 				o.notes = append(o.notes, r.Name+": StandardV2 zone support is documented inconsistently")
 			} else if !(strings.EqualFold(sku, "Premium") || strings.EqualFold(sku, "PremiumV2")) {
-				o.add(r, "APIM tier does not satisfy the declared zone-resilience objective")
+				o.add(r, "apim-tier-satisfy-declared-zone-resilience", "APIM tier does not satisfy the declared zone-resilience objective")
 			} else if len(r.Zones) == 0 {
-				o.add(r, "APIM zone-resilience objective is declared but no zones are configured")
+				o.add(r, "apim-zone-resilience-objective-declared-zones", "APIM zone-resilience objective is declared but no zones are configured")
 			}
 		}
 		if regionalRequired {
 			additional, _ := r.Properties["additionalLocations"].([]any)
 			if !strings.EqualFold(sku, "Premium") || len(additional) == 0 {
-				o.add(r, "APIM regional-resilience objective is declared but the documented Premium multi-region shape is absent")
+				o.add(r, "apim-regional-resilience-objective-declared-documented", "APIM regional-resilience objective is declared but the documented Premium multi-region shape is absent")
 			}
 		}
 	}

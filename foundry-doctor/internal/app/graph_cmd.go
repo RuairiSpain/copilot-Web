@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/armmodel"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/azure"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/azureyaml"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/bicep"
@@ -129,7 +130,11 @@ func Graph(ctx context.Context, svc Services, req GraphRequest, stdout io.Writer
 			arm, loadErr := svc.ARM.Load(ctx, src)
 			switch {
 			case loadErr == nil:
-				if raw, ok := arm.(interface{ RawTemplate() []byte }); ok && len(raw.RawTemplate()) > 0 {
+				if pm, ok := arm.(interface{ Placements() []armmodel.Placement }); ok && arm != nil {
+					// The flattened model has the module parameters
+					// substituted and symbols qualified per deployment.
+					coreResources = append(coreResources, graphview.ModelResources(arm.Resources(), pm.Placements())...)
+				} else if raw, ok := arm.(interface{ RawTemplate() []byte }); ok && len(raw.RawTemplate()) > 0 {
 					if p, err := bicep.ParseARM(raw.RawTemplate()); err == nil {
 						coreResources = append(coreResources, templateResources(p)...)
 					}

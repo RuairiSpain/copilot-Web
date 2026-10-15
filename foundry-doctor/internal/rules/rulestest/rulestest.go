@@ -6,7 +6,7 @@
 package rulestest
 
 import (
-	_ "embed"
+	"embed"
 	"testing"
 
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/armmodel"
@@ -22,6 +22,31 @@ func Model(t testing.TB) sdk.ARMModel {
 	m, err := armmodel.FromARM(mainJSON, armmodel.Options{Entry: "main.bicep"})
 	if err != nil {
 		t.Fatalf("load golden ARM: %v", err)
+	}
+	return m
+}
+
+//go:embed testdata/*/main.json
+var scenarios embed.FS
+
+// ScenarioJSON returns the compiled ARM template of the named module scenario
+// (twice, condmod, loopmod, nested), compiled with Bicep CLI 0.48.1 from
+// testdata/<name>/main.bicep and its modules.
+func ScenarioJSON(t testing.TB, name string) []byte {
+	t.Helper()
+	b, err := scenarios.ReadFile("testdata/" + name + "/main.json")
+	if err != nil {
+		t.Fatalf("scenario %q: %v", name, err)
+	}
+	return b
+}
+
+// Scenario returns the named module scenario as an ARM model.
+func Scenario(t testing.TB, name string) *armmodel.Model {
+	t.Helper()
+	m, err := armmodel.FromARM(ScenarioJSON(t, name), armmodel.Options{Entry: "main.bicep"})
+	if err != nil {
+		t.Fatalf("load scenario %q: %v", name, err)
 	}
 	return m
 }
