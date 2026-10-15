@@ -11,6 +11,8 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/armexpr"
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/foundrylink"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
 
@@ -21,6 +23,7 @@ const SkipUnresolved = "unresolved-expression"
 const (
 	typeAccounts    = "Microsoft.CognitiveServices/accounts"
 	typeProjects    = "Microsoft.CognitiveServices/accounts/projects"
+	typeDeployments = "Microsoft.CognitiveServices/accounts/deployments"
 	typeContainer   = "Microsoft.App/containerApps"
 	typeSites       = "Microsoft.Web/sites"
 	typeSlots       = "Microsoft.Web/sites/slots"
@@ -78,6 +81,25 @@ type acc struct {
 	fs         []sdk.Finding
 	unresolved bool
 	seen       bool
+	// conditional: a resource that would be evaluated may not be deployed.
+	conditional bool
+	// scopeUncertain: whether the resource is in the rule's scope could not be
+	// decided from the template.
+	scopeUncertain bool
+}
+
+// maybe reports (and records) that r is deployed only under a condition or
+// loop the template cannot resolve; callers skip such a resource.
+func (a *acc) maybe(r sdk.ARMResource) bool {
+	if presence(r) == armexpr.MaybeDeployed {
+		a.conditional = true
+		return true
+	}
+	return false
+}
+
+func presence(r sdk.ARMResource) armexpr.Presence {
+	return armexpr.PresenceOf(r.Conditional, r.Condition, r.Looped)
 }
 
 func (a *acc) add(r sdk.ARMResource, evidence string) {
@@ -92,6 +114,10 @@ func (a *acc) result() sdk.Result {
 	switch {
 	case len(a.fs) > 0:
 		return sdk.Result{Findings: a.fs}
+	case a.scopeUncertain:
+		return skip(foundrylink.SkipScopeUncertain)
+	case a.conditional:
+		return skip(foundrylink.SkipConditional)
 	case !a.seen:
 		return skip(sdk.SkipInputUnavailable)
 	case a.unresolved:
@@ -103,6 +129,9 @@ func (a *acc) result() sdk.Result {
 func ofType(in *sdk.Input, types ...string) []sdk.ARMResource {
 	var out []sdk.ARMResource
 	for _, r := range in.ARM.Resources() {
+		if presence(r) == armexpr.NotDeployed {
+			continue
+		}
 		for _, t := range types {
 			if strings.EqualFold(r.Type, t) {
 				out = append(out, r)
@@ -115,7 +144,7 @@ func ofType(in *sdk.Input, types ...string) []sdk.ARMResource {
 
 func unresolved(v any) bool {
 	s, ok := v.(string)
-	return ok && strings.HasPrefix(s, "[") && !strings.HasPrefix(s, "[[")
+	return ok && armexpr.IsExpression(s)
 }
 
 // strOf returns (value, present, isExpr). Non-string present values are
@@ -132,16 +161,50 @@ func strOf(m map[string]any, key string) (string, bool, bool) {
 	return s, true, false
 }
 
+// rawStr returns the string value of key, expression or not.
+func rawStr(m map[string]any, key string) (string, bool) {
+	v, ok := m[key]
+	if !ok || v == nil {
+		return "", false
+	}
+	s, _ := v.(string)
+	return s, true
+}
+
 // ---- FND-IDN-001 -----------------------------------------------------------
 
 func evalIDN001(in *sdk.Input) sdk.Result {
 	var a acc
-	for _, r := range ofType(in, typeAccounts, typeProjects) {
+	accounts := ofType(in, typeAccounts)
+	for _, r := range accounts {
+		// Only Foundry accounts: kind AIServices that own projects or
+		// deployments (the same scope as FND-SEC-001 and FND-NET-001). Other
+		// Cognitive Services kinds are not applicable.
+		if !strings.EqualFold(r.Kind, "AIServices") {
+			continue
+		}
+		switch foundrylink.Owns(in.ARM, r, len(accounts), typeProjects, typeDeployments) {
+		case foundrylink.OwnsNone:
+			continue
+		case foundrylink.OwnsMaybe:
+			a.scopeUncertain = true
+			continue
+		}
+		if a.maybe(r) {
+			continue
+		}
+		a.seen = true
+		checkIdentity(&a, r)
+	}
+	for _, r := range ofType(in, typeProjects) {
+		if a.maybe(r) {
+			continue
+		}
 		a.seen = true
 		checkIdentity(&a, r)
 	}
 	for _, r := range ofType(in, typeContainer, typeSites, typeSlots) {
-		if !referencesFoundry(r) {
+		if !referencesFoundry(r) || a.maybe(r) {
 			continue
 		}
 		a.seen = true
@@ -234,6 +297,9 @@ func dig(m map[string]any, path ...string) (any, bool) {
 func evalIDN003(in *sdk.Input) sdk.Result {
 	var a acc
 	for _, r := range ofType(in, typeRoleAssign) {
+		if a.maybe(r) {
+			continue
+		}
 		a.seen = true
 		pt, ptPresent, ptExpr := strOf(r.Properties, "principalType")
 		switch {
@@ -242,13 +308,13 @@ func evalIDN003(in *sdk.Input) sdk.Result {
 		case !ptPresent || pt == "":
 			a.add(r, "principalType is not set; set it explicitly to avoid replication-delay failures")
 		}
-		if ptPresent && !ptExpr && apiBefore(r.APIVersion, "2022-04-01") {
-			a.add(r, fmt.Sprintf("apiVersion %q predates 2022-04-01 but principalType is set", r.APIVersion))
+		if ptPresent && !ptExpr && apiTooOld(r.APIVersion) {
+			a.add(r, fmt.Sprintf("apiVersion %q may not support principalType (earliest preview 2018-09-01-preview, first stable 2022-04-01); this finding is low confidence, verify the API version", r.APIVersion))
 		}
 		pid, pidPresent, pidExpr := strOf(r.Properties, "principalId")
 		switch {
 		case pidExpr:
-			if refersToClientID(r.Properties["principalId"].(string)) {
+			if armexpr.ReadsClientID(r.Properties["principalId"].(string)) {
 				a.add(r, "principalId expression reads a clientId/applicationId; an object (principal) ID is required")
 			} else {
 				a.unresolved = true
@@ -262,9 +328,16 @@ func evalIDN003(in *sdk.Input) sdk.Result {
 	return a.result()
 }
 
-func refersToClientID(expr string) bool {
-	l := strings.ToLower(expr)
-	return strings.Contains(l, "clientid") || strings.Contains(l, "applicationid") || strings.Contains(l, "appid")
+// apiTooOld reports whether a role assignment API version is too old for
+// principalType. Preview versions from 2018-09-01-preview on support it
+// (RBAC role assignment template article), so a preview version is flagged only
+// when its date is earlier than that; a stable version is flagged when it
+// predates 2022-04-01, the first stable version that documents it.
+func apiTooOld(apiVersion string) bool {
+	if strings.Contains(strings.ToLower(apiVersion), "preview") {
+		return apiBefore(apiVersion, "2018-09-01")
+	}
+	return apiBefore(apiVersion, "2022-04-01")
 }
 
 // apiBefore reports whether apiVersion is a well-formed date earlier than min.
@@ -298,11 +371,6 @@ func classifyScope(s string) scopeLevel {
 		return scopeResource
 	}
 	return scopeUnknown
-}
-
-func roleGUID(def string) string {
-	i := strings.LastIndex(def, "/")
-	return strings.ToLower(def[i+1:])
 }
 
 // ---- FND-IDN-006 -----------------------------------------------------------

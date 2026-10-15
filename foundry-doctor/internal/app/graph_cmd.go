@@ -269,6 +269,7 @@ func templateResources(tpl *bicep.Template) []coregraph.Resource {
 		}
 		out = append(out, coregraph.Resource{
 			ID: r.Pointer, Type: r.Type, Name: r.Name, SymbolicName: r.SymbolicName, DependsOn: slices.Clone(r.DependsOn),
+			Conditional: r.Conditional, Condition: r.Condition, Looped: r.Copy != nil,
 		})
 	})
 	return out
@@ -281,7 +282,10 @@ func armResources(arm sdk.ARMModel) []coregraph.Resource {
 	res := arm.Resources()
 	out := make([]coregraph.Resource, 0, len(res))
 	for i, r := range res {
-		out = append(out, coregraph.Resource{ID: fmt.Sprintf("/resources/%d", i), Type: r.Type, Name: r.Name})
+		out = append(out, coregraph.Resource{
+			ID: fmt.Sprintf("/resources/%d", i), Type: r.Type, Name: r.Name,
+			Conditional: r.Conditional, Condition: r.Condition, Looped: r.Looped,
+		})
 	}
 	return out
 }

@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/armexpr"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
 
@@ -38,46 +39,47 @@ func appIdentityResources(in *sdk.Input) []sdk.ARMResource {
 
 // classifyPrincipal correlates a role assignment principalId to an application
 // identity declared in the template. Anything it cannot prove is unknown.
+//
+// A literal principalId matches an identity.principalId literal. A compiled
+// expression such as
+// reference(resourceId('Microsoft.CognitiveServices/accounts/projects', format('ai-{0}', ...), 'proj'), '2025-06-01', 'full').identity.principalId
+// matches when the resource named in its first argument is one of the apps
+// (type and name segments compared with armexpr), or one of the apps'
+// user-assigned identities.
 func classifyPrincipal(pid string, apps []sdk.ARMResource) principalClass {
-	lp := strings.ToLower(strings.TrimSpace(pid))
-	if lp == "" {
+	pid = strings.TrimSpace(pid)
+	if pid == "" {
 		return principalUnknown
 	}
-	isExpr := strings.HasPrefix(lp, "[")
-	for _, r := range apps {
-		if !isExpr {
-			if v, ok, e := strOf(r.Identity, "principalId"); ok && !e && strings.EqualFold(v, lp) {
+	if !armexpr.IsExpression(pid) {
+		for _, r := range apps {
+			if v, ok, e := strOf(r.Identity, "principalId"); ok && !e && strings.EqualFold(v, pid) {
 				return principalApp
 			}
-			continue
 		}
-		if !strings.Contains(lp, "principalid") {
-			continue
-		}
-		if strings.Contains(lp, "'"+strings.ToLower(r.Type)+"'") && nameSegmentsIn(lp, r.Name) {
+		return principalUnknown
+	}
+	c, ok := armexpr.ParseCall(pid)
+	if !ok || c.Fn != "reference" || !strings.Contains(strings.ToLower(c.Suffix), "principalid") {
+		return principalUnknown
+	}
+	target := armexpr.ParseRef(pid)
+	if target.Opaque {
+		return principalUnknown
+	}
+	for _, r := range apps {
+		if armexpr.Compare(target, armexpr.ParseName(r.Type, r.Name)) == armexpr.Same {
 			return principalApp
 		}
 		if ua, ok := r.Identity["userAssignedIdentities"].(map[string]any); ok {
 			for k := range ua {
-				if !unresolved(k) && strings.Contains(lp, strings.ToLower(k)) {
+				if armexpr.Compare(target, armexpr.ParseRef(k)) == armexpr.Same {
 					return principalApp
 				}
 			}
 		}
 	}
 	return principalUnknown
-}
-
-func nameSegmentsIn(lexpr, name string) bool {
-	if name == "" || unresolved(name) {
-		return false
-	}
-	for _, seg := range strings.Split(name, "/") {
-		if !strings.Contains(lexpr, "'"+strings.ToLower(seg)+"'") {
-			return false
-		}
-	}
-	return true
 }
 
 type condVerdict int
@@ -140,16 +142,24 @@ func evalIDN004(in *sdk.Input) sdk.Result {
 	excludedOnly := false
 	missingData := false
 	for _, r := range ofType(in, typeRoleAssign) {
-		def, present, isExpr := strOf(r.Properties, "roleDefinitionId")
+		if a.maybe(r) {
+			continue
+		}
+		def, present := rawStr(r.Properties, "roleDefinitionId")
 		if !present {
 			missingData = true
 			continue
 		}
-		if isExpr {
-			a.unresolved = true
+		// Compiled Bicep writes subscriptionResourceId('...roleDefinitions',
+		// '<guid>') (or extensionResourceId / format); the last literal GUID
+		// is the role. A role that is not a literal GUID cannot be judged.
+		role, ok := armexpr.RoleDefinitionGUID(def)
+		if !ok {
+			if armexpr.IsExpression(def) {
+				a.unresolved = true
+			}
 			continue
 		}
-		role := roleGUID(def)
 		var name string
 		switch role {
 		case roleOwner:
@@ -188,16 +198,16 @@ func evalIDN004(in *sdk.Input) sdk.Result {
 		default:
 			continue // human and group principals are out of scope
 		}
-		if unresolved(r.Scope) || r.Scope == "" {
+		// An empty scope is the deployment scope (resource group, subscription
+		// or management group), which is broad. Expressions are classified by
+		// armexpr (resourceGroup().id, subscription().id, format() paths,
+		// resourceId() calls).
+		lvl := armexpr.ClassifyScope(r.Scope)
+		if lvl == armexpr.ScopeUnknown {
 			a.unresolved = true
 			continue
 		}
 		evaluated = true
-		lvl := classifyScope(r.Scope)
-		if lvl == scopeUnknown {
-			a.unresolved = true
-			continue
-		}
 		var condNote string
 		if role == roleUAA || role == roleRBACAdmin {
 			switch v, why := evalCondition(r); v {
@@ -211,9 +221,9 @@ func evalIDN004(in *sdk.Input) sdk.Result {
 			}
 		}
 		switch {
-		case lvl == scopeBroad:
+		case lvl == armexpr.ScopeBroad:
 			a.add(r, fmt.Sprintf("%s granted to an application identity at broad scope %q%s", name, r.Scope, condNote))
-		case lvl == scopeResource && role != roleContributor:
+		case lvl == armexpr.ScopeResource && role != roleContributor:
 			a.add(r, fmt.Sprintf("%s granted to an application identity at resource scope %q%s", name, r.Scope, condNote))
 		}
 	}

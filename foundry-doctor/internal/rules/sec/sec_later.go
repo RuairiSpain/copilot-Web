@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/armexpr"
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/foundrylink"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
 
@@ -37,11 +39,11 @@ func evalSEC005(in *sdk.Input) sdk.Result {
 	if len(vaults) == 0 {
 		return unavailable()
 	}
-	refs, anyRef := foundryRefs(in)
+	set := foundrylink.Collect(in.ARM)
 	var a acc
 	seen := false
 	for _, r := range vaults {
-		if anyRef && !inFoundryScope(r, refs, anyRef) {
+		if !linkOf(&a, set, r) {
 			continue
 		}
 		seen = true
@@ -63,7 +65,7 @@ func evalSEC005(in *sdk.Input) sdk.Result {
 			}
 		}
 	}
-	if !seen {
+	if !seen && len(a.fs) == 0 && !a.scopeUncertain && !a.conditional {
 		return skip(SkipOutOfScope)
 	}
 	return a.result()
@@ -75,6 +77,9 @@ func evalSEC007(in *sdk.Input) sdk.Result {
 	declared := declaredRaiPolicies(in)
 	for _, r := range ofType(in, typeAcctDeploy) {
 		seen = true
+		if a.maybe(r) {
+			continue
+		}
 		name, st := str(r.Properties, "raiPolicyName")
 		present, isExpr := st != absent, st == expr
 		switch {
@@ -157,6 +162,9 @@ func evalSEC008(in *sdk.Input) sdk.Result {
 	}
 	pricings := map[string]sdk.ARMResource{}
 	for _, r := range ofType(in, typePricing) {
+		if presence(r) != armexpr.Deployed {
+			continue
+		}
 		pricings[strings.ToLower(lastSegment(r.Name))] = r
 	}
 	var a acc
@@ -188,6 +196,9 @@ func evalSEC009(in *sdk.Input) sdk.Result {
 	mapped := mappedSecurityPolicies()
 	var a acc
 	for _, r := range assignments {
+		if a.maybe(r) {
+			continue
+		}
 		id, _ := str(r.Properties, "policyDefinitionId")
 		if !mapped[strings.ToLower(lastSegment(id))] {
 			continue
@@ -205,7 +216,10 @@ func evalSEC009(in *sdk.Input) sdk.Result {
 
 func evalSEC010(in *sdk.Input) sdk.Result {
 	var fs []sdk.Finding
-	for _, r := range foundryAccountsSec(in.ARM) {
+	var a acc
+	accounts, uncertain := foundryAccountsSec(in.ARM)
+	a.conditional = uncertain
+	for _, r := range accounts {
 		state := "platform-managed"
 		if src, _ := str(r.Properties, "encryption", "keySource"); strings.EqualFold(src, "Microsoft.KeyVault") {
 			if _, ok := get(r.Properties, "encryption", "keyVaultProperties"); ok {
@@ -214,10 +228,10 @@ func evalSEC010(in *sdk.Input) sdk.Result {
 		}
 		fs = append(fs, sdk.Finding{Resource: sdk.ResourceRef{Type: r.Type, Name: r.Name}, Location: r.Location, Evidence: "CMK posture: " + state})
 	}
-	refs, anyRef := foundryRefs(in)
+	set := foundrylink.Collect(in.ARM)
 	for _, typ := range []string{typeSearch, typeCosmos, typeStorage} {
 		for _, r := range ofType(in, typ) {
-			if anyRef && !inFoundryScope(r, refs, anyRef) {
+			if !linkOf(&a, set, r) {
 				continue
 			}
 			state := "platform-managed"
@@ -239,6 +253,9 @@ func evalSEC010(in *sdk.Input) sdk.Result {
 		}
 	}
 	if len(fs) == 0 {
+		if a.scopeUncertain || a.conditional {
+			return a.result()
+		}
 		return unavailable()
 	}
 	return sdk.Result{Findings: fs}
@@ -266,7 +283,8 @@ func evalSEC011(in *sdk.Input) sdk.Result {
 			}
 		}
 	}
-	for _, r := range foundryAccountsSec(in.ARM) {
+	accounts, uncertain := foundryAccountsSec(in.ARM)
+	for _, r := range accounts {
 		mode, _ := str(r.Properties, "managedNetworkSettings", "isolationMode")
 		restrict := boolState(r.Properties, "restrictOutboundNetworkAccess") == isTrue
 		if strings.EqualFold(mode, "AllowOnlyApprovedOutbound") || restrict {
@@ -279,6 +297,9 @@ func evalSEC011(in *sdk.Input) sdk.Result {
 		})
 	}
 	if len(fs) == 0 {
+		if uncertain {
+			return skip(foundrylink.SkipConditional)
+		}
 		return unavailable()
 	}
 	return sdk.Result{Findings: fs}
@@ -394,7 +415,7 @@ func relevantDefenderPlans(in *sdk.Input) []string {
 		return nil
 	}
 	set := map[string]bool{}
-	if len(foundryAccountsSec(in.ARM)) > 0 {
+	if accounts, _ := foundryAccountsSec(in.ARM); len(accounts) > 0 {
 		set["AI"] = true
 	}
 	if len(ofType(in, typeStorage)) > 0 {
@@ -569,16 +590,25 @@ func lastSegment(s string) string {
 	return s
 }
 
-func foundryAccountsSec(m sdk.ARMModel) []sdk.ARMResource {
-	accounts := ofType(&sdk.Input{ARM: m}, typeAccounts)
-	var out []sdk.ARMResource
-	for _, r := range accounts {
-		if ownsChild(&sdk.Input{ARM: m}, r, len(accounts), typeAcctProject, typeAcctDeploy) {
-			out = append(out, r)
+// foundryAccountsSec returns the deployed accounts that own projects or
+// deployments, or all deployed accounts when none does. uncertain is true when
+// a conditional account was left out.
+func foundryAccountsSec(m sdk.ARMModel) (accounts []sdk.ARMResource, uncertain bool) {
+	in := &sdk.Input{ARM: m}
+	all := ofType(in, typeAccounts)
+	var deployed, owning []sdk.ARMResource
+	for _, r := range all {
+		if presence(r) != armexpr.Deployed {
+			uncertain = true
+			continue
+		}
+		deployed = append(deployed, r)
+		if owns(in, r, len(all), typeAcctProject, typeAcctDeploy) == ownsYes {
+			owning = append(owning, r)
 		}
 	}
-	if len(out) == 0 {
-		return accounts
+	if len(owning) > 0 {
+		return owning, uncertain
 	}
-	return out
+	return deployed, uncertain
 }

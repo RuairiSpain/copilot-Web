@@ -7,9 +7,10 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
-	"sort"
 	"strings"
 
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/armexpr"
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/foundrylink"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
 
@@ -75,10 +76,16 @@ func unavailable() sdk.Result {
 
 func skip(reason string) sdk.Result { return sdk.Result{Skipped: &sdk.Skip{Reason: reason}} }
 
-// acc accumulates findings and notes unresolved decisive values.
+// acc accumulates findings and notes values that block a verdict.
 type acc struct {
 	fs         []sdk.Finding
 	unresolved bool
+	// scopeUncertain: Foundry usage of a resource could not be proven or
+	// disproven (reason foundrylink.SkipScopeUncertain).
+	scopeUncertain bool
+	// conditional: a resource that would be evaluated may not be deployed
+	// (reason foundrylink.SkipConditional).
+	conditional bool
 }
 
 func (a *acc) add(r sdk.ARMResource, evidence string) {
@@ -89,21 +96,48 @@ func (a *acc) add(r sdk.ARMResource, evidence string) {
 	})
 }
 
-// result: findings win; otherwise unresolved values skip; otherwise pass.
+// addRec adds a finding with a rule-specific recommendation.
+func (a *acc) addRec(r sdk.ARMResource, evidence, recommendation string) {
+	a.add(r, evidence)
+	a.fs[len(a.fs)-1].Recommendation = recommendation
+}
+
+// maybe reports (and records) that r is deployed only under a condition or
+// loop the template cannot resolve; callers skip such a resource.
+func (a *acc) maybe(r sdk.ARMResource) bool {
+	if presence(r) == armexpr.MaybeDeployed {
+		a.conditional = true
+		return true
+	}
+	return false
+}
+
+// result: findings win; otherwise uncertainty skips; otherwise pass.
 func (a *acc) result() sdk.Result {
 	if len(a.fs) > 0 {
 		return sdk.Result{Findings: a.fs}
 	}
-	if a.unresolved {
+	switch {
+	case a.scopeUncertain:
+		return skip(foundrylink.SkipScopeUncertain)
+	case a.conditional:
+		return skip(foundrylink.SkipConditional)
+	case a.unresolved:
 		return skip(SkipUnresolved)
 	}
 	return sdk.Result{}
 }
 
+func presence(r sdk.ARMResource) armexpr.Presence {
+	return armexpr.PresenceOf(r.Conditional, r.Condition, r.Looped)
+}
+
+// ofType returns the resources of type t that are not provably undeployed
+// (a literal false condition removes a resource).
 func ofType(in *sdk.Input, t string) []sdk.ARMResource {
 	var out []sdk.ARMResource
 	for _, r := range in.ARM.Resources() {
-		if strings.EqualFold(r.Type, t) {
+		if strings.EqualFold(r.Type, t) && presence(r) != armexpr.NotDeployed {
 			out = append(out, r)
 		}
 	}
@@ -113,7 +147,7 @@ func ofType(in *sdk.Input, t string) []sdk.ARMResource {
 // unresolved reports an ARM language expression ("[...]" but not "[[").
 func unresolved(v any) bool {
 	s, ok := v.(string)
-	return ok && strings.HasPrefix(s, "[") && !strings.HasPrefix(s, "[[")
+	return ok && armexpr.IsExpression(s)
 }
 
 func get(m map[string]any, path ...string) (any, bool) {
@@ -173,30 +207,16 @@ func str(m map[string]any, path ...string) (string, state) {
 	return s, isTrue
 }
 
-// parentName returns the part of a child resource name before the first "/".
-func parentName(child string) string {
-	if i := strings.Index(child, "/"); i >= 0 {
-		return child[:i]
-	}
-	return ""
-}
+const (
+	ownsNone  = foundrylink.OwnsNone
+	ownsYes   = foundrylink.OwnsYes
+	ownsMaybe = foundrylink.OwnsMaybe
+)
 
-// ownsChild reports whether account owns a child resource of the given types.
-// Names match by "parent/child" prefix; when a name is an unresolved
-// expression the match falls back to the sole-account assumption.
-func ownsChild(in *sdk.Input, account sdk.ARMResource, accounts int, types ...string) bool {
-	for _, t := range types {
-		for _, c := range ofType(in, t) {
-			p := parentName(c.Name)
-			switch {
-			case p != "" && strings.EqualFold(p, account.Name):
-				return true
-			case (strings.HasPrefix(c.Name, "[") || strings.HasPrefix(account.Name, "[")) && accounts == 1:
-				return true
-			}
-		}
-	}
-	return false
+// owns reports whether account owns a child resource of the given types; see
+// foundrylink.Owns.
+func owns(in *sdk.Input, account sdk.ARMResource, accounts int, types ...string) foundrylink.Ownership {
+	return foundrylink.Owns(in.ARM, account, accounts, types...)
 }
 
 func evalSEC001(in *sdk.Input) sdk.Result {
@@ -204,7 +224,14 @@ func evalSEC001(in *sdk.Input) sdk.Result {
 	var a acc
 	seen := false
 	for _, r := range accounts {
-		if !ownsChild(in, r, len(accounts), typeAcctProject, typeAcctDeploy) {
+		switch owns(in, r, len(accounts), typeAcctProject, typeAcctDeploy) {
+		case ownsNone:
+			continue
+		case ownsMaybe:
+			a.scopeUncertain = true
+			continue
+		}
+		if a.maybe(r) {
 			continue
 		}
 		seen = true
@@ -218,63 +245,20 @@ func evalSEC001(in *sdk.Input) sdk.Result {
 			a.add(r, "Foundry account owns projects or deployments; properties.disableLocalAuth is not true")
 		}
 	}
-	if !seen {
+	if !seen && !a.scopeUncertain && !a.conditional {
 		return unavailable()
 	}
 	return a.result()
 }
 
-// foundryRefs collects lower-cased strings from Foundry connections and
-// capability hosts so external services can be tied to Foundry.
-func foundryRefs(in *sdk.Input) (refs []string, found bool) {
-	prefix := strings.ToLower(typeAccounts)
-	for _, r := range in.ARM.Resources() {
-		t := strings.ToLower(r.Type)
-		if !strings.HasPrefix(t, prefix) {
-			continue
-		}
-		if !strings.HasSuffix(t, "/connections") && !strings.HasSuffix(t, "/capabilityhosts") {
-			continue
-		}
-		found = true
-		flatten(r.Properties, &refs)
-	}
-	sort.Strings(refs)
-	return refs, found
-}
-
-func flatten(v any, out *[]string) {
-	switch x := v.(type) {
-	case string:
-		*out = append(*out, strings.ToLower(x))
-	case []any:
-		for _, e := range x {
-			flatten(e, out)
-		}
-	case map[string]any:
-		keys := make([]string, 0, len(x))
-		for k := range x {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		for _, k := range keys {
-			flatten(x[k], out)
-		}
-	}
-}
-
-func inFoundryScope(r sdk.ARMResource, refs []string, anyRef bool) bool {
-	if !anyRef {
-		return false
-	}
-	if strings.HasPrefix(r.Name, "[") {
-		return true // cannot correlate; a Foundry connection exists
-	}
-	n := strings.ToLower(r.Name)
-	for _, s := range refs {
-		if strings.Contains(s, n) {
-			return true
-		}
+// linkOf classifies r against the Foundry link set and records uncertainty.
+// It returns true only when r is provably used by Foundry and deployed.
+func linkOf(a *acc, set foundrylink.Set, r sdk.ARMResource) bool {
+	switch set.Classify(r) {
+	case foundrylink.Linked:
+		return !a.maybe(r)
+	case foundrylink.Uncertain:
+		a.scopeUncertain = true
 	}
 	return false
 }
@@ -284,11 +268,11 @@ func evalSEC002(in *sdk.Input) sdk.Result {
 	if len(svcs) == 0 {
 		return unavailable()
 	}
-	refs, anyRef := foundryRefs(in)
+	set := foundrylink.Collect(in.ARM)
 	var a acc
 	scoped := false
 	for _, r := range svcs {
-		if !inFoundryScope(r, refs, anyRef) {
+		if !linkOf(&a, set, r) {
 			continue
 		}
 		scoped = true
@@ -310,7 +294,7 @@ func evalSEC002(in *sdk.Input) sdk.Result {
 		}
 		a.add(r, "Search service referenced by Foundry; properties.disableLocalAuth is not true; "+sub)
 	}
-	if !scoped {
+	if !scoped && len(a.fs) == 0 && !a.scopeUncertain && !a.conditional {
 		return skip(SkipOutOfScope)
 	}
 	return a.result()
@@ -321,11 +305,11 @@ func evalSEC003(in *sdk.Input) sdk.Result {
 	if len(dbs) == 0 {
 		return unavailable()
 	}
-	refs, anyRef := foundryRefs(in)
+	set := foundrylink.Collect(in.ARM)
 	var a acc
 	scoped := false
 	for _, r := range dbs {
-		if !inFoundryScope(r, refs, anyRef) {
+		if !linkOf(&a, set, r) {
 			continue
 		}
 		scoped = true
@@ -337,7 +321,7 @@ func evalSEC003(in *sdk.Input) sdk.Result {
 			a.add(r, "Cosmos DB account referenced by Foundry; properties.disableLocalAuth is not true")
 		}
 	}
-	if !scoped {
+	if !scoped && len(a.fs) == 0 && !a.scopeUncertain && !a.conditional {
 		return skip(SkipOutOfScope)
 	}
 	return a.result()
@@ -349,14 +333,23 @@ func evalSEC004(in *sdk.Input) sdk.Result {
 		return unavailable()
 	}
 	var a acc
+	keyed := foundrylink.CollectWhere(in.ARM, usesKeyAuth)
 	for _, r := range stores {
+		if a.maybe(r) {
+			continue
+		}
 		p := r.Properties
 		switch boolState(p, "allowSharedKeyAccess") {
 		case isFalse:
 		case expr:
 			a.unresolved = true
 		default:
-			a.add(r, "properties.allowSharedKeyAccess is not false (shared key access enabled)")
+			ev := "properties.allowSharedKeyAccess is not false (shared key access enabled)"
+			if keyed.Classify(r) == foundrylink.NotLinked {
+				a.add(r, ev)
+			} else {
+				a.addRec(r, ev, sharedKeyRecommendation+" "+keyAuthWarning)
+			}
 		}
 		switch boolState(p, "allowBlobPublicAccess") {
 		case isTrue:
@@ -381,6 +374,20 @@ func evalSEC004(in *sdk.Input) sdk.Result {
 		}
 	}
 	return a.result()
+}
+
+const sharedKeyRecommendation = "Set allowSharedKeyAccess false, allowBlobPublicAccess false, supportsHttpsTrafficOnly true and minimumTlsVersion TLS1_2 on the account, and give the Foundry identity Storage data roles. Verify no client still uses account keys or SAS signed with the account key before disabling Shared Key."
+
+const keyAuthWarning = "Warning: a Foundry connection that may target this account uses authType AccountKey or SAS; disabling Shared Key access breaks it, so move that connection to Microsoft Entra ID authentication first."
+
+// usesKeyAuth selects Foundry connections whose literal authType is AccountKey
+// or SAS (the key-based authentication types of the connection schema).
+func usesKeyAuth(r sdk.ARMResource) bool {
+	if !strings.HasSuffix(strings.ToLower(r.Type), "/connections") {
+		return false
+	}
+	v, _ := str(r.Properties, "authType")
+	return strings.EqualFold(v, "AccountKey") || strings.EqualFold(v, "SAS")
 }
 
 // ipSpec describes where IP rules live per resource type (catalogue FND-SEC-006).
@@ -436,6 +443,9 @@ func evalSEC006(in *sdk.Input) sdk.Result {
 	for _, sp := range ipSpecs() {
 		for _, r := range ofType(in, sp.typ) {
 			seen = true
+			if a.maybe(r) {
+				continue
+			}
 			v, ok := get(r.Properties, sp.path...)
 			if !ok {
 				continue
@@ -456,13 +466,16 @@ func evalSEC006(in *sdk.Input) sdk.Result {
 					continue
 				}
 				val = strings.TrimSpace(val)
-				open := val == "0.0.0.0/0"
+				allAddr := val == "0.0.0.0/0"
+				azureWide := false
 				for _, o := range sp.openAlso {
-					open = open || val == o
+					azureWide = azureWide || val == o
 				}
 				switch {
-				case open:
+				case allAddr:
 					a.add(r, "IP rule "+val+" opens the resource to all addresses")
+				case azureWide:
+					a.add(r, "IP rule "+val+" allows all Azure datacenter IPs")
 				case overlaps(val, sp.private):
 					a.add(r, "IP rule "+val+" is a private or non-routable range that the service does not enforce")
 				}
