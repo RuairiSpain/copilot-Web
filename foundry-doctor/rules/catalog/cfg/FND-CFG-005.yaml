@@ -1,5 +1,5 @@
 id: FND-CFG-005
-version: 1
+version: 2
 group: CFG
 title: "No raw secrets in YAML/Bicep/environment blocks"
 description: >-
@@ -33,7 +33,10 @@ evidence:
     credentials value must be a ${VAR} or ${{...}} reference; env values whose key name matches secret naming
     (key, secret, token, password, pwd, connection string) must be references; target URLs must not contain
     userinfo or sig/sv/token query parameters; .env files must not be tracked by git. A literal that
-    matches a known secret pattern raises confidence to certain; name-only matches are reported as likely.
+    matches a known secret pattern raises confidence to certain; name-only matches (a secret-like name with a non-reference value and no secret-shaped literal) are uncertain, not
+    findings. Names that describe a quantity, rotation or file (limit, count, rotation, size, file) are not treated as
+    secret names. In ${VAR:-default} the default part is inspected like a literal; a value that mixes literal text with a
+    reference is uncertain. A SAS query string is a credential only with sig; sv alone is a version selector.
     Bicep and ARM findings are mapped from the Bicep linter, PSRule and Checkov results rather than
     re-derived. Findings never include the value.
   confidence: likely
@@ -113,17 +116,23 @@ testability: >-
 tests:
   positive:
     - connection-credentials-literal-api-key
-    - service-env-literal-token
+    - service-env-literal-secret-shaped-value
+    - credentials-default-literal
     - target-url-with-sas-signature
     - target-url-with-userinfo
     - dotenv-tracked-in-git
   negative:
     - credentials-use-env-reference
+    - token-limit-and-key-rotation-names
+    - sas-version-without-signature
     - foundry-server-side-expression-passthrough
     - managed-identity-connection-no-credentials
   skipped:
     - bicep-cli-missing
     - checkov-not-configured
+  uncertain:
+    - env-secret-like-name-with-plain-value
+    - credentials-mix-literal-and-reference
 notes: >-
   The Learn guidance conflicts in emphasis: the Foundry reference stores connection secrets in the azd
   environment via ${VAR} (azd env set), while the azd docs say never to keep secrets in a .env file and

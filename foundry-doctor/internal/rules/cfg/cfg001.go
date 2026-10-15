@@ -3,8 +3,6 @@ package cfg
 import (
 	"fmt"
 	"regexp"
-	"sort"
-	"strconv"
 	"strings"
 
 	"go.yaml.in/yaml/v3"
@@ -18,53 +16,9 @@ var cfg001MinVersions = map[string]string{
 	"azure.ai.projects": "1.0.0-beta.13",
 }
 
-var verRe = regexp.MustCompile(`(\d+)\.(\d+)\.(\d+)(?:-beta\.(\d+))?`)
-
-// parseVer extracts major.minor.patch and beta number (-1 for a release).
-func parseVer(s string) ([4]int, bool) {
-	m := verRe.FindStringSubmatch(s)
-	if m == nil {
-		return [4]int{}, false
-	}
-	var v [4]int
-	for i := 0; i < 3; i++ {
-		v[i], _ = strconv.Atoi(m[i+1])
-	}
-	v[3] = 1 << 30
-	if m[4] != "" {
-		v[3], _ = strconv.Atoi(m[4])
-	}
-	return v, true
-}
-
-func verLess(a, b [4]int) bool {
-	for i := range a {
-		if a[i] != b[i] {
-			return a[i] < b[i]
-		}
-	}
-	return false
-}
-
-// requiredVersionsBelow returns findings-ready entries (extension, node,
-// constraint) whose constraint is parseable and below min.
-func requiredVersionsBelow(root *yaml.Node, mins map[string]string) []nameAt {
-	ext := child(child(root, "requiredVersions"), "extensions")
-	var out []nameAt
-	for _, p := range pairs(ext) {
-		min, ok := mins[p.Key.Value]
-		if !ok {
-			continue
-		}
-		got, ok1 := parseVer(scalar(p.Val))
-		want, ok2 := parseVer(min)
-		if ok1 && ok2 && verLess(got, want) {
-			out = append(out, nameAt{p.Key.Value, p.Val})
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
-	return out
-}
+// Azure.yaml name rule from the azd schema (schemas/v1.0/azure.yaml.json):
+// minLength 2 and pattern ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$.
+var appNameRe = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
 
 func evalCFG001(in *sdk.Input) sdk.Result {
 	d, ok0 := loadDoc(in)
@@ -77,20 +31,26 @@ func evalCFG001(in *sdk.Input) sdk.Result {
 			fs = append(fs, sdk.Finding{Location: sdk.Location{File: dg.Location.File, Line: dg.Location.Line, Column: dg.Location.Column}, Evidence: dg.Message})
 		}
 	}
-	svcNode := child(d.Root(), "services")
-	svcs := serviceList(d)
-	if len(svcs) == 0 {
-		n := svcNode
-		fs = append(fs, sdk.Finding{Location: loc(d, n), Evidence: "services must declare at least one service"})
+	root := d.Resolved()
+	switch nameNode := child(root, "name"); {
+	case nameNode == nil:
+		fs = append(fs, sdk.Finding{Location: loc(d, root), Evidence: "name is required"})
+	case nameNode.Kind != yaml.ScalarNode:
+		fs = append(fs, sdk.Finding{Location: loc(d, nameNode), Evidence: "name must be a string"})
+	default:
+		if n := scalar(nameNode); len(n) < 2 || !appNameRe.MatchString(n) {
+			fs = append(fs, sdk.Finding{Location: loc(d, nameNode),
+				Evidence: "name must be at least 2 characters of lowercase letters, numbers and hyphens, starting and ending with a letter or number"})
+		}
 	}
-	for _, s := range svcs {
+	// services is optional; when present the schema requires at least one entry.
+	if svcNode := child(root, "services"); svcNode != nil && len(pairs(svcNode)) == 0 {
+		fs = append(fs, sdk.Finding{Location: loc(d, svcNode), Evidence: "services must declare at least one service when present"})
+	}
+	for _, s := range serviceList(d) {
 		fs = append(fs, cfg001Service(d, s)...)
 	}
-	for _, e := range requiredVersionsBelow(d.Root(), cfg001MinVersions) {
-		fs = append(fs, sdk.Finding{Location: loc(d, e.Node),
-			Evidence: fmt.Sprintf("requiredVersions.extensions.%s %q is older than verified %s", e.Name, scalar(e.Node), cfg001MinVersions[e.Name])})
-	}
-	return ok(fs)
+	return withNotes(fs, noteTexts(requiredVersionNotes(root, cfg001MinVersions)))
 }
 
 func cfg001Service(d document, s service) []sdk.Finding {

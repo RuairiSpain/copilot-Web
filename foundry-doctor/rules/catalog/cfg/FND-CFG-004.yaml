@@ -1,5 +1,5 @@
 id: FND-CFG-004
-version: 1
+version: 2
 group: CFG
 title: "Prompt model or hosted source/image is valid"
 description: >-
@@ -8,7 +8,8 @@ description: >-
   hosted) must have an agent source (project path that exists, with a Dockerfile for container
   builds) or a prebuilt image, must not combine codeConfiguration with image-based container
   configuration, must give codeConfiguration both runtime and entryPoint, and must keep container
-  resources inside the documented range (cpu 0.25 to 4.0, memory 0.5Gi to 8.0Gi). Voice agents
+  resources (container.resources.cpu and container.resources.memory) inside the documented range (cpu 0.25 to 4.0
+  cores, memory 0.5Gi to 8.0Gi; the schema allows cpu such as 500m and memory with Ki, Mi, Gi and decimal suffixes, which are normalised). Voice agents
   require a model unless they use conversationEngine.
 status: verified
 phases: ["1"]
@@ -35,7 +36,10 @@ evidence:
     the deployment comes from a $ref file that cannot be read). For kind hosted: project is present
     and the directory exists; when no image is set and codeConfiguration is absent, a Dockerfile exists
     under project; codeConfiguration and image are not both set; codeConfiguration has runtime and
-    entryPoint; cpu and memory parse and fall within the documented bounds.
+    entryPoint; container.resources.cpu and container.resources.memory parse and fall within the documented bounds. When the project
+    declares no deployments key, the model-to-deployment match is unknown and the result is uncertain. A hosted agent with no
+    Dockerfile, image or codeConfiguration but with runtime, startupCommand or skill is accepted; with none of them the
+    source is unclear and the result is uncertain.
   confidence: likely
 recommendation: >-
   Set model to the name of a deployment declared on the project, provide instructions for prompt agents,
@@ -69,6 +73,10 @@ sources:
     lastVerified: "2026-10-04"
     verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/author-azure-yaml.md
     note: Deploy modes (code vs container), prebuilt image.
+  - url: https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json
+    lastVerified: "2026-10-15"
+    verifiedVia: raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json fetched 2026-10-15; immutable revision unavailable
+    note: "ContainerSettings.resources (ResourceSettings): cpu pattern ^[0-9]+(\\.[0-9]+)?m?$ and memory pattern with Ki|Mi|Gi|Ti|Pi|Ei|k|M|G|T|P|E suffixes; startupCommand is a service property. Numeric bounds still come from the Learn reference above."
 overlap:
   decision: native
   provisional: true
@@ -103,14 +111,20 @@ tests:
     - hosted-agent-project-dir-missing
     - hosted-agent-code-configuration-and-image
     - hosted-agent-cpu-above-4
+    - container-resources-memory-above-8Gi
     - code-configuration-missing-entrypoint
   negative:
     - prompt-agent-model-matches-deployment
     - hosted-agent-prebuilt-image
     - hosted-agent-code-deploy
+    - hosted-agent-runtime-and-startup-command
+    - container-resources-512Mi-and-500m
   skipped:
     - project-uses-existing-endpoint
     - deployments-in-ref-file-unreadable
+  uncertain:
+    - project-declares-no-deployments
+    - hosted-agent-no-dockerfile-image-or-runtime
 notes: >-
   Unverified: whether project is still required when image is set. The v1.0 schema requires project for
   host azure.ai.agent, while the reference describes image as skipping the Dockerfile build; the rule follows

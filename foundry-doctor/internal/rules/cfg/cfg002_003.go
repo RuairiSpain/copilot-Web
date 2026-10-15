@@ -53,6 +53,7 @@ func evalCFG003(in *sdk.Input) sdk.Result {
 	svcs := serviceList(d)
 	all := byName(svcs)
 	var fs []sdk.Finding
+	var notes []string
 	for _, s := range svcs {
 		add := func(n *yaml.Node, f string, a ...any) { fs = append(fs, finding(d, s, n, fmt.Sprintf(f, a...))) }
 		switch {
@@ -82,10 +83,10 @@ func evalCFG003(in *sdk.Input) sdk.Result {
 				}
 			}
 		case s.Host == "azure.ai.memory-store" || s.Host == "azure.ai.memorystore":
-			fs = append(fs, cfg003Memory(d, s, all)...)
+			fs = append(fs, cfg003Memory(d, s, all, &notes)...)
 		}
 	}
-	return ok(fs)
+	return withNotes(fs, notes)
 }
 
 func cfg003Conn(d document, s service, all map[string]service, r nameAt) []sdk.Finding {
@@ -119,24 +120,37 @@ func cfg003Voice(d document, s service, all map[string]service) []sdk.Finding {
 	return nil
 }
 
-func deploymentNames(p service) (map[string]bool, bool) {
+// deploymentNames returns the deployment names declared on a project service.
+// known is false when the names cannot be established from azure.yaml: the
+// project reuses an endpoint or $ref, deployments is absent (they may come
+// from infrastructure), is not a sequence, or an entry has no literal name.
+func deploymentNames(p service) (names map[string]bool, known bool) {
 	if has(p.Node, "endpoint") || has(p.Node, "$ref") {
 		return nil, false
 	}
-	names := map[string]bool{}
-	for _, dep := range items(p.get("deployments")) {
-		names[str(dep, "name")] = true
+	deps := p.get("deployments")
+	if deps == nil || deps.Kind != yaml.SequenceNode {
+		return nil, false
+	}
+	names = map[string]bool{}
+	for _, dep := range items(deps) {
+		n := str(dep, "name")
+		if n == "" || containsRef(n) {
+			return nil, false
+		}
+		names[n] = true
 	}
 	return names, true
 }
 
-func cfg003Memory(d document, s service, all map[string]service) []sdk.Finding {
+func cfg003Memory(d document, s service, all map[string]service, notes *[]string) []sdk.Finding {
 	p, found := projectOf(s, all)
 	if !found {
 		return nil
 	}
 	names, known := deploymentNames(p)
 	if !known {
+		*notes = append(*notes, fmt.Sprintf("%s: deployments of project %q are not declared in azure.yaml, so chatModel and embeddingModel cannot be checked", s.Name, p.Name))
 		return nil
 	}
 	var fs []sdk.Finding

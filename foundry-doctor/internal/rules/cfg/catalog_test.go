@@ -2,6 +2,7 @@ package cfg
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/catalog"
@@ -26,22 +27,28 @@ func (s armOutStub) Outputs() []sdk.ARMOutput {
 
 func TestCFG006ARMOutputsProducer(t *testing.T) {
 	y := "services:\n  a:\n    host: azure.ai.agent\n    env:\n      X: ${ACR_ENDPOINT}\n"
-	r := find(RegisterWith(Providers{Env: fakeEnv{true, nil}}), "FND-CFG-006")
 	cases := []struct {
-		name string
-		arm  sdk.ARMModel
-		want int
+		name         string
+		arm          sdk.ARMModel
+		env          map[string]string
+		wantFindings int
+		wantSkip     bool
 	}{
-		{"output produces var", armOutStub{[]string{"ACR_ENDPOINT"}}, 0},
-		{"unrelated output", armOutStub{[]string{"OTHER"}}, 1},
-		{"model without outputs", armStub{}, 1},
-		{"nil arm", nil, 1},
+		{"output only, not provisioned yet is uncertain", armOutStub{[]string{"ACR_ENDPOINT"}}, nil, 0, true},
+		{"output present and value in env passes", armOutStub{[]string{"ACR_ENDPOINT"}}, map[string]string{"ACR_ENDPOINT": "x"}, 0, false},
+		{"unrelated output, name undefined", armOutStub{[]string{"OTHER"}}, nil, 1, false},
+		{"model without outputs is uncertain", armStub{}, nil, 0, true},
+		{"nil arm is uncertain", nil, nil, 0, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			r := find(RegisterWith(Providers{Env: fakeEnv{true, tc.env}}), "FND-CFG-006")
 			res := run(t, r, &sdk.Input{AzureYAML: doc(t, y), ARM: tc.arm})
-			if res.Skipped != nil || len(res.Findings) != tc.want {
-				t.Fatalf("skipped=%v findings=%+v want %d", res.Skipped, res.Findings, tc.want)
+			if (res.Skipped != nil) != tc.wantSkip || len(res.Findings) != tc.wantFindings {
+				t.Fatalf("skipped=%v findings=%+v want findings=%d skip=%v", res.Skipped, res.Findings, tc.wantFindings, tc.wantSkip)
+			}
+			if tc.wantSkip && !strings.HasPrefix(res.Skipped.Reason, "uncertain: ") {
+				t.Fatalf("skip reason %q is not marked uncertain", res.Skipped.Reason)
 			}
 		})
 	}
