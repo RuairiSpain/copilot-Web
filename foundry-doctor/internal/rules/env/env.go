@@ -12,6 +12,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"net/url"
 	"sort"
 	"strings"
 
@@ -52,6 +53,64 @@ type Environment struct {
 	// Status is the state of the environment's .env file.
 	Status Status
 	Values map[string]string
+	// Shapes holds the shape of values that were replaced by a digest. A key
+	// absent here has its shape derived from the value.
+	Shapes map[string]Shape
+}
+
+// Shape says what kind of non-secret identifier a value is. The app layer
+// digests values under secret-looking key names before the rules see them; it
+// classifies the value first and carries the shape next to the digest, so a
+// Key Vault resource ID under AZURE_KEYVAULT_ID is treated like the same ID
+// under AZURE_VAULT_ID. A value that is not one of these shapes stays plain.
+type Shape string
+
+// Value shapes.
+const (
+	ShapePlain           Shape = ""
+	ShapeResourceID      Shape = "resource-id"
+	ShapeFoundryEndpoint Shape = "foundry-endpoint" // https URL on *.services.ai.azure.com
+	ShapeEndpoint        Shape = "endpoint"         // other https URL on *.azure.com or *.azure.net
+)
+
+// ClassifyShape returns the strict shape of v: an ARM resource ID, or a bare
+// https URL with no user info, query or fragment. Anything else, including
+// connection strings and SAS URLs, is plain.
+func ClassifyShape(v string) Shape {
+	t := strings.TrimSpace(v)
+	if strings.HasPrefix(strings.ToLower(t), "/subscriptions/") && !strings.ContainsAny(t, " ;?=") {
+		return ShapeResourceID
+	}
+	u, err := url.Parse(t)
+	if err != nil || !strings.EqualFold(u.Scheme, "https") || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Host == "" {
+		return ShapePlain
+	}
+	h := strings.ToLower(u.Hostname())
+	switch {
+	case strings.HasSuffix(h, ".services.ai.azure.com"):
+		return ShapeFoundryEndpoint
+	case strings.HasSuffix(h, ".azure.com"), strings.HasSuffix(h, ".azure.net"):
+		return ShapeEndpoint
+	}
+	return ShapePlain
+}
+
+// shapeOf returns the shape of key k in e: the app-supplied shape when the
+// value was digested, otherwise derived from the value.
+func (e Environment) shapeOf(k, v string) Shape {
+	if s, ok := e.Shapes[k]; ok {
+		return s
+	}
+	l := strings.ToLower(v)
+	switch {
+	case strings.HasPrefix(l, "/subscriptions/"):
+		return ShapeResourceID
+	case strings.Contains(l, ".services.ai.azure.com"):
+		return ShapeFoundryEndpoint
+	case strings.Contains(l, ".azure.com"), strings.Contains(l, ".azure.net"):
+		return ShapeEndpoint
+	}
+	return ShapePlain
 }
 
 func (e Environment) usable() bool { return e.Status == StatusOK }
@@ -86,7 +145,8 @@ func (r rule) Evaluate(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 	}
 	all := r.p.Environments()
 	if len(all) < 2 {
-		return skip(r.id), nil
+		// Nothing to compare: the project has fewer than two environments.
+		return sdk.Result{Skipped: &sdk.Skip{RuleID: r.id, Reason: sdk.SkipNotApplicable + ": fewer than two azd environments"}}, nil
 	}
 	sort.SliceStable(all, func(i, j int) bool { return all[i].Name < all[j].Name })
 	var envs []Environment
@@ -174,8 +234,20 @@ func eval001(_ context.Context, _ *sdk.Input, envs []Environment) outcome {
 		}
 	}
 	for _, e := range envs {
-		if len(e.LiteralRGAt) > 0 {
-			out.findings = append(out.findings, finding(e.Name, fmt.Sprintf("azure.yaml pins a literal resourceGroup (%s) while multiple environments exist", strings.Join(e.LiteralRGAt, ", "))))
+		var services []string
+		for _, at := range e.LiteralRGAt {
+			if at != "resourceGroup" {
+				services = append(services, at)
+			}
+		}
+		if len(services) < len(e.LiteralRGAt) {
+			out.findings = append(out.findings, finding(e.Name, "azure.yaml pins a literal resourceGroup (resourceGroup) while multiple environments exist"))
+		}
+		if len(services) > 0 {
+			// The azd schema describes a service-level resourceGroup as the group
+			// that contains the resource; no source says a literal value breaks
+			// environment isolation, so this is uncertain, not an error.
+			out.notes = append(out.notes, fmt.Sprintf("azure.yaml sets a literal %s; the azd schema does not say whether that defeats environment isolation", strings.Join(services, ", ")))
 		}
 	}
 	return out
@@ -193,15 +265,14 @@ const (
 // than not, so they are never reported.
 var excludedFromBound = []string{"TENANT", "PRINCIPAL", "DEPLOYMENT", "MODEL"}
 
-func classify(k, v string) int {
+func classify(k string, shape Shape) int {
 	u := strings.ToUpper(k)
-	l := strings.ToLower(v)
 	switch {
 	case k == "AZURE_ENV_NAME":
 		return classNone
 	case u == "AZURE_SUBSCRIPTION_ID":
 		return classStrong
-	case strings.HasPrefix(l, "/subscriptions/"), strings.Contains(l, ".services.ai.azure.com"):
+	case shape == ShapeResourceID, shape == ShapeFoundryEndpoint:
 		return classStrong
 	case strings.HasSuffix(u, "_ENDPOINT"), strings.HasSuffix(u, "_RESOURCE_GROUP"):
 		return classStrong
@@ -236,7 +307,7 @@ func eval002(_ context.Context, _ *sdk.Input, envs []Environment) outcome {
 				if !ok || va == "" || va != a.Values[k] {
 					continue
 				}
-				switch classify(k, va) {
+				switch classify(k, a.shapeOf(k, va)) {
 				case classStrong:
 					out.findings = append(out.findings, finding(k, fmt.Sprintf("key %s has identical value (fingerprint %s) in environments %s and %s", k, Fingerprint(va), a.Name, b.Name)))
 				case classWeak:
@@ -284,9 +355,8 @@ func targets(e Environment) map[string]string {
 		}
 	}
 	add("resource group", e.ResourceGroup)
-	for _, v := range e.Values {
-		l := norm(v)
-		if strings.HasPrefix(l, "/subscriptions/") || strings.Contains(l, ".azure.com") || strings.Contains(l, ".azure.net") {
+	for k, v := range e.Values {
+		if e.shapeOf(k, v) != ShapePlain {
 			add("resource identifier", v)
 		}
 	}

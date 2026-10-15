@@ -62,3 +62,19 @@ code also differed from the decision text. This amendment makes the text describ
    recomputes the fingerprint, and reports a diagnostic (`Report.Diagnostics`, printed as a warning). This fallback depends on evidence wording and is a safety net, not a substitute for a rule-set `Key`.
    The `FND-SYS-DUPLICATE-FINGERPRINT` finding of ADR-009 is not emitted in Phase 1; the diagnostic is a stderr warning.
 5. Excluded inputs are unchanged: line, column, profile, severity, confidence, evidence prose, recommendation, adapter, wall-clock and machine-specific data.
+
+## Amendment 2 (2026-10-15): no sibling dependence (Foundry lead R1)
+
+Amendment 1 decision 4 derived a `Key` from evidence only when two findings collided. That made a fingerprint depend on whether a sibling finding existed (a baselined
+finding resurfaced when a second finding appeared on the same resource) and merged findings that had equal evidence but different locations (duplicate `host` keys gave one finding).
+
+1. **Scheme tag `v3`.** The canonical form (decision 1 of Amendment 1) is unchanged; the tag is bumped because the `Key` of key-less findings now changes. Every fingerprint changes
+   once. Golden files and the frozen-value test were regenerated. Phase 1 is unreleased, so no migration is provided.
+2. **Derived key for key-less findings.** After enrichment the engine sets, for every finding whose rule set no `Finding.Key`,
+   `Key = "auto:<line>:<column>:<first 12 hex of SHA-256 of the redacted evidence>"`. The value depends only on the finding itself, never on other findings, so adding or removing a
+   sibling does not change it. Cost: a key-less finding's fingerprint changes when its line, column or evidence wording changes. Rules that need a baseline stable across line moves MUST set `Key`.
+3. **Merge rule.** Only exact duplicates merge: same fingerprint, same location (file, line, column) and same redacted evidence. Findings with equal fingerprints but a different
+   location or evidence are all kept.
+4. **Diagnostics (stderr warning).** The engine names every rule whose key-less findings would have shared a fingerprint without the derived key ("the rule sets no Finding.Key").
+   It also names a rule that set a `Key` which does not separate findings that differ in location or evidence; those findings keep the same fingerprint (a baseline entry for one hides all of them).
+5. Amendment 1 decision 4 is superseded by this amendment.

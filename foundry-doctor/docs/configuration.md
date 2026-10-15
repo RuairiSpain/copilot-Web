@@ -27,7 +27,7 @@ organisation-specific policy values.
 
 ```yaml
 version: 1
-profile: prod
+profile: foundry-prod
 inputs:
   azureYaml: ./azure.yaml
   infraPath: ./infra
@@ -60,7 +60,7 @@ environments:
 | Key | Purpose |
 | --- | --- |
 | `version` | Required schema version. Must be `1`. |
-| `profile` | Curated default profile: `dev`, `test`, or `prod`. |
+| `profile` | Curated default profile: `foundry-dev`, `foundry-test`, or `foundry-prod`. |
 | `inputs` | Local file locations and default environment name. |
 | `rules` | Rule pack and category selection. |
 | `validation` | Whether Bicep, Azure, and runtime validations are required, optional, or disabled. |

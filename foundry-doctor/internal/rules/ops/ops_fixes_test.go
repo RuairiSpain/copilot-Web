@@ -303,6 +303,26 @@ func TestOPS007Pipelines(t *testing.T) {
 			writeFile(t, repo, ".github/workflows/azure-dev.txt", "run: azd up\n")
 			return project
 		}, plainYAML, "finding"},
+		{"echo azd up is not an invocation", func(t *testing.T) string {
+			repo, project := gitRepo(t)
+			writeFile(t, repo, ".github/workflows/x.yml", "jobs:\n  d:\n    steps:\n    - run: echo azd up\n")
+			return project
+		}, plainYAML, "skipped"},
+		{"trailing comment is not an invocation", func(t *testing.T) string {
+			repo, project := gitRepo(t)
+			writeFile(t, repo, ".github/workflows/x.yml", "jobs:\n  d:\n    steps:\n    - run: echo hi # azd up\n")
+			return project
+		}, plainYAML, "skipped"},
+		{"azd in dead code is not an invocation", func(t *testing.T) string {
+			repo, project := gitRepo(t)
+			writeFile(t, repo, ".github/workflows/x.yml", "jobs:\n  d:\n    steps:\n    - run: |\n        echo \"skipping azd up\"\n        if false; then\n          azd deploy\n        fi\n")
+			return project
+		}, plainYAML, "skipped"},
+		{"heredoc run step is uncertain, not a pass", func(t *testing.T) string {
+			repo, project := gitRepo(t)
+			writeFile(t, repo, ".github/workflows/x.yml", "jobs:\n  d:\n    steps:\n    - run: |\n        cat <<EOF\n        azd up\n        EOF\n")
+			return project
+		}, plainYAML, "skipped"},
 		{"azd auth login only", func(t *testing.T) string {
 			repo, project := gitRepo(t)
 			writeFile(t, repo, ".github/workflows/x.yml", "jobs:\n  d:\n    steps:\n    - run: azd auth login\n")

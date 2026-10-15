@@ -1,5 +1,5 @@
 id: FND-OPS-007
-version: 2
+version: 3
 group: OPS
 title: CI/CD pipeline exists
 description: >-
@@ -40,7 +40,11 @@ evidence:
     .github/workflows (GitHub Actions run steps) and in .azdo/pipelines and .azuredevops/pipelines (Azure Pipelines
     script, bash, pwsh and powershell steps). Files are opened through a root-bounded handle, symlinks are skipped, each
     file is capped at 256 KiB and at most 100 files are read; a skipped file makes the result uncertain. Pass when a parsed
-    step command runs azd provision, deploy or up (comment lines and text outside run steps do not count). The azure.yaml
+    step command runs azd provision, deploy or up. Each shell run line is tokenised and azd must be in command position
+    (start of the text or of a command after ;, &, &&, ||, |, ( , $( or a backtick) directly followed by provision,
+    deploy or up. Comments, quoted strings, arguments such as echo azd up, and code under if false or while false do not
+    count. A run step with a heredoc, function definition, eval or sh -c, unterminated quote or computed azd
+    subcommand cannot be followed and makes the result uncertain, never a pass. The azure.yaml
     pipeline section is configuration and is not evidence. Report, with the azure.yaml location, when no pipeline file
     exists and the active profile is test or prod. A pipeline definition that exists but has no azd provision, deploy or
     up step is reported as uncertain, because other deployment tools are valid. Other CI systems are not detected and

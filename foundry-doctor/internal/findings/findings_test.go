@@ -113,14 +113,14 @@ func TestFingerprintKeyDiscriminates(t *testing.T) {
 }
 
 func TestFingerprintFrozenValue(t *testing.T) {
-	// Pins the v2 canonical form. Changing it invalidates every baseline and
+	// Pins the v3 canonical form. Changing it invalidates every baseline and
 	// needs an ADR-008 amendment and a new FingerprintVersion.
 	f := sdk.Finding{RuleID: "FND-CFG-005", RuleVersion: 1, Resource: sdk.ResourceRef{Type: "Services", Name: "web"}, Location: sdk.Location{File: "Azure.yaml"}, Key: "env.API_URL"}
-	const want = "fba47d64eafd72c973f31d384f6e4975"
+	const want = "f5886460a82e182b61821770c86ca4c0"
 	if got := Fingerprint(f); got != want {
 		t.Fatalf("fingerprint = %s, want %s", got, want)
 	}
-	if FingerprintVersion != "v2" {
+	if FingerprintVersion != "v3" {
 		t.Fatalf("FingerprintVersion = %s", FingerprintVersion)
 	}
 }
