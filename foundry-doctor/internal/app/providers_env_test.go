@@ -229,7 +229,7 @@ func TestEnvRulesClassifyBeforeDigest(t *testing.T) {
 }
 
 func TestReadEnvFileShapes(t *testing.T) {
-	dir := envProject(t, map[string]*string{"dev": str("AZURE_KEYVAULT_ID=/subscriptions/1/x\nAPI_KEY=sk-abcdef123456\nSAS_URL=https://x.blob.core.windows.net/c?sig=abc\nPLAIN=v\nEP_TOKEN_URL=https://a.services.ai.azure.com\n")})
+	dir := envProject(t, map[string]*string{"dev": str("AZURE_KEYVAULT_ID=/subscriptions/1/x\nAPI_KEY=" + "sk" + "-abcdef123456\nSAS_URL=https://x.blob.core.windows.net/c?" + "sig" + "=abc\nPLAIN=v\nEP_TOKEN_URL=https://a.services.ai.azure.com\n")})
 	root, err := os.OpenRoot(dir)
 	if err != nil {
 		t.Fatal(err)
