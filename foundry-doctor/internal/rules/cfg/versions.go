@@ -89,7 +89,9 @@ var comparatorRe = regexp.MustCompile(`^\s*(>=|<=|>|<|=|~)?\s*([^\s<>=~]+)`)
 // A bare version means equality. "latest" and the empty string allow any
 // version (any=true). Anything else, including || and ^, is not parsed.
 func parseConstraint(s string) (r versionRange, any, ok bool) {
-	s = strings.TrimSpace(s)
+	// Comma-separated constraints (">=1.0.0, <2.0.0") mean the same as the
+	// space-separated form.
+	s = strings.TrimSpace(strings.ReplaceAll(s, ",", " "))
 	if s == "" || strings.EqualFold(s, "latest") {
 		return r, true, true
 	}
@@ -129,6 +131,16 @@ type versionNote struct {
 	Name string
 	Node *yaml.Node
 	Text string
+	// Info marks a note that never makes a rule inconclusive: a floor below
+	// the tested minimum says nothing about the checks the rule ran.
+	Info bool
+}
+
+// testedMax is the highest extension version the catalogue verified
+// (compatibility.extensions upper bounds of FND-CFG-001 and FND-CFG-011).
+var testedMax = map[string]string{
+	"azure.ai.agents":   "1.0.0-beta.18",
+	"azure.ai.projects": "1.0.0-beta.13",
 }
 
 // requiredVersionNotes compares each declared extension constraint with the
@@ -151,26 +163,36 @@ func requiredVersionNotes(root *yaml.Node, mins map[string]string) []versionNote
 		raw := scalar(p.Val)
 		r, anyVersion, parsed := parseConstraint(raw)
 		var text string
+		info := false
+		maxV, maxOK := parseSemver(testedMax[p.Key.Value])
 		switch {
 		case p.Val == nil || p.Val.Kind != yaml.ScalarNode, !parsed:
 			text = fmt.Sprintf("requiredVersions.extensions.%s constraint cannot be parsed", p.Key.Value)
 		case anyVersion:
 		case r.hi.set && (r.hi.v.cmp(minV) < 0 || (r.hi.v.cmp(minV) == 0 && !r.hi.incl)):
 			text = fmt.Sprintf("requiredVersions.extensions.%s excludes the tested range starting at %s", p.Key.Value, minText)
+		case maxOK && r.lo.set && (r.lo.v.cmp(maxV) > 0 || (r.lo.v.cmp(maxV) == 0 && !r.lo.incl)):
+			text = fmt.Sprintf("requiredVersions.extensions.%s requires versions above the highest tested %s; those versions were not verified", p.Key.Value, testedMax[p.Key.Value])
 		case !r.lo.set || r.lo.v.cmp(minV) < 0:
 			text = fmt.Sprintf("requiredVersions.extensions.%s allows versions below the tested %s", p.Key.Value, minText)
+			info = true
 		}
 		if text != "" {
-			out = append(out, versionNote{p.Key.Value, p.Val, text})
+			out = append(out, versionNote{p.Key.Value, p.Val, text, info})
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
 }
 
+// noteTexts returns the texts of the notes that make a rule inconclusive.
+// Info notes are left out: they do not turn other passed checks into skips.
 func noteTexts(ns []versionNote) []string {
 	var out []string
 	for _, n := range ns {
+		if n.Info {
+			continue
+		}
 		out = append(out, n.Text)
 	}
 	return out

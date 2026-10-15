@@ -1,5 +1,5 @@
 id: FND-CFG-010
-version: 1
+version: 2
 group: CFG
 title: Model versions pinned in stricter profiles
 description: >-
@@ -104,3 +104,4 @@ notes: >-
   is available (the property is documented in the Learn include; the stable Microsoft.CognitiveServices spec was not searched
   for it) and whether azd azure.ai.project can set it (the schema has no such field). The Learn page itself recommends auto-update
   for early testing, so dev stays info.
+  A project with nothing the rule applies to skips with the not-applicable reason head, not input-unavailable.

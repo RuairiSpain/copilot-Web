@@ -1,5 +1,5 @@
 id: FND-CFG-003
-version: 2
+version: 3
 group: CFG
 title: "All inter-service references resolve"
 description: >-

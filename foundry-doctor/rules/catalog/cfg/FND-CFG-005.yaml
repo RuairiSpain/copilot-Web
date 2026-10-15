@@ -1,5 +1,5 @@
 id: FND-CFG-005
-version: 2
+version: 3
 group: CFG
 title: "No raw secrets in YAML/Bicep/environment blocks"
 description: >-
@@ -141,3 +141,6 @@ notes: >-
   each type carries a secret in credentials is not documented and the set is a product decision.
   CKV_SECRET_6 is mentioned in the Checkov README only as an example of the secrets framework; its exact
   semantics were not verified.
+  Secret-name exclusions (limit, count, size, file, rotation, tokens) match whole underscore-delimited tokens, never
+  substrings, so STORAGE_ACCOUNT_KEY and PROFILE_PASSWORD are not excluded. A literal under a secret-looking name that
+  has no credential shape is reported as uncertain (name only).

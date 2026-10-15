@@ -1,5 +1,5 @@
 id: FND-CFG-009
-version: 1
+version: 2
 group: CFG
 title: "Cron expressions are valid"
 description: >-
@@ -112,3 +112,4 @@ notes: >-
   other spellings and missing time_zone as Uncertain.
   Cron dialect details beyond five fields (names such as MON, the L and # extensions) are not documented and are not
   assumed; expressions using them are reported uncertain.
+  A project with nothing the rule applies to skips with the not-applicable reason head, not input-unavailable.
