@@ -146,7 +146,7 @@ func TestRealCatalogueInvariantsAndGeneratedDocs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := Validate(rules, Options{Now: time.Date(2026, 10, 5, 0, 0, 0, 0, time.UTC)}); err != nil {
+	if err := Validate(rules, Options{Now: time.Date(2026, 10, 15, 0, 0, 0, 0, time.UTC)}); err != nil {
 		t.Fatal(err)
 	}
 	groupCounts := map[string]int{"CFG": 12, "COST": 4, "DEP": 12, "ENV": 4, "GW": 6, "IDN": 6, "IQ": 12, "NET": 11, "OPS": 10, "REL": 9, "RUN": 8, "SEC": 14}
