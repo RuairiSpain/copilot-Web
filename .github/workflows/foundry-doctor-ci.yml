@@ -171,6 +171,24 @@ jobs:
         with:
           go-version-file: foundry-doctor/go.mod
           cache-dependency-path: foundry-doctor/go.sum
+      - name: Install the pinned Bicep CLI
+        # The doctor requires Bicep 0.48.1 (ContractVersion) for the prod profile; runner images carry other versions.
+        run: |
+          v=0.48.1
+          case "$RUNNER_OS-$RUNNER_ARCH" in
+            Linux-X64) asset=bicep-linux-x64 ;;
+            Linux-ARM64) asset=bicep-linux-arm64 ;;
+            macOS-ARM64) asset=bicep-osx-arm64 ;;
+            macOS-X64) asset=bicep-osx-x64 ;;
+            Windows-X64) asset=bicep-win-x64.exe ;;
+            *) echo "no Bicep asset for $RUNNER_OS-$RUNNER_ARCH" >&2; exit 1 ;;
+          esac
+          dest="$RUNNER_TEMP/bicep-bin"; mkdir -p "$dest"
+          exe="$dest/bicep"; [ "$RUNNER_OS" = Windows ] && exe="$dest/bicep.exe"
+          curl -fsSL -o "$exe" "https://github.com/Azure/bicep/releases/download/v$v/$asset"
+          chmod +x "$exe"
+          "$exe" --version
+          echo "BICEP_PATH=$exe" >> "$GITHUB_ENV"
       - name: Build the binary and run it against samples/*
         # Skips with a visible warning while cmd/foundry-doctor or samples/ are absent; a skip is not a pass.
         run: |
