@@ -21,11 +21,15 @@ import (
 
 const rootUse = "foundry-doctor"
 
-var version = app.ToolVersion
+// version is stamped by release builds: -ldflags "-X main.version=<v>". It must
+// stay an uninitialised-by-expression string variable (a literal is allowed) or
+// the linker cannot replace it.
+var version = "0.1.0-dev"
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
+	app.ToolVersion = version
 	svc := app.DefaultServices(os.Stderr)
 	os.Exit(run(ctx, os.Args[1:], os.Stdout, os.Stderr, svc))
 }
@@ -79,9 +83,9 @@ func finish(exit *int, code int, err error) error {
 
 func doctorCmd(ctx context.Context, svc app.Services, exit *int) *cobra.Command {
 	var (
-		profile, minSev, failOn, baseline, suppress, format, out, dir string
-		local, strict                                                 bool
-		rules                                                         []string
+		profile, minSev, failOn, baseline, suppress, format, out, dir, azdVersion string
+		local, strict                                                             bool
+		rules                                                                     []string
 	)
 	cmd := &cobra.Command{
 		Use:   "doctor",
@@ -89,7 +93,8 @@ func doctorCmd(ctx context.Context, svc app.Services, exit *int) *cobra.Command 
 		Long: "Run Foundry Doctor rules against azure.yaml and infrastructure.\n\n" +
 			"Exit codes: 0 no findings at or above --fail-on; 1 findings; 2 the requested\n" +
 			"validation could not run (invalid input/config or unavailable dependency);\n" +
-			"3 a check was skipped and --strict was set; 4 internal error.\n" +
+			"3 a skip hid a check and --strict was set (not-implemented, not-applicable,\n" +
+			"profile-key-missing and synthetic-infrastructure skips do not count); 4 internal error.\n" +
 			"Skipped checks are always reported and are never treated as passes.",
 		Example: "  foundry-doctor doctor --local --profile prod\n" +
 			"  foundry-doctor doctor --format sarif --out foundry.sarif --fail-on warning\n" +
@@ -99,6 +104,7 @@ func doctorCmd(ctx context.Context, svc app.Services, exit *int) *cobra.Command 
 			req := app.DoctorRequest{
 				Dir: dir, Profile: profile, Local: local, Rules: rules,
 				Baseline: baseline, Suppress: suppress, Strict: strict, Format: format, Out: out,
+				AzdVersion: azdVersion,
 			}
 			var err error
 			if req.MinSeverity, err = optSeverity("--min-severity", minSev); err != nil {
@@ -119,7 +125,8 @@ func doctorCmd(ctx context.Context, svc app.Services, exit *int) *cobra.Command 
 	f.StringVar(&failOn, "fail-on", "", "lowest severity that fails the run: info, warning or error (default error)")
 	f.StringVar(&baseline, "baseline", "", "baseline file; hides only findings with matching fingerprints")
 	f.StringVar(&suppress, "suppressions", "", "suppressions file (reason, owner and expiry required)")
-	f.BoolVar(&strict, "strict", false, "exit 3 when any check was skipped")
+	f.BoolVar(&strict, "strict", false, "exit 3 when a skipped check hid validation (missing input, capability or version); by-design skips do not count")
+	f.StringVar(&azdVersion, "azd-version", "", "azd version to gate rules by when azd is not on PATH, for example 1.35.0 (env FOUNDRY_DOCTOR_AZD_VERSION)")
 	f.StringVar(&format, "format", "console", "report format: "+strings.Join(app.Formats, ", "))
 	f.StringVar(&out, "out", "", "write the report to this file instead of stdout")
 	f.StringVar(&dir, "dir", ".", "project directory containing azure.yaml")

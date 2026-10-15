@@ -1,12 +1,12 @@
 id: FND-CFG-006
-version: 1
+version: 2
 group: CFG
 title: "Every variable has an environment or infrastructure producer"
 description: >-
   Every ${VAR} reference in azure.yaml (service env, connection target and credentials, project network
   fields, policies and similar) must have a producer: a value in the selected azd environment
   (.azure/<env>/.env), an azd-set standard variable (AZURE_ENV_NAME, AZURE_LOCATION, AZURE_SUBSCRIPTION_ID,
-  AZURE_RESOURCE_GROUP), a Bicep output that provisioning writes to the environment, a value written by a
+  AZURE_RESOURCE_GROUP, AZURE_TENANT_ID, AZURE_PRINCIPAL_ID, AZURE_PRINCIPAL_TYPE; names defined in azd's environment.go), a Bicep output that provisioning writes to the environment, a value written by a
   previous deploy (AGENT_<SERVICE>_NAME, _VERSION, _ENDPOINT), or an inline default (${VAR:-default}).
   ${{...}} Foundry server-side expressions and escaped $${VAR} forms are not azd variables.
 status: verified
@@ -31,14 +31,17 @@ evidence:
   description: >-
     Extract ${VAR} references (excluding ${{...}}, $${VAR} escapes and references with a :- default) and
     match each name against: keys in the selected environment .env, the azd standard variables, outputs of
-    the compiled Bicep/ARM main template, and AGENT_<SERVICE>_* names derived from declared agent services.
+    the compiled Bicep/ARM main template (an output that is not in the environment yet is uncertain because provisioning
+    has not written it; without a compiled template, an unresolved name is uncertain, not an error; azd-defined names that
+    only exist when the infrastructure provides them, such as AZURE_CONTAINER_REGISTRY_ENDPOINT, AZURE_CONTAINER_APPS_ENVIRONMENT_DEFAULT_DOMAIN,
+    AZURE_APP_SERVICE_DASHBOARD_URI, AZURE_AKS_CLUSTER_NAME and AZD_PLATFORM_TYPE, are uncertain when absent), and AGENT_<SERVICE>_* names derived from declared agent services.
     A name with no producer is reported. When no environment is selected or provisioning has not run, outputs
     that would only exist after provision are reported as uncertain rather than failed. Values are never read
     into findings.
   confidence: likely
 recommendation: >-
   Set the variable in the active azd environment (azd env set), emit it from a Bicep output, give it an inline
-  default, or remove the reference. Do not declare FOUNDRY_ or AGENT_ prefixed names in env.
+  default, or remove the reference. Do not declare FOUNDRY_ or AGENT_ prefixed names in the azure.yaml service env (FND-CFG-011).
 fix: |
   # Produce the value
   #   azd env set MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME gpt-5.4-mini
@@ -74,6 +77,10 @@ sources:
     lastVerified: "2026-10-04"
     verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json from azure.ai.agents 1.0.0-beta.18; immutable repository revision unavailable
     note: Schema evidence for the required project and agent fields used by the fix.
+  - url: https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/pkg/environment/environment.go
+    lastVerified: "2026-10-15"
+    verifiedVia: raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/pkg/environment/environment.go fetched 2026-10-15; immutable revision unavailable
+    note: "Constants naming the azd-defined environment keys (AZURE_ENV_NAME, AZURE_LOCATION, AZURE_SUBSCRIPTION_ID, AZURE_PRINCIPAL_ID, AZURE_PRINCIPAL_TYPE, AZURE_TENANT_ID, AZURE_CONTAINER_REGISTRY_ENDPOINT, AZURE_CONTAINER_APPS_ENVIRONMENT_DEFAULT_DOMAIN, AZURE_APP_SERVICE_DASHBOARD_URI, AZURE_AKS_CLUSTER_NAME, AZURE_RESOURCE_GROUP, AZD_PLATFORM_TYPE). The source defines the names; it does not state which are always set."
 overlap:
   decision: native
   provisional: true
@@ -103,17 +110,21 @@ testability: >-
   is skipped with the reason, not passed.
 tests:
   positive:
-    - reference-missing-from-env-and-outputs
-    - env-declares-foundry-prefixed-variable
+    - reference-missing-from-env-and-outputs-with-compiled-template
     - agent-endpoint-reference-for-undeclared-service
   negative:
     - reference-with-inline-default
-    - reference-produced-by-bicep-output
+    - reference-produced-by-bicep-output-and-present-in-env
+    - azd-tenant-and-principal-variables
+    - agent-prefixed-keys-in-env-not-reported
     - foundry-server-side-expression-untouched
     - escaped-dollar-reference
   skipped:
     - no-environment-selected
+  uncertain:
     - bicep-not-compiled
+    - output-not-yet-provisioned
+    - infra-dependent-azd-variable-absent
 notes: >-
   Unverified: that every Bicep output is written to the azd environment (the azd environments overview
   shows service outputs in .env but the provisioning-output rule was not read in the clones; azd core source

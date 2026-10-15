@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Smoke test: run a built foundry-doctor binary against every directory in samples/ (except samples/github).
+# Directories without azure.yaml are listed as NOTE and not run (they hold sample inputs for other commands).
 # Usage: smoke-samples.sh --binary PATH [--out DIR]
 # For each sample the binary runs inside the sample directory: `doctor --format sarif --out <DIR>/<sample>.sarif`.
 # Accepted exit codes are 0 and 1 (PRD section 7: findings are a valid outcome). A sample can pin one exact code in
@@ -24,6 +25,8 @@ if [ -d "$ROOT/samples" ]; then
   for d in "$ROOT"/samples/*/; do
     d="${d%/}"; [ -d "$d" ] || continue
     [ "$(basename "$d")" = github ] && continue   # copy-paste workflow samples, not doctor projects
+    # Directories without azure.yaml hold command-specific sample files (graph, llm, preflight, annotate), not projects.
+    if [ ! -f "$d/azure.yaml" ]; then echo "NOTE  $(basename "$d"): no azure.yaml, not a doctor project; not run by this smoke test"; continue; fi
     samples+=("$d")
   done
 fi

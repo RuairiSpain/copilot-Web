@@ -1,6 +1,6 @@
 # ADR-012: ARM-dependent rules under synthetic infrastructure
 
-Status: Accepted
+Status: Accepted, amended 2026-10-15 (Amendment 1)
 Date: 2026-10-05
 
 ## Context
@@ -24,3 +24,18 @@ therefore have no input in `iac: synthetic` projects.
 - Default Foundry projects show many skipped SEC and NET checks. This is correct and visible, not a failure of the tool.
 - When a later phase compiles the synthesised template or reads deployed state, the same rules start running without a change to their code.
 - Reporter golden tests include a synthetic-project report with the summary line.
+
+## Amendment 1 (2026-10-15): implementation and `--strict`
+
+Review findings Azure N13 and Foundry N19 found that the engine shortcut and the summary were not implemented. They are now:
+
+1. **Engine shortcut.** `rules.Engine.Synthetic` is set by `internal/app` when the Bicep/ARM loader reports `ErrNoInfrastructure` (neither `<infra.path>/main.bicep` nor `main.json`
+   exists and `infra.layers` is not used). A rule is skipped before `Evaluate` with reason `synthetic-infrastructure` when `Input.ARM` is nil and `rules.NeedsARMOnly` holds: the catalogue
+   `inputs` list contains `bicep-arm` and neither `azure.yaml` nor `azd-env`. Rules that also list `azure.yaml` or `azd-env` run and skip their ARM sub-checks themselves (decision 4, last sentence).
+   `sdk.Skip.MissingCapability` carries `compiled ARM template`. `iac: none` and `iac: synthetic` use the same reason (decision 1); `Detail` is not implemented.
+   A missing Bicep CLI or a compile failure on a project that does have Bicep is not synthetic: those rules skip themselves as `input-unavailable`, or the run exits 2 when `validation.bicep` is `required` (ADR-010 decision 11).
+2. **Summary.** `rules.Report.SkippedByReason` counts skips by reason head. The console and Markdown reports print the line
+   `N checks need compiled infrastructure and were skipped (synthetic-infrastructure): <rule IDs>` before the report (`app.SkipSummaryNotes`). The JSON and SARIF reports list every
+   skip with its reason; a `Summary.SkippedByReason` field in the JSON summary is **not** implemented in Phase 1 (it needs a change in `internal/report`).
+3. **`--strict` supersedes decision 3, last sentence.** A `synthetic-infrastructure` skip is by design: the check could not have run on any input the user can provide, and
+   Foundry-only projects without `infra/` are first-class (ADR-004). It does not trigger exit 3. The skip stays in every report. See ADR-010 decision 9.

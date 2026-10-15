@@ -90,14 +90,18 @@ type Suppression struct {
 
 // Finding is a single result. See PRD section 7.
 type Finding struct {
-	RuleID         string       `json:"ruleId"`
-	RuleVersion    int          `json:"ruleVersion"`
-	Severity       Severity     `json:"severity"`
-	Category       Category     `json:"category,omitempty"`
-	Pillar         string       `json:"pillar,omitempty"`
-	Basis          []string     `json:"basis,omitempty"`
-	Profile        string       `json:"profile,omitempty"`
-	Resource       ResourceRef  `json:"resource"`
+	RuleID      string      `json:"ruleId"`
+	RuleVersion int         `json:"ruleVersion"`
+	Severity    Severity    `json:"severity"`
+	Category    Category    `json:"category,omitempty"`
+	Pillar      string      `json:"pillar,omitempty"`
+	Basis       []string    `json:"basis,omitempty"`
+	Profile     string      `json:"profile,omitempty"`
+	Resource    ResourceRef `json:"resource"`
+	// Key is a rule-chosen stable discriminator (resource key, variable name,
+	// property path) that separates two findings of one rule on one resource.
+	// It is part of the fingerprint (ADR-008). It must not contain secret values.
+	Key            string       `json:"key,omitempty"`
 	Location       Location     `json:"location"`
 	Evidence       string       `json:"evidence,omitempty"`
 	Recommendation string       `json:"recommendation,omitempty"`
@@ -118,6 +122,9 @@ type Skip struct {
 	// Required marks a skip of an input the user explicitly asked to validate.
 	// A required skip makes the run exit 2 (PRD section 7).
 	Required bool `json:"required,omitempty"`
+	// MissingCapability names the input or capability whose absence caused the
+	// skip, for example "compiled ARM template" or "azd version".
+	MissingCapability string `json:"missingCapability,omitempty"`
 }
 
 // Skip reason constants understood by the platform.
@@ -126,6 +133,15 @@ const (
 	SkipUnsupportedVersion = "unsupported-version"
 	SkipInputUnavailable   = "input-unavailable"
 	SkipProfileKeyPrefix   = "profile-key-missing:"
+	// SkipAzdVersionUnknown: the rule has an azd compatibility range and the
+	// azd version could not be determined.
+	SkipAzdVersionUnknown = "azd-version-unknown"
+	// SkipSyntheticInfrastructure: the rule needs a compiled ARM template and the
+	// project has no on-disk infrastructure (ADR-004, ADR-012).
+	SkipSyntheticInfrastructure = "synthetic-infrastructure"
+	// SkipNotApplicable: the rule ran its applicability check and the project has
+	// nothing it applies to. Not a hidden check.
+	SkipNotApplicable = "not-applicable"
 )
 
 // SkipMissingPolicyKey builds the standard reason for a missing policy key.

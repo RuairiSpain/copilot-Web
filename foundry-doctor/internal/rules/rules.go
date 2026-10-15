@@ -8,6 +8,8 @@ package rules
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"slices"
@@ -102,6 +104,10 @@ type Engine struct {
 	Selector Selector
 	// Required marks IDs whose skips make the run fail (user explicitly asked).
 	Required []string
+	// Synthetic is set when the project has no on-disk infrastructure (ADR-004,
+	// ADR-012). Rules that need only ARM input are then skipped with
+	// SkipSyntheticInfrastructure before they run.
+	Synthetic bool
 }
 
 // Report is the outcome of a run, sorted deterministically.
@@ -110,6 +116,10 @@ type Report struct {
 	Skipped  []sdk.Skip
 	// Evaluated lists IDs that actually ran (even with no findings).
 	Evaluated []string
+	// SkippedByReason counts skips by reason head (see ReasonHead).
+	SkippedByReason map[string]int
+	// Diagnostics lists engine-level problems such as fingerprint collisions.
+	Diagnostics []string
 }
 
 // Run evaluates all selected catalogue rules against in. in.Profile must be a
@@ -135,6 +145,9 @@ func (e *Engine) Run(ctx context.Context, in *sdk.Input) (*Report, error) {
 		skip := func(reason string) {
 			rep.Skipped = append(rep.Skipped, sdk.Skip{RuleID: cr.ID, Reason: reason, Required: slices.Contains(e.Required, cr.ID)})
 		}
+		skipMissing := func(reason, capability string) {
+			rep.Skipped = append(rep.Skipped, sdk.Skip{RuleID: cr.ID, Reason: reason, MissingCapability: capability, Required: slices.Contains(e.Required, cr.ID)})
+		}
 		impl, ok := e.Registry.Get(cr.ID)
 		if !ok {
 			skip(sdk.SkipNotImplemented)
@@ -145,9 +158,13 @@ func (e *Engine) Run(ctx context.Context, in *sdk.Input) (*Report, error) {
 			skip(reason)
 			continue
 		}
+		if e.Synthetic && in.ARM == nil && NeedsARMOnly(cr) {
+			skipMissing(sdk.SkipSyntheticInfrastructure, MissingARMCapability)
+			continue
+		}
 		if !cr.Compatibility.Azd.Empty() {
 			if in.AzdVersion == "" {
-				skip(sdk.SkipInputUnavailable)
+				skipMissing(sdk.SkipAzdVersionUnknown, "azd version")
 				continue
 			}
 			if !cr.Compatibility.Azd.Contains(in.AzdVersion) {
@@ -178,7 +195,9 @@ func (e *Engine) Run(ctx context.Context, in *sdk.Input) (*Report, error) {
 			rep.Findings = append(rep.Findings, Enrich(f, cr, in.Profile, sev))
 		}
 	}
+	rep.Findings, rep.Diagnostics = resolveFingerprintCollisions(rep.Findings)
 	findings.Sort(rep.Findings)
+	rep.SkippedByReason = SkippedByReason(rep.Skipped)
 	slices.SortFunc(rep.Skipped, func(a, b sdk.Skip) int {
 		if c := strings.Compare(a.RuleID, b.RuleID); c != 0 {
 			return c
@@ -272,4 +291,61 @@ func Enrich(f sdk.Finding, cr catalog.Rule, profile string, sev sdk.Severity) sd
 	f.Evidence = findings.Redact(f.Evidence)
 	f.Fingerprint = findings.Fingerprint(f)
 	return f
+}
+
+// MissingARMCapability is the MissingCapability text of synthetic-infrastructure skips.
+const MissingARMCapability = "compiled ARM template"
+
+// NeedsARMOnly reports whether the catalogue lists the compiled ARM template as
+// an input and no input that can be read without it (azure.yaml or the azd
+// environment). Such a rule cannot run in a project with no on-disk
+// infrastructure (ADR-012 decision 4). A rule that also lists azure.yaml or
+// azd-env runs and skips its ARM sub-checks itself.
+func NeedsARMOnly(cr catalog.Rule) bool {
+	return slices.Contains(cr.Inputs, "bicep-arm") &&
+		!slices.Contains(cr.Inputs, "azure.yaml") && !slices.Contains(cr.Inputs, "azd-env")
+}
+
+// resolveFingerprintCollisions handles findings that share a fingerprint
+// (ADR-008). Findings with identical evidence are duplicates and one is kept.
+// Findings with different evidence mean the rule did not set Finding.Key: each
+// gets a key derived from its redacted evidence so the fingerprints differ, and
+// a diagnostic names the rule. It returns the findings and the diagnostics.
+func resolveFingerprintCollisions(fs []sdk.Finding) ([]sdk.Finding, []string) {
+	groups := map[string][]int{}
+	for i, f := range fs {
+		groups[f.Fingerprint] = append(groups[f.Fingerprint], i)
+	}
+	drop := map[int]bool{}
+	var diags []string
+	for _, idx := range groups {
+		if len(idx) < 2 {
+			continue
+		}
+		seen := map[string]int{}
+		for _, i := range idx {
+			if _, dup := seen[fs[i].Evidence]; dup {
+				drop[i] = true
+				continue
+			}
+			seen[fs[i].Evidence] = i
+		}
+		if len(seen) < 2 {
+			continue
+		}
+		for ev, i := range seen {
+			sum := sha256.Sum256([]byte(ev))
+			fs[i].Key += "#ev:" + hex.EncodeToString(sum[:])[:12]
+			fs[i].Fingerprint = findings.Fingerprint(fs[i])
+		}
+		diags = append(diags, fmt.Sprintf("%s: findings share a fingerprint because the rule sets no Finding.Key; fingerprints were derived from evidence", fs[idx[0]].RuleID))
+	}
+	out := make([]sdk.Finding, 0, len(fs))
+	for i, f := range fs {
+		if !drop[i] {
+			out = append(out, f)
+		}
+	}
+	slices.Sort(diags)
+	return out, diags
 }

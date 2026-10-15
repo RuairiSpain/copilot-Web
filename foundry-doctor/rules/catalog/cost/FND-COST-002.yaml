@@ -1,5 +1,5 @@
 id: FND-COST-002
-version: 1
+version: 2
 group: COST
 title: Dev avoids production-sized fixed SKUs
 description: >-
@@ -30,6 +30,8 @@ compatibility:
   - { plane: management, provider: Microsoft.Search, resourceType: searchServices, version: '2025-05-01' }
   - { plane: management, provider: Microsoft.ApiManagement, resourceType: service, version: '2024-05-01' }
   - { plane: management, provider: Microsoft.DocumentDB, resourceType: databaseAccounts/throughputSettings, version: '2026-03-15' }
+  - { plane: management, provider: Microsoft.DocumentDB, resourceType: databaseAccounts/sqlDatabases, version: '2025-04-15' }
+  - { plane: management, provider: Microsoft.DocumentDB, resourceType: databaseAccounts/sqlDatabases/containers, version: '2025-04-15' }
   preview: true
   notes: >-
     azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects
@@ -41,10 +43,14 @@ evidence:
     in azure.yaml and the compiled template - Foundry model deployments with sku.name GlobalProvisionedManaged, DataZoneProvisionedManaged
     or ProvisionedManaged (reserved PTU capacity); Microsoft.Search/searchServices with sku.name standard2, standard3, storage_optimized_l1
     or storage_optimized_l2, or replicaCount or partitionCount greater than 1; Microsoft.ApiManagement/service with sku.name
-    Premium or Isolated, or sku.capacity greater than 1; Microsoft.DocumentDB throughputSettings with throughput or autoscale
-    maximum above the profile limit (no default limit is shipped). An exemption list in the profile silences intentional
+    Premium or Isolated, or sku.capacity greater than 1; Microsoft.DocumentDB throughputSettings (properties.resource) and SQL databases and containers
+    (properties.options.throughput and properties.options.autoscaleSettings.maxThroughput, CreateUpdateOptions in the
+    2025-04-15 specification) with throughput or autoscale maximum above the profile limit (no default limit is shipped).
+    Resources whose Bicep condition is the literal false are ignored; a non-literal condition or a copy loop makes the
+    result uncertain. An exemption list in the profile silences intentional
     uses. A Cosmos DB account configured for the Foundry Agent Service standard setup needs at least 3000 RU/s in total
-    (both provisioned and serverless modes are supported), so throughput at or below that platform minimum is never reported.
+    (both provisioned and serverless modes are supported). The profile limit is applied exactly as configured; set it
+    at or above 3000 for projects that use the standard agent setup.
     A dev environment is identified by the profile or the azd environment name mapping, never guessed.
   confidence: likely
 recommendation: >-
@@ -93,6 +99,15 @@ sources:
   verifiedVia: >-
     refs/rest-api-specs/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
   note: ThroughputSettingsResource has throughput or autoscaleSettings, not both.
+- url: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2025-04-15/cosmos-db.json
+  lastVerified: '2026-10-15'
+  verifiedVia: >-
+    raw.githubusercontent.com/Azure/azure-rest-api-specs/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2025-04-15/cosmos-db.json
+    (definitions CreateUpdateOptions, AutoscaleSettings, SqlDatabaseCreateUpdateProperties, SqlContainerCreateUpdateProperties)
+  note: >-
+    CreateUpdateOptions has integer throughput and autoscaleSettings.maxThroughput ("either throughput or autoscaleSettings,
+    but not both") and is the options property of SQL database and container create-update properties. Fetched 2026-10-15.
 - url: https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup
   lastVerified: '2026-10-04'
   verifiedVia: refs/azure-ai-docs/articles/foundry/agents/includes/concepts-standard-agent-setup-content.md
@@ -137,7 +152,7 @@ tests:
   - dev-global-standard-deployment
   - dev-search-basic-single-unit
   - prod-environment-with-provisioned-managed
-  - dev-cosmos-at-foundry-minimum-3000-ru
+  - dev-cosmos-at-configured-limit
   skipped:
   - environment-not-classified-as-dev
   - sku-value-is-unresolved-parameter
@@ -146,6 +161,8 @@ notes: >-
   Product opinion: no source defines production-sized. Unverified - minimum PTU quantities per model (documented as varying
   by model and not read); whether Standard, StandardV2 or BasicV2 APIM tiers are appropriate for dev (only Premium and Isolated
   are flagged); Cosmos DB account-level versus container-level throughput resources in Bicep (only the throughputSettings
-  definition was read); Foundry hosted-agent container CPU and memory sizing is out of scope. SKU string comparison is case-sensitive
-  as typed in the sources. The waf basis was removed after the Phase 0 Azure black belt review because no WAF pillar tag
+  definition was read); Foundry hosted-agent container CPU and memory sizing is out of scope. SKU string comparison is case-insensitive (deployment, Search and API Management SKU names), because the
+  specifications type sku.name as a free string. Cosmos options.throughput on SQL databases and containers was read in
+  cosmos-db.json 2025-04-15 (CreateUpdateOptions); the other Cosmos APIs (MongoDB, Gremlin, Cassandra, Table) are not
+  evaluated. The waf basis was removed after the Phase 0 Azure black belt review because no WAF pillar tag
   or WARA recommendation is cited here; the WAF mapping is added in Phase 4 when the guidance is verified.

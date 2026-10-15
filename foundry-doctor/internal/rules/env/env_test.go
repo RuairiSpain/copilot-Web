@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/catalog"
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/report"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 	ruledata "github.com/ruairispain/copilot-web/foundry-doctor/rules"
 )
@@ -33,37 +34,82 @@ func eval(t *testing.T, id string, p Provider, in *sdk.Input) sdk.Result {
 	return sdk.Result{}
 }
 
+func vals(kv ...string) map[string]string {
+	m := map[string]string{}
+	for i := 0; i+1 < len(kv); i += 2 {
+		m[kv[i]] = kv[i+1]
+	}
+	return m
+}
+
 func TestRules(t *testing.T) {
 	tiersPol := pol{TierPolicyKey: map[string]any{"p": "prod", "d": "dev"}}
+	const endpoint = "https://a.services.ai.azure.com"
 	tests := []struct {
-		name     string
-		id       string
-		p        Provider
-		policy   sdk.Policy
-		wantSkip bool
-		want     int
-		contains string
+		name       string
+		id         string
+		p          Provider
+		policy     sdk.Policy
+		wantSkip   bool
+		wantReason string // substring of the skip reason
+		want       int
+		contains   string
 	}{
-		{"001 shared rg", "FND-ENV-001", prov{{Name: "d", Subscription: "S", ResourceGroup: "RG"}, {Name: "p", Subscription: "s", ResourceGroup: "rg"}}, nil, false, 1, "share"},
-		{"001 distinct", "FND-ENV-001", prov{{Name: "d", Subscription: "s", ResourceGroup: "a"}, {Name: "p", Subscription: "s", ResourceGroup: "b"}}, nil, false, 0, ""},
-		{"001 literal rg", "FND-ENV-001", prov{{Name: "d", ResourceGroup: "a", LiteralRGInYAML: true}, {Name: "p"}}, nil, false, 1, "literal"},
-		{"001 single env skips", "FND-ENV-001", prov{{Name: "d"}}, nil, true, 0, ""},
-		{"001 no provider skips", "FND-ENV-001", nil, nil, true, 0, ""},
-		{"002 shared endpoint", "FND-ENV-002", prov{{Name: "d", Values: map[string]string{"AZURE_ENV_NAME": "d", "X_ENDPOINT": "https://a.services.ai.azure.com"}}, {Name: "p", Values: map[string]string{"AZURE_ENV_NAME": "p", "X_ENDPOINT": "https://a.services.ai.azure.com"}}}, nil, false, 1, "fingerprint"},
-		{"002 different", "FND-ENV-002", prov{{Name: "d", Values: map[string]string{"AZURE_ENV_NAME": "d", "X_ID": "1"}}, {Name: "p", Values: map[string]string{"AZURE_ENV_NAME": "p", "X_ID": "2"}}}, nil, false, 0, ""},
-		{"002 not env bound", "FND-ENV-002", prov{{Name: "d", Values: map[string]string{"AZURE_ENV_NAME": "d", "FOO": "1"}}, {Name: "p", Values: map[string]string{"AZURE_ENV_NAME": "p", "FOO": "1"}}}, nil, false, 0, ""},
-		{"003 no policy skips", "FND-ENV-003", prov{{Name: "d"}, {Name: "p"}}, nil, true, 0, ""},
-		{"003 shared rg", "FND-ENV-003", prov{{Name: "d", ResourceGroup: "RG"}, {Name: "p", ResourceGroup: "rg"}}, tiersPol, false, 1, "prod environment p"},
-		{"003 distinct", "FND-ENV-003", prov{{Name: "d", ResourceGroup: "a"}, {Name: "p", ResourceGroup: "b"}}, tiersPol, false, 0, ""},
-		{"004 only in", "FND-ENV-004", prov{{Name: "d", Values: map[string]string{"A": "1"}}, {Name: "p", Values: map[string]string{}}}, nil, false, 1, "only in d"},
-		{"004 secret by name", "FND-ENV-004", prov{{Name: "d", Values: map[string]string{"API_KEY": "s1"}}, {Name: "p", Values: map[string]string{"API_KEY": "s2"}}}, nil, false, 1, "differs between"},
-		{"004 same", "FND-ENV-004", prov{{Name: "d", Values: map[string]string{"A": "1"}}, {Name: "p", Values: map[string]string{"A": "1"}}}, nil, false, 0, ""},
+		{"001 shared rg", "FND-ENV-001", prov{{Name: "d", Subscription: "S", ResourceGroup: "RG"}, {Name: "p", Subscription: "s", ResourceGroup: "rg"}}, nil, false, "", 1, "share"},
+		{"001 distinct", "FND-ENV-001", prov{{Name: "d", Subscription: "s", ResourceGroup: "a"}, {Name: "p", Subscription: "s", ResourceGroup: "b"}}, nil, false, "", 0, ""},
+		{"001 distinct subscriptions same group", "FND-ENV-001", prov{{Name: "d", Subscription: "s1", ResourceGroup: "a"}, {Name: "p", Subscription: "s2", ResourceGroup: "a"}}, nil, false, "", 0, ""},
+		{"001 literal top-level rg", "FND-ENV-001", prov{{Name: "d", Subscription: "s", ResourceGroup: "a", LiteralRGAt: []string{"resourceGroup"}}, {Name: "p", Subscription: "s", ResourceGroup: "b"}}, nil, false, "", 1, "(resourceGroup)"},
+		{"001 literal service rg", "FND-ENV-001", prov{{Name: "d", Subscription: "s", ResourceGroup: "a", LiteralRGAt: []string{"services.web.resourceGroup"}}, {Name: "p", Subscription: "s", ResourceGroup: "b"}}, nil, false, "", 1, "services.web.resourceGroup"},
+		{"001 single env skips", "FND-ENV-001", prov{{Name: "d"}}, nil, true, sdk.SkipInputUnavailable, 0, ""},
+		{"001 no provider skips", "FND-ENV-001", nil, nil, true, sdk.SkipInputUnavailable, 0, ""},
+		{"001 no resource group is uncertain", "FND-ENV-001", prov{{Name: "d", Subscription: "s"}, {Name: "p", Subscription: "s", ResourceGroup: "b"}}, nil, true, "environment d: no AZURE_SUBSCRIPTION_ID or AZURE_RESOURCE_GROUP", 0, ""},
+		{"001 no subscription is uncertain", "FND-ENV-001", prov{{Name: "d", ResourceGroup: "a"}, {Name: "p", ResourceGroup: "a"}}, nil, true, "no AZURE_SUBSCRIPTION_ID", 0, ""},
+		{"001 missing env file is uncertain", "FND-ENV-001", prov{{Name: "d", Subscription: "s", ResourceGroup: "a"}, {Name: "p", Status: StatusMissing}}, nil, true, "environment p: .env missing", 0, ""},
+		{"001 one usable of three still reports finding", "FND-ENV-001", prov{{Name: "a", Subscription: "s", ResourceGroup: "r"}, {Name: "b", Subscription: "s", ResourceGroup: "r"}, {Name: "c", Status: StatusOversize}}, nil, false, "", 1, "share"},
+
+		{"002 shared endpoint", "FND-ENV-002", prov{{Name: "d", Values: vals("AZURE_ENV_NAME", "d", "X_ENDPOINT", endpoint)}, {Name: "p", Values: vals("AZURE_ENV_NAME", "p", "X_ENDPOINT", endpoint)}}, nil, false, "", 1, "fingerprint"},
+		{"002 shared arm id value", "FND-ENV-002", prov{{Name: "d", Values: vals("AZURE_ENV_NAME", "d", "FOO", "/subscriptions/1/resourceGroups/r")}, {Name: "p", Values: vals("AZURE_ENV_NAME", "p", "FOO", "/subscriptions/1/resourceGroups/r")}}, nil, false, "", 1, "FOO"},
+		{"002 different", "FND-ENV-002", prov{{Name: "d", Values: vals("AZURE_ENV_NAME", "d", "X_ID", "1")}, {Name: "p", Values: vals("AZURE_ENV_NAME", "p", "X_ID", "2")}}, nil, false, "", 0, ""},
+		{"002 not env bound", "FND-ENV-002", prov{{Name: "d", Values: vals("AZURE_ENV_NAME", "d", "FOO", "1")}, {Name: "p", Values: vals("AZURE_ENV_NAME", "p", "FOO", "1")}}, nil, false, "", 0, ""},
+		{"002 tenant id is not reported", "FND-ENV-002", prov{{Name: "d", Values: vals("AZURE_ENV_NAME", "d", "AZURE_TENANT_ID", "t")}, {Name: "p", Values: vals("AZURE_ENV_NAME", "p", "AZURE_TENANT_ID", "t")}}, nil, false, "", 0, ""},
+		{"002 principal id is not reported", "FND-ENV-002", prov{{Name: "d", Values: vals("AZURE_ENV_NAME", "d", "AZURE_PRINCIPAL_ID", "x", "APP_PRINCIPAL_ID", "y")}, {Name: "p", Values: vals("AZURE_ENV_NAME", "p", "AZURE_PRINCIPAL_ID", "x", "APP_PRINCIPAL_ID", "y")}}, nil, false, "", 0, ""},
+		{"002 model deployment name is not reported", "FND-ENV-002", prov{{Name: "d", Values: vals("AZURE_ENV_NAME", "d", "MODEL_DEPLOYMENT_NAME", "gpt-4o", "AZURE_AI_MODEL_NAME", "gpt-4o")}, {Name: "p", Values: vals("AZURE_ENV_NAME", "p", "MODEL_DEPLOYMENT_NAME", "gpt-4o", "AZURE_AI_MODEL_NAME", "gpt-4o")}}, nil, false, "", 0, ""},
+		{"002 weak name key is uncertain", "FND-ENV-002", prov{{Name: "d", Values: vals("AZURE_ENV_NAME", "d", "SEARCH_SERVICE_NAME", "srch")}, {Name: "p", Values: vals("AZURE_ENV_NAME", "p", "SEARCH_SERVICE_NAME", "srch")}}, nil, true, "key SEARCH_SERVICE_NAME", 0, ""},
+		{"002 weak id key is uncertain", "FND-ENV-002", prov{{Name: "d", Values: vals("AZURE_ENV_NAME", "d", "CLIENT_ID", "c")}, {Name: "p", Values: vals("AZURE_ENV_NAME", "p", "CLIENT_ID", "c")}}, nil, true, "not known to be environment-bound", 0, ""},
+		{"002 equal env names are uncertain", "FND-ENV-002", prov{{Name: "d", Values: vals("AZURE_ENV_NAME", "same", "X_ENDPOINT", endpoint)}, {Name: "p", Values: vals("AZURE_ENV_NAME", "same", "X_ENDPOINT", endpoint)}}, nil, true, "AZURE_ENV_NAME is empty or equal", 0, ""},
+		{"002 empty env names are uncertain", "FND-ENV-002", prov{{Name: "d", Values: vals("X_ENDPOINT", endpoint)}, {Name: "p", Values: vals("X_ENDPOINT", endpoint)}}, nil, true, "environments d and p", 0, ""},
+		{"002 one empty env name is uncertain", "FND-ENV-002", prov{{Name: "d", Values: vals("AZURE_ENV_NAME", "d")}, {Name: "p", Values: vals("X", "1")}}, nil, true, "AZURE_ENV_NAME", 0, ""},
+		{"002 truncated env is uncertain", "FND-ENV-002", prov{{Name: "d", Values: vals("AZURE_ENV_NAME", "d")}, {Name: "p", Status: StatusTruncated}}, nil, true, "environment p: .env truncated", 0, ""},
+
+		{"003 no policy skips", "FND-ENV-003", prov{{Name: "d"}, {Name: "p"}}, nil, true, sdk.SkipMissingPolicyKey(TierPolicyKey), 0, ""},
+		{"003 shared rg", "FND-ENV-003", prov{{Name: "d", ResourceGroup: "RG"}, {Name: "p", ResourceGroup: "rg"}}, tiersPol, false, "", 1, "prod environment p"},
+		{"003 distinct", "FND-ENV-003", prov{{Name: "d", ResourceGroup: "a"}, {Name: "p", ResourceGroup: "b"}}, tiersPol, false, "", 0, ""},
+		{"003 prod without targets is uncertain", "FND-ENV-003", prov{{Name: "d", ResourceGroup: "a"}, {Name: "p"}}, tiersPol, true, "environment p: no resource group", 0, ""},
+		{"003 untiered environment is uncertain", "FND-ENV-003", prov{{Name: "d", ResourceGroup: "a"}, {Name: "p", ResourceGroup: "b"}, {Name: "x", ResourceGroup: "c"}}, tiersPol, true, "environment x: no tier", 0, ""},
+		{"003 no prod visible is uncertain", "FND-ENV-003", prov{{Name: "d", ResourceGroup: "a"}, {Name: "q", ResourceGroup: "b"}}, pol{TierPolicyKey: map[string]any{"d": "dev", "q": "test"}}, true, "no visible environment is configured as prod", 0, ""},
+		{"003 unreadable prod is uncertain", "FND-ENV-003", prov{{Name: "d", ResourceGroup: "a"}, {Name: "p", Status: StatusUnparseable}}, tiersPol, true, "environment p: .env unparseable", 0, ""},
+
+		{"004 only in", "FND-ENV-004", prov{{Name: "d", Values: vals("A", "1")}, {Name: "p", Values: map[string]string{}}}, nil, false, "", 1, "only in d"},
+		{"004 secret by name", "FND-ENV-004", prov{{Name: "d", Values: vals("API_KEY", "s1")}, {Name: "p", Values: vals("API_KEY", "s2")}}, nil, false, "", 1, "differs between"},
+		{"004 same", "FND-ENV-004", prov{{Name: "d", Values: vals("A", "1")}, {Name: "p", Values: vals("A", "1")}}, nil, false, "", 0, ""},
+		{"004 unreadable env does not read as identical", "FND-ENV-004", prov{{Name: "d", Values: vals("A", "1")}, {Name: "p", Status: StatusUnreadable}}, nil, true, "environment p: .env unreadable", 0, ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			res := eval(t, tc.id, tc.p, &sdk.Input{Policy: tc.policy})
 			if (res.Skipped != nil) != tc.wantSkip {
-				t.Fatalf("skipped=%v want %v", res.Skipped, tc.wantSkip)
+				t.Fatalf("skipped=%v want %v (findings %+v)", res.Skipped, tc.wantSkip, res.Findings)
+			}
+			if res.Skipped != nil {
+				if res.Skipped.RuleID != tc.id {
+					t.Fatalf("skip rule id %q", res.Skipped.RuleID)
+				}
+				if !strings.Contains(res.Skipped.Reason, tc.wantReason) {
+					t.Fatalf("reason %q lacks %q", res.Skipped.Reason, tc.wantReason)
+				}
+				if tc.wantReason != sdk.SkipInputUnavailable && !strings.HasPrefix(res.Skipped.Reason, report.UncertainPrefix) && !strings.HasPrefix(res.Skipped.Reason, sdk.SkipProfileKeyPrefix) {
+					t.Fatalf("reason %q is neither uncertain nor a named input skip", res.Skipped.Reason)
+				}
 			}
 			if len(res.Findings) != tc.want {
 				t.Fatalf("findings=%d want %d: %+v", len(res.Findings), tc.want, res.Findings)
@@ -75,14 +121,65 @@ func TestRules(t *testing.T) {
 	}
 }
 
+func TestNilInputSkips(t *testing.T) {
+	for _, r := range RegisterWith(prov{{Name: "a"}, {Name: "b"}}) {
+		res, err := r.Evaluate(context.Background(), nil)
+		if err != nil || res.Skipped == nil || res.Skipped.Reason != sdk.SkipInputUnavailable {
+			t.Errorf("%s: %+v %v", r.ID(), res, err)
+		}
+	}
+}
+
+func TestUncertainReasonIsBoundedAndHasNoValues(t *testing.T) {
+	var envs prov
+	for _, n := range []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"} {
+		envs = append(envs, Environment{Name: n, Status: StatusMissing, Values: vals("API_KEY", "topsecret1")})
+	}
+	res := eval(t, "FND-ENV-004", envs, &sdk.Input{})
+	if res.Skipped == nil || !strings.Contains(res.Skipped.Reason, "and 4 more") || strings.Contains(res.Skipped.Reason, "topsecret") {
+		t.Fatalf("%+v", res.Skipped)
+	}
+}
+
 func TestNoRawValuesInEvidence(t *testing.T) {
-	p := prov{{Name: "d", Values: map[string]string{"API_KEY": "topsecret1", "N": "plainval1"}}, {Name: "p", Values: map[string]string{"API_KEY": "topsecret2", "N": "plainval2"}}}
+	p := prov{{Name: "d", Values: vals("API_KEY", "topsecret1", "N", "plainval1")}, {Name: "p", Values: vals("API_KEY", "topsecret2", "N", "plainval2")}}
 	res := eval(t, "FND-ENV-004", p, &sdk.Input{})
 	for _, f := range res.Findings {
 		for _, v := range []string{"topsecret", "plainval"} {
 			if strings.Contains(f.Evidence, v) {
 				t.Fatalf("leaked %s", v)
 			}
+		}
+	}
+	q := prov{{Name: "d", Values: vals("AZURE_ENV_NAME", "d", "SEARCH_SERVICE_NAME", "plainval1")}, {Name: "p", Values: vals("AZURE_ENV_NAME", "p", "SEARCH_SERVICE_NAME", "plainval1")}}
+	r2 := eval(t, "FND-ENV-002", q, &sdk.Input{})
+	if r2.Skipped == nil || strings.Contains(r2.Skipped.Reason, "plainval") {
+		t.Fatalf("uncertain reason leaks value: %+v", r2.Skipped)
+	}
+}
+
+func TestClassify(t *testing.T) {
+	tests := []struct {
+		k, v string
+		want int
+	}{
+		{"AZURE_ENV_NAME", "x", classNone},
+		{"AZURE_SUBSCRIPTION_ID", "x", classStrong},
+		{"AZURE_RESOURCE_GROUP", "x", classStrong},
+		{"AZURE_AI_PROJECT_ENDPOINT", "x", classStrong},
+		{"ANY", "/subscriptions/1/x", classStrong},
+		{"AZURE_TENANT_ID", "x", classNone},
+		{"AZURE_PRINCIPAL_ID", "x", classNone},
+		{"AZURE_OPENAI_DEPLOYMENT_NAME", "x", classNone},
+		{"MODEL_DEPLOYMENT_NAME", "x", classNone},
+		{"AZURE_AI_MODEL_NAME", "x", classNone},
+		{"KEYVAULT_NAME", "x", classWeak},
+		{"CLIENT_ID", "x", classWeak},
+		{"FOO", "x", classNone},
+	}
+	for _, tc := range tests {
+		if got := classify(tc.k, tc.v); got != tc.want {
+			t.Errorf("classify(%s)=%d want %d", tc.k, got, tc.want)
 		}
 	}
 }

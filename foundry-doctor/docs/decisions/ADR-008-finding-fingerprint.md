@@ -1,6 +1,6 @@
 # ADR-008: Finding fingerprint
 
-Status: Accepted
+Status: Accepted, amended 2026-10-15 (Amendment 1)
 Date: 2026-10-05
 
 ## Context
@@ -41,3 +41,24 @@ Rules:
 - Renaming a resource re-surfaces its findings. This is accepted: a rename is a change.
 - Rule authors own the quality of `Key`; the rule test template checks that distinct findings of one rule have distinct fingerprints.
 - Fingerprint scheme changes need a new prefix (`fp2:`) and an ADR; the baseline reader rejects unknown prefixes with exit 2.
+
+## Amendment 1 (2026-10-15): implemented form and `Finding.Key`
+
+Review findings (Foundry lead N12, Phase 1 re-review) showed that the code ignored `Key`: FND-CFG-005 and FND-CFG-006 findings on one service shared one fingerprint. The
+code also differed from the decision text. This amendment makes the text describe the code and adds the missing discriminator.
+
+1. **Implemented canonical form (`internal/findings.Fingerprint`, scheme tag `v2`).** The SHA-256 input is the `0x00`-joined sequence
+   `v2`, `RuleID`, `RuleVersion` (decimal), lower-cased `Resource.Type`, `Resource.Name`, `Resource.ID`, lower-cased `Location.File`, `Key`.
+   The output is the first 32 hex characters, **without** the `fp1:` prefix, because the baseline and suppression file schemas accept only `^[0-9a-f]{32}$`
+   (`internal/baseline`, `internal/suppress`). The scheme tag is hashed inside the canonical string instead of being printed. `findings.FingerprintVersion` holds it.
+   `Resource.Kind` and `Resource.Pointer` do not exist in `pkg/sdk`; `Key` replaces the evidence-key item of decision 5.
+2. **`Finding.Key` added to `pkg/sdk`** (JSON `key`, omitted when empty). A rule sets it to a stable, non-secret discriminator: the azure.yaml key path, variable name, or ARM resource
+   key. A rule that can emit several findings on one resource MUST set it (the rule test template checks that distinct findings have distinct fingerprints).
+3. **Version bump v1 to v2.** The previous tag was `v1` and had no `Key` input. Every fingerprint changes once, including findings whose `Key` is empty. Baselines and
+   suppressions that name a fingerprint must be regenerated. Phase 1 is unreleased (`0.1.0-dev`), so no migration is provided.
+   A future change to the canonical form needs tag `v3` and an amendment here.
+4. **Collision handling in the engine (`internal/rules`).** After enrichment, findings that share a fingerprint and have identical redacted evidence are merged. Findings that share a
+   fingerprint with different evidence indicate that the rule set no `Key`: the engine appends `#ev:` plus the first 12 hex characters of SHA-256 of the evidence to `Key`,
+   recomputes the fingerprint, and reports a diagnostic (`Report.Diagnostics`, printed as a warning). This fallback depends on evidence wording and is a safety net, not a substitute for a rule-set `Key`.
+   The `FND-SYS-DUPLICATE-FINGERPRINT` finding of ADR-009 is not emitted in Phase 1; the diagnostic is a stderr warning.
+5. Excluded inputs are unchanged: line, column, profile, severity, confidence, evidence prose, recommendation, adapter, wall-clock and machine-specific data.

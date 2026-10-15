@@ -105,7 +105,13 @@ func TestOPS007PipelineExists(t *testing.T) {
 	if len(clean.Findings) != 0 || clean.Skipped != nil {
 		t.Fatalf("expected pass, got %+v", clean)
 	}
-	bad := eval(t, "FND-OPS-007", Providers{Root: t.TempDir()}, in)
+	// A repository (it has .git) with no pipeline file is a finding; without
+	// .git the same absence is only uncertain (see TestOPS007Pipelines).
+	emptyRepo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(emptyRepo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	bad := eval(t, "FND-OPS-007", Providers{Root: emptyRepo}, in)
 	if len(bad.Findings) != 1 {
 		t.Fatalf("expected finding, got %+v", bad)
 	}

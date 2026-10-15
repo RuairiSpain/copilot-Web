@@ -1,5 +1,5 @@
 id: FND-OPS-007
-version: 1
+version: 2
 group: OPS
 title: CI/CD pipeline exists
 description: >-
@@ -34,13 +34,17 @@ compatibility:
     them in Phase 1 by reading older tags.
 evidence:
   description: >-
-    File-system and azure.yaml evidence only, no pipeline execution. Pass when at least one of the following exists -
-    a file azure-dev.yml or azure-dev.yaml (the names azd writes and detects) or another workflow file that invokes
-    azd under .github/workflows; a file azure-dev.yml or azure-dev.yaml under .azdo/pipelines or
-    .azuredevops/pipelines; or an azure.yaml top-level pipeline section whose provider is github or azdo (schema
-    enumeration). Report when none exists and the active profile is test or prod. A pipeline definition that exists
-    but does not invoke azd provision, deploy or up is reported as uncertain, because other deployment tools are
-    valid. Other CI systems are not detected and the finding says so.
+    File-system and azure.yaml evidence only, no pipeline execution. Pipeline files are looked up from the git repository root (the
+    nearest ancestor of the project directory that contains .git); when no .git is found only the project directory is
+    searched and an absent pipeline is uncertain, not a finding. Only .yml and .yaml files are read, in
+    .github/workflows (GitHub Actions run steps) and in .azdo/pipelines and .azuredevops/pipelines (Azure Pipelines
+    script, bash, pwsh and powershell steps). Files are opened through a root-bounded handle, symlinks are skipped, each
+    file is capped at 256 KiB and at most 100 files are read; a skipped file makes the result uncertain. Pass when a parsed
+    step command runs azd provision, deploy or up (comment lines and text outside run steps do not count). The azure.yaml
+    pipeline section is configuration and is not evidence. Report, with the azure.yaml location, when no pipeline file
+    exists and the active profile is test or prod. A pipeline definition that exists but has no azd provision, deploy or
+    up step is reported as uncertain, because other deployment tools are valid. Other CI systems are not detected and
+    the finding says so.
   confidence: likely
 recommendation: >-
   Run azd pipeline config to generate azure-dev.yml and the federated credential for GitHub Actions or Azure Pipelines,
@@ -110,7 +114,7 @@ tests:
   negative:
   - github-workflows-azure-dev-yml
   - azdo-pipelines-azure-dev-yml
-  - azure-yaml-pipeline-section-with-provider
+  - azure-yaml-pipeline-section-with-provider-is-not-evidence
   skipped:
   - dev-profile
   - repository-root-not-available

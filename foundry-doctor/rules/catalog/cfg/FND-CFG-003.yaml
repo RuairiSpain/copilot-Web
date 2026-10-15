@@ -1,5 +1,5 @@
 id: FND-CFG-003
-version: 1
+version: 2
 group: CFG
 title: "All inter-service references resolve"
 description: >-
@@ -121,6 +121,7 @@ tests:
   uncertain:
     - generic-uses-target-not-found-in-services-or-resources
     - routine-agent-use-relationship-not-documented
+    - memory-model-with-project-deployments-absent
 notes: >-
   Generic uses and routine relationships remain uncertain and do not produce violations. The generic
   schema permits resource names while the Foundry article discusses service names; compiled Bicep does

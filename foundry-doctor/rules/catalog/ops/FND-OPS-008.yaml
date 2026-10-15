@@ -1,5 +1,5 @@
 id: FND-OPS-008
-version: 1
+version: 2
 group: OPS
 title: Evaluations run before promotion
 description: >-
@@ -36,7 +36,8 @@ compatibility:
 evidence:
   description: >-
     Repository evidence only. Pass when (a) an eval.yaml exists in the agent project root or at a path passed with --config
-    in the pipeline, and (b) a pipeline definition (see FND-OPS-007) contains a step that runs azd ai agent eval run, and
+    in the pipeline, and (b) a pipeline definition found as described for FND-OPS-007 (git repository root, YAML parsed, symlinks and
+    oversize files skipped) contains a run step that runs azd ai agent eval run, and
     that step appears before any step that promotes to production (a pipeline job or environment named for prod/production,
     or a documented version-pinning step). Report separately - no eval.yaml; eval.yaml has no evaluators list or no dataset
     reference (keys agent, dataset_file or dataset, evaluators as read in the extension source); the pipeline never runs

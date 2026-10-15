@@ -1,5 +1,5 @@
 id: FND-ENV-003
-version: 1
+version: 2
 group: ENV
 title: "Prod does not reference non-prod resource IDs"
 description: >-
@@ -102,7 +102,11 @@ tests:
   skipped:
     - environment-tiers-not-configured
     - sibling-environments-not-visible
+    - env-file-unparseable-uncertain
+    - environment-without-tier-or-targets-uncertain
 notes: >-
   Product opinion: no source states a prohibition. Tier mapping is Foundry Doctor configuration (profiles), which does not
   exist in azd. Resources that a prod environment legitimately shares with non-prod (central registries, shared search)
-  need an allow entry with a reason and expiry.
+  need an allow entry with a reason and expiry. Version 2 (2026-10-15): with no finding, an unusable .env, an
+  environment with no tier, no visible prod or non-prod environment, or an environment with no resource group or
+  resource identifier value gives an uncertain skip naming it, not a pass.

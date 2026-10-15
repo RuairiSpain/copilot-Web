@@ -1,13 +1,13 @@
 id: FND-CFG-011
-version: 1
+version: 2
 group: CFG
 title: "Preview/retired fields are version-aware"
 description: >-
   azure.yaml uses preview schemas that change between extension betas. The rule reports fields and hosts that
   the sources mark as deprecated, replaced or compatibility-only (service-level config for the agent,
   microsoft.foundry host, kind prompt-voice alias, the two-file agent.manifest.yaml/agent.yaml model, ignored
-  hosted-agent fields displayName/inputSchema/outputSchema) and reports when requiredVersions or the installed
-  extensions are older than the version that introduced the construct used.
+  hosted-agent fields displayName/inputSchema/outputSchema). When requiredVersions allows extension versions older
+  than the version that introduced the construct used, the result is uncertain, not an error.
 status: verified
 phases: ["1"]
 inputs: ["azure.yaml"]
@@ -98,12 +98,13 @@ tests:
     - microsoft-foundry-host
     - prompt-voice-kind
     - env-declares-foundry-endpoint
-    - requiredversions-below-minimum
   negative:
     - unified-service-level-env
     - kind-voice
   skipped:
     - installed-extension-versions-unavailable
+  uncertain:
+    - requiredversions-below-minimum
 notes: >-
   Verified against azure-dev schemas v1.0 and extension schemas in the clone (azure.ai.agents 1.0.0-beta.18,
   azure.ai.projects 1.0.0-beta.13); the Learn reference page is dated 09/17/2026. Unverified: the exact extension

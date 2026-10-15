@@ -47,7 +47,10 @@ func (r rule) Evaluate(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 type outcome struct {
 	findings   []sdk.Finding
 	unresolved bool
-	skip       string
+	// cond is set when a conditional or looped resource that the rule
+	// inspects could not be classified as deployed or not.
+	cond bool
+	skip string
 }
 
 func (o *outcome) add(r sdk.ARMResource, evidence string) {
@@ -65,6 +68,9 @@ func (o *outcome) result() sdk.Result {
 	if o.unresolved {
 		return sdk.Result{Skipped: &sdk.Skip{Reason: "unresolved-expression"}}
 	}
+	if o.cond {
+		return sdk.Result{Skipped: &sdk.Skip{Reason: "conditional-deployment-unresolved"}}
+	}
 	if o.skip != "" {
 		return sdk.Result{Skipped: &sdk.Skip{Reason: o.skip}}
 	}
@@ -73,9 +79,26 @@ func (o *outcome) result() sdk.Result {
 
 func eval001(in *sdk.Input) sdk.Result {
 	o := &outcome{}
-	budgets := byType(in.ARM, typeBudget)
+	live, unc := liveResources(in.ARM)
+	var budgets []sdk.ARMResource
+	for _, r := range live {
+		if strings.EqualFold(r.Type, typeBudget) {
+			budgets = append(budgets, r)
+		}
+	}
+	for _, r := range unc {
+		if strings.EqualFold(r.Type, typeBudget) {
+			o.cond = true
+		}
+	}
 	if len(budgets) == 0 {
-		return sdk.Result{Findings: []sdk.Finding{{Evidence: "no Microsoft.Consumption/budgets resource was found in the compiled plan"}}}
+		if o.cond {
+			return o.result()
+		}
+		// A budget is a subscription or resource-group object that is often
+		// created outside the project repository, so its absence from the plan
+		// is not proof that none exists (FND-COST-001 evidence).
+		return sdk.Result{Skipped: &sdk.Skip{Reason: "budget-managed-outside-repository"}}
 	}
 	valid := false
 	for _, b := range budgets {
@@ -94,7 +117,13 @@ func eval001(in *sdk.Input) sdk.Result {
 			o.add(b, "budget timeGrain is missing")
 		}
 		if tp := mapAt(props, "timePeriod"); tp == nil || str(tp["startDate"]) == "" {
-			o.add(b, "budget timePeriod.startDate is missing")
+			if s, ok := props["timePeriod"].(string); !(ok && isExpr(s)) {
+				o.add(b, "budget timePeriod.startDate is missing")
+			}
+		}
+		if s, ok := props["notifications"].(string); ok && isExpr(s) {
+			o.unresolved = true
+			continue
 		}
 		notifications := mapAt(props, "notifications")
 		if notifications == nil {
@@ -104,17 +133,24 @@ func eval001(in *sdk.Input) sdk.Result {
 		if len(notifications) > 5 {
 			o.add(b, "budget has more than five notifications")
 		}
-		var enabled, forecasted bool
+		var enabled, forecasted, unresolved bool
 		for _, raw := range notifications {
 			n, _ := raw.(map[string]any)
 			if n == nil {
 				continue
 			}
-			if strings.HasPrefix(str(n["enabled"]), "[") || strings.HasPrefix(str(n["thresholdType"]), "[") {
-				o.unresolved = true
+			if isExpr(str(n["enabled"])) || isExpr(str(n["thresholdType"])) || isExpr(str(n["operator"])) {
+				unresolved = true
 				continue
 			}
-			if truthy(n["enabled"]) && str(n["operator"]) != "" && hasContact(n) {
+			if !truthy(n["enabled"]) || str(n["operator"]) == "" {
+				continue
+			}
+			has, contactUnresolved := contactStatus(n)
+			if contactUnresolved {
+				unresolved = true
+			}
+			if has {
 				enabled = true
 				if strings.EqualFold(str(n["thresholdType"]), "Forecasted") {
 					forecasted = true
@@ -122,10 +158,18 @@ func eval001(in *sdk.Input) sdk.Result {
 			}
 		}
 		if !enabled {
+			if unresolved {
+				o.unresolved = true
+				continue
+			}
 			o.add(b, "budget has no enabled notification with a contact")
 			continue
 		}
 		if !forecasted {
+			if unresolved {
+				o.unresolved = true
+				continue
+			}
 			o.add(b, "budget has no forecasted-cost notification")
 			continue
 		}
@@ -144,14 +188,20 @@ func eval002(in *sdk.Input) sdk.Result {
 	o := &outcome{}
 	limit, hasLimit := cosmosLimit(in)
 	exemptions := exemptionSet(in)
-	for _, r := range in.ARM.Resources() {
+	live, unc := liveResources(in.ARM)
+	for _, r := range unc {
+		if !exempt(exemptions, r.Name) && costRelevant(r.Type) {
+			o.cond = true
+		}
+	}
+	for _, r := range live {
 		if exempt(exemptions, r.Name) {
 			continue
 		}
 		switch {
 		case strings.EqualFold(r.Type, typeDeployment):
-			switch r.SKUName {
-			case "GlobalProvisionedManaged", "DataZoneProvisionedManaged", "ProvisionedManaged":
+			switch strings.ToLower(strings.TrimSpace(r.SKUName)) {
+			case "globalprovisionedmanaged", "datazoneprovisionedmanaged", "provisionedmanaged":
 				o.add(r, "development environment uses provisioned throughput model capacity")
 			case "":
 				if skuUnresolved(r) {
@@ -182,8 +232,8 @@ func eval002(in *sdk.Input) sdk.Result {
 				o.unresolved = true
 			}
 		case strings.EqualFold(r.Type, typeAPIM):
-			switch r.SKUName {
-			case "Premium", "Isolated":
+			switch strings.ToLower(strings.TrimSpace(r.SKUName)) {
+			case "premium", "isolated":
 				o.add(r, "development environment uses a production-sized API Management tier")
 			case "":
 				if skuUnresolved(r) {
@@ -197,16 +247,17 @@ func eval002(in *sdk.Input) sdk.Result {
 			} else if r.SKU != nil && propUnresolved(r.SKU, "capacity") {
 				o.unresolved = true
 			}
-		case strings.HasSuffix(strings.ToLower(r.Type), "/throughputsettings"):
+		case cosmosThroughputType(r.Type):
+			// The policy limit is applied exactly as configured.
 			if throughput, ok := cosmosThroughput(r); ok {
-				if hasLimit && throughput > float64(max(limit, 3000)) {
+				if hasLimit && throughput > float64(limit) {
 					o.add(r, "development environment Cosmos DB throughput exceeds the configured policy limit")
 				}
 			} else if propThroughputUnresolved(r) {
 				o.unresolved = true
 			}
 			if autoscale, ok := cosmosAutoscale(r); ok {
-				if hasLimit && autoscale > max(limit, 3000) {
+				if hasLimit && autoscale > limit {
 					o.add(r, "development environment Cosmos DB autoscale maxThroughput exceeds the configured policy limit")
 				}
 			} else if propAutoscaleUnresolved(r) {
@@ -218,6 +269,26 @@ func eval002(in *sdk.Input) sdk.Result {
 		o.skip = sdk.SkipMissingPolicyKey("policy.cost.devMaxCosmosThroughput")
 	}
 	return o.result()
+}
+
+// costRelevant reports whether eval002 inspects resources of the given type.
+func costRelevant(typ string) bool {
+	return strings.EqualFold(typ, typeDeployment) || strings.EqualFold(typ, typeSearch) ||
+		strings.EqualFold(typ, typeAPIM) || cosmosThroughputType(typ)
+}
+
+const (
+	cosmosSQLDatabase  = "microsoft.documentdb/databaseaccounts/sqldatabases"
+	cosmosSQLContainer = "microsoft.documentdb/databaseaccounts/sqldatabases/containers"
+)
+
+// cosmosThroughputType matches throughputSettings resources and the Cosmos DB
+// SQL databases and containers, whose properties.options.throughput and
+// properties.options.autoscaleSettings.maxThroughput set throughput at creation
+// (CreateUpdateOptions in the Microsoft.DocumentDB 2025-04-15 specification).
+func cosmosThroughputType(typ string) bool {
+	t := strings.ToLower(typ)
+	return strings.HasSuffix(t, "/throughputsettings") || t == cosmosSQLDatabase || t == cosmosSQLContainer
 }
 
 func eval003(in *sdk.Input) sdk.Result {
@@ -271,7 +342,13 @@ func eval004(in *sdk.Input) sdk.Result {
 	}
 	o := &outcome{}
 	supported := 0
-	for _, r := range in.ARM.Resources() {
+	live, unc := liveResources(in.ARM)
+	for _, r := range unc {
+		if costRelevant(r.Type) {
+			o.cond = true
+		}
+	}
+	for _, r := range live {
 		switch {
 		case strings.EqualFold(r.Type, typeSearch):
 			if strings.EqualFold(r.SKUName, "free") || strings.EqualFold(r.SKUName, "serverless") {
@@ -309,33 +386,23 @@ func eval004(in *sdk.Input) sdk.Result {
 			}
 			o.add(r, "fixed-capacity estimate is incomplete because Cosmos throughput is unresolved")
 		case strings.EqualFold(r.Type, typeDeployment):
-			switch strings.TrimSpace(r.SKUName) {
-			case "GlobalProvisionedManaged", "DataZoneProvisionedManaged", "ProvisionedManaged":
+			switch strings.ToLower(strings.TrimSpace(r.SKUName)) {
+			case "globalprovisionedmanaged", "datazoneprovisionedmanaged", "provisionedmanaged":
 				supported++
 				o.add(r, "fixed-capacity estimate is incomplete because PTU retail meter mapping remains UNVERIFIED for generic deployment SKUs")
 			}
 		}
 	}
 	if supported == 0 {
+		if o.cond {
+			return o.result()
+		}
 		return sdk.Result{Skipped: &sdk.Skip{Reason: "no-supported-fixed-capacity-resources"}}
 	}
 	if len(o.findings) == 0 {
 		return sdk.Result{}
 	}
 	return o.result()
-}
-
-func byType(m sdk.ARMModel, typ string) []sdk.ARMResource {
-	var out []sdk.ARMResource
-	if m == nil {
-		return nil
-	}
-	for _, r := range m.Resources() {
-		if strings.EqualFold(r.Type, typ) {
-			out = append(out, r)
-		}
-	}
-	return out
 }
 
 func isDev(in *sdk.Input) bool {
@@ -440,13 +507,30 @@ func truthy(v any) bool {
 	}
 }
 
-func hasContact(m map[string]any) bool {
+// contactStatus reports whether a notification has a literal contact and whether
+// any contact list is an unresolved ARM expression (a string starting with "["
+// that is not "[[", or a list that holds such a string). An expression-valued
+// list is unresolved, never empty.
+func contactStatus(m map[string]any) (has, unresolved bool) {
 	for _, k := range []string{"contactEmails", "contactRoles", "contactGroups"} {
-		if xs := stringsFrom(m[k]); len(xs) > 0 {
-			return true
+		switch x := m[k].(type) {
+		case string:
+			if isExpr(x) {
+				unresolved = true
+			} else if strings.TrimSpace(x) != "" {
+				has = true
+			}
+		default:
+			for _, s := range stringsFrom(x) {
+				if isExpr(s) {
+					unresolved = true
+				} else {
+					has = true
+				}
+			}
 		}
 	}
-	return false
+	return has, unresolved && !has
 }
 
 func number(v any) (float64, bool) {
@@ -487,8 +571,18 @@ func skuCapacity(r sdk.ARMResource) (float64, bool) {
 	return number(r.SKU["capacity"])
 }
 
+// throughputBag returns the object that holds throughput: properties.resource
+// for throughputSettings, properties.options for SQL databases and containers.
+func throughputBag(r sdk.ARMResource) map[string]any {
+	t := strings.ToLower(r.Type)
+	if t == cosmosSQLDatabase || t == cosmosSQLContainer {
+		return mapAt(r.Properties, "options")
+	}
+	return mapAt(r.Properties, "resource")
+}
+
 func cosmosThroughput(r sdk.ARMResource) (float64, bool) {
-	resource := mapAt(r.Properties, "resource")
+	resource := throughputBag(r)
 	if resource == nil {
 		return 0, false
 	}
@@ -496,7 +590,7 @@ func cosmosThroughput(r sdk.ARMResource) (float64, bool) {
 }
 
 func cosmosAutoscale(r sdk.ARMResource) (int, bool) {
-	resource := mapAt(r.Properties, "resource")
+	resource := throughputBag(r)
 	if resource == nil {
 		return 0, false
 	}
@@ -509,24 +603,17 @@ func cosmosAutoscale(r sdk.ARMResource) (int, bool) {
 }
 
 func propThroughputUnresolved(r sdk.ARMResource) bool {
-	resource := mapAt(r.Properties, "resource")
+	resource := throughputBag(r)
 	return propUnresolved(resource, "throughput")
 }
 
 func propAutoscaleUnresolved(r sdk.ARMResource) bool {
-	resource := mapAt(r.Properties, "resource")
+	resource := throughputBag(r)
 	if resource == nil {
 		return false
 	}
 	auto := mapAt(resource, "autoscaleSettings")
 	return propUnresolved(auto, "maxThroughput")
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 func tokenLimitValid(el runtimegw.PolicyElement) bool {

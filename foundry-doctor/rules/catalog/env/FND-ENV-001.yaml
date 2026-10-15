@@ -1,12 +1,13 @@
 id: FND-ENV-001
-version: 1
+version: 2
 group: ENV
 title: "Environments do not unintentionally share resource groups"
 description: >-
   Two azd environments of the same project (for example dev and prod) should not resolve to the same resource
-  group. azd documents one resource group per environment for isolation; azure.yaml resourceGroup overrides the
-  name used for provisioning, and a value without an environment-specific component makes every environment
-  target the same group, so tearing down or redeploying one environment affects the other.
+  group. azd documents one resource group per environment for isolation. The Bicep provider reads only
+  AZURE_RESOURCE_GROUP from the environment; the azure.yaml resourceGroup (project or service level) applies when azd
+  resolves a service's deployment target. A resourceGroup literal without an environment-specific component makes
+  every environment's services target the same group, so redeploying or tearing down one environment affects the other.
 status: verified
 phases: ["1"]
 inputs: ["azure.yaml", "azd-env"]
@@ -30,9 +31,12 @@ evidence:
     values. The effective group of an environment follows azd's order: service resourceGroup, then project
     resourceGroup (each used only when non-blank after substitution), then AZURE_RESOURCE_GROUP; both candidates are
     still compared because the provisioning scope reads AZURE_RESOURCE_GROUP. Report two environments whose
-    subscription and resource group names are equal (case-insensitive), and report a resourceGroup literal that
-    contains no variable reference when more than one environment exists. Environments that are not locally present
-    are not guessed; the rule is skipped for them.
+    subscription and resource group names are equal (case-insensitive), and report each resourceGroup literal that
+    contains no variable reference (top-level, and per service, named in the evidence) when more than one environment
+    exists. Environments that are not locally present are not guessed. An environment whose .env is missing,
+    unreadable, over 256 KiB, holds more than 2000 keys or does not parse with the godotenv grammar, and an
+    environment with no AZURE_SUBSCRIPTION_ID or AZURE_RESOURCE_GROUP, is named in an uncertain skip when no finding
+    is produced; the rule never passes on such input.
   confidence: likely
 recommendation: >-
   Give each environment its own resource group, for example by including the environment name in the group name
@@ -117,15 +121,23 @@ tests:
   positive:
     - dev-and-prod-same-resource-group
     - literal-resourcegroup-with-two-environments
+    - literal-service-resourcegroup-with-two-environments
   negative:
     - env-name-in-resourcegroup
     - distinct-subscriptions-same-group-name
   skipped:
     - single-environment-visible
     - env-files-not-in-workspace
+    - env-file-missing-or-unparseable-uncertain
+    - env-without-resource-group-uncertain
 notes: >-
   Intended sharing (for example a shared model-hosting group) is legitimate, hence the suppression path. Phase 1 fact
   check (2026-10-05): azd source shows the azure.yaml resourceGroup (service, then project) wins over
   AZURE_RESOURCE_GROUP when resolving a service target, and AZURE_RESOURCE_GROUP is the fallback; the Bicep
-  provisioning scope reads AZURE_RESOURCE_GROUP. Both sources are therefore evaluated and the report states which one
-  wins for service targets.
+  provisioning scope reads only AZURE_RESOURCE_GROUP (the azure.yaml resourceGroup is not read there). Both sources
+  are therefore evaluated: the .env pair for the provisioning scope, the azure.yaml literal for service targets.
+  Version 2 (2026-10-15): wording corrected as above; per-service resourceGroup literals are checked; unusable or
+  incomplete environments produce an uncertain skip instead of a silent pass. The .env parser is an in-repository
+  port of the godotenv v1.5.1 grammar (internal/project/dotenv.go), checked against the module's output on a
+  26-input corpus; the module is not a dependency. .azure/config.json defaultEnvironment is read by project
+  discovery to select the environment for the FND-CFG rules; this rule compares every environment directory (at most 100).

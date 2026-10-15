@@ -1,16 +1,18 @@
 id: FND-CFG-001
-version: 1
+version: 2
 group: CFG
 title: Valid YAML, duplicate-key detection and compatible azure.ai.* schema
 description: >-
   azure.yaml must parse as YAML with unique mapping keys and conform to the published azd schema (v1.0) for the azure.ai.*
   service hosts: azure.ai.project, azure.ai.agent, azure.ai.connection, azure.ai.toolbox, azure.ai.skill, azure.ai.routine
   (and azure.ai.eval). Constraints checked are those the schema states as required, const, enum, type or "not": top-level
-  name pattern, services with at least one entry, host required on every service, project required on azure.ai.agent, prompt
+  name (required, minimum length 2, pattern ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$), services (optional; at least one entry when present), host required on every service, project required on azure.ai.agent, prompt
   agents requiring model and instructions, azure.ai.project forbidding project/runtime/docker/image/config, and the unsupported
   voice authoring shapes (modelType hosted_agent, targetAgent). Unknown properties are not errors because the schema allows
-  additional properties. Also reports when the declared requiredVersions are older than the extension versions the schema
-  was verified against.
+  additional properties. requiredVersions extension constraints are parsed (>=, >, <=, <, =, ~, a bare version, latest, and
+  space-separated ranges as in the schema examples). A constraint that allows versions below the tested range, excludes the
+  tested range, or cannot be parsed makes the result uncertain; it is never an error because the tested range is a
+  verification window, not a platform requirement.
 status: verified
 phases:
 - '1'
@@ -104,15 +106,23 @@ tests:
   - unknown-host-missing-host-field
   - agent-without-project
   - prompt-agent-missing-model-and-instructions
+  - missing-or-invalid-name
+  - empty-services-mapping
   - project-service-with-project-path
   - voice-modeltype-hosted-agent
   negative:
   - minimal-hosted-agent-project
   - full-example-from-reference
   - unknown-extra-property-allowed
+  - services-absent
+  - requiredversions-range-containing-tested-version
   skipped:
   - schema-version-not-vendored-for-declared-extension
   - azure-yaml-uses-ref-file-missing
+  uncertain:
+  - required-version-floor-below-tested-range
+  - required-version-ceiling-below-tested-range
+  - required-version-constraint-unparseable
 notes: >-
   Unverified: how azd core handles duplicate YAML keys (azd core parser source is not in the local clone), so duplicate-key
   detection is a Foundry Doctor addition based on YAML mapping semantics, reported at the same severity. The azure.ai.*

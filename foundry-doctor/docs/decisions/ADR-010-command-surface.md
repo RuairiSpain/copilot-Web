@@ -1,6 +1,6 @@
 # ADR-010: Command-surface decisions for Phase 1
 
-Status: Accepted
+Status: Accepted, amended 2026-10-15 (Amendment 1)
 Date: 2026-10-05
 
 ## Context
@@ -29,6 +29,21 @@ Each is recorded here instead of being chosen silently.
 7. **Per-environment layout** is `environments.<name>.policy` in the same file, as ADR-007 decision 4. `<name>` is an azd environment name. Only `policy` is allowed there in Phase 1.
 8. **Output path flag** is `--out`, as ADR-007. PRD `cmd/foundry` is `cmd/foundry-doctor` (CLAUDE.md layout, ADR-003).
 
+9. **`--strict` counts only skips that hid a check.** Exit 3 applies when at least one skip is classified `SkipHidesCheck` by `rules.ClassifySkip`
+   (`internal/rules/skipclass.go`, the single classification). Hiding: `input-unavailable` (missing input or capability), `unsupported-version`, `azd-version-unknown`,
+   `rule-error`, `invalid-catalogue-metadata`, `unsupported-profile`, and any reason not listed below (fail safe). By design, not hiding: `not-implemented`, `not-applicable`,
+   `synthetic-infrastructure`, `profile-key-missing:*`, a small list of rule-specific "nothing to check" reasons, and `input-unavailable` details that state the project has no such
+   resource (listed in the source with tests). Every skip is still printed in every report. A required skip (explicit `--rules` ID) still exits 2. A new skip reason must be added to
+   the source list in the same change as the rule that emits it; rule packages should use the `not-applicable` head for "nothing to check".
+10. **azd version supply.** `doctor --azd-version <semver>` and the environment variable `FOUNDRY_DOCTOR_AZD_VERSION` give the azd version when the `azd` binary is not on PATH
+    (CI without azd, Bicep-only checks). Precedence: flag, environment variable, `azd version --output json`. A value that is not a semantic version exits 2. The value is trusted as stated;
+    it is not verified. When no source yields a version, rules with an azd range skip as `azd-version-unknown` and the report header says `versions not detected: azd`.
+    This adds one flag to `doctor`; it does not enable any rejected later-phase flag.
+11. **`validation.bicep: required` is enforced.** `test` and `prod` curated profiles default to `required` (`internal/config/profiles.go`). When it is `required`, a Bicep CLI that is
+    missing or unsupported, or a compile failure or unreadable template on a project that has Bicep or ARM input, ends the run with exit 2 and an error. When it is `optional` or
+    `disabled`, the same condition is a stderr warning and Bicep-dependent rules skip. A project with no Bicep or ARM input (synthetic infrastructure) is never an error. `annotate`
+    and the other commands keep the warning behaviour.
+
 ## PRD inconsistencies recorded
 
 | PRD place | Inconsistency | Resolution |
@@ -44,3 +59,9 @@ Each is recorded here instead of being chosen silently.
 
 - CLI contract tests cover each rejected flag and the precedence order.
 - Later phases enable the rejected flags without renaming anything.
+
+## Amendment 1 (2026-10-15): open items
+
+- Decision 2 orders exit codes 4, 2, 1, 3, 0. `internal/report.ClassifyExit` returns 3 before 1 (strict skip beats findings) and `internal/app` tests assert that. The code and this ADR
+  disagree; the owner of `internal/report` must pick one. This amendment does not change the behaviour.
+- Decision 6 says the default profile is `foundry-dev`; `config.DefaultProfile` is `foundry-prod`. Also unresolved.

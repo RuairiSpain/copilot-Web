@@ -13,13 +13,19 @@ import (
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
 
+// FingerprintVersion is the version tag hashed into every fingerprint
+// (ADR-008). Version 2 added Finding.Key.
+const FingerprintVersion = "v2"
+
 // Fingerprint returns a stable identity for a finding. It deliberately omits
 // line, column and evidence so unrelated edits do not invalidate baselines,
-// and never includes evidence text (which may be sensitive).
+// and never includes evidence text (which may be sensitive). Key separates two
+// findings of one rule on one resource.
 func Fingerprint(f sdk.Finding) string {
 	h := sha256.New()
-	fmt.Fprintf(h, "v1\x00%s\x00%d\x00%s\x00%s\x00%s\x00%s",
-		f.RuleID, f.RuleVersion, f.Resource.Type, f.Resource.Name, f.Resource.ID, strings.ToLower(f.Location.File))
+	fmt.Fprintf(h, "%s\x00%s\x00%d\x00%s\x00%s\x00%s\x00%s\x00%s",
+		FingerprintVersion, f.RuleID, f.RuleVersion, strings.ToLower(f.Resource.Type), f.Resource.Name, f.Resource.ID,
+		strings.ToLower(f.Location.File), f.Key)
 	return hex.EncodeToString(h.Sum(nil))[:32]
 }
 

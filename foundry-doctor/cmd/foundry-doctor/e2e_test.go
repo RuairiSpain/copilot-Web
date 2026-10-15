@@ -159,12 +159,12 @@ func TestSamplesEndToEnd(t *testing.T) {
 		}
 		found := false
 		for _, s := range r.Skipped {
-			if strings.HasPrefix(s.RuleID, "FND-NET-") && s.Reason == "input-unavailable" {
+			if strings.HasPrefix(s.RuleID, "FND-NET-") && s.Reason == "synthetic-infrastructure" {
 				found = true
 			}
 		}
 		if !found {
-			t.Error("NET rules should be skipped input-unavailable")
+			t.Error("NET rules should be skipped synthetic-infrastructure")
 		}
 	})
 	t.Run("bicep-backed with fake compiler runs ARM rules", func(t *testing.T) {
