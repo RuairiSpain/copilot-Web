@@ -376,14 +376,6 @@ func peeringPairs(m sdk.ARMModel) [][2]string {
 	return out
 }
 
-func lastName(id string) string {
-	parts := strings.Split(strings.Trim(id, "/"), "/")
-	if len(parts) == 0 {
-		return ""
-	}
-	return parts[len(parts)-1]
-}
-
 func withinAny(p netip.Prefix, allowed []netip.Prefix) bool {
 	for _, a := range allowed {
 		if a.Contains(p.Addr()) {

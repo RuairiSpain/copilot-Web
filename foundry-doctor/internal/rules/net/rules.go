@@ -587,13 +587,14 @@ func (r net005) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 				o.skip(a.Name + ": agent subnet is unresolved or not in the template")
 				continue
 			}
-			if !literalRegion(sn.vnet.Region) || !literalRegion(a.Region) {
+			switch regionCompare(a.Region, sn.vnet.Region) {
+			case armexpr.Same:
+				o.evaluated++
+			case armexpr.Different:
+				o.evaluated++
+				o.add(a, fmt.Sprintf("account region %q differs from agent virtual network region %q", armexpr.StripScope(a.Region), armexpr.StripScope(sn.vnet.Region)))
+			default:
 				o.skip(a.Name + ": account or virtual network region is an expression or unset, so regions are not comparable")
-				continue
-			}
-			o.evaluated++
-			if normRegion(a.Region) != normRegion(sn.vnet.Region) {
-				o.add(a, fmt.Sprintf("account region %q differs from agent virtual network region %q", a.Region, sn.vnet.Region))
 			}
 		}
 	}
@@ -607,13 +608,14 @@ func (r net005) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 			o.skip(pe.Name + ": endpoint subnet is unresolved or not in the template")
 			continue
 		}
-		if !literalRegion(pe.Region) || !literalRegion(sn.vnet.Region) {
+		switch regionCompare(pe.Region, sn.vnet.Region) {
+		case armexpr.Same:
+			o.evaluated++
+		case armexpr.Different:
+			o.evaluated++
+			o.add(pe, fmt.Sprintf("private endpoint region %q differs from its virtual network region %q", armexpr.StripScope(pe.Region), armexpr.StripScope(sn.vnet.Region)))
+		default:
 			o.skip(pe.Name + ": endpoint or virtual network region is an expression or unset, so regions are not comparable")
-			continue
-		}
-		o.evaluated++
-		if normRegion(pe.Region) != normRegion(sn.vnet.Region) {
-			o.add(pe, fmt.Sprintf("private endpoint region %q differs from its virtual network region %q", pe.Region, sn.vnet.Region))
 		}
 	}
 	return o.result(), nil
@@ -710,4 +712,16 @@ func (r net008) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 		}
 	}
 	return o.result(), nil
+}
+
+// regionCompare compares two regions: literals by normalised name, expressions
+// only when armexpr proves them equal within one deployment scope (Same).
+func regionCompare(a, b string) armexpr.Result {
+	if literalRegion(a) && literalRegion(b) {
+		if normRegion(a) == normRegion(b) {
+			return armexpr.Same
+		}
+		return armexpr.Different
+	}
+	return armexpr.CompareValues(a, b)
 }

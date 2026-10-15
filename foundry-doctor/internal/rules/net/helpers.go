@@ -501,7 +501,7 @@ func (o *outcome) addKey(r sdk.ARMResource, key, evidence string) {
 	o.findings[len(o.findings)-1].Key = key
 }
 
-func (o *outcome) skip(reason string) { o.skips = append(o.skips, reason) }
+func (o *outcome) skip(reason string) { o.skips = append(o.skips, armexpr.StripScope(reason)) }
 
 func (o *outcome) result() sdk.Result {
 	if len(o.findings) == 0 && o.evaluated == 0 {

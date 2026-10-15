@@ -121,7 +121,11 @@ func TestRules(t *testing.T) {
 		{name: "006 cosmos cgnat", rule: "FND-SEC-006", res: []sdk.ARMResource{conn("db"), res(typeCosmos, "db", props{"ipRules": []any{props{"ipAddressOrRange": "100.64.1.1"}}})}, findings: 1},
 		{name: "006 keyvault private not evaluated", rule: "FND-SEC-006", res: []sdk.ARMResource{conn("kv"), res(typeKeyVault, "kv", props{"networkAcls": props{"ipRules": []any{props{"value": "10.0.0.0/8"}}}})}},
 		{name: "006 search open", rule: "FND-SEC-006", res: []sdk.ARMResource{conn("srch"), res(typeSearch, "srch", props{"networkRuleSet": props{"ipRules": []any{props{"value": "0.0.0.0/0"}}}})}, findings: 1},
-		{name: "006 cogsvc open", rule: "FND-SEC-006", res: []sdk.ARMResource{func() sdk.ARMResource { r := res(typeAccounts, "a", props{"networkAcls": props{"ipRules": []any{props{"value": "0.0.0.0/0"}}}}); r.Kind = "AIServices"; return r }()}, findings: 1},
+		{name: "006 cogsvc open", rule: "FND-SEC-006", res: []sdk.ARMResource{func() sdk.ARMResource {
+			r := res(typeAccounts, "a", props{"networkAcls": props{"ipRules": []any{props{"value": "0.0.0.0/0"}}}})
+			r.Kind = "AIServices"
+			return r
+		}()}, findings: 1},
 		{name: "006 public ip ok", rule: "FND-SEC-006", res: []sdk.ARMResource{conn("st"), res(typeStorage, "st", props{"networkAcls": props{"ipRules": []any{props{"value": "203.0.113.0/24"}}}})}},
 		{name: "006 param array skips", rule: "FND-SEC-006", res: []sdk.ARMResource{conn("st"), res(typeStorage, "st", props{"networkAcls": props{"ipRules": "[parameters('rules')]"}})}, skip: SkipUnresolved},
 		{name: "006 param value skips", rule: "FND-SEC-006", res: []sdk.ARMResource{conn("st"), res(typeStorage, "st", props{"networkAcls": props{"ipRules": []any{props{"value": "[parameters('ip')]"}}}})}, skip: SkipUnresolved},

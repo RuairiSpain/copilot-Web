@@ -122,13 +122,20 @@ func TestCompiledNET003ScopeAndNotDeployed(t *testing.T) {
 	}
 }
 
-func TestCompiledNET005RegionExpressionsSkip(t *testing.T) {
+func TestCompiledNET005IdenticalRegionExpressionsAreSame(t *testing.T) {
+	// The endpoints and the virtual network are all at the parameter
+	// "location" within one template scope: Same, so evaluated and passing.
 	out := runRule(t, net005{}, goldenResources(t), nil)
-	if len(out.Findings) != 0 || out.Skipped == nil {
-		t.Fatalf("resourceGroup().location and parameter regions are not comparable: %+v", out)
+	if out.Skipped != nil || len(out.Findings) != 0 {
+		t.Fatalf("identical region expressions must compare Same and pass: %+v", out)
 	}
-	if !strings.Contains(out.Skipped.Reason, "not comparable") {
-		t.Errorf("reason %q", out.Skipped.Reason)
+	// A literal region against an expression stays uncertain.
+	rs := append([]sdk.ARMResource(nil), goldenResources(t)...)
+	vi := find(rs, "Microsoft.Network/virtualNetworks", "vnet-")
+	rs[vi].Region = "swedencentral"
+	out = runRule(t, net005{}, rs, nil)
+	if len(out.Findings) != 0 || out.Skipped == nil || !strings.Contains(out.Skipped.Reason, "not comparable") {
+		t.Fatalf("literal vs expression must skip: %+v", out)
 	}
 }
 

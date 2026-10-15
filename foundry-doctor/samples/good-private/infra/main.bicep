@@ -42,12 +42,21 @@ resource agentSubnet 'Microsoft.Network/virtualNetworks/subnets@2023-11-01' = {
   }
 }
 
+resource peNsg 'Microsoft.Network/networkSecurityGroups@2023-11-01' = {
+  name: 'fdgoodsafe-pe-nsg'
+  location: 'swedencentral'
+  properties: {}
+}
+
 resource peSubnet 'Microsoft.Network/virtualNetworks/subnets@2023-11-01' = {
   parent: vnet
   name: 'private-endpoints'
   properties: {
     addressPrefix: '10.20.1.0/24'
     privateEndpointNetworkPolicies: 'Disabled'
+    networkSecurityGroup: {
+      id: peNsg.id
+    }
   }
 }
 
