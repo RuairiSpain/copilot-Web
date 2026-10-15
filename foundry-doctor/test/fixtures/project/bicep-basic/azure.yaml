@@ -1,5 +1,0 @@
-name: bicep-basic
-services:
-  api:
-    host: containerapp
-    project: ./src
