@@ -23,7 +23,7 @@
         "reason": "accepted",
         "owner": "team"
       },
-      "fingerprint": "ad88df047941a1417e944aed6bc381e7"
+      "fingerprint": "1181c0263db77e2a46e30a562fb94600"
     },
     {
       "ruleId": "FND-001",
@@ -35,7 +35,7 @@
         "line": 1
       },
       "evidence": "line1\nline2\u001b[31m",
-      "fingerprint": "b195cab776ae63496ef9b6122afef35e"
+      "fingerprint": "7f790d679a92d3b4f4f48a9efaa6a85b"
     },
     {
       "ruleId": "FND-002",
@@ -51,7 +51,7 @@
       "evidence": "note=plain | `x` \u003cscript\u003e",
       "recommendation": "Use *managed* identity",
       "docsUrl": "https://learn.microsoft.com/azure/foundry",
-      "fingerprint": "7e065fce80b5cbbd6243242251212175"
+      "fingerprint": "8fcedc9e6f68e31b296584e5ef92db84"
     },
     {
       "ruleId": "FND-003",
@@ -62,7 +62,7 @@
         "file": "passwd"
       },
       "baselined": true,
-      "fingerprint": "a5579886efbfe458f43fb65eeba953b5"
+      "fingerprint": "973d28a81f8a19f03f96b9bb8c48be21"
     }
   ],
   "skipped": [

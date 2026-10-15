@@ -14,8 +14,8 @@ import (
 )
 
 // FingerprintVersion is the version tag hashed into every fingerprint
-// (ADR-008). Version 2 added Finding.Key.
-const FingerprintVersion = "v2"
+// (ADR-008). Version 2 added Finding.Key; version 3 derives a Key for key-less findings from the finding itself (ADR-008 amendment 2).
+const FingerprintVersion = "v3"
 
 // Fingerprint returns a stable identity for a finding. It deliberately omits
 // line, column and evidence so unrelated edits do not invalidate baselines,

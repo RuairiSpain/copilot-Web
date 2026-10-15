@@ -180,7 +180,7 @@ func TestEnvRulesEndToEndFindings(t *testing.T) {
 		t.Fatal(err)
 	}
 	res := evalEnvRules(t, dir, []string{"dev", "prod"}, doc)
-	if n := len(res["FND-ENV-001"].Findings); n != 3 {
+	if n := len(res["FND-ENV-001"].Findings); n != 1 {
 		t.Fatalf("ENV-001 findings=%d: %+v", n, res["FND-ENV-001"])
 	}
 	var keys []string
@@ -190,5 +190,60 @@ func TestEnvRulesEndToEndFindings(t *testing.T) {
 	want := []string{"AZURE_AI_PROJECT_ENDPOINT", "AZURE_RESOURCE_GROUP", "AZURE_SUBSCRIPTION_ID"}
 	if !reflect.DeepEqual(keys, want) {
 		t.Fatalf("ENV-002 keys=%v want %v (AZURE_TENANT_ID must not be reported)", keys, want)
+	}
+}
+
+type tierPolicy map[string]any
+
+func (p tierPolicy) Get(k string) (any, bool) { v, ok := p[k]; return v, ok }
+
+// A Key Vault resource ID shared by prod and non-prod is reported whatever the
+// key is called; the secret value under the same key stays out of evidence.
+func TestEnvRulesClassifyBeforeDigest(t *testing.T) {
+	const kv = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.KeyVault/vaults/kv1"
+	for _, key := range []string{"AZURE_KEYVAULT_ID", "AZURE_VAULT_ID"} {
+		t.Run(key, func(t *testing.T) {
+			mk := func(n string) *string {
+				return str("AZURE_ENV_NAME=" + n + "\n" + key + "=" + kv + "\n")
+			}
+			dir := envProject(t, map[string]*string{"dev": mk("dev"), "prod": mk("prod")})
+			s := &envStore{src: Source{Dir: dir, Environments: []string{"dev", "prod"}}}
+			pol := tierPolicy{env.TierPolicyKey: map[string]any{"dev": "dev", "prod": "prod"}}
+			for _, r := range env.RegisterWith(s) {
+				if r.ID() != "FND-ENV-003" {
+					continue
+				}
+				res, err := r.Evaluate(context.Background(), &sdk.Input{Policy: pol})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(res.Findings) != 1 {
+					t.Fatalf("ENV-003 findings=%d skip=%+v", len(res.Findings), res.Skipped)
+				}
+				if strings.Contains(res.Findings[0].Evidence, "00000000") {
+					t.Fatalf("evidence leaks the value: %s", res.Findings[0].Evidence)
+				}
+			}
+		})
+	}
+}
+
+func TestReadEnvFileShapes(t *testing.T) {
+	dir := envProject(t, map[string]*string{"dev": str("AZURE_KEYVAULT_ID=/subscriptions/1/x\nAPI_KEY=sk-abcdef123456\nSAS_URL=https://x.blob.core.windows.net/c?sig=abc\nPLAIN=v\nEP_TOKEN_URL=https://a.services.ai.azure.com\n")})
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+	vals, shapes, st := readEnvFile(root, ".azure/dev/.env")
+	if st != env.StatusOK {
+		t.Fatal(st)
+	}
+	want := map[string]env.Shape{"AZURE_KEYVAULT_ID": env.ShapeResourceID, "EP_TOKEN_URL": env.ShapeFoundryEndpoint}
+	if !reflect.DeepEqual(shapes, want) {
+		t.Fatalf("shapes=%v want %v", shapes, want)
+	}
+	if !strings.HasPrefix(vals["API_KEY"], "sha256:") || !strings.HasPrefix(vals["AZURE_KEYVAULT_ID"], "sha256:") || vals["PLAIN"] != "v" {
+		t.Fatalf("vals=%v", vals)
 	}
 }

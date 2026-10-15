@@ -1,5 +1,5 @@
 id: FND-ENV-002
-version: 2
+version: 3
 group: ENV
 title: "Environment-bound names/IDs/rules were not copied unchanged"
 description: >-
@@ -33,7 +33,10 @@ evidence:
     deployment or model (AZURE_TENANT_ID, *_PRINCIPAL_ID, MODEL_DEPLOYMENT_NAME and similar), which are shared on
     purpose. A pair of environments with an empty or equal AZURE_ENV_NAME, and any environment whose .env is missing,
     unreadable, over-size, truncated or unparseable, is named in an uncertain skip; the rule never passes on such
-    input. Values are never printed; the finding carries the key and a salted hash fingerprint.
+    input. Values are never printed; the finding carries the key and a salted hash fingerprint. Values under secret-looking key
+    names (KEY, SECRET, TOKEN and similar) are digested before the rule runs; the value shape (resource ID or bare
+    endpoint URL) is classified first and carried next to the digest, so such a key is judged exactly like the same
+    value under another name. With fewer than two environments the rule is not applicable.
   confidence: likely
 recommendation: >-
   Review each reported key and give the environment its own value, or suppress the finding with a reason and

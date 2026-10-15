@@ -90,6 +90,7 @@ type envStore struct {
 	once   sync.Once
 	envs   []env.Environment
 	byEn   map[string]map[string]string
+	shapes map[string]map[string]env.Shape
 	status map[string]env.Status
 }
 
@@ -119,6 +120,7 @@ func literalResourceGroups(view sdk.AzureYAMLView) []string {
 func (s *envStore) load() {
 	s.once.Do(func() {
 		s.byEn = map[string]map[string]string{}
+		s.shapes = map[string]map[string]env.Shape{}
 		s.status = map[string]env.Status{}
 		if s.src.Dir == "" {
 			return
@@ -132,14 +134,16 @@ func (s *envStore) load() {
 		literalRG := literalResourceGroups(s.view)
 		for _, n := range names {
 			vals, st := map[string]string{}, env.StatusUnreadable
+			var shapes map[string]env.Shape
 			if rootErr == nil {
-				vals, st = readEnvFile(root, path.Join(project.AzureDir, n, ".env"))
+				vals, shapes, st = readEnvFile(root, path.Join(project.AzureDir, n, ".env"))
 			}
 			s.byEn[n] = vals
+			s.shapes[n] = shapes
 			s.status[n] = st
 			s.envs = append(s.envs, env.Environment{
 				Name: n, Subscription: vals["AZURE_SUBSCRIPTION_ID"], ResourceGroup: vals["AZURE_RESOURCE_GROUP"],
-				LiteralRGAt: literalRG, Status: st, Values: vals,
+				LiteralRGAt: literalRG, Status: st, Values: vals, Shapes: shapes,
 			})
 		}
 	})
@@ -193,42 +197,51 @@ func digest(v string) string {
 // anything other than env.StatusOK comes with an empty map, because a partial
 // view would let a comparison pass on missing data. Secret-looking values are
 // replaced by a digest after parsing, so variable expansion sees real values.
-func readEnvFile(root *os.Root, rel string) (map[string]string, env.Status) {
+func readEnvFile(root *os.Root, rel string) (map[string]string, map[string]env.Shape, env.Status) {
 	none := map[string]string{}
 	f, err := root.Open(rel)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return none, env.StatusMissing
+			return none, nil, env.StatusMissing
 		}
-		return none, env.StatusUnreadable
+		return none, nil, env.StatusUnreadable
 	}
 	defer f.Close()
 	fi, err := f.Stat()
 	if err != nil || !fi.Mode().IsRegular() {
-		return none, env.StatusUnreadable
+		return none, nil, env.StatusUnreadable
 	}
 	if fi.Size() > maxEnvFileBytes {
-		return none, env.StatusOversize
+		return none, nil, env.StatusOversize
 	}
 	data, err := io.ReadAll(io.LimitReader(f, maxEnvFileBytes+1))
 	if err != nil {
-		return none, env.StatusUnreadable
+		return none, nil, env.StatusUnreadable
 	}
 	if len(data) > maxEnvFileBytes {
-		return none, env.StatusOversize
+		return none, nil, env.StatusOversize
 	}
 	parsed, err := project.ParseDotEnv(data)
 	if err != nil {
-		return none, env.StatusUnparseable
+		return none, nil, env.StatusUnparseable
 	}
 	if len(parsed) > maxEnvKeys {
-		return none, env.StatusTruncated
+		return none, nil, env.StatusTruncated
 	}
 	delete(parsed, "") // godotenv yields an empty key for a last line without separator
+	var shapes map[string]env.Shape
 	for k, v := range parsed {
 		if v != "" && secretishKey(k) {
+			// Classify before digesting: a resource ID or bare endpoint URL
+			// under a key such as AZURE_KEYVAULT_ID keeps its shape.
+			if sh := env.ClassifyShape(v); sh != env.ShapePlain {
+				if shapes == nil {
+					shapes = map[string]env.Shape{}
+				}
+				shapes[k] = sh
+			}
 			parsed[k] = digest(v)
 		}
 	}
-	return parsed, env.StatusOK
+	return parsed, shapes, env.StatusOK
 }
