@@ -101,14 +101,13 @@ sources:
   note: ThroughputSettingsResource has throughput or autoscaleSettings, not both.
 - url: >-
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2025-04-15/cosmos-db.json
-  lastVerified: '2026-10-05'
+  lastVerified: '2026-10-15'
   verifiedVia: >-
     raw.githubusercontent.com/Azure/azure-rest-api-specs/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2025-04-15/cosmos-db.json
     (definitions CreateUpdateOptions, AutoscaleSettings, SqlDatabaseCreateUpdateProperties, SqlContainerCreateUpdateProperties)
   note: >-
     CreateUpdateOptions has integer throughput and autoscaleSettings.maxThroughput ("either throughput or autoscaleSettings,
-    but not both") and is the options property of SQL database and container create-update properties. Fetched 2026-10-15;
-    lastVerified is capped at the catalogue test clock (2026-10-05).
+    but not both") and is the options property of SQL database and container create-update properties. Fetched 2026-10-15.
 - url: https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup
   lastVerified: '2026-10-04'
   verifiedVia: refs/azure-ai-docs/articles/foundry/agents/includes/concepts-standard-agent-setup-content.md
