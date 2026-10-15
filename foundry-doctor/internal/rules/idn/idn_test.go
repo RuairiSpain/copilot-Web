@@ -21,6 +21,8 @@ const (
 	resSc = rg + "/providers/Microsoft.CognitiveServices/accounts/acct"
 )
 
+const naReason = sdk.SkipNotApplicable + ": no applicable resources in the compiled template"
+
 const restrictiveCond = "((!(ActionMatches{'Microsoft.Authorization/roleAssignments/write'})) OR " +
 	"(@Request[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {f6c7c914-8db3-469d-8ca1-694a8f32e121})) AND " +
 	"((!(ActionMatches{'Microsoft.Authorization/roleAssignments/delete'})) OR " +
@@ -91,7 +93,7 @@ func TestCancelledContext(t *testing.T) {
 
 func TestRules(t *testing.T) {
 	acct := func(id map[string]any) sdk.ARMResource {
-		return sdk.ARMResource{Type: typeAccounts, Name: "acct", Identity: id}
+		return sdk.ARMResource{Type: typeAccounts, Name: "acct", Kind: "AIServices", Identity: id}
 	}
 	app := func(id map[string]any, name, val string) sdk.ARMResource {
 		return sdk.ARMResource{Type: typeContainer, Name: "app", Identity: id, Properties: props{
@@ -106,6 +108,11 @@ func TestRules(t *testing.T) {
 		return p
 	}
 	sys := props{"type": "SystemAssigned"}
+	// fa is a Foundry account (kind AIServices) that owns a project, as the
+	// rule scope requires.
+	fa := func(id map[string]any) []sdk.ARMResource {
+		return []sdk.ARMResource{acct(id), {Type: typeProjects, Name: "acct/p", Identity: sys}}
+	}
 	appA := acct(props{"type": "SystemAssigned", "principalId": guidA})
 	cases := []struct {
 		name     string
@@ -116,20 +123,31 @@ func TestRules(t *testing.T) {
 		contains string
 	}{
 		// IDN-001
-		{name: "001 no identity", rule: "FND-IDN-001", res: []sdk.ARMResource{acct(nil)}, findings: 1, contains: "no identity"},
-		{name: "001 None", rule: "FND-IDN-001", res: []sdk.ARMResource{acct(props{"type": "None"})}, findings: 1},
-		{name: "001 system assigned", rule: "FND-IDN-001", res: []sdk.ARMResource{acct(sys)}},
-		{name: "001 user assigned empty", rule: "FND-IDN-001", res: []sdk.ARMResource{acct(props{"type": "UserAssigned", "userAssignedIdentities": props{}})}, findings: 1},
-		{name: "001 user assigned missing map", rule: "FND-IDN-001", res: []sdk.ARMResource{acct(props{"type": "UserAssigned"})}, findings: 1},
-		{name: "001 user assigned ok", rule: "FND-IDN-001", res: []sdk.ARMResource{acct(props{"type": "UserAssigned", "userAssignedIdentities": props{"/id": props{}}})}},
-		{name: "001 expression type", rule: "FND-IDN-001", res: []sdk.ARMResource{acct(props{"type": "[parameters('t')]"})}, skip: SkipUnresolved},
-		{name: "001 expression map", rule: "FND-IDN-001", res: []sdk.ARMResource{acct(props{"type": "UserAssigned", "userAssignedIdentities": "[variables('u')]"})}, skip: SkipUnresolved},
+		{name: "001 no identity", rule: "FND-IDN-001", res: fa(nil), findings: 1, contains: "no identity"},
+		{name: "001 None", rule: "FND-IDN-001", res: fa(props{"type": "None"}), findings: 1},
+		{name: "001 system assigned", rule: "FND-IDN-001", res: fa(sys)},
+		{name: "001 user assigned empty", rule: "FND-IDN-001", res: fa(props{"type": "UserAssigned", "userAssignedIdentities": props{}}), findings: 1},
+		{name: "001 user assigned missing map", rule: "FND-IDN-001", res: fa(props{"type": "UserAssigned"}), findings: 1},
+		{name: "001 user assigned ok", rule: "FND-IDN-001", res: fa(props{"type": "UserAssigned", "userAssignedIdentities": props{"/id": props{}}})},
+		{name: "001 expression type", rule: "FND-IDN-001", res: fa(props{"type": "[parameters('t')]"}), skip: SkipUnresolved},
+		{name: "001 expression map", rule: "FND-IDN-001", res: fa(props{"type": "UserAssigned", "userAssignedIdentities": "[variables('u')]"}), skip: SkipUnresolved},
+		{name: "001 non-AIServices account is not applicable", rule: "FND-IDN-001", res: []sdk.ARMResource{{Type: typeAccounts, Name: "speech", Kind: "SpeechServices"}}, skip: naReason},
+		{name: "001 AIServices account without projects or deployments", rule: "FND-IDN-001", res: []sdk.ARMResource{{Type: typeAccounts, Name: "lonely", Kind: "AIServices"}, {Type: typeAccounts, Name: "other", Kind: "AIServices"}, {Type: typeProjects, Name: "other/p", Identity: sys}}, findings: 1, contains: "no identity"},
+		{name: "001 expression-named account owns expression-named project", rule: "FND-IDN-001", res: []sdk.ARMResource{
+			{Type: typeAccounts, Name: "[format('ai-{0}', variables('token'))]", Kind: "AIServices"},
+			{Type: typeProjects, Name: "[format('{0}/{1}', format('ai-{0}', variables('token')), 'proj')]", Identity: sys},
+			{Type: typeAccounts, Name: "[format('other-{0}', variables('token'))]", Kind: "AIServices"}}, findings: 1},
+		{name: "001 conditional account skips", rule: "FND-IDN-001", res: []sdk.ARMResource{func() sdk.ARMResource {
+			a := acct(nil)
+			a.Conditional, a.Condition = true, "[parameters('deploy')]"
+			return a
+		}(), {Type: typeDeployments, Name: "acct/d"}}, skip: "conditional-resource"},
 		{name: "001 project", rule: "FND-IDN-001", res: []sdk.ARMResource{{Type: typeProjects, Name: "acct/p"}}, findings: 1},
 		{name: "001 workload foundry no identity", rule: "FND-IDN-001", res: []sdk.ARMResource{app(nil, "AZURE_AI_PROJECT_ENDPOINT", "x")}, findings: 1},
 		{name: "001 workload foundry value", rule: "FND-IDN-001", res: []sdk.ARMResource{app(nil, "X", "https://a.services.ai.azure.com/api")}, findings: 1},
 		{name: "001 workload foundry identity ok", rule: "FND-IDN-001", res: []sdk.ARMResource{app(sys, "FOUNDRY_URL", "x")}},
-		{name: "001 workload unrelated not evaluated", rule: "FND-IDN-001", res: []sdk.ARMResource{app(nil, "LOG", "debug")}, skip: sdk.SkipInputUnavailable},
-		{name: "001 no resources", rule: "FND-IDN-001", res: nil, skip: sdk.SkipInputUnavailable},
+		{name: "001 workload unrelated not evaluated", rule: "FND-IDN-001", res: []sdk.ARMResource{app(nil, "LOG", "debug")}, skip: naReason},
+		{name: "001 no resources", rule: "FND-IDN-001", res: nil, skip: naReason},
 		// IDN-003
 		{name: "003 good", rule: "FND-IDN-003", res: []sdk.ARMResource{ra(props{"principalId": guidA, "principalType": "ServicePrincipal"}, rg, "2022-04-01")}},
 		{name: "003 missing principalType", rule: "FND-IDN-003", res: []sdk.ARMResource{ra(props{"principalId": guidA}, rg, "2022-04-01")}, findings: 1, contains: "principalType"},
@@ -138,10 +156,25 @@ func TestRules(t *testing.T) {
 		{name: "003 clientId expression", rule: "FND-IDN-003", res: []sdk.ARMResource{ra(props{"principalId": "[reference('x').clientId]", "principalType": "ServicePrincipal"}, rg, "2022-04-01")}, findings: 1, contains: "clientId"},
 		{name: "003 parameter expression", rule: "FND-IDN-003", res: []sdk.ARMResource{ra(props{"principalId": "[parameters('p')]", "principalType": "ServicePrincipal"}, rg, "2022-04-01")}, skip: SkipUnresolved},
 		{name: "003 principalType expression", rule: "FND-IDN-003", res: []sdk.ARMResource{ra(props{"principalId": guidA, "principalType": "[parameters('t')]"}, rg, "2022-04-01")}, skip: SkipUnresolved},
-		{name: "003 old api with principalType", rule: "FND-IDN-003", res: []sdk.ARMResource{ra(props{"principalId": guidA, "principalType": "ServicePrincipal"}, rg, "2020-04-01-preview")}, findings: 1, contains: "apiVersion"},
+		{name: "003 old api with principalType", rule: "FND-IDN-003", res: []sdk.ARMResource{ra(props{"principalId": guidA, "principalType": "ServicePrincipal"}, rg, "2017-05-01")}, findings: 1, contains: "low confidence"},
+		{name: "003 preview api supports principalType", rule: "FND-IDN-003", res: []sdk.ARMResource{ra(props{"principalId": guidA, "principalType": "ServicePrincipal"}, rg, "2020-04-01-preview")}},
+		{name: "003 too old preview", rule: "FND-IDN-003", res: []sdk.ARMResource{ra(props{"principalId": guidA, "principalType": "ServicePrincipal"}, rg, "2018-01-01-preview")}, findings: 1},
+		{name: "003 param named appIdentityPrincipalId is not a client id", rule: "FND-IDN-003", res: []sdk.ARMResource{ra(props{"principalId": "[parameters('appIdentityPrincipalId')]", "principalType": "ServicePrincipal"}, rg, "2022-04-01")}, skip: SkipUnresolved},
+		{name: "003 param uamiClientId", rule: "FND-IDN-003", res: []sdk.ARMResource{ra(props{"principalId": "[parameters('uamiClientId')]", "principalType": "ServicePrincipal"}, rg, "2022-04-01")}, findings: 1, contains: "clientId"},
+		{name: "003 property access appId", rule: "FND-IDN-003", res: []sdk.ARMResource{ra(props{"principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'u'), '2023-01-31').appId]", "principalType": "ServicePrincipal"}, rg, "2022-04-01")}, findings: 1},
+		{name: "003 literal false condition not deployed", rule: "FND-IDN-003", res: []sdk.ARMResource{func() sdk.ARMResource {
+			r := ra(props{"principalId": guidA}, rg, "2022-04-01")
+			r.Conditional, r.Condition = true, "false"
+			return r
+		}()}, skip: naReason},
+		{name: "003 parameter condition skips", rule: "FND-IDN-003", res: []sdk.ARMResource{func() sdk.ARMResource {
+			r := ra(props{"principalId": guidA}, rg, "2022-04-01")
+			r.Conditional, r.Condition = true, "[parameters('assign')]"
+			return r
+		}()}, skip: "conditional-resource"},
 		{name: "003 old api without principalType", rule: "FND-IDN-003", res: []sdk.ARMResource{ra(props{"principalId": guidA}, rg, "2020-04-01-preview")}, findings: 1},
 		{name: "003 unparseable api ignored", rule: "FND-IDN-003", res: []sdk.ARMResource{ra(props{"principalId": guidA, "principalType": "User"}, rg, "weird")}},
-		{name: "003 none", rule: "FND-IDN-003", res: []sdk.ARMResource{{Type: typeAccounts}}, skip: sdk.SkipInputUnavailable},
+		{name: "003 none", rule: "FND-IDN-003", res: []sdk.ARMResource{{Type: typeAccounts}}, skip: naReason},
 		// IDN-004
 		{name: "004 owner subscription", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(sp(roleOwner, "ServicePrincipal"), subsc, "")}, findings: 1, contains: "Owner"},
 		{name: "004 contributor rg", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(sp(roleContributor, "ServicePrincipal"), rg, "")}, findings: 1},
@@ -152,7 +185,22 @@ func TestRules(t *testing.T) {
 		{name: "004 human ignored", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(sp(roleOwner, "User"), subsc, "")}},
 		{name: "004 non-privileged role", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(sp("5e0bd9bd-7b93-4f28-af87-19fc36ad61bd", "ServicePrincipal"), subsc, "")}},
 		{name: "004 missing principalType skips", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(sp(roleOwner, ""), subsc, "")}, skip: SkipUnresolved},
-		{name: "004 expression scope skips", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(sp(roleOwner, "ServicePrincipal"), "[resourceGroup().id]", "")}, skip: SkipUnresolved},
+		{name: "004 resourceGroup().id scope is broad", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(sp(roleOwner, "ServicePrincipal"), "[resourceGroup().id]", "")}, findings: 1},
+		{name: "004 empty scope is the deployment scope", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(sp(roleOwner, "ServicePrincipal"), "", "")}, findings: 1},
+		{name: "004 parameter scope skips", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(sp(roleOwner, "ServicePrincipal"), "[parameters('scope')]", "")}, skip: SkipUnresolved},
+		{name: "004 compiled subscriptionResourceId role", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(props{"roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '" + roleOwner + "')]", "principalId": guidA, "principalType": "ServicePrincipal"}, subsc, "")}, findings: 1, contains: "Owner"},
+		{name: "004 compiled extensionResourceId role", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(props{"roleDefinitionId": "[extensionResourceId(resourceGroup().id, 'Microsoft.Authorization/roleDefinitions', '" + roleContributor + "')]", "principalId": guidA, "principalType": "ServicePrincipal"}, rg, "")}, findings: 1},
+		{name: "004 compiled format scope", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(sp(roleOwner, "ServicePrincipal"), "[format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('rg'))]", "")}, findings: 1},
+		{name: "004 compiled resourceId scope is resource scope", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(sp(roleContributor, "ServicePrincipal"), "[resourceId('Microsoft.CognitiveServices/accounts', format('ai-{0}', variables('token')))]", "")}},
+		{name: "004 expression-named project principal", rule: "FND-IDN-004", res: []sdk.ARMResource{
+			{Type: typeProjects, Name: "[format('{0}/{1}', format('ai-{0}', variables('token')), 'proj')]", Identity: sys},
+			ra(props{"roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '" + roleOwner + "')]", "principalType": "ServicePrincipal",
+				"principalId": "[reference(resourceId('Microsoft.CognitiveServices/accounts/projects', format('ai-{0}', variables('token')), 'proj'), '2025-06-01', 'full').identity.principalId]"}, "", "")}, findings: 1},
+		{name: "004 conditional role assignment skips", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, func() sdk.ARMResource {
+			r := ra(sp(roleOwner, "ServicePrincipal"), subsc, "")
+			r.Conditional, r.Condition = true, "[parameters('grant')]"
+			return r
+		}()}, skip: "conditional-resource"},
 		{name: "004 expression role skips", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(props{"roleDefinitionId": "[variables('r')]", "principalType": "ServicePrincipal"}, subsc, "")}, skip: SkipUnresolved},
 		{name: "004 unknown scope shape skips", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(sp(roleOwner, "ServicePrincipal"), "/weird", "")}, skip: SkipUnresolved},
 		{name: "004 finding beats skip", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(sp(roleOwner, ""), subsc, ""), ra(sp(roleOwner, "ServicePrincipal"), subsc, "")}, findings: 1},
@@ -194,7 +242,7 @@ func TestRules(t *testing.T) {
 		{name: "006 other issuer ok", rule: "FND-IDN-006", res: []sdk.ARMResource{fic("https://issuer.example", "anything")}},
 		{name: "006 expression issuer", rule: "FND-IDN-006", res: []sdk.ARMResource{fic("[parameters('i')]", "s")}, skip: SkipUnresolved},
 		{name: "006 expression subject", rule: "FND-IDN-006", res: []sdk.ARMResource{fic(githubIssuer, "[parameters('s')]")}, skip: SkipUnresolved},
-		{name: "006 none", rule: "FND-IDN-006", res: nil, skip: sdk.SkipInputUnavailable},
+		{name: "006 none", rule: "FND-IDN-006", res: nil, skip: naReason},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

@@ -25,7 +25,7 @@ func TestNET006009010011(t *testing.T) {
 				acct("a", m{"publicNetworkAccess": "Disabled", "networkInjections": l{m{"scenario": "agent", "subnetArmId": "/s/providers/Microsoft.Network/virtualNetworks/vn/subnets/agents"}}}),
 				{Type: "Microsoft.Network/virtualNetworks", Name: "vn", Properties: m{"addressSpace": m{"addressPrefixes": l{"44.0.0.0/16"}}, "subnets": l{m{"name": "agents", "properties": m{"addressPrefix": "44.0.0.0/24"}}}}},
 			},
-			findings: 1, contains: "private address space",
+			findings: 1, contains: "RFC 1918",
 		},
 		{
 			name:     "net009 classic sku mismatch",

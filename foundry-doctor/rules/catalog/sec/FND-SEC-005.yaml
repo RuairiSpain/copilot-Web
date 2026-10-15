@@ -1,5 +1,5 @@
 id: FND-SEC-005
-version: 1
+version: 2
 group: SEC
 title: Key Vault soft delete, purge protection and RBAC
 description: >-

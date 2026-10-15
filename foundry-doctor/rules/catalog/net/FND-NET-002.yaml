@@ -1,5 +1,5 @@
 id: FND-NET-002
-version: 1
+version: 2
 group: NET
 title: Dependent services public access/default-deny/private endpoints
 description: >-

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/armexpr"
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/foundrylink"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
 
@@ -37,13 +39,24 @@ func (net009) ID() string { return "FND-NET-009" }
 func (net010) ID() string { return "FND-NET-010" }
 func (net011) ID() string { return "FND-NET-011" }
 
+// publicAccessPolicy is the ADR-007 key policy.network.publicAccess.
+const publicAccessPolicy = "network.publicAccess"
+
 // FND-NET-001: Foundry account public access / private endpoint posture.
+//
+// A private endpoint counts as proof only when it is deployed and its target
+// provably names the account. A conditional or looped endpoint, or one whose
+// target cannot be correlated, makes the account uncertain, not failed.
 func (r net001) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 	if res, skip := noARM(r.ID(), in); skip {
 		return res, nil
 	}
 	o := &outcome{id: r.ID()}
+	declared := policyString(in, publicAccessPolicy)
 	for _, a := range foundryAccounts(in.ARM) {
+		if !o.usable(a) {
+			continue
+		}
 		pa, ok := publicAccess(a)
 		if !ok {
 			o.skip(a.Name + ": publicNetworkAccess is not resolvable from the template")
@@ -58,20 +71,24 @@ func (r net001) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 			}
 			o.evaluated++
 			if da == "allow" {
-				o.add(a, "publicNetworkAccess is Enabled (or unset) and networkAcls.defaultAction is Allow (or unset)")
+				ev := "publicNetworkAccess is Enabled (or unset) and networkAcls.defaultAction is Allow (or unset)"
+				if declared == "entra-only" || declared == "allowed" {
+					ev += "; policy.network.publicAccess is " + declared + ", so public access is declared deliberate"
+				}
+				o.add(a, ev)
 			}
 		case "disabled":
-			pes, unres := pesFor(in.ARM, a.Name, "account")
+			pes, unc := pesFor(in.ARM, a, "account")
 			if len(pes) > 0 {
 				o.evaluated++
 				continue
 			}
-			if unres {
-				o.skip(a.Name + ": a private endpoint with a parameter-valued target may cover this account")
+			if unc {
+				o.skip(a.Name + ": a private endpoint that is conditional, looped or has a target the template cannot correlate may cover this account")
 				continue
 			}
 			o.evaluated++
-			o.add(a, "publicNetworkAccess is Disabled but no private endpoint with group ID 'account' targets the account")
+			o.add(a, "publicNetworkAccess is Disabled but no deployed private endpoint with group ID 'account' targets the account")
 		default:
 			o.skip(a.Name + ": unrecognised publicNetworkAccess value")
 		}
@@ -89,13 +106,20 @@ var deps = []dep{
 	{"vectorStore", tSearch, "searchService", "AI Search"},
 }
 
-func findByRef(m sdk.ARMModel, typ, id string) (sdk.ARMResource, bool) {
+// findByRef finds the deployed resource of a type that id provably names.
+// uncertain is true when some resource of the type could not be ruled out.
+func findByRef(m sdk.ARMModel, typ, id string) (res sdk.ARMResource, found, uncertain bool) {
 	for _, r := range byType(m, typ) {
-		if refMatches(id, r.Name) {
-			return r, true
+		switch corr(id, r) {
+		case armexpr.Same:
+			if !found {
+				res, found = r, true
+			}
+		case armexpr.Unknown:
+			uncertain = true
 		}
 	}
-	return sdk.ARMResource{}, false
+	return res, found, uncertain
 }
 
 // FND-NET-002: dependent store posture for the private standard-agent setup.
@@ -105,6 +129,9 @@ func (r net002) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 	}
 	o := &outcome{id: r.ID()}
 	for _, a := range foundryAccounts(in.ARM) {
+		if !o.usable(a) {
+			continue
+		}
 		if !isPrivate(a) {
 			o.skip(a.Name + ": account is not private; rule applies to the private standard-agent setup only")
 			continue
@@ -118,13 +145,16 @@ func (r net002) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 			if id == "" {
 				continue
 			}
-			if unresolved(id) {
-				o.skip(fmt.Sprintf("%s: capabilitySettings.%s is unresolved", a.Name, d.key))
+			target, ok, unc := findByRef(in.ARM, d.typ, id)
+			if !ok {
+				if unc || unresolved(id) {
+					o.skip(fmt.Sprintf("%s: capabilitySettings.%s cannot be correlated with a resource in the template", a.Name, d.key))
+				} else {
+					o.skip(fmt.Sprintf("%s: capabilitySettings.%s resource is not in the template (external or live inventory required)", a.Name, d.key))
+				}
 				continue
 			}
-			target, ok := findByRef(in.ARM, d.typ, id)
-			if !ok {
-				o.skip(fmt.Sprintf("%s: capabilitySettings.%s resource is not in the template (external or live inventory required)", a.Name, d.key))
+			if !o.usable(target) {
 				continue
 			}
 			pa, pok := publicAccess(target)
@@ -132,13 +162,13 @@ func (r net002) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 				o.skip(target.Name + ": publicNetworkAccess is not resolvable")
 				continue
 			}
-			pes, unres := pesFor(in.ARM, target.Name, d.group)
+			pes, unres := pesFor(in.ARM, target, d.group)
 			o.evaluated++
 			if pa != "disabled" {
-				o.add(target, fmt.Sprintf("%s (%s) publicNetworkAccess is %q, expected Disabled", d.label, d.key, pa))
+				o.addKey(target, "publicNetworkAccess", fmt.Sprintf("%s (%s) publicNetworkAccess is %q, expected Disabled", d.label, d.key, pa))
 			}
 			if len(pes) == 0 && !unres {
-				o.add(target, fmt.Sprintf("%s (%s) has no private endpoint with group ID %q in the template", d.label, d.key, d.group))
+				o.addKey(target, "privateEndpoint", fmt.Sprintf("%s (%s) has no private endpoint with group ID %q in the template", d.label, d.key, d.group))
 			}
 		}
 	}
@@ -172,38 +202,30 @@ var expectedZones = map[string]map[string][]string{
 	},
 }
 
-// Policy keys read by FND-NET-003:
-//   - policy.network.cloud (string: public|usgov|china): selects the zone table.
-//     When unset the cloud is inferred from resource regions (usgov*/usdod* =>
-//     usgov, china* => china, other regions => public); mixed or unresolved
-//     regions make the cloud undeterminable and the rule skips.
-//   - policy.network.dnsManagedByPolicy (bool): DINE policy manages zone groups.
-//   - policy.network.centralDns (bool): DNS is centralised (hub zones, private
+// Policy keys read by FND-NET-003 (effective-policy keys, relative to policy:):
+//   - managedByAzurePolicy (list, ADR-007): containing private-dns-zone-group
+//     means Azure Policy creates the zone groups; the rule skips.
+//   - network.cloud (string: public|usgov|china): selects the zone table. When
+//     unset the cloud is inferred from literal resource regions (usgov*/usdod*
+//     => usgov, china* => china, other regions => public); mixed or
+//     unresolved regions make the cloud undeterminable and the rule skips.
+//   - network.dnsManagedByPolicy (bool): legacy alias of the managedByAzurePolicy
+//     entry.
+//   - network.centralDns (bool): DNS is centralised (hub zones, private
 //     resolver or custom DNS servers); the rule skips instead of failing.
-func policyBool(in *sdk.Input, key string) bool {
-	if in.Policy == nil {
-		return false
-	}
-	v, ok := in.Policy.Get(key)
-	b, isB := v.(bool)
-	return ok && isB && b
-}
-
 func detectCloud(in *sdk.Input) string {
-	if in.Policy != nil {
-		if v, ok := in.Policy.Get("policy.network.cloud"); ok {
-			if s, isS := v.(string); isS {
-				switch c := lc(s); c {
-				case "public", "usgov", "china":
-					return c
-				}
+	if v, ok := policyValue(in, "network.cloud"); ok {
+		if s, isS := v.(string); isS {
+			switch c := lc(s); c {
+			case "public", "usgov", "china":
+				return c
 			}
-			return ""
 		}
+		return ""
 	}
 	found := map[string]bool{}
 	for _, r := range in.ARM.Resources() {
-		if r.Region == "" || unresolved(r.Region) {
+		if !literalRegion(r.Region) {
 			continue
 		}
 		reg := normRegion(r.Region)
@@ -224,53 +246,59 @@ func detectCloud(in *sdk.Input) string {
 	}
 	return ""
 }
-func zoneNameOf(id string) string {
-	if name, ok := literalResourceIDName(id); ok {
-		return lc(name)
-	}
-	i := strings.LastIndex(id, "/")
-	if i >= 0 {
-		return lc(strings.Trim(id[i+1:], "')]"))
-	}
-	return lc(id)
-}
 
-func literalResourceIDName(id string) (string, bool) {
-	if !strings.HasPrefix(id, "[resourceId(") || !strings.HasSuffix(id, ")]") {
+// zoneNameOf returns the private DNS zone name a zone ID refers to, when the ID
+// is a literal or a resourceId() call with literal arguments.
+func zoneNameOf(id string) (string, bool) {
+	ref := armexpr.ParseRef(id)
+	if !ref.Literal() {
 		return "", false
 	}
-	var parts []string
-	for i := 0; i < len(id); {
-		if id[i] != '\'' {
-			i++
-			continue
-		}
-		i++
-		start := i
-		for i < len(id) && id[i] != '\'' {
-			i++
-		}
-		if i >= len(id) {
-			return "", false
-		}
-		parts = append(parts, id[start:i])
-		i++
-	}
-	if len(parts) < 2 {
-		return "", false
-	}
-	return parts[len(parts)-1], true
+	return ref.Segments[len(ref.Segments)-1].Text, true
 }
 
-// FND-NET-003: private DNS zone groups and VNet links.
+// foundryScope decides whether a private endpoint targets the Foundry account
+// or a store linked to it.
+type foundryScope struct {
+	accounts []sdk.ARMResource
+	linked   foundrylink.Set
+}
+
+func newFoundryScope(m sdk.ARMModel) foundryScope {
+	return foundryScope{accounts: foundryAccounts(m), linked: foundrylink.Collect(m)}
+}
+
+// classify reports whether target names a Foundry account or linked store.
+func (s foundryScope) classify(target string) foundrylink.State {
+	ref := armexpr.ParseRef(target)
+	state := foundrylink.NotLinked
+	for _, a := range s.accounts {
+		switch armexpr.Compare(ref, refOf(a)) {
+		case armexpr.Same:
+			return foundrylink.Linked
+		case armexpr.Unknown:
+			state = foundrylink.Uncertain
+		}
+	}
+	switch s.linked.ClassifyRef(ref) {
+	case foundrylink.Linked:
+		return foundrylink.Linked
+	case foundrylink.Uncertain:
+		state = foundrylink.Uncertain
+	}
+	return state
+}
+
+// FND-NET-003: private DNS zone groups and VNet links for private endpoints of
+// the Foundry account and its linked stores.
 func (r net003) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 	if res, skip := noARM(r.ID(), in); skip {
 		return res, nil
 	}
-	if policyBool(in, "policy.network.dnsManagedByPolicy") {
+	if policyListHas(in, "managedByAzurePolicy", "private-dns-zone-group") || policyBool(in, "network.dnsManagedByPolicy") {
 		return sdk.Result{Skipped: &sdk.Skip{RuleID: r.ID(), Reason: "policy-managed"}}, nil
 	}
-	if policyBool(in, "policy.network.centralDns") {
+	if policyBool(in, "network.centralDns") {
 		return sdk.Result{Skipped: &sdk.Skip{RuleID: r.ID(), Reason: "central-dns: DNS declared as centrally managed in policy"}}, nil
 	}
 	cloud := detectCloud(in)
@@ -279,10 +307,31 @@ func (r net003) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 	}
 	zonesFor := expectedZones[cloud]
 	o := &outcome{id: r.ID()}
+	scope := newFoundryScope(in.ARM)
 	zoneGroups := byType(in.ARM, tZoneGroup)
 	zones := byType(in.ARM, tZone)
 	links := byType(in.ARM, tZoneLink)
 	for _, pe := range byType(in.ARM, tPE) {
+		// Scope: only endpoints that target the Foundry account or a linked
+		// store are evaluated; others are not applicable.
+		applies, uncertain := false, false
+		for _, c := range peConns(pe) {
+			switch scope.classify(c.target) {
+			case foundrylink.Linked:
+				applies = true
+			case foundrylink.Uncertain:
+				uncertain = true
+			}
+		}
+		if !applies {
+			if uncertain {
+				o.skip(foundrylink.SkipScopeUncertain + ": " + pe.Name + " may target a Foundry resource but its target cannot be correlated")
+			}
+			continue
+		}
+		if !o.usable(pe) {
+			continue
+		}
 		var groups []string
 		for _, c := range peConns(pe) {
 			groups = append(groups, c.groups...)
@@ -300,81 +349,120 @@ func (r net003) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 			continue
 		}
 		var zg *sdk.ARMResource
+		zgUncertain := false
 		for i := range zoneGroups {
-			if childOf(zoneGroups[i].Name, pe.Name) {
-				zg = &zoneGroups[i]
-				break
+			switch childOf(zoneGroups[i], pe) {
+			case armexpr.Same:
+				if presence(zoneGroups[i]) == armexpr.Deployed {
+					if zg == nil {
+						zg = &zoneGroups[i]
+					}
+				} else {
+					zgUncertain = true
+				}
+			case armexpr.Unknown:
+				zgUncertain = true
 			}
 		}
-		o.evaluated++
 		if zg == nil {
+			if zgUncertain {
+				o.skip(pe.Name + ": a privateDnsZoneGroups child may belong to this endpoint but is conditional or cannot be correlated")
+				continue
+			}
+			o.evaluated++
 			o.add(pe, "private endpoint has no privateDnsZoneGroups child in the template")
 			continue
 		}
-		have := map[string]string{}
+		o.evaluated++
+		have := map[string]bool{}
+		idsResolved := true
 		for _, c := range arr(zg.Properties, "privateDnsZoneConfigs") {
-			if id, ok := str(asMap(c), "properties", "privateDnsZoneId"); ok {
-				have[zoneNameOf(id)] = id
+			id, ok := str(asMap(c), "properties", "privateDnsZoneId")
+			if !ok {
+				continue
+			}
+			if name, ok := zoneNameOf(id); ok {
+				have[name] = true
+			} else {
+				idsResolved = false
 			}
 		}
 		for _, w := range want {
-			id, ok := have[w]
-			if !ok {
-				o.add(pe, "zone group lacks expected private DNS zone "+w)
+			if !have[w] {
+				if !idsResolved {
+					o.skip(pe.Name + ": a privateDnsZoneId is not resolvable, so zone " + w + " cannot be confirmed")
+					continue
+				}
+				o.addKey(pe, "zone:"+w, "zone group lacks expected private DNS zone "+w)
 				continue
 			}
 			var zone *sdk.ARMResource
+			zoneUncertain := false
 			for i := range zones {
-				if lc(zones[i].Name) == w {
+				switch armexpr.Compare(armexpr.ParseName("", w), refOf(zones[i])) {
+				case armexpr.Same:
 					zone = &zones[i]
+				case armexpr.Unknown:
+					zoneUncertain = true
 				}
 			}
-			if zone == nil {
-				_ = id
-				o.skip(w + ": zone not in the template; virtual network link not verifiable")
+			if zone == nil || presence(*zone) != armexpr.Deployed {
+				if zoneUncertain || zone != nil {
+					o.skip(w + ": zone is conditional or cannot be correlated; virtual network link not verifiable")
+				} else {
+					o.skip(w + ": zone not in the template; virtual network link not verifiable")
+				}
 				continue
 			}
-			vnetID, _ := str(pe.Properties, "subnet", "id")
-			if vnetID == "" || unresolved(vnetID) {
+			subnetID, _ := str(pe.Properties, "subnet", "id")
+			sr, ok := parseSubnetRef(subnetID)
+			if !ok {
 				o.skip(pe.Name + ": endpoint subnet unresolved; link not verifiable")
 				continue
 			}
-			linked := false
+			linked, linkUncertain := false, false
 			for _, l := range links {
-				if !childOf(l.Name, zone.Name) {
+				if childOf(l, *zone) != armexpr.Same {
+					if childOf(l, *zone) == armexpr.Unknown {
+						linkUncertain = true
+					}
 					continue
 				}
 				lv, _ := str(l.Properties, "virtualNetwork", "id")
-				if unresolved(lv) {
-					linked = true // cannot disprove
-					continue
-				}
-				i := strings.Index(lc(vnetID), "/subnets/")
-				base := lc(vnetID)
-				if i >= 0 {
-					base = base[:i]
-				}
-				if lv != "" && (strings.HasPrefix(base, lc(lv)) || strings.HasPrefix(lc(lv), base) || vnetNameMatch(lv, vnetID)) {
-					linked = true
+				switch armexpr.Compare(armexpr.ParseRef(lv), sr.vnet) {
+				case armexpr.Same:
+					if presence(l) == armexpr.Deployed {
+						linked = true
+					} else {
+						linkUncertain = true
+					}
+				case armexpr.Unknown:
+					linkUncertain = true
 				}
 			}
-			if !linked {
-				o.add(*zone, "private DNS zone has no virtualNetworkLinks entry for the endpoint virtual network of "+pe.Name)
+			switch {
+			case linked:
+			case linkUncertain:
+				o.skip(w + ": a virtual network link may connect the endpoint network but is conditional or cannot be correlated")
+			default:
+				o.addKey(*zone, "vnetLink:"+nameKey(refOf(pe).Segments), "private DNS zone has no virtualNetworkLinks entry for the endpoint virtual network of "+pe.Name)
 			}
 		}
 	}
 	return o.result(), nil
 }
 
-func vnetNameMatch(vnetID, subnetID string) bool {
-	parts := strings.Split(vnetID, "/")
-	if len(parts) == 0 {
+// sameSubnet reports whether two subnet references provably name one subnet.
+func sameSubnet(m sdk.ARMModel, a, b string) bool {
+	if a == "" || b == "" {
 		return false
 	}
-	n := strings.Trim(parts[len(parts)-1], "')]")
-	n = strings.Trim(n, "'")
-	return n != "" && strings.Contains(lc(subnetID), "'"+lc(n)+"'") ||
-		strings.Contains(lc(subnetID), "/virtualnetworks/"+lc(n)+"/")
+	sa, oka := resolveSubnet(m, a)
+	sb, okb := resolveSubnet(m, b)
+	if oka && okb {
+		return armexpr.Compare(refOf(sa.vnet), refOf(sb.vnet)) == armexpr.Same && lc(sa.name) == lc(sb.name)
+	}
+	return armexpr.Normalize(a) == armexpr.Normalize(b)
 }
 
 // FND-NET-004: agent subnet delegation, size, name and sharing.
@@ -384,7 +472,10 @@ func (r net004) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 	}
 	o := &outcome{id: r.ID()}
 	accounts := foundryAccounts(in.ARM)
-	for _, a := range accounts {
+	for ai, a := range accounts {
+		if !o.usable(a) {
+			continue
+		}
 		for _, inj := range injections(a) {
 			if !inj.agent || inj.subnet == "" {
 				continue
@@ -406,7 +497,7 @@ func (r net004) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 				}
 			}
 			if !delegated {
-				o.add(a, "agent subnet is not delegated to Microsoft.App/environments")
+				o.addKey(a, "delegation", "agent subnet is not delegated to Microsoft.App/environments")
 			}
 			var prefixes []string
 			if s, ok := str(sn.props, "addressPrefix"); ok {
@@ -422,19 +513,19 @@ func (r net004) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 					continue
 				}
 				if n, ok := prefixLen(p); ok && n > 27 {
-					o.add(a, fmt.Sprintf("agent subnet prefix %s is smaller than /27", p))
+					o.addKey(a, "prefix:"+p, fmt.Sprintf("agent subnet prefix %s is smaller than /27", p))
 				}
 			}
 			if len(sn.name) > 63 && !isExpr(sn.name) {
-				o.add(a, "agent subnet name exceeds 63 bytes")
+				o.addKey(a, "subnetName", "agent subnet name exceeds 63 bytes")
 			}
-			for _, other := range accounts {
-				if lc(other.Name) == lc(a.Name) {
+			for oi, other := range accounts {
+				if oi == ai || presence(other) == armexpr.NotDeployed {
 					continue
 				}
-				for _, oi := range injections(other) {
-					if oi.agent && lc(oi.subnet) == lc(inj.subnet) {
-						o.add(a, "agent subnet is shared with account "+other.Name)
+				for _, oinj := range injections(other) {
+					if oinj.agent && sameSubnet(in.ARM, oinj.subnet, inj.subnet) {
+						o.addKey(a, "shared:"+nameKey(refOf(other).Segments), "agent subnet is shared with account "+other.Name)
 					}
 				}
 			}
@@ -443,20 +534,29 @@ func (r net004) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 	return o.result(), nil
 }
 
-// FND-NET-005: region and subscription consistency.
+// FND-NET-005: region consistency. Regions are compared only when both sides
+// are literals; an expression such as resourceGroup().location or a parameter
+// is not comparable inside a flattened template, so the check is skipped.
 func (r net005) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 	if res, skip := noARM(r.ID(), in); skip {
 		return res, nil
 	}
 	o := &outcome{id: r.ID()}
 	for _, a := range foundryAccounts(in.ARM) {
+		if !o.usable(a) {
+			continue
+		}
 		for _, inj := range injections(a) {
 			if !inj.agent || inj.managed || inj.subnet == "" {
 				continue
 			}
 			sn, ok := resolveSubnet(in.ARM, inj.subnet)
-			if !ok || sn.vnet.Region == "" || a.Region == "" || unresolved(sn.vnet.Region) || unresolved(a.Region) {
-				o.skip(a.Name + ": account or virtual network region unresolved")
+			if !ok {
+				o.skip(a.Name + ": agent subnet is unresolved or not in the template")
+				continue
+			}
+			if !literalRegion(sn.vnet.Region) || !literalRegion(a.Region) {
+				o.skip(a.Name + ": account or virtual network region is an expression or unset, so regions are not comparable")
 				continue
 			}
 			o.evaluated++
@@ -466,10 +566,17 @@ func (r net005) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 		}
 	}
 	for _, pe := range byType(in.ARM, tPE) {
+		if !o.usable(pe) {
+			continue
+		}
 		sid, _ := str(pe.Properties, "subnet", "id")
 		sn, ok := resolveSubnet(in.ARM, sid)
-		if !ok || pe.Region == "" || sn.vnet.Region == "" || unresolved(pe.Region) || unresolved(sn.vnet.Region) {
-			o.skip(pe.Name + ": endpoint or virtual network region unresolved")
+		if !ok {
+			o.skip(pe.Name + ": endpoint subnet is unresolved or not in the template")
+			continue
+		}
+		if !literalRegion(pe.Region) || !literalRegion(sn.vnet.Region) {
+			o.skip(pe.Name + ": endpoint or virtual network region is an expression or unset, so regions are not comparable")
 			continue
 		}
 		o.evaluated++
@@ -492,8 +599,11 @@ func (r net007) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 		if !ok || !dok || pa != "enabled" || da != "deny" {
 			continue
 		}
-		if pes, _ := pesFor(in.ARM, a.Name, ""); len(pes) > 0 {
-			o.skip(a.Name + ": private endpoint present")
+		if !o.usable(a) {
+			continue
+		}
+		if pes, unc := pesFor(in.ARM, a, ""); len(pes) > 0 || unc {
+			o.skip(a.Name + ": a private endpoint is present or may target this account")
 			continue
 		}
 		rawIP, _ := get(a.Properties, "networkAcls", "ipRules")
@@ -505,7 +615,7 @@ func (r net007) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 		ips := arr(a.Properties, "networkAcls", "ipRules")
 		vns := arr(a.Properties, "networkAcls", "virtualNetworkRules")
 		if len(ips) == 0 && len(vns) == 0 {
-			o.add(a, "restricted mode (defaultAction Deny) has no ipRules or virtualNetworkRules")
+			o.addKey(a, "ipRules", "restricted mode (defaultAction Deny) has no ipRules or virtualNetworkRules")
 			continue
 		}
 		for _, e := range ips {
@@ -514,7 +624,7 @@ func (r net007) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 				continue
 			}
 			if !isIPv4OrCIDR(v) {
-				o.add(a, fmt.Sprintf("ipRules value %q is not an IPv4 address or CIDR", v))
+				o.addKey(a, "ipRule:"+v, fmt.Sprintf("ipRules value %q is not an IPv4 address or CIDR", v))
 			}
 		}
 	}
@@ -534,13 +644,16 @@ func (r net008) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 		}
 		if id := capabilityRef(a, "vectorStore"); id != "" {
 			for _, s := range byType(in.ARM, tSearch) {
-				if refMatches(id, s.Name) {
-					vector[lc(s.Name)] = true
+				if corr(id, s) == armexpr.Same {
+					vector[nameKey(refOf(s).Segments)] = true
 				}
 			}
 		}
 	}
 	for _, s := range byType(in.ARM, tSearch) {
+		if !o.usable(s) {
+			continue
+		}
 		if unresolved(s.SKUName) {
 			o.skip(s.Name + ": sku is a parameter")
 			continue
@@ -552,15 +665,15 @@ func (r net008) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 		if lc(s.SKUName) != "free" {
 			continue
 		}
-		pes, _ := pesFor(in.ARM, s.Name, "searchService")
+		pes, _ := pesFor(in.ARM, s, "searchService")
 		pa, _ := publicAccess(s)
-		anyPE, _ := pesFor(in.ARM, s.Name, "")
+		anyPE, _ := pesFor(in.ARM, s, "")
 		switch {
 		case len(pes) > 0:
 			o.add(s, "Free SKU search service has a private endpoint, which Free does not support")
 		case pa == "disabled" && len(anyPE) > 0:
 			o.add(s, "Free SKU search service has public access disabled with a private endpoint")
-		case vector[lc(s.Name)]:
+		case vector[nameKey(refOf(s).Segments)]:
 			o.add(s, "Free SKU search service is the vectorStore of a private Foundry account")
 		}
 	}

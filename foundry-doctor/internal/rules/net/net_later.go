@@ -6,6 +6,7 @@ import (
 	"net/netip"
 	"strings"
 
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/armexpr"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
 
@@ -26,7 +27,13 @@ var (
 		"169.254.0.0/16", "172.30.0.0/16", "172.31.0.0/16", "192.0.2.0/24",
 		"0.0.0.0/8", "127.0.0.0/8", "100.100.0.0/17", "100.100.192.0/19", "100.100.224.0/19",
 	)
+	// cgnat is RFC 6598 shared address space. The Foundry virtual network
+	// limitations page lists it as supported for the agent subnet except for the
+	// three 100.100.* ranges in reserved.
 	cgnat = mustPrefix("100.64.0.0/10")
+	// supported is every range the agent subnet may use before the reserved
+	// ranges are removed.
+	supported = append(append([]netip.Prefix(nil), rfc1918...), cgnat)
 )
 
 func (r net006) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
@@ -37,6 +44,9 @@ func (r net006) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 	spaces := vnetAddressSpaces(in.ARM)
 	peers := peeringPairs(in.ARM)
 	for _, a := range foundryAccounts(in.ARM) {
+		if !o.usable(a) {
+			continue
+		}
 		for _, inj := range injections(a) {
 			if inj.managed || !inj.agent || inj.subnet == "" {
 				continue
@@ -59,18 +69,16 @@ func (r net006) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 				}
 				o.evaluated++
 				switch {
-				case cgnat.Contains(p.Addr()) && !intersectsAny(p, reserved):
-					o.skip(a.Name + ": " + cidr + " is in 100.64.0.0/10 and the documentation conflicts")
-				case !withinAny(p, rfc1918):
-					o.add(a, "agent subnet prefix "+cidr+" is not in RFC 1918 private address space")
+				case !withinAny(p, supported):
+					o.addKey(a, "prefix:"+cidr, "agent subnet prefix "+cidr+" is not in RFC 1918 or RFC 6598 (100.64.0.0/10) address space")
 				case intersectsAny(p, reserved):
-					o.add(a, "agent subnet prefix "+cidr+" intersects a reserved range")
+					o.addKey(a, "prefix:"+cidr, "agent subnet prefix "+cidr+" intersects a reserved range")
 				}
 			}
-			for _, p := range spaces[strings.ToLower(sn.vnet.Name)] {
+			for _, p := range spaces[nameKey(refOf(sn.vnet).Segments)] {
 				if intersectsAny(p, reserved) {
 					o.evaluated++
-					o.add(sn.vnet, "virtual network address space "+p.String()+" intersects a reserved range")
+					o.addKey(sn.vnet, "addressSpace:"+p.String(), "virtual network address space "+p.String()+" intersects a reserved range")
 				}
 			}
 		}
@@ -96,6 +104,9 @@ func (r net009) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 	}
 	o := &outcome{id: r.ID()}
 	for _, svc := range byType(in.ARM, tAPIMService) {
+		if !o.usable(svc) {
+			continue
+		}
 		sku := lc(svc.SKUName)
 		if sku == "" || unresolved(svc.SKUName) {
 			o.skip(svc.Name + ": APIM sku is unresolved")
@@ -126,7 +137,7 @@ func (r net009) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 				}
 			}
 		}
-		pes, _ := pesFor(in.ARM, svc.Name, "gateway")
+		pes, _ := pesFor(in.ARM, svc, "gateway")
 		if len(pes) > 0 {
 			o.evaluated++
 			switch sku {
@@ -161,24 +172,33 @@ func (r net010) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 	if len(components) == 0 {
 		return sdk.Result{Skipped: &sdk.Skip{RuleID: r.ID(), Reason: sdk.SkipInputUnavailable + ": no Application Insights component is in the scanned template"}}, nil
 	}
-	scoped := amplsScopedResources(in.ARM)
+	scoped, scopedUncertain := amplsScopedResources(in.ARM)
 	amplsPEs := amplsPrivateEndpoints(in.ARM)
 	for _, c := range components {
-		o.evaluated++
+		if !o.usable(c) {
+			continue
+		}
 		if publicTelemetry {
+			o.evaluated++
 			if v, ok := str(c.Properties, "publicNetworkAccessForIngestion"); ok && strings.TrimSpace(v) != "" {
 				continue
 			}
 			o.add(c, "public telemetry is declared but Application Insights does not set publicNetworkAccessForIngestion explicitly")
 			continue
 		}
-		links := scoped[strings.ToLower(c.Name)]
+		links := scoped[nameKey(refOf(c).Segments)]
 		if len(links) == 0 {
+			if scopedUncertain {
+				o.skip(c.Name + ": a scopedResources entry with a link target the template cannot correlate may cover this component")
+				continue
+			}
+			o.evaluated++
 			o.add(c, "private Foundry design has Application Insights without an Azure Monitor Private Link Scope or a public telemetry declaration")
 			continue
 		}
+		o.evaluated++
 		for _, scope := range links {
-			if !amplsPEs[strings.ToLower(scope)] {
+			if !amplsPEs[scope] {
 				o.add(c, "Azure Monitor Private Link Scope "+scope+" has no private endpoint with groupId azuremonitor")
 			}
 			if !amplsModesExplicit(in.ARM, scope) {
@@ -198,18 +218,30 @@ func (r net011) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 	for _, v := range byType(in.ARM, tVNet) {
 		enabled, _ := boolean(v.Properties, "enableDdosProtection")
 		plan, _ := str(v.Properties, "ddosProtectionPlan", "id")
-		vnetProtected[lc(v.Name)] = enabled && plan != ""
+		vnetProtected[nameKey(refOf(v).Segments)] = enabled && plan != ""
 	}
+	// Agent subnets are resolved to (virtual network, subnet) first so that a
+	// reference such as reference(vnet).subnets[0].id exempts the right subnet.
 	agentSubnets := map[string]bool{}
+	agentUnresolved := false
 	for _, a := range foundryAccounts(in.ARM) {
 		for _, inj := range injections(a) {
-			if inj.agent {
-				agentSubnets[lc(inj.subnet)] = true
-				agentSubnets[lc(lastName(inj.subnet))] = true
+			if !inj.agent || inj.managed {
+				continue
 			}
+			sn, ok := resolveSubnet(in.ARM, inj.subnet)
+			if !ok {
+				agentUnresolved = true
+				continue
+			}
+			agentSubnets[nameKey(refOf(sn.vnet).Segments)+"/"+lc(sn.name)] = true
 		}
 	}
 	for _, v := range byType(in.ARM, tVNet) {
+		if !o.usable(v) {
+			continue
+		}
+		vkey := nameKey(refOf(v).Segments)
 		for _, raw := range arr(v.Properties, "subnets") {
 			sm := asMap(raw)
 			name, _ := str(sm, "name")
@@ -218,17 +250,25 @@ func (r net011) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 				continue
 			}
 			nsg, _ := str(props, "networkSecurityGroup", "id")
-			if nsg == "" {
+			if nsg != "" {
 				o.evaluated++
-				if agentSubnets[lc(name)] {
+			} else {
+				switch {
+				case agentSubnets[vkey+"/"+lc(name)]:
 					o.skip(name + ": uncertain: NSG support for the agent subnet is not verified")
-				} else {
+				case agentUnresolved:
+					o.skip(name + ": uncertain: an agent subnet injection could not be resolved, so this subnet may be the agent subnet")
+				default:
+					o.evaluated++
 					o.add(sdk.ARMResource{Type: "Microsoft.Network/virtualNetworks/subnets", Name: v.Name + "/" + name}, "subnet has no networkSecurityGroup association")
 				}
 			}
 		}
 	}
 	for _, pip := range byType(in.ARM, tPublicIP) {
+		if !o.usable(pip) {
+			continue
+		}
 		o.evaluated++
 		mode, _ := str(pip.Properties, "ddosSettings", "protectionMode")
 		if strings.EqualFold(mode, "Enabled") {
@@ -286,7 +326,8 @@ func vnetAddressSpaces(m sdk.ARMModel) map[string][]netip.Prefix {
 				continue
 			}
 			if p, err := netip.ParsePrefix(s); err == nil {
-				out[lc(v.Name)] = append(out[lc(v.Name)], p)
+				k := nameKey(refOf(v).Segments)
+				out[k] = append(out[k], p)
 			}
 		}
 	}
@@ -296,12 +337,16 @@ func vnetAddressSpaces(m sdk.ARMModel) map[string][]netip.Prefix {
 func peeringPairs(m sdk.ARMModel) [][2]string {
 	var out [][2]string
 	for _, p := range byType(m, tVNetPeering) {
-		parent := strings.ToLower(strings.TrimSpace(strings.Split(p.Name, "/")[0]))
-		remote, _ := str(p.Properties, "remoteVirtualNetwork", "id")
-		if remote == "" {
+		segs := refOf(p).Segments
+		if len(segs) < 2 {
 			continue
 		}
-		out = append(out, [2]string{parent, lc(lastName(remote))})
+		remote, _ := str(p.Properties, "remoteVirtualNetwork", "id")
+		rr := armexpr.ParseRef(remote)
+		if rr.Opaque || len(rr.Segments) == 0 || (rr.Type != "" && rr.Type != tVNet) {
+			continue
+		}
+		out = append(out, [2]string{nameKey(segs[:len(segs)-1]), nameKey(rr.Segments)})
 	}
 	return out
 }
@@ -354,16 +399,28 @@ func hasPrivateFoundry(m sdk.ARMModel) bool {
 	return false
 }
 
-func amplsScopedResources(m sdk.ARMModel) map[string][]string {
-	out := map[string][]string{}
+// amplsScopedResources maps a linked resource key to the Private Link Scope
+// keys that scope it. uncertain is true when a scoped resource's link target
+// cannot be reduced to a name.
+func amplsScopedResources(m sdk.ARMModel) (out map[string][]string, uncertain bool) {
+	out = map[string][]string{}
 	for _, r := range byType(m, tAMPLSScoped) {
-		scope := strings.Split(r.Name, "/")[0]
-		id, _ := str(r.Properties, "linkedResourceId")
-		if id != "" {
-			out[lc(lastName(id))] = append(out[lc(lastName(id))], scope)
+		segs := refOf(r).Segments
+		if len(segs) < 2 {
+			uncertain = true
+			continue
 		}
+		scope := nameKey(segs[:len(segs)-1])
+		id, _ := str(r.Properties, "linkedResourceId")
+		ref := armexpr.ParseRef(id)
+		if ref.Opaque || len(ref.Segments) == 0 {
+			uncertain = true
+			continue
+		}
+		k := nameKey(ref.Segments)
+		out[k] = append(out[k], scope)
 	}
-	return out
+	return out, uncertain
 }
 
 func amplsPrivateEndpoints(m sdk.ARMModel) map[string]bool {
@@ -371,7 +428,9 @@ func amplsPrivateEndpoints(m sdk.ARMModel) map[string]bool {
 	for _, pe := range byType(m, tPE) {
 		for _, c := range peConns(pe) {
 			if hasGroup(c.groups, "azuremonitor") {
-				out[lc(lastName(c.target))] = true
+				if ref := armexpr.ParseRef(c.target); !ref.Opaque && len(ref.Segments) > 0 {
+					out[nameKey(ref.Segments)] = true
+				}
 			}
 		}
 	}
@@ -380,7 +439,7 @@ func amplsPrivateEndpoints(m sdk.ARMModel) map[string]bool {
 
 func amplsModesExplicit(m sdk.ARMModel, scope string) bool {
 	for _, r := range byType(m, tAMPLS) {
-		if lc(r.Name) != lc(scope) {
+		if nameKey(refOf(r).Segments) != scope {
 			continue
 		}
 		_, inok := str(r.Properties, "accessModeSettings", "ingestionAccessMode")

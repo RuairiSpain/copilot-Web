@@ -1,5 +1,5 @@
 id: FND-NET-003
-version: 1
+version: 2
 group: NET
 title: Private endpoint DNS zone groups and VNet links
 description: >-
@@ -35,8 +35,10 @@ compatibility:
   notes: Not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked)
 evidence:
   description: >-
-    For each Microsoft.Network/privateEndpoints whose privateLinkServiceConnections.groupIds and target type are
-    known, find child privateDnsZoneGroups and read properties.privateDnsZoneConfigs[].properties.privateDnsZoneId.
+    For each deployed Microsoft.Network/privateEndpoints that targets the Foundry account or a store linked to it by a
+    Foundry connection, capability host or capabilitySettings (endpoints of other resources are not applicable; an
+    endpoint whose target cannot be correlated is skipped as scope-uncertain; a conditional endpoint is skipped) and
+    whose privateLinkServiceConnections.groupIds and target type are known, find child privateDnsZoneGroups and read properties.privateDnsZoneConfigs[].properties.privateDnsZoneId.
     Finding 1: no zone group. Finding 2: zone group lacks one of the expected zone names for the group ID (public
     cloud: account needs privatelink.cognitiveservices.azure.com, privatelink.openai.azure.com and
     privatelink.services.ai.azure.com; searchService needs privatelink.search.windows.net; Cosmos DB Sql needs

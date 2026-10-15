@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/armexpr"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
 
@@ -25,15 +26,17 @@ func evalIDN005(in *sdk.Input) sdk.Result {
 		return skip(sdk.SkipInputUnavailable)
 	}
 	for _, r := range assignments {
-		def, present, isExpr := strOf(r.Properties, "roleDefinitionId")
+		def, present := rawStr(r.Properties, "roleDefinitionId")
 		if !present {
 			continue
 		}
-		if isExpr {
-			unresolved = true
+		role, gok := armexpr.RoleDefinitionGUID(def)
+		if !gok {
+			if armexpr.IsExpression(def) {
+				unresolved = true
+			}
 			continue
 		}
-		role := roleGUID(def)
 		label, ok := humanPrivilegedRole(role)
 		if !ok {
 			continue

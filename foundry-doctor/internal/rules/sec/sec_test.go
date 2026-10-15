@@ -68,6 +68,8 @@ func TestCancelledContext(t *testing.T) {
 	}
 }
 
+const naReason = sdk.SkipNotApplicable + ": no applicable resources in the compiled template"
+
 type tc struct {
 	name     string
 	rule     string
@@ -88,7 +90,7 @@ func TestRules(t *testing.T) {
 		{name: "001 absent", rule: "FND-SEC-001", res: []sdk.ARMResource{res(typeAccounts, "acct", props{}), proj}, findings: 1, contains: "absent"},
 		{name: "001 disabled passes", rule: "FND-SEC-001", res: []sdk.ARMResource{res(typeAccounts, "acct", props{"disableLocalAuth": true}), proj}},
 		{name: "001 expression skips", rule: "FND-SEC-001", res: []sdk.ARMResource{res(typeAccounts, "acct", props{"disableLocalAuth": "[parameters('d')]"}), proj}, skip: SkipUnresolved},
-		{name: "001 no children not in scope", rule: "FND-SEC-001", res: []sdk.ARMResource{res(typeAccounts, "acct", props{})}, skip: sdk.SkipInputUnavailable},
+		{name: "001 no children not in scope", rule: "FND-SEC-001", res: []sdk.ARMResource{res(typeAccounts, "acct", props{})}, skip: naReason},
 		{name: "001 child of other account", rule: "FND-SEC-001", res: []sdk.ARMResource{res(typeAccounts, "a", props{}), res(typeAccounts, "b", props{"disableLocalAuth": true}), res(typeAcctDeploy, "b/d", nil)}},
 		{name: "001 case-insensitive type", rule: "FND-SEC-001", res: []sdk.ARMResource{res("microsoft.cognitiveservices/ACCOUNTS", "acct", props{}), res(typeAcctDeploy, "acct/d", nil)}, findings: 1},
 		// SEC-002
@@ -99,7 +101,7 @@ func TestRules(t *testing.T) {
 		{name: "002 out of scope", rule: "FND-SEC-002", res: []sdk.ARMResource{res(typeSearch, "srch", props{})}, skip: SkipOutOfScope},
 		{name: "002 unrelated connection", rule: "FND-SEC-002", res: []sdk.ARMResource{res(typeSearch, "srch", props{}), conn("other")}, skip: SkipOutOfScope},
 		{name: "002 expression", rule: "FND-SEC-002", res: []sdk.ARMResource{res(typeSearch, "srch", props{"disableLocalAuth": "[x]"}), conn("srch")}, skip: SkipUnresolved},
-		{name: "002 no search", rule: "FND-SEC-002", res: []sdk.ARMResource{}, skip: sdk.SkipInputUnavailable},
+		{name: "002 no search", rule: "FND-SEC-002", res: []sdk.ARMResource{}, skip: naReason},
 		// SEC-003
 		{name: "003 cosmos keys", rule: "FND-SEC-003", res: []sdk.ARMResource{res(typeCosmos, "db", props{}), conn("db")}, findings: 1},
 		{name: "003 disabled", rule: "FND-SEC-003", res: []sdk.ARMResource{res(typeCosmos, "db", props{"disableLocalAuth": true}), conn("db")}},
@@ -111,7 +113,7 @@ func TestRules(t *testing.T) {
 		{name: "004 tls absent", rule: "FND-SEC-004", res: []sdk.ARMResource{res(typeStorage, "st", props{"allowSharedKeyAccess": false})}, findings: 1, contains: "minimumTlsVersion"},
 		{name: "004 tls1_1", rule: "FND-SEC-004", res: []sdk.ARMResource{res(typeStorage, "st", props{"allowSharedKeyAccess": false, "minimumTlsVersion": "tls1_1"})}, findings: 1},
 		{name: "004 expressions skip", rule: "FND-SEC-004", res: []sdk.ARMResource{res(typeStorage, "st", props{"allowSharedKeyAccess": "[p]", "allowBlobPublicAccess": "[p]", "supportsHttpsTrafficOnly": "[p]", "minimumTlsVersion": "[p]"})}, skip: SkipUnresolved},
-		{name: "004 none", rule: "FND-SEC-004", res: []sdk.ARMResource{}, skip: sdk.SkipInputUnavailable},
+		{name: "004 none", rule: "FND-SEC-004", res: []sdk.ARMResource{}, skip: naReason},
 		// SEC-006
 		{name: "006 storage open", rule: "FND-SEC-006", res: []sdk.ARMResource{res(typeStorage, "st", props{"networkAcls": props{"ipRules": []any{props{"value": "0.0.0.0/0"}}}})}, findings: 1, contains: "all addresses"},
 		{name: "006 storage private", rule: "FND-SEC-006", res: []sdk.ARMResource{res(typeStorage, "st", props{"networkAcls": props{"ipRules": []any{props{"value": "10.1.0.0/16"}, props{"value": "203.0.113.4"}}}})}, findings: 1, contains: "private"},
@@ -123,7 +125,7 @@ func TestRules(t *testing.T) {
 		{name: "006 public ip ok", rule: "FND-SEC-006", res: []sdk.ARMResource{res(typeStorage, "st", props{"networkAcls": props{"ipRules": []any{props{"value": "203.0.113.0/24"}}}})}},
 		{name: "006 param array skips", rule: "FND-SEC-006", res: []sdk.ARMResource{res(typeStorage, "st", props{"networkAcls": props{"ipRules": "[parameters('rules')]"}})}, skip: SkipUnresolved},
 		{name: "006 param value skips", rule: "FND-SEC-006", res: []sdk.ARMResource{res(typeStorage, "st", props{"networkAcls": props{"ipRules": []any{props{"value": "[parameters('ip')]"}}}})}, skip: SkipUnresolved},
-		{name: "006 no applicable", rule: "FND-SEC-006", res: []sdk.ARMResource{res("Microsoft.Web/sites", "w", nil)}, skip: sdk.SkipInputUnavailable},
+		{name: "006 no applicable", rule: "FND-SEC-006", res: []sdk.ARMResource{res("Microsoft.Web/sites", "w", nil)}, skip: naReason},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

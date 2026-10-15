@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/armexpr"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/bicep"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
@@ -137,10 +138,7 @@ func toResource(r bicep.Resource, node map[string]any, bl bicep.Location) sdk.AR
 }
 
 func normalizeLiteralRef(s string) string {
-	if out, ok := normalizeFormatExpr(s); ok {
-		return out
-	}
-	if out, ok := normalizeResourceIDExpr(s); ok {
+	if out, ok := armexpr.Fold(s); ok {
 		return out
 	}
 	return s
@@ -165,82 +163,6 @@ func normalizeValue(v any) any {
 	default:
 		return v
 	}
-}
-
-func normalizeFormatExpr(s string) (string, bool) {
-	body, ok := trimExprCall(s, "format")
-	if !ok {
-		return "", false
-	}
-	args, ok := splitLiteralArgs(body)
-	if !ok || len(args) < 1 {
-		return "", false
-	}
-	format := args[0]
-	for _, ch := range format {
-		if !(ch == '/' || (ch >= '0' && ch <= '9') || ch == '{' || ch == '}') {
-			return "", false
-		}
-	}
-	out := format
-	for i, arg := range args[1:] {
-		out = strings.ReplaceAll(out, "{"+strconv.Itoa(i)+"}", arg)
-	}
-	if strings.Contains(out, "{") || strings.Contains(out, "}") {
-		return "", false
-	}
-	return out, true
-}
-
-func normalizeResourceIDExpr(s string) (string, bool) {
-	body, ok := trimExprCall(s, "resourceId")
-	if !ok {
-		return "", false
-	}
-	args, ok := splitLiteralArgs(body)
-	if !ok || len(args) < 2 {
-		return "", false
-	}
-	return strings.Join(args[1:], "/"), true
-}
-
-func trimExprCall(s, fn string) (string, bool) {
-	if !strings.HasPrefix(s, "["+fn+"(") || !strings.HasSuffix(s, ")]") {
-		return "", false
-	}
-	return strings.TrimSuffix(strings.TrimPrefix(s, "["+fn+"("), ")]"), true
-}
-
-func splitLiteralArgs(s string) ([]string, bool) {
-	var out []string
-	for i := 0; i < len(s); {
-		for i < len(s) && (s[i] == ' ' || s[i] == ',') {
-			i++
-		}
-		if i >= len(s) {
-			break
-		}
-		if s[i] != '\'' {
-			return nil, false
-		}
-		i++
-		start := i
-		for i < len(s) && s[i] != '\'' {
-			i++
-		}
-		if i >= len(s) {
-			return nil, false
-		}
-		out = append(out, s[start:i])
-		i++
-		for i < len(s) && s[i] == ' ' {
-			i++
-		}
-		if i < len(s) && s[i] != ',' {
-			return nil, false
-		}
-	}
-	return out, len(out) > 0
 }
 
 func str(v any) string {

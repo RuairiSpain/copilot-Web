@@ -1,5 +1,5 @@
 id: FND-IDN-003
-version: 1
+version: 2
 group: IDN
 title: "Role assignments use object IDs and principalType"
 description: >-
