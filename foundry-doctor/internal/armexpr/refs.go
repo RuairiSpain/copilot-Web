@@ -519,6 +519,9 @@ func ReadsClientID(expr string) bool {
 		}
 	}
 	for _, name := range identifierArgs(expr) {
+		if i := strings.Index(name, ScopeSep); i >= 0 {
+			name = name[:i]
+		}
 		if nameIsClientID(name) {
 			return true
 		}
