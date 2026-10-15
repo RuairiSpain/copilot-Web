@@ -81,10 +81,10 @@ func TestRules(t *testing.T) {
 		{"cfg006 no env skip", "FND-CFG-006", "services:\n  a:\n    host: azure.ai.agent\n    env:\n      X: ${FOO}\n", Providers{}, true, true, 0, ""},
 		{"cfg006 no arm still evaluates", "FND-CFG-006", "services: {}\n", Providers{Env: fakeEnv{true, nil}}, false, false, 0, ""},
 		{"cfg006 no arm undefined is uncertain", "FND-CFG-006", "services:\n  a:\n    host: azure.ai.agent\n    env:\n      X: ${FOO}\n", Providers{Env: fakeEnv{true, nil}}, false, true, 0, ""},
-		{"cfg006 no arm agent producer", "FND-CFG-006", "services:\n  a:\n    host: azure.ai.agent\n    env:\n      X: ${AGENT_A_ENDPOINT}\n      Y: ${AZURE_LOCATION}\n", Providers{Env: fakeEnv{true, nil}}, false, false, 0, ""},
+		{"cfg006 no arm agent producer", "FND-CFG-006", "services:\n  a:\n    host: azure.ai.agent\n    env:\n      X: ${AGENT_A_ENDPOINT}\n      Y: ${AGENT_A_RESPONSES_ENDPOINT}\n", Providers{Env: fakeEnv{true, nil}}, false, false, 0, ""},
 		{"cfg006 undefined without template outputs is uncertain", "FND-CFG-006", "services:\n  a:\n    host: azure.ai.agent\n    env:\n      X: ${FOO}\n", Providers{Env: fakeEnv{true, map[string]string{"BAR": "1"}}}, true, true, 0, ""},
 		{"cfg006 defined", "FND-CFG-006", "services:\n  a:\n    host: azure.ai.agent\n    env:\n      X: ${FOO}\n", Providers{Env: fakeEnv{true, map[string]string{"FOO": "1"}}}, true, false, 0, ""},
-		{"cfg012 display name", "FND-CFG-012", "services: {}\n", Providers{Env: fakeEnv{true, map[string]string{"AZURE_LOCATION": "East US"}}}, false, false, 1, "lowercase"},
+		{"cfg012 display name", "FND-CFG-012", "services: {}\n", Providers{Env: fakeEnv{true, map[string]string{"AZURE_LOCATION": "East US"}}}, false, true, 0, ""},
 		{"cfg012 good", "FND-CFG-012", "services: {}\n", Providers{Env: fakeEnv{true, map[string]string{"AZURE_LOCATION": "eastus"}}}, false, false, 0, ""},
 		{"cfg012 unavailable", "FND-CFG-012", "services: {}\n", Providers{}, false, true, 0, ""},
 	}

@@ -1,5 +1,5 @@
 id: FND-CFG-012
-version: 1
+version: 2
 group: CFG
 title: "Azure region values are valid"
 description: >-
@@ -26,8 +26,8 @@ compatibility:
   notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from a changelog and was not verified."
 evidence:
   description: >-
-    Offline, check that the value is a non-empty, lower-case, space-free location name in the form azd stores
-    (for example eastus2) and that it is consistent across AZURE_LOCATION and parameter files. When a
+    Offline, check that the value is non-empty (an empty value is a finding) and report a value that is not a lower-case,
+    space-free location name in the form azd stores (for example eastus2) as uncertain, never as an error and that it is consistent across AZURE_LOCATION and parameter files. When a
     control-plane capability is available, compare it to the Subscriptions_ListLocations result (API
     2022-12-01) for the subscription and report values not in the list. Without that capability the
     list membership check is skipped, never passed. Values with ${VAR} are not evaluated.
@@ -87,7 +87,7 @@ testability: >-
   Format and consistency checks are offline. List membership needs a control-plane capability and is skipped without it.
 tests:
   positive:
-    - location-with-space-and-capitals
+    - empty-azure-location
     - location-not-in-subscription-list
     - azure-location-differs-from-parameter-file
   negative:
@@ -95,8 +95,13 @@ tests:
   skipped:
     - control-plane-unavailable
     - location-is-env-reference
+    - location-with-space-and-capitals-is-uncertain
 notes: >-
   Product opinion: no source read states that a malformed or unlisted location fails deployment, so no platform basis
   is claimed. Unverified: that the azd environment stores the short name form (the docs example shows eastus); the
-  rule does not accept display names such as East US as an inferred error and reports them as warnings.
+  rule does not treat display names such as East US as an error and reports them as uncertain.
   Region availability of specific models or Foundry features is not covered and is not inferred.
+  Severity: no source says that a display name such as East US, or a mixed-case value, is rejected, so the rule reports
+  it as uncertain in every profile (never an error). Only an empty AZURE_LOCATION is a finding. Without a usable
+  environment the rule skips with input-unavailable and a named reason (no-environment-selected, env-file-missing,
+  default-environment-not-found).

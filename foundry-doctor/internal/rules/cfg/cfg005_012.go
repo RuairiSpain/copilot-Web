@@ -20,7 +20,10 @@ var (
 	secretKeyRe = regexp.MustCompile(`(?i)(key|secret|token|password|pwd|connection[_-]?string)`)
 	// Names that look secret-bearing by substring but describe a quantity,
 	// a rotation setting or a file location, not a credential.
-	nonSecretNameRe = regexp.MustCompile(`(?i)(limit|count|rotation|size|file)`)
+	// Matched as whole `_`-delimited tokens, never as substrings: ACCOUNT
+	// contains COUNT and PROFILE contains FILE, and neither is excluded.
+	nonSecretTokens = map[string]bool{"LIMIT": true, "LIMITS": true, "COUNT": true, "SIZE": true,
+		"FILE": true, "ROTATION": true, "TOKENS": true}
 	// Only a signature makes a SAS query string a credential; sv is the
 	// signed-version selector.
 	sensQuery = map[string]bool{"sig": true, "token": true}
@@ -28,7 +31,17 @@ var (
 	secretShapeRe = regexp.MustCompile(`\bsk-[A-Za-z0-9_-]{16,}`)
 )
 
-func isSecretKey(k string) bool { return secretKeyRe.MatchString(k) && !nonSecretNameRe.MatchString(k) }
+func isSecretKey(k string) bool {
+	if !secretKeyRe.MatchString(k) {
+		return false
+	}
+	for _, tok := range strings.FieldsFunc(strings.ToUpper(k), func(r rune) bool { return r == '_' || r == '-' || r == '.' }) {
+		if nonSecretTokens[tok] {
+			return false
+		}
+	}
+	return true
+}
 
 // secretShaped reports whether a literal has the shape of a credential.
 func secretShaped(v string) bool {
@@ -48,9 +61,9 @@ func evalCFG005(in *sdk.Input) sdk.Result {
 				shape, _ := classifyValue(scalar(p.Val))
 				switch shape {
 				case shapeLiteral:
-					fs = append(fs, finding(d, s, p.Val, fmt.Sprintf("credentials.%s is a literal; use a ${VAR} reference", p.Key.Value)))
+					fs = append(fs, finding(d, s, p.Val, "credential-literal:"+p.Key.Value, fmt.Sprintf("credentials.%s is a literal; use a ${VAR} reference", p.Key.Value)))
 				case shapeDefaultLiteral:
-					fs = append(fs, finding(d, s, p.Val, fmt.Sprintf("credentials.%s has a literal default; remove the default after :-", p.Key.Value)))
+					fs = append(fs, finding(d, s, p.Val, "credential-default-literal:"+p.Key.Value, fmt.Sprintf("credentials.%s has a literal default; remove the default after :-", p.Key.Value)))
 				case shapeMixed:
 					notes = append(notes, fmt.Sprintf("%s: credentials.%s mixes literal text and a reference", s.Name, p.Key.Value))
 				}
@@ -61,7 +74,7 @@ func evalCFG005(in *sdk.Input) sdk.Result {
 			named := isSecretKey(p.Key.Value)
 			switch {
 			case (shape == shapeLiteral || shape == shapeDefaultLiteral) && secretShaped(lit):
-				fs = append(fs, finding(d, s, p.Val, fmt.Sprintf("env.%s holds a literal with the shape of a credential", p.Key.Value)))
+				fs = append(fs, finding(d, s, p.Val, "env-credential-shape:"+p.Key.Value, fmt.Sprintf("env.%s holds a literal with the shape of a credential", p.Key.Value)))
 			case named && shape != shapeEmpty && shape != shapeRef:
 				notes = append(notes, fmt.Sprintf("%s: env.%s looks secret-bearing by name only", s.Name, p.Key.Value))
 			}
@@ -73,7 +86,7 @@ func evalCFG005(in *sdk.Input) sdk.Result {
 					bad = bad || sensQuery[strings.ToLower(q)]
 				}
 				if bad {
-					fs = append(fs, finding(d, s, u.Node, fmt.Sprintf("%s embeds credentials in the URL", u.Name)))
+					fs = append(fs, finding(d, s, u.Node, "url-credentials:"+u.Name, fmt.Sprintf("%s embeds credentials in the URL", u.Name)))
 				}
 			}
 		}
@@ -134,10 +147,10 @@ func evalCFG007(in *sdk.Input) sdk.Result {
 				continue
 			}
 			if !strings.EqualFold(pu.Scheme, "https") {
-				fs = append(fs, finding(d, s, u.Node, fmt.Sprintf("%s uses non-https scheme %q", u.Name, pu.Scheme)))
+				fs = append(fs, finding(d, s, u.Node, "non-https:"+u.Name, fmt.Sprintf("%s uses non-https scheme %q", u.Name, pu.Scheme)))
 			}
 			if riskyHost(pu.Hostname()) {
-				fs = append(fs, finding(d, s, u.Node, fmt.Sprintf("%s targets local/private host %q", u.Name, pu.Hostname())))
+				fs = append(fs, finding(d, s, u.Node, "private-host:"+u.Name, fmt.Sprintf("%s targets local/private host %q", u.Name, pu.Hostname())))
 			}
 		}
 	}
@@ -157,29 +170,29 @@ func evalCFG011(in *sdk.Input) sdk.Result {
 	}
 	var fs []sdk.Finding
 	for _, s := range serviceList(d) {
-		add := func(n *yaml.Node, m string) { fs = append(fs, finding(d, s, n, m)) }
+		add := func(key string, n *yaml.Node, m string) { fs = append(fs, finding(d, s, n, key, m)) }
 		if strings.EqualFold(s.Host, "microsoft.foundry") {
-			add(s.Key, "host microsoft.foundry is a legacy shape")
+			add("legacy-host", s.Key, "host microsoft.foundry is a legacy shape")
 		}
 		if s.Host != hostAgent {
 			continue
 		}
 		if has(s.Node, "config") {
-			add(s.get("config"), "config on azure.ai.agent is a legacy shape")
+			add("legacy-config", s.get("config"), "config on azure.ai.agent is a legacy shape")
 		}
 		if s.kind() == "prompt-voice" {
-			add(s.get("kind"), "kind prompt-voice is a legacy shape")
+			add("legacy-kind", s.get("kind"), "kind prompt-voice is a legacy shape")
 		}
 		if s.isHostedAgent() {
 			for _, k := range []string{"displayName", "inputSchema", "outputSchema"} {
 				if has(s.Node, k) {
-					add(s.get(k), k+" on a hosted agent is a legacy shape")
+					add("legacy-field:"+k, s.get(k), k+" on a hosted agent is a legacy shape")
 				}
 			}
 		}
 		for _, p := range pairs(s.get("env")) {
 			if strings.HasPrefix(p.Key.Value, "FOUNDRY_") || strings.HasPrefix(p.Key.Value, "AGENT_") {
-				add(p.Key, "env key "+p.Key.Value+" uses a reserved prefix")
+				add("reserved-env-prefix:"+p.Key.Value, p.Key, "env key "+p.Key.Value+" uses a reserved prefix")
 			}
 		}
 	}
@@ -187,17 +200,22 @@ func evalCFG011(in *sdk.Input) sdk.Result {
 }
 
 // Variable names azd core defines as environment keys (azd source,
-// cli/azd/pkg/environment/environment.go). These are producers by definition.
+// cli/azd/pkg/environment/environment.go) and that azd itself sets for every
+// environment. The source defines the names but does not state which are
+// always set, so only the environment name, subscription and resource group
+// are treated as producers; the others are uncertain when absent.
 var standardVars = map[string]bool{
-	"AZURE_ENV_NAME": true, "AZURE_LOCATION": true, "AZURE_SUBSCRIPTION_ID": true,
-	"AZURE_RESOURCE_GROUP": true, "AZURE_TENANT_ID": true,
-	"AZURE_PRINCIPAL_ID": true, "AZURE_PRINCIPAL_TYPE": true,
+	"AZURE_ENV_NAME": true, "AZURE_SUBSCRIPTION_ID": true, "AZURE_RESOURCE_GROUP": true,
 }
 
 // Names azd also defines in the same source but that only exist when the
-// infrastructure or host provides them. They are not known producers; a
-// missing one is uncertain, not an error.
+// infrastructure, the host or the user provides them. They are not known
+// producers; a missing one is uncertain, not an error.
 var infraDependentVars = map[string]bool{
+	"AZURE_LOCATION":                                  true,
+	"AZURE_TENANT_ID":                                 true,
+	"AZURE_PRINCIPAL_ID":                              true,
+	"AZURE_PRINCIPAL_TYPE":                            true,
 	"AZURE_CONTAINER_REGISTRY_ENDPOINT":               true,
 	"AZURE_CONTAINER_APPS_ENVIRONMENT_DEFAULT_DOMAIN": true,
 	"AZURE_APP_SERVICE_DASHBOARD_URI":                 true,
@@ -205,16 +223,71 @@ var infraDependentVars = map[string]bool{
 	"AZD_PLATFORM_TYPE":                               true,
 }
 
+// Reasons for a skipped environment-dependent check (R13). They follow
+// "input-unavailable:" so `--strict` counts them as a missing input.
+const (
+	reasonNoEnvironmentSelected      = "no-environment-selected"
+	reasonEnvFileMissing             = "env-file-missing"
+	reasonDefaultEnvironmentNotFound = "default-environment-not-found"
+)
+
+// EnvSelection is optionally implemented by an EnvView to say why no
+// environment is selected. It returns one of no-environment-selected,
+// env-file-missing or default-environment-not-found. A view without it is
+// reported as no-environment-selected.
+type EnvSelection interface {
+	SelectionReason() string
+}
+
+// envSkip builds the missing-input skip for an unusable environment view, or
+// reports false when an environment is selected.
+func envSkip(p Providers) (sdk.Result, bool) {
+	if p.Env != nil {
+		if _, sel := p.Env.Selected(); sel {
+			return sdk.Result{}, false
+		}
+	}
+	reason := reasonNoEnvironmentSelected
+	if es, isSel := p.Env.(EnvSelection); isSel && p.Env != nil {
+		switch r := es.SelectionReason(); r {
+		case reasonEnvFileMissing, reasonDefaultEnvironmentNotFound, reasonNoEnvironmentSelected:
+			reason = r
+		}
+	}
+	return skip(sdk.SkipInputUnavailable + ": " + reason), true
+}
+
+var agentNameReplacer = strings.NewReplacer("-", "_", ".", "_")
+
+// agentProducers returns the AGENT_<SERVICE>_* names the agent extension is
+// known to write for an agent-host service. Other hosts get none.
+func agentProducers(s service) []string {
+	if s.Host != hostAgent {
+		return nil
+	}
+	up := "AGENT_" + strings.ToUpper(agentNameReplacer.Replace(s.Name))
+	out := []string{up + "_NAME", up + "_VERSION", up + "_ENDPOINT"}
+	for _, proto := range []string{"RESPONSES", "INVOCATIONS", "INVOCATIONS_WS"} {
+		out = append(out, up+"_"+proto+"_ENDPOINT")
+	}
+	return out
+}
+
 func evalCFG006(in *sdk.Input, p Providers) sdk.Result {
 	d, okd := loadDoc(in)
-	if !okd || p.Env == nil {
+	if !okd {
 		return skip(sdk.SkipInputUnavailable)
 	}
-	if _, sel := p.Env.Selected(); !sel {
-		return skip(sdk.SkipInputUnavailable)
+	if r, bad := envSkip(p); bad {
+		return r
 	}
 	have := map[string]bool{}
-	for k := range p.Env.Values() {
+	empty := map[string]bool{}
+	for k, v := range p.Env.Values() {
+		if strings.TrimSpace(v) == "" {
+			empty[k] = true // a key with no value is not a producer
+			continue
+		}
 		have[k] = true
 	}
 	// Bicep/ARM outputs are an additional producer class. Without a compiled
@@ -235,9 +308,8 @@ func evalCFG006(in *sdk.Input, p Providers) sdk.Result {
 		}
 	}
 	for _, s := range serviceList(d) {
-		up := strings.ToUpper(strings.NewReplacer("-", "_", ".", "_").Replace(s.Name))
-		for _, sfx := range []string{"_NAME", "_VERSION", "_ENDPOINT"} {
-			have["AGENT_"+up+sfx] = true
+		for _, n := range agentProducers(s) {
+			have[n] = true
 		}
 	}
 	var fs []sdk.Finding
@@ -250,14 +322,19 @@ func evalCFG006(in *sdk.Input, p Providers) sdk.Result {
 			}
 			seen[name] = true
 			switch {
+			case empty[name]:
+				notes = append(notes, fmt.Sprintf("${%s} is present in the environment with an empty value", name))
 			case outputOnly[name]:
 				notes = append(notes, fmt.Sprintf("${%s} is produced by a template output that is not in the environment yet (provision has not written it)", name))
 			case infraDependentVars[name]:
-				notes = append(notes, fmt.Sprintf("${%s} is an azd-defined name that only exists when the infrastructure provides it", name))
+				notes = append(notes, fmt.Sprintf("${%s} is an azd-defined name that is only set when the environment, infrastructure or host provides it", name))
+			case strings.HasPrefix(name, "AGENT_"):
+				notes = append(notes, fmt.Sprintf("${%s} is an AGENT_<SERVICE>_* name that is not a verified producer for any agent-host service", name))
 			case !outputsKnown:
 				notes = append(notes, fmt.Sprintf("${%s} is not in the environment and no compiled template outputs are available to check", name))
 			default:
-				fs = append(fs, sdk.Finding{Location: loc(d, v), Evidence: fmt.Sprintf("%s references ${%s} which no producer defines", path, name)})
+				fs = append(fs, sdk.Finding{Key: "undefined-variable:" + name, Location: loc(d, v),
+					Evidence: fmt.Sprintf("%s references ${%s} which no producer defines", path, name)})
 			}
 		}
 	})
@@ -266,24 +343,20 @@ func evalCFG006(in *sdk.Input, p Providers) sdk.Result {
 }
 
 func evalCFG012(in *sdk.Input, p Providers) sdk.Result {
-	if p.Env == nil {
-		return skip(sdk.SkipInputUnavailable)
-	}
-	if _, sel := p.Env.Selected(); !sel {
-		return skip(sdk.SkipInputUnavailable)
+	if r, bad := envSkip(p); bad {
+		return r
 	}
 	v, present := p.Env.Values()["AZURE_LOCATION"]
 	if !present || containsRef(v) {
-		return skip(sdk.SkipInputUnavailable)
+		return skip(sdk.SkipInputUnavailable + ": AZURE_LOCATION is not set in the selected environment")
 	}
-	f := sdk.Finding{}
 	switch {
 	case strings.TrimSpace(v) == "":
-		f.Evidence = "AZURE_LOCATION is empty"
+		return ok([]sdk.Finding{{Key: "location-empty", Evidence: "AZURE_LOCATION is empty"}})
 	case v != strings.ToLower(v) || strings.ContainsAny(v, " \t"):
-		f.Evidence = "AZURE_LOCATION must be a lowercase region name without spaces (for example eastus)"
-	default:
-		return ok(nil)
+		// No primary source says ARM or azd rejects a display name such as
+		// "East US", so this is inconclusive in every profile.
+		return skip(uncertainPrefix + "AZURE_LOCATION is not in the lowercase region-name form azd documents (for example eastus); no source says it is rejected")
 	}
-	return ok([]sdk.Finding{f})
+	return ok(nil)
 }

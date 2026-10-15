@@ -217,11 +217,14 @@ func loc(d document, n *yaml.Node) sdk.Location {
 }
 
 // finding builds a finding anchored at n (or the service key when n is nil).
-func finding(d document, s service, n *yaml.Node, evidence string) sdk.Finding {
+// key is the stable discriminator (check kind, plus field path or variable
+// name) that separates this finding from others of the rule on the same
+// resource. It must not depend on sibling findings, line numbers or values.
+func finding(d document, s service, n *yaml.Node, key, evidence string) sdk.Finding {
 	if n == nil {
 		n = s.Key
 	}
-	f := sdk.Finding{Location: loc(d, n), Evidence: evidence}
+	f := sdk.Finding{Key: key, Location: loc(d, n), Evidence: evidence}
 	if s.Name != "" {
 		f.Resource = sdk.ResourceRef{Type: s.Host, Name: s.Name}
 	}

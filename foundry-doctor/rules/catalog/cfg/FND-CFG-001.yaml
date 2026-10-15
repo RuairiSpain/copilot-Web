@@ -1,5 +1,5 @@
 id: FND-CFG-001
-version: 2
+version: 3
 group: CFG
 title: Valid YAML, duplicate-key detection and compatible azure.ai.* schema
 description: >-
@@ -128,3 +128,6 @@ notes: >-
   detection is a Foundry Doctor addition based on YAML mapping semantics, reported at the same severity. The azure.ai.*
   schemas are preview and change between extension betas (azure.ai.agents 1.0.0-beta.18, azure.ai.projects 1.0.0-beta.13
   in the clone).
+  requiredVersions.extensions: comma- and space-separated constraints are accepted. A floor above the highest tested
+  version is reported as uncertain (not verified). A floor below the tested minimum is informational and does not make
+  the rule inconclusive.
