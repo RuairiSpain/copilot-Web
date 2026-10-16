@@ -193,8 +193,10 @@ jobs:
           out_dir="$RUNNER_TEMP/foundry-doctor-out"; mkdir -p "$out_dir"
           sarif="$out_dir/foundry-doctor.sarif"
           foundry-doctor --version || true
+          # The CLI flag takes dev, test or prod; the foundry-* names are config-file names for the same profiles.
+          profile="${IN_PROFILE#foundry-}"
           set +e
-          ( cd "$IN_PATH" && foundry-doctor doctor --profile "$IN_PROFILE" --fail-on "$IN_FAIL_ON" --format sarif --out "$sarif" )
+          ( cd "$IN_PATH" && foundry-doctor doctor --profile "$profile" --fail-on "$IN_FAIL_ON" --format sarif --out "$sarif" )
           rc=$?
           set -e
           echo "exit-code=$rc" >> "$GITHUB_OUTPUT"
