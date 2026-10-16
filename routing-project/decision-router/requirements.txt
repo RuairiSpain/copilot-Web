@@ -3,6 +3,6 @@ httpx==0.28.1
 uvicorn[standard]==0.54.0
 prometheus-client==0.26.0
 azure-identity==1.26.0
-PyJWT[crypto]==2.12.1
+PyJWT[crypto]==2.15.0
 redis==8.1.0
 mcp==2.3.0
