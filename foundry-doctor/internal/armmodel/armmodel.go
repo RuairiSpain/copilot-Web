@@ -17,6 +17,7 @@ package armmodel
 import (
 	"bytes"
 	"encoding/json"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -25,8 +26,27 @@ import (
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
 
-// MaxResources bounds the model size so hostile templates cannot exhaust memory.
-const MaxResources = 20000
+// Size bounds. They keep hostile templates from exhausting memory or time:
+// a deployment parameter that is substituted into a child template is
+// expression text, and a module that passes a parameter into itself many times
+// grows the text exponentially with the nesting depth.
+const (
+	// MaxResources bounds the number of model resources.
+	MaxResources = 20000
+	// MaxBindingBytes bounds the text a single deployment parameter binding
+	// (or resolved module output) may carry into a child template. A larger
+	// value is not substituted: the reference keeps its scope-qualified name and
+	// compares as unknown.
+	MaxBindingBytes = 4 << 10
+	// MaxExprBytes bounds the substituted text added to one expression.
+	MaxExprBytes = 64 << 10
+	// MaxSubstitutedBytes bounds all substituted text in one model, which
+	// bounds the substitution work.
+	MaxSubstitutedBytes = 8 << 20
+	// MaxTextBytes bounds the expression text retained in the model. When it is
+	// exceeded the remaining resources are dropped and Truncated reports true.
+	MaxTextBytes = 32 << 20
+)
 
 // Options describe where the template came from.
 type Options struct {
@@ -35,6 +55,12 @@ type Options struct {
 	Entry string
 	// Modules optionally maps module deployment names to their source files.
 	Modules bicep.ModuleFiles
+	// ModuleHashes optionally maps the templateHash of a compiled module
+	// (metadata._generator.templateHash, see bicep.TemplateHash) to its source
+	// file. The compiled ARM carries no source path, but the nested template of
+	// a module has the same hash as the module file compiled on its own. It is
+	// consulted when Modules has no entry for the deployment name.
+	ModuleHashes map[string]string
 }
 
 // Placement is the template-structure detail of one model resource. The
@@ -52,6 +78,11 @@ type Placement struct {
 	// DependsOn are the resource's dependsOn entries with the caller's
 	// parameters substituted; symbolic-name entries are qualified like Symbol.
 	DependsOn []string
+	// ModuleDeps are the deployment paths (Placement.Module values) of module
+	// deployments this resource depends on, directly or through an ancestor
+	// module's dependsOn. Every resource declared in such a module (or below
+	// it) is a dependency.
+	ModuleDeps []string
 }
 
 // Model implements sdk.ARMModel.
@@ -59,12 +90,17 @@ type Model struct {
 	resources  []sdk.ARMResource
 	placements []Placement
 	outputs    []sdk.ARMOutput
+	truncated  bool
 }
 
 var (
 	_ sdk.ARMModel   = (*Model)(nil)
 	_ sdk.ARMOutputs = (*Model)(nil)
 )
+
+// Truncated reports that a size bound (MaxResources or MaxTextBytes) cut the
+// model short; rules must then treat absent resources as unknown.
+func (m *Model) Truncated() bool { return m != nil && m.truncated }
 
 // Outputs returns the top-level template outputs in template order.
 func (m *Model) Outputs() []sdk.ARMOutput {
@@ -93,6 +129,7 @@ func (m *Model) Placements() []Placement {
 	out := make([]Placement, len(m.placements))
 	for i, p := range m.placements {
 		p.DependsOn = append([]string(nil), p.DependsOn...)
+		p.ModuleDeps = append([]string(nil), p.ModuleDeps...)
 		out[i] = p
 	}
 	return out
@@ -107,6 +144,11 @@ func FromARM(raw []byte, opt Options) (*Model, error) {
 	return FromTemplate(t, raw, opt)
 }
 
+// budget tracks the work and retained text of one model build.
+type budget struct {
+	subst, text int
+}
+
 // scope is the evaluation context of one (nested) template.
 type scope struct {
 	path string
@@ -119,6 +161,36 @@ type scope struct {
 	cond  string
 	// looped: an ancestor module is deployed through a copy loop.
 	looped bool
+	// deps and modDeps are the ancestor modules' dependsOn entries, in the
+	// entry template's terms; they apply to every descendant resource.
+	deps, modDeps []string
+	// file is the source file of the nearest enclosing module, "" if unknown.
+	file string
+	bud  *budget
+}
+
+// modInfo is one module deployment of a template.
+type modInfo struct {
+	r     bicep.Resource
+	props moduleProperties
+	path  string
+	built bool
+	busy  bool
+	ch    scope
+}
+
+// modIndex finds the module deployments of one template by literal name or
+// symbolic name.
+type modIndex struct {
+	byName, bySym map[string]*modInfo
+}
+
+func (x *modIndex) lookup(name string) *modInfo {
+	k := strings.ToLower(name)
+	if mi := x.byName[k]; mi != nil {
+		return mi
+	}
+	return x.bySym[k]
 }
 
 // FromTemplate maps t, which must have been produced from raw by
@@ -136,45 +208,186 @@ func FromTemplate(t *bicep.Template, raw []byte, opt Options) (*Model, error) {
 	}
 	mapper := bicep.Mapper{Entry: opt.Entry, Modules: opt.Modules}
 	usedPaths := map[string]bool{}
+	bud := &budget{}
 	var walk func(t *bicep.Template, sc scope, ancestors []bicep.Resource)
 	walk = func(t *bicep.Template, sc scope, ancestors []bicep.Resource) {
 		symbolic := map[string]bool{}
-		for _, r := range t.Resources {
+		mods := &modIndex{byName: map[string]*modInfo{}, bySym: map[string]*modInfo{}}
+		order := make([]*modInfo, len(t.Resources))
+		for idx, r := range t.Resources {
 			if r.SymbolicName != "" {
 				symbolic[r.SymbolicName] = true
 			}
+			if r.Nested == nil {
+				continue
+			}
+			mi := &modInfo{r: r, props: moduleProps(r.Properties)}
+			if mi.props.outer {
+				mi.path = sc.path
+			} else {
+				mi.path = uniquePath(sc.path, r, usedPaths)
+				if r.SymbolicName != "" {
+					mods.bySym[strings.ToLower(r.SymbolicName)] = mi
+				}
+				if !armexpr.IsExpression(r.Name) && mods.byName[strings.ToLower(r.Name)] == nil {
+					mods.byName[strings.ToLower(r.Name)] = mi
+				}
+			}
+			order[idx] = mi
+		}
+		base := sc.tx
+		var child func(mi *modInfo) (scope, bool)
+		sc.tx = func(s string) string {
+			return armexpr.RewriteDeploymentOutputs(base(s), func(dep, out string) (string, bool) {
+				mi := mods.lookup(dep)
+				if mi == nil || mi.props.outer || mi.r.Conditional || mi.r.Copy != nil {
+					return "", false
+				}
+				return moduleOutput(mi, out, child, bud)
+			})
+		}
+		// child builds the scope of a module on first use: a module's
+		// parameters may read an earlier or later sibling's outputs.
+		child = func(mi *modInfo) (scope, bool) {
+			if mi.busy {
+				return scope{}, false
+			}
+			if !mi.built {
+				mi.busy = true
+				mi.ch = childScope(sc, mi.r, mi.path, mi.props, bud)
+				mi.busy, mi.built = false, true
+			}
+			return mi.ch, true
 		}
 		for idx, r := range t.Resources {
-			if len(m.resources) >= MaxResources {
+			if len(m.resources) >= MaxResources || bud.text > MaxTextBytes {
+				m.truncated = true
 				return
 			}
 			if r.Nested != nil {
 				// A module deployment is structure, not a deployed resource;
 				// its children are what rules inspect.
-				walk(r.Nested, childScope(sc, r, idx, usedPaths), append(append([]bicep.Resource(nil), ancestors...), r))
+				ch, _ := child(order[idx])
+				d, md := dependsOf(r, sc, symbolic, mods)
+				ch.deps = append(append([]string(nil), sc.deps...), d...)
+				ch.modDeps = append(append([]string(nil), sc.modDeps...), md...)
+				ch.file = moduleFile(mapper, opt, doc, r)
+				walk(r.Nested, ch, append(append([]bicep.Resource(nil), ancestors...), r))
 				continue
 			}
-			res := toResource(r, resolve(doc, r.Pointer), mapper.Locate(r, ancestors), sc)
+			loc := mapper.Locate(r, ancestors)
+			if sc.file != "" {
+				loc.File = sc.file
+			}
+			res := toResource(r, resolve(doc, r.Pointer), loc, sc)
+			bud.text += resourceBytes(res)
 			m.resources = append(m.resources, res)
-			m.placements = append(m.placements, placement(r, sc, symbolic))
+			m.placements = append(m.placements, placement(r, sc, symbolic, mods))
 		}
 	}
-	walk(t, scope{tx: func(s string) string { return s }}, nil)
+	walk(t, scope{tx: func(s string) string { return s }, bud: bud}, nil)
 	return m, nil
 }
 
-func placement(r bicep.Resource, sc scope, symbolic map[string]bool) Placement {
+// resourceBytes approximates the expression text a model resource retains.
+func resourceBytes(r sdk.ARMResource) int {
+	n := len(r.Name) + len(r.Region) + len(r.Condition) + len(r.Scope)
+	var add func(v any)
+	add = func(v any) {
+		switch x := v.(type) {
+		case string:
+			n += len(x)
+		case map[string]any:
+			for k, e := range x {
+				n += len(k)
+				add(e)
+			}
+		case []any:
+			for _, e := range x {
+				add(e)
+			}
+		}
+	}
+	add(r.Properties)
+	add(r.Tags)
+	add(r.SKU)
+	add(r.Identity)
+	return n
+}
+
+// moduleFile returns the source file of module r: from the deployment name
+// map, then from the template hash. It returns "" when neither knows.
+func moduleFile(mapper bicep.Mapper, opt Options, doc any, r bicep.Resource) string {
+	if f, ok := mapper.LookupModule(r.Name); ok {
+		return f
+	}
+	if len(opt.ModuleHashes) > 0 {
+		if h := bicep.TemplateHash(resolve(doc, r.Pointer)); h != "" {
+			if f, ok := opt.ModuleHashes[h]; ok {
+				return f
+			}
+		}
+	}
+	return ""
+}
+
+// moduleOutput returns the text of output out of module mi in the entry
+// template's terms. It resolves only expression outputs of a plain, unlooped,
+// unconditional module (the caller checks), and never secure ones.
+func moduleOutput(mi *modInfo, out string, child func(*modInfo) (scope, bool), bud *budget) (string, bool) {
+	for _, o := range mi.r.Nested.Outputs {
+		if !strings.EqualFold(o.Name, out) {
+			continue
+		}
+		if t := strings.ToLower(o.Type); t == "securestring" || t == "secureobject" || !armexpr.IsExpression(o.Value) {
+			return "", false
+		}
+		ch, ok := child(mi)
+		if !ok {
+			return "", false
+		}
+		text := armexpr.ExprText(ch.tx(o.Value))
+		if len(text) > MaxBindingBytes || bud.subst+len(text) > MaxSubstitutedBytes {
+			return "", false
+		}
+		bud.subst += len(text)
+		return text, true
+	}
+	return "", false
+}
+
+// dependsOf splits the dependsOn entries of module r (declared in sc) into
+// resource entries and module deployment paths.
+func dependsOf(r bicep.Resource, sc scope, symbolic map[string]bool, mods *modIndex) (deps, modDeps []string) {
+	for _, d := range r.DependsOn {
+		if symbolic[d] {
+			if mi := mods.bySym[strings.ToLower(d)]; mi != nil {
+				modDeps = append(modDeps, mi.path)
+				continue
+			}
+			deps = append(deps, qualifySymbol(d, sc.path))
+			continue
+		}
+		txt := sc.tx(d)
+		if ref := armexpr.ParseRef(txt); !ref.Opaque && strings.EqualFold(ref.Type, armexpr.DeploymentsType) && len(ref.Segments) == 1 && ref.Segments[0].Literal {
+			if mi := mods.byName[ref.Segments[0].Text]; mi != nil {
+				modDeps = append(modDeps, mi.path)
+				continue
+			}
+		}
+		deps = append(deps, normalizeLiteralRef(txt))
+	}
+	return deps, modDeps
+}
+
+func placement(r bicep.Resource, sc scope, symbolic map[string]bool, mods *modIndex) Placement {
 	p := Placement{Pointer: r.Pointer, Module: sc.path}
 	if r.SymbolicName != "" {
 		p.Symbol = qualifySymbol(r.SymbolicName, sc.path)
 	}
-	for _, d := range r.DependsOn {
-		if symbolic[d] {
-			p.DependsOn = append(p.DependsOn, qualifySymbol(d, sc.path))
-			continue
-		}
-		p.DependsOn = append(p.DependsOn, normalizeLiteralRef(sc.tx(d)))
-	}
+	deps, modDeps := dependsOf(r, sc, symbolic, mods)
+	p.DependsOn = append(deps, sc.deps...)
+	p.ModuleDeps = append(modDeps, sc.modDeps...)
 	return p
 }
 
@@ -185,23 +398,22 @@ func qualifySymbol(sym, path string) string {
 	return path + "::" + sym
 }
 
-// childScope builds the scope of the template nested in module deployment r,
-// which is the idx-th resource of its parent template, declared in sc.
-func childScope(sc scope, r bicep.Resource, idx int, used map[string]bool) scope {
+// childScope builds the scope of the template nested in module deployment r
+// (deployment path path), declared in sc.
+func childScope(sc scope, r bicep.Resource, path string, props moduleProperties, bud *budget) scope {
 	pr := armexpr.PresenceOf(r.Conditional, sc.tx(r.Condition), r.Copy != nil)
-	ch := scope{never: sc.never || pr == armexpr.NotDeployed, looped: sc.looped || r.Copy != nil, maybe: sc.maybe, cond: sc.cond}
+	ch := scope{never: sc.never || pr == armexpr.NotDeployed, looped: sc.looped || r.Copy != nil, maybe: sc.maybe, cond: sc.cond, bud: bud}
 	if !ch.maybe && r.Conditional && pr == armexpr.MaybeDeployed && r.Copy == nil {
 		ch.maybe, ch.cond = true, sc.tx(r.Condition)
 	}
 
-	props := moduleProps(r.Properties)
 	if props.outer {
 		// Legacy outer-scope evaluation: the child's expressions are the
 		// caller's, so the caller's scope applies unchanged.
 		ch.path, ch.tx = sc.path, sc.tx
 		return ch
 	}
-	ch.path = uniquePath(sc.path, r, idx, used)
+	ch.path = path
 
 	secure := map[string]bool{}
 	for _, p := range r.Nested.Parameters {
@@ -210,19 +422,27 @@ func childScope(sc scope, r bicep.Resource, idx int, used map[string]bool) scope
 		}
 	}
 	bound := map[string]string{}
-	for name, v := range props.params {
+	names := make([]string, 0, len(props.params))
+	for name := range props.params {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
 		if secure[strings.ToLower(name)] {
 			continue
 		}
-		if repl, ok := bindingText(v, sc.tx); ok {
+		if repl, ok := bindingText(props.params[name], sc.tx); ok && len(repl) <= MaxBindingBytes {
 			bound[strings.ToLower(name)] = repl
 		}
 	}
-	path := ch.path
 	local := func(s string) string {
+		used := 0
 		return armexpr.RewriteRefs(s, func(kind, name string) (string, bool) {
 			if kind == armexpr.RefParameter {
-				if repl, ok := bound[strings.ToLower(name)]; ok {
+				if repl, ok := bound[strings.ToLower(name)]; ok &&
+					used+len(repl) <= MaxExprBytes && bud.subst+len(repl) <= MaxSubstitutedBytes {
+					used += len(repl)
+					bud.subst += len(repl)
 					return repl, true
 				}
 			}
@@ -233,11 +453,17 @@ func childScope(sc scope, r bicep.Resource, idx int, used map[string]bool) scope
 	return ch
 }
 
-// uniquePath returns the deployment path of module r under parent path.
-func uniquePath(parent string, r bicep.Resource, idx int, used map[string]bool) string {
-	label := r.SymbolicName
+// uniquePath returns the deployment path of module r under parent path. It is
+// built from the module's deployment name (its symbolic name when it has one,
+// else its name), never from its position, so inserting an unrelated module
+// does not change it. Equal labels get a "#n" suffix in template order.
+func uniquePath(parent string, r bicep.Resource, used map[string]bool) string {
+	label := sanitize(r.SymbolicName)
 	if label == "" {
-		label = "m" + strconv.Itoa(idx) + "-" + sanitize(r.Name)
+		label = sanitize(r.Name)
+	}
+	if label == "" {
+		label = "module"
 	}
 	p := label
 	if parent != "" {
@@ -257,7 +483,7 @@ func sanitize(s string) string {
 		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' {
 			b.WriteRune(c)
 		}
-		if b.Len() >= 24 {
+		if b.Len() >= 48 {
 			break
 		}
 	}
@@ -350,7 +576,9 @@ func toResource(r bicep.Resource, node map[string]any, bl bicep.Location, sc sco
 	if id, ok := node["identity"].(map[string]any); ok {
 		res.Identity = normalizeValue(id, tx).(map[string]any)
 	}
-	res.Scope = tx(str(node["scope"]))
+	// The scope stays unfolded: resourceId('type', 'name') folded to the bare
+	// name would lose the type IDN-004 needs to classify the scope.
+	res.Scope = sc.tx(str(node["scope"]))
 	return res
 }
 

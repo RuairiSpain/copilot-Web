@@ -8,6 +8,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/armexpr"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
 
@@ -205,7 +206,7 @@ func evalCFG010(in *sdk.Input) sdk.Result {
 			if !vok || strings.TrimSpace(v) == "" || looksUnpinnedVersion(v) {
 				fs = append(fs, sdk.Finding{
 					Key:      "deployment-version-unpinned",
-					Resource: sdk.ResourceRef{Type: r.Type, Name: r.Name},
+					Resource: sdk.ResourceRef{Type: r.Type, Name: armexpr.StripScope(r.Name)},
 					Location: r.Location,
 					Evidence: "deployment model.version is empty or unpinned",
 				})
@@ -214,7 +215,7 @@ func evalCFG010(in *sdk.Input) sdk.Result {
 				if !strings.HasPrefix(strings.TrimSpace(opt), "[") && strings.EqualFold(strings.TrimSpace(opt), "OnceNewDefaultVersionAvailable") {
 					fs = append(fs, sdk.Finding{
 						Key:      "upgrade-option-once-new-default",
-						Resource: sdk.ResourceRef{Type: r.Type, Name: r.Name},
+						Resource: sdk.ResourceRef{Type: r.Type, Name: armexpr.StripScope(r.Name)},
 						Location: r.Location,
 						Evidence: "deployment versionUpgradeOption is OnceNewDefaultVersionAvailable",
 					})
@@ -222,7 +223,7 @@ func evalCFG010(in *sdk.Input) sdk.Result {
 			} else {
 				fs = append(fs, sdk.Finding{
 					Key:      "upgrade-option-absent",
-					Resource: sdk.ResourceRef{Type: r.Type, Name: r.Name},
+					Resource: sdk.ResourceRef{Type: r.Type, Name: armexpr.StripScope(r.Name)},
 					Location: r.Location,
 					Evidence: "deployment versionUpgradeOption is absent",
 				})

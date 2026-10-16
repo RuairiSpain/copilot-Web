@@ -226,7 +226,7 @@ func evalSEC010(in *sdk.Input) sdk.Result {
 				state = "cmk"
 			}
 		}
-		fs = append(fs, sdk.Finding{Resource: sdk.ResourceRef{Type: r.Type, Name: r.Name}, Location: r.Location, Evidence: "CMK posture: " + state})
+		fs = append(fs, sdk.Finding{Resource: sdk.ResourceRef{Type: r.Type, Name: armexpr.StripScope(r.Name)}, Location: r.Location, Evidence: "CMK posture: " + state})
 	}
 	set := foundrylink.Collect(in.ARM)
 	for _, typ := range []string{typeSearch, typeCosmos, typeStorage} {
@@ -249,7 +249,7 @@ func evalSEC010(in *sdk.Input) sdk.Result {
 					state = "cmk"
 				}
 			}
-			fs = append(fs, sdk.Finding{Resource: sdk.ResourceRef{Type: r.Type, Name: r.Name}, Location: r.Location, Evidence: "CMK posture: " + state})
+			fs = append(fs, sdk.Finding{Resource: sdk.ResourceRef{Type: r.Type, Name: armexpr.StripScope(r.Name)}, Location: r.Location, Evidence: "CMK posture: " + state})
 		}
 	}
 	if len(fs) == 0 {
@@ -291,7 +291,7 @@ func evalSEC011(in *sdk.Input) sdk.Result {
 			continue
 		}
 		fs = append(fs, sdk.Finding{
-			Resource: sdk.ResourceRef{Type: r.Type, Name: r.Name},
+			Resource: sdk.ResourceRef{Type: r.Type, Name: armexpr.StripScope(r.Name)},
 			Location: r.Location,
 			Evidence: "outbound network posture does not show an approved-only egress configuration",
 		})

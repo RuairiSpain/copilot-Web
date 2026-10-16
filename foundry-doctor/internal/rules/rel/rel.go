@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/armexpr"
 	runtimegw "github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/gateway"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
@@ -66,10 +67,10 @@ func (o *outcome) add(r sdk.ARMResource, key, evidence string) {
 
 func (o *outcome) addRes(typ, name string, loc sdk.Location, key, evidence string) {
 	o.findings = append(o.findings, sdk.Finding{
-		Resource: sdk.ResourceRef{Type: typ, Name: name},
+		Resource: sdk.ResourceRef{Type: typ, Name: armexpr.StripScope(name)},
 		Location: loc,
 		Key:      key,
-		Evidence: evidence,
+		Evidence: armexpr.StripScope(evidence),
 	})
 }
 
@@ -88,11 +89,11 @@ func (o *outcome) result() sdk.Result {
 	}
 	if len(o.skips) > 0 {
 		slices.Sort(o.skips)
-		return sdk.Result{Skipped: &sdk.Skip{Reason: strings.Join(unique(o.skips), "; ")}}
+		return sdk.Result{Skipped: &sdk.Skip{Reason: armexpr.StripScope(strings.Join(unique(o.skips), "; "))}}
 	}
 	if len(o.notes) > 0 {
 		slices.Sort(o.notes)
-		return sdk.Result{Skipped: &sdk.Skip{Reason: "uncertain: " + strings.Join(unique(o.notes), "; ")}}
+		return sdk.Result{Skipped: &sdk.Skip{Reason: armexpr.StripScope("uncertain: " + strings.Join(unique(o.notes), "; "))}}
 	}
 	return sdk.Result{}
 }

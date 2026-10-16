@@ -13,6 +13,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/armexpr"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/config"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
@@ -64,9 +65,9 @@ type outcome struct {
 
 func (o *outcome) add(r sdk.ARMResource, evidence string) {
 	o.findings = append(o.findings, sdk.Finding{
-		Resource: sdk.ResourceRef{Type: r.Type, Name: r.Name},
+		Resource: sdk.ResourceRef{Type: r.Type, Name: armexpr.StripScope(r.Name)},
 		Location: r.Location,
-		Evidence: evidence,
+		Evidence: armexpr.StripScope(evidence),
 	})
 }
 
@@ -98,17 +99,17 @@ func (o *outcome) result() sdk.Result {
 		if len(unevaluated) > 0 {
 			slices.Sort(unevaluated)
 			unevaluated = unique(unevaluated)
-			o.findings[0].Evidence += fmt.Sprintf(" [note: %d resource check(s) not evaluated by this rule: %s]", len(unevaluated), strings.Join(unevaluated, "; "))
+			o.findings[0].Evidence += armexpr.StripScope(fmt.Sprintf(" [note: %d resource check(s) not evaluated by this rule: %s]", len(unevaluated), strings.Join(unevaluated, "; ")))
 		}
 		return sdk.Result{Findings: o.findings}
 	}
 	if len(o.skips) > 0 {
 		slices.Sort(o.skips)
-		return sdk.Result{Skipped: &sdk.Skip{Reason: strings.Join(unique(o.skips), "; ")}}
+		return sdk.Result{Skipped: &sdk.Skip{Reason: armexpr.StripScope(strings.Join(unique(o.skips), "; "))}}
 	}
 	if len(o.notes) > 0 {
 		slices.Sort(o.notes)
-		return sdk.Result{Skipped: &sdk.Skip{Reason: "uncertain: " + strings.Join(unique(o.notes), "; ")}}
+		return sdk.Result{Skipped: &sdk.Skip{Reason: armexpr.StripScope("uncertain: " + strings.Join(unique(o.notes), "; "))}}
 	}
 	return sdk.Result{}
 }

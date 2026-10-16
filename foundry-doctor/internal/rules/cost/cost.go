@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/armexpr"
 	runtimegw "github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/gateway"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
@@ -55,9 +56,9 @@ type outcome struct {
 
 func (o *outcome) add(r sdk.ARMResource, evidence string) {
 	o.findings = append(o.findings, sdk.Finding{
-		Resource: sdk.ResourceRef{Type: r.Type, Name: r.Name},
+		Resource: sdk.ResourceRef{Type: r.Type, Name: armexpr.StripScope(r.Name)},
 		Location: r.Location,
-		Evidence: evidence,
+		Evidence: armexpr.StripScope(evidence),
 	})
 }
 
@@ -83,7 +84,7 @@ func (o *outcome) result() sdk.Result {
 			notes = append(notes, o.skip)
 		}
 		if len(notes) > 0 {
-			o.findings[0].Evidence += " [note: not evaluated by this rule: " + strings.Join(notes, "; ") + "]"
+			o.findings[0].Evidence += armexpr.StripScope(" [note: not evaluated by this rule: " + strings.Join(notes, "; ") + "]")
 		}
 		return sdk.Result{Findings: o.findings}
 	}
@@ -94,7 +95,7 @@ func (o *outcome) result() sdk.Result {
 		return sdk.Result{Skipped: &sdk.Skip{Reason: "conditional-deployment-unresolved"}}
 	}
 	if o.skip != "" {
-		return sdk.Result{Skipped: &sdk.Skip{Reason: o.skip}}
+		return sdk.Result{Skipped: &sdk.Skip{Reason: armexpr.StripScope(o.skip)}}
 	}
 	return sdk.Result{}
 }

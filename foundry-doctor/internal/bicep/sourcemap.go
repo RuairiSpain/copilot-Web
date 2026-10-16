@@ -59,6 +59,24 @@ func (m Mapper) Locate(r Resource, ancestors []Resource) Location {
 	return loc
 }
 
+// LookupModule returns the source file of the module deployment with the given
+// ARM name (a literal, or an expression holding a known literal).
+func (m Mapper) LookupModule(name string) (string, bool) { return m.lookup(name) }
+
+// TemplateHash returns metadata._generator.templateHash of the nested template
+// of a module deployment resource node (the decoded JSON object of the
+// Microsoft.Resources/deployments resource), or "" when absent. A module file
+// compiled on its own has the same hash as the template nested in the caller,
+// which maps a nested template to its source file without reading Bicep.
+func TemplateHash(deployment map[string]any) string {
+	props, _ := deployment["properties"].(map[string]any)
+	tpl, _ := props["template"].(map[string]any)
+	meta, _ := tpl["metadata"].(map[string]any)
+	gen, _ := meta["_generator"].(map[string]any)
+	h, _ := gen["templateHash"].(string)
+	return h
+}
+
 func (m Mapper) lookup(name string) (string, bool) {
 	if f, ok := m.Modules[name]; ok {
 		return f, true

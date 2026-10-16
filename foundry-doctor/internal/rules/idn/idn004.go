@@ -182,7 +182,7 @@ func scopeDescription(scope string) string {
 	if strings.TrimSpace(scope) == "" {
 		return "deployment scope"
 	}
-	return fmt.Sprintf("scope %q", scope)
+	return fmt.Sprintf("scope %q", armexpr.StripScope(scope))
 }
 
 func evalIDN004(in *sdk.Input) sdk.Result {

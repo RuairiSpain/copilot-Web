@@ -148,7 +148,9 @@ func foundryAccounts(m sdk.ARMModel) []sdk.ARMResource {
 	return out
 }
 
-func ref(r sdk.ARMResource) sdk.ResourceRef { return sdk.ResourceRef{Type: r.Type, Name: r.Name} }
+func ref(r sdk.ARMResource) sdk.ResourceRef {
+	return sdk.ResourceRef{Type: r.Type, Name: armexpr.StripScope(r.Name)}
+}
 
 type peConn struct {
 	target string
@@ -491,7 +493,7 @@ type outcome struct {
 }
 
 func (o *outcome) add(r sdk.ARMResource, evidence string) {
-	o.findings = append(o.findings, sdk.Finding{Resource: ref(r), Location: r.Location, Evidence: evidence})
+	o.findings = append(o.findings, sdk.Finding{Resource: ref(r), Location: r.Location, Evidence: armexpr.StripScope(evidence)})
 }
 
 // addKey adds a finding with a stable Key separating several findings of one

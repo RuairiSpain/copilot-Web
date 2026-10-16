@@ -59,9 +59,9 @@ func evalIDN005(in *sdk.Input) sdk.Result {
 			subOwners++
 		}
 		findings = append(findings, sdk.Finding{
-			Resource: sdk.ResourceRef{Type: r.Type, Name: r.Name},
+			Resource: sdk.ResourceRef{Type: r.Type, Name: armexpr.StripScope(r.Name)},
 			Location: r.Location,
-			Evidence: fmt.Sprintf("%s assignment for principalType %s at scope %q is standing human admin access that requires review", label, pt, r.Scope),
+			Evidence: fmt.Sprintf("%s assignment for principalType %s at scope %q is standing human admin access that requires review", label, pt, armexpr.StripScope(r.Scope)),
 		})
 	}
 	if subOwners > 3 {

@@ -101,6 +101,7 @@ func (a *acc) unres(r sdk.ARMResource, why string) {
 
 // shortName bounds a resource name (often a long guid() expression) for notes.
 func shortName(n string) string {
+	n = armexpr.StripScope(n)
 	if len(n) > 60 {
 		return n[:57] + "..."
 	}
@@ -114,7 +115,7 @@ func withNotes(fs []sdk.Finding, notes []string) []sdk.Finding {
 	}
 	sorted := append([]string(nil), notes...)
 	sort.Strings(sorted)
-	fs[0].Evidence += fmt.Sprintf(" [note: %d resource check(s) not evaluated by this rule: %s]", len(sorted), strings.Join(sorted, "; "))
+	fs[0].Evidence += fmt.Sprintf(" [note: %d resource check(s) not evaluated by this rule: %s]", len(sorted), armexpr.StripScope(strings.Join(sorted, "; ")))
 	return fs
 }
 
@@ -142,9 +143,9 @@ func (a *acc) addKey(r sdk.ARMResource, key, evidence string) {
 
 func (a *acc) add(r sdk.ARMResource, evidence string) {
 	a.fs = append(a.fs, sdk.Finding{
-		Resource: sdk.ResourceRef{Type: r.Type, Name: r.Name},
+		Resource: sdk.ResourceRef{Type: r.Type, Name: armexpr.StripScope(r.Name)},
 		Location: r.Location,
-		Evidence: evidence,
+		Evidence: armexpr.StripScope(evidence),
 	})
 }
 

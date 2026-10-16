@@ -46,6 +46,11 @@ type Resource struct {
 	Name         string
 	SymbolicName string
 	DependsOn    []string // ARM dependsOn entries (resourceId expressions or symbolic names)
+	// DependsOnIDs are the IDs of resources this one depends on directly, such
+	// as every resource declared in a module deployment the resource's module
+	// depends on. IDs that are not deployed nodes, and the resource itself, are
+	// ignored.
+	DependsOnIDs []string
 	// Conditional, Condition and Looped carry the ARM condition and copy loop.
 	// A literal false condition removes the resource from the graph; any other
 	// condition or a loop marks the node as conditional.
@@ -179,6 +184,13 @@ func Build(in Input) (*Graph, error) {
 	}
 	for _, r := range deployed {
 		from := ResourceID(r.ID)
+		for _, id := range r.DependsOnIDs {
+			if to := ResourceID(id); to != from {
+				if _, ok := g.byID[to]; ok {
+					add(Edge{from, to, EdgeDependsOn})
+				}
+			}
+		}
 		for _, d := range r.DependsOn {
 			to, ok, inTemplate := resolveDep(d, resBySym, resByName, deployed)
 			switch {

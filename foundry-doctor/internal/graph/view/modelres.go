@@ -2,6 +2,7 @@ package view
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/armmodel"
 	coregraph "github.com/ruairispain/copilot-web/foundry-doctor/internal/graph"
@@ -26,8 +27,21 @@ func ModelResources(res []sdk.ARMResource, ps []armmodel.Placement) []coregraph.
 			cr.ID = ps[i].Pointer
 			cr.SymbolicName = ps[i].Symbol
 			cr.DependsOn = append([]string(nil), ps[i].DependsOn...)
+			for _, path := range ps[i].ModuleDeps {
+				for j := range ps {
+					if j < len(res) && j != i && inModule(ps[j].Module, path) {
+						cr.DependsOnIDs = append(cr.DependsOnIDs, ps[j].Pointer)
+					}
+				}
+			}
 		}
 		out = append(out, cr)
 	}
 	return out
+}
+
+// inModule reports whether a resource declared in module path m is in module
+// path of (the module itself or a module nested in it).
+func inModule(m, of string) bool {
+	return m == of || strings.HasPrefix(m, of+"/")
 }

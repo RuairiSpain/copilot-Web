@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/armexpr"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/azure"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/azureyaml"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/findings"
@@ -211,9 +212,11 @@ func Build(in Input, opt Options) (Graph, error) {
 			default:
 				r.key = "arm:" + n.Type + ":" + n.Name
 				r.kind = classifyResource(n.Type)
-				r.label = firstNonEmpty(n.Name, n.Type)
+				// The node key keeps the scope token that tells two module
+				// instances apart; labels and names never show it.
+				r.label = firstNonEmpty(armexpr.StripScope(n.Name), n.Type)
 				r.typ = n.Type
-				r.name = n.Name
+				r.name = armexpr.StripScope(n.Name)
 				r.resourceID = n.ID
 				r.conditional = n.Conditional
 			}
@@ -228,9 +231,9 @@ func Build(in Input, opt Options) (Graph, error) {
 			key := unresolvedKeyFor(u.Ref, u.InTemplate)
 			external := looksExternal(u.Ref) && !u.InTemplate
 			if external {
-				addNode(nodeRec{key: key, label: externalLabel(u.Ref), kind: "external", origin: OriginExternal, name: u.Ref, external: true})
+				addNode(nodeRec{key: key, label: externalLabel(armexpr.StripScope(u.Ref)), kind: "external", origin: OriginExternal, name: armexpr.StripScope(u.Ref), external: true})
 			} else {
-				addNode(nodeRec{key: key, label: findings.Redact(u.Ref), kind: "missing", origin: OriginMissing, name: u.Ref, missing: true})
+				addNode(nodeRec{key: key, label: findings.Redact(armexpr.StripScope(u.Ref)), kind: "missing", origin: OriginMissing, name: armexpr.StripScope(u.Ref), missing: true})
 			}
 			addEdge(from, key, string(u.Kind), !external, external, false)
 		}

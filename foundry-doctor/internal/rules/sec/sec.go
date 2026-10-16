@@ -100,7 +100,7 @@ type acc struct {
 
 // note records why r was not evaluated.
 func (a *acc) note(r sdk.ARMResource, why string) {
-	n := r.Name
+	n := armexpr.StripScope(r.Name)
 	if len(n) > 60 {
 		n = n[:57] + "..."
 	}
@@ -109,9 +109,9 @@ func (a *acc) note(r sdk.ARMResource, why string) {
 
 func (a *acc) add(r sdk.ARMResource, evidence string) {
 	a.fs = append(a.fs, sdk.Finding{
-		Resource: sdk.ResourceRef{Type: r.Type, Name: r.Name},
+		Resource: sdk.ResourceRef{Type: r.Type, Name: armexpr.StripScope(r.Name)},
 		Location: r.Location,
-		Evidence: evidence,
+		Evidence: armexpr.StripScope(evidence),
 	})
 }
 
