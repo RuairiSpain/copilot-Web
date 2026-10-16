@@ -22,7 +22,7 @@ Read-only token, no secrets, no `pull_request_target`: safe for fork pull reques
 
 - `test`: `go test ./...` on ubuntu, macos and windows, `go-version-file: foundry-doctor/go.mod`.
 - `quality`: `scripts/install-dev-tools.sh`, then `scripts/claude/verify-phase.sh` (gofmt, vet, test, race, staticcheck, govulncheck, build, rule-catalogue check,
-  secret scan, import boundary, `bash -n scripts/ci/*.sh`). Not yet `--strict`: switch it on when `cmd/foundry-doctor` exists, otherwise the skipped build gate would fail CI.
+  secret scan, import boundary, `bash -n scripts/ci/*.sh`). Runs with `--strict`: all gates are available on the runner, so a skipped gate fails CI (for example govulncheck when vuln.go.dev is unreachable). Tests that skip themselves inside `go test` without `BICEP_PATH` are not counted by `--strict`; the `smoke` job installs Bicep.
 - `import-boundary`: `scripts/ci/check-import-boundary.sh`.
 - `azd-namespace`: `scripts/ci/check-azd-namespace.sh`; exit 5 becomes a warning annotation and a "SKIPPED (not a pass)" summary line.
 - `build-matrix`: `scripts/ci/build-matrix.sh`; uploads the binaries. Warns "SKIPPED" while `cmd/foundry-doctor` is absent.
@@ -65,7 +65,7 @@ and `actions: read`, which `upload-sarif` needs in private repositories). `githu
 - The caller must grant `contents: read`, `actions: read`, `security-events: write`; otherwise GitHub rejects the run at start-up. Private repositories need GitHub Code Security for SARIF upload.
 - The workflow has no Azure login and no secrets. Do not call it from `pull_request_target`.
 
-`foundry-doctor/samples/github/foundry-doctor-starter.yml` and its README are a copy-paste sample. A real starter-workflow listing needs `workflow-templates/` plus a `.properties.json` in an organisation `.github` repository.
+`foundry-doctor/samples/github/foundry-doctor-starter.yml` and its README are a copy-paste sample. It is deliberately not kept in `.github/workflows/`: it would run on this repository's pull requests, and an earlier in-repo copy ended in `startup_failure` (inputs the reusable workflow does not declare, `fail-on: high`, no `version`, no `actions: read`). A real starter-workflow listing needs `workflow-templates/` plus a `.properties.json` in an organisation `.github` repository.
 
 ## Release (`foundry-doctor-release.yml`) - authored, never run
 
