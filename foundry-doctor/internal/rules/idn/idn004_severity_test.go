@@ -78,6 +78,15 @@ func TestIDN004ContributorProjectScopeAndMissingAccount(t *testing.T) {
 			if got := out.Findings[0].Severity; got != tc.want {
 				t.Errorf("severity override %q want %q: %s", got, tc.want, out.Findings[0].Evidence)
 			}
+			// N5: the info downgrade is a policy choice and says why it is not proof.
+			if tc.want == sdk.SeverityInfo {
+				ev := out.Findings[0].Evidence
+				for _, w := range []string{"policy choice", "not proof of safety", "set disableLocalAuth back to false", "list the account keys"} {
+					if !strings.Contains(ev, w) {
+						t.Errorf("info evidence lacks %q: %s", w, ev)
+					}
+				}
+			}
 		})
 	}
 }

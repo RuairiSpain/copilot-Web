@@ -86,6 +86,28 @@ func TestGuardFileLoads(t *testing.T) {
 		{"bicepparam using hostile main", fileSet{
 			"infra/main.bicepparam": "using './main.bicep'\nparam a = 'x'\n",
 			"infra/main.bicep":      esc + "param a string\n"}, "infra/main.bicepparam", true},
+		{"block comment before paren", fileSet{"infra/main.bicep": "var x = loadTextContent/* x */('../../outside.txt')\n"}, "infra/main.bicep", true},
+		{"block comment before paren in bicepparam", fileSet{
+			"infra/main.bicepparam": "using './main.bicep'\nparam a = loadTextContent/* x */('../../outside.txt')\n",
+			"infra/main.bicep":      "param a string\n"}, "infra/main.bicepparam", true},
+		{"space and comments before paren, inside project", fileSet{"infra/main.bicep": "var x = loadTextContent /* a */ /* b */ ('ok.txt')\n", "infra/ok.txt": "1"}, "infra/main.bicep", false},
+		{"load name not followed by paren", fileSet{"infra/main.bicep": "var loadTextContent = 1\n"}, "infra/main.bicep", true},
+		{"line comment then paren is refused", fileSet{"infra/main.bicep": "var x = loadTextContent// c\n('ok.txt')\n", "infra/ok.txt": "1"}, "infra/main.bicep", true},
+		{"unterminated comment after name", fileSet{"infra/main.bicep": "var x = loadTextContent/* never\n"}, "infra/main.bicep", true},
+		{"load from .azure", fileSet{"infra/main.bicep": "var x = loadTextContent('../.azure/dev/.env')\n", ".azure/dev/.env": "A=1"}, "infra/main.bicep", true},
+		{"load from nested .azure", fileSet{"infra/main.bicep": "var x = loadJsonContent('.AZURE/c.json')\n", "infra/.AZURE/c.json": "{}"}, "infra/main.bicep", true},
+		{"directory .azure", fileSet{"main.bicep": "var x = loadDirectoryFileInfo('.azure')\n", ".azure/a": "1"}, "main.bicep", true},
+		{"similar name is allowed", fileSet{"infra/main.bicep": "var x = loadTextContent('.azure-notes.txt')\n", "infra/.azure-notes.txt": "1"}, "infra/main.bicep", false},
+		{"json module escaping root", fileSet{"infra/main.bicep": "module m '../../outmod.json' = {\n  name: 'm'\n}\n"}, "infra/main.bicep", true},
+		{"json module inside root", fileSet{"infra/main.bicep": "module m './t/m.json' = {\n  name: 'm'\n}\n", "infra/t/m.json": "{}"}, "infra/main.bicep", false},
+		{"json module with comment-like text is not scanned", fileSet{"infra/main.bicep": "module m './m.json' = {\n  name: 'm'\n}\n", "infra/m.json": "{\"a\": \"/* x\"}"}, "infra/main.bicep", false},
+		{"url string does not refuse", fileSet{"infra/main.bicep": "var src = 'https://github.com/org/repo/blob/main/infra/main.bicep'\nvar p = '../../x.bicepparam'\nvar j = '../../x.json'\n"}, "infra/main.bicep", false},
+		{"url string and real escaping module", fileSet{"infra/main.bicep": "var src = 'https://github.com/o/r/main.bicep'\nmodule m '../../x/m.bicep' = {\n  name: 'm'\n}\n"}, "infra/main.bicep", true},
+		{"url string and hostile real module", fileSet{
+			"infra/main.bicep": "var src = 'https://github.com/o/r/main.bicep'\nmodule m './m.bicep' = {\n  name: 'm'\n}\n",
+			"infra/m.bicep":    esc}, "infra/main.bicep", true},
+		{"extends escaping root", fileSet{"infra/main.bicepparam": "using './main.bicep'\nextends '../../base.bicepparam'\n", "infra/main.bicep": "param a string\n"}, "infra/main.bicepparam", true},
+		{"import from escaping root", fileSet{"infra/main.bicep": "import { f } from '../../lib.bicep'\n"}, "infra/main.bicep", true},
 		{"unreadable start", fileSet{}, "infra/main.bicep", true},
 	}
 	for _, tc := range cases {

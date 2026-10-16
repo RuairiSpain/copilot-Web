@@ -43,8 +43,9 @@ func (e *LoadGuardError) Error() string {
 }
 
 // GuardFileLoads scans start (a slash-separated path relative to root) and
-// every local .bicep or .bicepparam file it references, transitively and
-// bounded, for calls to loadTextContent, loadFileAsBase64, loadJsonContent,
+// every local .bicep or .bicepparam file it references through a module,
+// using, extends or import statement (and every local .json module), transitively
+// and bounded, for calls to loadTextContent, loadFileAsBase64, loadJsonContent,
 // loadYamlContent and loadDirectoryFileInfo. A call is allowed only when its
 // first argument is a plain single-quoted literal naming a relative path that
 // resolves, through root, to a regular file (a directory for
@@ -67,6 +68,9 @@ func GuardFileLoads(root *os.Root, start string) error {
 			}
 			continue // a missing or unreadable module is the compiler's diagnostic
 		}
+		if strings.HasSuffix(strings.ToLower(file), ".json") {
+			continue // an ARM JSON module cannot call load functions; only its location is checked
+		}
 		sc := scanSource(src)
 		if sc.doubt != "" {
 			return &LoadGuardError{File: file, Detail: sc.doubt}
@@ -84,6 +88,9 @@ func GuardFileLoads(root *os.Root, start string) error {
 			if err != nil {
 				return &LoadGuardError{File: file, Detail: c.fn + " path does not resolve to a file inside the project root"}
 			}
+			if inAzureDir(rel) {
+				return &LoadGuardError{File: file, Detail: c.fn + " path is inside the .azure directory, which holds azd environment values"}
+			}
 			if strings.EqualFold(c.fn, "loadDirectoryFileInfo") {
 				if !fi.IsDir() {
 					return &LoadGuardError{File: file, Detail: c.fn + " path is not a directory inside the project root"}
@@ -95,7 +102,7 @@ func GuardFileLoads(root *os.Root, start string) error {
 		for _, ref := range sc.refs {
 			rel, ok := projectRel(dir, ref)
 			if !ok {
-				return &LoadGuardError{File: file, Detail: "referenced Bicep file is absolute or leaves the project root"}
+				return &LoadGuardError{File: file, Detail: "referenced Bicep, Bicep parameter or JSON module file is absolute or leaves the project root"}
 			}
 			if seen[rel] {
 				continue
@@ -121,6 +128,17 @@ func projectRel(dir, lit string) (string, bool) {
 		return "", false
 	}
 	return rel, true
+}
+
+// inAzureDir reports whether a root-relative slash path has a ".azure" segment.
+// azd keeps environment values there, so loads from it are refused.
+func inAzureDir(rel string) bool {
+	for _, seg := range strings.Split(rel, "/") {
+		if strings.EqualFold(seg, ".azure") {
+			return true
+		}
+	}
+	return false
 }
 
 func readBounded(root *os.Root, rel string) ([]byte, error) {
@@ -163,8 +181,9 @@ func isIdentPart(c byte) bool { return isIdentStart(c) || c >= '0' && c <= '9' }
 
 func isSpace(c byte) bool { return c == ' ' || c == '\t' || c == '\r' || c == '\n' }
 
-// scanSource finds load-function calls and local Bicep file references in the
-// code parts of src. Comments and the text of string literals are skipped;
+// scanSource finds load-function calls and local file references in the code
+// parts of src. References are collected only from module, using, extends and
+// import ... from statements; other strings that look like paths are ignored. Comments and the text of string literals are skipped;
 // ${...} interpolations inside strings are code and are scanned.
 func scanSource(src []byte) scanResult {
 	var res scanResult
@@ -174,6 +193,11 @@ func scanSource(src []byte) scanResult {
 	var lit []byte
 	hasInterp := false
 	inStr := false
+	// t1 and t2 are the last two code tokens before the current one: a
+	// lower-cased identifier, or tokNone for punctuation and strings.
+	const tokNone = "\x00"
+	t1, t2 := tokNone, tokNone
+	push := func(t string) { t2, t1 = t1, t }
 	i := 0
 	for i < n {
 		c := src[i]
@@ -199,10 +223,19 @@ func scanSource(src []byte) scanResult {
 				if !hasInterp {
 					s := string(lit)
 					l := strings.ToLower(s)
-					if strings.HasSuffix(l, ".bicep") || strings.HasSuffix(l, ".bicepparam") {
-						res.refs = append(res.refs, s)
+					isBicep := strings.HasSuffix(l, ".bicep") || strings.HasSuffix(l, ".bicepparam")
+					switch {
+					case t1 == "using" || t1 == "extends" || t1 == "from":
+						if isBicep {
+							res.refs = append(res.refs, s)
+						}
+					case t2 == "module":
+						if isBicep || strings.HasSuffix(l, ".json") {
+							res.refs = append(res.refs, s)
+						}
 					}
 				}
+				push(tokNone)
 			default:
 				lit = append(lit, c)
 				i++
@@ -228,6 +261,7 @@ func scanSource(src []byte) scanResult {
 				return res
 			}
 			i += 3 + j + 3
+			push(tokNone)
 		case c == '\'':
 			i++
 			lit = lit[:0]
@@ -254,16 +288,25 @@ func scanSource(src []byte) scanResult {
 			}
 			name := string(src[i:j])
 			i = j
-			if loadFunctions[strings.ToLower(name)] {
-				k := j
-				for k < n && isSpace(src[k]) {
-					k++
-				}
-				if k < n && src[k] == '(' {
+			lname := strings.ToLower(name)
+			push(lname)
+			if loadFunctions[lname] {
+				k, ok := skipSpaceAndBlockComments(src, j)
+				switch {
+				case !ok:
+					res.doubt = "unterminated block comment after " + name
+					return res
+				case k < n && src[k] == '(':
 					res.calls = append(res.calls, firstArg(name, src, k+1))
+				default:
+					res.doubt = name + " is not directly followed by '('"
+					return res
 				}
 			}
 		default:
+			if !isSpace(c) {
+				push(tokNone)
+			}
 			i++
 		}
 	}
@@ -271,6 +314,28 @@ func scanSource(src []byte) scanResult {
 		res.doubt = "unterminated string interpolation"
 	}
 	return res
+}
+
+// skipSpaceAndBlockComments advances k over whitespace and /* */ comments,
+// which Bicep accepts between a function name and its '('. It returns false
+// when a block comment is not terminated.
+func skipSpaceAndBlockComments(src []byte, k int) (int, bool) {
+	n := len(src)
+	for k < n {
+		switch {
+		case isSpace(src[k]):
+			k++
+		case src[k] == '/' && k+1 < n && src[k+1] == '*':
+			j := bytes.Index(src[k+2:], []byte("*/"))
+			if j < 0 {
+				return k, false
+			}
+			k += 2 + j + 2
+		default:
+			return k, true
+		}
+	}
+	return k, true
 }
 
 // firstArg reads the first argument after '(' at src[k:]. It is a plain

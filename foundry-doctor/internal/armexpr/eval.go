@@ -19,7 +19,8 @@ const (
 // It is not an ARM evaluator. Anything else (a parameter or variable
 // reference, resourceGroup(), uniqueString(), a property access, a format
 // specifier) returns ok false, and the caller must treat the value as unknown.
-// equals compares strings case-insensitively, as ARM does.
+// equals and contains compare strings case-sensitively, as the ARM template functions
+// and the Bicep == operator are documented to do.
 func Eval(s string) (any, bool) {
 	s = strings.TrimSpace(s)
 	if !IsExpression(s) || !strings.HasSuffix(s, "]") || len(s) > maxEvalBytes {
@@ -219,7 +220,7 @@ func applyFn(name string, args []any) (any, bool) {
 		}
 		if a, ok := args[0].(string); ok {
 			b, ok := args[1].(string)
-			return ok && strings.EqualFold(a, b), true
+			return ok && a == b, true
 		}
 		return args[0] == args[1], true
 	case "if":
@@ -282,8 +283,8 @@ func applyFn(name string, args []any) (any, bool) {
 		if !ok1 || !ok2 {
 			return nil, false
 		}
-		// ARM contains() on strings is case-insensitive.
-		return strings.Contains(strings.ToLower(a), strings.ToLower(b)), true
+		// contains() on strings is case-sensitive.
+		return strings.Contains(a, b), true
 	}
 	return nil, false
 }
