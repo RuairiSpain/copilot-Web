@@ -1,0 +1,37 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.48.1.52935",
+      "templateHash": "11510117248052574598"
+    }
+  },
+  "parameters": {
+    "name": {
+      "type": "string"
+    },
+    "accountName": {
+      "type": "string"
+    },
+    "searchName": {
+      "type": "string"
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.CognitiveServices/accounts/connections",
+      "apiVersion": "2025-06-01",
+      "name": "[format('{0}/{1}', parameters('accountName'), parameters('name'))]",
+      "properties": {
+        "category": "CognitiveSearch",
+        "target": "[format('https://{0}.search.windows.net', parameters('searchName'))]",
+        "authType": "AAD",
+        "metadata": {
+          "ResourceId": "[resourceId('Microsoft.Search/searchServices', parameters('searchName'))]"
+        }
+      }
+    }
+  ]
+}

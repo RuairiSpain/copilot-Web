@@ -62,7 +62,7 @@ type Options struct {
 	// consulted when Modules has no entry for the deployment name.
 	ModuleHashes map[string]string
 	// Parameters are deployment parameter values for the ROOT template, from
-	// a parameter file (ADR-015). A string, bool or integer value of a
+	// a parameter file (ADR-018). A string, bool or integer value of a
 	// non-secure parameter replaces parameters('name') in every expression
 	// before the module bindings are substituted. A key mapped to nil is set
 	// but unresolved (an unresolved ${VAR}, an object, a Key Vault

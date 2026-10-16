@@ -1,5 +1,5 @@
 // Compiled with Bicep CLI 0.48.1: bicep build main.bicep --outfile main.json
-// Parameter-driven conditions, names, regions, SKUs and tags (ADR-015).
+// Parameter-driven conditions, names, regions, SKUs and tags (ADR-018).
 targetScope = 'resourceGroup'
 
 param location string = resourceGroup().location
