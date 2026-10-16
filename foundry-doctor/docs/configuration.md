@@ -60,12 +60,12 @@ environments:
 | Key | Purpose |
 | --- | --- |
 | `version` | Required schema version. Must be `1`. |
-| `profile` | Curated default profile: `foundry-dev`, `foundry-test`, or `foundry-prod`. |
+| `profile` | Curated profile: `foundry-dev`, `foundry-test`, or `foundry-prod`. Default when unset: `foundry-prod` (ADR-010 amendment 4). |
 | `inputs` | Local file locations and default environment name. |
 | `rules` | Rule pack and category selection. |
 | `validation` | Whether Bicep, Azure, and runtime validations are required, optional, or disabled. |
 | `policy` | Organisation policy inputs used by rules. |
-| `adoption` | Baseline and suppression files. |
+| `adoption` | Baseline and suppression files. Create a baseline with `foundry-doctor doctor --write-baseline .foundry-doctor/baseline.yaml` (add `--force` to replace one). |
 | `outputs` | Output formats and default output directory. |
 | `advanced` | Optional adapter controls and Bicep executable override. |
 | `environments` | Per-environment policy overrides only. |

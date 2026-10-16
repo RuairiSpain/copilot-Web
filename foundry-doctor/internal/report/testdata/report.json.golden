@@ -10,7 +10,12 @@
     "info": 0,
     "suppressed": 1,
     "baselined": 1,
-    "skipped": 2
+    "skipped": 2,
+    "hidden": 2,
+    "skippedByReason": {
+      "az not signed in": 1,
+      "optional scanner missing": 1
+    }
   },
   "findings": [
     {

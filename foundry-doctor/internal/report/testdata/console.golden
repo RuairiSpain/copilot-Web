@@ -14,4 +14,4 @@ Skipped checks (skipped is not passed):
   FND-010: optional scanner missing
   FND-020 [required]: az not signed in
 
-Summary: 1 error, 1 warning, 0 info; 1 suppressed, 1 baselined; 2 skipped; exit code 1
+Summary: 1 error, 1 warning, 0 info; 1 suppressed, 1 baselined; 2 hidden by --min-severity; 2 skipped; exit code 1

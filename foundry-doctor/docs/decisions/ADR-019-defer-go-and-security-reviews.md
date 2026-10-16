@@ -1,4 +1,4 @@
-# ADR-014: Go principal and security reviews are deferred to the last phase
+# ADR-019: Go principal and security reviews are deferred to the last phase
 
 Status: Accepted (project owner decision, 2026-10-12)
 Date: 2026-10-12
@@ -14,7 +14,7 @@ only in the last project phase (Phase 9).
 
 1. Phases 0 to 8 run the `foundry-lead` and `azure-black-belt` reviews only.
 2. `go-principal-engineer` and `security-reviewer` run once, in Phase 9, over the whole code base.
-3. Each phase hand-off lists both reviews as **deferred by ADR-014**, never as met.
+3. Each phase hand-off lists both reviews as **deferred by ADR-019**, never as met.
 4. The global DoD item "no unresolved critical/high security findings" (PRD section 22) cannot be shown until the Phase 9 security review.
    Every phase hand-off says so. Until then the evidence is the implementers' own tests (canary secrets, path and symlink confinement,
    hostile-input fuzzing, the secret scan), which are not an independent review.

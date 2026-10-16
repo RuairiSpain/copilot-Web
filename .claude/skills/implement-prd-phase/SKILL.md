@@ -39,7 +39,7 @@ Never weaken a test or a requirement to pass a gate.
 ## 6. Independent reviews (parallel, read-only)
 Launch `foundry-lead` and `azure-black-belt` always. `go-principal-engineer` and
 `security-reviewer` are deferred to the last project phase (Phase 9) by the project owner's
-decision (ADR-014): do not launch them in phases 0 to 8, and list them in the hand-off as
+decision (ADR-019): do not launch them in phases 0 to 8, and list them in the hand-off as
 deferred, not as met. Give each reviewer only the phase DoD and the diff, not other
 reviewers' findings. Keep disagreements; do not average them.
 

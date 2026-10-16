@@ -519,7 +519,7 @@ func (reportAdapter) Render(w io.Writer, format string, r Report) error {
 	}
 	return report.Write(w, f, r.Findings, report.Run{
 		ToolVersion: ToolVersion, Profile: r.Profile, Skipped: r.Skipped, ExitCode: r.ExitCode,
-		Readiness: r.Readiness,
+		Readiness: r.Readiness, Hidden: r.Hidden,
 	})
 }
 

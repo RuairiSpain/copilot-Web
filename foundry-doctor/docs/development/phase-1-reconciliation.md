@@ -11,9 +11,9 @@ On 2026-10-15 this branch was merged with `main`. Two Phase 1 implementations ex
 A line-by-line merge does not compile, so this merge takes `main`'s code (`cmd/`, `internal/`, `pkg/`, `go.mod`, `go.sum`) and keeps the
 archive's decision records and review reports. The archive code is not deleted; it is on the archive branch.
 
-Kept from this branch: `ADR-014` (Go principal and security reviews deferred to Phase 9), the two independent review reports in
+Kept from this branch: `ADR-019` (Go principal and security reviews deferred to Phase 9), the two independent review reports in
 `docs/development/reviews/` (they examined the archived code and are a checklist for `main`'s code), and the `implement-prd-phase` skill and
-`CLAUDE.md` changes that follow from ADR-014. Dropped: the archive's ADR-015 (docs, samples, end-to-end tests and PSRule deferred), because
+`CLAUDE.md` changes that follow from ADR-019. Dropped: the archive's ADR-015 (docs, samples, end-to-end tests and PSRule deferred), because
 `main` already contains docs, samples, end-to-end tests and an adapter layer; the archive's CLI doc and adapter doc.
 
 Known state after the merge (checked in this sandbox on 2026-10-15):

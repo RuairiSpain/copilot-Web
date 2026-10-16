@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/azureyaml"
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/baseline"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/cost"
 	costreport "github.com/ruairispain/copilot-web/foundry-doctor/internal/cost/report"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/findings"
@@ -28,13 +29,14 @@ import (
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
 
-// Exit codes (PRD section 7).
+// Exit codes (PRD section 7). They alias internal/report so there is one
+// definition and one classifier (report.ClassifyExit).
 const (
-	ExitOK          = 0 // no unsuppressed finding at or above --fail-on
-	ExitFindings    = 1 // findings meet or exceed the threshold
-	ExitUnavailable = 2 // the requested validation could not run
-	ExitStrictSkip  = 3 // a check was skipped and --strict was given
-	ExitInternal    = 4 // internal error or adapter protocol failure
+	ExitOK          = report.ExitOK            // no unsuppressed finding at or above --fail-on
+	ExitFindings    = report.ExitFindings      // findings meet or exceed the threshold
+	ExitUnavailable = report.ExitCannotRun     // the requested validation could not run
+	ExitStrictSkip  = report.ExitStrictSkipped // a check was skipped and --strict was given
+	ExitInternal    = report.ExitInternal      // internal error or adapter protocol failure
 )
 
 // ErrUnavailable marks an input, dependency, authentication or permission
@@ -77,10 +79,11 @@ type Outcome struct {
 	Strict bool
 }
 
-// ExitCode applies PRD section 7. Precedence: required-skip (2) over strict
-// skip (3) over findings (1) over success (0). Internal errors (4) are
-// decided by ExitCodeForError before an Outcome exists. Strict applies only
-// when a skip hid a check; every skip is still reported.
+// ExitCode applies PRD section 7 by calling report.ClassifyExit, the single
+// classifier. Precedence: 4, 2, 3, 1, 0 (ADR-010 decision 2 as amended).
+// Internal errors (4) are decided by ExitCodeForError before an Outcome
+// exists. This function only maps the app Outcome: --strict counts only a skip
+// that hid a check (rules.AnyHiddenCheck); every skip is still reported.
 func ExitCode(o Outcome) int {
 	return report.ClassifyExit(report.Outcome{
 		Findings: o.Findings, FailOn: o.FailOn, Skipped: o.Skips,
@@ -232,6 +235,8 @@ type Report struct {
 	ExitCode    int
 	// Notes are printed in the console and Markdown report header.
 	Notes []string
+	// Hidden counts findings removed by --min-severity (ADR-010 decision 1).
+	Hidden int
 	// Readiness is set by the preflight command only.
 	Readiness *report.Readiness
 }
@@ -288,6 +293,12 @@ type DoctorRequest struct {
 	Out         string
 	// AzdVersion supplies the azd version when azd is not on PATH.
 	AzdVersion string
+	// WriteBaseline, when set, writes a baseline of the current findings to
+	// this path (relative to Dir) instead of rendering a report (ADR-010
+	// amendment 4). It cannot be combined with Baseline.
+	WriteBaseline string
+	// Force allows WriteBaseline to replace an existing file.
+	Force bool
 }
 
 // CostInput is the advisory estimator input.
@@ -331,6 +342,12 @@ func (r *DoctorRequest) Validate() error {
 	}
 	if r.Dir == "" {
 		r.Dir = "."
+	}
+	if r.WriteBaseline != "" && r.Baseline != "" {
+		return Usagef("--write-baseline cannot be combined with --baseline: a baseline records every current finding")
+	}
+	if r.Force && r.WriteBaseline == "" {
+		return Usagef("--force only applies to --write-baseline")
 	}
 	return nil
 }
@@ -406,6 +423,9 @@ func doctor(ctx context.Context, svc Services, req DoctorRequest, stdout io.Writ
 	if err != nil {
 		return 0, fmt.Errorf("run rules: %w", err)
 	}
+	if req.WriteBaseline != "" {
+		return svc.writeBaseline(req, out.Findings, stdout)
+	}
 	fs := out.Findings
 	if set.Baseline != "" && svc.Baseline != nil {
 		if fs, err = svc.Baseline.Apply(ctx, set.Baseline, fs, svc.now()); err != nil {
@@ -423,9 +443,12 @@ func doctor(ctx context.Context, svc Services, req DoctorRequest, stdout io.Writ
 	// The fail-on decision is made on the displayed findings, so a threshold
 	// below --min-severity could never trigger and is rejected up front.
 	shown := make([]sdk.Finding, 0, len(fs))
+	hidden := 0
 	for _, f := range fs {
 		if f.Severity.Rank() >= req.MinSeverity.Rank() {
 			shown = append(shown, f)
+		} else {
+			hidden++
 		}
 	}
 	findings.Sort(shown)
@@ -457,7 +480,7 @@ func doctor(ctx context.Context, svc Services, req DoctorRequest, stdout io.Writ
 			_, _ = fmt.Fprintf(svc.Stderr, "warning: %s\n", findings.Redact(n))
 		}
 	}
-	rep := Report{Profile: set.Profile, Environment: set.Environment, Policy: set.Policy, Findings: shown, Skipped: skips, ExitCode: code, Notes: notes}
+	rep := Report{Profile: set.Profile, Environment: set.Environment, Policy: set.Policy, Findings: shown, Skipped: skips, ExitCode: code, Notes: notes, Hidden: hidden}
 	if err := svc.Reporter.Render(&buf, req.Format, rep); err != nil {
 		return 0, fmt.Errorf("render %s report: %w", req.Format, err)
 	}
@@ -465,6 +488,26 @@ func doctor(ctx context.Context, svc Services, req DoctorRequest, stdout io.Writ
 		return 0, err
 	}
 	return code, nil
+}
+
+// writeBaseline records every current finding (before any baseline or
+// suppression is applied, so the result does not depend on an earlier
+// baseline) in req.WriteBaseline under the project directory. It stores
+// fingerprints and rule IDs only. The write never follows a symbolic link and
+// never replaces a file without req.Force. Unsafe paths and an existing file
+// are usage errors (exit 2).
+func (s Services) writeBaseline(req DoctorRequest, fs []sdk.Finding, stdout io.Writer) (int, error) {
+	b := baseline.FromFindings(fs)
+	if err := baseline.WriteFile(req.Dir, req.WriteBaseline, b, req.Force); err != nil {
+		if errors.Is(err, baseline.ErrExists) || errors.Is(err, baseline.ErrUnsafePath) {
+			return 0, Usagef("--write-baseline: %s", findings.Redact(err.Error()))
+		}
+		return 0, fmt.Errorf("write baseline: %w", err)
+	}
+	if _, err := fmt.Fprintf(stdout, "Wrote baseline with %d entries to %s\n", len(b.Entries), filepath.ToSlash(filepath.Clean(req.WriteBaseline))); err != nil {
+		return 0, fmt.Errorf("write report: %w", err)
+	}
+	return ExitOK, nil
 }
 
 func (s Services) now() time.Time {
