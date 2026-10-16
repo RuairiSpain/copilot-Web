@@ -94,7 +94,7 @@ func (r net006) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 			for _, b := range right {
 				if prefixesOverlap(a, b) {
 					o.evaluated++
-					o.add(sdk.ARMResource{Type: "Microsoft.Network/virtualNetworks", Name: pair[0]}, fmt.Sprintf("peered virtual networks %s and %s have overlapping address spaces", pair[0], pair[1]))
+					o.addKey(sdk.ARMResource{Type: "Microsoft.Network/virtualNetworks", Name: pair[0]}, "peer:"+pair[1]+":"+a.String()+":"+b.String(), fmt.Sprintf("peered virtual networks %s and %s have overlapping address spaces", pair[0], pair[1]))
 				}
 			}
 		}
@@ -121,7 +121,7 @@ func (r net009) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 		if strings.EqualFold(vt, "External") || strings.EqualFold(vt, "Internal") {
 			o.evaluated++
 			if sku != "developer" && sku != "premium" {
-				o.add(svc, "classic APIM virtual network injection requires Developer or Premium")
+				o.addKey(svc, "classicVnetSku", "classic APIM virtual network injection requires Developer or Premium")
 			}
 			continue
 		}
@@ -132,11 +132,11 @@ func (r net009) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 				switch deleg {
 				case "microsoft.web/serverfarms":
 					if sku != "standardv2" && sku != "premiumv2" {
-						o.add(svc, "outbound VNet integration requires StandardV2 or PremiumV2")
+						o.addKey(svc, "outboundSku", "outbound VNet integration requires StandardV2 or PremiumV2")
 					}
 				case "microsoft.web/hostingenvironments":
 					if sku != "premiumv2" {
-						o.add(svc, "PremiumV2 is required for the delegated injection subnet")
+						o.addKey(svc, "injectionSubnetSku", "PremiumV2 is required for the delegated injection subnet")
 					}
 				}
 			}
@@ -149,7 +149,7 @@ func (r net009) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 			case "basicv2":
 				o.skip(svc.Name + ": inbound private endpoint support for BasicV2 is not verified")
 			default:
-				o.add(svc, "APIM SKU does not support the configured inbound private endpoint model")
+				o.addKey(svc, "privateEndpointSku", "APIM SKU does not support the configured inbound private endpoint model")
 			}
 		}
 	}
@@ -187,7 +187,7 @@ func (r net010) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 			if v, ok := str(c.Properties, "publicNetworkAccessForIngestion"); ok && strings.TrimSpace(v) != "" {
 				continue
 			}
-			o.add(c, "public telemetry is declared but Application Insights does not set publicNetworkAccessForIngestion explicitly")
+			o.addKey(c, "publicTelemetry", "public telemetry is declared but Application Insights does not set publicNetworkAccessForIngestion explicitly")
 			continue
 		}
 		links := scoped[nameKey(refOf(c).Segments)]
@@ -197,16 +197,16 @@ func (r net010) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 				continue
 			}
 			o.evaluated++
-			o.add(c, "private Foundry design has Application Insights without an Azure Monitor Private Link Scope or a public telemetry declaration")
+			o.addKey(c, "noAmpls", "private Foundry design has Application Insights without an Azure Monitor Private Link Scope or a public telemetry declaration")
 			continue
 		}
 		o.evaluated++
 		for _, scope := range links {
 			if !amplsPEs[scope] {
-				o.add(c, "Azure Monitor Private Link Scope "+scope+" has no private endpoint with groupId azuremonitor")
+				o.addKey(c, "ampls:"+scope+":privateEndpoint", "Azure Monitor Private Link Scope "+scope+" has no private endpoint with groupId azuremonitor")
 			}
 			if !amplsModesExplicit(in.ARM, scope) {
-				o.add(c, "Azure Monitor Private Link Scope "+scope+" does not set explicit ingestionAccessMode and queryAccessMode")
+				o.addKey(c, "ampls:"+scope+":accessModes", "Azure Monitor Private Link Scope "+scope+" does not set explicit ingestionAccessMode and queryAccessMode")
 			}
 		}
 	}

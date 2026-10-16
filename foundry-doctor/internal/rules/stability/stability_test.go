@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"regexp"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/armmodel"
@@ -85,7 +86,13 @@ func evaluate(t *testing.T, raw []byte) (map[string]observed, []string) {
 		if res.Skipped != nil {
 			skips = append(skips, r.ID()+": "+res.Skipped.Reason)
 		}
+		for _, sk := range res.Skips {
+			skips = append(skips, r.ID()+": "+sk.Reason)
+		}
 		for _, f := range res.Findings {
+			if strings.Contains(f.Evidence, "[note: ") {
+				t.Errorf("%s: evidence carries a partial-skip note, rules must return Result.Skips: %q", r.ID(), f.Evidence)
+			}
 			f.RuleID = r.ID()
 			key := r.ID() + "|" + f.Resource.Type + "|" + f.Resource.Name + "|" + f.Key + "|" + f.Evidence
 			got[key] = observed{findings.Fingerprint(f), f.Evidence}

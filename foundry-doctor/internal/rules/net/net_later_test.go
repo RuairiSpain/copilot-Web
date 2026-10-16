@@ -59,6 +59,13 @@ func TestNET006009010011(t *testing.T) {
 			if len(res.Findings) != tc.findings {
 				t.Fatalf("findings=%d want %d: %+v", len(res.Findings), tc.findings, res.Findings)
 			}
+			if tc.rule.ID() == "FND-NET-009" || tc.rule.ID() == "FND-NET-010" {
+				for _, f := range res.Findings {
+					if f.Key == "" {
+						t.Errorf("%s finding sets no Finding.Key: %+v", tc.rule.ID(), f)
+					}
+				}
+			}
 			if tc.contains != "" && tc.findings > 0 {
 				found := false
 				for _, f := range res.Findings {

@@ -1,5 +1,5 @@
 id: FND-SEC-009
-version: 1
+version: 2
 group: SEC
 title: Policy coverage and compliance evidence
 description: Evidence report on whether Azure Policy assignments at the subscription or resource group scope cover

@@ -128,8 +128,14 @@ func TestIDN004ResolvesLiteralVariableRoleWhenModelExposesVariables(t *testing.T
 		"contributorRoleId": roleContributor,
 	}}
 	out := run(t, "FND-IDN-004", &sdk.Input{ARM: vm})
-	if len(out.Findings) != 2 {
-		t.Fatalf("want the no-principalType Owner and the variable Owner, got %+v", out)
+	info := 0
+	for _, f := range out.Findings {
+		if f.Severity == sdk.SeverityInfo {
+			info++
+		}
+	}
+	if len(out.Findings) != 3 || info != 1 {
+		t.Fatalf("want the no-principalType Owner, the variable Owner and an info Contributor, got %+v", out)
 	}
 	// A variable that is itself an expression is reported with that cause.
 	vm.vars["ownerRoleId"] = "[parameters('x')]"
@@ -138,7 +144,7 @@ func TestIDN004ResolvesLiteralVariableRoleWhenModelExposesVariables(t *testing.T
 	for _, sk := range out.Skips {
 		hasCause = hasCause || strings.Contains(sk.Reason, "not a literal string")
 	}
-	if len(out.Findings) != 1 || !hasCause {
+	if len(out.Findings) != 2 || !hasCause {
 		t.Fatalf("got %+v", out)
 	}
 }
@@ -148,6 +154,9 @@ func TestIDN003NameOnlyClientIDWording(t *testing.T) {
 	out := run(t, "FND-IDN-003", &sdk.Input{ARM: rs})
 	if len(out.Findings) != 1 || !strings.Contains(out.Findings[0].Evidence, "name match only") || !strings.Contains(out.Findings[0].Evidence, "likely") {
 		t.Fatalf("name-only match must say so: %+v", out)
+	}
+	if out.Findings[0].Confidence != sdk.ConfidenceMedium {
+		t.Fatalf("name-only match must lower confidence to likely (medium), got %q", out.Findings[0].Confidence)
 	}
 	rs = model{ra(props{"principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'u'), '2023-01-31').clientId]", "principalType": "ServicePrincipal"}, "", "2022-04-01")}
 	out = run(t, "FND-IDN-003", &sdk.Input{ARM: rs})

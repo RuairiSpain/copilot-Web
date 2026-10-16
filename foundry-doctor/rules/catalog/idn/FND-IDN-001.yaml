@@ -1,5 +1,5 @@
 id: FND-IDN-001
-version: 2
+version: 3
 group: IDN
 title: "Managed identities used for Foundry and workloads"
 description: >-
@@ -138,6 +138,10 @@ tests:
   uncertain:
     - workload-identity-set-by-module-output
 notes: >-
+  Scope decision (review M14): the rule evaluates accounts of kind AIServices (the Foundry resource) that own projects or
+  deployments, and accounts/projects. An account of kind OpenAI with model deployments and no identity is deliberately not
+  reported: this entry is about the Foundry account and its projects, and no source cited here states that a standalone
+  Azure OpenAI account needs a managed identity. Extending the rule to OpenAI-kind accounts needs a verified source first.
   Unverified: whether the platform rejects or degrades a Foundry account created without an identity
   (no source states it; the severity is security-basis, not platform). Unverified: Defender for Cloud
   and Advisor equivalents were not available in any clone. The sources do not state whether an

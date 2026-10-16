@@ -290,9 +290,14 @@ func evalIDN004(in *sdk.Input) sdk.Result {
 			a.addKey(r, "scope:"+role, fmt.Sprintf("%s granted to an application identity at broad %s%s", name, scopeDescription(r.Scope), condNote))
 		case lvl == armexpr.ScopeResource && role != roleContributor:
 			a.addKey(r, "scope:"+role, fmt.Sprintf("%s granted to an application identity at resource %s%s", name, scopeDescription(r.Scope), condNote))
+		case lvl == armexpr.ScopeResource:
+			// Contributor at the scope of a single resource is informational
+			// (catalogue product decision: Foundry sources list Contributor as
+			// the minimum role for some tools). The rule lowers the severity
+			// to info for this finding; the engine never raises it.
+			a.addKey(r, "scope:"+role, fmt.Sprintf("Contributor granted to an application identity at resource %s; informational only, a narrower Foundry role is preferred%s", scopeDescription(r.Scope), condNote))
+			a.fs[len(a.fs)-1].Severity = sdk.SeverityInfo
 		}
-		// Contributor at a single Foundry resource is deliberately not reported
-		// (catalogue product decision): it is evaluated and compliant here.
 	}
 	switch {
 	case len(a.fs) > 0:

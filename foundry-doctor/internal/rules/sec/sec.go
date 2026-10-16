@@ -279,9 +279,9 @@ func evalSEC001(in *sdk.Input) sdk.Result {
 		case expr:
 			a.unresolved = true
 		case absent:
-			a.add(r, "Foundry account owns projects or deployments; properties.disableLocalAuth is absent (key authentication defaults to enabled)")
+			a.addKey(r, "disableLocalAuth", "Foundry account owns projects or deployments; properties.disableLocalAuth is absent (key authentication defaults to enabled)")
 		default:
-			a.add(r, "Foundry account owns projects or deployments; properties.disableLocalAuth is not true")
+			a.addKey(r, "disableLocalAuth", "Foundry account owns projects or deployments; properties.disableLocalAuth is not true")
 		}
 	}
 	if !seen && !a.scopeUncertain && !a.conditional {
@@ -331,7 +331,7 @@ func evalSEC002(in *sdk.Input) sdk.Result {
 				sub += " (aadAuthFailureMode=" + m + ")"
 			}
 		}
-		a.add(r, "Search service referenced by Foundry; properties.disableLocalAuth is not true; "+sub)
+		a.addKey(r, "disableLocalAuth", "Search service referenced by Foundry; properties.disableLocalAuth is not true; "+sub)
 	}
 	if !scoped && len(a.fs) == 0 && !a.scopeUncertain && !a.conditional {
 		return skip(SkipOutOfScope)
@@ -357,7 +357,7 @@ func evalSEC003(in *sdk.Input) sdk.Result {
 		case expr:
 			a.unresolved = true
 		default:
-			a.add(r, "Cosmos DB account referenced by Foundry; properties.disableLocalAuth is not true")
+			a.addKey(r, "disableLocalAuth", "Cosmos DB account referenced by Foundry; properties.disableLocalAuth is not true")
 		}
 	}
 	if !scoped && len(a.fs) == 0 && !a.scopeUncertain && !a.conditional {

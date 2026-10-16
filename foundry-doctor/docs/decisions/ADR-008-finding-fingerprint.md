@@ -1,6 +1,6 @@
 # ADR-008: Finding fingerprint
 
-Status: Accepted, amended 2026-10-15 (Amendment 1)
+Status: Accepted, amended 2026-10-16 (Amendments 1 to 3)
 Date: 2026-10-05
 
 ## Context
@@ -78,3 +78,26 @@ finding resurfaced when a second finding appeared on the same resource) and merg
 4. **Diagnostics (stderr warning).** The engine names every rule whose key-less findings would have shared a fingerprint without the derived key ("the rule sets no Finding.Key").
    It also names a rule that set a `Key` which does not separate findings that differ in location or evidence; those findings keep the same fingerprint (a baseline entry for one hides all of them).
 5. Amendment 1 decision 4 is superseded by this amendment.
+
+## Amendment 3 (2026-10-16): per-finding lower severity and confidence, partial skips, and fingerprints (round-2 review R8, M3)
+
+1. **Overrides.** `sdk.Finding.Severity` and `sdk.Finding.Confidence` already existed (the engine filled them). A rule MAY now set either field on a finding it returns. `rules.Enrich`
+   treats the catalogue value for the active profile as a ceiling:
+   - a severity override is honoured only when it is valid and strictly lower than the catalogue severity (info < warning < error); an equal, higher or invalid value is ignored;
+   - a confidence override is honoured only when it is valid and strictly lower than the catalogue confidence (low < medium < high; the catalogue `certain` maps to high and `likely` to medium);
+   - **platform-basis rules stay `error` in every profile**: a severity override on a rule whose basis contains `platform` is ignored (tested in `internal/rules/override_test.go`). A confidence override is
+     still honoured for them, because confidence is not part of the "platform rules are errors" guarantee.
+   An override can therefore never raise severity or confidence, never skip a rule and never hide a finding.
+2. **Fingerprint.** Severity, confidence and the override are not inputs to the fingerprint (unchanged from Amendment 1 decision 5). A baseline entry keeps matching when a rule starts or stops
+   lowering a finding, and `--fail-on` thresholds see the lowered severity.
+3. **First users.** FND-NET-001 (version 3) lowers severity to `warning` for `policy.network.publicAccess: entra-only` and to `info` for `allowed` (ADR-007); in the dev profile the catalogue value is already `info`,
+   so nothing changes there. FND-IDN-003 (version 4) sets confidence `likely` (medium) on a name-only client-ID match; a `.clientId`, `.appId` or `.applicationId` property access stays `certain`.
+   FND-IDN-004 (version 4) emits an `info` finding for Contributor at a single resource scope (see the catalogue note on FND-IDN-004).
+4. **Partial skips.** `sdk.Result` gains `Skips []sdk.Skip`. A rule that evaluates some resources and cannot evaluate others returns its findings and one skip per unevaluated resource.
+   The engine appends them to `Report.Skipped` with the rule ID (and `Required` when the rule was explicitly requested); the rule still counts as evaluated. `Skips` must not be combined with `Skipped`
+   (the engine reports `rule-error`). This replaces the ` [note: N resource check(s) not evaluated ...]` suffix on the first finding's evidence, which put information about other resources into a
+   finding. Skip reasons keep their reason head (for example `unresolved-expression`), so `ClassifySkip` and `--strict` treat them as before. The engine's `stableEvidence` workaround was removed;
+   derived keys (Amendment 2) now see the evidence the rule wrote. Fingerprints are unaffected by skips.
+5. **Keys.** The remaining multi-finding paths now set `Finding.Key`: NET-005 (agent subnet region, endpoint region), NET-008 (peered pair and prefixes), NET-009 (one key per SKU check), NET-010 (public telemetry,
+   missing Azure Monitor Private Link Scope, per-scope endpoint and access modes), IDN-001, SEC-001/002/003 (`disableLocalAuth`), SEC-008 (`pricingTier`), SEC-009 (`enforcementMode`), SEC-012 and SEC-013.
+   Their rule versions were bumped because their fingerprints change once.

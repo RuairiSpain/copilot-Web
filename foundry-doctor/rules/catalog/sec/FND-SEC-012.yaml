@@ -1,5 +1,5 @@
 id: FND-SEC-012
-version: 1
+version: 2
 group: SEC
 title: Gateway telemetry avoids raw prompt/completion logging
 description: An API Management AI gateway should not persist raw prompts and completions in logs unless that is
