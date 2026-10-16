@@ -76,7 +76,7 @@ func TestCompiledNET001ConditionalEndpointIsNotProof(t *testing.T) {
 }
 
 func TestCompiledNET001PublicAccessPolicy(t *testing.T) {
-	rs := []sdk.ARMResource{acct("a", m{})}
+	rs := []sdk.ARMResource{acct("a", m{"disableLocalAuth": true})}
 	for _, tc := range []struct{ policy, want string }{
 		{"entra-only", "declared deliberate"},
 		{"allowed", "declared deliberate"},
@@ -93,6 +93,35 @@ func TestCompiledNET001PublicAccessPolicy(t *testing.T) {
 		if got := strings.Contains(out.Findings[0].Evidence, "declared deliberate"); got != (tc.want != "") {
 			t.Errorf("%s: evidence %q", tc.policy, out.Findings[0].Evidence)
 		}
+	}
+}
+
+// P5: the entra-only downgrade needs disableLocalAuth provably true on the
+// account; otherwise the severity is not lowered and the evidence says why.
+func TestNET001EntraOnlyNeedsLocalAuthDisabled(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		props m
+		want  sdk.Severity
+	}{
+		{"absent", m{}, ""},
+		{"false", m{"disableLocalAuth": false}, ""},
+		{"expression", m{"disableLocalAuth": "[parameters('x')]"}, ""},
+		{"true", m{"disableLocalAuth": true}, sdk.SeverityWarning},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out := runRule(t, net001{}, []sdk.ARMResource{acct("a", tc.props)}, fakePolicy{"network.publicAccess": "entra-only"})
+			if len(out.Findings) != 1 {
+				t.Fatalf("%+v", out)
+			}
+			f := out.Findings[0]
+			if f.Severity != tc.want {
+				t.Errorf("severity override %q want %q", f.Severity, tc.want)
+			}
+			if got := strings.Contains(f.Evidence, "not provably true"); got != (tc.want == "") {
+				t.Errorf("evidence %q", f.Evidence)
+			}
+		})
 	}
 }
 

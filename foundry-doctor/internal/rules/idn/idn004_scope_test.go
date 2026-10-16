@@ -34,12 +34,12 @@ func TestCompiledIDN004ReportsResourceScopedOwnerAndUAA(t *testing.T) {
 		}
 	}
 	if len(roles) != 3 {
-		t.Fatalf("want Owner, User Access Administrator and an info Contributor finding, got %v: %+v", roles, out.Findings)
+		t.Fatalf("want Owner, User Access Administrator and a warning Contributor finding, got %v: %+v", roles, out.Findings)
 	}
 	for _, f := range out.Findings {
 		isContrib := strings.HasPrefix(f.Evidence, "Contributor granted")
-		if isContrib != (f.Severity == sdk.SeverityInfo) {
-			t.Errorf("only Contributor at a resource scope is info; %q has severity %q", f.Evidence, f.Severity)
+		if isContrib != (f.Severity == sdk.SeverityWarning) {
+			t.Errorf("Contributor at an account that does not disable local auth is a warning; %q has severity %q", f.Evidence, f.Severity)
 		}
 	}
 }

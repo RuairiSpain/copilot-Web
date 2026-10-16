@@ -62,7 +62,7 @@ func TestCompiledIDN005And006DoNotRegress(t *testing.T) {
 // assignment to the project identity has no principalType and is still
 // evaluated. The Owner whose role definition is held in variables('ownerRoleId')
 // is now resolved through the model's compiled variables and is reported too.
-// Contributor at the account scope is an info finding. Only the parameter
+// Contributor at the account scope is a warning finding because the account does not disable local auth. Only the parameter
 // principal stays uncertain and is named as such.
 func TestCompiledIDN004GoldenNoPrincipalTypeAndVariables(t *testing.T) {
 	out := run(t, "FND-IDN-004", &sdk.Input{ARM: rulestest.Golden(t, "idn")})
@@ -75,7 +75,7 @@ func TestCompiledIDN004GoldenNoPrincipalTypeAndVariables(t *testing.T) {
 		switch {
 		case strings.Contains(ev, "Owner granted to an application identity at broad deployment scope"):
 			owners++
-		case f.Severity == "info" && strings.Contains(ev, "Contributor"):
+		case f.Severity == "warning" && strings.Contains(ev, "Contributor") && strings.Contains(ev, "not downgraded to info"):
 			infos++
 		default:
 			t.Errorf("unexpected finding %q", ev)
@@ -88,7 +88,7 @@ func TestCompiledIDN004GoldenNoPrincipalTypeAndVariables(t *testing.T) {
 		}
 	}
 	if owners != 2 || infos != 1 {
-		t.Fatalf("want 2 Owner findings (no principalType, role in variables()) and 1 info Contributor, got %d and %d: %+v", owners, infos, out.Findings)
+		t.Fatalf("want 2 Owner findings (no principalType, role in variables()) and 1 warning Contributor (the account does not disable local auth), got %d and %d: %+v", owners, infos, out.Findings)
 	}
 	var skips []string
 	for _, s := range out.Skips {
@@ -141,7 +141,7 @@ func TestIDN004ResolvesLiteralVariableRoleWhenModelExposesVariables(t *testing.T
 	out := run(t, "FND-IDN-004", &sdk.Input{ARM: vm})
 	info := 0
 	for _, f := range out.Findings {
-		if f.Severity == sdk.SeverityInfo {
+		if f.Severity == sdk.SeverityWarning {
 			info++
 		}
 	}

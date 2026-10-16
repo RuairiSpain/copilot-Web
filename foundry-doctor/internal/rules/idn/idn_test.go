@@ -182,7 +182,7 @@ func TestRules(t *testing.T) {
 		{name: "004 mgmt group", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(sp(roleUAA, "ServicePrincipal"), "/providers/Microsoft.Management/managementGroups/mg", "")}, findings: 1},
 		{name: "004 owner resource scope", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(sp(roleOwner, "ServicePrincipal"), resSc, "")}, findings: 1},
 		{name: "004 rbac admin resource scope", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(sp(roleRBACAdmin, "ServicePrincipal"), resSc, "")}, findings: 1},
-		{name: "004 contributor resource scope is info", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(sp(roleContributor, "ServicePrincipal"), resSc, "")}, findings: 1, contains: "informational"},
+		{name: "004 contributor resource scope without disableLocalAuth is not info", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(sp(roleContributor, "ServicePrincipal"), resSc, "")}, findings: 1, contains: "not downgraded to info"},
 		{name: "004 human ignored", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(sp(roleOwner, "User"), subsc, "")}},
 		{name: "004 non-privileged role", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(sp("5e0bd9bd-7b93-4f28-af87-19fc36ad61bd", "ServicePrincipal"), subsc, "")}},
 		{name: "004 missing principalType on a provable Foundry identity is evaluated", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(sp(roleOwner, ""), subsc, "")}, findings: 1, contains: "Owner"},
@@ -192,7 +192,7 @@ func TestRules(t *testing.T) {
 		{name: "004 compiled subscriptionResourceId role", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(props{"roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '" + roleOwner + "')]", "principalId": guidA, "principalType": "ServicePrincipal"}, subsc, "")}, findings: 1, contains: "Owner"},
 		{name: "004 compiled extensionResourceId role", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(props{"roleDefinitionId": "[extensionResourceId(resourceGroup().id, 'Microsoft.Authorization/roleDefinitions', '" + roleContributor + "')]", "principalId": guidA, "principalType": "ServicePrincipal"}, rg, "")}, findings: 1},
 		{name: "004 compiled format scope", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(sp(roleOwner, "ServicePrincipal"), "[format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('rg'))]", "")}, findings: 1},
-		{name: "004 compiled resourceId scope is resource scope", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(sp(roleContributor, "ServicePrincipal"), "[resourceId('Microsoft.CognitiveServices/accounts', format('ai-{0}', variables('token')))]", "")}, findings: 1, contains: "informational"},
+		{name: "004 compiled resourceId scope is resource scope", rule: "FND-IDN-004", res: []sdk.ARMResource{appA, ra(sp(roleContributor, "ServicePrincipal"), "[resourceId('Microsoft.CognitiveServices/accounts', format('ai-{0}', variables('token')))]", "")}, findings: 1, contains: "not downgraded to info"},
 		{name: "004 expression-named project principal", rule: "FND-IDN-004", res: []sdk.ARMResource{
 			{Type: typeProjects, Name: "[format('{0}/{1}', format('ai-{0}', variables('token')), 'proj')]", Identity: sys},
 			ra(props{"roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '" + roleOwner + "')]", "principalType": "ServicePrincipal",

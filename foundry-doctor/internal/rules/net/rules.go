@@ -72,17 +72,24 @@ func (r net001) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 			o.evaluated++
 			if da == "allow" {
 				ev := "publicNetworkAccess is Enabled (or unset) and networkAcls.defaultAction is Allow (or unset)"
+				localOff, _ := boolean(a.Properties, "disableLocalAuth")
 				if declared == "entra-only" || declared == "allowed" {
 					ev += "; policy.network.publicAccess is " + declared + ", so public access is declared deliberate"
 				}
-				o.add(a, ev)
 				// ADR-007: a declared deliberate posture lowers the severity
-				// (entra-only: warning, allowed: info). The engine only ever
-				// lowers, so the dev profile (info) is unchanged.
-				switch declared {
-				case "entra-only":
+				// (entra-only: warning, allowed: info). Entra-only is a claim
+				// about authentication, so it lowers only when the account
+				// provably disables key authentication; the reason is recorded.
+				// The engine only ever lowers, so the dev profile (info) is
+				// unchanged.
+				if declared == "entra-only" && !localOff {
+					ev += "; severity not lowered because properties.disableLocalAuth is not provably true on the account, so key authentication is not ruled out"
+				}
+				o.add(a, ev)
+				switch {
+				case declared == "entra-only" && localOff:
 					o.findings[len(o.findings)-1].Severity = sdk.SeverityWarning
-				case "allowed":
+				case declared == "allowed":
 					o.findings[len(o.findings)-1].Severity = sdk.SeverityInfo
 				}
 			}

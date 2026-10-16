@@ -367,7 +367,10 @@ func evalIDN003(in *sdk.Input) sdk.Result {
 				a.addKey(r, "principalId", "principalId expression uses a parameter or variable whose name suggests a clientId/applicationId (name match only, so confidence is likely rather than certain); verify that it holds an object (principal) ID")
 				// A name-only match is not proof (catalogue confidence is certain
 				// for property access); the engine only ever lowers confidence.
+				// The severity is lowered to warning for the same reason: only a
+				// property access proves the wrong ID kind.
 				a.fs[len(a.fs)-1].Confidence = sdk.ConfidenceMedium
+				a.fs[len(a.fs)-1].Severity = sdk.SeverityWarning
 			default:
 				a.unres(r, "principalId is an unresolved expression")
 			}

@@ -178,6 +178,40 @@ func resolveRoleDefinition(in *sdk.Input, def string) (guid, why string, ok bool
 	return "", "roleDefinitionId does not resolve to a literal role GUID after substituting variables", false
 }
 
+type scopeKind int
+
+const (
+	scopeOther   scopeKind = iota // not provably a Foundry account or project
+	scopeFoundry                  // Microsoft.CognitiveServices/accounts or accounts/projects
+)
+
+// foundryScopeState classifies a single-resource role assignment scope. kind is
+// scopeFoundry only when the scope reference provably has the type accounts or
+// accounts/projects. localAuthOff is true only when the account it names (or the
+// parent account of a project) is in the model with disableLocalAuth true.
+func foundryScopeState(in *sdk.Input, scope string) (kind scopeKind, localAuthOff bool) {
+	ref := armexpr.ParseRef(scope)
+	if ref.Opaque || len(ref.Segments) == 0 {
+		return scopeOther, false
+	}
+	switch ref.Type {
+	case "microsoft.cognitiveservices/accounts", "microsoft.cognitiveservices/accounts/projects":
+	default:
+		return scopeOther, false
+	}
+	acct := armexpr.Ref{Type: "microsoft.cognitiveservices/accounts", Segments: ref.Segments[:1]}
+	for _, r := range ofType(in, typeAccounts) {
+		if armexpr.Compare(acct, armexpr.ParseName(r.Type, r.Name)) != armexpr.Same {
+			continue
+		}
+		if v, ok := r.Properties["disableLocalAuth"].(bool); ok && v {
+			return scopeFoundry, true
+		}
+		return scopeFoundry, false
+	}
+	return scopeFoundry, false
+}
+
 func scopeDescription(scope string) string {
 	if strings.TrimSpace(scope) == "" {
 		return "deployment scope"
@@ -291,12 +325,24 @@ func evalIDN004(in *sdk.Input) sdk.Result {
 		case lvl == armexpr.ScopeResource && role != roleContributor:
 			a.addKey(r, "scope:"+role, fmt.Sprintf("%s granted to an application identity at resource %s%s", name, scopeDescription(r.Scope), condNote))
 		case lvl == armexpr.ScopeResource:
-			// Contributor at the scope of a single resource is informational
+			// Contributor at the scope of a single Foundry resource whose
+			// account provably disables key authentication is informational
 			// (catalogue product decision: Foundry sources list Contributor as
-			// the minimum role for some tools). The rule lowers the severity
-			// to info for this finding; the engine never raises it.
-			a.addKey(r, "scope:"+role, fmt.Sprintf("Contributor granted to an application identity at resource %s; informational only, a narrower Foundry role is preferred%s", scopeDescription(r.Scope), condNote))
-			a.fs[len(a.fs)-1].Severity = sdk.SeverityInfo
+			// the minimum role for some tools). Contributor at any other
+			// resource keeps the catalogue severity, and one at a Foundry
+			// resource whose local auth is not provably disabled is a warning.
+			// The rule only lowers severity; the engine never raises it.
+			kind, localAuthOff := foundryScopeState(in, r.Scope)
+			switch {
+			case kind == scopeFoundry && localAuthOff:
+				a.addKey(r, "scope:"+role, fmt.Sprintf("Contributor granted to an application identity at resource %s; informational only because the Foundry account has disableLocalAuth true, a narrower Foundry role is preferred%s", scopeDescription(r.Scope), condNote))
+				a.fs[len(a.fs)-1].Severity = sdk.SeverityInfo
+			case kind == scopeFoundry:
+				a.addKey(r, "scope:"+role, fmt.Sprintf("Contributor granted to an application identity at resource %s; not downgraded to info because disableLocalAuth is not provably true on the Foundry account%s", scopeDescription(r.Scope), condNote))
+				a.fs[len(a.fs)-1].Severity = sdk.SeverityWarning
+			default:
+				a.addKey(r, "scope:"+role, fmt.Sprintf("Contributor granted to an application identity at resource %s; the scope is not a Foundry account or project, so the informational downgrade does not apply%s", scopeDescription(r.Scope), condNote))
+			}
 		}
 	}
 	switch {
