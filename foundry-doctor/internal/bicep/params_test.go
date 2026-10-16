@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -150,7 +151,7 @@ func TestBuildParams(t *testing.T) {
 	if err != nil || set.Values["deploySearch"] != true || set.Values["prefix"] != "dev" {
 		t.Fatalf("%v %v", set, err)
 	}
-	if got := strings.Join(fr.calls[0], " "); got != "build-params main.bicepparam --stdout --no-restore" || fr.dir != "/p/infra" {
+	if got := strings.Join(fr.calls[0], " "); got != "build-params main.bicepparam --stdout --no-restore" || fr.dir != filepath.FromSlash("/p/infra") {
 		t.Errorf("args %q dir %q", got, fr.dir)
 	}
 	for name, c := range map[string]struct {
