@@ -148,3 +148,30 @@ func FuzzParse(f *testing.F) {
 		}
 	})
 }
+
+func TestExpiredRuleIDIsADR009Value(t *testing.T) {
+	if ExpiredRuleID != "FND-SYS-SUPPRESSION-EXPIRED" {
+		t.Fatalf("ExpiredRuleID = %q, ADR-009 mandates FND-SYS-SUPPRESSION-EXPIRED", ExpiredRuleID)
+	}
+	e := Entry{RuleID: "FND-A-001", Reason: "r", Owner: "o", Expires: "2020-01-01"}
+	f := expiredFinding(e)
+	if f.Category != "" || len(f.Basis) != 0 {
+		t.Errorf("engine diagnostics carry no category or basis: %+v", f)
+	}
+}
+
+func TestParseRuleIDForms(t *testing.T) {
+	doc := func(id string) []byte {
+		return []byte("version: 1\nentries:\n  - ruleId: " + id + "\n    reason: r\n    owner: o\n    expires: 2030-01-01\n")
+	}
+	for _, ok := range []string{"FND-CFG-001", "bicep/no-hardcoded-env-urls", "bicep/BCP035"} {
+		if _, err := Parse(doc(ok)); err != nil {
+			t.Errorf("%s rejected: %v", ok, err)
+		}
+	}
+	for _, bad := range []string{"FND-SYS-SUPPRESSION-EXPIRED", "FND-SYS-SUPPRESSION-INVALID", "bicep/", "bicep/../x", "bicep/a b"} {
+		if _, err := Parse(doc(bad)); err == nil {
+			t.Errorf("%s accepted", bad)
+		}
+	}
+}

@@ -10,7 +10,7 @@ Status: **implemented, open issues recorded** (not signed off as fully complete;
 
 ## Changed contracts
 - `ARMResource` gained Region, Kind, SKUName, Identity, Scope; `ARMOutput` and optional `ARMOutputs` interface.
-- Engine-internal rule ID `FND-SUPPRESS-001` (expired suppression), not in the catalogue.
+- Engine-internal rule ID `FND-SYS-SUPPRESSION-EXPIRED` (expired suppression), not in the catalogue.
 
 ## Rule catalogue changes
 None to catalogue entries. Policy keys introduced by implementers (not in catalogue): `network.dnsManagedByPolicy`, `network.centralDns`, `network.cloud`, `environments.tiers`.
