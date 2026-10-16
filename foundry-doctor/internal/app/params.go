@@ -101,6 +101,9 @@ func (l armLoader) loadParameters(ctx context.Context, root *os.Root, entry stri
 		if strings.Contains(string(text), "readEnvironmentVariable") && !known {
 			return skip(bp, &bicep.ParamsError{Reason: bicep.ParamNeedsEnv})
 		}
+		if gerr := bicep.GuardFileLoads(root, bp); gerr != nil {
+			return skip(bp, &bicep.ParamsError{Reason: bicep.ReasonFileLoadOutsideProject, Detail: "bicep-compile-not-run"})
+		}
 		c := *comp
 		if l.runner == nil {
 			c.Runner = bicep.ExecRunner{ExtraEnv: bicepEnv(vals)}
@@ -189,7 +192,7 @@ func (l armLoader) locateModules(ctx context.Context, root *os.Root, entry strin
 	defer cancel()
 	found := map[string]string{}
 	ambiguous := map[string]bool{}
-	failed := 0
+	failed, guarded := 0, 0
 	for _, f := range files {
 		if ctx.Err() != nil || len(found)+len(ambiguous) >= len(want) {
 			break
@@ -197,6 +200,10 @@ func (l armLoader) locateModules(ctx context.Context, root *os.Root, entry strin
 		fi, err := root.Stat(f)
 		if err != nil || !fi.Mode().IsRegular() || fi.Size() > maxModuleFileBytes {
 			failed++
+			continue
+		}
+		if bicep.GuardFileLoads(root, f) != nil {
+			guarded++
 			continue
 		}
 		r, err := comp.Compile(ctx, filepath.Join(src.Dir, filepath.FromSlash(f)))
@@ -214,6 +221,9 @@ func (l armLoader) locateModules(ctx context.Context, root *os.Root, entry strin
 		default:
 			found[h] = f
 		}
+	}
+	if guarded > 0 {
+		res.notes = append(res.notes, fmt.Sprintf("%s: %d .bicep file(s) not compiled alone and not matched", bicep.ReasonFileLoadOutsideProject, guarded))
 	}
 	if failed > 0 {
 		res.notes = append(res.notes, fmt.Sprintf("module file locations: %d .bicep file(s) could not be compiled alone and were not matched", failed))

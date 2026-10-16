@@ -186,6 +186,12 @@ func (l armLoader) Load(ctx context.Context, src Source) (sdk.ARMModel, error) {
 			return nil, bicepFailedf("%s", bicepReason(err))
 		}
 		comp := bicep.Compiler{Tool: tool, Runner: l.runner, Root: src.Dir}
+		// A hostile file-load call would put an outside file in the model
+		// (ADR-018 point 7); the compile is not run.
+		if gerr := bicep.GuardFileLoads(root, entry); gerr != nil {
+			l.warnf(fmt.Sprintf("%s: %s not compiled", bicep.ReasonFileLoadOutsideProject, entry))
+			return nil, bicepFailedf("%s", gerr.Error())
+		}
 		res, err := comp.Compile(ctx, filepath.Join(src.Dir, filepath.FromSlash(entry)))
 		if err != nil {
 			if ctx.Err() != nil {
