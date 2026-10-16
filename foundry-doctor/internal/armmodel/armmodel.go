@@ -108,7 +108,9 @@ type Model struct {
 	resources  []sdk.ARMResource
 	placements []Placement
 	outputs    []sdk.ARMOutput
-	truncated  bool
+	// secrets is the root-template detail FND-SEC-014 reads; see secrets.go.
+	secrets   secretFacts
+	truncated bool
 	// meta is keyed by resourceKey: ARMResource holds maps and cannot key a
 	// map itself.
 	meta map[string]resMeta
@@ -307,6 +309,7 @@ func FromTemplate(t *bicep.Template, raw []byte, opt Options) (*Model, error) {
 	for _, o := range t.Outputs {
 		m.outputs = append(m.outputs, sdk.ARMOutput{Name: o.Name, Type: o.Type})
 	}
+	m.secrets = secretFactsOf(t)
 	mapper := bicep.Mapper{Entry: opt.Entry, Modules: opt.Modules}
 	usedPaths := map[string]bool{}
 	bud := &budget{}

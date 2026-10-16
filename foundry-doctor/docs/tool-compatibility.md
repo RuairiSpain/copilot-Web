@@ -313,7 +313,7 @@ Findings that matter to rules:
 
 Windows widened in the catalogue `compatibility` blocks on 2026-10-16:
 
-- azd upper bound `1.36.0-beta.1` to `1.36.0` for every rule that had one except ENV-001 to ENV-004.
+- azd upper bound `1.36.0-beta.1` to `1.36.0` for every rule that had one, ENV-001 to ENV-004 included (see the ENV paragraph below).
 - azure.ai.projects to beta.14: CFG-001, CFG-003, CFG-004, CFG-010, CFG-011, DEP-004, DEP-005, DEP-011, DEP-012, ENV-003.
 - azure.ai.agents to beta.20: CFG-002, CFG-004, CFG-005, CFG-007, CFG-008, DEP-012, OPS-007, OPS-008, RUN-001, RUN-003, RUN-005, SEC-007, SEC-011.
 - azure.ai.connections to beta.10: CFG-002, CFG-005, CFG-007. azure.ai.toolboxes to beta.11: CFG-002, CFG-007, CFG-008.
@@ -324,7 +324,12 @@ Left unchanged because a change touches the rule:
 - CFG-006: agents and projects stay (new `AGENT_<NAME>_PROMPT_ENDPOINT_VERSION` key; provisioning inputs changed).
 - CFG-009: routines stays beta.8 (cron key, trigger type and `time_zone` renamed).
 - CFG-011: agents stays beta.18 (the hosted create path in `service_target_agent.go` changed; the unused-field behaviour was not re-verified).
-- ENV-001 to ENV-004: azd stays 1.36.0-beta.1 (path and environment-name handling changed in the files these rules cite).
+ENV-001 to ENV-004 (azd widened to 1.36.0 on 2026-10-16, decided from `git diff azure-dev-cli_1.35.0 azure-dev-cli_1.36.0`, commits `170ebb8` and `acebba1`, in a blobless clone of https://github.com/Azure/azure-dev):
+
+- Unchanged: `cli/azd/go.mod` has no godotenv change and `reloadLocked` still calls `godotenv.Read` on the env's `.env`; constants `.azure`, `.env`, `config.json`, `ConfigFileVersion` 1 and the `defaultEnvironment` field; `environment.go` has no change to any `AZURE_*` constant; `EnvironmentNameRegexp` is still `^[a-zA-Z0-9-\(\)_\.]{1,64}$` (now declared in `azdcontext/environment_name.go`); `pkg/project` resource group resolution (`resource_manager.go`, `service_manager.go`, `project_config.go`, `service_config.go`) and `pkg/infra/provisioning/bicep` have no diff.
+- Changed in 1.36.0 (tightening only): `IsValidEnvironmentName` also rejects dot-only names, names that are not `filepath.IsLocal`, and, on Windows, names ending in a period; environment, `.azure` and state-file paths that are symbolic links, reparse points or outside the `.azure` tree are refused (`ErrUnsafeEnvironmentPath`) and `List` skips such entries; a `defaultEnvironment` with an invalid name is an error; a `config.json` that is not valid JSON is now an error instead of being silently replaced by an empty config; the path accessors return errors.
+- Effect on the rules: Foundry Doctor's own reader (`internal/project`) already uses a stricter name pattern (first character alphanumeric, so dot-only names are skipped), skips symbolic links and ignores an invalid `defaultEnvironment` with a warning. The one gap: a name ending in a period (for example `dev.`) is accepted by Foundry Doctor on every OS but azd 1.36.0 rejects it on Windows; this only adds an environment azd would not load, and does not change any finding for valid names. Not verified at runtime (nothing was executed).
+- ENV-003 was widened to azure.ai.projects beta.14, whose CHANGELOG says it requires azd >=1.36.0; its azd window now reaches 1.36.0, so the pair is consistent.
 
 Rules whose catalogue `azd` field is empty carry no azd window and are not affected. `lastVerified` dates were not changed: the catalogue test pins "today"
 to 2026-10-15, so a 2026-10-16 date fails `TestRealCatalogueInvariantsAndGeneratedDocs`.
