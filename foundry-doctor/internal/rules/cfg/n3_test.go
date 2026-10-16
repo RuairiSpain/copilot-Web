@@ -94,6 +94,13 @@ func TestCFG009UnderstoodAndUnknownTriggers(t *testing.T) {
 		{"timer is not evaluated, not not-applicable", routine("        type: timer\n        at: \"2030-01-01T00:00:00Z\"\n"), uncertainPrefix + "r: trigger default type timer", 0},
 		{"missing type is uncertain", routine("        cronExpression: \"* * * * *\"\n"), uncertainPrefix + "r: trigger default type is missing", 0},
 		{"no routine services is not applicable", "services:\n  a:\n    host: azure.ai.agent\n", sdk.SkipNotApplicable, 0},
+		{"list-shaped triggers is uncertain", "services:\n  r:\n    host: azure.ai.routine\n    triggers:\n      - type: recurring\n        cron_expression: \"* * * * *\"\n        time_zone: UTC\n", uncertainPrefix + "r: triggers is not a mapping", 0},
+		{"scalar triggers is uncertain", "services:\n  r:\n    host: azure.ai.routine\n    triggers: daily\n", uncertainPrefix + "r: triggers is not a mapping", 0},
+		{"singular trigger mapping is uncertain", "services:\n  r:\n    host: azure.ai.routine\n    trigger:\n      type: recurring\n      cron_expression: \"* * * * *\"\n      time_zone: UTC\n", uncertainPrefix + "r: uses a trigger key instead of triggers", 0},
+		{"singular trigger list is uncertain", "services:\n  r:\n    host: azure.ai.routine\n    trigger:\n      - type: recurring\n", uncertainPrefix + "r: uses a trigger key instead of triggers", 0},
+		{"null triggers is not applicable", "services:\n  r:\n    host: azure.ai.routine\n    triggers:\n", sdk.SkipNotApplicable, 0},
+		{"empty triggers mapping is not applicable", "services:\n  r:\n    host: azure.ai.routine\n    triggers: {}\n", sdk.SkipNotApplicable, 0},
+		{"non-routine service with trigger key is not applicable", "services:\n  a:\n    host: azure.ai.agent\n    trigger: x\n", sdk.SkipNotApplicable, 0},
 		{"routine without triggers is not applicable", "services:\n  r:\n    host: azure.ai.routine\n", sdk.SkipNotApplicable, 0},
 	}
 	for _, tc := range tests {

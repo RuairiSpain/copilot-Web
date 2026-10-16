@@ -75,11 +75,16 @@ func TestParseAzdRange(t *testing.T) {
 		{"1.0.0 - 2.0.0", parseUnverified, nil, "blang accepts it (drops the one-character - token); not verified"},
 		{"|| >=1.0.0", parseInvalid, nil, "leading or"},
 		{">=1.0.0 ||", parseInvalid, nil, "trailing or"},
-		{">=1.0.0 || || <2.0.0", parseInvalid, nil, "empty alternative"},
+		{">=1.0.0 || || <2.0.0", parseUnverified, nil, "repeated or: accepted by the library, which panics when matching"},
+		{">=1.0.0  ||  || <2.0.0", parseUnverified, nil, "repeated or"},
+		{">=1.0.0 <", parseUnverified, nil, "dangling operator: accepted by the library"},
+		{">1.0.0 <", parseUnverified, nil, "dangling operator: accepted by the library"},
+		{"> = 1.0.0", parseUnverified, nil, "operator, space, operator: accepted by the library"},
+		{"! 1.35.0", parseUnverified, nil, "one-character ! token before a space: accepted by the library, not verified"},
 		{">=1.0", parseInvalid, nil, "partial version"},
 		{"v1.0.0", parseInvalid, nil, "v prefix"},
-		{">=", parseInvalid, nil, "operator only"},
-		{">= ||", parseInvalid, nil, "operator then or"},
+		{">=", parseUnverified, nil, "dangling operator"},
+		{">= ||", parseUnverified, nil, "dangling operator then or"},
 		{">=1.0.0||<2.0.0", parseUnverified, nil, "glued or is not verified"},
 		{">=1.x", parseUnverified, nil, "operator with wildcard is not verified"},
 		{"x", parseUnverified, nil, "bare wildcard is not verified"},
@@ -225,6 +230,9 @@ func TestCFG001AzdRequiredVersion(t *testing.T) {
 		{name: "invalid range latest", yaml: y("latest"), azd: "1.5.0", wantKey: "required-versions-azd-invalid", evidenceIn: "latest"},
 		{name: "invalid range empty", yaml: y(""), azd: "1.5.0", wantKey: "required-versions-azd-invalid", evidenceIn: "not a valid semver range"},
 		{name: "invalid range decided even for a dev build", yaml: y("~1.0.0"), azd: "0.0.0-dev.0", wantKey: "required-versions-azd-invalid", evidenceIn: "not a valid semver range"},
+		{name: "dangling operator is uncertain, not invalid", yaml: y(">=1.0.0 <"), azd: "1.5.0", skip: "not verified"},
+		{name: "operator space operator is uncertain", yaml: y("> = 1.0.0"), azd: "1.5.0", skip: "not verified"},
+		{name: "repeated or is uncertain", yaml: y(">=1.0.0 || || <2.0.0"), azd: "1.5.0", skip: "not verified"},
 		{name: "unverified form is uncertain", yaml: y(">=1.x"), azd: "1.5.0", skip: "not verified"},
 		{name: "absent", yaml: "name: app\n", azd: "1.5.0"},
 		{name: "null value is no constraint", yaml: "name: app\nrequiredVersions:\n  azd:\n", azd: "1.5.0"},
@@ -299,5 +307,29 @@ func TestVersionNotesPrerelease(t *testing.T) {
 				t.Fatalf("notes=%+v", ns)
 			}
 		})
+	}
+}
+
+func TestCFG001AzdFindingsHaveOwnRemediation(t *testing.T) {
+	r := find(RegisterWith(Providers{}), "FND-CFG-001")
+	for _, tc := range []struct{ name, yaml, azd, want string }{
+		{"invalid", "name: app\nrequiredVersions:\n  azd: \"^1.0.0\"\n", "", "Change requiredVersions.azd"},
+		{"out of range", "name: app\nrequiredVersions:\n  azd: \">=1.34.2\"\n", "1.30.0", "Upgrade azd"},
+	} {
+		res := run(t, r, &sdk.Input{AzureYAML: doc(t, tc.yaml), AzdVersion: tc.azd})
+		if len(res.Findings) != 1 {
+			t.Fatalf("%s: findings %+v", tc.name, res.Findings)
+		}
+		f := res.Findings[0]
+		if !strings.Contains(f.Recommendation, tc.want) || !strings.Contains(f.Fix, "requiredVersions:") {
+			t.Errorf("%s: recommendation %q fix %q", tc.name, f.Recommendation, f.Fix)
+		}
+	}
+	// A non-azd finding keeps the catalogue text (empty here, filled by the engine).
+	res := run(t, r, &sdk.Input{AzureYAML: doc(t, "services:\n  a:\n    host: azure.ai.agent\n")})
+	for _, f := range res.Findings {
+		if f.Recommendation != "" {
+			t.Errorf("finding %s must not carry its own recommendation: %q", f.Key, f.Recommendation)
+		}
 	}
 }

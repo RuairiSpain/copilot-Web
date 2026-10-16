@@ -22,6 +22,18 @@ var cfg001MinVersions = map[string]string{
 // engine honours it only when it equals a catalogue source URL.
 const cfg001AzdSourceURL = "https://github.com/Azure/azure-dev/blob/1bd2ca4699c7b1f371db85dd867f18aa4fbc4730/cli/azd/pkg/project/project.go"
 
+// Remediation for the required-versions-azd-* findings. The generic FND-CFG-001
+// text (fix the YAML, add the schema comment, install extensions) does not
+// help with a bad azd range, so these findings carry their own.
+const (
+	cfg001AzdInvalidRecommendation = "Change requiredVersions.azd in azure.yaml to a range that the semver library azd uses " +
+		"(blang/semver v4 ParseRange) accepts: space-separated comparators such as >=1.34.2 <2.0.0, with || between alternatives. " +
+		"Do not use commas, ~, ^, => or =<."
+	cfg001AzdOutOfRangeRecommendation = "Upgrade azd to a version inside requiredVersions.azd (azd version shows the installed one), " +
+		"or change the range in azure.yaml to include the azd version the team uses."
+	cfg001AzdFix = "requiredVersions:\n  azd: \">=1.34.2\"\n"
+)
+
 // Azure.yaml name rule from the azd schema (schemas/v1.0/azure.yaml.json):
 // minLength 2 and pattern ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$.
 var appNameRe = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
@@ -102,6 +114,7 @@ func cfg001AzdRange(d document, root *yaml.Node, azdVersion string) ([]sdk.Findi
 	switch st {
 	case parseInvalid:
 		return []sdk.Finding{{Key: "required-versions-azd-invalid", DocsURL: cfg001AzdSourceURL, Location: loc(d, n),
+			Recommendation: cfg001AzdInvalidRecommendation, Fix: cfg001AzdFix,
 			Evidence: fmt.Sprintf("requiredVersions.azd %q is not a valid semver range; azd fails to load the project", clip(n.Value))}}, nil
 	case parseUnverified:
 		return nil, []string{"requiredVersions.azd uses a range form whose validity is not verified; the range was not checked"}
@@ -117,6 +130,7 @@ func cfg001AzdRange(d document, root *yaml.Node, azdVersion string) ([]sdk.Findi
 		return nil, nil
 	}
 	return []sdk.Finding{{Key: "required-versions-azd-out-of-range", DocsURL: cfg001AzdSourceURL, Location: loc(d, n),
+		Recommendation: cfg001AzdOutOfRangeRecommendation, Fix: cfg001AzdFix,
 		Evidence: fmt.Sprintf("azd %s is outside requiredVersions.azd %q; azd refuses to load the project", v, clip(n.Value))}}, nil
 }
 

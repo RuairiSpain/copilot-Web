@@ -23,6 +23,10 @@ type diffEntry struct {
 	Input   string   `json:"input"`
 	Valid   bool     `json:"valid"`
 	Matches []string `json:"matches"`
+	// Panics: ParseRange accepts the input but the returned range func panics
+	// when called (for example repeated "||"). azd would crash on it, so the
+	// doctor must not decide anything about it.
+	Panics bool `json:"panicsOnMatch"`
 }
 
 type diffFixture struct {
@@ -52,6 +56,10 @@ func TestParseAzdRangeAgreesWithBlangSemver(t *testing.T) {
 	valid, decided := 0, 0
 	for _, e := range f.Blang {
 		rng, st := parseAzdRange(e.Input)
+		if e.Panics && st != parseUnverified {
+			t.Errorf("parseAzdRange(%q) = %v, but the blang/semver range panics when matching; want unverified", e.Input, st)
+			continue
+		}
 		switch st {
 		case parseUnverified:
 			continue
@@ -80,6 +88,51 @@ func TestParseAzdRangeAgreesWithBlangSemver(t *testing.T) {
 	}
 	if valid < 200 || decided < 1000 {
 		t.Errorf("only %d valid and %d decided inputs were compared; the parser is too eager to say unverified", valid, decided)
+	}
+}
+
+// TestParseAzdRangeNeverInventsInvalid is the explicit guard behind the
+// required-versions-azd-invalid error finding: every string the parser calls
+// invalid must be rejected by the real library, and the strings below, which
+// the library accepts, must never be called invalid.
+func TestParseAzdRangeNeverInventsInvalid(t *testing.T) {
+	f := loadDiffFixture(t)
+	byInput := map[string]diffEntry{}
+	invalid := 0
+	for _, e := range f.Blang {
+		byInput[e.Input] = e
+		if _, st := parseAzdRange(e.Input); st == parseInvalid {
+			invalid++
+			if e.Valid {
+				t.Errorf("parseAzdRange(%q) = invalid but the library accepts it", e.Input)
+			}
+		}
+	}
+	if invalid < 100 {
+		t.Errorf("only %d inputs were called invalid; the guard is not exercised", invalid)
+	}
+	accepted := []string{
+		">=1.0.0 <", ">1.0.0 <", "> = 1.0.0",
+		">=1.0.0 || || <2.0.0", ">=1.0.0  ||  || <2.0.0", "! 1.35.0",
+	}
+	for _, in := range accepted {
+		e, ok := byInput[in]
+		if !ok {
+			t.Errorf("fixture is missing %q", in)
+			continue
+		}
+		_, st := parseAzdRange(in)
+		if e.Valid && st == parseInvalid {
+			t.Errorf("parseAzdRange(%q) = invalid, but the library accepts it", in)
+		}
+		if in != "! 1.35.0" && st == parseValid && !e.Valid {
+			t.Errorf("parseAzdRange(%q) = valid, but the library rejects it", in)
+		}
+	}
+	for _, in := range []string{">=1.0.0 ||", "|| >=1.0.0"} {
+		if e, ok := byInput[in]; !ok || e.Valid {
+			t.Errorf("fixture must record %q as rejected by the library", in)
+		}
 	}
 }
 

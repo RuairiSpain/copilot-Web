@@ -90,6 +90,18 @@ func evalCFG009(in *sdk.Input) sdk.Result {
 		if strings.ToLower(s.Host) != "azure.ai.routine" {
 			continue
 		}
+		// Only a mapping of named triggers under "triggers" is understood
+		// (the shape in the catalogue examples). The shape azd accepts is not
+		// verified, so a list, a scalar or a singular "trigger" key is an
+		// uncertain note, never not-applicable.
+		if tn := s.get("triggers"); tn != nil && tn.Tag != "!!null" && tn.Kind != yaml.MappingNode {
+			declared = true
+			st.skips = append(st.skips, s.Name+": triggers is not a mapping of named triggers; that shape is not verified and was not evaluated")
+		}
+		if tn := s.get("trigger"); tn != nil && tn.Tag != "!!null" {
+			declared = true
+			st.skips = append(st.skips, s.Name+": uses a trigger key instead of triggers; that shape is not verified and was not evaluated")
+		}
 		for _, trig := range pairs(s.get("triggers")) {
 			declared = true
 			checkRoutineTrigger(d, s, trig.Key, trig.Val, &st)

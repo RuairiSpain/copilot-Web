@@ -371,4 +371,9 @@ differential run disagreed with the first parsers are reported as uncertain, not
 The dev-build exemption (`0.0.0-dev.0`) covers the range comparison only, and only inside the CFG-001 azd window; an invalid range is still an error for a dev
 build because azd runs `ParseRange` (`project.go:64`) before the `IsDevVersion` skip (`project.go:70`).
 
+Further forms are uncertain, not errors (2026-10-16, Foundry lead re-review N4-1): a dangling operator (`>=1.0.0 <`, `>1.0.0 <`), an operator, a space and a non-version (`> = 1.0.0`), a space-separated version
+the library parses in ways not proven (`! 1.35.0`), and repeated `||` (`>=1.0.0 || || <2.0.0`; `ParseRange` accepts it and the returned range function panics when called). The parser
+returns "invalid" only for a failure the differential fixture proves: the empty string, a version-shaped token that is not a strict semver, an unsupported operator, a comma, and a single
+leading or trailing `||`. A test asserts that every string the parser calls invalid is also rejected by `ParseRange`.
+
 Not verified: azd itself was not executed, and older azd releases may use another range parser.

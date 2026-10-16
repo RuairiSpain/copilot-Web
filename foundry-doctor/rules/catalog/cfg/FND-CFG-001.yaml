@@ -1,5 +1,5 @@
 id: FND-CFG-001
-version: 6
+version: 7
 group: CFG
 title: Valid YAML, duplicate-key detection and compatible azure.ai.* schema
 description: >-
@@ -12,7 +12,7 @@ description: >-
   additional properties. requiredVersions.azd is parsed with the grammar of blang/semver/v4 ParseRange (operators < <= > >= = == ! !=,
   space-separated AND, || OR, lowercase x wildcards; comma, ~, ^, =>, =<, X, latest, the empty string and a
   leading or trailing || are not accepted; one-character tokens, x outside the exact N.x and N.M.x forms and "!" followed by
-  a space behave unexpectedly in the library and are reported as uncertain, not as errors): a value that is not a valid range is an error because azd fails to load the
+  a space behave unexpectedly in the library, as do a dangling operator, an operator and a version separated by a space that does not parse, and repeated ||, which the library accepts but panics on when matching; all of these are reported as uncertain, not as errors): a value that is not a valid range is an error because azd fails to load the
   project, and so is a known azd version (flag, environment variable or probe) outside the range; a local dev build
   (0.0.0-dev.0) is exempt from the range comparison, as in azd, but not from range validity: azd parses the range
   (project.go:64) before it skips a dev build (:70), so an invalid range is reported for a dev build too. The exemption is
@@ -197,3 +197,11 @@ notes: >-
   x outside N.x and N.M.x; "! " with a space; wildcard with pre-release; "<x", "^*"; "~0.0.0") are reported as uncertain. The
   required-versions-azd-* findings cite the azd project.go source (the Learn page documents the azure.yaml schema, not
   requiredVersions).
+  Version 7: the azd range parser reports "invalid" (an error finding) only for failures proven against blang/semver/v4
+  v4.0.0 ParseRange by the differential fixture. A dangling operator (">=1.0.0 <", ">1.0.0 <"), an operator and a
+  non-version separated by a space ("> = 1.0.0"), "! 1.35.0" and repeated "||" (">=1.0.0 || || <2.0.0", accepted by
+  ParseRange, panics when the range is matched) are uncertain. The fixture now holds these strings and about 1650
+  generated token combinations with verdicts produced by running the real library, and a test asserts that every string the
+  parser calls invalid is also rejected by the library. The required-versions-azd-* findings carry their own
+  remediation and fix text (change the range, or upgrade azd) instead of the generic text above. requiredVersions.extensions
+  problems are uncertain skips, not findings, and carry no remediation field.

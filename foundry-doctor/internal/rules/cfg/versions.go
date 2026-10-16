@@ -260,7 +260,14 @@ func azdWildcard(tok string) (lo, hi semver, isWild, ok bool) {
 // equality, an optional space between operator and version, space-separated
 // constraints ANDed, "||" ORed (AND binds tighter, no parentheses), lowercase
 // x wildcards. Comma, ~, ~>, ^, =>, =<, *, X, hyphen ranges, "latest", the
-// empty string and a leading or trailing "||" are rejected.
+// empty string and a single leading or trailing "||" are rejected.
+//
+// parseInvalid is returned only for failures verified against the library
+// (testdata/semver_diff.json). Token-level shapes the library accepts or
+// handles in ways not proven here (a dangling operator, an operator and a
+// version separated by a space where the version does not parse, repeated
+// "||", which the library accepts but panics on when matching) return
+// parseUnverified, so they never become an error finding.
 func parseAzdRange(s string) (azdRange, parseStatus) {
 	toks := strings.Fields(s)
 	if len(toks) == 0 {
@@ -286,7 +293,12 @@ func parseAzdRange(s string) (azdRange, parseStatus) {
 		tok := toks[i]
 		if tok == "||" {
 			if !flush() {
-				return nil, parseInvalid
+				// A single leading "||" is verified invalid. Repeated "||"
+				// is accepted by ParseRange and panics when matching.
+				if i == 0 && len(toks) > 1 && toks[1] != "||" {
+					return nil, parseInvalid
+				}
+				return nil, parseUnverified
 			}
 			continue
 		}
@@ -306,12 +318,14 @@ func parseAzdRange(s string) (azdRange, parseStatus) {
 			// valid operator (for example "<> 1.x" is accepted).
 			return nil, parseUnverified
 		}
+		spaced := false
 		if rest == "" {
 			if i+1 >= len(toks) || toks[i+1] == "||" {
-				return nil, parseInvalid
+				return nil, parseUnverified // dangling operator
 			}
 			i++
 			rest = toks[i]
+			spaced = true
 		}
 		lo, hi, wild, wok := azdWildcard(rest)
 		switch {
@@ -322,6 +336,12 @@ func parseAzdRange(s string) (azdRange, parseStatus) {
 		default:
 			v, vok := parseStrictSemver(rest)
 			if !vok {
+				// Only a version-shaped token that fails to parse is verified
+				// invalid. An operator and a version separated by a space, or
+				// a token containing "|", is not.
+				if spaced || strings.Contains(rest, "|") {
+					return nil, parseUnverified
+				}
 				return nil, parseInvalid
 			}
 			if op == "" {
@@ -332,7 +352,9 @@ func parseAzdRange(s string) (azdRange, parseStatus) {
 		sawTerm = true
 	}
 	if !flush() {
-		return nil, parseInvalid // trailing "||"
+		// Reached only after a "||" that follows a term: a single trailing
+		// "||", verified invalid.
+		return nil, parseInvalid
 	}
 	return groups, parseValid
 }

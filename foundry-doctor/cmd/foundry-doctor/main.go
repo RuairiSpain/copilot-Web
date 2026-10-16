@@ -97,6 +97,10 @@ func doctorCmd(ctx context.Context, svc app.Services, exit *int) *cobra.Command 
 			"validation could not run (invalid input/config or unavailable dependency);\n" +
 			"3 a skip hid a check and --strict was set (not-implemented, not-applicable,\n" +
 			"profile-key-missing and synthetic-infrastructure skips do not count); 4 internal error.\n" +
+			"--rules naming an exact rule ID (FND-CFG-001) marks that rule as requested: any skip\n" +
+			"from it, including not-implemented, not-applicable and uncertain skips, means the\n" +
+			"validation could not run and the exit code is 2, with or without --strict. Globs\n" +
+			"(FND-CFG-*), groups, pillars and categories do not do this.\n" +
 			"Skipped checks are always reported and are never treated as passes.",
 		Example: "  foundry-doctor doctor --local --profile prod\n" +
 			"  foundry-doctor doctor --format sarif --out foundry.sarif --fail-on warning\n" +
@@ -123,7 +127,7 @@ func doctorCmd(ctx context.Context, svc app.Services, exit *int) *cobra.Command 
 	f := cmd.Flags()
 	f.StringVar(&profile, "profile", "", "curated profile: dev, test or prod (default "+config.DefaultProfile+"; overridden by "+config.EnvProfile+" or the config file)")
 	f.BoolVar(&local, "local", false, "offline mode: validate local files only, no Azure access")
-	f.StringSliceVar(&rules, "rules", nil, "rule selectors: IDs or globs such as FND-CFG-*; repeatable or comma-separated")
+	f.StringSliceVar(&rules, "rules", nil, "rule selectors: IDs or globs such as FND-CFG-*; repeatable or comma-separated; any skip from an exact rule ID gives exit 2")
 	f.StringVar(&minSev, "min-severity", "", "lowest severity to report: info, warning or error (default info)")
 	f.StringVar(&failOn, "fail-on", "", "lowest severity that fails the run: info, warning or error (default error)")
 	f.StringVar(&baselineFile, "baseline", "", "baseline file (YAML, default "+baseline.DefaultPath+"); hides only findings with matching fingerprints")

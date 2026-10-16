@@ -89,6 +89,9 @@ func TestHelpAndFlags(t *testing.T) {
 			t.Errorf("doctor help missing %s", f)
 		}
 	}
+	if !strings.Contains(out, "any skip\nfrom it") || !strings.Contains(out, "exit code is 2, with or without --strict") {
+		t.Errorf("doctor help must say that a skip from a rule named by exact ID gives exit 2:\n%s", out)
+	}
 	// -o and -e are reserved by azd and must not be declared as shorthands.
 	for _, bad := range []string{" -o,", " -e,", "--environment"} {
 		if strings.Contains(out, bad) {
