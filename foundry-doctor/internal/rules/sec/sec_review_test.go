@@ -22,7 +22,10 @@ func TestSEC006FindingsKeepUnevaluatedVisible(t *testing.T) {
 		t.Fatalf("got %+v", out)
 	}
 	ev := out.Findings[0].Evidence
-	if !strings.Contains(ev, "1 resource check(s) not evaluated") || !strings.Contains(ev, "db: ipRules is an unresolved expression") {
-		t.Errorf("evidence lacks the unevaluated note: %q", ev)
+	if strings.Contains(ev, "not evaluated") {
+		t.Errorf("evidence must not carry a note: %q", ev)
+	}
+	if len(out.Skips) != 1 || !strings.Contains(out.Skips[0].Reason, "db: ipRules is an unresolved expression") {
+		t.Errorf("the unevaluated resource must be returned as a skip: %+v", out.Skips)
 	}
 }

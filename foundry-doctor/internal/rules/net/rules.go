@@ -76,6 +76,15 @@ func (r net001) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 					ev += "; policy.network.publicAccess is " + declared + ", so public access is declared deliberate"
 				}
 				o.add(a, ev)
+				// ADR-007: a declared deliberate posture lowers the severity
+				// (entra-only: warning, allowed: info). The engine only ever
+				// lowers, so the dev profile (info) is unchanged.
+				switch declared {
+				case "entra-only":
+					o.findings[len(o.findings)-1].Severity = sdk.SeverityWarning
+				case "allowed":
+					o.findings[len(o.findings)-1].Severity = sdk.SeverityInfo
+				}
 			}
 		case "disabled":
 			pes, unc := pesFor(in.ARM, a, "account")
@@ -592,7 +601,7 @@ func (r net005) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 				o.evaluated++
 			case armexpr.Different:
 				o.evaluated++
-				o.add(a, fmt.Sprintf("account region %q differs from agent virtual network region %q", armexpr.StripScope(a.Region), armexpr.StripScope(sn.vnet.Region)))
+				o.addKey(a, "agentSubnetRegion:"+armexpr.StripScope(sn.vnet.Name)+"/"+sn.name, fmt.Sprintf("account region %q differs from agent virtual network region %q", armexpr.StripScope(a.Region), armexpr.StripScope(sn.vnet.Region)))
 			default:
 				o.skip(a.Name + ": account or virtual network region is an expression or unset, so regions are not comparable")
 			}
@@ -613,7 +622,7 @@ func (r net005) Evaluate(_ context.Context, in *sdk.Input) (sdk.Result, error) {
 			o.evaluated++
 		case armexpr.Different:
 			o.evaluated++
-			o.add(pe, fmt.Sprintf("private endpoint region %q differs from its virtual network region %q", armexpr.StripScope(pe.Region), armexpr.StripScope(sn.vnet.Region)))
+			o.addKey(pe, "region", fmt.Sprintf("private endpoint region %q differs from its virtual network region %q", armexpr.StripScope(pe.Region), armexpr.StripScope(sn.vnet.Region)))
 		default:
 			o.skip(pe.Name + ": endpoint or virtual network region is an expression or unset, so regions are not comparable")
 		}

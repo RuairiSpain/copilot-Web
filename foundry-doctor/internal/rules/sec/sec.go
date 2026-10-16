@@ -93,8 +93,8 @@ type acc struct {
 	// (reason foundrylink.SkipConditional).
 	conditional bool
 	// notes names resources that could not be evaluated. When a rule has
-	// findings, they are appended to the first finding so the unevaluated
-	// resources stay visible (review M3; sdk.Result has no skip list).
+	// findings, they are returned as Skips next to the findings so the
+	// unevaluated resources stay visible (review M3, ADR-008 amendment 3).
 	notes []string
 }
 
@@ -149,11 +149,12 @@ func (a *acc) result() sdk.Result {
 		if a.unresolved && len(notes) == 0 {
 			notes = append(notes, SkipUnresolved+": a decisive value is an unresolved expression")
 		}
-		if len(notes) > 0 {
-			sort.Strings(notes)
-			a.fs[0].Evidence += fmt.Sprintf(" [note: %d resource check(s) not evaluated by this rule: %s]", len(notes), strings.Join(notes, "; "))
+		sort.Strings(notes)
+		var skips []sdk.Skip
+		for _, n := range notes {
+			skips = append(skips, sdk.Skip{Reason: n})
 		}
-		return sdk.Result{Findings: a.fs}
+		return sdk.Result{Findings: a.fs, Skips: skips}
 	}
 	switch {
 	case a.scopeUncertain:
@@ -278,9 +279,9 @@ func evalSEC001(in *sdk.Input) sdk.Result {
 		case expr:
 			a.unresolved = true
 		case absent:
-			a.add(r, "Foundry account owns projects or deployments; properties.disableLocalAuth is absent (key authentication defaults to enabled)")
+			a.addKey(r, "disableLocalAuth", "Foundry account owns projects or deployments; properties.disableLocalAuth is absent (key authentication defaults to enabled)")
 		default:
-			a.add(r, "Foundry account owns projects or deployments; properties.disableLocalAuth is not true")
+			a.addKey(r, "disableLocalAuth", "Foundry account owns projects or deployments; properties.disableLocalAuth is not true")
 		}
 	}
 	if !seen && !a.scopeUncertain && !a.conditional {
@@ -330,7 +331,7 @@ func evalSEC002(in *sdk.Input) sdk.Result {
 				sub += " (aadAuthFailureMode=" + m + ")"
 			}
 		}
-		a.add(r, "Search service referenced by Foundry; properties.disableLocalAuth is not true; "+sub)
+		a.addKey(r, "disableLocalAuth", "Search service referenced by Foundry; properties.disableLocalAuth is not true; "+sub)
 	}
 	if !scoped && len(a.fs) == 0 && !a.scopeUncertain && !a.conditional {
 		return skip(SkipOutOfScope)
@@ -356,7 +357,7 @@ func evalSEC003(in *sdk.Input) sdk.Result {
 		case expr:
 			a.unresolved = true
 		default:
-			a.add(r, "Cosmos DB account referenced by Foundry; properties.disableLocalAuth is not true")
+			a.addKey(r, "disableLocalAuth", "Cosmos DB account referenced by Foundry; properties.disableLocalAuth is not true")
 		}
 	}
 	if !scoped && len(a.fs) == 0 && !a.scopeUncertain && !a.conditional {

@@ -83,8 +83,11 @@ func TestFindingsKeepUnevaluatedVisible(t *testing.T) {
 	if len(out.Findings) == 0 {
 		t.Fatalf("the public IP finding must be kept: %+v", out)
 	}
-	if !strings.Contains(out.Findings[0].Evidence, "not evaluated") || !strings.Contains(out.Findings[0].Evidence, "uncertain") {
-		t.Fatalf("first finding must name unevaluated resources: %q", out.Findings[0].Evidence)
+	if strings.Contains(out.Findings[0].Evidence, "not evaluated") {
+		t.Fatalf("evidence must not carry a note: %q", out.Findings[0].Evidence)
+	}
+	if len(out.Skips) == 0 || !strings.Contains(out.Skips[0].Reason, "uncertain") {
+		t.Fatalf("unevaluated resources must be returned as skips: %+v", out.Skips)
 	}
 }
 

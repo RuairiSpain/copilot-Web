@@ -82,9 +82,13 @@ func TestCompiledNET001PublicAccessPolicy(t *testing.T) {
 		{"allowed", "declared deliberate"},
 		{"forbidden", ""},
 	} {
+		wantSev := map[string]sdk.Severity{"entra-only": sdk.SeverityWarning, "allowed": sdk.SeverityInfo, "forbidden": ""}[tc.policy]
 		out := runRule(t, net001{}, rs, fakePolicy{"network.publicAccess": tc.policy})
 		if len(out.Findings) != 1 {
 			t.Fatalf("%s: %+v", tc.policy, out)
+		}
+		if out.Findings[0].Severity != wantSev {
+			t.Errorf("%s: severity override %q want %q", tc.policy, out.Findings[0].Severity, wantSev)
 		}
 		if got := strings.Contains(out.Findings[0].Evidence, "declared deliberate"); got != (tc.want != "") {
 			t.Errorf("%s: evidence %q", tc.policy, out.Findings[0].Evidence)

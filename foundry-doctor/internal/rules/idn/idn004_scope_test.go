@@ -33,7 +33,13 @@ func TestCompiledIDN004ReportsResourceScopedOwnerAndUAA(t *testing.T) {
 			t.Errorf("evidence should name the resource scope: %q", f.Evidence)
 		}
 	}
-	if len(roles) != 2 || roles[0] == roles[1] {
-		t.Fatalf("want Owner and User Access Administrator (Contributor at one resource is by design not reported), got %v: %+v", roles, out.Findings)
+	if len(roles) != 3 {
+		t.Fatalf("want Owner, User Access Administrator and an info Contributor finding, got %v: %+v", roles, out.Findings)
+	}
+	for _, f := range out.Findings {
+		isContrib := strings.HasPrefix(f.Evidence, "Contributor granted")
+		if isContrib != (f.Severity == sdk.SeverityInfo) {
+			t.Errorf("only Contributor at a resource scope is info; %q has severity %q", f.Evidence, f.Severity)
+		}
 	}
 }

@@ -178,7 +178,7 @@ func (e *Engine) Run(ctx context.Context, in *sdk.Input) (*Report, error) {
 			continue
 		}
 		if res.Skipped != nil {
-			if len(res.Findings) > 0 {
+			if len(res.Findings) > 0 || len(res.Skips) > 0 {
 				skip(SkipRuleError)
 				continue
 			}
@@ -191,6 +191,13 @@ func (e *Engine) Run(ctx context.Context, in *sdk.Input) (*Report, error) {
 			continue
 		}
 		rep.Evaluated = append(rep.Evaluated, cr.ID)
+		for _, s := range res.Skips {
+			s.RuleID = cr.ID
+			if slices.Contains(e.Required, cr.ID) {
+				s.Required = true
+			}
+			rep.Skipped = append(rep.Skipped, s)
+		}
 		for _, f := range res.Findings {
 			rep.Findings = append(rep.Findings, Enrich(f, cr, in.Profile, sev))
 		}
@@ -272,7 +279,7 @@ func ConfidenceFor(c string) sdk.Confidence {
 func Enrich(f sdk.Finding, cr catalog.Rule, profile string, sev sdk.Severity) sdk.Finding {
 	f.RuleID = cr.ID
 	f.RuleVersion = cr.Version
-	f.Severity = sev
+	f.Severity = lowerSeverity(sev, f.Severity, cr)
 	f.Category = sdk.Category(cr.Category)
 	f.Pillar = cr.Pillar
 	f.Basis = slices.Clone(cr.Basis)
@@ -287,10 +294,33 @@ func Enrich(f sdk.Finding, cr catalog.Rule, profile string, sev sdk.Severity) sd
 		f.DocsURL = cr.Sources[0].URL
 		f.LastVerified = cr.Sources[0].LastVerified
 	}
-	f.Confidence = ConfidenceFor(cr.Evidence.Confidence)
+	f.Confidence = lowerConfidence(ConfidenceFor(cr.Evidence.Confidence), f.Confidence)
 	f.Evidence = findings.Redact(f.Evidence)
 	f.Fingerprint = findings.Fingerprint(f)
 	return f
+}
+
+// lowerSeverity applies a rule's per-finding severity override (ADR-008
+// amendment 3). The catalogue severity wins unless the override is valid and
+// strictly lower. Platform-basis rules are error in every profile, so an
+// override is ignored for them.
+func lowerSeverity(cat, override sdk.Severity, cr catalog.Rule) sdk.Severity {
+	if slices.Contains(cr.Basis, PlatformBasis) {
+		return cat
+	}
+	if override.Valid() && override.Rank() < cat.Rank() {
+		return override
+	}
+	return cat
+}
+
+// lowerConfidence applies a rule's per-finding confidence override: only a
+// valid, strictly lower value is honoured.
+func lowerConfidence(cat, override sdk.Confidence) sdk.Confidence {
+	if override.Rank() > 0 && override.Rank() < cat.Rank() {
+		return override
+	}
+	return cat
 }
 
 // MissingARMCapability is the MissingCapability text of synthetic-infrastructure skips.
@@ -317,17 +347,6 @@ func NeedsARMOnly(cr catalog.Rule) bool {
 // Only exact duplicates (same fingerprint, location and evidence) merge.
 // Findings with equal fingerprints but different location or evidence are all
 // kept; if a rule set a Key that failed to separate them, a diagnostic says so.
-// stableEvidence drops the trailing "[note: ... not evaluated ...]" that rules
-// append to their first finding. The note depends on other resources, so it
-// must not feed a derived key: an unrelated unresolved resource would change
-// the fingerprint of a finding that did not change.
-func stableEvidence(ev string) string {
-	if i := strings.Index(ev, " [note: "); i >= 0 {
-		return ev[:i]
-	}
-	return ev
-}
-
 func resolveFingerprintCollisions(fs []sdk.Finding) ([]sdk.Finding, []string) {
 	base := map[string]map[string]bool{} // base fingerprint -> distinct identities
 	for _, f := range fs {
@@ -337,7 +356,7 @@ func resolveFingerprintCollisions(fs []sdk.Finding) ([]sdk.Finding, []string) {
 		if base[f.Fingerprint] == nil {
 			base[f.Fingerprint] = map[string]bool{}
 		}
-		base[f.Fingerprint][fmt.Sprintf("%d:%d:%s", f.Location.Line, f.Location.Column, stableEvidence(f.Evidence))] = true
+		base[f.Fingerprint][fmt.Sprintf("%d:%d:%s", f.Location.Line, f.Location.Column, f.Evidence)] = true
 	}
 	diagSet := map[string]bool{}
 	for i := range fs {
@@ -348,7 +367,7 @@ func resolveFingerprintCollisions(fs []sdk.Finding) ([]sdk.Finding, []string) {
 		if len(base[f.Fingerprint]) > 1 {
 			diagSet[fmt.Sprintf("%s: findings share a fingerprint because the rule sets no Finding.Key; fingerprints were derived from location and evidence", f.RuleID)] = true
 		}
-		sum := sha256.Sum256([]byte(stableEvidence(f.Evidence)))
+		sum := sha256.Sum256([]byte(f.Evidence))
 		f.Key = fmt.Sprintf("auto:%d:%d:%s", f.Location.Line, f.Location.Column, hex.EncodeToString(sum[:])[:12])
 		f.Fingerprint = findings.Fingerprint(*f)
 	}

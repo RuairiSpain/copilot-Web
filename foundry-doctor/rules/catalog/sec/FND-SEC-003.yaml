@@ -1,5 +1,5 @@
 id: FND-SEC-003
-version: 2
+version: 3
 group: SEC
 title: Cosmos DB local authentication disabled
 description: >-

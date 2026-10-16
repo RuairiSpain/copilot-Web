@@ -1,6 +1,6 @@
 # ADR-010: Command-surface decisions for Phase 1
 
-Status: Accepted, amended 2026-10-15 (Amendment 1)
+Status: Accepted, amended 2026-10-16 (Amendments 1 to 3)
 Date: 2026-10-05
 
 ## Context
@@ -82,3 +82,11 @@ Each is recorded here instead of being chosen silently.
   intended, and the fix is to supply the input (a Bicep build, live reads), not to reclassify the skip.
 - R6: CFG-010 with no ARM model emits `input-unavailable`, because the deployments may be declared in Bicep that could not be read; `not-applicable` is emitted only when the ARM
   model is present and declares no deployment.
+
+## Amendment 3 (2026-10-16): per-resource skips next to findings (round-2 review M3)
+
+- A rule that returns findings may also return `Result.Skips` (ADR-008 amendment 3). The engine adds each entry to the skipped list. Every reporter (console, JSON, Markdown, SARIF) already prints
+  the whole skipped list with the rule ID, so a partial skip appears in the "Skipped checks" section next to the rule's findings; no reporter field was added.
+- Decision 9 (`--strict`) is unchanged: a partial skip is classified by its reason head like any other skip. A rule with findings and an `unresolved-expression` or `conditional-resource` partial skip
+  therefore makes `--strict` exit 3, because a resource could not be checked. Findings alone still exit 1 first only when `ClassifyExit` says so (see Amendment 1 on the 3-before-1 order).
+- Readiness (`BuildReadiness`) is unchanged: a rule with an active finding is `blocked` whatever its partial skips.

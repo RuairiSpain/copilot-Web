@@ -71,8 +71,8 @@ func (o *outcome) addKey(r sdk.ARMResource, key, evidence string) {
 
 func (o *outcome) result() sdk.Result {
 	if len(o.findings) > 0 {
-		// sdk.Result cannot carry skips next to findings, so the first finding
-		// names what was not evaluated (review M3).
+		// What was not evaluated is returned as Skips next to the findings
+		// (review M3, ADR-008 amendment 3).
 		var notes []string
 		if o.unresolved {
 			notes = append(notes, "unresolved-expression: a decisive value could not be resolved")
@@ -83,10 +83,11 @@ func (o *outcome) result() sdk.Result {
 		if o.skip != "" {
 			notes = append(notes, o.skip)
 		}
-		if len(notes) > 0 {
-			o.findings[0].Evidence += armexpr.StripScope(" [note: not evaluated by this rule: " + strings.Join(notes, "; ") + "]")
+		var skips []sdk.Skip
+		for _, n := range notes {
+			skips = append(skips, sdk.Skip{Reason: armexpr.StripScope(n)})
 		}
-		return sdk.Result{Findings: o.findings}
+		return sdk.Result{Findings: o.findings, Skips: skips}
 	}
 	if o.unresolved {
 		return sdk.Result{Skipped: &sdk.Skip{Reason: "unresolved-expression"}}

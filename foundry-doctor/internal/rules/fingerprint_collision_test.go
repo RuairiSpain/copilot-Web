@@ -74,15 +74,3 @@ func TestKeyedSameFingerprintDifferentLocationBothKept(t *testing.T) {
 		t.Errorf("diagnostics = %v", rep.Diagnostics)
 	}
 }
-
-// A partial-skip note appended by a rule depends on other resources, so it
-// must not change the fingerprint of a finding that did not change.
-func TestFingerprintIgnoresPartialSkipNote(t *testing.T) {
-	plain := keylessAt(3, "retention 7 is below minimum 30")
-	noted := keylessAt(3, "retention 7 is below minimum 30 [note: 1 resource check(s) not evaluated by this rule: wb: unresolved]")
-	_, a := fpsOf(t, plain)
-	_, b := fpsOf(t, noted)
-	if len(a) != 1 || len(b) != 1 || a[0] != b[0] {
-		t.Errorf("fingerprint changed with the note: %v vs %v", a, b)
-	}
-}

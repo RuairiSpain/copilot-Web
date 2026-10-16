@@ -85,7 +85,16 @@ func (o *outcome) result() sdk.Result {
 			}
 			return strings.Compare(a.Evidence, b.Evidence)
 		})
-		return sdk.Result{Findings: o.findings}
+		// Uncertain resources are returned as Skips next to the findings
+		// (review M3, ADR-008 amendment 3). Not-applicable skips are not.
+		var skips []sdk.Skip
+		if len(o.notes) > 0 {
+			slices.Sort(o.notes)
+			for _, n := range unique(o.notes) {
+				skips = append(skips, sdk.Skip{Reason: armexpr.StripScope("uncertain: " + n)})
+			}
+		}
+		return sdk.Result{Findings: o.findings, Skips: skips}
 	}
 	if len(o.skips) > 0 {
 		slices.Sort(o.skips)

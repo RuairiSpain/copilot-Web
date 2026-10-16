@@ -88,8 +88,8 @@ type acc struct {
 	// decided from the template.
 	scopeUncertain bool
 	// notes records, per resource, why a resource could not be evaluated. It is
-	// appended to the first finding when the rule has findings, so partially
-	// evaluated rules never hide the unevaluated resources (review M3).
+	// returned as Skips next to the findings, so partially evaluated rules
+	// never hide the unevaluated resources (review M3).
 	notes []string
 }
 
@@ -108,15 +108,19 @@ func shortName(n string) string {
 	return n
 }
 
-// withNotes attaches the unevaluated-resource note to the first finding.
-func withNotes(fs []sdk.Finding, notes []string) []sdk.Finding {
-	if len(fs) == 0 || len(notes) == 0 {
-		return fs
-	}
+// withSkips returns the findings together with one skip per resource that
+// could not be evaluated (ADR-008 amendment 3). Skips never alter a finding.
+func withSkips(fs []sdk.Finding, notes []string) sdk.Result {
 	sorted := append([]string(nil), notes...)
 	sort.Strings(sorted)
-	fs[0].Evidence += fmt.Sprintf(" [note: %d resource check(s) not evaluated by this rule: %s]", len(sorted), armexpr.StripScope(strings.Join(sorted, "; ")))
-	return fs
+	var skips []sdk.Skip
+	for i, n := range sorted {
+		if i > 0 && sorted[i-1] == n {
+			continue
+		}
+		skips = append(skips, sdk.Skip{Reason: armexpr.StripScope(n)})
+	}
+	return sdk.Result{Findings: fs, Skips: skips}
 }
 
 // maybe reports (and records) that r is deployed only under a condition or
@@ -152,7 +156,7 @@ func (a *acc) add(r sdk.ARMResource, evidence string) {
 func (a *acc) result() sdk.Result {
 	switch {
 	case len(a.fs) > 0:
-		return sdk.Result{Findings: withNotes(a.fs, a.notes)}
+		return withSkips(a.fs, a.notes)
 	case a.scopeUncertain:
 		return skip(foundrylink.SkipScopeUncertain)
 	case a.conditional:
@@ -255,7 +259,7 @@ func evalIDN001(in *sdk.Input) sdk.Result {
 
 func checkIdentity(a *acc, r sdk.ARMResource) {
 	if r.Identity == nil {
-		a.add(r, "no identity block; managed identity is not enabled")
+		a.addKey(r, "identity", "no identity block; managed identity is not enabled")
 		return
 	}
 	t, present, isExpr := strOf(r.Identity, "type")
@@ -264,7 +268,7 @@ func checkIdentity(a *acc, r sdk.ARMResource) {
 		a.unres(r, "identity.type is an unresolved expression")
 		return
 	case !present || strings.EqualFold(strings.TrimSpace(t), "None") || strings.TrimSpace(t) == "":
-		a.add(r, fmt.Sprintf("identity.type is %q; managed identity is not enabled", t))
+		a.addKey(r, "identity", fmt.Sprintf("identity.type is %q; managed identity is not enabled", t))
 		return
 	}
 	if strings.Contains(strings.ToLower(t), "userassigned") {
@@ -273,10 +277,10 @@ func checkIdentity(a *acc, r sdk.ARMResource) {
 		case ok && unresolved(uai):
 			a.unres(r, "userAssignedIdentities is an unresolved expression")
 		case !ok || uai == nil:
-			a.add(r, fmt.Sprintf("identity.type %q requires a non-empty userAssignedIdentities map", t))
+			a.addKey(r, "userAssignedIdentities", fmt.Sprintf("identity.type %q requires a non-empty userAssignedIdentities map", t))
 		default:
 			if m, isMap := uai.(map[string]any); isMap && len(m) == 0 {
-				a.add(r, fmt.Sprintf("identity.type %q has an empty userAssignedIdentities map", t))
+				a.addKey(r, "userAssignedIdentities", fmt.Sprintf("identity.type %q has an empty userAssignedIdentities map", t))
 			}
 		}
 	}
@@ -360,6 +364,9 @@ func evalIDN003(in *sdk.Input) sdk.Result {
 				a.addKey(r, "principalId", "principalId expression reads a clientId/applicationId property; an object (principal) ID is required")
 			case clientIDNameOnly:
 				a.addKey(r, "principalId", "principalId expression uses a parameter or variable whose name suggests a clientId/applicationId (name match only, so confidence is likely rather than certain); verify that it holds an object (principal) ID")
+				// A name-only match is not proof (catalogue confidence is certain
+				// for property access); the engine only ever lowers confidence.
+				a.fs[len(a.fs)-1].Confidence = sdk.ConfidenceMedium
 			default:
 				a.unres(r, "principalId is an unresolved expression")
 			}

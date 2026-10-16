@@ -1,5 +1,5 @@
 id: FND-NET-001
-version: 2
+version: 3
 group: NET
 title: Foundry public access/private endpoint posture
 description: >-
@@ -155,4 +155,5 @@ notes: >-
   recommendation is cited here; the WAF mapping is added in Phase 4 when the guidance is verified. A profile that declares
   a public-by-design posture (Entra-only public access) should downgrade this finding; the profile key is policy.network.publicAccess
   (ADR-007). Profile key: policy.network.publicAccess (ADR-007); entra-only and allowed lower the severity, they never skip
-  the rule.
+  the rule. Since version 3 the rule sets the lower severity itself through the per-finding override (ADR-008 amendment 3):
+  entra-only gives warning and allowed gives info. The override only lowers, so dev (info) is unchanged.

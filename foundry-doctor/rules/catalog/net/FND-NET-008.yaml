@@ -1,5 +1,5 @@
 id: FND-NET-008
-version: 2
+version: 3
 group: NET
 title: "Search SKU supports private endpoints"
 description: >-

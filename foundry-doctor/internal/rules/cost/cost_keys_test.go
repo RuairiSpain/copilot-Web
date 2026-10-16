@@ -48,7 +48,12 @@ func TestCost004KeysAndUnevaluatedNote(t *testing.T) {
 	// A conditional cost-relevant resource next to a finding stays visible.
 	cond := sdk.ARMResource{Type: typeSearch, Name: "c", SKUName: "standard", Conditional: true, Condition: "[parameters('deploy')]"}
 	out = run(t, "FND-COST-004", &sdk.Input{ARM: model{search, cond}})
-	if len(out.Findings) == 0 || !strings.Contains(out.Findings[0].Evidence, "not evaluated") || !strings.Contains(out.Findings[0].Evidence, "conditional-deployment-unresolved") {
-		t.Fatalf("unevaluated resources must be named in the first finding: %+v", out)
+	if len(out.Findings) == 0 || len(out.Skips) != 1 || !strings.Contains(out.Skips[0].Reason, "conditional-deployment-unresolved") {
+		t.Fatalf("unevaluated resources must be returned as skips: %+v", out)
+	}
+	for _, f := range out.Findings {
+		if strings.Contains(f.Evidence, "not evaluated") {
+			t.Errorf("evidence must not carry a note: %q", f.Evidence)
+		}
 	}
 }

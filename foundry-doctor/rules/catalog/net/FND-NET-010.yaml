@@ -1,5 +1,5 @@
 id: FND-NET-010
-version: 2
+version: 3
 group: NET
 title: Azure Monitor private-link choice is explicit
 description: >-

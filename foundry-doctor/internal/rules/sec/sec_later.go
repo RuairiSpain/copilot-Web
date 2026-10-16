@@ -176,7 +176,7 @@ func evalSEC008(in *sdk.Input) sdk.Result {
 		}
 		tier, _ := str(r.Properties, "pricingTier")
 		if !strings.EqualFold(strings.TrimSpace(tier), "Standard") {
-			a.add(r, fmt.Sprintf("Defender plan %s pricingTier is %q", name, tier))
+			a.addKey(r, "pricingTier", fmt.Sprintf("Defender plan %s pricingTier is %q", name, tier))
 		}
 	}
 	if len(a.fs) > 0 {
@@ -205,7 +205,7 @@ func evalSEC009(in *sdk.Input) sdk.Result {
 		}
 		mode, _ := str(r.Properties, "enforcementMode")
 		if strings.EqualFold(mode, "DoNotEnforce") {
-			a.add(r, "mapped policy assignment uses enforcementMode DoNotEnforce")
+			a.addKey(r, "enforcementMode", "mapped policy assignment uses enforcementMode DoNotEnforce")
 		}
 	}
 	if len(a.fs) > 0 {
@@ -311,13 +311,13 @@ func evalSEC012(in *sdk.Input) sdk.Result {
 	policies := append(ofType(in, typeAPIMServiceDiag), ofType(in, typeAPIMAPIDiag)...)
 	for _, r := range policies {
 		if hasLLMMessageLogging(r) {
-			a.add(r, "APIM diagnostic enables raw LLM request or response message logging")
+			a.addKey(r, "messageLogging", "APIM diagnostic enables raw LLM request or response message logging")
 			continue
 		}
 		if strings.EqualFold(r.Type, typeAPIMAPIDiag) && diagnosticBodyLogging(r) {
 			apiName := apiNameFromDiag(r.Name)
 			if llmAPIs[strings.ToLower(apiName)] {
-				a.add(r, "APIM diagnostic enables request or response body logging for an LLM API")
+				a.addKey(r, "bodyLogging", "APIM diagnostic enables request or response body logging for an LLM API")
 			} else {
 				a.unresolved = true
 			}
@@ -358,7 +358,7 @@ func evalSEC013(in *sdk.Input) sdk.Result {
 		}
 		finding := validateTenantPolicy(r, xmlText)
 		if finding != "" {
-			a.add(r, finding)
+			a.addKey(r, "tenantPolicy", finding)
 		}
 	}
 	for apiName, ok := range llmAPIs {

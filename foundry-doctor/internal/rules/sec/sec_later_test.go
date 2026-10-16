@@ -93,6 +93,14 @@ func TestLaterRules(t *testing.T) {
 			if len(out.Findings) != tc.findings {
 				t.Fatalf("findings=%d want %d: %+v", len(out.Findings), tc.findings, out.Findings)
 			}
+			switch tc.id {
+			case "FND-SEC-008", "FND-SEC-009", "FND-SEC-012", "FND-SEC-013":
+				for _, f := range out.Findings {
+					if f.Key == "" {
+						t.Errorf("%s finding sets no Finding.Key: %+v", tc.id, f)
+					}
+				}
+			}
 			if tc.contains != "" && tc.findings > 0 && !strings.Contains(out.Findings[0].Evidence, tc.contains) {
 				t.Fatalf("evidence %q lacks %q", out.Findings[0].Evidence, tc.contains)
 			}

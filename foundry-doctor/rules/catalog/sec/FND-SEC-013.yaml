@@ -1,5 +1,5 @@
 id: FND-SEC-013
-version: 1
+version: 2
 group: SEC
 title: Gateway tenant validation is robust
 description: Token validation policies on an AI gateway must pin the Microsoft Entra tenant and the accepted client

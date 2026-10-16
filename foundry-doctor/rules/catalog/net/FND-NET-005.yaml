@@ -1,5 +1,5 @@
 id: FND-NET-005
-version: 3
+version: 4
 group: NET
 title: "Private-mode VNet/region consistency"
 description: >-

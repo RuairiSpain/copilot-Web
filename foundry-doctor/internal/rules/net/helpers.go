@@ -3,7 +3,6 @@
 package net
 
 import (
-	"fmt"
 	"net/netip"
 	"regexp"
 	"sort"
@@ -521,13 +520,16 @@ func (o *outcome) result() sdk.Result {
 		}
 		return a.Evidence < b.Evidence
 	})
-	// sdk.Result cannot carry skips next to findings, so the first finding
-	// names the resources that were not evaluated (review M3).
-	if len(o.skips) > 0 && len(o.findings) > 0 {
+	// Resources that were not evaluated are returned as Skips next to the
+	// findings (review M3, ADR-008 amendment 3).
+	var skips []sdk.Skip
+	if len(o.findings) > 0 {
 		sort.Strings(o.skips)
-		o.findings[0].Evidence += fmt.Sprintf(" [note: %d resource check(s) not evaluated by this rule: %s]", len(o.skips), strings.Join(o.skips, "; "))
+		for _, s := range o.skips {
+			skips = append(skips, sdk.Skip{Reason: s})
+		}
 	}
-	return sdk.Result{Findings: o.findings}
+	return sdk.Result{Findings: o.findings, Skips: skips}
 }
 
 func noARM(id string, in *sdk.Input) (sdk.Result, bool) {
