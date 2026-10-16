@@ -22,7 +22,7 @@ func fixture() ([]sdk.Finding, Run) {
 		{RuleID: "FND-003", Severity: sdk.SeverityInfo, Baselined: true, Location: sdk.Location{File: "../../etc/passwd"}},
 		{RuleID: "FND-004", Severity: sdk.SeverityError, Suppressed: &sdk.Suppression{Reason: "accepted", Owner: "team"}},
 	}
-	run := Run{ToolVersion: "1.0.0", Profile: "default", ExitCode: 1, Skipped: []sdk.Skip{
+	run := Run{ToolVersion: "1.0.0", Profile: "default", ExitCode: 1, Hidden: 2, Skipped: []sdk.Skip{
 		{RuleID: "FND-020", Reason: "az not signed in", Required: true},
 		{RuleID: "FND-010", Reason: "optional scanner missing"},
 	}}

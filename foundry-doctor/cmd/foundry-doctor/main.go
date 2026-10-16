@@ -15,6 +15,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/app"
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/baseline"
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/config"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/llm"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
@@ -83,9 +85,9 @@ func finish(exit *int, code int, err error) error {
 
 func doctorCmd(ctx context.Context, svc app.Services, exit *int) *cobra.Command {
 	var (
-		profile, minSev, failOn, baseline, suppress, format, out, dir, azdVersion string
-		local, strict                                                             bool
-		rules                                                                     []string
+		profile, minSev, failOn, baselineFile, suppress, format, out, dir, azdVersion, writeBaseline string
+		local, strict, force                                                                         bool
+		rules                                                                                        []string
 	)
 	cmd := &cobra.Command{
 		Use:   "doctor",
@@ -98,13 +100,14 @@ func doctorCmd(ctx context.Context, svc app.Services, exit *int) *cobra.Command 
 			"Skipped checks are always reported and are never treated as passes.",
 		Example: "  foundry-doctor doctor --local --profile prod\n" +
 			"  foundry-doctor doctor --format sarif --out foundry.sarif --fail-on warning\n" +
-			"  foundry-doctor doctor --rules FND-CFG-*,FND-SEC-001 --baseline .foundry/baseline.json --strict",
+			"  foundry-doctor doctor --rules FND-CFG-*,FND-SEC-001 --baseline .foundry-doctor/baseline.yaml --strict\n" +
+			"  foundry-doctor doctor --write-baseline .foundry-doctor/baseline.yaml   # record current findings",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			req := app.DoctorRequest{
 				Dir: dir, Profile: profile, Local: local, Rules: rules,
-				Baseline: baseline, Suppress: suppress, Strict: strict, Format: format, Out: out,
-				AzdVersion: azdVersion,
+				Baseline: baselineFile, Suppress: suppress, Strict: strict, Format: format, Out: out,
+				AzdVersion: azdVersion, WriteBaseline: writeBaseline, Force: force,
 			}
 			var err error
 			if req.MinSeverity, err = optSeverity("--min-severity", minSev); err != nil {
@@ -118,12 +121,14 @@ func doctorCmd(ctx context.Context, svc app.Services, exit *int) *cobra.Command 
 		},
 	}
 	f := cmd.Flags()
-	f.StringVar(&profile, "profile", "", "curated profile: dev, test or prod (default from config)")
+	f.StringVar(&profile, "profile", "", "curated profile: dev, test or prod (default "+config.DefaultProfile+"; overridden by "+config.EnvProfile+" or the config file)")
 	f.BoolVar(&local, "local", false, "offline mode: validate local files only, no Azure access")
 	f.StringSliceVar(&rules, "rules", nil, "rule selectors: IDs or globs such as FND-CFG-*; repeatable or comma-separated")
 	f.StringVar(&minSev, "min-severity", "", "lowest severity to report: info, warning or error (default info)")
 	f.StringVar(&failOn, "fail-on", "", "lowest severity that fails the run: info, warning or error (default error)")
-	f.StringVar(&baseline, "baseline", "", "baseline file; hides only findings with matching fingerprints")
+	f.StringVar(&baselineFile, "baseline", "", "baseline file (YAML, default "+baseline.DefaultPath+"); hides only findings with matching fingerprints")
+	f.StringVar(&writeBaseline, "write-baseline", "", "write a baseline of the current findings to this path, relative to --dir (conventionally "+baseline.DefaultPath+"), instead of a report; refuses to replace a file without --force and never follows symbolic links")
+	f.BoolVar(&force, "force", false, "with --write-baseline: replace an existing baseline file")
 	f.StringVar(&suppress, "suppressions", "", "suppressions file (reason, owner and expiry required)")
 	f.BoolVar(&strict, "strict", false, "exit 3 when a skipped check hid validation (missing input, capability or version); by-design skips do not count")
 	f.StringVar(&azdVersion, "azd-version", "", "azd version to gate rules by when azd is not on PATH, for example 1.35.0 (env FOUNDRY_DOCTOR_AZD_VERSION)")
