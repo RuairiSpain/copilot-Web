@@ -59,3 +59,7 @@ because `armmodel.FromARM` was given only the entry. ADR-006 (read-only), ADR-00
 
 - Multi-layer infrastructure (`infra.layers`) still has no parameter file handling.
 - Parameter files of nested modules are not read (Bicep modules take no parameter files).
+
+## Amendment 1 (2026-10-16): confidence of default-derived findings
+
+The engine lowers the confidence of a finding to `likely` (medium) when the ARM model reports through `FromDefault` that the finding's resource took a fact from a parameter's Bicep default. The cap is applied in `internal/rules/rules.go` (`capDefaultDerived`) before the catalogue clamp, so it can only lower confidence. The evidence text and the fingerprint are not changed, so adding a parameter file does not re-key existing baseline entries. A finding whose rule already set a lower confidence keeps it.

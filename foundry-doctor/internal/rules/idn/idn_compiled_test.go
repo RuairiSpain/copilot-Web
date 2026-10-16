@@ -60,35 +60,46 @@ func TestCompiledIDN005And006DoNotRegress(t *testing.T) {
 
 // M2/M10: golden compiled from rulestest/goldens/idn.bicep. The Owner
 // assignment to the project identity has no principalType and is still
-// evaluated; the Owner through variables() is reported as unresolved with the
-// real cause (the compiled variables are not exposed); Contributor at the
-// account scope is evaluated and compliant; the parameter principal is
-// uncertain and named as such.
+// evaluated. The Owner whose role definition is held in variables('ownerRoleId')
+// is now resolved through the model's compiled variables and is reported too.
+// Contributor at the account scope is an info finding. Only the parameter
+// principal stays uncertain and is named as such.
 func TestCompiledIDN004GoldenNoPrincipalTypeAndVariables(t *testing.T) {
 	out := run(t, "FND-IDN-004", &sdk.Input{ARM: rulestest.Golden(t, "idn")})
-	if out.Skipped != nil || len(out.Findings) != 1 {
-		t.Fatalf("want the principalType-less project Owner finding, got %+v", out)
+	if out.Skipped != nil {
+		t.Fatalf("unexpected rule skip: %+v", out)
 	}
-	ev := out.Findings[0].Evidence
-	if !strings.Contains(ev, "Owner granted to an application identity at broad deployment scope") {
-		t.Errorf("evidence %q", ev)
+	owners, infos := 0, 0
+	for _, f := range out.Findings {
+		ev := f.Evidence
+		switch {
+		case strings.Contains(ev, "Owner granted to an application identity at broad deployment scope"):
+			owners++
+		case f.Severity == "info" && strings.Contains(ev, "Contributor"):
+			infos++
+		default:
+			t.Errorf("unexpected finding %q", ev)
+		}
+		if strings.Contains(ev, `""`) {
+			t.Errorf("evidence must not print an empty scope: %q", ev)
+		}
+		if strings.Contains(ev, "not evaluated") {
+			t.Errorf("evidence must not carry a note: %q", ev)
+		}
 	}
-	if strings.Contains(ev, `""`) {
-		t.Errorf("evidence must not print an empty scope: %q", ev)
-	}
-	// Unevaluated resources stay visible next to the finding (M3).
-	if strings.Contains(ev, "not evaluated") {
-		t.Errorf("evidence must not carry a note: %q", ev)
+	if owners != 2 || infos != 1 {
+		t.Fatalf("want 2 Owner findings (no principalType, role in variables()) and 1 info Contributor, got %d and %d: %+v", owners, infos, out.Findings)
 	}
 	var skips []string
 	for _, s := range out.Skips {
 		skips = append(skips, s.Reason)
 	}
 	all := strings.Join(skips, "\n")
-	for _, want := range []string{"variables('ownerRoleId')", "principalType is not set and principalId is not a provable Foundry identity"} {
-		if !strings.Contains(all, want) {
-			t.Errorf("skips lack %q: %q", want, all)
-		}
+	if !strings.Contains(all, "principalType is not set and principalId is not a provable Foundry identity") {
+		t.Errorf("skips lack the parameter-principal cause: %q", all)
+	}
+	if strings.Contains(all, "variables('ownerRoleId')") {
+		t.Errorf("the variable role id must be resolved now: %q", all)
 	}
 }
 

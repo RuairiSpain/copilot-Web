@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/armexpr"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/catalog"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/findings"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
@@ -199,7 +200,7 @@ func (e *Engine) Run(ctx context.Context, in *sdk.Input) (*Report, error) {
 			rep.Skipped = append(rep.Skipped, s)
 		}
 		for _, f := range res.Findings {
-			rep.Findings = append(rep.Findings, Enrich(f, cr, in.Profile, sev))
+			rep.Findings = append(rep.Findings, Enrich(capDefaultDerived(f, in.ARM), cr, in.Profile, sev))
 		}
 	}
 	rep.Findings, rep.Diagnostics = resolveFingerprintCollisions(rep.Findings)
@@ -312,6 +313,36 @@ func lowerSeverity(cat, override sdk.Severity, cr catalog.Rule) sdk.Severity {
 		return override
 	}
 	return cat
+}
+
+// defaultProvenance is implemented by the ARM model when it can say that a
+// resource's facts came from a parameter's Bicep default (applied because a
+// parameter file exists but does not set the parameter; ADR-018).
+type defaultProvenance interface {
+	FromDefault(sdk.ARMResource) []string
+}
+
+// capDefaultDerived lowers a finding's confidence to medium when the resource
+// it names took a fact from a parameter default. A default is not what the
+// deployment necessarily uses, so a finding built on it is not certain. The
+// evidence text and the fingerprint are left alone.
+func capDefaultDerived(f sdk.Finding, m sdk.ARMModel) sdk.Finding {
+	dp, ok := m.(defaultProvenance)
+	if !ok || m == nil || f.Resource.Name == "" {
+		return f
+	}
+	for _, r := range m.Resources() {
+		if !strings.EqualFold(r.Type, f.Resource.Type) || armexpr.StripScope(r.Name) != f.Resource.Name {
+			continue
+		}
+		if len(dp.FromDefault(r)) > 0 {
+			if f.Confidence.Rank() == 0 || f.Confidence.Rank() > sdk.ConfidenceMedium.Rank() {
+				f.Confidence = sdk.ConfidenceMedium
+			}
+			break
+		}
+	}
+	return f
 }
 
 // lowerConfidence applies a rule's per-finding confidence override: only a

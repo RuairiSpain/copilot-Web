@@ -140,13 +140,13 @@ func itoa(i int) string {
 
 func TestBuildParams(t *testing.T) {
 	ok := `{"parametersJson":"{\"parameters\":{\"deploySearch\":{\"value\":true},\"prefix\":{\"value\":\"dev\"}}}","templateJson":"{}"}`
-	run := func(res RunResult, err error) (ParamSet, error, *fakeRunner) {
+	run := func(res RunResult, err error) (ParamSet, *fakeRunner, error) {
 		fr := &fakeRunner{res: res, err: err}
 		c := Compiler{Tool: Tool{Path: "bicep"}, Runner: fr}
 		set, e := c.BuildParams(context.Background(), "/p/infra/main.bicepparam")
-		return set, e, fr
+		return set, fr, e
 	}
-	set, err, fr := run(RunResult{Stdout: []byte(ok)}, nil)
+	set, fr, err := run(RunResult{Stdout: []byte(ok)}, nil)
 	if err != nil || set.Values["deploySearch"] != true || set.Values["prefix"] != "dev" {
 		t.Fatalf("%v %v", set, err)
 	}
@@ -165,7 +165,7 @@ func TestBuildParams(t *testing.T) {
 		"start":     {RunResult{}, errors.New("exec: not found"), ParamBicepparamFailed},
 		"bad json":  {RunResult{Stdout: []byte(`{"parametersJson":"{nope"}`)}, nil, ParamMalformed},
 	} {
-		_, err, _ := run(c.res, c.err)
+		_, _, err := run(c.res, c.err)
 		if ReasonOf(err) != c.reason {
 			t.Errorf("%s: reason %q (%v), want %q", name, ReasonOf(err), err, c.reason)
 		}

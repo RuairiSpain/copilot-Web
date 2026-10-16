@@ -75,3 +75,38 @@ func TestEngineRejectsSkippedWithSkips(t *testing.T) {
 		t.Fatalf("skips = %+v", rep.Skipped)
 	}
 }
+
+type provModel struct {
+	res      []sdk.ARMResource
+	fromDflt map[string]bool
+}
+
+func (m provModel) Resources() []sdk.ARMResource { return m.res }
+func (m provModel) FromDefault(r sdk.ARMResource) []string {
+	if m.fromDflt[r.Name] {
+		return []string{"deploySearch"}
+	}
+	return nil
+}
+
+func TestCapDefaultDerivedLowersConfidenceOnly(t *testing.T) {
+	m := provModel{res: []sdk.ARMResource{{Type: "Microsoft.Search/searchServices", Name: "a"}, {Type: "Microsoft.Search/searchServices", Name: "b"}},
+		fromDflt: map[string]bool{"a": true}}
+	derived := sdk.Finding{Resource: sdk.ResourceRef{Type: "microsoft.search/searchservices", Name: "a"}, Evidence: "e"}
+	plain := sdk.Finding{Resource: sdk.ResourceRef{Type: "Microsoft.Search/searchServices", Name: "b"}, Evidence: "e"}
+	got := capDefaultDerived(derived, m)
+	if got.Confidence != sdk.ConfidenceMedium || got.Evidence != "e" {
+		t.Errorf("default-derived finding: confidence %q evidence %q", got.Confidence, got.Evidence)
+	}
+	if capDefaultDerived(plain, m).Confidence != "" {
+		t.Error("a finding on a resource not shaped by a default must be unchanged")
+	}
+	low := derived
+	low.Confidence = sdk.ConfidenceLow
+	if capDefaultDerived(low, m).Confidence != sdk.ConfidenceLow {
+		t.Error("an already lower confidence must stay lower")
+	}
+	if capDefaultDerived(derived, nil).Confidence != "" {
+		t.Error("a nil model must be tolerated")
+	}
+}

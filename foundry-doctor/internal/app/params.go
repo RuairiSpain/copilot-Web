@@ -49,7 +49,7 @@ func selectedEnv(root *os.Root, src Source) (vals map[string]string, known bool)
 	if src.Environment == "" {
 		return nil, false
 	}
-	all, _, st := readEnvFile(root, path.Join(project.AzureDir, src.Environment, ".env"))
+	all, _, _, st := readEnvFile(root, path.Join(project.AzureDir, src.Environment, ".env"))
 	if st != env.StatusOK {
 		return nil, false
 	}
