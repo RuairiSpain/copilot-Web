@@ -57,6 +57,19 @@ const (
 	ConfidenceLow    Confidence = "low"
 )
 
+// Rank orders confidences: low < medium < high. Unknown values rank 0.
+func (c Confidence) Rank() int {
+	switch c {
+	case ConfidenceLow:
+		return 1
+	case ConfidenceMedium:
+		return 2
+	case ConfidenceHigh:
+		return 3
+	}
+	return 0
+}
+
 // Category classifies a rule as must-have or nice-to-have.
 type Category string
 
@@ -90,29 +103,37 @@ type Suppression struct {
 
 // Finding is a single result. See PRD section 7.
 type Finding struct {
-	RuleID      string      `json:"ruleId"`
-	RuleVersion int         `json:"ruleVersion"`
-	Severity    Severity    `json:"severity"`
-	Category    Category    `json:"category,omitempty"`
-	Pillar      string      `json:"pillar,omitempty"`
-	Basis       []string    `json:"basis,omitempty"`
-	Profile     string      `json:"profile,omitempty"`
-	Resource    ResourceRef `json:"resource"`
+	RuleID      string `json:"ruleId"`
+	RuleVersion int    `json:"ruleVersion"`
+	// Severity is filled by the engine from the catalogue. A rule MAY set it to
+	// a LOWER severity than the catalogue value for this one finding (ADR-008
+	// amendment 3); the engine ignores a value that is not lower and ignores
+	// it for platform-basis rules. It never feeds the fingerprint.
+	Severity Severity    `json:"severity"`
+	Category Category    `json:"category,omitempty"`
+	Pillar   string      `json:"pillar,omitempty"`
+	Basis    []string    `json:"basis,omitempty"`
+	Profile  string      `json:"profile,omitempty"`
+	Resource ResourceRef `json:"resource"`
 	// Key is a rule-chosen stable discriminator (resource key, variable name,
 	// property path) that separates two findings of one rule on one resource.
 	// It is part of the fingerprint (ADR-008). It must not contain secret values.
-	Key            string       `json:"key,omitempty"`
-	Location       Location     `json:"location"`
-	Evidence       string       `json:"evidence,omitempty"`
-	Recommendation string       `json:"recommendation,omitempty"`
-	Fix            string       `json:"fix,omitempty"`
-	DocsURL        string       `json:"docsUrl,omitempty"`
-	LastVerified   string       `json:"lastVerified,omitempty"`
-	Confidence     Confidence   `json:"confidence,omitempty"`
-	Suppressed     *Suppression `json:"suppressed,omitempty"`
-	Baselined      bool         `json:"baselined,omitempty"`
-	Fingerprint    string       `json:"fingerprint"`
-	Adapter        string       `json:"adapter,omitempty"`
+	Key            string   `json:"key,omitempty"`
+	Location       Location `json:"location"`
+	Evidence       string   `json:"evidence,omitempty"`
+	Recommendation string   `json:"recommendation,omitempty"`
+	Fix            string   `json:"fix,omitempty"`
+	DocsURL        string   `json:"docsUrl,omitempty"`
+	LastVerified   string   `json:"lastVerified,omitempty"`
+	// Confidence is filled by the engine from the catalogue evidence confidence.
+	// A rule MAY set a LOWER confidence for this one finding (ADR-008
+	// amendment 3); a value that is not lower is ignored. It never feeds the
+	// fingerprint.
+	Confidence  Confidence   `json:"confidence,omitempty"`
+	Suppressed  *Suppression `json:"suppressed,omitempty"`
+	Baselined   bool         `json:"baselined,omitempty"`
+	Fingerprint string       `json:"fingerprint"`
+	Adapter     string       `json:"adapter,omitempty"`
 }
 
 // Skip reports a check that did not run. Skipped is never a pass.
@@ -153,6 +174,13 @@ type Result struct {
 	// Skipped, when non-nil, means the rule did not evaluate. Findings must
 	// then be empty.
 	Skipped *Skip
+	// Skips lists per-resource checks the rule could not evaluate while it
+	// still evaluated others. It may accompany Findings (or be set alone when
+	// the rule ran but nothing was reported). The engine reports each entry as
+	// a skip of the rule; skips never alter a finding or its fingerprint. It
+	// must not be combined with Skipped. Each Reason should start with a
+	// reason head (for example "unresolved-expression") and name the resource.
+	Skips []Skip
 }
 
 // Rule is implemented by packet B (and later) rule packages. Implementations

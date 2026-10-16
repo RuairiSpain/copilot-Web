@@ -89,8 +89,8 @@ func (o *outcome) result() sdk.Result {
 			}
 			return strings.Compare(a.Evidence, b.Evidence)
 		})
-		// sdk.Result cannot carry skips next to findings, so the first finding
-		// names the resources that were not evaluated (review M3).
+		// Resources that were not evaluated are returned as Skips next to the
+		// findings (review M3, ADR-008 amendment 3).
 		var unevaluated []string
 		unevaluated = append(unevaluated, o.skips...)
 		for _, n := range o.notes {
@@ -99,9 +99,8 @@ func (o *outcome) result() sdk.Result {
 		if len(unevaluated) > 0 {
 			slices.Sort(unevaluated)
 			unevaluated = unique(unevaluated)
-			o.findings[0].Evidence += armexpr.StripScope(fmt.Sprintf(" [note: %d resource check(s) not evaluated by this rule: %s]", len(unevaluated), strings.Join(unevaluated, "; ")))
 		}
-		return sdk.Result{Findings: o.findings}
+		return sdk.Result{Findings: o.findings, Skips: toSkips(unevaluated)}
 	}
 	if len(o.skips) > 0 {
 		slices.Sort(o.skips)
@@ -112,6 +111,15 @@ func (o *outcome) result() sdk.Result {
 		return sdk.Result{Skipped: &sdk.Skip{Reason: armexpr.StripScope("uncertain: " + strings.Join(unique(o.notes), "; "))}}
 	}
 	return sdk.Result{}
+}
+
+// toSkips turns unevaluated-resource reasons into per-resource skips.
+func toSkips(reasons []string) []sdk.Skip {
+	var out []sdk.Skip
+	for _, r := range reasons {
+		out = append(out, sdk.Skip{Reason: armexpr.StripScope(r)})
+	}
+	return out
 }
 
 func unique(in []string) []string {

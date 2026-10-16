@@ -260,7 +260,14 @@ func TestRules(t *testing.T) {
 			if len(out.Findings) != c.findings {
 				t.Fatalf("findings = %d want %d: %+v", len(out.Findings), c.findings, out.Findings)
 			}
-			if c.contains != "" && !strings.Contains(out.Findings[0].Evidence, c.contains) {
+			if c.contains == "not evaluated" {
+				if len(out.Skips) == 0 {
+					t.Errorf("want per-resource skips next to the finding, got none")
+				}
+				if strings.Contains(out.Findings[0].Evidence, "not evaluated") {
+					t.Errorf("evidence must not carry a note: %q", out.Findings[0].Evidence)
+				}
+			} else if c.contains != "" && !strings.Contains(out.Findings[0].Evidence, c.contains) {
 				t.Errorf("evidence %q lacks %q", out.Findings[0].Evidence, c.contains)
 			}
 			for _, f := range out.Findings {

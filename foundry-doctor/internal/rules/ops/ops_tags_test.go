@@ -97,8 +97,8 @@ func TestOPS004CompiledNoTagsAndExpressionTags(t *testing.T) {
 	if strings.Join(keys, ",") != strings.Join(want, ",") {
 		t.Fatalf("findings %v want %v", keys, want)
 	}
-	if !strings.Contains(out.Findings[0].Evidence, "exprtags: tags is an ARM expression") {
-		t.Errorf("first finding must keep the expression-valued resource visible: %q", out.Findings[0].Evidence)
+	if len(out.Skips) != 1 || !strings.Contains(out.Skips[0].Reason, "exprtags: tags is an ARM expression") {
+		t.Errorf("the expression-valued resource must stay visible as a skip: %+v", out.Skips)
 	}
 	// Only the expression resource: uncertain skip, never a pass.
 	only := tagModel{model: model{byName["exprtags"]}, expr: tm.expr}

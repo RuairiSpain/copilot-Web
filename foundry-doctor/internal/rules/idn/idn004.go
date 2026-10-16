@@ -296,7 +296,7 @@ func evalIDN004(in *sdk.Input) sdk.Result {
 	}
 	switch {
 	case len(a.fs) > 0:
-		return sdk.Result{Findings: withNotes(a.fs, a.notes)}
+		return withSkips(a.fs, a.notes)
 	case a.unresolved:
 		sort.Strings(reasons)
 		return skip(SkipUnresolved + ": " + strings.Join(dedupe(reasons), "; "))

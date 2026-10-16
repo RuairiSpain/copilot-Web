@@ -88,8 +88,8 @@ type acc struct {
 	// decided from the template.
 	scopeUncertain bool
 	// notes records, per resource, why a resource could not be evaluated. It is
-	// appended to the first finding when the rule has findings, so partially
-	// evaluated rules never hide the unevaluated resources (review M3).
+	// returned as Skips next to the findings, so partially evaluated rules
+	// never hide the unevaluated resources (review M3).
 	notes []string
 }
 
@@ -108,15 +108,19 @@ func shortName(n string) string {
 	return n
 }
 
-// withNotes attaches the unevaluated-resource note to the first finding.
-func withNotes(fs []sdk.Finding, notes []string) []sdk.Finding {
-	if len(fs) == 0 || len(notes) == 0 {
-		return fs
-	}
+// withSkips returns the findings together with one skip per resource that
+// could not be evaluated (ADR-008 amendment 3). Skips never alter a finding.
+func withSkips(fs []sdk.Finding, notes []string) sdk.Result {
 	sorted := append([]string(nil), notes...)
 	sort.Strings(sorted)
-	fs[0].Evidence += fmt.Sprintf(" [note: %d resource check(s) not evaluated by this rule: %s]", len(sorted), armexpr.StripScope(strings.Join(sorted, "; ")))
-	return fs
+	var skips []sdk.Skip
+	for i, n := range sorted {
+		if i > 0 && sorted[i-1] == n {
+			continue
+		}
+		skips = append(skips, sdk.Skip{Reason: armexpr.StripScope(n)})
+	}
+	return sdk.Result{Findings: fs, Skips: skips}
 }
 
 // maybe reports (and records) that r is deployed only under a condition or
@@ -152,7 +156,7 @@ func (a *acc) add(r sdk.ARMResource, evidence string) {
 func (a *acc) result() sdk.Result {
 	switch {
 	case len(a.fs) > 0:
-		return sdk.Result{Findings: withNotes(a.fs, a.notes)}
+		return withSkips(a.fs, a.notes)
 	case a.scopeUncertain:
 		return skip(foundrylink.SkipScopeUncertain)
 	case a.conditional:

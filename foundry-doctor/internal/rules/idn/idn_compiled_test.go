@@ -77,9 +77,17 @@ func TestCompiledIDN004GoldenNoPrincipalTypeAndVariables(t *testing.T) {
 		t.Errorf("evidence must not print an empty scope: %q", ev)
 	}
 	// Unevaluated resources stay visible next to the finding (M3).
-	for _, want := range []string{"not evaluated", "variables('ownerRoleId')", "principalType is not set and principalId is not a provable Foundry identity"} {
-		if !strings.Contains(ev, want) {
-			t.Errorf("evidence lacks %q: %q", want, ev)
+	if strings.Contains(ev, "not evaluated") {
+		t.Errorf("evidence must not carry a note: %q", ev)
+	}
+	var skips []string
+	for _, s := range out.Skips {
+		skips = append(skips, s.Reason)
+	}
+	all := strings.Join(skips, "\n")
+	for _, want := range []string{"variables('ownerRoleId')", "principalType is not set and principalId is not a provable Foundry identity"} {
+		if !strings.Contains(all, want) {
+			t.Errorf("skips lack %q: %q", want, all)
 		}
 	}
 }
@@ -126,7 +134,11 @@ func TestIDN004ResolvesLiteralVariableRoleWhenModelExposesVariables(t *testing.T
 	// A variable that is itself an expression is reported with that cause.
 	vm.vars["ownerRoleId"] = "[parameters('x')]"
 	out = run(t, "FND-IDN-004", &sdk.Input{ARM: vm})
-	if len(out.Findings) != 1 || !strings.Contains(out.Findings[0].Evidence, "not a literal string") {
+	hasCause := false
+	for _, sk := range out.Skips {
+		hasCause = hasCause || strings.Contains(sk.Reason, "not a literal string")
+	}
+	if len(out.Findings) != 1 || !hasCause {
 		t.Fatalf("got %+v", out)
 	}
 }
