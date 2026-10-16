@@ -61,6 +61,19 @@ type Options struct {
 	// a module has the same hash as the module file compiled on its own. It is
 	// consulted when Modules has no entry for the deployment name.
 	ModuleHashes map[string]string
+	// Parameters are deployment parameter values for the ROOT template, from
+	// a parameter file (ADR-015). A string, bool or integer value of a
+	// non-secure parameter replaces parameters('name') in every expression
+	// before the module bindings are substituted. A key mapped to nil is set
+	// but unresolved (an unresolved ${VAR}, an object, a Key Vault
+	// reference): it is neither injected nor replaced by the default.
+	Parameters map[string]any
+	// ParametersProvided reports that a parameter file exists and was read.
+	// Only then is a literal Bicep default of an unset parameter applied; the
+	// resources it reaches record the parameter as default-derived
+	// (Model.FromDefault, Placement.DefaultParams). An expression default
+	// (resourceGroup().location) is never applied.
+	ParametersProvided bool
 }
 
 // Placement is the template-structure detail of one model resource. The
@@ -83,6 +96,11 @@ type Placement struct {
 	// module's dependsOn. Every resource declared in such a module (or below
 	// it) is a dependency.
 	ModuleDeps []string
+	// DefaultParams are the root template parameters whose literal Bicep
+	// default, not a parameter-file value, shaped this resource's name,
+	// region, condition, properties or the module bindings it inherits.
+	// Sorted. Facts derived from them carry less certainty than file values.
+	DefaultParams []string
 }
 
 // Model implements sdk.ARMModel.
@@ -91,6 +109,46 @@ type Model struct {
 	placements []Placement
 	outputs    []sdk.ARMOutput
 	truncated  bool
+	// meta is keyed by resourceKey: ARMResource holds maps and cannot key a
+	// map itself.
+	meta map[string]resMeta
+	// vars are the root template variables; varTx injects the root parameter
+	// values into one of their expressions.
+	vars  map[string]json.RawMessage
+	varTx func(string) string
+}
+
+// resMeta is per-resource detail that sdk.ARMResource does not carry.
+type resMeta struct {
+	tagsExpr bool
+	defaults []string
+}
+
+// resourceKey identifies a model resource by the text rules see. Two
+// resources with equal keys share their (merged) metadata.
+func resourceKey(r sdk.ARMResource) string {
+	return r.Type + "\x00" + r.Name + "\x00" + r.Location.File + "\x00" + r.Region + "\x00" + r.Condition + "\x00" + r.Scope
+}
+
+// TagsAreExpression reports whether the resource's top-level tags property is
+// an ARM expression (tags: tags, union(tags, ...)) that the model could not
+// resolve to an object, as opposed to absent tags. Resource.Tags is empty in
+// both cases. A resource not in the model returns false.
+func (m *Model) TagsAreExpression(r sdk.ARMResource) bool {
+	if m == nil {
+		return false
+	}
+	return m.meta[resourceKey(r)].tagsExpr
+}
+
+// FromDefault returns the names of the root parameters whose literal default
+// (applied because a parameter file exists but does not set them) shaped the
+// resource, sorted; nil when none did.
+func (m *Model) FromDefault(r sdk.ARMResource) []string {
+	if m == nil {
+		return nil
+	}
+	return append([]string(nil), m.meta[resourceKey(r)].defaults...)
 }
 
 var (
@@ -130,6 +188,7 @@ func (m *Model) Placements() []Placement {
 	for i, p := range m.placements {
 		p.DependsOn = append([]string(nil), p.DependsOn...)
 		p.ModuleDeps = append([]string(nil), p.ModuleDeps...)
+		p.DefaultParams = append([]string(nil), p.DefaultParams...)
 		out[i] = p
 	}
 	return out
@@ -147,6 +206,45 @@ func FromARM(raw []byte, opt Options) (*Model, error) {
 // budget tracks the work and retained text of one model build.
 type budget struct {
 	subst, text int
+	// cur collects the names of default-derived root parameters substituted
+	// while it is non-nil (see collect).
+	cur map[string]bool
+}
+
+// note records a default-derived parameter use in the current collection.
+func (b *budget) note(names ...string) {
+	if b.cur == nil {
+		return
+	}
+	for _, n := range names {
+		b.cur[n] = true
+	}
+}
+
+// collect runs f and returns the sorted default-derived parameter names it
+// substituted. The names also propagate to an enclosing collection.
+func (b *budget) collect(f func()) []string {
+	prev := b.cur
+	b.cur = map[string]bool{}
+	f()
+	got := b.cur
+	b.cur = prev
+	names := make([]string, 0, len(got))
+	for n := range got {
+		names = append(names, n)
+		if prev != nil {
+			prev[n] = true
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+// binding is the text a parameter is replaced by, with the default-derived
+// root parameters it contains.
+type binding struct {
+	text     string
+	defaults []string
 }
 
 // scope is the evaluation context of one (nested) template.
@@ -161,6 +259,9 @@ type scope struct {
 	cond  string
 	// looped: an ancestor module is deployed through a copy loop.
 	looped bool
+	// defaults are the default-derived root parameters behind the ancestor
+	// modules' condition and loop.
+	defaults []string
 	// deps and modDeps are the ancestor modules' dependsOn entries, in the
 	// entry template's terms; they apply to every descendant resource.
 	deps, modDeps []string
@@ -202,13 +303,19 @@ func FromTemplate(t *bicep.Template, raw []byte, opt Options) (*Model, error) {
 	if err := json.Unmarshal(raw, &doc); err != nil {
 		return nil, err
 	}
-	m := &Model{}
+	m := &Model{meta: map[string]resMeta{}}
 	for _, o := range t.Outputs {
 		m.outputs = append(m.outputs, sdk.ARMOutput{Name: o.Name, Type: o.Type})
 	}
 	mapper := bicep.Mapper{Entry: opt.Entry, Modules: opt.Modules}
 	usedPaths := map[string]bool{}
 	bud := &budget{}
+	rootTx := injector(rootBindings(t, opt), bud)
+	m.vars = map[string]json.RawMessage{}
+	for _, v := range t.Variables {
+		m.vars[strings.ToLower(v.Name)] = v.Value
+	}
+	m.varTx = rootTx
 	var walk func(t *bicep.Template, sc scope, ancestors []bicep.Resource)
 	walk = func(t *bicep.Template, sc scope, ancestors []bicep.Resource) {
 		symbolic := map[string]bool{}
@@ -279,13 +386,20 @@ func FromTemplate(t *bicep.Template, raw []byte, opt Options) (*Model, error) {
 			if sc.file != "" {
 				loc.File = sc.file
 			}
-			res := toResource(r, resolve(doc, r.Pointer), loc, sc)
+			node := resolve(doc, r.Pointer)
+			var res sdk.ARMResource
+			used := bud.collect(func() { res = toResource(r, node, loc, sc) })
+			used = union(used, sc.defaults)
 			bud.text += resourceBytes(res)
 			m.resources = append(m.resources, res)
-			m.placements = append(m.placements, placement(r, sc, symbolic, mods))
+			pl := placement(r, sc, symbolic, mods)
+			pl.DefaultParams = used
+			m.placements = append(m.placements, pl)
+			tags, _ := node["tags"].(string)
+			m.addMeta(res, armexpr.IsExpression(tags) && len(res.Tags) == 0, used)
 		}
 	}
-	walk(t, scope{tx: func(s string) string { return s }, bud: bud}, nil)
+	walk(t, scope{tx: rootTx, bud: bud}, nil)
 	return m, nil
 }
 
@@ -401,10 +515,13 @@ func qualifySymbol(sym, path string) string {
 // childScope builds the scope of the template nested in module deployment r
 // (deployment path path), declared in sc.
 func childScope(sc scope, r bicep.Resource, path string, props moduleProperties, bud *budget) scope {
-	pr := armexpr.PresenceOf(r.Conditional, sc.tx(r.Condition), r.Copy != nil)
-	ch := scope{never: sc.never || pr == armexpr.NotDeployed, looped: sc.looped || r.Copy != nil, maybe: sc.maybe, cond: sc.cond, bud: bud}
+	var condText string
+	condDefaults := bud.collect(func() { condText = sc.tx(r.Condition) })
+	pr := armexpr.PresenceOf(r.Conditional, condText, r.Copy != nil)
+	ch := scope{never: sc.never || pr == armexpr.NotDeployed, looped: sc.looped || r.Copy != nil, maybe: sc.maybe, cond: sc.cond, bud: bud,
+		defaults: union(sc.defaults, condDefaults)}
 	if !ch.maybe && r.Conditional && pr == armexpr.MaybeDeployed && r.Copy == nil {
-		ch.maybe, ch.cond = true, sc.tx(r.Condition)
+		ch.maybe, ch.cond = true, condText
 	}
 
 	if props.outer {
@@ -421,7 +538,7 @@ func childScope(sc scope, r bicep.Resource, path string, props moduleProperties,
 			secure[strings.ToLower(p.Name)] = true
 		}
 	}
-	bound := map[string]string{}
+	bound := map[string]binding{}
 	names := make([]string, 0, len(props.params))
 	for name := range props.params {
 		names = append(names, name)
@@ -431,23 +548,31 @@ func childScope(sc scope, r bicep.Resource, path string, props moduleProperties,
 		if secure[strings.ToLower(name)] {
 			continue
 		}
-		if repl, ok := bindingText(props.params[name], sc.tx); ok && len(repl) <= MaxBindingBytes {
-			bound[strings.ToLower(name)] = repl
+		var repl string
+		var ok bool
+		defs := bud.collect(func() { repl, ok = bindingText(props.params[name], sc.tx) })
+		if ok && len(repl) <= MaxBindingBytes {
+			bound[strings.ToLower(name)] = binding{text: repl, defaults: defs}
 		}
 	}
 	local := func(s string) string {
 		used := 0
-		return armexpr.RewriteRefs(s, func(kind, name string) (string, bool) {
+		out := armexpr.RewriteRefs(s, func(kind, name string) (string, bool) {
 			if kind == armexpr.RefParameter {
-				if repl, ok := bound[strings.ToLower(name)]; ok &&
-					used+len(repl) <= MaxExprBytes && bud.subst+len(repl) <= MaxSubstitutedBytes {
-					used += len(repl)
-					bud.subst += len(repl)
-					return repl, true
+				if b, ok := bound[strings.ToLower(name)]; ok &&
+					used+len(b.text) <= MaxExprBytes && bud.subst+len(b.text) <= MaxSubstitutedBytes {
+					used += len(b.text)
+					bud.subst += len(b.text)
+					bud.note(b.defaults...)
+					return b.text, true
 				}
 			}
 			return kind + "(" + armexpr.QuoteLiteral(armexpr.ScopedName(name, path)) + ")", true
 		})
+		if out != s {
+			out = armexpr.Simplify(out)
+		}
+		return out
 	}
 	ch.tx = local
 	return ch
@@ -610,7 +735,13 @@ func normalizeLiteralRef(s string) string {
 func normalizeValue(v any, tx func(string) string) any {
 	switch x := v.(type) {
 	case string:
-		return tx(x)
+		r := tx(x)
+		if r != x && armexpr.IsExpression(r) {
+			// A substitution made the expression literal: give a number or
+			// boolean its JSON type, as if the template had written it.
+			return armexpr.SimplifyValue(r)
+		}
+		return r
 	case map[string]any:
 		out := make(map[string]any, len(x))
 		for k, v := range x {

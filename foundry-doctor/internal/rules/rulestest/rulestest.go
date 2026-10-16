@@ -51,6 +51,20 @@ func Scenario(t testing.TB, name string) *armmodel.Model {
 	return m
 }
 
+// ScenarioWith is Scenario with explicit model options (parameter values,
+// module hashes). An empty opt.Entry becomes main.bicep.
+func ScenarioWith(t testing.TB, name string, opt armmodel.Options) *armmodel.Model {
+	t.Helper()
+	if opt.Entry == "" {
+		opt.Entry = "main.bicep"
+	}
+	m, err := armmodel.FromARM(ScenarioJSON(t, name), opt)
+	if err != nil {
+		t.Fatalf("load scenario %q: %v", name, err)
+	}
+	return m
+}
+
 // JSON returns a copy of the golden compiled ARM template.
 func JSON() []byte { return append([]byte(nil), mainJSON...) }
 
