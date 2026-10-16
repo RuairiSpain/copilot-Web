@@ -327,15 +327,15 @@ func evalIDN004(in *sdk.Input) sdk.Result {
 		case lvl == armexpr.ScopeResource:
 			// Contributor at the scope of a single Foundry resource whose
 			// account provably disables key authentication is informational
-			// (catalogue product decision: Foundry sources list Contributor as
-			// the minimum role for some tools). Contributor at any other
+			// (catalogue product decision, see FND-IDN-004 notes; Contributor can
+			// re-enable local auth and list keys, which the finding text says). Contributor at any other
 			// resource keeps the catalogue severity, and one at a Foundry
 			// resource whose local auth is not provably disabled is a warning.
 			// The rule only lowers severity; the engine never raises it.
 			kind, localAuthOff := foundryScopeState(in, r.Scope)
 			switch {
 			case kind == scopeFoundry && localAuthOff:
-				a.addKey(r, "scope:"+role, fmt.Sprintf("Contributor granted to an application identity at resource %s; informational only because the Foundry account has disableLocalAuth true, a narrower Foundry role is preferred%s", scopeDescription(r.Scope), condNote))
+				a.addKey(r, "scope:"+role, fmt.Sprintf("Contributor granted to an application identity at resource %s; informational only because the Foundry account has disableLocalAuth true; this is a policy choice, not proof of safety, because Contributor can set disableLocalAuth back to false and list the account keys; a narrower Foundry role is preferred%s", scopeDescription(r.Scope), condNote))
 				a.fs[len(a.fs)-1].Severity = sdk.SeverityInfo
 			case kind == scopeFoundry:
 				a.addKey(r, "scope:"+role, fmt.Sprintf("Contributor granted to an application identity at resource %s; not downgraded to info because disableLocalAuth is not provably true on the Foundry account%s", scopeDescription(r.Scope), condNote))

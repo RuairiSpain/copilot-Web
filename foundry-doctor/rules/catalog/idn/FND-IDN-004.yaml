@@ -1,5 +1,5 @@
 id: FND-IDN-004
-version: 5
+version: 6
 group: IDN
 title: "No broad Owner/Contributor for application identities"
 description: >-
@@ -110,9 +110,9 @@ sources:
       articles/foundry/agents/quickstarts/set-up-cicd-hosted-agent.md; retrieved 2026-10-04
     note: The Foundry CI/CD quickstart assigns Foundry User and Contributor on the target project to the workflow identity, which is why pipeline identities are separate from application identities.
   - url: https://learn.microsoft.com/azure/role-based-access-control/built-in-roles
-    lastVerified: "2026-10-04"
-    verifiedVia: https://learn.microsoft.com/azure/role-based-access-control/built-in-roles and https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/role-based-access-control/built-in-roles/privileged.md (branch URL, not commit-pinned); (ms.date 07/01/2026; role id fields)
-    note: Role definition GUIDs.
+    lastVerified: "2026-10-16"
+    verifiedVia: https://learn.microsoft.com/azure/role-based-access-control/built-in-roles and https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/role-based-access-control/built-in-roles/privileged.md (branch URL, not commit-pinned; Contributor description re-read 2026-10-16)
+    note: Role definition GUIDs. Contributor grants full access to manage all resources, except assigning roles in Azure RBAC, managing assignments in Azure Blueprints and sharing image galleries.
 overlap:
   decision: native
   provisional: true
@@ -163,7 +163,7 @@ tests:
     - identity-is-both-application-and-deployment
     - rbac-administrator-with-unresolved-condition
 notes: >-
-  Review M2 and M10: the principal is classified first, so a role assignment without principalType whose principalId is provably a Foundry identity is evaluated; the skip reason names the real cause. A role definition ID held in variables() is resolved only when the ARM model exposes the compiled variables, otherwise the reason says so. The scope of an assignment without a scope property is printed as the deployment scope. Contributor at the scope of one Foundry resource is reported as an info finding through the per-finding severity override (ADR-008 amendment 3); the earlier version evaluated it silently because the engine could not lower severity. Version 4. Version 5 (review P1, P1b): the info downgrade applies only to the Foundry account and project resource types, and only when disableLocalAuth is provably true on the account; Contributor on a Foundry resource without that proof is a warning, and Contributor on any other resource keeps the catalogue severity.
+  Review M2 and M10: the principal is classified first, so a role assignment without principalType whose principalId is provably a Foundry identity is evaluated; the skip reason names the real cause. A role definition ID held in variables() is resolved only when the ARM model exposes the compiled variables, otherwise the reason says so. The scope of an assignment without a scope property is printed as the deployment scope. Contributor at the scope of one Foundry resource is reported as an info finding through the per-finding severity override (ADR-008 amendment 3); the earlier version evaluated it silently because the engine could not lower severity. Version 4. Version 6 (Azure review N5): the info finding text states that Contributor on the account can set disableLocalAuth back to false and list keys (it manages all resources except RBAC assignments), so info is a policy choice and not proof of safety. Version 5 (review P1, P1b): the info downgrade applies only to the Foundry account and project resource types, and only when disableLocalAuth is provably true on the account; Contributor on a Foundry resource without that proof is a warning, and Contributor on any other resource keeps the catalogue severity.
   Unverified: Defender for Cloud (Defender CSPM permission management) recommendations about
   overprivileged identities; no Defender reference was in the local sources. Product decision inside
   a verified rule: Contributor at the scope of a single Foundry resource with local auth disabled is info, not a

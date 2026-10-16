@@ -168,3 +168,28 @@ func TestVariableFoldingFanOutIsBounded(t *testing.T) {
 		t.Errorf("oversize variable must stay unresolved, presence %v", got)
 	}
 }
+
+// Bicep == and equals() compare strings case-sensitively: `if (mode == 'Deploy')`
+// with the parameter-file value `deploy` means the resource is not deployed.
+func TestConditionStringComparisonIsCaseSensitive(t *testing.T) {
+	const cond = "[equals(parameters('p'), 'Deploy')]"
+	for _, tc := range []struct {
+		value string
+		want  armexpr.Presence
+	}{
+		{"Deploy", armexpr.Deployed},
+		{"deploy", armexpr.NotDeployed},
+		{"DEPLOY", armexpr.NotDeployed},
+	} {
+		t.Run(tc.value, func(t *testing.T) {
+			opt := armmodel.Options{ParametersProvided: true, Parameters: map[string]any{"p": tc.value}}
+			m, err := armmodel.FromARM(tmpl("", cond), opt)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := presence(m.Resources()[0]); got != tc.want {
+				t.Errorf("value %q: presence %v want %v", tc.value, got, tc.want)
+			}
+		})
+	}
+}

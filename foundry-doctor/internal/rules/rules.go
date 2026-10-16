@@ -371,6 +371,12 @@ func capDefaultDerived(f sdk.Finding, m sdk.ARMModel) sdk.Finding {
 
 // defaultFeedsFinding reports whether one of the default-shaped paths is the
 // condition or is named in the finding's Key or Evidence.
+//
+// Limitation (ADR-018 amendment 3): it matches the property name as a
+// lower-cased substring of Key and Evidence, so it cannot know which
+// properties a rule read. A rule that reads a defaulted property without
+// naming it is not capped; each such rule needs a test that its finding names
+// the property (see FND-NET-001's TestNET001FindingNamesTheDefaultedProperties).
 func defaultFeedsFinding(paths []string, f sdk.Finding) bool {
 	text := strings.ToLower(f.Key + "\n" + f.Evidence)
 	for _, p := range paths {
