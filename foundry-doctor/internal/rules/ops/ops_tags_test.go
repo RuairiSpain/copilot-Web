@@ -65,7 +65,7 @@ func TestOPS004PolicyKeyMissingAndEmpty(t *testing.T) {
 			t.Errorf("%s: want profile-key-missing skip, got %+v", name, out)
 		}
 	}
-	if out := eval(t, "FND-OPS-004", Providers{}, &sdk.Input{Policy: realPolicy()}); out.Skipped == nil || out.Skipped.Reason != sdk.SkipInputUnavailable {
+	if out := eval(t, "FND-OPS-004", Providers{}, &sdk.Input{Policy: realPolicy()}); out.Skipped == nil || !strings.HasPrefix(out.Skipped.Reason, sdk.SkipInputUnavailable+": ") {
 		t.Errorf("no ARM: %+v", out)
 	}
 }

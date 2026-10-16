@@ -186,7 +186,7 @@ func uncertain(id string, notes []string) sdk.Result {
 }
 
 func skip(id string) sdk.Result {
-	return sdk.Result{Skipped: &sdk.Skip{RuleID: id, Reason: sdk.SkipInputUnavailable}}
+	return sdk.Result{Skipped: &sdk.Skip{RuleID: id, Reason: sdk.SkipInputUnavailable + ": no azd environment provider is wired for this run"}}
 }
 
 // Register returns rules with no provider; they skip until wired.
@@ -250,6 +250,8 @@ func eval001(_ context.Context, _ *sdk.Input, envs []Environment) outcome {
 			out.notes = append(out.notes, fmt.Sprintf("azure.yaml sets a literal %s; the azd schema does not say whether that defeats environment isolation", strings.Join(services, ", ")))
 		}
 	}
+	// A service-level literal is identical in every environment; say it once.
+	out.notes = dedupe(out.notes)
 	return out
 }
 

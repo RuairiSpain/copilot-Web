@@ -1,5 +1,5 @@
 id: FND-CFG-012
-version: 2
+version: 3
 group: CFG
 title: "Azure region values are valid"
 description: >-
@@ -105,3 +105,6 @@ notes: >-
   it as uncertain in every profile (never an error). Only an empty AZURE_LOCATION is a finding. Without a usable
   environment the rule skips with input-unavailable and a named reason (no-environment-selected, env-file-missing,
   default-environment-not-found).
+  Version 3: a value built by variable expansion in the .env file (for example AZURE_LOCATION=${X}) is uncertain, not
+  empty: the .env parser (godotenv grammar) expands an undefined variable to an empty string, so the parsed value does not
+  show the intent.

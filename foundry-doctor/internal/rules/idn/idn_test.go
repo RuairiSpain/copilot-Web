@@ -76,7 +76,7 @@ func TestNilInputsSkip(t *testing.T) {
 	for _, r := range Register() {
 		for name, in := range map[string]*sdk.Input{"nil input": nil, "nil ARM": {}} {
 			out, err := r.Evaluate(context.Background(), in)
-			if err != nil || out.Skipped == nil || out.Skipped.Reason != sdk.SkipInputUnavailable || len(out.Findings) != 0 {
+			if err != nil || out.Skipped == nil || !strings.HasPrefix(out.Skipped.Reason, sdk.SkipInputUnavailable+": ") || len(out.Findings) != 0 {
 				t.Errorf("%s %s: got %+v err=%v", r.ID(), name, out, err)
 			}
 		}
@@ -285,7 +285,7 @@ func TestIDN004DeploymentIdentityExclusion(t *testing.T) {
 		Policy: fakePolicy{"identity.deploymentPrincipalIds": []string{guidA}},
 	}
 	out := run(t, "FND-IDN-004", in)
-	if out.Skipped == nil || out.Skipped.Reason != sdk.SkipInputUnavailable {
+	if out.Skipped == nil || !strings.HasPrefix(out.Skipped.Reason, sdk.SkipInputUnavailable+": ") {
 		t.Fatalf("want input-unavailable skip after exclusion, got %+v", out)
 	}
 }

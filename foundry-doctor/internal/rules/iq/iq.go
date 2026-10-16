@@ -441,7 +441,7 @@ func eval007(in *sdk.Input) sdk.Result {
 	}
 	a := &acc{}
 	if len(snap.Bases) == 0 && len(snap.Sources) == 0 {
-		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable}}
+		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable + ": no Foundry IQ knowledge base or knowledge source in the input"}}
 	}
 	for _, source := range snap.Sources {
 		versionKnown, supported := supportedKnowledgeSource(source.APIVersion, source.Kind)
@@ -528,7 +528,7 @@ func eval008(in *sdk.Input) sdk.Result {
 		}
 	}
 	if !seen {
-		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable}}
+		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable + ": no Foundry IQ knowledge base MCP connection in the input"}}
 	}
 	return a.result()
 }
@@ -598,7 +598,7 @@ func eval010(in *sdk.Input) sdk.Result {
 		}
 	}
 	if !seen {
-		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable}}
+		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable + ": no ADLS Gen2 knowledge source in the input"}}
 	}
 	return a.result()
 }
@@ -675,7 +675,7 @@ func eval012(in *sdk.Input) sdk.Result {
 }
 
 func skipUnavailable() sdk.Result {
-	return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable}}
+	return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable + ": no Foundry IQ index metadata input"}}
 }
 
 func locOf(source runtimeiq.KnowledgeSource) sdk.Location { return source.Location }

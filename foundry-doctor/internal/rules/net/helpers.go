@@ -532,7 +532,7 @@ func (o *outcome) result() sdk.Result {
 
 func noARM(id string, in *sdk.Input) (sdk.Result, bool) {
 	if in == nil || in.ARM == nil {
-		return sdk.Result{Skipped: &sdk.Skip{RuleID: id, Reason: sdk.SkipInputUnavailable}}, true
+		return sdk.Result{Skipped: &sdk.Skip{RuleID: id, Reason: sdk.SkipInputUnavailable + ": compiled ARM model unavailable"}}, true
 	}
 	return sdk.Result{}, false
 }

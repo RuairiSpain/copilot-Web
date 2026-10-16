@@ -142,7 +142,7 @@ func TestRules(t *testing.T) {
 func TestNilInputSkips(t *testing.T) {
 	for _, r := range RegisterWith(prov{{Name: "a"}, {Name: "b"}}) {
 		res, err := r.Evaluate(context.Background(), nil)
-		if err != nil || res.Skipped == nil || res.Skipped.Reason != sdk.SkipInputUnavailable {
+		if err != nil || res.Skipped == nil || !strings.HasPrefix(res.Skipped.Reason, sdk.SkipInputUnavailable+": ") {
 			t.Errorf("%s: %+v %v", r.ID(), res, err)
 		}
 	}

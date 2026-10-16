@@ -243,13 +243,13 @@ func TestSkipReasonsAreNamed(t *testing.T) {
 	t.Run("010 without the ARM model is input-unavailable", func(t *testing.T) {
 		y := "services:\n  a:\n    host: azure.ai.agent\n    kind: prompt\n"
 		res := run(t, find(Register(), "FND-CFG-010"), &sdk.Input{AzureYAML: doc(t, y)})
-		if res.Skipped == nil || res.Skipped.Reason != sdk.SkipInputUnavailable {
+		if res.Skipped == nil || !strings.HasPrefix(res.Skipped.Reason, sdk.SkipInputUnavailable+": ") {
 			t.Fatalf("got %+v", res.Skipped)
 		}
 	})
 	t.Run("010 without any input stays input-unavailable", func(t *testing.T) {
 		res := run(t, find(Register(), "FND-CFG-010"), &sdk.Input{})
-		if res.Skipped == nil || res.Skipped.Reason != sdk.SkipInputUnavailable {
+		if res.Skipped == nil || !strings.HasPrefix(res.Skipped.Reason, sdk.SkipInputUnavailable+": ") {
 			t.Fatalf("got %+v", res.Skipped)
 		}
 	})

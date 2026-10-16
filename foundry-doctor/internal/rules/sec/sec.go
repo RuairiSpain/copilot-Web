@@ -77,7 +77,7 @@ func notApplicable() sdk.Result {
 }
 
 func unavailable() sdk.Result {
-	return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable}}
+	return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable + ": compiled ARM model unavailable"}}
 }
 
 func skip(reason string) sdk.Result { return sdk.Result{Skipped: &sdk.Skip{Reason: reason}} }

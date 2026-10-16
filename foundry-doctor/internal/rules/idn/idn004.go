@@ -305,9 +305,9 @@ func evalIDN004(in *sdk.Input) sdk.Result {
 	case evaluated:
 		return sdk.Result{}
 	case excludedOnly:
-		return skip(sdk.SkipInputUnavailable)
+		return skip(sdk.SkipInputUnavailable + ": only excluded role assignments were found, so no assignment could be evaluated")
 	case missingData:
-		return skip(sdk.SkipInputUnavailable)
+		return skip(sdk.SkipInputUnavailable + ": role assignment data missing from the compiled ARM model")
 	default:
 		return sdk.Result{}
 	}

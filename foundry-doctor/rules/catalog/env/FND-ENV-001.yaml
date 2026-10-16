@@ -1,5 +1,5 @@
 id: FND-ENV-001
-version: 3
+version: 4
 group: ENV
 title: "Environments do not unintentionally share resource groups"
 description: >-
@@ -143,3 +143,4 @@ notes: >-
   port of the godotenv v1.5.1 grammar (internal/project/dotenv.go), checked against the module's output on a
   26-input corpus; the module is not a dependency. .azure/config.json defaultEnvironment is read by project
   discovery to select the environment for the FND-CFG rules; this rule compares every environment directory (at most 100).
+  Version 4: the uncertain note for a service-level literal resourceGroup is reported once, not once per environment.

@@ -52,7 +52,7 @@ func (r rule) Evaluate(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 		return sdk.Result{}, fmt.Errorf("%s: %w", r.id, err)
 	}
 	if in == nil {
-		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable}}, nil
+		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable + ": no rule input"}}, nil
 	}
 	return r.fn(in, r.p), nil
 }
@@ -440,7 +440,7 @@ func isWorkspaceRef(ws string) bool {
 
 func eval001(in *sdk.Input, _ Providers) sdk.Result {
 	if in.ARM == nil {
-		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable}}
+		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable + ": compiled ARM model unavailable"}}
 	}
 	if managed := policyStrings(in, "managedByAzurePolicy"); slices.Contains(managed, "diagnostic-settings") {
 		return sdk.Result{Skipped: &sdk.Skip{Reason: "policy-managed"}}
@@ -551,7 +551,7 @@ func eval002(_ *sdk.Input, _ Providers) sdk.Result {
 
 func eval003(in *sdk.Input, _ Providers) sdk.Result {
 	if in.ARM == nil {
-		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable}}
+		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable + ": compiled ARM model unavailable"}}
 	}
 	o := &outcome{}
 	v := newView(in)
@@ -646,7 +646,7 @@ type tagExpressionReporter interface {
 
 func eval004(in *sdk.Input, _ Providers) sdk.Result {
 	if in.ARM == nil {
-		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable}}
+		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable + ": compiled ARM model unavailable"}}
 	}
 	reqsAny, ok := func() (any, bool) {
 		if in.Policy == nil {
@@ -739,7 +739,7 @@ var (
 
 func eval005(in *sdk.Input, _ Providers) sdk.Result {
 	if in.ARM == nil {
-		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable}}
+		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable + ": compiled ARM model unavailable"}}
 	}
 	o := &outcome{}
 	namedTypes := []string{
@@ -810,7 +810,7 @@ func eval005(in *sdk.Input, _ Providers) sdk.Result {
 
 func eval006(in *sdk.Input, _ Providers) sdk.Result {
 	if in.ARM == nil {
-		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable}}
+		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable + ": compiled ARM model unavailable"}}
 	}
 	minDays, ok := policyInt(in, "logRetention.minimumDays")
 	if !ok {
@@ -1001,7 +1001,7 @@ func eval009(in *sdk.Input, _ Providers) sdk.Result {
 	scope, _ := scopeAny.(string)
 	scope = strings.ToLower(strings.TrimSpace(scope))
 	if in.ARM == nil {
-		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable}}
+		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable + ": compiled ARM model unavailable"}}
 	}
 	skuAllow := map[string]bool{}
 	for _, s := range policyStrings(in, "dataResidency.deploymentSkus") {

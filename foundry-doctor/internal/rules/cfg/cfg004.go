@@ -80,7 +80,7 @@ func parseGiB(s string) (float64, quantity) {
 func evalCFG004(in *sdk.Input, p Providers) sdk.Result {
 	d, okd := loadDoc(in)
 	if !okd {
-		return skip(sdk.SkipInputUnavailable)
+		return skip(sdk.SkipInputUnavailable + ": azure.yaml unavailable")
 	}
 	svcs := serviceList(d)
 	all := byName(svcs)

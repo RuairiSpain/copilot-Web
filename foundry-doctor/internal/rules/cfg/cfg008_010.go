@@ -15,7 +15,7 @@ import (
 func evalCFG008(in *sdk.Input) sdk.Result {
 	d, okd := loadDoc(in)
 	if !okd {
-		return skip(sdk.SkipInputUnavailable)
+		return skip(sdk.SkipInputUnavailable + ": azure.yaml unavailable")
 	}
 	var (
 		fs        []sdk.Finding
@@ -82,7 +82,7 @@ func evalCFG008(in *sdk.Input) sdk.Result {
 func evalCFG009(in *sdk.Input) sdk.Result {
 	d, okd := loadDoc(in)
 	if !okd {
-		return skip(sdk.SkipInputUnavailable)
+		return skip(sdk.SkipInputUnavailable + ": azure.yaml unavailable")
 	}
 	st := cfgState{}
 	for _, s := range serviceList(d) {
@@ -237,7 +237,7 @@ func evalCFG010(in *sdk.Input) sdk.Result {
 		// Without the ARM model the deployments may be declared in Bicep that
 		// could not be read, so "declares no deployments" is not known.
 		if in == nil || in.ARM == nil {
-			return skip(sdk.SkipInputUnavailable)
+			return skip(sdk.SkipInputUnavailable + ": compiled ARM model unavailable")
 		}
 		return skip(sdk.SkipNotApplicable + ": project declares no model deployments")
 	}

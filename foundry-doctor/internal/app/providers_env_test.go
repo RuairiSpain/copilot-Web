@@ -235,7 +235,7 @@ func TestReadEnvFileShapes(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer root.Close()
-	vals, shapes, st := readEnvFile(root, ".azure/dev/.env")
+	vals, shapes, _, st := readEnvFile(root, ".azure/dev/.env")
 	if st != env.StatusOK {
 		t.Fatal(st)
 	}
