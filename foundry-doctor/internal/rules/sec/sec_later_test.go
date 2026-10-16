@@ -81,7 +81,7 @@ func TestLaterRules(t *testing.T) {
 			name:     "sec014 secret output name",
 			id:       "FND-SEC-014",
 			in:       &sdk.Input{ARM: armOutStub{names: []string{"accountPassword"}}},
-			findings: 1, contains: "secret-shaped",
+			findings: 1, contains: "output name contains",
 		},
 	}
 	for _, tc := range tests {

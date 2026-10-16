@@ -378,27 +378,6 @@ func evalSEC013(in *sdk.Input) sdk.Result {
 	return a.result()
 }
 
-func evalSEC014(in *sdk.Input) sdk.Result {
-	outs, ok := in.ARM.(sdk.ARMOutputs)
-	if !ok {
-		return skip(sdk.SkipInputUnavailable + ": compiled ARM outputs are not available")
-	}
-	var fs []sdk.Finding
-	for _, out := range outs.Outputs() {
-		name := strings.ToLower(strings.TrimSpace(out.Name))
-		if strings.Contains(name, "password") || strings.Contains(name, "secret") || strings.Contains(name, "key") || strings.Contains(name, "token") {
-			fs = append(fs, sdk.Finding{
-				Resource: sdk.ResourceRef{Type: "ARM/output", Name: out.Name},
-				Evidence: "output name is secret-shaped and should not emit secret material",
-			})
-		}
-	}
-	if len(fs) > 0 {
-		return sdk.Result{Findings: fs}
-	}
-	return skip(sdk.SkipInputUnavailable + ": Bicep output value diagnostics are not available in this build")
-}
-
 func declaredRaiPolicies(in *sdk.Input) map[string]bool {
 	out := map[string]bool{}
 	if in == nil || in.ARM == nil {

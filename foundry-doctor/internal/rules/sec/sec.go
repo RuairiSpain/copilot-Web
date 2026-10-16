@@ -33,8 +33,8 @@ const (
 	typeAcctDeploy  = typeAccounts + "/deployments"
 )
 
-// Register returns the Phase 1 SEC rules in ID order. FND-SEC-014 is owned by
-// internal/bicep and is deliberately not registered here.
+// Register returns the Phase 1 SEC rules in ID order, FND-SEC-014 included
+// (it analyses the compiled ARM outputs; see sec014.go).
 func Register() []sdk.Rule {
 	return []sdk.Rule{
 		fn{"FND-SEC-001", evalSEC001},
