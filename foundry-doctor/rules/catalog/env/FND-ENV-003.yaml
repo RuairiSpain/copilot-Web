@@ -24,7 +24,7 @@ compatibility:
   preview: true
   notes: >-
     azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18,
-    projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower
+    projects beta.13 need >=1.34.2); the maximum is azd 1.36.0 (tag azure-dev-cli_1.36.0, acebba1e388b489a91ab8e2487a676359ab516a1, released 2026-10-14; the first clone read at 1.36.0-beta.1 is earlier evidence). The earlier >=1.27.1 lower
     bound came from a changelog and was not verified. Extension ranges are exactly the versions whose schemas or
     source were read; widen them in Phase 1 by reading older tags. Window widened 2026-10-16: azure.ai.projects to
     1.0.0-beta.14. The azd and extension changelogs and the schema and source diffs from the previously verified
@@ -65,12 +65,7 @@ sources:
   - url: https://github.com/Azure/azure-dev/blob/azure-dev-cli_1.35.0/cli/azd/pkg/environment/local_file_data_store.go
     lastVerified: '2026-10-05'
     verifiedVia: >-
-      Azure/azure-dev azure-dev-cli_1.35.0 (170ebb8) cli/azd/pkg/environment/local_file_data_store.go (godotenv.Read
-      of <env root>/.env, godotenv.Marshal on save), environment.go (marshallDotEnv, fixupUnquotedDotenv,
-      AZURE_ENV_NAME and AZURE_RESOURCE_GROUP constants) and azdcontext/azdcontext.go (EnvironmentDirectoryName
-      .azure, DotEnvFileName .env, ConfigFileName config.json, configFile.DefaultEnvironment); git diff to main
-      afe4b2b is empty for pkg/environment. github.com/joho/godotenv v1.5.1 (Go proxy zip, tag commit 3fc4292, MIT)
-      parser.go.
+      https://github.com/Azure/azure-dev/blob/azure-dev-cli_1.35.0/cli/azd/pkg/environment/local_file_data_store.go; Azure/azure-dev azure-dev-cli_1.35.0 (170ebb8) cli/azd/pkg/environment/local_file_data_store.go (godotenv.Read of <env root>/.env, godotenv.Marshal on save), environment.go (marshallDotEnv, fixupUnquotedDotenv, AZURE_ENV_NAME and AZURE_RESOURCE_GROUP constants) and azdcontext/azdcontext.go (EnvironmentDirectoryName .azure, DotEnvFileName .env, ConfigFileName config.json, configFile.DefaultEnvironment); git diff to main afe4b2b is empty for pkg/environment. github.com/joho/godotenv v1.5.1 (Go proxy zip, tag commit 3fc4292, MIT) parser.go.
     note: >-
       Verified .env grammar (godotenv v1.5.1 as used by azd): KEY=VALUE or KEY: VALUE with an optional leading `export
       `; key characters letters, digits, `_` and `.` (anything else is a parse error); a line whose first non-space

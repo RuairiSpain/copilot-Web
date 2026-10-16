@@ -82,11 +82,13 @@ sources:
       Branch URL, not commit-pinned.
   - url: https://learn.microsoft.com/azure/ddos-protection/ddos-protection-sku-comparison
     lastVerified: "2026-10-04"
-    verifiedVia: github.com/MicrosoftDocs/azure-docs articles/ddos-protection/ddos-protection-sku-comparison.md (ms.date 03/17/2026) and ddos-protection-overview.md (ms.date 07/08/2025)
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/ddos-protection/ddos-protection-sku-comparison.md (ms.date 03/17/2026) and ddos-protection-overview.md (ms.date 07/08/2025); branch URL, not commit-pinned
     note: DDoS IP Protection and Network Protection tiers; infrastructure protection is free for every service with public IPs; Network Protection applies to services deployed in a virtual network; other services use default infrastructure protection.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/network/resource-manager/Microsoft.Network/Network/stable/2026-01-01/virtualNetwork.json
     lastVerified: "2026-10-04"
-    verifiedVia: github.com/Azure/azure-rest-api-specs specification/network/resource-manager/Microsoft.Network/Network/stable/2026-01-01/{virtualNetwork.json,common.json}
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/network/resource-manager/Microsoft.Network/Network/stable/2026-01-01/virtualNetwork.json; github.com/Azure/azure-rest-api-specs specification/network/resource-manager/Microsoft.Network/Network/stable/2026-01-01/{virtualNetwork.json,common.json}
     note: VirtualNetworkPropertiesFormat.enableDdosProtection and ddosProtectionPlan; SubnetPropertiesFormat.networkSecurityGroup; DdosSettings.protectionMode enum.
   - url: https://learn.microsoft.com/azure/foundry/openai/how-to/troubleshoot-errors
     lastVerified: "2026-10-04"

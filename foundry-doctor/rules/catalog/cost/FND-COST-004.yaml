@@ -27,7 +27,7 @@ compatibility:
   preview: true
   notes: >-
     azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18,
-    projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower
+    projects beta.13 need >=1.34.2); the maximum is azd 1.36.0 (tag azure-dev-cli_1.36.0, acebba1e388b489a91ab8e2487a676359ab516a1, released 2026-10-14; the first clone read at 1.36.0-beta.1 is earlier evidence). The earlier >=1.27.1 lower
     bound came from a changelog and was not verified. Window widened 2026-10-16: azd to 1.36.0 (tag
     azure-dev-cli_1.36.0, acebba1, released 2026-10-14). The azd and extension changelogs and the schema and source
     diffs from the previously verified versions were read; none touches this rule's verified facts for the widened
@@ -81,7 +81,8 @@ sources:
     note: Foundry estimates cover standard deployment costs only, not provisioned throughput, and do not reflect discounts or contracted pricing; invoices and meter records are the source of truth. Page ms.date 08/27/2026.
   - url: https://learn.microsoft.com/rest/api/cost-management/retail-prices/azure-retail-prices
     lastVerified: "2026-10-04"
-    verifiedVia: web search result summary only (learn.microsoft.com is blocked by the egress proxy; prices.azure.com is also blocked)
+    verifiedVia: >-
+      https://learn.microsoft.com/rest/api/cost-management/retail-prices/azure-retail-prices (web search result summary only; learn.microsoft.com and prices.azure.com were blocked by the egress proxy, so the page was not fetched)
     note: Not verified from a primary source file. The search summary described an unauthenticated endpoint https://prices.azure.com/api/retail/prices with a $filter query parameter and an api-version 2023-01-01-preview with case-sensitive filters; none of this is used until confirmed.
 overlap:
   decision: native

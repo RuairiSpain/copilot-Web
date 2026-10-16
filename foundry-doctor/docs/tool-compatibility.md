@@ -341,6 +341,22 @@ Not verified: the GitHub release pages for azd 1.36.0 and the extensions; runtim
 `MicrosoftDocs/azure-ai-docs`, which returned 404 for every path on raw.githubusercontent.com from this environment, so Learn page content was not re-read
 for this update.
 
+Catalogue maintenance follow-up (2026-10-16):
+
+- The compatibility notes that still said the azd maximum was the clone read (1.36.0-beta.1) now state the real window: the maximum is azd 1.36.0 (`azure-dev-cli_1.36.0`,
+  `acebba1e388b489a91ab8e2487a676359ab516a1`, released 2026-10-14) and the beta.1 clone is earlier evidence. The windows that really stay narrower are unchanged and
+  described above (CFG-001 and CFG-003 agents beta.18, CFG-006, CFG-009 routines beta.8, CFG-011 agents beta.18). The "azd 1.36.0-beta.1 clone checked" remarks in the
+  NET and IDN notes are statements about what was read and were left as written.
+- Every `sources[].verifiedVia` value now starts with a URL. URLs in the form `https://raw.githubusercontent.com/<org>/<repo>/<ref>/<path>` and the equivalent `blob`
+  URLs were requested on 2026-10-16 and returned HTTP 200 (status code only for most; content was read for blang/semver v4.0.0 `range.go`, Masterminds/semver v3.4.0
+  `constraints.go`, and azd `project.go` at commit `1bd2ca4699c7b1f371db85dd867f18aa4fbc4730`). `learn.microsoft.com` and `openid.net` are blocked by the egress
+  proxy and were not fetched. Branch (`main`) URLs are labelled as not commit-pinned.
+- API versions: `Microsoft.CognitiveServices` stable `2026-09-01` and preview `2026-07-15-preview` exist in Azure/azure-rest-api-specs `main`
+  (`specification/cognitiveservices/.../CognitiveServices/{stable,preview}/<version>/cognitiveservices.json`; `info.version` read from the file, and the paths for accounts,
+  projects, deployments, capabilityHosts, connections, usages, modelCapacities, deletedAccounts and models are present). `Microsoft.Insights` stable `metricAlerts` `2026-01-01`
+  (`specification/monitor/.../Insights/stable/2026-01-01/metricAlert.json`), `activityLogAlerts` `2026-01-01` and `scheduledQueryRules` `2026-03-01` exist in the same repository.
+  This confirms the version labels in the specification repository, not their availability in every Azure cloud or region, and Learn's template reference was not read.
+
 ## azure.yaml `requiredVersions.azd` (2026-10-15, updated 2026-10-16)
 
 The vendored azd schema states that a project fails to load when the running azd is outside the range, and gives `>= 0.6.0-beta.3` as its only example. The grammar is

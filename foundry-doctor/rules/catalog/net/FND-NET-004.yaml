@@ -88,7 +88,8 @@ sources:
       AccountProperties.networkInjections array. Branch URL, not commit-pinned.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/network/resource-manager/Microsoft.Network/Network/stable/2024-05-01/virtualNetwork.json
     lastVerified: "2026-10-04"
-    verifiedVia: raw.githubusercontent.com/Azure/azure-rest-api-specs/main/specification/network/resource-manager/Microsoft.Network/Network/stable/2024-05-01/virtualNetwork.json
+    verifiedVia: >-
+      https://raw.githubusercontent.com/Azure/azure-rest-api-specs/main/specification/network/resource-manager/Microsoft.Network/Network/stable/2024-05-01/virtualNetwork.json; branch URL, not commit-pinned
     note: SubnetPropertiesFormat delegations (serviceName), addressPrefix, addressPrefixes.
 overlap:
   decision: native

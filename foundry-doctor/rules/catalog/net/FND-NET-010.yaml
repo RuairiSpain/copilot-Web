@@ -81,8 +81,7 @@ sources:
 - url: https://learn.microsoft.com/azure/azure-monitor/fundamentals/private-link-design
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    github.com/MicrosoftDocs/azure-monitor-docs articles/azure-monitor/fundamentals/private-link-design.md (ms.date 08/07/2026);
-    the article moved out of azure-docs
+    https://github.com/MicrosoftDocs/azure-monitor-docs/blob/main/articles/azure-monitor/fundamentals/private-link-design.md (ms.date 08/07/2026); the article moved out of azure-docs; branch URL, not commit-pinned
   note: >-
     Access modes (Private Only versus Open), Private Only affects all networks sharing the DNS, one AMPLS per DNS, per-resource
     public ingestion and query settings, Application Insights guidance.
@@ -106,16 +105,14 @@ sources:
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/monitor/resource-manager/Microsoft.Insights/Insights/stable/2021-09-01/privateLinkScopes_API.json
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    github.com/Azure/azure-rest-api-specs specification/monitor/resource-manager/Microsoft.Insights/Insights/{stable/2021-09-01/privateLinkScopes_API.json,
-    preview/2023-06-01-preview/privateLinkScopes.json}
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/monitor/resource-manager/Microsoft.Insights/Insights/stable/2021-09-01/privateLinkScopes_API.json; github.com/Azure/azure-rest-api-specs specification/monitor/resource-manager/Microsoft.Insights/Insights/{stable/2021-09-01/privateLinkScopes_API.json, preview/2023-06-01-preview/privateLinkScopes.json}
   note: >-
     AccessModeSettings (queryAccessMode, ingestionAccessMode, exclusions), AccessMode enum Open and PrivateOnly, ScopedResourceProperties.linkedResourceId.
 - url: >-
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/applicationinsights/resource-manager/Microsoft.Insights/ApplicationInsights/Components/models.tsp
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    github.com/Azure/azure-rest-api-specs specification/applicationinsights/resource-manager/Microsoft.Insights/ApplicationInsights/Components/models.tsp;
-    operationalinsights stable/2026-03-01/openapi.json
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/applicationinsights/resource-manager/Microsoft.Insights/ApplicationInsights/Components/models.tsp; github.com/Azure/azure-rest-api-specs specification/applicationinsights/resource-manager/Microsoft.Insights/ApplicationInsights/Components/models.tsp; operationalinsights stable/2026-03-01/openapi.json
   note: >-
     publicNetworkAccessForIngestion and publicNetworkAccessForQuery default Enabled on components; workspaces accept Enabled,
     Disabled, SecuredByPerimeter.

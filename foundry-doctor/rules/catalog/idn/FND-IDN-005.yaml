@@ -59,11 +59,13 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/role-based-access-control/best-practices
     lastVerified: "2026-10-04"
-    verifiedVia: github.com/MicrosoftDocs/azure-docs articles/role-based-access-control/best-practices.md (ms.date 03/30/2025)
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/role-based-access-control/best-practices.md (ms.date 03/30/2025); branch URL, not commit-pinned
     note: Limit the number of subscription owners to a maximum of 3; limit privileged administrator role assignments; use PIM; assign roles to groups, not users.
   - url: https://learn.microsoft.com/azure/role-based-access-control/pim-integration
     lastVerified: "2026-10-04"
-    verifiedVia: github.com/MicrosoftDocs/azure-docs articles/role-based-access-control/pim-integration.md (ms.date 12/12/2024)
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/role-based-access-control/pim-integration.md (ms.date 12/12/2024); branch URL, not commit-pinned
     note: Eligible and time-bound assignment terms; permanent active versus time-bound; eligible assignments cannot be made for service principals or managed identities; PIM licence requirement.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/authorization/resource-manager/Microsoft.Authorization/Authorization/stable/2020-10-01/RoleAssignmentScheduleInstance.json
     lastVerified: "2026-10-04"
@@ -74,7 +76,8 @@ sources:
       principalType. Branch URL, not commit-pinned.
   - url: https://learn.microsoft.com/azure/role-based-access-control/role-assignments-steps
     lastVerified: "2026-10-04"
-    verifiedVia: github.com/MicrosoftDocs/azure-docs articles/role-based-access-control/role-assignments-steps.md (ms.date 10/15/2025)
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/role-based-access-control/role-assignments-steps.md (ms.date 10/15/2025); branch URL, not commit-pinned
     note: Privileged administrator roles table.
   - url: https://learn.microsoft.com/azure/foundry/concepts/rbac-foundry
     lastVerified: "2026-10-04"

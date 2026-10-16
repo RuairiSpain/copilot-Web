@@ -97,15 +97,18 @@ sources:
   note: Prompt-agent required fields, unsupported modelType hosted_agent and targetAgent.
 - url: https://raw.githubusercontent.com/blang/semver/v4.0.0/v4/range.go
   lastVerified: '2026-10-16'
-  verifiedVia: docs/spikes/azd-required-versions.md
+  verifiedVia: >-
+    https://raw.githubusercontent.com/blang/semver/v4.0.0/v4/range.go (tag v4.0.0; grammar summary in docs/spikes/azd-required-versions.md)
   note: requiredVersions.azd range grammar (ParseRange), used by azd.
 - url: https://raw.githubusercontent.com/Masterminds/semver/v3.4.0/constraints.go
   lastVerified: '2026-10-16'
-  verifiedVia: docs/spikes/azd-required-versions.md
+  verifiedVia: >-
+    https://raw.githubusercontent.com/Masterminds/semver/v3.4.0/constraints.go (tag v3.4.0; grammar summary in docs/spikes/azd-required-versions.md)
   note: requiredVersions.extensions constraint grammar (NewConstraint) and the pre-release rule.
 - url: https://github.com/Azure/azure-dev/blob/1bd2ca4699c7b1f371db85dd867f18aa4fbc4730/cli/azd/pkg/project/project.go
   lastVerified: '2026-10-16'
-  verifiedVia: docs/spikes/azd-required-versions.md (project.go:63-77)
+  verifiedVia: >-
+    https://raw.githubusercontent.com/Azure/azure-dev/1bd2ca4699c7b1f371db85dd867f18aa4fbc4730/cli/azd/pkg/project/project.go (commit 1bd2ca4699c7b1f371db85dd867f18aa4fbc4730, lines 63-77; grammar summary in docs/spikes/azd-required-versions.md)
   note: azd fails to load the project when the range is malformed or does not contain the azd version; skipped for a local dev build.
 overlap:
   decision: adapt
