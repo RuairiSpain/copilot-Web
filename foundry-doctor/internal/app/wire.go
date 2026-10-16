@@ -99,7 +99,7 @@ func NewServices(stderr io.Writer, o Options) Services {
 	}
 	return Services{
 		Project:   projectAdapter{},
-		Config:    configAdapter{getenv: getenv},
+		Config:    configAdapter{getenv: getenv, stderr: stderr},
 		ARM:       armLoader{disc: disc, runner: o.BicepRunner, stderr: stderr, adapter: store},
 		Engine:    engineAdapter{cat: cat, azd: azd, adapter: store},
 		Preflight: preflightEngine{cat: cat, azd: azd, getenv: getenv},
@@ -326,6 +326,32 @@ func (projectAdapter) Load(ctx context.Context, dir string, in Inputs) (Source, 
 
 type configAdapter struct {
 	getenv func(string) string
+	// stderr receives the configuration warnings of ADR-020. Nil discards them.
+	stderr io.Writer
+}
+
+// DefaultRulePack is the only rule pack Phase 1 knows. Every registered rule
+// runs whatever rules.packs says (ADR-020).
+const DefaultRulePack = "foundry-core"
+
+// configWarnings returns the visible warnings for configuration that is parsed
+// but inert in Phase 1 (ADR-020): the PSRule adapter is deferred and rules.packs
+// is reserved.
+func configWarnings(eff *config.Effective) []string {
+	var w []string
+	if eff.Advanced.PSRule.Enabled == config.True {
+		w = append(w, "advanced.psrule.enabled is true but the PSRule adapter is not available in this release (ADR-020); no PSRule checks run and none are reported as passed")
+	}
+	var extra []string
+	for _, p := range eff.Rules.Packs {
+		if p != DefaultRulePack {
+			extra = append(extra, p)
+		}
+	}
+	if len(extra) > 0 {
+		w = append(w, fmt.Sprintf("rules.packs names %s but rule packs are reserved and not applied (ADR-020); every registered rule runs", strings.Join(extra, ", ")))
+	}
+	return w
 }
 
 // profileFlag maps the PRD profile names to the curated profile names.
@@ -380,6 +406,11 @@ func (c configAdapter) Resolve(_ context.Context, r ConfigRequest) (Settings, er
 		return Settings{}, configError("configuration", err)
 	}
 
+	if c.stderr != nil {
+		for _, m := range configWarnings(eff) {
+			_, _ = fmt.Fprintf(c.stderr, "warning: %s\n", findings.Redact(m))
+		}
+	}
 	set := Settings{
 		Profile: eff.Profile.Name, Environment: eff.Environment,
 		Inputs:        Inputs{AzureYAML: eff.Inputs.AzureYAML, InfraPath: eff.Inputs.InfraPath, Environment: eff.Environment},

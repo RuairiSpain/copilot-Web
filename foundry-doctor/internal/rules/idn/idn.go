@@ -1,7 +1,8 @@
 // Package idn implements the Phase 1 FND-IDN-* rules as static checks over the
 // compiled ARM model. An unresolved ARM expression yields a skip, never a pass;
 // a missing ARM model yields SkipInputUnavailable. FND-IDN-002 needs effective
-// permission data and is not implemented in Phase 1.
+// permission data and stays catalogue-only in Phase 1 (ADR-020): the pack lists it
+// but no check is registered, so it reports as skipped (not-implemented), never passed.
 package idn
 
 import (

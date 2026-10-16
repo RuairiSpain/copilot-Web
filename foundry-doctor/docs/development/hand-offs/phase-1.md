@@ -31,7 +31,7 @@ Initial REJECT (CFG-006 blocker; IDN-004 x2 and NET-003 high). All four fixed wi
 Not yet run for Phase 1.
 
 ## Known limitations
-Rules needing data not yet provided skip rather than pass. CFG-008..010 not implemented. NET-003 China zone table incomplete. IDN-004 deployment-identity exclusion not configurable. Bicep and azure.yaml diagnostics are warnings, not findings.
+Rules needing data not yet provided skip rather than pass. CFG-008..010 not implemented. NET-003 China zone table incomplete. IDN-004 deployment-identity exclusion not configurable. Bicep compiler diagnostics are findings with rule IDs bicep/<code> (ADR-009); azure.yaml diagnostics are stderr warnings.
 
 ## Deferred issues with rationale
 Phase 0 open items (XF provenance, race gate, CI run, adapter fixtures, provisional overlap decisions). PSRule adapter deferred. Open questions: cmd directory name (`cmd/foundry-doctor` vs PRD `cmd/foundry`), config filename `.foundry-doctor/config.yaml`, `compare` exit code, policy key names.
@@ -50,6 +50,6 @@ Linux CI green (race, spikes); resolve policy key naming; Azure read-only adapte
 |---|---|---|
 | Local doctor runs offline with 4 formats | met | e2e tests in cmd/foundry-doctor |
 | Exit codes consistent | met | e2e and app tests |
-| 35-40 rules | unmet (29 implemented) | catalogue allocation; remainder deferred |
+| 35-40 rules | met (37 of 38 allocated rules implemented; FND-IDN-002 stays catalogue-only, ADR-020) | ADR-020 |
 | Race-clean | unmet | needs Linux CI |
 | Independent reviews | partial | foundry/go re-review and black-belt pending |

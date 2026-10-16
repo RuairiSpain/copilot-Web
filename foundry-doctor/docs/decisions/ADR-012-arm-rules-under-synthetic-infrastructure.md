@@ -39,3 +39,8 @@ Review findings Azure N13 and Foundry N19 found that the engine shortcut and the
    skip with its reason; a `Summary.SkippedByReason` field in the JSON summary is **not** implemented in Phase 1 (it needs a change in `internal/report`).
 3. **`--strict` supersedes decision 3, last sentence.** A `synthetic-infrastructure` skip is by design: the check could not have run on any input the user can provide, and
    Foundry-only projects without `infra/` are first-class (ADR-004). It does not trigger exit 3. The skip stays in every report. See ADR-010 decision 9.
+
+## Amendment 2 (2026-10-16): compile diagnostics do not change the synthetic decision
+
+A project whose Bicep compiles with warnings is not synthetic and not skipped: the compiler warnings are reported as `bicep/<code>` findings (ADR-009 Amendment 1) and ARM rules run. A project whose Bicep fails to compile
+is not synthetic either: ARM-dependent rules skip as `input-unavailable` (or the run exits 2 when `validation.bicep` is `required`), and the compiler's error diagnostics are reported as error findings so the cause is visible in the report.
