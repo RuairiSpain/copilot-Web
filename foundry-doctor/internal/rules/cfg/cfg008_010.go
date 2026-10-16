@@ -234,7 +234,9 @@ func evalCFG010(in *sdk.Input) sdk.Result {
 		return ok(fs)
 	}
 	if !evaluated {
-		if !loaded && (in == nil || in.ARM == nil) {
+		// Without the ARM model the deployments may be declared in Bicep that
+		// could not be read, so "declares no deployments" is not known.
+		if in == nil || in.ARM == nil {
 			return skip(sdk.SkipInputUnavailable)
 		}
 		return skip(sdk.SkipNotApplicable + ": project declares no model deployments")

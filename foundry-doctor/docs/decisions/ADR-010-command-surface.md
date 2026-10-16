@@ -65,3 +65,20 @@ Each is recorded here instead of being chosen silently.
 - Decision 2 orders exit codes 4, 2, 1, 3, 0. `internal/report.ClassifyExit` returns 3 before 1 (strict skip beats findings) and `internal/app` tests assert that. The code and this ADR
   disagree; the owner of `internal/report` must pick one. This amendment does not change the behaviour.
 - Decision 6 says the default profile is `foundry-dev`; `config.DefaultProfile` is `foundry-prod`. Also unresolved.
+
+## Amendment 2 (2026-10-16): by-design skip classification, round-2 review R9 and R10
+
+- `profile-key-missing:network.cloud` (NET-003) stays by design. NET-003 needs the cloud (public, usgov or china) to choose the private DNS zone table; when the
+  profile sets no `network.cloud` and the regions are not literal, the rule is hidden completely for that run, and `--strict` does not count it. Whether a private endpoint is in
+  scope is decided inside the rule, not by `ClassifySkip`, which sees only the reason text; the classifier therefore cannot tell the two cases apart, and the reason text already
+  names the key to set. The skip is still printed in every report.
+- R10: no reason was added. The reasons the review names mean a required input is missing, not that there is nothing to evaluate, so they remain hiding (fail safe):
+  COST-001 `budget-managed-outside-repository` (the catalogue text says a budget may exist outside the repository), SEC-008 and SEC-009 in Bicep-only mode
+  (`input-unavailable`: subscription Defender pricing state and policy assignments live outside the template), REL-004 `uncertain: no lock resources are declared...`
+  (locks can be applied later or at parent scope), and the IQ reasons `knowledge-source-kind-without-backing-index-input`, `index-metadata-not-readable` and
+  `knowledge-base-metadata-not-readable`. The "nothing to evaluate" reasons the rules emit today are already by design: `no-split-skill-in-project; no-explicit-query-definitions`
+  (IQ), `project-has-no-agent-services`, `no-resilience-objective-declared`, `no-access-requirement-declared`, `no-emit-token-metric-policy`, `schedule-null`,
+  `no-supported-fixed-capacity-resources` and the `not-applicable` head. A clean Foundry project under `--strict` can therefore still exit 3 while such inputs are missing; that is
+  intended, and the fix is to supply the input (a Bicep build, live reads), not to reclassify the skip.
+- R6: CFG-010 with no ARM model emits `input-unavailable`, because the deployments may be declared in Bicep that could not be read; `not-applicable` is emitted only when the ARM
+  model is present and declares no deployment.

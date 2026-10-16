@@ -228,12 +228,25 @@ func TestSkipReasonsAreNamed(t *testing.T) {
 	}
 	for _, tc := range na {
 		t.Run(tc.name, func(t *testing.T) {
-			res := run(t, find(Register(), tc.id), &sdk.Input{AzureYAML: doc(t, tc.y)})
+			in := &sdk.Input{AzureYAML: doc(t, tc.y)}
+			if tc.id == "FND-CFG-010" {
+				in.ARM = emptyARM{} // the ARM model is available and declares nothing
+			}
+			res := run(t, find(Register(), tc.id), in)
 			if res.Skipped == nil || !strings.HasPrefix(res.Skipped.Reason, sdk.SkipNotApplicable+":") {
 				t.Fatalf("got %+v want not-applicable", res.Skipped)
 			}
 		})
 	}
+	// R6: azure.yaml declares no deployments but the Bicep, which may declare
+	// them, is unavailable: that is a hidden check, not "not applicable".
+	t.Run("010 without the ARM model is input-unavailable", func(t *testing.T) {
+		y := "services:\n  a:\n    host: azure.ai.agent\n    kind: prompt\n"
+		res := run(t, find(Register(), "FND-CFG-010"), &sdk.Input{AzureYAML: doc(t, y)})
+		if res.Skipped == nil || res.Skipped.Reason != sdk.SkipInputUnavailable {
+			t.Fatalf("got %+v", res.Skipped)
+		}
+	})
 	t.Run("010 without any input stays input-unavailable", func(t *testing.T) {
 		res := run(t, find(Register(), "FND-CFG-010"), &sdk.Input{})
 		if res.Skipped == nil || res.Skipped.Reason != sdk.SkipInputUnavailable {
@@ -331,3 +344,7 @@ func TestIsSecretKeyTokenOrder(t *testing.T) {
 		}
 	}
 }
+
+type emptyARM struct{}
+
+func (emptyARM) Resources() []sdk.ARMResource { return nil }
