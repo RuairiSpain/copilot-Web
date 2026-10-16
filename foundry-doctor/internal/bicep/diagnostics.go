@@ -2,6 +2,7 @@ package bicep
 
 import (
 	"encoding/json"
+	"net/url"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -53,11 +54,27 @@ func severityOf(s string) Severity {
 	}
 }
 
+// fileURIPath turns a file: URI into a path. The leading slash of a POSIX path
+// is kept ("file:///tmp/x" is "/tmp/x") and the one before a Windows drive
+// letter is dropped ("file:///C:/x" is "C:/x"). Other inputs are unchanged.
+func fileURIPath(u string) string {
+	rest, ok := strings.CutPrefix(u, "file://")
+	if !ok {
+		return u
+	}
+	if dec, err := url.PathUnescape(rest); err == nil {
+		rest = dec
+	}
+	if len(rest) >= 3 && rest[0] == '/' && rest[2] == ':' {
+		return rest[1:]
+	}
+	return rest
+}
+
 // safePath returns a slash path relative to root when file is inside root,
 // otherwise only the base name (never leaks absolute paths).
 func safePath(root, file string) string {
-	file = strings.TrimPrefix(file, "file:///")
-	file = strings.TrimPrefix(file, "file://")
+	file = fileURIPath(file)
 	if i := strings.IndexAny(file, "\x00\r\n"); i >= 0 {
 		file = file[:i]
 	}
@@ -154,9 +171,15 @@ func ParseSARIF(data []byte, root string) ([]Diagnostic, error) {
 			if len(r.Locations) > 8 {
 				return nil, toolErr(KindAdapter, "too many SARIF locations", nil)
 			}
+			msg := r.Message.Text
+			docs := ""
+			if m := docsRE.FindStringSubmatch(msg); m != nil {
+				docs = m[1]
+				msg = docsRE.ReplaceAllString(msg, "")
+			}
 			d := Diagnostic{
 				Severity: severityOf(r.Level), Code: r.RuleID,
-				Message: sanitize(r.Message.Text, maxMessage),
+				Message: sanitize(msg, maxMessage), DocsURL: docs,
 			}
 			if len(r.Locations) > 0 {
 				pl := r.Locations[0].PhysicalLocation
