@@ -1,12 +1,24 @@
 package bicep
 
-import "testing"
+import (
+	"runtime"
+	"testing"
+)
 
 func TestFileURIPathAndSafePath(t *testing.T) {
 	t.Parallel()
+	// A rooted path without a drive letter is not absolute on Windows, and
+	// real Windows diagnostics carry drive-letter URIs, so the inside-root
+	// cases use the platform's own spelling.
+	inRoot, inURI := "/work/proj", "file:///work/proj/infra/main.bicep"
+	spRoot, spURI := "/work/my proj", "file:///work/my%20proj/a.bicep"
+	if runtime.GOOS == "windows" {
+		inRoot, inURI = `C:\work\proj`, "file:///C:/work/proj/infra/main.bicep"
+		spRoot, spURI = `C:\work\my proj`, "file:///C:/work/my%20proj/a.bicep"
+	}
 	tests := []struct{ name, root, in, want string }{
-		{"posix uri inside root", "/work/proj", "file:///work/proj/infra/main.bicep", "infra/main.bicep"},
-		{"percent-encoded space", "/work/my proj", "file:///work/my%20proj/a.bicep", "a.bicep"},
+		{"uri inside root", inRoot, inURI, "infra/main.bicep"},
+		{"percent-encoded space", spRoot, spURI, "a.bicep"},
 		{"posix uri outside root keeps base name", "/work/proj", "file:///etc/other/x.bicep", "x.bicep"},
 		{"windows drive uri outside root keeps base name", "/work/proj", "file:///C:/other/x.bicep", "x.bicep"},
 		{"relative path", "/work/proj", "infra/main.bicep", "infra/main.bicep"},
