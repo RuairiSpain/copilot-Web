@@ -67,6 +67,36 @@ type paramResult struct {
 	values   map[string]any
 	provided bool
 	notes    []string
+	// file is the parameter file in use; unresolved are its parameters already
+	// named in a note as unresolved ${VAR} references.
+	file       string
+	unresolved []string
+}
+
+// maxIgnoredNamed bounds the parameter names listed in the ignored-values note.
+const maxIgnoredNamed = 20
+
+// ignoredNote names the parameters a parameter file set but the model could not
+// use (type mismatch, a string starting with "[", an unsupported value). Names
+// only, never values; sorted and capped. Parameters already reported as
+// unresolved ${VAR} references are left out. It returns "" when none.
+func ignoredNote(p paramResult, ignored []string) string {
+	var names []string
+	for _, n := range ignored {
+		if !slices.Contains(p.unresolved, n) {
+			names = append(names, n)
+		}
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	more := ""
+	if len(names) > maxIgnoredNamed {
+		more = fmt.Sprintf(" and %d more", len(names)-maxIgnoredNamed)
+		names = names[:maxIgnoredNamed]
+	}
+	return fmt.Sprintf("parameter file %s: values for %s%s were ignored (type mismatch, a string starting with \"[\", or an unsupported value) and the parameters stay unresolved",
+		p.file, strings.Join(names, ", "), more)
 }
 
 // loadParameters reads the deployment parameters of the entry template:
@@ -127,7 +157,7 @@ func (l armLoader) loadParameters(ctx context.Context, root *os.Root, entry stri
 	default:
 		return paramResult{}
 	}
-	res := paramResult{values: set.Values, provided: true}
+	res := paramResult{values: set.Values, provided: true, file: file, unresolved: set.Unresolved}
 	if len(set.Unresolved) > 0 {
 		res.notes = append(res.notes, fmt.Sprintf("parameter file %s: %s reference azd variables that could not be resolved from the selected environment and stay unresolved",
 			file, strings.Join(set.Unresolved, ", ")))

@@ -148,6 +148,13 @@ func (l armLoader) noteTruncated(m *armmodel.Model) {
 	}
 }
 
+// noteIgnored warns once per parameter file about the values the model ignored.
+func (l armLoader) noteIgnored(p paramResult, m *armmodel.Model) {
+	if n := ignoredNote(p, m.IgnoredParameters()); n != "" {
+		l.warnf(n)
+	}
+}
+
 // unavailablef reports a model that could not be produced for a reason that is
 // not a Bicep failure.
 func unavailablef(format string, a ...any) error {
@@ -215,6 +222,7 @@ func (l armLoader) Load(ctx context.Context, src Source) (sdk.ARMModel, error) {
 		if err != nil {
 			return nil, bicepFailedf("cannot read compiled ARM template")
 		}
+		l.noteIgnored(pr, m)
 		l.noteTruncated(m)
 		return rawModel{Model: m, raw: res.ARM}, nil
 	}
@@ -232,6 +240,7 @@ func (l armLoader) Load(ctx context.Context, src Source) (sdk.ARMModel, error) {
 	if err != nil {
 		return nil, bicepFailedf("cannot read ARM JSON template %s", jsonEntry)
 	}
+	l.noteIgnored(pr, m)
 	l.noteTruncated(m)
 	return rawModel{Model: m, raw: data}, nil
 }

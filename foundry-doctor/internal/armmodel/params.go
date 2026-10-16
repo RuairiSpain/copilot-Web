@@ -20,10 +20,15 @@ const maxVariableDepth = 16
 // parameter file exists) the literal Bicep default, marked default-derived.
 // A secure parameter, an expression default and an unresolved file value get
 // no binding, so parameters('x') stays an expression and compares as unknown.
-func rootBindings(t *bicep.Template, opt Options) map[string]binding {
-	out := map[string]binding{}
+//
+// ignored lists, sorted, the non-secure template parameters the file sets but
+// whose value could not be used: a type mismatch, a string that starts with
+// "[", a value that is too large, or a value that is unresolved (object, array,
+// null, reference, unresolved ${VAR}).
+func rootBindings(t *bicep.Template, opt Options) (out map[string]binding, ignored []string) {
+	out = map[string]binding{}
 	if len(opt.Parameters) == 0 && !opt.ParametersProvided {
-		return out
+		return out, nil
 	}
 	given := make(map[string]any, len(opt.Parameters))
 	for k, v := range opt.Parameters {
@@ -37,6 +42,8 @@ func rootBindings(t *bicep.Template, opt Options) map[string]binding {
 		if v, set := given[key]; set {
 			if text, ok := paramText(p.Type, v); ok && len(text) <= MaxBindingBytes {
 				out[key] = binding{text: text}
+			} else {
+				ignored = append(ignored, p.Name)
 			}
 			continue
 		}
@@ -53,7 +60,8 @@ func rootBindings(t *bicep.Template, opt Options) map[string]binding {
 			out[key] = binding{text: text, defaults: []string{p.Name}}
 		}
 	}
-	return out
+	sort.Strings(ignored)
+	return out, ignored
 }
 
 // paramText renders a parameter value of ARM type typ as expression text. Only
@@ -374,4 +382,14 @@ func (m *Model) resolveString(s string, depth int) (any, bool) {
 		return v, true
 	}
 	return normalizeLiteralRef(txt), true
+}
+
+// IgnoredParameters returns, sorted, the root parameters a parameter file set
+// whose value the model could not use (type mismatch, a string starting with
+// "[", an oversize or unresolved value). Those parameters stay unresolved.
+func (m *Model) IgnoredParameters() []string {
+	if m == nil {
+		return nil
+	}
+	return append([]string(nil), m.ignored...)
 }

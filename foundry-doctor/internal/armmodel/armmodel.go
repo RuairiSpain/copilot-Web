@@ -121,10 +121,12 @@ type Model struct {
 	varTx func(string) string
 	// bud notes the default-derived parameters behind a memoised variable;
 	// mu guards memo and busy, which Variable fills after the build too.
-	bud  *budget
-	mu   sync.Mutex
-	memo map[string]varMemo
-	busy map[string]bool
+	bud *budget
+	// ignored are the parameter-file values that could not be used.
+	ignored []string
+	mu      sync.Mutex
+	memo    map[string]varMemo
+	busy    map[string]bool
 }
 
 // varMemo is a resolved variable with the default-derived parameters it used.
@@ -345,7 +347,8 @@ func FromTemplate(t *bicep.Template, raw []byte, opt Options) (*Model, error) {
 	mapper := bicep.Mapper{Entry: opt.Entry, Modules: opt.Modules}
 	usedPaths := map[string]bool{}
 	bud := &budget{}
-	bound := rootBindings(t, opt)
+	bound, ignored := rootBindings(t, opt)
+	m.ignored = ignored
 	paramTx := injector(bound, bud)
 	m.vars = map[string]json.RawMessage{}
 	for _, v := range t.Variables {
