@@ -2,7 +2,7 @@
 
 Branch `claude/foundry-doctor-phase-1`, draft PR #29. Code state described here: head 83e055e (2026-10-16).
 
-Status: **implemented; not signed off as complete.** Two DoD items are unmet (independent review verdicts, GitHub workflow run evidence) and one is partly met (security review deferred by ADR-019). The reasons are in the audit table at the end. This file replaces the earlier hand-off, which described the archived implementation (29 rules) that the branch no longer contains.
+Status: **implemented; both independent reviewers ACCEPT on the final code; the reusable PR workflow has a successful run.** One DoD item is partly met (security review deferred by ADR-019). The release workflow has not run, and the user decisions listed under next-phase prerequisites are open. The reasons are in the audit table at the end. This file replaces the earlier hand-off, which described the archived implementation (29 rules) that the branch no longer contains.
 
 ## Delivered
 
@@ -61,7 +61,7 @@ This branch holds the implementation merged from `main` (PR #18, which delivered
 
 `failed=0 skipped=1`. Under PRD section 22 a strict run with a skipped gate is not a pass; the skipped gate is `govulncheck`, which runs in GitHub CI (`quality` job, now `--strict`) where the database is reachable. `GOOS=windows go vet ./...` also passes locally.
 
-GitHub CI on PR #29 (workflow `foundry-doctor-ci`): the run on head 83e055e (run 53) completed successfully, including `lint, vet, vulncheck, catalogue` in `verify-phase.sh --strict` mode (so `govulncheck` passed on Go 1.26.9), `go test` on ubuntu, macOS and Windows, smoke samples on three operating systems, the cross-platform build, the ADR-005 import boundary and the ADR-003 namespace check; CodeQL and dependency review were also green on the PR. Runs that failed earlier on this branch and were fixed: `staticcheck` (unused function, fixed in d557157), Windows `TestBuildParams` and `TestFileURIPathAndSafePath` (tests assumed POSIX path spelling, fixed in 9214baf and 06ab397), the secret scan (fake secret-shaped literal in a test, fixed in af260e4). The run on the docs-only commit a02fc50 (this hand-off) was still in progress when this file was last edited; confirm it on the PR. Coverage of the engine packages: all at or above 80% (rules 97%, findings 87%, baseline 97%, report 94%, config 99%).
+GitHub CI on PR #29 (workflow `foundry-doctor-ci`): the run on head 83e055e (run 53) completed successfully, including `lint, vet, vulncheck, catalogue` in `verify-phase.sh --strict` mode (so `govulncheck` passed on Go 1.26.9), `go test` on ubuntu, macOS and Windows, smoke samples on three operating systems, the cross-platform build, the ADR-005 import boundary and the ADR-003 namespace check; CodeQL and dependency review were also green on the PR. Runs that failed earlier on this branch and were fixed: `staticcheck` (unused function, fixed in d557157), Windows `TestBuildParams` and `TestFileURIPathAndSafePath` (tests assumed POSIX path spelling, fixed in 9214baf and 06ab397), the secret scan (fake secret-shaped literal in a test, fixed in af260e4). Check suites on the later heads (a02fc50, c5f3fa4, 2892fd6, 007b195, b920094, f3b8fe8) finished without failures. Coverage of the engine packages: all at or above 80% (rules 97%, findings 87%, baseline 97%, report 94%, config 99%).
 
 Not run: the Bicep-backed samples and the `spike`-tagged real-CLI tests in the audit environment (no Bicep CLI); they run in CI smoke (Bicep 0.48.1 installed in the job). `foundry-doctor-release.yml` (signing, SBOM, provenance) has never been run.
 
@@ -71,11 +71,11 @@ Deferred to Phase 9 by the user (ADR-019, which also defers the Go principal rev
 
 ## Foundry lead review
 
-Reports: `reviews/phase-1-foundry-lead.md` (archived code), `-rerun.md`, `-verify.md`, `-final.md`. Last verdict: **REJECT** at 9214baf on two blockers: uncertain notes dropped when a CFG or ENV rule had findings (N3-1), and CFG-009 reporting not-applicable for routine triggers written in the current extension spelling (N3-2). Both, and the minor findings N3-3 to N3-6, N3-8 to N3-12, were fixed afterwards (commits 324e65c, a8f4e5d, 83e055e). **No re-review of the fixed code has been recorded.** N3-7 (ENV-003 window) was resolved by widening the azd window. The reviewer confirmed the `requiredVersions` grammar by running the real blang and Masterminds libraries.
+Reports: `reviews/phase-1-foundry-lead.md` (archived code), `-rerun.md`, `-verify.md`, `-final.md`. Last verdict: **REJECT** at 9214baf on two blockers: uncertain notes dropped when a CFG or ENV rule had findings (N3-1), and CFG-009 reporting not-applicable for routine triggers written in the current extension spelling (N3-2). Both, and the minor findings N3-3 to N3-6, N3-8 to N3-12, were fixed afterwards (commits 324e65c, a8f4e5d, 83e055e). Re-review 2026-10-16 at c5f3fa4: ACCEPT with conditions (`phase-1-foundry-lead-reverify.md`); the conditions (N4-1 range parser false error, CFG-009 list-shaped `triggers`, remediation text, ADR-004 wording, exit-2 documentation) were fixed in 007b195 and the reviewer re-checked at b920094: **ACCEPT**, no open findings. The later load-guard commits (85352b6, f3b8fe8, 7299567) changed only `internal/bicep`, `internal/armexpr`, IDN-004 text and ADR-018 and were not in the Foundry lead's scope. N3-7 (ENV-003 window) was resolved by widening the azd window. The reviewer confirmed the `requiredVersions` grammar by running the real blang and Masterminds libraries.
 
 ## Azure black belt review
 
-Reports: `reviews/phase-1-azure-black-belt.md` (archived code), `-rerun.md`, `-verify.md`, `-round2.md`, `-final.md`. Last verdict: **ACCEPT with conditions** at 47d5aa7 (code identical to 36acd92). Conditions P1 (IDN-004 info scope), P2 (file loads outside the project) and P3 (variables in conditions) were addressed in 83e055e; P4 to P7 also fixed; P8 (API versions) was checked and needed no change. **No re-review of the fixed code has been recorded.**
+Reports: `reviews/phase-1-azure-black-belt.md` (archived code), `-rerun.md`, `-verify.md`, `-round2.md`, `-final.md`. Last verdict: **ACCEPT with conditions** at 47d5aa7 (code identical to 36acd92). Conditions P1 (IDN-004 info scope), P2 (file loads outside the project) and P3 (variables in conditions) were addressed in 83e055e; P4 to P7 also fixed; P8 (API versions) was checked and needed no change. Re-review 2026-10-16 at c5f3fa4: ACCEPT with conditions (N1 comment between a load function and `(`, N2 outside JSON module, N4 case-sensitive `equals`); three further rounds found and closed M1 (module reference with any extension), M2 (symlink to `.azure`), M3 (`.git`), S1 (module through a symlinked directory); final verdict at 7299567: **ACCEPT** (`phase-1-azure-black-belt-reverify.md`). ADR-018 states that the file-load guard is a best-effort lexical scan, not a complete defence, and lists the gaps (`bicepconfig.json` above the project, registry references, races).
 
 ## Known limitations
 
@@ -110,7 +110,7 @@ Go 1.26.9 (core and extension, ADR-005 Amendment 1); Bicep CLI 0.48.1 (ADR-015);
 ## Exact next-phase prerequisites
 
 1. Confirm the CI run on the final PR head (the run on the docs-only commit that adds this file) is green.
-2. Obtain and record a re-review (or an explicit acceptance of the recorded verdicts) from the Foundry lead and the Azure black belt on the final head.
+2. (Done) Re-reviews recorded; see Reviews above.
 3. Resolve the two open decisions flagged in this hand-off: keep exit order 4, 2, 3, 1, 0 and default profile `foundry-prod`, or change them.
 4. Run `foundry-rules/` once under PowerShell with PSRule and record the result.
 5. Run `foundry-doctor-release.yml` once on a tag or branch to prove signing, SBOM and provenance.
@@ -127,7 +127,7 @@ Statuses follow the independent audit of 2026-10-16 (`implementation-coordinator
 | Baseline hides only matching old fingerprints | met | `TestApplyHidesOnlyMatching`; baseline generation added (`doctor --write-baseline`) with round-trip test; fingerprint v3 (ADR-008) |
 | Expired suppressions generate an error | met | `FND-SYS-SUPPRESSION-EXPIRED` (ADR-009 Amendment 1), `TestExpiredSuppressionFailsRun` |
 | Console, JSON, Markdown and SARIF output is deterministic | met | goldens in `internal/report/testdata`, `TestOutputFormatsAreDeterministic`, `internal/rules/stability` |
-| GitHub PR workflow uploads SARIF and enforces exit codes | unmet | the reusable workflow `foundry-doctor-offline.yml` enforces the exit code, but no successful run of it is evidenced; the broken in-repo starter was removed; sample starter checked with actionlint only |
+| GitHub PR workflow uploads SARIF and enforces exit codes | met | run 38974252828 (caller `foundry-doctor-offline-check.yml`, `install-mode: source`, sample `good`, head 2892fd6): doctor job, SARIF artifact, code-scanning upload and exit-code enforcement all succeeded. The run exposed that the `profile` input accepted `foundry-*` names the CLI flag rejects; fixed in 2892fd6. Fork and Dependabot pull requests, release mode and a failing-exit run are not exercised |
 | No secrets in findings, debug logs or snapshots | partly met | `check-no-secrets.sh`, redaction fuzz tests, canary run; independent security review deferred by ADR-019; no `--debug` flag yet |
 | Cross-platform binaries produced | met for build; release signing unrun | CI job "cross-platform build and checksums" (six targets); `foundry-doctor-release.yml` never run |
 | Exit codes 0 to 4 | met (order 4, 2, 3, 1, 0, ADR-010 Amendment 4) | `internal/report/exit.go` and tests |
@@ -136,6 +136,6 @@ Statuses follow the independent audit of 2026-10-16 (`implementation-coordinator
 | Bicep adapter compiles only, no custom parser | met | `internal/bicep` runs the CLI with `--no-restore --diagnostics-format sarif`; diagnostics become `bicep/<code>` findings; file-load guard |
 | Read-only guarantee | met for Phase 1 | `os.Root` confinement; no Azure call in `--local`; ADR-006, ADR-018 |
 | Fuzz tests (YAML, redaction) | met | `FuzzParse`, `FuzzRedact`, baseline, suppress, config, report and armmodel fuzzers |
-| Independent Foundry lead and Azure black belt reviews | unmet | last verdicts REJECT (Foundry lead) and ACCEPT with conditions (Azure black belt); fixes landed after both; no re-review recorded |
+| Independent Foundry lead and Azure black belt reviews | met | Foundry lead ACCEPT (b920094), Azure black belt ACCEPT (7299567); the Foundry lead did not see the load-guard commits after b920094 |
 | Security and Go principal reviews | requirement changed by ADR-019 | deferred to Phase 9 |
 | Hand-off written, DoD audited | met | this file and the audit above |
