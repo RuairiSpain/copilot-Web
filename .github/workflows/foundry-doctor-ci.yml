@@ -69,8 +69,11 @@ jobs:
         # check, the secret scan, the import-boundary check and the scripts/ci syntax check.
         # govulncheck runs here because the runner can reach vuln.go.dev; verify-phase.sh reports it as
         # skipped only where the database is unreachable.
-        # TODO(phase 1 hand-off): add --strict once cmd/foundry-doctor exists, so a skipped gate fails CI.
-        run: bash scripts/claude/verify-phase.sh
+        # --strict: every gate is available on ubuntu-latest (staticcheck and govulncheck are installed above,
+        # cmd/foundry-doctor exists, the race detector supports linux/amd64), so a SKIPPED gate fails CI (exit 3).
+        # Not covered by the strict flag: tests that skip themselves inside go test when BICEP_PATH is unset
+        # (real-Bicep tests); the smoke job installs Bicep and exercises it.
+        run: bash scripts/claude/verify-phase.sh --strict
 
   import-boundary:
     name: core builds with GOWORK=off, no azure-dev import (ADR-005)
