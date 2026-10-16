@@ -23,7 +23,7 @@ severity:
   test: info
   prod: info
 compatibility:
-  azd: '>=1.34.2 <=1.36.0-beta.1'
+  azd: '>=1.34.2 <=1.36.0'
   extensions: {}
   apiVersions:
   - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts/deployments, version: '2026-09-01' }
@@ -34,9 +34,12 @@ compatibility:
   - { plane: management, provider: Microsoft.DocumentDB, resourceType: databaseAccounts/sqlDatabases/containers, version: '2025-04-15' }
   preview: true
   notes: >-
-    azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects
-    beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from
-    a changelog and was not verified.
+    azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18,
+    projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower
+    bound came from a changelog and was not verified. Window widened 2026-10-16: azd to 1.36.0 (tag
+    azure-dev-cli_1.36.0, acebba1, released 2026-10-14). The azd and extension changelogs and the schema and source
+    diffs from the previously verified versions were read; none touches this rule's verified facts for the widened
+    fields (see docs/tool-compatibility.md section 6).
 evidence:
   description: >-
     Evaluated only for environments the profile classifies as dev; test and prod environments are not evaluated. Offline,

@@ -1,6 +1,6 @@
 # Tool compatibility matrix (Phase 0)
 
-Verified 2026-10-04. Sources: git tags and commit dates fetched from github.com (clone/ls-remote), the PyPI, npm and Go
+Verified 2026-10-04 (updated 2026-10-16, see section 6). Sources: git tags and commit dates fetched from github.com (clone/ls-remote), the PyPI, npm and Go
 proxy registries, and repository files read under `REFS` (shallow clones listed in
 `docs/development/phase-0-research-brief.md`). `learn.microsoft.com`, `api.github.com` and GitHub release pages were not
 reachable, so release dates below are tag commit dates (or registry upload dates) and can differ from the GitHub release
@@ -16,9 +16,9 @@ parsing, external exit-code translation, redaction and missing-tool behaviour.
 
 | Tool | Current stable (verified) | Tag / upload date | Proposed minimum for FD | FD dependency class |
 |---|---|---|---|---|
-| azd | 1.35.0 (`cli/azd/v1.35.0`); `main` is at 1.36.0-beta.1 | 2026-09-30 | 1.34.2 (proposed; see 2.1) | Required when running as azd extension; optional for standalone CLI |
+| azd | 1.35.0 (`cli/azd/v1.35.0`); `main` is at 1.36.0-beta.1 (updated 2026-10-16: 1.36.0 is released and was diffed, see section 6) | 2026-09-30 | 1.34.2 (proposed; see 2.1) | Required when running as azd extension; optional for standalone CLI |
 | Bicep CLI | 0.48.1 (`v0.48.1`) | 2026-09-29 | Current FD contract 0.48.1; hard floor 0.4.451 is PSRule-only, see 2.2 | Required when a requested Bicep check cannot otherwise run (exit 2); otherwise check is explicitly skipped |
-| azd Foundry/AI agent extension | `azure.ai.agents` 1.0.0-beta.18 (beta, not GA) | 2026-09-30 (CHANGELOG) | Not required; detect only | Optional (detect and report version) |
+| azd Foundry/AI agent extension | `azure.ai.agents` 1.0.0-beta.18 (beta, not GA); beta.19 and beta.20 exist (updated 2026-10-16, see section 6) | 2026-09-30 (CHANGELOG) | Not required; detect only | Optional (detect and report version) |
 | PSRule for Azure | v1.47.0 stable; v1.48.0-B0228 pre-release | 2026-01-08 / 2026-06-22 | 1.47.0 (proposed) | Optional adapter |
 | PSRule (engine module) | v2.9.0 stable; v3.0.0-B0783 pre-release | 2023-06-08 / 2026-04-28 | 2.9.0 (verified floor: `modules.json`) | Optional (via PSRule for Azure) |
 | Checkov | 3.3.22 | 2026-10-01 (PyPI) | 3.3.x current at time of release; no verified floor | Optional adapter, disabled by default |
@@ -279,6 +279,62 @@ but has no successful run evidence. azd JSON discovery shapes remain unverified.
 4. Verify PSRule invocation end to end on Linux with PowerShell 7.4 (not run here: no `pwsh` in this environment).
 5. Run Checkov (`pip install checkov==3.3.22`) and KICS binary against a Foundry Bicep sample to confirm rule coverage
    before agreeing any adapter ID mapping (this document only verified flags and formats from documentation).
+
+## 6. Verification update 2026-10-16 (R11)
+
+Method: `git diff` between tag commits of the public Azure/azure-dev repository (blobless clone) plus the extension CHANGELOG.md files on `main`.
+Nothing was run against a live azd. The diffs cover the schemas (`schemas/v1.0/azure.yaml.json` and every `azure.ai.*/schemas/`), the azd packages the
+catalogue cites (`pkg/environment`, `pkg/pipeline`, `pkg/project`, `pkg/infra`), the cited design documents and the cited extension source files.
+GitHub release pages and api.github.com were not read; dates are tag commit dates and CHANGELOG headings.
+
+| Component | Previously verified | Newly verified | Commit | Date (tag commit / CHANGELOG) |
+|---|---|---|---|---|
+| azd | 1.35.0 (`170ebb8`); main 1.36.0-beta.1 (`afe4b2b`) | 1.35.1, 1.36.0 (`azure-dev-cli_1.36.0`) | `0651d77`, `acebba1` | 2026-10-07; commit 2026-10-15 (+08:00), CHANGELOG heading 2026-10-14 |
+| azure.ai.agents | 1.0.0-beta.18 (`a64ca8f`) | beta.19, beta.20 | `8fe608d`, `5667b6a` | 2026-10-08; 2026-10-15 |
+| azure.ai.projects | 1.0.0-beta.13 | beta.14 (requires azd >=1.36.0) | `5667b6a` | 2026-10-15 |
+| azure.ai.connections | 1.0.0-beta.9 | beta.10 (build fix only) | `5667b6a` | 2026-10-15 |
+| azure.ai.toolboxes | 1.0.0-beta.9 | beta.10 (camelCase), beta.11 (build fix) | `5667b6a` | 2026-10-08; 2026-10-15 |
+| azure.ai.routines | 1.0.0-beta.8 | beta.9 (camelCase), beta.10 | `5667b6a` | 2026-10-08; 2026-10-15 |
+
+Findings that matter to rules:
+
+- `schemas/v1.0/azure.yaml.json` is byte-identical at `azure-dev-cli_1.35.0`, `azure-dev-cli_1.36.0` and `main` (empty `git diff` between the tags; file hashes of the 1.35.0 tag and `main` compared on 2026-10-16).
+  The azure.ai.projects and azure.ai.connections schemas are unchanged between beta.13 / beta.9 and the new tags.
+- azd 1.36.0: environment and state path APIs now return errors; invalid environment names, unsafe state paths and a default environment with an
+  invalid name are rejected (`azdcontext`, `local_file_data_store.go`, `environment.go`). `azd pipeline config` can install required extensions and the
+  generated pipeline templates gain an install step. Layout constants (`.azure`, `.env`, `config.json`) and the pipeline file names are unchanged.
+- azure.ai.agents beta.19 renames the prompt-memory keys (`chat_model`, `embedding_model`, `update_delay`, `max_memories` and the options keys) and the GitHub
+  Copilot toolset key `default_config` to camelCase and rejects the old spellings. The hosted session idle maximum rises from 3600 to 14400 seconds and the
+  invocation moderation `textField` becomes a field name, not a JSONPath. beta.20 adds file-backed agent definitions with validation, resolves prompt-agent
+  Connection references by service key or effective resource name, adds the `AGENT_<NAME>_PROMPT_ENDPOINT_VERSION` key, adds `metadata.tags`, and removes the
+  generated developer role assignment (`principalId`, `principalType` parameters) from synthesized infrastructure.
+- azure.ai.toolboxes beta.10 renames `instance_name`, `rai_config` and `rai_policy_name`. azure.ai.routines beta.9 renames `cron_expression`, `time_zone`,
+  `agent_name` and related keys, and its schema describes trigger type `schedule`. azure.ai.evaluations beta.2 (in no catalogue window) uses camelCase keys in `azure.eval.yaml`.
+
+Windows widened in the catalogue `compatibility` blocks on 2026-10-16:
+
+- azd upper bound `1.36.0-beta.1` to `1.36.0` for every rule that had one except ENV-001 to ENV-004.
+- azure.ai.projects to beta.14: CFG-001, CFG-003, CFG-004, CFG-010, CFG-011, DEP-004, DEP-005, DEP-011, DEP-012, ENV-003.
+- azure.ai.agents to beta.20: CFG-002, CFG-004, CFG-005, CFG-007, CFG-008, DEP-012, OPS-007, OPS-008, RUN-001, RUN-003, RUN-005, SEC-007, SEC-011.
+- azure.ai.connections to beta.10: CFG-002, CFG-005, CFG-007. azure.ai.toolboxes to beta.11: CFG-002, CFG-007, CFG-008.
+
+Left unchanged because a change touches the rule:
+
+- CFG-001 and CFG-003: agents stays beta.18 (schema key renames; Connection reference resolution).
+- CFG-006: agents and projects stay (new `AGENT_<NAME>_PROMPT_ENDPOINT_VERSION` key; provisioning inputs changed).
+- CFG-009: routines stays beta.8 (cron key, trigger type and `time_zone` renamed).
+- CFG-011: agents stays beta.18 (the hosted create path in `service_target_agent.go` changed; the unused-field behaviour was not re-verified).
+- ENV-001 to ENV-004: azd stays 1.36.0-beta.1 (path and environment-name handling changed in the files these rules cite).
+
+Rules whose catalogue `azd` field is empty carry no azd window and are not affected. `lastVerified` dates were not changed: the catalogue test pins "today"
+to 2026-10-15, so a 2026-10-16 date fails `TestRealCatalogueInvariantsAndGeneratedDocs`.
+
+Code constant: `internal/rules/cfg/versions.go` `testedMax` for `azure.ai.projects` is now `1.0.0-beta.14` (agents stays `1.0.0-beta.18`). It mirrors the
+FND-CFG-001 and FND-CFG-011 windows and `TestTestedMaxMatchesCatalogueWindows` fails if they drift.
+
+Not verified: the GitHub release pages for azd 1.36.0 and the extensions; runtime behaviour of azd 1.36.0 or the extensions (nothing was executed);
+`MicrosoftDocs/azure-ai-docs`, which returned 404 for every path on raw.githubusercontent.com from this environment, so Learn page content was not re-read
+for this update.
 
 ## azure.yaml `requiredVersions.azd` (2026-10-15)
 

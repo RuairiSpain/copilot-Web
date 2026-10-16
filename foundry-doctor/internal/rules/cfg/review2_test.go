@@ -319,8 +319,10 @@ func TestVersionNotes(t *testing.T) {
 		{">=1.0.0-beta.13", 0, false},
 		{">=1.0.0-beta.13, <2.0.0", 0, false},
 		{">=1.0.0-beta.1", 1, true},
-		{">=1.0.0-beta.14", 1, false},
-		{">1.0.0-beta.13", 1, false},
+		{">=1.0.0-beta.14", 0, false},
+		{">=1.0.0-beta.15", 1, false},
+		{">1.0.0-beta.13", 0, false},
+		{">1.0.0-beta.14", 1, false},
 		{"=1.0.0", 1, false},
 		{"^1.0.0", 1, false},
 	}

@@ -20,10 +20,17 @@ severity:
 compatibility:
   azd: ""
   extensions:
-    azure.ai.agents: ">=1.0.0-beta.18 <=1.0.0-beta.18"
+    azure.ai.agents: ">=1.0.0-beta.18 <=1.0.0-beta.20"
   apiVersions: []
   preview: true
-  notes: "No azd dependency: data-plane reads against the project endpoint; azure.yaml service names are read for correlation only azure.ai.agents 1.0.0-beta.18: probe shapes read in source. Extension ranges are exactly the versions whose schemas or source were read; widen them in Phase 1 by reading older tags. Foundry project endpoint agents API api-version v1 (read in azd extension source; no REST spec in the clones)"
+  notes: >-
+    No azd dependency: data-plane reads against the project endpoint; azure.yaml service names are read for
+    correlation only azure.ai.agents 1.0.0-beta.18: probe shapes read in source. Extension ranges are exactly the
+    versions whose schemas or source were read; widen them in Phase 1 by reading older tags. Foundry project endpoint
+    agents API api-version v1 (read in azd extension source; no REST spec in the clones) Window widened 2026-10-16:
+    azure.ai.agents to 1.0.0-beta.20. The azd and extension changelogs and the schema and source diffs from the
+    previously verified versions were read; none touches this rule's verified facts for the widened fields (see
+    docs/tool-compatibility.md section 6).
 evidence:
   description: >-
     Read-only GETs against the project endpoint: GET {projectEndpoint}/agents?api-version=v1&limit=1 (endpoint reachable),
