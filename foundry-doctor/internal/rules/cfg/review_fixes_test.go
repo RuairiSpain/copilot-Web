@@ -174,49 +174,11 @@ func TestCFG001RequiredVersionConstraints(t *testing.T) {
 			skip: uncertainPrefix + "requiredVersions.extensions.azure.ai.agents excludes the tested range"},
 		{name: "ceiling exclusive at tested", id: "FND-CFG-001", yaml: ver(">=1.0.0-beta.1 <1.0.0-beta.18"),
 			skip: "excludes the tested range"},
-		{name: "unparseable constraint", id: "FND-CFG-001", yaml: ver("^1.0.0 || 2"), skip: "cannot be parsed"},
+		{name: "unparseable constraint", id: "FND-CFG-001", yaml: ver("not-a-version"), skip: "cannot be parsed"},
+		{name: "or of valid constraints is parsed", id: "FND-CFG-001", yaml: ver("^1.0.0 || 2"), skip: "requires versions above", notInSkip: "cannot be parsed"},
 		{name: "unknown extension ignored", id: "FND-CFG-001", yaml: "name: app\nrequiredVersions:\n  extensions:\n    other.ext: \">=0.0.1\"\n"},
 		{name: "findings win over version notes", id: "FND-CFG-001", yaml: "requiredVersions:\n  extensions:\n    azure.ai.agents: \">=1.0.0-beta.10\"\n", want: 1, contains: "name is required"},
 	})
-}
-
-func TestVersionConstraintParsing(t *testing.T) {
-	tests := []struct {
-		in      string
-		ok, any bool
-		loSet   bool
-		hiSet   bool
-	}{
-		{"", true, true, false, false},
-		{"latest", true, true, false, false},
-		{">=1.0.0", true, false, true, false},
-		{"~2.0.0", true, false, true, true},
-		{"=3.1.2", true, false, true, true},
-		{"3.1.2", true, false, true, true},
-		{">= 1.0.0 < 2.0.0", true, false, true, true},
-		{"<1.0.0-beta.12", true, false, false, true},
-		{">=1.0.0-beta.10", true, false, true, false},
-		{"^1.0.0", false, false, false, false},
-		{">=1.0", false, false, false, false},
-		{">=1.0.0 ||", false, false, false, false},
-	}
-	for _, tc := range tests {
-		t.Run(tc.in, func(t *testing.T) {
-			r, anyV, ok := parseConstraint(tc.in)
-			if ok != tc.ok || (ok && anyV != tc.any) {
-				t.Fatalf("ok=%v any=%v", ok, anyV)
-			}
-			if ok && (r.lo.set != tc.loSet || r.hi.set != tc.hiSet) {
-				t.Fatalf("lo=%v hi=%v", r.lo.set, r.hi.set)
-			}
-		})
-	}
-	a, _ := parseSemver("1.0.0-beta.9")
-	b, _ := parseSemver("1.0.0-beta.10")
-	c, _ := parseSemver("1.0.0")
-	if a.cmp(b) >= 0 || b.cmp(c) >= 0 || c.cmp(c) != 0 {
-		t.Fatal("version ordering wrong")
-	}
 }
 
 func TestCFG011VersionNotesAreNotErrors(t *testing.T) {

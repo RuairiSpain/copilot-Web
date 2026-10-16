@@ -66,7 +66,53 @@ func evalCFG001(in *sdk.Input) sdk.Result {
 	for _, s := range serviceList(d) {
 		fs = append(fs, cfg001Service(d, s)...)
 	}
+	azdFs, azdNotes := cfg001AzdRange(d, root, in.AzdVersion)
+	fs = append(fs, azdFs...)
+	notes = append(notes, azdNotes...)
 	return withNotes(fs, append(notes, noteTexts(requiredVersionNotes(root, cfg001MinVersions))...))
+}
+
+// clip shortens user text quoted in evidence.
+func clip(s string) string {
+	if len(s) > 80 {
+		return s[:80] + "..."
+	}
+	return s
+}
+
+// cfg001AzdRange checks requiredVersions.azd with the blang/semver/v4 grammar
+// (docs/spikes/azd-required-versions.md; azd project.go:63-77). An invalid
+// range and a known azd version outside the range both make azd fail to load
+// the project, so both are findings. An unknown or unparseable azd version is
+// an uncertain note. A local dev build (0.0.0-dev.0) is exempt, as in azd.
+func cfg001AzdRange(d document, root *yaml.Node, azdVersion string) ([]sdk.Finding, []string) {
+	n := child(child(root, "requiredVersions"), "azd")
+	if n == nil || n.Tag == "!!null" {
+		return nil, nil // nil pointer in azd: no constraint
+	}
+	if n.Kind != yaml.ScalarNode {
+		return nil, []string{"requiredVersions.azd is not a string; the range was not checked"}
+	}
+	rng, st := parseAzdRange(n.Value)
+	switch st {
+	case parseInvalid:
+		return []sdk.Finding{{Key: "required-versions-azd-invalid", Location: loc(d, n),
+			Evidence: fmt.Sprintf("requiredVersions.azd %q is not a valid semver range; azd fails to load the project", clip(n.Value))}}, nil
+	case parseUnverified:
+		return nil, []string{"requiredVersions.azd uses a range form whose validity is not verified; the range was not checked"}
+	}
+	if strings.TrimSpace(azdVersion) == "" {
+		return nil, []string{sdk.SkipAzdVersionUnknown + ": requiredVersions.azd is declared but the azd version is unknown (use --azd-version or FOUNDRY_DOCTOR_AZD_VERSION)"}
+	}
+	v, ok := parseGivenAzdVersion(azdVersion)
+	if !ok {
+		return nil, []string{"requiredVersions.azd is declared but the azd version is not a valid semantic version; the range was not checked"}
+	}
+	if isAzdDevBuild(v) || rng.contains(v) {
+		return nil, nil
+	}
+	return []sdk.Finding{{Key: "required-versions-azd-out-of-range", Location: loc(d, n),
+		Evidence: fmt.Sprintf("azd %s is outside requiredVersions.azd %q; azd refuses to load the project", v, clip(n.Value))}}, nil
 }
 
 func cfg001Service(d document, s service) []sdk.Finding {

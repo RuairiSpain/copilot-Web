@@ -105,3 +105,13 @@ It does not define the grammar: operators, whitespace, `||` alternatives, wildca
 A hand-written parser would assert an unverified product fact, and a wrong parse would produce a false platform error in every profile. The finding is therefore **not implemented in Phase 1**.
 Behaviour is unchanged from Amendment 1: the range is evidence only and is quoted in the report header when azd is not detected. Revisit when the azd range parser or its documentation is read and pinned in
 `docs/tool-compatibility.md`. The Decision 5 bullet on `requiredVersions.azd` is a target, not Phase 1 behaviour.
+
+**Update (2026-10-16): R10 is now implemented.** The grammar was read from the azd source and the two semver libraries it uses and is recorded in `docs/spikes/azd-required-versions.md` (grammar tables for `requiredVersions.azd`, which uses blang/semver/v4 `ParseRange`, and for `requiredVersions.extensions.<id>`, which uses Masterminds/semver/v3 `NewConstraint`). FND-CFG-001 (ruleVersion 5) now:
+
+- reports an error finding (`required-versions-azd-invalid`, platform basis) when `requiredVersions.azd` is not a valid blang range, because azd then fails to load the project (`project.go:63-77`);
+- reports an error finding (`required-versions-azd-out-of-range`) when the azd version is known (`--azd-version`, `FOUNDRY_DOCTOR_AZD_VERSION` or the probe) and outside the range;
+- is **exempt for a local dev build** (`0.0.0-dev.0`) for the out-of-range check, as azd skips the check for a dev build (`internal.IsDevVersion()`). An invalid range is still reported for a dev build: it is a defect of azure.yaml that fails on a release build, and the research note does not say whether azd parses the range before the dev-build skip;
+- reports an uncertain skip naming `azd-version-unknown` when the range is declared and the version is unknown, and an uncertain skip when the version is not valid semver or the range uses a form the note does not cover (an operator on a wildcard, a bare `x`, `||` glued to a version);
+- parses `requiredVersions.extensions.<id>` with the Masterminds grammar; an invalid value is uncertain (azd falls back to an exact tag match), never an error, and extension constraints are never decided offline because installed extension versions live in azd's user config and cannot be read.
+
+The parsers are small and hand-written (no new dependency). Not verified: azd and the libraries were not executed; comma rejection and the empty-string error are inferred from source; older azd releases may differ. The Decision 5 bullet is therefore Phase 1 behaviour, and the statement above that the finding is not implemented in Phase 1 is superseded.
