@@ -1,5 +1,5 @@
 id: FND-CFG-011
-version: 3
+version: 4
 group: CFG
 title: "Preview/retired fields are version-aware"
 description: >-
