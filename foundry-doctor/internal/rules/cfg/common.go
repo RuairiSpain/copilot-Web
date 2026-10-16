@@ -292,6 +292,47 @@ func varRefs(s string) []string {
 	return out
 }
 
+// unusualForms returns, for each ${NAME<op>...} reference whose operator is
+// not the documented inline default ":-", the name and the operator (for
+// example "X:?" or "X:+" or "X="). azd core expands with drone/envsubst, whose
+// full operator set no source in this repository documents for azure.yaml, so
+// the caller treats these as uncertain, never as undefined. Default text after
+// the operator is not returned.
+func unusualForms(s string) []string {
+	var out []string
+	for i := 0; i < len(s); i++ {
+		if s[i] != '$' {
+			continue
+		}
+		if i+1 < len(s) && s[i+1] == '$' {
+			i++
+			continue
+		}
+		if !strings.HasPrefix(s[i:], "${") || strings.HasPrefix(s[i:], "${{") {
+			continue
+		}
+		end := strings.IndexByte(s[i:], '}')
+		if end < 0 {
+			return out
+		}
+		inner := s[i+2 : i+end]
+		i += end
+		j := 0
+		for j < len(inner) && (inner[j] == '_' || inner[j] >= 'A' && inner[j] <= 'Z' || inner[j] >= 'a' && inner[j] <= 'z' || j > 0 && inner[j] >= '0' && inner[j] <= '9') {
+			j++
+		}
+		if j == 0 || j == len(inner) || strings.HasPrefix(inner[j:], ":-") {
+			continue
+		}
+		op := inner[j : j+1]
+		if op == ":" && j+1 < len(inner) {
+			op = inner[j : j+2]
+		}
+		out = append(out, inner[:j]+op)
+	}
+	return out
+}
+
 func containsRef(s string) bool { return strings.Contains(s, "${") }
 
 // isWholeRef reports whether the entire value is a single ${VAR} or ${{...}}.

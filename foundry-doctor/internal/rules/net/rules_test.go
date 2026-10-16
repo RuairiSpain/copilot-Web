@@ -76,7 +76,7 @@ func TestAllRulesSkipWithoutARM(t *testing.T) {
 		seen[r.ID()] = true
 		for _, in := range []*sdk.Input{{}, nil} {
 			res, err := r.Evaluate(context.Background(), in)
-			if err != nil || res.Skipped == nil || res.Skipped.Reason != sdk.SkipInputUnavailable || len(res.Findings) != 0 {
+			if err != nil || res.Skipped == nil || !strings.HasPrefix(res.Skipped.Reason, sdk.SkipInputUnavailable+": ") || len(res.Findings) != 0 {
 				t.Fatalf("%s: want input-unavailable skip, got %+v %v", r.ID(), res, err)
 			}
 		}

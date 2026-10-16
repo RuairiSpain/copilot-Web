@@ -23,7 +23,7 @@ func evalIDN005(in *sdk.Input) sdk.Result {
 	)
 	assignments := ofType(in, typeRoleAssign)
 	if len(assignments) == 0 {
-		return skip(sdk.SkipInputUnavailable)
+		return skip(sdk.SkipInputUnavailable + ": no role assignment resource in the compiled ARM model")
 	}
 	for _, r := range assignments {
 		def, present := rawStr(r.Properties, "roleDefinitionId")

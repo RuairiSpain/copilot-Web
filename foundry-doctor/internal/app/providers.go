@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -90,6 +91,7 @@ type envStore struct {
 	once   sync.Once
 	envs   []env.Environment
 	byEn   map[string]map[string]string
+	expand map[string]map[string]bool
 	shapes map[string]map[string]env.Shape
 	status map[string]env.Status
 }
@@ -120,6 +122,7 @@ func literalResourceGroups(view sdk.AzureYAMLView) []string {
 func (s *envStore) load() {
 	s.once.Do(func() {
 		s.byEn = map[string]map[string]string{}
+		s.expand = map[string]map[string]bool{}
 		s.shapes = map[string]map[string]env.Shape{}
 		s.status = map[string]env.Status{}
 		if s.src.Dir == "" {
@@ -135,9 +138,11 @@ func (s *envStore) load() {
 		for _, n := range names {
 			vals, st := map[string]string{}, env.StatusUnreadable
 			var shapes map[string]env.Shape
+			var expanded map[string]bool
 			if rootErr == nil {
-				vals, shapes, st = readEnvFile(root, path.Join(project.AzureDir, n, ".env"))
+				vals, shapes, expanded, st = readEnvFile(root, path.Join(project.AzureDir, n, ".env"))
 			}
+			s.expand[n] = expanded
 			s.byEn[n] = vals
 			s.shapes[n] = shapes
 			s.status[n] = st
@@ -194,6 +199,27 @@ func (s *envStore) SelectionReason() string {
 	}
 }
 
+// SelectedByName implements cfg.EnvNameSelection. The environment counts as
+// selected by name when a name was given and it is not just the default from
+// .azure/config.json. A name that equals the default is treated as the default,
+// which only makes the rules less certain, never more.
+func (s *envStore) SelectedByName() bool {
+	if _, ok := s.Selected(); !ok {
+		return false
+	}
+	return s.src.Environment != s.src.DefaultEnvironment
+}
+
+// ExpandedKeys implements cfg.ExpandedKeys.
+func (s *envStore) ExpandedKeys() map[string]bool {
+	s.load()
+	out := map[string]bool{}
+	for k := range s.expand[s.src.Environment] {
+		out[k] = true
+	}
+	return out
+}
+
 // Values implements cfg.EnvView.
 func (s *envStore) Values() map[string]string {
 	s.load()
@@ -224,36 +250,36 @@ func digest(v string) string {
 // anything other than env.StatusOK comes with an empty map, because a partial
 // view would let a comparison pass on missing data. Secret-looking values are
 // replaced by a digest after parsing, so variable expansion sees real values.
-func readEnvFile(root *os.Root, rel string) (map[string]string, map[string]env.Shape, env.Status) {
+func readEnvFile(root *os.Root, rel string) (map[string]string, map[string]env.Shape, map[string]bool, env.Status) {
 	none := map[string]string{}
 	f, err := root.Open(rel)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return none, nil, env.StatusMissing
+			return none, nil, nil, env.StatusMissing
 		}
-		return none, nil, env.StatusUnreadable
+		return none, nil, nil, env.StatusUnreadable
 	}
 	defer f.Close()
 	fi, err := f.Stat()
 	if err != nil || !fi.Mode().IsRegular() {
-		return none, nil, env.StatusUnreadable
+		return none, nil, nil, env.StatusUnreadable
 	}
 	if fi.Size() > maxEnvFileBytes {
-		return none, nil, env.StatusOversize
+		return none, nil, nil, env.StatusOversize
 	}
 	data, err := io.ReadAll(io.LimitReader(f, maxEnvFileBytes+1))
 	if err != nil {
-		return none, nil, env.StatusUnreadable
+		return none, nil, nil, env.StatusUnreadable
 	}
 	if len(data) > maxEnvFileBytes {
-		return none, nil, env.StatusOversize
+		return none, nil, nil, env.StatusOversize
 	}
 	parsed, err := project.ParseDotEnv(data)
 	if err != nil {
-		return none, nil, env.StatusUnparseable
+		return none, nil, nil, env.StatusUnparseable
 	}
 	if len(parsed) > maxEnvKeys {
-		return none, nil, env.StatusTruncated
+		return none, nil, nil, env.StatusTruncated
 	}
 	delete(parsed, "") // godotenv yields an empty key for a last line without separator
 	var shapes map[string]env.Shape
@@ -270,5 +296,28 @@ func readEnvFile(root *os.Root, rel string) (map[string]string, map[string]env.S
 			parsed[k] = digest(v)
 		}
 	}
-	return parsed, shapes, env.StatusOK
+	return parsed, shapes, expandedKeys(data), env.StatusOK
+}
+
+// envAssignRe matches the start of a .env statement: optional export, the key
+// and the separator, then the raw value text on that line.
+var envAssignRe = regexp.MustCompile(`(?m)^[ \t]*(?:export[ \t]+)?([A-Za-z0-9_.]+)[ \t]*[=:][ \t]*(.*)$`)
+
+// expandedKeys returns the keys whose last assignment has a raw value that
+// can trigger variable expansion in the godotenv grammar: a '$' outside a
+// single-quoted value. It scans lines only; a double-quoted value that spans
+// lines is judged by its first line, which is where the key and any '$' that
+// matters for a short value like AZURE_LOCATION sit.
+func expandedKeys(data []byte) map[string]bool {
+	out := map[string]bool{}
+	for _, m := range envAssignRe.FindAllSubmatch(data, -1) {
+		raw := strings.TrimSpace(string(m[2]))
+		out[string(m[1])] = strings.Contains(raw, "$") && !strings.HasPrefix(raw, "'")
+	}
+	for k, v := range out {
+		if !v {
+			delete(out, k)
+		}
+	}
+	return out
 }

@@ -12,7 +12,7 @@ import (
 func evalCFG002(in *sdk.Input) sdk.Result {
 	d, okd := loadDoc(in)
 	if !okd {
-		return skip(sdk.SkipInputUnavailable)
+		return skip(sdk.SkipInputUnavailable + ": azure.yaml unavailable")
 	}
 	svcs := serviceList(d)
 	all := byName(svcs)
@@ -48,7 +48,7 @@ func evalCFG002(in *sdk.Input) sdk.Result {
 func evalCFG003(in *sdk.Input) sdk.Result {
 	d, okd := loadDoc(in)
 	if !okd {
-		return skip(sdk.SkipInputUnavailable)
+		return skip(sdk.SkipInputUnavailable + ": azure.yaml unavailable")
 	}
 	svcs := serviceList(d)
 	all := byName(svcs)

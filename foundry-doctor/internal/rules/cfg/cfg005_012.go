@@ -61,7 +61,7 @@ func secretShaped(v string) bool {
 func evalCFG005(in *sdk.Input) sdk.Result {
 	d, okd := loadDoc(in)
 	if !okd {
-		return skip(sdk.SkipInputUnavailable)
+		return skip(sdk.SkipInputUnavailable + ": azure.yaml unavailable")
 	}
 	var fs []sdk.Finding
 	var notes []string
@@ -143,7 +143,7 @@ func riskyHost(h string) bool {
 func evalCFG007(in *sdk.Input) sdk.Result {
 	d, okd := loadDoc(in)
 	if !okd {
-		return skip(sdk.SkipInputUnavailable)
+		return skip(sdk.SkipInputUnavailable + ": azure.yaml unavailable")
 	}
 	var fs []sdk.Finding
 	for _, s := range serviceList(d) {
@@ -176,7 +176,7 @@ var cfg011MinVersions = map[string]string{
 func evalCFG011(in *sdk.Input) sdk.Result {
 	d, okd := loadDoc(in)
 	if !okd {
-		return skip(sdk.SkipInputUnavailable)
+		return skip(sdk.SkipInputUnavailable + ": azure.yaml unavailable")
 	}
 	var fs []sdk.Finding
 	for _, s := range serviceList(d) {
@@ -210,18 +210,19 @@ func evalCFG011(in *sdk.Input) sdk.Result {
 }
 
 // Variable names azd core defines as environment keys (azd source,
-// cli/azd/pkg/environment/environment.go) and that azd itself sets for every
-// environment. The source defines the names but does not state which are
-// always set, so only the environment name, subscription and resource group
-// are treated as producers; the others are uncertain when absent.
-var standardVars = map[string]bool{
-	"AZURE_ENV_NAME": true, "AZURE_SUBSCRIPTION_ID": true, "AZURE_RESOURCE_GROUP": true,
-}
+// cli/azd/pkg/environment/environment.go). The source defines the names but
+// does not state which are always set, so none is a guaranteed producer: a
+// name absent from the selected environment's .env is uncertain, except
+// AZURE_ENV_NAME when the environment was selected by name (see
+// EnvNameSelection).
 
 // Names azd also defines in the same source but that only exist when the
 // infrastructure, the host or the user provides them. They are not known
 // producers; a missing one is uncertain, not an error.
 var infraDependentVars = map[string]bool{
+	"AZURE_ENV_NAME":                                  true,
+	"AZURE_SUBSCRIPTION_ID":                           true,
+	"AZURE_RESOURCE_GROUP":                            true,
 	"AZURE_LOCATION":                                  true,
 	"AZURE_TENANT_ID":                                 true,
 	"AZURE_PRINCIPAL_ID":                              true,
@@ -250,6 +251,23 @@ const (
 // reported as no-environment-selected.
 type EnvSelection interface {
 	SelectionReason() string
+}
+
+// EnvNameSelection is optionally implemented by an EnvView to say that the
+// environment was selected by name (a flag or configured name), not by the
+// default in .azure/config.json. Only then is AZURE_ENV_NAME known to equal
+// the selected name even when the .env file does not hold it. A view without
+// it, or one that returns false, gets no such assumption.
+type EnvNameSelection interface {
+	SelectedByName() bool
+}
+
+// ExpandedKeys is optionally implemented by an EnvView to name .env keys whose
+// raw value used variable expansion ($VAR or ${VAR}). The parsed value of such
+// a key depends on keys the parser may not have seen (an undefined variable
+// expands to the empty string), so it is not trusted as empty or as set.
+type ExpandedKeys interface {
+	ExpandedKeys() map[string]bool
 }
 
 // envSkip builds the missing-input skip for an unusable environment view, or
@@ -290,7 +308,7 @@ func agentProducers(s service) []string {
 func evalCFG006(in *sdk.Input, p Providers) sdk.Result {
 	d, okd := loadDoc(in)
 	if !okd {
-		return skip(sdk.SkipInputUnavailable)
+		return skip(sdk.SkipInputUnavailable + ": azure.yaml unavailable")
 	}
 	if r, bad := envSkip(p); bad {
 		return r
@@ -303,6 +321,9 @@ func evalCFG006(in *sdk.Input, p Providers) sdk.Result {
 			continue
 		}
 		have[k] = true
+	}
+	if es, isName := p.Env.(EnvNameSelection); isName && es.SelectedByName() && !empty["AZURE_ENV_NAME"] {
+		have["AZURE_ENV_NAME"] = true
 	}
 	// Bicep/ARM outputs are an additional producer class. Without a compiled
 	// model, or with a model that exposes no outputs, the set of outputs is
@@ -330,8 +351,14 @@ func evalCFG006(in *sdk.Input, p Providers) sdk.Result {
 	var notes []string
 	seen := map[string]bool{}
 	walkScalars(d.Resolved(), "", func(path, _ string, v *yaml.Node) {
+		for _, form := range unusualForms(v.Value) {
+			if !seen["form:"+form] {
+				seen["form:"+form] = true
+				notes = append(notes, fmt.Sprintf("${%s...} uses a substitution form that no verified azd source documents for azure.yaml; whether it is defined is undecided", form))
+			}
+		}
 		for _, name := range varRefs(v.Value) {
-			if have[name] || standardVars[name] || seen[name] {
+			if have[name] || seen[name] {
 				continue
 			}
 			seen[name] = true
@@ -363,6 +390,11 @@ func evalCFG012(in *sdk.Input, p Providers) sdk.Result {
 	v, present := p.Env.Values()["AZURE_LOCATION"]
 	if !present || containsRef(v) {
 		return skip(sdk.SkipInputUnavailable + ": AZURE_LOCATION is not set in the selected environment")
+	}
+	if xk, isX := p.Env.(ExpandedKeys); isX && xk.ExpandedKeys()["AZURE_LOCATION"] {
+		// godotenv expands an undefined variable to the empty string; the parsed
+		// value does not show what the author or azd intends.
+		return skip(uncertainPrefix + "AZURE_LOCATION is defined by variable expansion in the .env file; its value cannot be judged statically")
 	}
 	switch {
 	case strings.TrimSpace(v) == "":

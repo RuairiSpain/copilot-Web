@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 
 	"go.yaml.in/yaml/v3"
 
@@ -19,7 +20,17 @@ import (
 type Diagnostic struct {
 	Message  string       `json:"message"`
 	Location sdk.Location `json:"location"`
+	// Path is the dotted key path of the mapping that holds the problem, for
+	// duplicate keys. Rules use it so an ordinal among identical problems does
+	// not shift when an unrelated duplicate is added elsewhere.
+	Path string `json:"path,omitempty"`
 }
+
+// MultiDocumentMessage is the diagnostic recorded when the file holds more
+// than one YAML document. azd decodes only the first document (project.Parse
+// calls yaml.Unmarshal from github.com/braydonk/yaml v0.9.0, which parses one
+// document), so the rest is ignored by azd and by this tool.
+const MultiDocumentMessage = "multiple YAML documents: azd reads only the first document"
 
 // Document is a parsed azure.yaml. It implements sdk.AzureYAMLView.
 type Document struct {
@@ -34,9 +45,10 @@ var _ sdk.AzureYAMLView = (*Document)(nil)
 // ErrEmpty is returned for an empty document.
 var ErrEmpty = errors.New("azure.yaml is empty")
 
-// Parse parses data strictly. Syntax errors, multiple documents, empty input
-// and a non-mapping root return an error. Duplicate keys and unresolved
-// uses references are recorded as diagnostics.
+// Parse parses data strictly. Syntax errors, empty input and a non-mapping
+// root return an error. Duplicate keys, unresolved uses references and
+// further YAML documents after the first (which azd ignores) are recorded as
+// diagnostics.
 func Parse(data []byte, path string) (*Document, error) {
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	var root yaml.Node
@@ -47,15 +59,20 @@ func Parse(data []byte, path string) (*Document, error) {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
 	var extra yaml.Node
-	if err := dec.Decode(&extra); err == nil {
-		return nil, fmt.Errorf("parse %s: multiple YAML documents are not supported", path)
-	} else if !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("parse %s: %w", path, err)
-	}
+	extraErr := dec.Decode(&extra)
 	if root.Kind != yaml.DocumentNode || len(root.Content) != 1 || root.Content[0].Kind != yaml.MappingNode {
 		return nil, fmt.Errorf("parse %s: top level must be a mapping", path)
 	}
 	d := &Document{path: path, root: root.Content[0]}
+	if extraErr == nil || !errors.Is(extraErr, io.EOF) {
+		// azd never reads past the first document, so neither a second document
+		// nor a syntax error inside it can change what azd loads.
+		line := extra.Line
+		if line == 0 {
+			line = 1
+		}
+		d.diagnostics = append(d.diagnostics, Diagnostic{Message: MultiDocumentMessage, Location: sdk.Location{File: path, Line: line, Column: 1}})
+	}
 	d.checkDuplicates(d.root, nil, 0)
 	d.resolve()
 	d.checkUses()
@@ -107,6 +124,7 @@ func (d *Document) checkDuplicates(n *yaml.Node, trail []string, depth int) {
 				d.diagnostics = append(d.diagnostics, Diagnostic{
 					Message:  fmt.Sprintf("duplicate key %q", k.Value),
 					Location: d.loc(k),
+					Path:     strings.Join(trail, "."),
 				})
 			}
 			seen[k.Value] = true

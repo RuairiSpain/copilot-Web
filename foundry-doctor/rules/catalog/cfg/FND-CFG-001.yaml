@@ -1,5 +1,5 @@
 id: FND-CFG-001
-version: 3
+version: 4
 group: CFG
 title: Valid YAML, duplicate-key detection and compatible azure.ai.* schema
 description: >-
@@ -131,3 +131,8 @@ notes: >-
   requiredVersions.extensions: comma- and space-separated constraints are accepted. A floor above the highest tested
   version is reported as uncertain (not verified). A floor below the tested minimum is informational and does not make
   the rule inconclusive.
+  Version 4: the Key of a duplicate-key finding includes the dotted path of the mapping, so a duplicate added under
+  another mapping does not renumber existing ones. Multiple YAML documents: azd decodes only the first document
+  (project.Parse calls yaml.Unmarshal from github.com/braydonk/yaml v0.9.0, whose unmarshal parses one document; source
+  read 2026-10-16), so a second document is reported as an uncertain note, not as an input error. Unverified: whether
+  azd warns about the ignored documents.

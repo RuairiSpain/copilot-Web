@@ -7,6 +7,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/azureyaml"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
 
@@ -23,16 +24,26 @@ var appNameRe = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
 func evalCFG001(in *sdk.Input) sdk.Result {
 	d, ok0 := loadDoc(in)
 	if !ok0 {
-		return skip(sdk.SkipInputUnavailable)
+		return skip(sdk.SkipInputUnavailable + ": azure.yaml unavailable")
 	}
 	var fs []sdk.Finding
+	var notes []string
 	dupN := map[string]int{}
 	for _, dg := range d.Diagnostics() {
+		if dg.Message == azureyaml.MultiDocumentMessage {
+			// azd decodes only the first document, so this cannot change what
+			// azd loads: a warning-level note, never a failure.
+			notes = append(notes, dg.Message)
+			continue
+		}
 		if strings.HasPrefix(dg.Message, "duplicate key") {
-			// The key is the message plus the ordinal among identical messages,
-			// so two duplicates of one key stay distinct without using a line.
-			dupN[dg.Message]++
-			fs = append(fs, sdk.Finding{Key: fmt.Sprintf("duplicate-key:%s#%d", dg.Message, dupN[dg.Message]),
+			// The key is the mapping path, the message and the ordinal among
+			// identical messages under that path, so two duplicates of one key
+			// stay distinct without a line and a duplicate added under another
+			// mapping does not renumber them.
+			id := dg.Path + "\x00" + dg.Message
+			dupN[id]++
+			fs = append(fs, sdk.Finding{Key: fmt.Sprintf("duplicate-key:%s:%s#%d", dg.Path, dg.Message, dupN[id]),
 				Location: sdk.Location{File: dg.Location.File, Line: dg.Location.Line, Column: dg.Location.Column}, Evidence: dg.Message})
 		}
 	}
@@ -55,7 +66,7 @@ func evalCFG001(in *sdk.Input) sdk.Result {
 	for _, s := range serviceList(d) {
 		fs = append(fs, cfg001Service(d, s)...)
 	}
-	return withNotes(fs, noteTexts(requiredVersionNotes(root, cfg001MinVersions)))
+	return withNotes(fs, append(notes, noteTexts(requiredVersionNotes(root, cfg001MinVersions))...))
 }
 
 func cfg001Service(d document, s service) []sdk.Finding {
