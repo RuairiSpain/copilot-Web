@@ -20,13 +20,18 @@ severity:
   test: error
   prod: error
 compatibility:
-  azd: '>=1.36.0-beta.1 <=1.36.0-beta.1'
+  azd: '>=1.36.0-beta.1 <=1.36.0'
   extensions: {}
   apiVersions: []
   preview: true
   notes: >-
-    azd verified at exactly 1.36.0-beta.1. Azd stores entry-point outputs as environment values per azd docs Bicep linter
-    rule outputs-should-not-contain-secrets (Learn ms.date 10/30/2025) - refs/azure-docs/articles/azure-resource-manager/bicep/linter-rule-outputs-should-not-contain-secrets.md
+    azd verified at exactly 1.36.0-beta.1. Azd stores entry-point outputs as environment values per azd docs Bicep
+    linter rule outputs-should-not-contain-secrets (Learn ms.date 10/30/2025) -
+    https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/azure-resource-manager/bicep/linter-rule-outputs-should-not-contain-secrets.md
+    (branch URL, not commit-pinned) Window widened 2026-10-16: azd to 1.36.0 (tag azure-dev-cli_1.36.0, acebba1,
+    released 2026-10-14). The azd and extension changelogs and the schema and source diffs from the previously
+    verified versions were read; none touches this rule's verified facts for the widened fields (see
+    docs/tool-compatibility.md section 6).
 evidence:
   description: >-
     Run the Bicep CLI build and collect the diagnostic with code outputs-should-not-contain-secrets (default level warning
@@ -42,16 +47,21 @@ fix: >-
 sources:
 - url: https://learn.microsoft.com/azure/azure-resource-manager/bicep/linter-rule-outputs-should-not-contain-secrets
   lastVerified: '2026-10-05'
-  verifiedVia: refs/azure-docs/articles/azure-resource-manager/bicep/linter-rule-outputs-should-not-contain-secrets.md
-  note: Rule code and detection (secure params, list* functions, names containing password).
+  verifiedVia: >-
+    https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/azure-resource-manager/bicep/linter-rule-outputs-should-not-contain-secrets.md
+  note: >-
+    Rule code and detection (secure params, list* functions, names containing password). Branch URL, not
+    commit-pinned.
 - url: https://learn.microsoft.com/azure/azure-resource-manager/bicep/linter
   lastVerified: '2026-10-05'
-  verifiedVia: refs/azure-docs/articles/azure-resource-manager/bicep/linter.md
-  note: Rule table lists default level warning.
+  verifiedVia: >-
+    https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/azure-resource-manager/bicep/linter.md
+  note: Rule table lists default level warning. Branch URL, not commit-pinned.
 - url: https://learn.microsoft.com/azure/developer/azure-developer-cli/azd-templates
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azd-docs/articles/azure-developer-cli/azd-templates.md
-  note: azd stores outputs from the entry point as environment values.
+  verifiedVia: >-
+    https://github.com/MicrosoftDocs/azure-dev-docs/blob/main/articles/azure-developer-cli/azd-templates.md
+  note: azd stores outputs from the entry point as environment values. Branch URL, not commit-pinned.
 - url: https://github.com/Azure/bicep/blob/4d4395e327b32da45ae3d961aa464d28e54d26f7/src/Bicep.Core/Analyzers/Linter/Rules/OutputsShouldNotContainSecretsRule.cs
   lastVerified: '2026-10-05'
   verifiedVia: >-

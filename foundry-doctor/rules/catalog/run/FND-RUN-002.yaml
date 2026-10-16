@@ -60,7 +60,10 @@ fix: |-
 sources:
 - url: https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/includes/how-to-virtual-networks-content.md
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks; source file
+    MicrosoftDocs/azure-ai-docs: articles/foundry/agents/includes/how-to-virtual-networks-content.md;
+    retrieved 2026-10-04
   note: >-
     DNS zone summary table, validation step ("From a machine connected to the VNet, run nslookup"), troubleshooting (private
     IP expected, 168.63.129.16 forwarders).
@@ -68,13 +71,16 @@ sources:
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/privatedns/resource-manager/Microsoft.Network/PrivateDns/stable/2018-09-01/privatedns.json
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/rest-api-specs/specification/privatedns/resource-manager/Microsoft.Network/PrivateDns/stable/2018-09-01/privatedns.json
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/privatedns/resource-manager/Microsoft.Network/PrivateDns/stable/2018-09-01/privatedns.json
   note: >-
-    virtualNetworkLinks path and virtualNetworkLinkState read-only property (documented values InProgress, Completed in
-    the enum).
+    virtualNetworkLinks path and virtualNetworkLinkState read-only property (documented values InProgress,
+    Completed in the enum). Branch URL, not commit-pinned.
 - url: https://learn.microsoft.com/azure/foundry/agents/concepts/agents-networking-deep-dive
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/agents-networking-deep-dive.md
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/agents/concepts/agents-networking-deep-dive; source file
+    MicrosoftDocs/azure-ai-docs: articles/foundry/agents/concepts/agents-networking-deep-dive.md; retrieved
+    2026-10-04
   note: Private DNS zones keep name resolution inside the VNet for storage, database and Key Vault private endpoints.
 overlap:
   decision: native

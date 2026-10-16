@@ -52,20 +52,29 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/search/service-create-private-endpoint
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/service-create-private-endpoint.md (ms.date 08/05/2026)
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/search/service-create-private-endpoint (ms.date 08/05/2026); source
+      file MicrosoftDocs/azure-ai-docs: articles/search/service-create-private-endpoint.md; retrieved
+      2026-10-04
     note: Basic tier or higher; private endpoints aren't supported on the Free tier.
   - url: https://learn.microsoft.com/azure/search/search-sku-tier
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/search-sku-tier.md (ms.date 08/04/2026)
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/search/search-sku-tier (ms.date 08/04/2026); source file
+      MicrosoftDocs/azure-ai-docs: articles/search/search-sku-tier.md; retrieved 2026-10-04
     note: Private endpoint feature row - inbound not available on Free; outbound indexer limits by tier.
   - url: https://learn.microsoft.com/azure/search/search-limits-quotas-capacity
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/search-limits-quotas-capacity.md (ms.date 09/16/2026)
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/search/search-limits-quotas-capacity (ms.date 09/16/2026); source file
+      MicrosoftDocs/azure-ai-docs: articles/search/search-limits-quotas-capacity.md; retrieved 2026-10-04
     note: Private endpoint indexer support table by tier and maximum private endpoints.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
-    note: SkuName enum and publicNetworkAccess Enabled/Disabled/SecuredByPerimeter.
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
+    note: >-
+      SkuName enum and publicNetworkAccess Enabled/Disabled/SecuredByPerimeter. Branch URL, not commit-pinned.
 overlap:
   decision: adapt
   provisional: true

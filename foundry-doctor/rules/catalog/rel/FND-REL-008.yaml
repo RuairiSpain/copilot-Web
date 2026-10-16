@@ -48,18 +48,25 @@ fix: "resource ptu 'Microsoft.CognitiveServices/accounts/deployments@2026-05-01'
 sources:
 - url: https://learn.microsoft.com/azure/foundry/openai/how-to/spillover-traffic-management
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/openai/how-to/spillover-traffic-management.md and includes/how-to-spillover-traffic-management-1.md,
-    -2.md (ms.date 06/18/2026)
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/openai/how-to/spillover-traffic-management and
+    includes/how-to-spillover-traffic-management-1.md, -2.md (ms.date 06/18/2026); source file
+    MicrosoftDocs/azure-ai-docs: articles/foundry/openai/how-to/spillover-traffic-management.md; retrieved
+    2026-10-04
   note: spilloverDeploymentName property, same-resource standard deployment requirement, trigger status codes, header alternative,
     cost.
 - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-05-01/cognitiveservices.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-05-01/cognitiveservices.json
-  note: DeploymentProperties.spilloverDeploymentName description.
+  verifiedVia: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-05-01/cognitiveservices.json
+  note: DeploymentProperties.spilloverDeploymentName description. Branch URL, not commit-pinned.
 - url: https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/CognitiveServices/accounts/recommendations.yaml
   lastVerified: '2026-10-04'
-  verifiedVia: refs/wara (git show HEAD:azure-resources/CognitiveServices/accounts/recommendations.yaml)
-  note: WARA 0c193899-da60-4a52-b4a0-77d75ac8c5c5 (PAYG instance to manage overflow), pgVerified true.
+  verifiedVia: >-
+    https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/CognitiveServices/accounts/recommendations.yaml
+  note: >-
+    WARA 0c193899-da60-4a52-b4a0-77d75ac8c5c5 (PAYG instance to manage overflow), pgVerified true. Branch URL,
+    not commit-pinned.
 overlap:
   decision: native
   provisional: true

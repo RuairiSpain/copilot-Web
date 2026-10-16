@@ -36,8 +36,9 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview
     lastVerified: "2026-10-05"
-    verifiedVia: refs/azd-docs/articles/azure-developer-cli/environments-overview.md
-    note: Environment layout (.azure/<env>/.env) that the comparison reads.
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/azure-dev-docs/blob/main/articles/azure-developer-cli/environments-overview.md
+    note: Environment layout (.azure/<env>/.env) that the comparison reads. Branch URL, not commit-pinned.
   - url: https://github.com/Azure/azure-dev/blob/azure-dev-cli_1.35.0/cli/azd/pkg/environment/local_file_data_store.go
     lastVerified: '2026-10-05'
     verifiedVia: >-

@@ -74,13 +74,18 @@ fix: |
 sources:
 - url: https://learn.microsoft.com/azure/foundry/agents/concepts/networking-options
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/networking-options.md (ms.date 06/29/2026)
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/agents/concepts/networking-options (ms.date 06/29/2026); source
+    file MicrosoftDocs/azure-ai-docs: articles/foundry/agents/concepts/networking-options.md; retrieved
+    2026-10-04
   note: >-
     Default is fully public; inbound is public (optionally selected IPs) or private endpoint; isolation of egress implies
     private endpoint inbound.
 - url: https://learn.microsoft.com/azure/foundry/how-to/configure-private-link
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/how-to/configure-private-link.md (ms.date 09/29/2026)
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/how-to/configure-private-link (ms.date 09/29/2026); source file
+    MicrosoftDocs/azure-ai-docs: articles/foundry/how-to/configure-private-link.md; retrieved 2026-10-04
   note: >-
     PNA flag decides whether a private endpoint is required; Disabled, selected IPs and all networks; connection stays Pending
     until approved.
@@ -88,13 +93,15 @@ sources:
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
   note: >-
-    AccountProperties publicNetworkAccess enum Enabled/Disabled; NetworkRuleSet defaultAction Allow/Deny, bypass None/AzureServices,
-    ipRules, virtualNetworkRules.
+    AccountProperties publicNetworkAccess enum Enabled/Disabled; NetworkRuleSet defaultAction Allow/Deny,
+    bypass None/AzureServices, ipRules, virtualNetworkRules. Branch URL, not commit-pinned.
 - url: https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/virtual-networks.md (ms.date 06/15/2026)
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks (ms.date 06/15/2026); source file
+    MicrosoftDocs/azure-ai-docs: articles/foundry/agents/how-to/virtual-networks.md; retrieved 2026-10-04
   note: Private endpoint group ID account; projects inherit the account network posture.
 overlap:
   decision: adapt

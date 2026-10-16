@@ -45,26 +45,36 @@ fix: "resource st 'Microsoft.Storage/storageAccounts@2026-09-01' = {\n  name: st
 sources:
 - url: https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/how-to/high-availability-resiliency.md and includes/how-to-high-availability-resiliency-1.md
-    (ms.date 09/21/2026)
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency and
+    includes/how-to-high-availability-resiliency-1.md (ms.date 09/21/2026); source file
+    MicrosoftDocs/azure-ai-docs: articles/foundry/how-to/high-availability-resiliency.md; retrieved 2026-10-04
   note: Foundry guidance on shared responsibility, delete locks, zone redundancy, recovery configuration and multi-region
     deployment.
 - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/storage/resource-manager/Microsoft.Storage/stable/2026-09-01/openapi.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/rest-api-specs/specification/storage/resource-manager/Microsoft.Storage/stable/2026-09-01/openapi.json
-  note: SkuName enum.
+  verifiedVia: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/storage/resource-manager/Microsoft.Storage/Storage/stable/2026-09-01/openapi.json
+  note: SkuName enum. Branch URL, not commit-pinned.
 - url: https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/Storage/storageAccounts/recommendations.yaml
   lastVerified: '2026-10-04'
-  verifiedVia: refs/wara (git show HEAD:azure-resources/Storage/storageAccounts/recommendations.yaml)
-  note: WARA e6c7e1cc-2f47-264d-aa50-1da421314472 (zone or region redundant storage), pgVerified true.
+  verifiedVia: >-
+    https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/Storage/storageAccounts/recommendations.yaml
+  note: >-
+    WARA e6c7e1cc-2f47-264d-aa50-1da421314472 (zone or region redundant storage), pgVerified true. Branch URL,
+    not commit-pinned.
 - url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.Storage.UseReplication/
   lastVerified: '2026-10-04'
-  verifiedVia: refs/psrule/docs/en/rules/Azure.Storage.UseReplication.md
-  note: Overlap source (PSRule for Azure rule documentation).
+  verifiedVia: >-
+    https://github.com/Azure/PSRule.Rules.Azure/blob/main/docs/en/rules/Azure.Storage.UseReplication.md
+  note: Overlap source (PSRule for Azure rule documentation). Branch URL, not commit-pinned.
 - url: https://github.com/Azure/azure-policy/blob/master/built-in-policies/policyDefinitions/Storage/GeoRedundant_StorageAccounts_Audit.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-policy/built-in-policies/policyDefinitions/Storage/GeoRedundant_StorageAccounts_Audit.json
-  note: Built-in policy bf045164-79ba-4215-8f95-f8048dc1780b (audit geo-redundant storage).
+  verifiedVia: >-
+    https://github.com/Azure/azure-policy/blob/master/built-in-policies/policyDefinitions/Storage/GeoRedundant_StorageAccounts_Audit.json
+  note: >-
+    Built-in policy bf045164-79ba-4215-8f95-f8048dc1780b (audit geo-redundant storage). Branch URL, not
+    commit-pinned.
 overlap:
   decision: adapt
   provisional: true

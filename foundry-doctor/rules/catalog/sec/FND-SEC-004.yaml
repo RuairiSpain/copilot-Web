@@ -58,26 +58,30 @@ sources:
 - url: >-
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/storage/resource-manager/Microsoft.Storage/stable/2026-06-01/openapi.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/rest-api-specs/specification/storage/resource-manager/Microsoft.Storage/stable/2026-06-01/openapi.json
+  verifiedVia: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/storage/resource-manager/Microsoft.Storage/Storage/stable/2026-06-01/openapi.json
   note: >-
-    StorageAccountProperties / StorageAccountPropertiesCreateParameters: allowSharedKeyAccess, allowBlobPublicAccess, supportsHttpsTrafficOnly,
-    minimumTlsVersion (enum TLS1_0..TLS1_3) with the default text quoted in evidence.
+    StorageAccountProperties / StorageAccountPropertiesCreateParameters: allowSharedKeyAccess,
+    allowBlobPublicAccess, supportsHttpsTrafficOnly, minimumTlsVersion (enum TLS1_0..TLS1_3) with the default
+    text quoted in evidence. Branch URL, not commit-pinned.
 - url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.Storage.LocalAuth/
   lastVerified: '2026-10-04'
-  verifiedVia: refs/psrule/docs/en/rules/Azure.Storage.LocalAuth.md
-  note: Overlap source (PSRule for Azure rule documentation).
+  verifiedVia: https://github.com/Azure/PSRule.Rules.Azure/blob/main/docs/en/rules/Azure.Storage.LocalAuth.md
+  note: Overlap source (PSRule for Azure rule documentation). Branch URL, not commit-pinned.
 - url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.Storage.BlobPublicAccess/
   lastVerified: '2026-10-04'
-  verifiedVia: refs/psrule/docs/en/rules/Azure.Storage.BlobPublicAccess.md
-  note: Overlap source (PSRule for Azure rule documentation).
+  verifiedVia: >-
+    https://github.com/Azure/PSRule.Rules.Azure/blob/main/docs/en/rules/Azure.Storage.BlobPublicAccess.md
+  note: Overlap source (PSRule for Azure rule documentation). Branch URL, not commit-pinned.
 - url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.Storage.MinTLS/
   lastVerified: '2026-10-04'
-  verifiedVia: refs/psrule/docs/en/rules/Azure.Storage.MinTLS.md
-  note: Overlap source (PSRule for Azure rule documentation).
+  verifiedVia: https://github.com/Azure/PSRule.Rules.Azure/blob/main/docs/en/rules/Azure.Storage.MinTLS.md
+  note: Overlap source (PSRule for Azure rule documentation). Branch URL, not commit-pinned.
 - url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.Storage.SecureTransfer/
   lastVerified: '2026-10-04'
-  verifiedVia: refs/psrule/docs/en/rules/Azure.Storage.SecureTransfer.md
-  note: Overlap source (PSRule for Azure rule documentation).
+  verifiedVia: >-
+    https://github.com/Azure/PSRule.Rules.Azure/blob/main/docs/en/rules/Azure.Storage.SecureTransfer.md
+  note: Overlap source (PSRule for Azure rule documentation). Branch URL, not commit-pinned.
 overlap:
   decision: adapt
   provisional: true

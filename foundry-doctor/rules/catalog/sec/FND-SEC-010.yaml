@@ -43,20 +43,26 @@ fix: "// Informational. Example for a Search service that enforces CMK complianc
 sources:
 - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
-  note: Encryption.keySource enum (Microsoft.CognitiveServices | Microsoft.KeyVault), keyVaultProperties.
+  verifiedVia: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+  note: >-
+    Encryption.keySource enum (Microsoft.CognitiveServices | Microsoft.KeyVault), keyVaultProperties. Branch
+    URL, not commit-pinned.
 - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/rest-api-specs/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
-  note: EncryptionWithCmk.enforcement (SearchEncryptionWithCmk enum).
+  verifiedVia: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
+  note: EncryptionWithCmk.enforcement (SearchEncryptionWithCmk enum). Branch URL, not commit-pinned.
 - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/rest-api-specs/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
-  note: keyVaultKeyUri property.
+  verifiedVia: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
+  note: keyVaultKeyUri property. Branch URL, not commit-pinned.
 - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/storage/resource-manager/Microsoft.Storage/stable/2026-06-01/openapi.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/rest-api-specs/specification/storage/resource-manager/Microsoft.Storage/stable/2026-06-01/openapi.json
-  note: Encryption.keySource enum (Microsoft.Storage | Microsoft.Keyvault).
+  verifiedVia: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/storage/resource-manager/Microsoft.Storage/Storage/stable/2026-06-01/openapi.json
+  note: Encryption.keySource enum (Microsoft.Storage | Microsoft.Keyvault). Branch URL, not commit-pinned.
 overlap:
   decision: adapt
   provisional: true

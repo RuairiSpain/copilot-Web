@@ -57,19 +57,30 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/search/semantic-how-to-enable-disable
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/semantic-how-to-enable-disable.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/search/semantic-how-to-enable-disable; source file
+      MicrosoftDocs/azure-ai-docs: articles/search/semantic-how-to-enable-disable.md; retrieved 2026-10-04
     note: Free default plan with billing error after allowance; standard requires Basic or higher; disabled no longer valid from 2026-03-01-preview and treated as free; PATCH versus PUT warning.
   - url: https://learn.microsoft.com/azure/search/agentic-retrieval-how-to-enable-disable
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/agentic-retrieval-how-to-enable-disable.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/search/agentic-retrieval-how-to-enable-disable; source file
+      MicrosoftDocs/azure-ai-docs: articles/search/agentic-retrieval-how-to-enable-disable.md; retrieved
+      2026-10-04
     note: knowledgeRetrieval plan free or standard; payment-required error after the free allowance; semanticSearch controls both before 2026-04-01.
   - url: https://learn.microsoft.com/azure/search/agentic-retrieval-how-to-create-index
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/agentic-retrieval-how-to-create-index.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/search/agentic-retrieval-how-to-create-index; source file
+      MicrosoftDocs/azure-ai-docs: articles/search/agentic-retrieval-how-to-create-index.md; retrieved
+      2026-10-04
     note: Agentic retrieval uses L2 semantic ranking; semantic configuration is required.
   - url: https://github.com/Azure/azure-rest-api-specs/tree/main/specification/search/resource-manager/Microsoft.Search/Search
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/search/resource-manager/Microsoft.Search/Search/models.tsp (SearchSemanticSearch disabled|free|standard; KnowledgeRetrieval free|standard added 2026-03-01-preview)
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/models.tsp
+      (SearchSemanticSearch disabled|free|standard; KnowledgeRetrieval free|standard added 2026-03-01-preview)
+    note: Branch URL, not commit-pinned.
 overlap:
   decision: native
   provisional: true

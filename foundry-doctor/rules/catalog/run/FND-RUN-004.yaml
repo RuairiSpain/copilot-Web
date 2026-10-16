@@ -54,23 +54,38 @@ fix: |-
 sources:
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
-    note: DeploymentProvisioningState enum, DeploymentProperties (provisioningState, rateLimits, dynamicThrottlingEnabled, currentCapacity); Deployments_Get path.
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    note: >-
+      DeploymentProvisioningState enum, DeploymentProperties (provisioningState, rateLimits,
+      dynamicThrottlingEnabled, currentCapacity); Deployments_Get path. Branch URL, not commit-pinned.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/monitor/resource-manager/Microsoft.Insights/Insights/stable/2024-02-01/metrics.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/monitor/resource-manager/Microsoft.Insights/Insights/stable/2024-02-01/metrics.json
-    note: Metrics_List path /{resourceUri}/providers/Microsoft.Insights/metrics with metricnamespace, timespan, interval, metricnames, aggregation parameters.
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/monitor/resource-manager/Microsoft.Insights/Insights/stable/2024-02-01/metrics.json
+    note: >-
+      Metrics_List path /{resourceUri}/providers/Microsoft.Insights/metrics with metricnamespace, timespan,
+      interval, metricnames, aggregation parameters. Branch URL, not commit-pinned.
   - url: https://learn.microsoft.com/azure/foundry/openai/monitor-openai-reference
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/openai/includes/monitor-openai-reference-content.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/openai/monitor-openai-reference; source file
+      MicrosoftDocs/azure-ai-docs: articles/foundry/openai/includes/monitor-openai-reference-content.md;
+      retrieved 2026-10-04
     note: AzureOpenAIRequests (request volume and errors), AzureOpenAIProvisionedManagedUtilizationV2, and the dimensions StatusCode and ModelDeploymentName for the namespace.
   - url: https://learn.microsoft.com/azure/foundry/openai/how-to/latency
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/openai/includes/how-to-latency-content.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/openai/how-to/latency; source file
+      MicrosoftDocs/azure-ai-docs: articles/foundry/openai/includes/how-to-latency-content.md; retrieved
+      2026-10-04
     note: Check AzureOpenAIRequests for 429 throttling on pay-as-you-go deployments.
   - url: https://learn.microsoft.com/azure/foundry/foundry-models/how-to/monitor-models
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/foundry-models/includes/how-to-monitor-models-1.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/foundry-models/how-to/monitor-models; source file
+      MicrosoftDocs/azure-ai-docs: articles/foundry/foundry-models/includes/how-to-monitor-models-1.md;
+      retrieved 2026-10-04
     note: Provisioned utilization at or above 100 percent returns 429.
 overlap:
   decision: native

@@ -61,18 +61,26 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/search/agentic-retrieval-how-to-create-index
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/agentic-retrieval-how-to-create-index.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/search/agentic-retrieval-how-to-create-index; source file
+      MicrosoftDocs/azure-ai-docs: articles/search/agentic-retrieval-how-to-create-index.md; retrieved
+      2026-10-04
     note: >-
       Criteria table (searchable and retrievable string fields required; semantic configuration required;
       citation fields recommended); semantic configuration needs a named config and prioritizedContentFields
       with at least one string field that is searchable and retrievable; title and keywords optional.
   - url: https://learn.microsoft.com/azure/search/vector-search-how-to-create-index
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/vector-search-how-to-create-index.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/search/vector-search-how-to-create-index; source file
+      MicrosoftDocs/azure-ai-docs: articles/search/vector-search-how-to-create-index.md; retrieved 2026-10-04
     note: Key must be Edm.String key=true; vector field searchable must be true, filterable/facetable/sortable must be false.
   - url: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-search-index
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/agentic-knowledge-source-how-to-search-index.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-search-index; source file
+      MicrosoftDocs/azure-ai-docs: articles/search/agentic-knowledge-source-how-to-search-index.md; retrieved
+      2026-10-04
     note: Starting with 2026-05-01-preview semanticConfigurationName is optional; earlier versions still require it.
 overlap:
   decision: native

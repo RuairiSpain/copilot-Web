@@ -78,22 +78,35 @@ fix: |
 sources:
 - url: https://learn.microsoft.com/azure/private-link/private-endpoint-dns
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-docs/articles/private-link/private-endpoint-dns.md (ms.date 08/11/2026)
+  verifiedVia: >-
+    https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/private-link/private-endpoint-dns.md
+    (ms.date 08/11/2026)
   note: >-
-    Per-service zone names and group IDs; Foundry Tools footnote 4 with the three account zones; Azure Government and China
-    tables.
+    Per-service zone names and group IDs; Foundry Tools footnote 4 with the three account zones; Azure
+    Government and China tables. Branch URL, not commit-pinned.
 - url: https://learn.microsoft.com/azure/private-link/private-endpoint-dns-integration
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-docs/articles/private-link/private-endpoint-dns-integration.md (ms.date 06/25/2025)
-  note: DNS zone group definition and limits (up to five zones, one zone per name, one zone group per endpoint).
+  verifiedVia: >-
+    https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/private-link/private-endpoint-dns-integration.md
+    (ms.date 06/25/2025)
+  note: >-
+    DNS zone group definition and limits (up to five zones, one zone per name, one zone group per endpoint).
+    Branch URL, not commit-pinned.
 - url: https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/includes/how-to-virtual-networks-content.md (ms.date 09/28/2026)
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks (ms.date 09/28/2026); source file
+    MicrosoftDocs/azure-ai-docs: articles/foundry/agents/includes/how-to-virtual-networks-content.md;
+    retrieved 2026-10-04
   note: DNS zone configurations summary; troubleshooting says verify each private DNS zone is linked to the VNet.
 - url: https://learn.microsoft.com/azure/dns/private-dns-virtual-network-links
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-docs/articles/dns/private-dns-virtual-network-links.md (ms.date 05/15/2024)
-  note: A zone without a link to a VNet is not resolvable from it (resolution virtual network concept).
+  verifiedVia: >-
+    https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/dns/private-dns-virtual-network-links.md
+    (ms.date 05/15/2024)
+  note: >-
+    A zone without a link to a VNet is not resolvable from it (resolution virtual network concept). Branch
+    URL, not commit-pinned.
 - url: >-
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/network/resource-manager/Microsoft.Network/Network/stable/2024-05-01/privateEndpoint.json
   lastVerified: '2026-10-04'

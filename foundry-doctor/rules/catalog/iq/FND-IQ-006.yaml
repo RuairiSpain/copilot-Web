@@ -49,22 +49,31 @@ fix: |
 sources:
 - url: https://learn.microsoft.com/azure/search/cognitive-search-skill-textsplit
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/search/cognitive-search-skill-textsplit.md
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/search/cognitive-search-skill-textsplit; source file
+    MicrosoftDocs/azure-ai-docs: articles/search/cognitive-search-skill-textsplit.md; retrieved 2026-10-04
   note: maximumPageLength minimum 300, maximum 50000, default 5000 (characters); pageOverlapLength 0 means no overlap.
 - url: https://learn.microsoft.com/azure/search/vector-search-how-to-chunk-documents
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/search/vector-search-how-to-chunk-documents.md
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/search/vector-search-how-to-chunk-documents; source file
+    MicrosoftDocs/azure-ai-docs: articles/search/vector-search-how-to-chunk-documents.md; retrieved 2026-10-04
   note: >-
     pageOverlapLength: if set, this must be less than half the maximum page length; start overlap around 10 to 25 percent.
 - url: https://learn.microsoft.com/azure/search/vector-search-how-to-query
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/search/vector-search-how-to-query.md
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/search/vector-search-how-to-query; source file
+    MicrosoftDocs/azure-ai-docs: articles/search/vector-search-how-to-query.md; retrieved 2026-10-04
   note: 'Vector weighting: default 1.0; the value must be a positive number larger than zero.'
 - url: https://github.com/Azure/azure-rest-api-specs/tree/main/specification/search/data-plane/Search
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/rest-api-specs/specification/search/data-plane/Search/models-index.tsp (VectorQuery.weight, positive number larger
-    than zero) and models-service.tsp (SplitSkill)
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/data-plane/Search/models-index.tsp
+    (VectorQuery.weight, positive number larger than zero) and
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/data-plane/Search/models-service.tsp
+    (SplitSkill)
+  note: Branch URL, not commit-pinned.
 overlap:
   decision: native
   provisional: true

@@ -22,15 +22,18 @@ severity:
   test: error
   prod: error
 compatibility:
-  azd: '>=1.34.2 <=1.36.0-beta.1'
+  azd: '>=1.34.2 <=1.36.0'
   extensions: {}
   apiVersions:
   - { plane: management, provider: Microsoft.Resources, resourceType: providers, version: '2025-04-01' }
   preview: true
   notes: >-
-    azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects
-    beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from
-    a changelog and was not verified.
+    azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18,
+    projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower
+    bound came from a changelog and was not verified. Window widened 2026-10-16: azd to 1.36.0 (tag
+    azure-dev-cli_1.36.0, acebba1, released 2026-10-14). The azd and extension changelogs and the schema and source
+    diffs from the previously verified versions were read; none touches this rule's verified facts for the widened
+    fields (see docs/tool-compatibility.md section 6).
 evidence:
   description: >-
     Read-only ARM call, GET /subscriptions/{subscriptionId}/providers/{resourceProviderNamespace} api-version 2025-04-01
@@ -60,21 +63,25 @@ sources:
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/resources/stable/2025-04-01/resources.json
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/rest-api-specs/specification/resources/resource-manager/Microsoft.Resources/resources/stable/2025-04-01/resources.json
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/resources/stable/2025-04-01/resources.json
   note: >-
-    Providers_Get, Providers_List and Providers_Register paths; Provider.registrationState (string, read-only) and resourceTypes[].locations.
+    Providers_Get, Providers_List and Providers_Register paths; Provider.registrationState (string, read-only)
+    and resourceTypes[].locations. Branch URL, not commit-pinned.
 - url: https://learn.microsoft.com/azure/azure-resource-manager/management/resource-providers-and-types
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/azure-docs/articles/azure-resource-manager/management/resource-providers-and-types.md (ms.date 02/27/2026)
+    https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/azure-resource-manager/management/resource-providers-and-types.md
+    (ms.date 02/27/2026)
   note: >-
-    Template-defined providers are registered automatically; supporting-resource providers are registered manually; /register/action
-    is in Contributor and Owner; do not block on the Registering state.
+    Template-defined providers are registered automatically; supporting-resource providers are registered
+    manually; /register/action is in Contributor and Owner; do not block on the Registering state. Branch URL,
+    not commit-pinned.
 - url: https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/azure-ai-docs/articles/foundry/agents/includes/how-to-virtual-networks-content.md (included by agents/how-to/virtual-networks.md,
-    ms.date 06/15/2026)
+    https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks (included by
+    agents/how-to/virtual-networks.md, ms.date 06/15/2026); source file MicrosoftDocs/azure-ai-docs:
+    articles/foundry/agents/includes/how-to-virtual-networks-content.md; retrieved 2026-10-04
   note: >-
     Providers that must be registered for the network-secured agent setup, and the Microsoft.Bing addition. The error text
     for missing Microsoft.App and Microsoft.ContainerService registration is quoted in the troubleshooting section.

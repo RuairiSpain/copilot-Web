@@ -86,15 +86,24 @@ sources:
     note: Role Based Access Control Administrator can be constrained with conditions over assignable role definitions and principal attributes to delegate only specific role-assignment actions.
   - url: https://learn.microsoft.com/azure/foundry/concepts/rbac-foundry
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/concepts/rbac-foundry.md (ms.date 09/16/2026, role permission tables)
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/concepts/rbac-foundry (ms.date 09/16/2026, role permission
+      tables); source file MicrosoftDocs/azure-ai-docs: articles/foundry/concepts/rbac-foundry.md; retrieved
+      2026-10-04
     note: Owner and Contributor have no data-plane access to build in a project; Foundry User, Project Manager and Agent Consumer cover agent use.
   - url: https://learn.microsoft.com/azure/foundry/agents/concepts/hosted-agent-permissions
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/hosted-agent-permissions.md (ms.date 04/21/2026)
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/concepts/hosted-agent-permissions (ms.date 04/21/2026);
+      source file MicrosoftDocs/azure-ai-docs: articles/foundry/agents/concepts/hosted-agent-permissions.md;
+      retrieved 2026-10-04
     note: Owner and Contributor do not include data-plane permissions; the least-privilege tip for agent identities (Foundry User or a custom role).
   - url: https://learn.microsoft.com/azure/foundry/agents/quickstarts/set-up-cicd-hosted-agent
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/quickstarts/set-up-cicd-hosted-agent.md (ms.date 09/16/2026)
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/quickstarts/set-up-cicd-hosted-agent (ms.date
+      09/16/2026); source file MicrosoftDocs/azure-ai-docs:
+      articles/foundry/agents/quickstarts/set-up-cicd-hosted-agent.md; retrieved 2026-10-04
     note: The Foundry CI/CD quickstart assigns Foundry User and Contributor on the target project to the workflow identity, which is why pipeline identities are separate from application identities.
   - url: https://learn.microsoft.com/azure/role-based-access-control/built-in-roles
     lastVerified: "2026-10-04"

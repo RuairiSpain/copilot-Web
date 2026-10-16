@@ -616,7 +616,7 @@ type versionNote struct {
 // (compatibility.extensions upper bounds of FND-CFG-001 and FND-CFG-011).
 var testedMax = map[string]string{
 	"azure.ai.agents":   "1.0.0-beta.18",
-	"azure.ai.projects": "1.0.0-beta.13",
+	"azure.ai.projects": "1.0.0-beta.14",
 }
 
 func parseTested(s string) (semver, bool) {

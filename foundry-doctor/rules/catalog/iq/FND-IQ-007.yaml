@@ -56,21 +56,32 @@ fix: |
 sources:
 - url: https://learn.microsoft.com/azure/search/agentic-retrieval-how-to-create-knowledge-base
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/search/agentic-retrieval-how-to-create-knowledge-base.md
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/search/agentic-retrieval-how-to-create-knowledge-base; source file
+    MicrosoftDocs/azure-ai-docs: articles/search/agentic-retrieval-how-to-create-knowledge-base.md; retrieved
+    2026-10-04
   note: Supported models table with API versions; GPT-4 family marked deprecated; web source requires an LLM.
 - url: https://learn.microsoft.com/azure/search/agentic-knowledge-source-overview
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/search/agentic-knowledge-source-overview.md
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/search/agentic-knowledge-source-overview; source file
+    MicrosoftDocs/azure-ai-docs: articles/search/agentic-knowledge-source-overview.md; retrieved 2026-10-04
   note: Supported knowledge sources table (kinds, indexed or remote, preview markers).
 - url: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-search-index
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/search/agentic-knowledge-source-how-to-search-index.md
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-search-index; source file
+    MicrosoftDocs/azure-ai-docs: articles/search/agentic-knowledge-source-how-to-search-index.md; retrieved
+    2026-10-04
   note: HTTP 400 when stored queryHints contain a filter and the model is a GPT-4o or GPT-4.1 family model.
 - url: https://github.com/Azure/azure-rest-api-specs/tree/main/specification/search/data-plane/Search
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/rest-api-specs/specification/search/data-plane/Search/preview/2026-08-01-preview/search.json and stable/2026-04-01/search.json
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/data-plane/Search/preview/2026-08-01-preview/search.json
+    and
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/data-plane/Search/stable/2026-04-01/search.json
     (KnowledgeSourceKind enum)
+  note: Branch URL, not commit-pinned.
 overlap:
   decision: native
   provisional: true

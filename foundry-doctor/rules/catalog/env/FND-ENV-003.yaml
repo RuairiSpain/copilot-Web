@@ -19,10 +19,18 @@ severity:
 compatibility:
   azd: ">=1.34.2 <=1.36.0-beta.1"
   extensions:
-    azure.ai.projects: ">=1.0.0-beta.13 <=1.0.0-beta.13"
+    azure.ai.projects: ">=1.0.0-beta.13 <=1.0.0-beta.14"
   apiVersions: []
   preview: true
-  notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from a changelog and was not verified. Extension ranges are exactly the versions whose schemas or source were read; widen them in Phase 1 by reading older tags."
+  notes: >-
+    azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18,
+    projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower
+    bound came from a changelog and was not verified. Extension ranges are exactly the versions whose schemas or
+    source were read; widen them in Phase 1 by reading older tags. Window widened 2026-10-16: azure.ai.projects to
+    1.0.0-beta.14. The azd and extension changelogs and the schema and source diffs from the previously verified
+    versions were read; none touches this rule's verified facts for the widened fields (see docs/tool-compatibility.md
+    section 6). azd stays at 1.36.0-beta.1: azd 1.36.0 changed environment name validation and state path resolution
+    in the files this rule cites (azdcontext, local_file_data_store.go, environment.go).
 evidence:
   description: >-
     Take the environment marked prod in Foundry Doctor configuration (the azd environment name is not assumed to indicate
@@ -43,12 +51,18 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview
     lastVerified: "2026-10-05"
-    verifiedVia: refs/azd-docs/articles/azure-developer-cli/environments-overview.md
-    note: Environments are isolated configurations for development, testing and production (context only).
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/azure-dev-docs/blob/main/articles/azure-developer-cli/environments-overview.md
+    note: >-
+      Environments are isolated configurations for development, testing and production (context only). Branch
+      URL, not commit-pinned.
   - url: https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/extensions/azure.ai.projects/schemas/azure.ai.project.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.projects/schemas/azure.ai.project.json
-    note: azure.ai.project endpoint connects to an existing project; may contain ${VAR}.
+    verifiedVia: >-
+      https://github.com/Azure/azure-dev/blob/main/cli/azd/extensions/azure.ai.projects/schemas/azure.ai.project.json
+    note: >-
+      azure.ai.project endpoint connects to an existing project; may contain ${VAR}. Branch URL, not
+      commit-pinned.
   - url: https://github.com/Azure/azure-dev/blob/azure-dev-cli_1.35.0/cli/azd/pkg/environment/local_file_data_store.go
     lastVerified: '2026-10-05'
     verifiedVia: >-

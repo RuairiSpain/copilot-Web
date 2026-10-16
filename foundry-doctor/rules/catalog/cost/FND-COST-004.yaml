@@ -18,14 +18,20 @@ severity:
   test: info
   prod: info
 compatibility:
-  azd: ">=1.34.2 <=1.36.0-beta.1"
+  azd: ">=1.34.2 <=1.36.0"
   extensions: {}
   apiVersions:
     - { plane: management, provider: Microsoft.Search, resourceType: searchServices, version: "2025-05-01" }
     - { plane: management, provider: Microsoft.ApiManagement, resourceType: service, version: "2024-05-01" }
     - { plane: management, provider: Microsoft.DocumentDB, resourceType: databaseAccounts/throughputSettings, version: "2026-03-15" }
   preview: true
-  notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from a changelog and was not verified."
+  notes: >-
+    azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18,
+    projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower
+    bound came from a changelog and was not verified. Window widened 2026-10-16: azd to 1.36.0 (tag
+    azure-dev-cli_1.36.0, acebba1, released 2026-10-14). The azd and extension changelogs and the schema and source
+    diffs from the previously verified versions were read; none touches this rule's verified facts for the widened
+    fields (see docs/tool-compatibility.md section 6).
 evidence:
   description: >-
     From the compiled resource plan, derive fixed-capacity drivers - Search units as replicaCount x partitionCount for the
@@ -44,23 +50,34 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/search/search-sku-tier
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/search-sku-tier.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/search/search-sku-tier; source file MicrosoftDocs/azure-ai-docs:
+      articles/search/search-sku-tier.md; retrieved 2026-10-04
     note: Search units are replicas x partitions and are billed at a fixed hourly rate per unit and tier.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
-    note: replicaCount (1-12 standard, 1-3 basic) and partitionCount (1, 2, 3, 4, 6, 12) properties.
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
+    note: >-
+      replicaCount (1-12 standard, 1-3 basic) and partitionCount (1, 2, 3, 4, 6, 12) properties. Branch URL,
+      not commit-pinned.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/stable/2024-05-01/apimdeployment.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/stable/2024-05-01/apimdeployment.json
-    note: sku.name enumeration and sku.capacity (number of deployed units; 0 for Consumption).
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/stable/2024-05-01/apimdeployment.json
+    note: >-
+      sku.name enumeration and sku.capacity (number of deployed units; 0 for Consumption). Branch URL, not
+      commit-pinned.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
-    note: ThroughputSettingsResource throughput or autoscaleSettings.
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
+    note: ThroughputSettingsResource throughput or autoscaleSettings. Branch URL, not commit-pinned.
   - url: https://learn.microsoft.com/azure/foundry/concepts/manage-costs
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/concepts/manage-costs.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/concepts/manage-costs; source file
+      MicrosoftDocs/azure-ai-docs: articles/foundry/concepts/manage-costs.md; retrieved 2026-10-04
     note: Foundry estimates cover standard deployment costs only, not provisioned throughput, and do not reflect discounts or contracted pricing; invoices and meter records are the source of truth. Page ms.date 08/27/2026.
   - url: https://learn.microsoft.com/rest/api/cost-management/retail-prices/azure-retail-prices
     lastVerified: "2026-10-04"

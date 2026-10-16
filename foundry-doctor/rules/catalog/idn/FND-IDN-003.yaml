@@ -72,15 +72,21 @@ sources:
     note: The error text recommends principalType after replication delay; unknown principals appear as Identity not found.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/authorization/resource-manager/Microsoft.Authorization/Authorization/stable/2022-04-01/authorization-RoleAssignmentsCalls.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/authorization/resource-manager/Microsoft.Authorization/Authorization/stable/2022-04-01/authorization-RoleAssignmentsCalls.json
-    note: RoleAssignmentProperties requires roleDefinitionId and principalId; principalType enum includes AgentUser and AgentServicePrincipal.
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/authorization/resource-manager/Microsoft.Authorization/Authorization/stable/2022-04-01/authorization-RoleAssignmentsCalls.json
+    note: >-
+      RoleAssignmentProperties requires roleDefinitionId and principalId; principalType enum includes
+      AgentUser and AgentServicePrincipal. Branch URL, not commit-pinned.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/msi/resource-manager/Microsoft.ManagedIdentity/ManagedIdentity/stable/2024-11-30/ManagedIdentity.json
     lastVerified: "2026-10-04"
     verifiedVia: github.com/Azure/azure-rest-api-specs specification/msi/resource-manager/Microsoft.ManagedIdentity/ManagedIdentity/stable/2024-11-30/ManagedIdentity.json
     note: UserAssignedIdentity properties.principalId and clientId are distinct fields.
   - url: https://learn.microsoft.com/azure/foundry/agents/how-to/ai-gateway
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/ai-gateway.md (lines near 152; managed identity object ID versus application client ID)
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/how-to/ai-gateway (lines near 152; managed identity
+      object ID versus application client ID); source file MicrosoftDocs/azure-ai-docs:
+      articles/foundry/agents/how-to/ai-gateway.md; retrieved 2026-10-04
     note: Documents that the project managed identity object ID must be looked up to obtain the client ID, showing that the two are different values.
 overlap:
   decision: native

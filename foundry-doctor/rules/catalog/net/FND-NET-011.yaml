@@ -66,12 +66,20 @@ fix: |
 sources:
   - url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.VNET.UseNSGs/
     lastVerified: "2026-10-04"
-    verifiedVia: refs/psrule/docs/en/rules/Azure.VNET.UseNSGs.md (reviewed 2024-01-02; WAF pillar Security, SE:06 Network controls)
-    note: Each subnet should have an NSG; list of special purpose subnets that do not support NSGs; property properties.networkSecurityGroup.id.
+    verifiedVia: >-
+      https://github.com/Azure/PSRule.Rules.Azure/blob/main/docs/en/rules/Azure.VNET.UseNSGs.md (reviewed
+      2024-01-02; WAF pillar Security, SE:06 Network controls)
+    note: >-
+      Each subnet should have an NSG; list of special purpose subnets that do not support NSGs; property
+      properties.networkSecurityGroup.id. Branch URL, not commit-pinned.
   - url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.NSG.AnyInboundSource/
     lastVerified: "2026-10-04"
-    verifiedVia: refs/psrule/docs/en/rules/Azure.NSG.AnyInboundSource.md (reviewed 2024-02-24; WAF pillar Security, SE:06)
-    note: Avoid custom allow rules with any inbound source; suggests DDoS Protection for public IP addresses.
+    verifiedVia: >-
+      https://github.com/Azure/PSRule.Rules.Azure/blob/main/docs/en/rules/Azure.NSG.AnyInboundSource.md
+      (reviewed 2024-02-24; WAF pillar Security, SE:06)
+    note: >-
+      Avoid custom allow rules with any inbound source; suggests DDoS Protection for public IP addresses.
+      Branch URL, not commit-pinned.
   - url: https://learn.microsoft.com/azure/ddos-protection/ddos-protection-sku-comparison
     lastVerified: "2026-10-04"
     verifiedVia: github.com/MicrosoftDocs/azure-docs articles/ddos-protection/ddos-protection-sku-comparison.md (ms.date 03/17/2026) and ddos-protection-overview.md (ms.date 07/08/2025)
@@ -82,7 +90,10 @@ sources:
     note: VirtualNetworkPropertiesFormat.enableDdosProtection and ddosProtectionPlan; SubnetPropertiesFormat.networkSecurityGroup; DdosSettings.protectionMode enum.
   - url: https://learn.microsoft.com/azure/foundry/openai/how-to/troubleshoot-errors
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/openai/how-to/troubleshoot-errors.md and refs/azure-ai-docs/articles/foundry/how-to/configure-private-link.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/openai/how-to/troubleshoot-errors; source files
+      MicrosoftDocs/azure-ai-docs: articles/foundry/openai/how-to/troubleshoot-errors.md,
+      articles/foundry/how-to/configure-private-link.md; retrieved 2026-10-04
     note: Foundry troubleshooting says to check that NSG rules do not block traffic to the private endpoint on port 443; no NSG requirement or exemption for the agent subnet is stated.
 overlap:
   decision: adapt

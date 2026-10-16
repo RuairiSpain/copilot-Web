@@ -54,27 +54,33 @@ sources:
 - url: https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/azure-ai-docs/articles/foundry/how-to/high-availability-resiliency.md and includes/how-to-high-availability-resiliency-1.md
-    (ms.date 09/21/2026)
+    https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency and
+    includes/how-to-high-availability-resiliency-1.md (ms.date 09/21/2026); source file
+    MicrosoftDocs/azure-ai-docs: articles/foundry/how-to/high-availability-resiliency.md; retrieved 2026-10-04
   note: >-
     Foundry guidance on shared responsibility, delete locks, zone redundancy, recovery configuration and multi-region deployment.
 - url: >-
     https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/Search/searchServices/recommendations.yaml
   lastVerified: '2026-10-04'
-  verifiedVia: refs/wara (git show HEAD:azure-resources/Search/searchServices/recommendations.yaml)
-  note: WARA dff62efe (multi-region AI Search), pgVerified false.
+  verifiedVia: >-
+    https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/Search/searchServices/recommendations.yaml
+  note: WARA dff62efe (multi-region AI Search), pgVerified false. Branch URL, not commit-pinned.
 - url: >-
     https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/DocumentDB/databaseAccounts/recommendations.yaml
   lastVerified: '2026-10-04'
-  verifiedVia: refs/wara (git show HEAD:azure-resources/DocumentDB/databaseAccounts/recommendations.yaml)
+  verifiedVia: >-
+    https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/DocumentDB/databaseAccounts/recommendations.yaml
   note: >-
-    WARA 43663217-a1d3-844b-80ea-571a2ce37c6c (at least two regions) and 9cabded7-a1fc-6e4a-944b-d7dd98ea31a2 (service-managed
-    failover).
+    WARA 43663217-a1d3-844b-80ea-571a2ce37c6c (at least two regions) and 9cabded7-a1fc-6e4a-944b-d7dd98ea31a2
+    (service-managed failover). Branch URL, not commit-pinned.
 - url: >-
     https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/CognitiveServices/accounts/recommendations.yaml
   lastVerified: '2026-10-04'
-  verifiedVia: refs/wara (git show HEAD:azure-resources/CognitiveServices/accounts/recommendations.yaml)
-  note: WARA 61187af4-7d36-4b48-b16e-de78bef143a0 (AOAI in multiple regions), pgVerified false.
+  verifiedVia: >-
+    https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/CognitiveServices/accounts/recommendations.yaml
+  note: >-
+    WARA 61187af4-7d36-4b48-b16e-de78bef143a0 (AOAI in multiple regions), pgVerified false. Branch URL, not
+    commit-pinned.
 overlap:
   decision: native
   provisional: true

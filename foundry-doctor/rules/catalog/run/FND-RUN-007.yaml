@@ -67,7 +67,9 @@ fix: |-
 sources:
 - url: https://learn.microsoft.com/azure/foundry/how-to/diagnostic-logging
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/how-to/diagnostic-logging.md
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/how-to/diagnostic-logging; source file
+    MicrosoftDocs/azure-ai-docs: articles/foundry/how-to/diagnostic-logging.md; retrieved 2026-10-04
   note: >-
     Categories (Audit, Request and Response, Azure OpenAI Request Usage, AllMetrics), up to two hours before data is queryable,
     AzureDiagnostics sample queries with ResourceProvider and Category filters.
@@ -75,8 +77,10 @@ sources:
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/monitor/resource-manager/Microsoft.Insights/Insights/preview/2021-05-01-preview/diagnosticsSettings_API.json
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/rest-api-specs/specification/monitor/resource-manager/Microsoft.Insights/Insights/preview/2021-05-01-preview/diagnosticsSettings_API.json
-  note: diagnosticSettings path under providers/Microsoft.Insights on a resource URI.
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/monitor/resource-manager/Microsoft.Insights/Insights/preview/2021-05-01-preview/diagnosticsSettings_API.json
+  note: >-
+    diagnosticSettings path under providers/Microsoft.Insights on a resource URI. Branch URL, not
+    commit-pinned.
 - url: https://github.com/Azure/azure-sdk-for-go/blob/main/sdk/monitor/azquery/logs_client.go
   lastVerified: '2026-10-04'
   verifiedVia: >-

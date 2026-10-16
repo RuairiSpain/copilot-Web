@@ -63,20 +63,26 @@ sources:
 - url: >-
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/data-plane/Search/stable/2026-04-01/search.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/rest-api-specs/specification/search/data-plane/Search/stable/2026-04-01/search.json
+  verifiedVia: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/data-plane/Search/stable/2026-04-01/search.json
   note: >-
-    Paths /indexes('{indexName}'), /indexes('{indexName}')/search.stats, /indexers('{indexerName}')/search.status; GetIndexStatisticsResult,
-    SearchIndexerStatus, IndexerExecutionResult, IndexerStatus (unknown, error, running), IndexerExecutionStatus (transientFailure,
-    success, inProgress, reset), SearchField (dimensions, vectorSearchProfile).
+    Paths /indexes('{indexName}'), /indexes('{indexName}')/search.stats,
+    /indexers('{indexerName}')/search.status; GetIndexStatisticsResult, SearchIndexerStatus,
+    IndexerExecutionResult, IndexerStatus (unknown, error, running), IndexerExecutionStatus (transientFailure,
+    success, inProgress, reset), SearchField (dimensions, vectorSearchProfile). Branch URL, not commit-pinned.
 - url: https://learn.microsoft.com/azure/search/search-security-rbac
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/search/search-security-rbac.md
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/search/search-security-rbac; source file MicrosoftDocs/azure-ai-docs:
+    articles/search/search-security-rbac.md; retrieved 2026-10-04
   note: >-
     Role capability table (Search Service Contributor manages indexes and indexers; Search Index Data Reader queries only;
     Reader cannot manage objects).
 - url: https://learn.microsoft.com/azure/foundry/agents/how-to/tools/ai-search
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/tools/ai-search.md
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/agents/how-to/tools/ai-search; source file
+    MicrosoftDocs/azure-ai-docs: articles/foundry/agents/how-to/tools/ai-search.md; retrieved 2026-10-04
   note: >-
     Project managed identity needs Search Index Data Contributor and Search Service Contributor for the Azure AI Search
     tool.

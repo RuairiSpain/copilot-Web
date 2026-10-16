@@ -43,12 +43,15 @@ fix: |-
 sources:
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/deployments/stable/2025-04-01/deployments.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/resources/resource-manager/Microsoft.Resources/deployments/stable/2025-04-01/deployments.json
-    note: whatIf POST operations exist at resource group, subscription, management group and tenant scope (path keys read).
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/deployments/stable/2025-04-01/deployments.json
+    note: >-
+      whatIf POST operations exist at resource group, subscription, management group and tenant scope (path
+      keys read). Branch URL, not commit-pinned.
   - url: https://github.com/Azure/azure-dev/blob/main/cli/azd/docs/extensions/extension-framework.md
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-dev/cli/azd/docs/extensions/extension-framework.md
-    note: azd provision --preview is mentioned (lifecycle events are not fired).
+    verifiedVia: https://github.com/Azure/azure-dev/blob/main/cli/azd/docs/extensions/extension-framework.md
+    note: azd provision --preview is mentioned (lifecycle events are not fired). Branch URL, not commit-pinned.
 overlap:
   decision: adapt
   provisional: true

@@ -89,15 +89,18 @@ sources:
 - url: https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/azure-ai-docs/articles/foundry/agents/how-to/virtual-networks.md (ms.date 06/15/2026, table row and DNS zone list)
+    https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks (ms.date 06/15/2026, table row
+    and DNS zone list); source file MicrosoftDocs/azure-ai-docs:
+    articles/foundry/agents/how-to/virtual-networks.md; retrieved 2026-10-04
   note: >-
     Application Insights is supported in the private setup through an Azure Monitor Private Link Scope; DNS zones privatelink.monitor.azure.com,
     privatelink.ods.opinsights.azure.com, privatelink.oms.opinsights.azure.com, privatelink.agentsvc.azure-automation.net.
 - url: https://learn.microsoft.com/azure/foundry/includes/how-to-managed-virtual-network-content
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/azure-ai-docs/articles/foundry/includes/how-to-managed-virtual-network-content.md (managed private endpoint targets
-    list)
+    https://learn.microsoft.com/azure/foundry/includes/how-to-managed-virtual-network-content (managed private
+    endpoint targets list); source file MicrosoftDocs/azure-ai-docs:
+    articles/foundry/includes/how-to-managed-virtual-network-content.md; retrieved 2026-10-04
   note: Azure Application Insights (via Azure Monitor Private Link Scope) is a supported managed-network target.
 - url: >-
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/monitor/resource-manager/Microsoft.Insights/Insights/stable/2021-09-01/privateLinkScopes_API.json

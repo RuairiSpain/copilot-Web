@@ -24,15 +24,18 @@ severity:
   test: warning
   prod: error
 compatibility:
-  azd: '>=1.34.2 <=1.36.0-beta.1'
+  azd: '>=1.34.2 <=1.36.0'
   extensions: {}
   apiVersions:
   - { plane: management, provider: Microsoft.Insights, resourceType: diagnosticSettings, version: '2021-05-01-preview' }
   preview: true
   notes: >-
-    azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects
-    beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from
-    a changelog and was not verified.
+    azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18,
+    projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower
+    bound came from a changelog and was not verified. Window widened 2026-10-16: azd to 1.36.0 (tag
+    azure-dev-cli_1.36.0, acebba1, released 2026-10-14). The azd and extension changelogs and the schema and source
+    diffs from the previously verified versions were read; none touches this rule's verified facts for the widened
+    fields (see docs/tool-compatibility.md section 6).
 evidence:
   description: >-
     Offline: in the compiled ARM template, for each in-scope resource (Microsoft.CognitiveServices/accounts, Microsoft.CognitiveServices/accounts/projects,
@@ -76,24 +79,29 @@ sources:
     https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-cognitiveservices-accounts-logs
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/azure-monitor-docs/articles/azure-monitor/reference/supported-logs/microsoft-cognitiveservices-accounts-logs.md
+    https://github.com/MicrosoftDocs/azure-monitor-docs/blob/main/articles/azure-monitor/reference/supported-logs/microsoft-cognitiveservices-accounts-logs.md
   note: >-
-    Categories Audit, AzureOpenAIRequestUsage, ManagedNetworkEvent, RequestResponse, Trace; all land in AzureDiagnostics.
-    Page ms.date 08/21/2026. Companion pages read for projects, searchServices, ApiManagement service, storageAccounts/blobServices
-    and DocumentDB/DatabaseAccounts.
+    Categories Audit, AzureOpenAIRequestUsage, ManagedNetworkEvent, RequestResponse, Trace; all land in
+    AzureDiagnostics. Page ms.date 08/21/2026. Companion pages read for projects, searchServices,
+    ApiManagement service, storageAccounts/blobServices and DocumentDB/DatabaseAccounts. Branch URL, not
+    commit-pinned.
 - url: https://learn.microsoft.com/azure/azure-monitor/data-collection/diagnostic-settings
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-monitor-docs/articles/azure-monitor/data-collection/diagnostic-settings.md
+  verifiedVia: >-
+    https://github.com/MicrosoftDocs/azure-monitor-docs/blob/main/articles/azure-monitor/data-collection/diagnostic-settings.md
   note: >-
-    Up to five diagnostic settings per resource; category groups allLogs and audit; one destination of each type per setting;
-    Bicep sample with workspaceId, categoryGroup and enabled (apiVersion 2021-05-01-preview). Page ms.date 03/31/2026.
+    Up to five diagnostic settings per resource; category groups allLogs and audit; one destination of each
+    type per setting; Bicep sample with workspaceId, categoryGroup and enabled (apiVersion
+    2021-05-01-preview). Page ms.date 03/31/2026. Branch URL, not commit-pinned.
 - url: >-
     https://github.com/Azure/azure-policy/blob/master/built-in-policies/policyDefinitions/Monitoring/DS_LA_cognitiveservices-accounts_DINE.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-policy/built-in-policies/policyDefinitions/Monitoring/DS_LA_cognitiveservices-accounts_DINE.json
+  verifiedVia: >-
+    https://github.com/Azure/azure-policy/blob/master/built-in-policies/policyDefinitions/Monitoring/DS_LA_cognitiveservices-accounts_DINE.json
   note: >-
-    Built-in DeployIfNotExists policy 55d1f543-d1b0-4811-9663-d6d0dbc6326d (category group audit or allLogs to Log Analytics);
-    sibling definitions read for Search, APIM, Cosmos and Blob services.
+    Built-in DeployIfNotExists policy 55d1f543-d1b0-4811-9663-d6d0dbc6326d (category group audit or allLogs to
+    Log Analytics); sibling definitions read for Search, APIM, Cosmos and Blob services. Branch URL, not
+    commit-pinned.
 overlap:
   decision: adapt
   provisional: true

@@ -45,13 +45,19 @@ fix: "resource diag 'Microsoft.ApiManagement/service/apis/diagnostics@2025-09-01
 sources:
 - url: https://learn.microsoft.com/azure/api-management/api-management-howto-llm-logs
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-docs/articles/api-management/api-management-howto-llm-logs.md
-  note: Optional logging of request and response messages (prompt and completion), 32 KB chunking.
+  verifiedVia: >-
+    https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/api-management/api-management-howto-llm-logs.md
+  note: >-
+    Optional logging of request and response messages (prompt and completion), 32 KB chunking. Branch URL, not
+    commit-pinned.
 - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/preview/2025-09-01-preview/openapi.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/rest-api-specs/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/preview/2025-09-01-preview/openapi.json
-  note: DiagnosticContractProperties.largeLanguageModel; LLMDiagnosticSettings (logs, requests, responses); LLMMessageDiagnosticSettings
-    (messages=all, maxSizeInBytes max 262144); HttpMessageDiagnostic.body.bytes max 8192.
+  verifiedVia: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/preview/2025-09-01-preview/openapi.json
+  note: >-
+    DiagnosticContractProperties.largeLanguageModel; LLMDiagnosticSettings (logs, requests, responses);
+    LLMMessageDiagnosticSettings (messages=all, maxSizeInBytes max 262144); HttpMessageDiagnostic.body.bytes
+    max 8192. Branch URL, not commit-pinned.
 overlap:
   decision: native
   provisional: true
