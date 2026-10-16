@@ -101,6 +101,16 @@ func TestGuardFileLoads(t *testing.T) {
 		{"json module escaping root", fileSet{"infra/main.bicep": "module m '../../outmod.json' = {\n  name: 'm'\n}\n"}, "infra/main.bicep", true},
 		{"json module inside root", fileSet{"infra/main.bicep": "module m './t/m.json' = {\n  name: 'm'\n}\n", "infra/t/m.json": "{}"}, "infra/main.bicep", false},
 		{"json module with comment-like text is not scanned", fileSet{"infra/main.bicep": "module m './m.json' = {\n  name: 'm'\n}\n", "infra/m.json": "{\"a\": \"/* x\"}"}, "infra/main.bicep", false},
+		{"module txt outside root", fileSet{"infra/main.bicep": "module m '../../outmod.txt' = {\n  name: 'm'\n}\n"}, "infra/main.bicep", true},
+		{"module extensionless outside root", fileSet{"infra/main.bicep": "module m '../../outmod' = {\n  name: 'm'\n}\n"}, "infra/main.bicep", true},
+		{"using txt outside root", fileSet{"infra/main.bicepparam": "using '../../x.txt'\n"}, "infra/main.bicepparam", true},
+		{"module txt inside root", fileSet{"infra/main.bicep": "module m './m.txt' = {\n  name: 'm'\n}\n", "infra/m.txt": "param a string\n"}, "infra/main.bicep", false},
+		{"module txt inside root with hostile load", fileSet{"infra/main.bicep": "module m './m.txt' = {\n  name: 'm'\n}\n", "infra/m.txt": esc}, "infra/main.bicep", true},
+		{"registry module is not a path", fileSet{"infra/main.bicep": "module m 'br:mcr.microsoft.com/bicep/avm/res/x:1.0.0' = {\n  name: 'm'\n}\n"}, "infra/main.bicep", false},
+		{"registry alias module is not a path", fileSet{"infra/main.bicep": "module m 'br/public:avm/res/x:1.0.0' = {\n  name: 'm'\n}\n"}, "infra/main.bicep", false},
+		{"template spec module is not a path", fileSet{"infra/main.bicep": "module m 'ts:sub/rg/spec:1' = {\n  name: 'm'\n}\n"}, "infra/main.bicep", false},
+		{"load from .git", fileSet{"infra/main.bicep": "var x = loadTextContent('../.git/config')\n", ".git/config": "[core]"}, "infra/main.bicep", true},
+		{"load from nested .GIT", fileSet{"infra/main.bicep": "var x = loadTextContent('.GIT/HEAD')\n", "infra/.GIT/HEAD": "x"}, "infra/main.bicep", true},
 		{"url string does not refuse", fileSet{"infra/main.bicep": "var src = 'https://github.com/org/repo/blob/main/infra/main.bicep'\nvar p = '../../x.bicepparam'\nvar j = '../../x.json'\n"}, "infra/main.bicep", false},
 		{"url string and real escaping module", fileSet{"infra/main.bicep": "var src = 'https://github.com/o/r/main.bicep'\nmodule m '../../x/m.bicep' = {\n  name: 'm'\n}\n"}, "infra/main.bicep", true},
 		{"url string and hostile real module", fileSet{
@@ -143,12 +153,32 @@ func TestGuardFileLoadsSymlinkOutside(t *testing.T) {
 	}
 }
 
-func TestGuardFileLoadsSymlinkInsideAllowed(t *testing.T) {
+// A link inside the project can point at .azure or .git, which the path text
+// does not show, so a load through any link is refused.
+func TestGuardFileLoadsSymlinkInsideIsRefused(t *testing.T) {
 	root, base := guardProject(t, fileSet{"infra/main.bicep": "var x = loadTextContent('link.txt')\n", "infra/real.txt": "1"})
 	if err := os.Symlink("real.txt", filepath.Join(base, "proj", "infra", "link.txt")); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
-	if err := GuardFileLoads(root, "infra/main.bicep"); err != nil {
-		t.Fatalf("symlink inside the project must be allowed: %v", err)
+	var ge *LoadGuardError
+	if err := GuardFileLoads(root, "infra/main.bicep"); !errors.As(err, &ge) || !strings.Contains(err.Error(), "symbolic link") {
+		t.Fatalf("a load through a link must be refused, got %v", err)
+	}
+}
+
+func TestGuardFileLoadsSymlinkToSensitiveDirIsRefused(t *testing.T) {
+	for _, dir := range []string{".azure", ".git"} {
+		t.Run(dir, func(t *testing.T) {
+			root, base := guardProject(t, fileSet{
+				"infra/main.bicep": "var x = loadTextContent('az/dev/.env')\n",
+				dir + "/dev/.env":  "A=1"})
+			if err := os.Symlink(filepath.Join("..", dir), filepath.Join(base, "proj", "infra", "az")); err != nil {
+				t.Skipf("symlinks unavailable: %v", err)
+			}
+			var ge *LoadGuardError
+			if err := GuardFileLoads(root, "infra/main.bicep"); !errors.As(err, &ge) {
+				t.Fatalf("symlink into %s must be refused, got %v", dir, err)
+			}
+		})
 	}
 }

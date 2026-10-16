@@ -43,8 +43,9 @@ func (e *LoadGuardError) Error() string {
 }
 
 // GuardFileLoads scans start (a slash-separated path relative to root) and
-// every local .bicep or .bicepparam file it references through a module,
-// using, extends or import statement (and every local .json module), transitively
+// every local file it references through a module, using, extends or
+// import ... from statement (any extension; a .json file is checked for
+// location only), transitively
 // and bounded, for calls to loadTextContent, loadFileAsBase64, loadJsonContent,
 // loadYamlContent and loadDirectoryFileInfo. A call is allowed only when its
 // first argument is a plain single-quoted literal naming a relative path that
@@ -88,8 +89,11 @@ func GuardFileLoads(root *os.Root, start string) error {
 			if err != nil {
 				return &LoadGuardError{File: file, Detail: c.fn + " path does not resolve to a file inside the project root"}
 			}
-			if inAzureDir(rel) {
-				return &LoadGuardError{File: file, Detail: c.fn + " path is inside the .azure directory, which holds azd environment values"}
+			if sensitiveDir(rel) != "" {
+				return &LoadGuardError{File: file, Detail: c.fn + " path is inside the " + sensitiveDir(rel) + " directory, which is not a source of template content"}
+			}
+			if hasSymlink(root, rel) {
+				return &LoadGuardError{File: file, Detail: c.fn + " path passes through a symbolic link"}
 			}
 			if strings.EqualFold(c.fn, "loadDirectoryFileInfo") {
 				if !fi.IsDir() {
@@ -130,15 +134,40 @@ func projectRel(dir, lit string) (string, bool) {
 	return rel, true
 }
 
-// inAzureDir reports whether a root-relative slash path has a ".azure" segment.
-// azd keeps environment values there, so loads from it are refused.
-func inAzureDir(rel string) bool {
+// sensitiveDir returns ".azure" or ".git" when a root-relative slash path has
+// such a segment (any case), else "". azd keeps environment values in .azure
+// and a repository keeps its history and config in .git; loads from them are
+// refused.
+func sensitiveDir(rel string) string {
 	for _, seg := range strings.Split(rel, "/") {
-		if strings.EqualFold(seg, ".azure") {
+		for _, d := range []string{".azure", ".git"} {
+			if strings.EqualFold(seg, d) {
+				return d
+			}
+		}
+	}
+	return ""
+}
+
+// hasSymlink reports whether any component of the root-relative path is a
+// symbolic link (or cannot be examined). A link inside the project could point
+// at .azure or .git, which the text check cannot see, so loads through links
+// are refused.
+func hasSymlink(root *os.Root, rel string) bool {
+	parts := strings.Split(rel, "/")
+	for i := range parts {
+		fi, err := root.Lstat(strings.Join(parts[:i+1], "/"))
+		if err != nil || fi.Mode()&os.ModeSymlink != 0 {
 			return true
 		}
 	}
 	return false
+}
+
+// isRegistryRef reports whether a lower-cased module reference names a Bicep
+// registry (br:, br/) or template spec (ts:) source, not a local file.
+func isRegistryRef(l string) bool {
+	return strings.HasPrefix(l, "br:") || strings.HasPrefix(l, "br/") || strings.HasPrefix(l, "ts:")
 }
 
 func readBounded(root *os.Root, rel string) ([]byte, error) {
@@ -223,16 +252,11 @@ func scanSource(src []byte) scanResult {
 				if !hasInterp {
 					s := string(lit)
 					l := strings.ToLower(s)
-					isBicep := strings.HasSuffix(l, ".bicep") || strings.HasSuffix(l, ".bicepparam")
-					switch {
-					case t1 == "using" || t1 == "extends" || t1 == "from":
-						if isBicep {
-							res.refs = append(res.refs, s)
-						}
-					case t2 == "module":
-						if isBicep || strings.HasSuffix(l, ".json") {
-							res.refs = append(res.refs, s)
-						}
+					// Bicep compiles a module file of any extension as Bicep
+					// source, so every literal in a reference position is a
+					// local file unless it is a registry reference.
+					if (t1 == "using" || t1 == "extends" || t1 == "from" || t2 == "module") && !isRegistryRef(l) {
+						res.refs = append(res.refs, s)
 					}
 				}
 				push(tokNone)
