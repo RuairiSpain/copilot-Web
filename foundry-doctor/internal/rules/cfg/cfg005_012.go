@@ -240,6 +240,7 @@ const (
 	reasonNoEnvironmentSelected      = "no-environment-selected"
 	reasonEnvFileMissing             = "env-file-missing"
 	reasonDefaultEnvironmentNotFound = "default-environment-not-found"
+	reasonEnvironmentNotFound        = "environment-not-found"
 	reasonEnvFileUnreadable          = "env-file-unreadable"
 	reasonEnvFileUnparseable         = "env-file-unparseable"
 	reasonEnvFileOversize            = "env-file-oversize"
@@ -247,8 +248,10 @@ const (
 
 // EnvSelection is optionally implemented by an EnvView to say why no
 // environment is selected. It returns one of no-environment-selected,
-// env-file-missing or default-environment-not-found. A view without it is
-// reported as no-environment-selected.
+// env-file-missing, default-environment-not-found (the default in
+// .azure/config.json names no environment) or environment-not-found (an
+// explicitly named environment does not exist; the value may be followed by
+// ": <name>"). A view without it is reported as no-environment-selected.
 type EnvSelection interface {
 	SelectionReason() string
 }
@@ -280,16 +283,58 @@ func envSkip(p Providers) (sdk.Result, bool) {
 	}
 	reason := reasonNoEnvironmentSelected
 	if es, isSel := p.Env.(EnvSelection); isSel && p.Env != nil {
-		switch r := es.SelectionReason(); r {
-		case reasonEnvFileMissing, reasonDefaultEnvironmentNotFound, reasonNoEnvironmentSelected,
-			reasonEnvFileUnreadable, reasonEnvFileUnparseable, reasonEnvFileOversize:
+		r := es.SelectionReason()
+		switch {
+		case r == reasonEnvFileMissing, r == reasonDefaultEnvironmentNotFound, r == reasonNoEnvironmentSelected,
+			r == reasonEnvFileUnreadable, r == reasonEnvFileUnparseable, r == reasonEnvFileOversize,
+			r == reasonEnvironmentNotFound:
 			reason = r
+		case strings.HasPrefix(r, reasonEnvironmentNotFound+": "):
+			reason = reasonEnvironmentNotFound + ": " + safeEnvName(strings.TrimPrefix(r, reasonEnvironmentNotFound+": "))
 		}
 	}
 	return skip(sdk.SkipInputUnavailable + ": " + reason), true
 }
 
-var agentNameReplacer = strings.NewReplacer("-", "_", ".", "_")
+// safeEnvName keeps the characters azd environment names use and caps the
+// length, so a hostile name cannot inject text into a skip reason.
+func safeEnvName(n string) string {
+	const limit = 40
+	var b strings.Builder
+	for _, r := range n {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_', r == '.':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('?')
+		}
+		if b.Len() >= limit {
+			b.WriteString("...")
+			break
+		}
+	}
+	return b.String()
+}
+
+// agentNameReplacer mirrors azd's agentServiceKey (azure.ai.agents
+// 1.0.0-beta.20, service_target_agent.go): it replaces a space and a hyphen
+// with an underscore and then upper-cases. Nothing else is replaced.
+var agentNameReplacer = strings.NewReplacer(" ", "_", "-", "_")
+
+// agentNameCertain reports whether every character of a service name is one
+// azd's key derivation is known to handle (letters, digits, space, hyphen and
+// underscore). Any other character, such as a dot, leaves the derived
+// AGENT_ names unverified.
+func agentNameCertain(name string) bool {
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_', r == ' ':
+		default:
+			return false
+		}
+	}
+	return name != ""
+}
 
 // agentProducers returns the AGENT_<SERVICE>_* names the agent extension is
 // known to write for an agent-host service. Other hosts get none.
