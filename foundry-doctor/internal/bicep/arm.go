@@ -14,8 +14,25 @@ const maxModuleDepth = 16
 type Template struct {
 	LanguageVersion string
 	Parameters      []Parameter
-	Resources       []Resource
-	Outputs         []Output
+	// Variables are the template variables, sorted by name. At most
+	// MaxVariables are kept and a value larger than MaxVariableBytes is
+	// dropped, so a hostile template cannot grow the model.
+	Variables []Variable
+	Resources []Resource
+	Outputs   []Output
+}
+
+// Bounds on the retained template variables and parameter defaults.
+const (
+	MaxVariables     = 512
+	MaxVariableBytes = 8 << 10
+)
+
+// Variable is a template variable. Value is the raw JSON of the compiled
+// value: a literal, or a string holding an ARM expression.
+type Variable struct {
+	Name  string
+	Value json.RawMessage
 }
 
 // Parameter is a template parameter; Secure is true for securestring/secureObject.
@@ -23,6 +40,10 @@ type Parameter struct {
 	Name   string
 	Type   string
 	Secure bool
+	// Default is the raw JSON of the parameter's defaultValue when it is a
+	// string, number or boolean and the parameter is not secure; nil when
+	// there is no default, it is an object or array, or the parameter is secure.
+	Default json.RawMessage
 }
 
 // Output is a template output. Value is the raw ARM expression or literal text.
@@ -87,6 +108,7 @@ type rawResource struct {
 type rawTemplate struct {
 	LanguageVersion string                     `json:"languageVersion"`
 	Parameters      map[string]json.RawMessage `json:"parameters"`
+	Variables       map[string]json.RawMessage `json:"variables"`
 	Resources       json.RawMessage            `json:"resources"`
 	Outputs         map[string]struct {
 		Type  string          `json:"type"`
@@ -125,11 +147,29 @@ func parseTemplate(data []byte, base string, depth int) (*Template, error) {
 	sort.Strings(names)
 	for _, n := range names {
 		var p struct {
-			Type string `json:"type"`
+			Type    string          `json:"type"`
+			Default json.RawMessage `json:"defaultValue"`
 		}
 		_ = json.Unmarshal(rt.Parameters[n], &p)
 		lt := strings.ToLower(p.Type)
-		t.Parameters = append(t.Parameters, Parameter{Name: n, Type: p.Type, Secure: lt == "securestring" || lt == "secureobject"})
+		par := Parameter{Name: n, Type: p.Type, Secure: lt == "securestring" || lt == "secureobject"}
+		if d := bytes.TrimSpace(p.Default); !par.Secure && len(d) > 0 && len(d) <= MaxVariableBytes && (d[0] == '"' || d[0] == 't' || d[0] == 'f' || d[0] == '-' || (d[0] >= '0' && d[0] <= '9')) {
+			par.Default = append(json.RawMessage(nil), d...)
+		}
+		t.Parameters = append(t.Parameters, par)
+	}
+	names = names[:0]
+	for n := range rt.Variables {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		if len(t.Variables) >= MaxVariables {
+			break
+		}
+		if v := bytes.TrimSpace(rt.Variables[n]); len(v) <= MaxVariableBytes {
+			t.Variables = append(t.Variables, Variable{Name: n, Value: append(json.RawMessage(nil), v...)})
+		}
 	}
 	names = names[:0]
 	for n := range rt.Outputs {

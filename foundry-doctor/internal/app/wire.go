@@ -99,7 +99,7 @@ func NewServices(stderr io.Writer, o Options) Services {
 	return Services{
 		Project:   projectAdapter{},
 		Config:    configAdapter{getenv: getenv},
-		ARM:       armLoader{disc: disc, runner: o.BicepRunner},
+		ARM:       armLoader{disc: disc, runner: o.BicepRunner, stderr: stderr},
 		Engine:    engineAdapter{cat: cat, azd: azd},
 		Preflight: preflightEngine{cat: cat, azd: azd, getenv: getenv},
 		Runtime:   runtimeEngine{cat: cat, azd: azd, getenv: getenv},
@@ -119,6 +119,29 @@ func NewServices(stderr io.Writer, o Options) Services {
 type armLoader struct {
 	disc   bicep.DiscoverOptions
 	runner bicep.Runner
+	// stderr receives the named notes about parameter files, module file
+	// locations and a truncated model. Nil discards them.
+	stderr io.Writer
+}
+
+// warnf writes one named, redacted note. The notes are not findings: they say
+// which input the model could not use, so a skipped or unresolved check is
+// explained.
+func (l armLoader) warnf(notes ...string) {
+	if l.stderr == nil {
+		return
+	}
+	for _, n := range notes {
+		_, _ = fmt.Fprintf(l.stderr, "warning: %s\n", findings.Redact(n))
+	}
+}
+
+// noteTruncated names the bound that cut the model short. Rules then treat an
+// absent resource as unknown, never as compliant.
+func (l armLoader) noteTruncated(m *armmodel.Model) {
+	if m.Truncated() {
+		l.warnf(fmt.Sprintf("model-truncated: the compiled template exceeds the model bounds (%d resources, %d bytes of expression text); later resources are not modelled and absence is unknown", armmodel.MaxResources, armmodel.MaxTextBytes))
+	}
 }
 
 // unavailablef reports a model that could not be produced for a reason that is
@@ -147,9 +170,9 @@ func (l armLoader) Load(ctx context.Context, src Source) (sdk.ARMModel, error) {
 	if err != nil {
 		return nil, unavailablef("cannot open project directory")
 	}
+	defer root.Close()
 	fi, err := root.Stat(entry)
 	if err == nil && fi.Mode().IsRegular() {
-		_ = root.Close()
 		tool, err := bicep.Discover(ctx, l.disc)
 		if err != nil {
 			if ctx.Err() != nil {
@@ -168,25 +191,34 @@ func (l armLoader) Load(ctx context.Context, src Source) (sdk.ARMModel, error) {
 		if !res.OK {
 			return nil, bicepFailedf("%s failed to compile (%d diagnostics)", entry, len(res.Diagnostics))
 		}
-		m, err := armmodel.FromARM(res.ARM, armmodel.Options{Entry: entry})
+		pr := l.loadParameters(ctx, root, entry, &comp, src)
+		mr := l.locateModules(ctx, root, entry, comp, src, res.ARM)
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		l.warnf(slices.Concat(pr.notes, mr.notes)...)
+		m, err := armmodel.FromARM(res.ARM, modelOptions(entry, pr, mr))
 		if err != nil {
 			return nil, bicepFailedf("cannot read compiled ARM template")
 		}
+		l.noteTruncated(m)
 		return rawModel{Model: m, raw: res.ARM}, nil
 	}
 	jsonEntry := strings.TrimSuffix(entry, ".bicep") + ".json"
 	data, err := readRegularFile(root, jsonEntry)
-	_ = root.Close()
 	if err != nil {
 		if doc, perr := azureyaml.Parse(src.AzureYAML, src.AzureYAMLAt); perr == nil && hasInfraLayers(doc) {
 			return nil, unavailablef("%s or %s not found; infra.layers is not read", entry, jsonEntry)
 		}
 		return nil, fmt.Errorf("%w: %w: %s or %s not found", ErrARMUnavailable, ErrNoInfrastructure, entry, jsonEntry)
 	}
-	m, err := armmodel.FromARM(data, armmodel.Options{Entry: jsonEntry})
+	pr := l.loadParameters(ctx, root, jsonEntry, nil, src)
+	l.warnf(pr.notes...)
+	m, err := armmodel.FromARM(data, modelOptions(jsonEntry, pr, moduleResult{}))
 	if err != nil {
 		return nil, bicepFailedf("cannot read ARM JSON template %s", jsonEntry)
 	}
+	l.noteTruncated(m)
 	return rawModel{Model: m, raw: data}, nil
 }
 
