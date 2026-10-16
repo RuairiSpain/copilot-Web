@@ -165,14 +165,29 @@ func (r rule) Evaluate(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 	if out.skip != "" {
 		return sdk.Result{Skipped: &sdk.Skip{RuleID: r.id, Reason: out.skip}}, nil
 	}
+	notes = dedupe(append(notes, out.notes...))
 	if len(out.findings) > 0 {
-		return sdk.Result{Findings: out.findings}, nil
+		// Notes ride next to the findings as uncertain skips; a finding never
+		// hides what the rule could not decide (ADR-008 amendment 3).
+		return sdk.Result{Findings: out.findings, Skips: uncertainSkips(r.id, notes)}, nil
 	}
-	notes = append(notes, out.notes...)
 	if len(notes) > 0 {
 		return uncertain(r.id, notes), nil
 	}
 	return sdk.Result{}, nil
+}
+
+// uncertainSkips builds one uncertain skip per note, capped like uncertain.
+func uncertainSkips(id string, notes []string) []sdk.Skip {
+	const limit = 8
+	if len(notes) > limit {
+		notes = append(notes[:limit:limit], fmt.Sprintf("and %d more", len(notes)-limit))
+	}
+	var out []sdk.Skip
+	for _, n := range notes {
+		out = append(out, sdk.Skip{RuleID: id, Reason: report.UncertainPrefix + "cannot decide: " + n})
+	}
+	return out
 }
 
 // uncertain builds a skip that readiness reports as uncertain. Notes name
@@ -208,8 +223,12 @@ func Fingerprint(v string) string {
 	return hex.EncodeToString(h[:])[:12]
 }
 
-func finding(resource, evidence string) sdk.Finding {
-	return sdk.Finding{Resource: sdk.ResourceRef{Type: "azd-environment", Name: resource}, Evidence: evidence}
+// finding builds a finding. key is the stable discriminator: check kind, then
+// the variable name when there is one, then the sorted environment pair. It
+// never contains a value or a value fingerprint, so a rotated value does not
+// make a baselined finding reappear.
+func finding(key, resource, evidence string) sdk.Finding {
+	return sdk.Finding{Key: key, Resource: sdk.ResourceRef{Type: "azd-environment", Name: resource}, Evidence: evidence}
 }
 
 func eval001(_ context.Context, _ *sdk.Input, envs []Environment) outcome {
@@ -230,7 +249,7 @@ func eval001(_ context.Context, _ *sdk.Input, envs []Environment) outcome {
 	sort.Strings(keys)
 	for _, k := range keys {
 		if n := seen[k]; len(n) > 1 {
-			out.findings = append(out.findings, finding(strings.Join(n, ","), fmt.Sprintf("environments %s share one subscription and resource group", strings.Join(n, ", "))))
+			out.findings = append(out.findings, finding("shared-subscription-resource-group:"+strings.Join(n, ","), strings.Join(n, ","), fmt.Sprintf("environments %s share one subscription and resource group", strings.Join(n, ", "))))
 		}
 	}
 	for _, e := range envs {
@@ -241,7 +260,7 @@ func eval001(_ context.Context, _ *sdk.Input, envs []Environment) outcome {
 			}
 		}
 		if len(services) < len(e.LiteralRGAt) {
-			out.findings = append(out.findings, finding(e.Name, "azure.yaml pins a literal resourceGroup (resourceGroup) while multiple environments exist"))
+			out.findings = append(out.findings, finding("literal-resource-group:"+e.Name, e.Name, "azure.yaml pins a literal resourceGroup (resourceGroup) while multiple environments exist"))
 		}
 		if len(services) > 0 {
 			// The azd schema describes a service-level resourceGroup as the group
@@ -311,7 +330,7 @@ func eval002(_ context.Context, _ *sdk.Input, envs []Environment) outcome {
 				}
 				switch classify(k, a.shapeOf(k, va)) {
 				case classStrong:
-					out.findings = append(out.findings, finding(k, fmt.Sprintf("key %s has identical value (fingerprint %s) in environments %s and %s", k, Fingerprint(va), a.Name, b.Name)))
+					out.findings = append(out.findings, finding("identical-value:"+k+":"+envPair(a.Name, b.Name), k, fmt.Sprintf("key %s has identical value (fingerprint %s) in environments %s and %s", k, Fingerprint(va), a.Name, b.Name)))
 				case classWeak:
 					out.notes = append(out.notes, fmt.Sprintf("key %s has identical value (fingerprint %s) in %s and %s; a _NAME or _ID key is not known to be environment-bound", k, Fingerprint(va), a.Name, b.Name))
 				}
@@ -345,6 +364,29 @@ func tiers(in *sdk.Input) (map[string]string, bool) {
 		return nil, false
 	}
 	return out, len(out) > 0
+}
+
+// envPair names two environments in sorted order.
+func envPair(a, b string) string {
+	if b < a {
+		a, b = b, a
+	}
+	return a + "," + b
+}
+
+// targetVar names the variable that carries the normalised target value k in e
+// (the lexicographically smallest, so the choice is stable).
+func targetVar(e Environment, k string) string {
+	if norm(e.ResourceGroup) == k {
+		return "AZURE_RESOURCE_GROUP"
+	}
+	best := ""
+	for name, v := range e.Values {
+		if e.shapeOf(name, v) != ShapePlain && norm(v) == k && (best == "" || name < best) {
+			best = name
+		}
+	}
+	return best
 }
 
 func norm(v string) string { return strings.ToLower(strings.TrimSpace(v)) }
@@ -414,7 +456,7 @@ func eval003(_ context.Context, in *sdk.Input, envs []Environment) outcome {
 			}
 			sort.Strings(ks)
 			for _, k := range ks {
-				out.findings = append(out.findings, finding(p.Name, fmt.Sprintf("prod environment %s shares %s (fingerprint %s) with non-prod environment %s", p.Name, pt[k], Fingerprint(k), o.Name)))
+				out.findings = append(out.findings, finding("prod-shares-target:"+pt[k]+":"+targetVar(p, k)+":"+envPair(p.Name, o.Name), p.Name, fmt.Sprintf("prod environment %s shares %s (fingerprint %s) with non-prod environment %s", p.Name, pt[k], Fingerprint(k), o.Name)))
 			}
 		}
 	}
@@ -464,20 +506,20 @@ func eval004(_ context.Context, _ *sdk.Input, envs []Environment) outcome {
 			for _, k := range ks {
 				va, ina := a.Values[k]
 				vb, inb := b.Values[k]
-				var ev string
+				var ev, kind string
 				switch {
 				case ina && !inb:
-					ev = fmt.Sprintf("key %s only in %s", k, a.Name)
+					ev, kind = fmt.Sprintf("key %s only in %s", k, a.Name), "key-only-in:"+a.Name
 				case inb && !ina:
-					ev = fmt.Sprintf("key %s only in %s", k, b.Name)
+					ev, kind = fmt.Sprintf("key %s only in %s", k, b.Name), "key-only-in:"+b.Name
 				case va != vb && secretKey(k):
-					ev = fmt.Sprintf("key %s differs between %s and %s", k, a.Name, b.Name)
+					ev, kind = fmt.Sprintf("key %s differs between %s and %s", k, a.Name, b.Name), "key-differs"
 				case va != vb:
-					ev = fmt.Sprintf("key %s differs between %s (%s) and %s (%s)", k, a.Name, Fingerprint(va), b.Name, Fingerprint(vb))
+					ev, kind = fmt.Sprintf("key %s differs between %s (%s) and %s (%s)", k, a.Name, Fingerprint(va), b.Name, Fingerprint(vb)), "key-differs"
 				default:
 					continue
 				}
-				out.findings = append(out.findings, finding(k, ev))
+				out.findings = append(out.findings, finding(kind+":"+k+":"+envPair(a.Name, b.Name), k, ev))
 			}
 		}
 	}

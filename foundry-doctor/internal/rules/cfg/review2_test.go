@@ -263,7 +263,7 @@ func TestCFG012Locations(t *testing.T) {
 		{name: "mixed case is uncertain", id: "FND-CFG-012", yaml: "services: {}\n", p: loc("EastUS"), skip: uncertainPrefix},
 		{name: "lowercase passes", id: "FND-CFG-012", yaml: "services: {}\n", p: loc("eastus2")},
 		{name: "empty is a finding", id: "FND-CFG-012", yaml: "services: {}\n", p: loc(" "), want: 1, contains: "empty"},
-		{name: "reference is skipped", id: "FND-CFG-012", yaml: "services: {}\n", p: loc("${L}"), skip: sdk.SkipInputUnavailable},
+		{name: "reference is skipped", id: "FND-CFG-012", yaml: "services: {}\n", p: loc("${L}"), skip: uncertainPrefix + "AZURE_LOCATION is set", notInSkip: "is not set"},
 	})
 }
 

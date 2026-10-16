@@ -237,11 +237,13 @@ func ok(fs []sdk.Finding) sdk.Result { return sdk.Result{Findings: fs} }
 // matches the prefix the report layer reads as "uncertain".
 const uncertainPrefix = "uncertain: "
 
-// withNotes returns the findings when there are any. Without findings, notes
-// make the rule inconclusive: the result is a skip with an uncertain reason,
-// never a pass.
+// withNotes reports the notes next to the findings. With findings, each
+// distinct note becomes one uncertain sdk.Skip so a finding never hides what
+// the rule could not decide (ADR-008 amendment 3). Without findings, notes make
+// the rule inconclusive: the result is a rule-level skip with an uncertain
+// reason, never a pass.
 func withNotes(fs []sdk.Finding, notes []string) sdk.Result {
-	if len(fs) > 0 || len(notes) == 0 {
+	if len(notes) == 0 {
 		return ok(fs)
 	}
 	seen := map[string]bool{}
@@ -253,7 +255,14 @@ func withNotes(fs []sdk.Finding, notes []string) sdk.Result {
 		}
 	}
 	sort.Strings(uniq)
-	return skip(uncertainPrefix + strings.Join(uniq, "; "))
+	if len(fs) == 0 {
+		return skip(uncertainPrefix + strings.Join(uniq, "; "))
+	}
+	skips := make([]sdk.Skip, 0, len(uniq))
+	for _, n := range uniq {
+		skips = append(skips, sdk.Skip{Reason: uncertainPrefix + n})
+	}
+	return sdk.Result{Findings: fs, Skips: skips}
 }
 
 var varName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)

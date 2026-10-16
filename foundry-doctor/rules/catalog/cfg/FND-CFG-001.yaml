@@ -1,5 +1,5 @@
 id: FND-CFG-001
-version: 5
+version: 6
 group: CFG
 title: Valid YAML, duplicate-key detection and compatible azure.ai.* schema
 description: >-
@@ -10,10 +10,14 @@ description: >-
   agents requiring model and instructions, azure.ai.project forbidding project/runtime/docker/image/config, and the unsupported
   voice authoring shapes (modelType hosted_agent, targetAgent). Unknown properties are not errors because the schema allows
   additional properties. requiredVersions.azd is parsed with the grammar of blang/semver/v4 ParseRange (operators < <= > >= = == ! !=,
-  space-separated AND, || OR, lowercase x wildcards; comma, ~, ^, =>, =<, *, X, hyphen ranges, latest, the empty string and a
-  leading or trailing || are not accepted): a value that is not a valid range is an error because azd fails to load the
+  space-separated AND, || OR, lowercase x wildcards; comma, ~, ^, =>, =<, X, latest, the empty string and a
+  leading or trailing || are not accepted; one-character tokens, x outside the exact N.x and N.M.x forms and "!" followed by
+  a space behave unexpectedly in the library and are reported as uncertain, not as errors): a value that is not a valid range is an error because azd fails to load the
   project, and so is a known azd version (flag, environment variable or probe) outside the range; a local dev build
-  (0.0.0-dev.0) is exempt, as in azd, and an unknown azd version makes the result uncertain (azd-version-unknown).
+  (0.0.0-dev.0) is exempt from the range comparison, as in azd, but not from range validity: azd parses the range
+  (project.go:64) before it skips a dev build (:70), so an invalid range is reported for a dev build too. The exemption is
+  unit-level only: outside the CFG-001 azd window the whole rule is skipped (unsupported-version). An unknown azd version makes
+  the result uncertain (azd-version-unknown).
   requiredVersions.extensions values are parsed with the grammar of Masterminds/semver/v3 NewConstraint (= != > < >= => <= =<
   ~ ~> ^, a bare version, space or comma as AND, || as OR, hyphen ranges, x X * wildcards, latest or empty for any). A
   value that is not valid is uncertain, never an error, because azd falls back to an exact tag match. A constraint that allows
@@ -42,7 +46,7 @@ compatibility:
   preview: true
   notes: >-
     azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18,
-    projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower
+    projects beta.13 need >=1.34.2); the maximum is azd 1.36.0 (tag azure-dev-cli_1.36.0; the first clone read was 1.36.0-beta.1). The earlier >=1.27.1 lower
     bound came from a changelog and was not verified. Extension ranges are exactly the versions whose schemas or
     source were read; widen them in Phase 1 by reading older tags. Window widened 2026-10-16: azd to 1.36.0 (tag
     azure-dev-cli_1.36.0, acebba1, released 2026-10-14); azure.ai.projects to 1.0.0-beta.14. The azd and extension
@@ -140,6 +144,8 @@ tests:
   - project-service-with-project-path
   - voice-modeltype-hosted-agent
   - requiredversions-azd-invalid-range
+  - requiredversions-azd-invalid-range-dev-build
+  - finding-with-multi-document-note
   - requiredversions-azd-out-of-range
   negative:
   - minimal-hosted-agent-project
@@ -179,3 +185,12 @@ notes: >-
   (project.Parse calls yaml.Unmarshal from github.com/braydonk/yaml v0.9.0, whose unmarshal parses one document; source
   read 2026-10-16), so a second document is reported as an uncertain note, not as an input error. Unverified: whether
   azd warns about the ignored documents.
+  Version 6: uncertain notes are returned as uncertain skips next to findings, not dropped. The dev-build exemption is
+  unit-level only (the rule is skipped outside the azd window) and covers the range comparison, not validity: azd runs
+  ParseRange (project.go:64) before the IsDevVersion skip (:70), so an invalid range errors for a dev build and is reported.
+  The two parsers are held to the real libraries (blang/semver/v4 v4.0.0 ParseRange, Masterminds/semver/v3 v3.4.0
+  NewConstraint) by a differential test over a committed fixture generated from a one-off run of both; forms where the
+  differential run disagreed (one-character tokens such as "*" and the hyphen of "1.0.0 - 2.0.0", which blang accepts;
+  x outside N.x and N.M.x; "! " with a space; wildcard with pre-release; "<x", "^*"; "~0.0.0") are reported as uncertain. The
+  required-versions-azd-* findings cite the azd project.go source (the Learn page documents the azure.yaml schema, not
+  requiredVersions).

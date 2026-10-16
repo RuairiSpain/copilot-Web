@@ -1,5 +1,5 @@
 id: FND-CFG-009
-version: 2
+version: 3
 group: CFG
 title: "Cron expressions are valid"
 description: >-
@@ -74,6 +74,15 @@ sources:
     note: >-
       Versioned schema evidence: trigger key cron_expression and type recurring/timer; cron is a string with no format
       constraint.
+  - url: https://raw.githubusercontent.com/Azure/azure-dev/azd-ext-azure-ai-routines_1.0.0-beta.10/cli/azd/extensions/azure.ai.routines/schemas/azure.ai.routine.json
+    lastVerified: "2026-10-16"
+    verifiedVia: >-
+      https://raw.githubusercontent.com/Azure/azure-dev/azd-ext-azure-ai-routines_1.0.0-beta.10/cli/azd/extensions/azure.ai.routines/schemas/azure.ai.routine.json;
+      https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/extensions/azure.ai.routines/CHANGELOG.md (1.0.0-beta.9
+      breaking change: camelCase authoring keys; snake_case rejected)
+    note: >-
+      Evidence for the unsupported spelling: the beta.10 schema has trigger type schedule with cronExpression and
+      timeZone and rejects cron_expression and time_zone. The rule does not evaluate this spelling (uncertain).
 overlap:
   decision: native
   provisional: true
@@ -123,3 +132,4 @@ notes: >-
   Cron dialect details beyond five fields (names such as MON, the L and # extensions) are not documented and are not
   assumed; expressions using them are reported uncertain.
   A project with nothing the rule applies to skips with the not-applicable reason head, not input-unavailable.
+  Version 3: uncertain notes are no longer dropped when the rule also has findings. They are returned as uncertain skips next to the findings (one per distinct note), and the rule-level skip is kept only when there are no findings. The rule reads only the azure.ai.routines beta.8 spelling (type recurring, cron_expression, time_zone) and keeps the beta.8 compatibility window. Routines beta.9 renamed authored keys to camelCase and rejects the snake_case spellings (CHANGELOG 1.0.0-beta.9); the beta.10 schema names trigger type schedule with cronExpression and timeZone and rejects cron_expression and time_zone (read 2026-10-16). No source states that the beta.8 cadence facts carry over, so a camelCase key, type schedule, any other trigger type, a trigger without a type and a recurring trigger without a cron_expression key are all reported as uncertain, never as not-applicable. not-applicable is used only when no azure.ai.routine service declares triggers.

@@ -17,6 +17,11 @@ var cfg001MinVersions = map[string]string{
 	"azure.ai.projects": "1.0.0-beta.13",
 }
 
+// cfg001AzdSourceURL is the FND-CFG-001 catalogue source (azd project.go) the
+// required-versions-azd-* findings cite instead of the first source; the
+// engine honours it only when it equals a catalogue source URL.
+const cfg001AzdSourceURL = "https://github.com/Azure/azure-dev/blob/1bd2ca4699c7b1f371db85dd867f18aa4fbc4730/cli/azd/pkg/project/project.go"
+
 // Azure.yaml name rule from the azd schema (schemas/v1.0/azure.yaml.json):
 // minLength 2 and pattern ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$.
 var appNameRe = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
@@ -96,7 +101,7 @@ func cfg001AzdRange(d document, root *yaml.Node, azdVersion string) ([]sdk.Findi
 	rng, st := parseAzdRange(n.Value)
 	switch st {
 	case parseInvalid:
-		return []sdk.Finding{{Key: "required-versions-azd-invalid", Location: loc(d, n),
+		return []sdk.Finding{{Key: "required-versions-azd-invalid", DocsURL: cfg001AzdSourceURL, Location: loc(d, n),
 			Evidence: fmt.Sprintf("requiredVersions.azd %q is not a valid semver range; azd fails to load the project", clip(n.Value))}}, nil
 	case parseUnverified:
 		return nil, []string{"requiredVersions.azd uses a range form whose validity is not verified; the range was not checked"}
@@ -111,7 +116,7 @@ func cfg001AzdRange(d document, root *yaml.Node, azdVersion string) ([]sdk.Findi
 	if isAzdDevBuild(v) || rng.contains(v) {
 		return nil, nil
 	}
-	return []sdk.Finding{{Key: "required-versions-azd-out-of-range", Location: loc(d, n),
+	return []sdk.Finding{{Key: "required-versions-azd-out-of-range", DocsURL: cfg001AzdSourceURL, Location: loc(d, n),
 		Evidence: fmt.Sprintf("azd %s is outside requiredVersions.azd %q; azd refuses to load the project", v, clip(n.Value))}}, nil
 }
 

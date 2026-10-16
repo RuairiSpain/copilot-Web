@@ -331,8 +331,8 @@ ENV-001 to ENV-004 (azd widened to 1.36.0 on 2026-10-16, decided from `git diff 
 - Effect on the rules: Foundry Doctor's own reader (`internal/project`) already uses a stricter name pattern (first character alphanumeric, so dot-only names are skipped), skips symbolic links and ignores an invalid `defaultEnvironment` with a warning. The one gap: a name ending in a period (for example `dev.`) is accepted by Foundry Doctor on every OS but azd 1.36.0 rejects it on Windows; this only adds an environment azd would not load, and does not change any finding for valid names. Not verified at runtime (nothing was executed).
 - ENV-003 was widened to azure.ai.projects beta.14, whose CHANGELOG says it requires azd >=1.36.0; its azd window now reaches 1.36.0, so the pair is consistent.
 
-Rules whose catalogue `azd` field is empty carry no azd window and are not affected. `lastVerified` dates were not changed: the catalogue test pins "today"
-to 2026-10-15, so a 2026-10-16 date fails `TestRealCatalogueInvariantsAndGeneratedDocs`.
+Rules whose catalogue `azd` field is empty carry no azd window and are not affected. `lastVerified` dates of existing sources were not changed by the window widening;
+a source's date moves only when that source was re-read. The catalogue clock in `TestRealCatalogueInvariantsAndGeneratedDocs` is 2026-10-16.
 
 Code constant: `internal/rules/cfg/versions.go` `testedMax` for `azure.ai.projects` is now `1.0.0-beta.14` (agents stays `1.0.0-beta.18`). It mirrors the
 FND-CFG-001 and FND-CFG-011 windows and `TestTestedMaxMatchesCatalogueWindows` fails if they drift.
@@ -341,7 +341,18 @@ Not verified: the GitHub release pages for azd 1.36.0 and the extensions; runtim
 `MicrosoftDocs/azure-ai-docs`, which returned 404 for every path on raw.githubusercontent.com from this environment, so Learn page content was not re-read
 for this update.
 
-## azure.yaml `requiredVersions.azd` (2026-10-15)
+## azure.yaml `requiredVersions.azd` (2026-10-15, updated 2026-10-16)
 
-The vendored azd schema states that a project fails to load when the running azd is outside the range, and gives `>= 0.6.0-beta.3` as its only example. The range grammar is not
-documented there and no azd parser source was read, so Foundry Doctor does not evaluate the range (ADR-004 Amendment 2). Verify the grammar before implementing the error finding.
+The vendored azd schema states that a project fails to load when the running azd is outside the range, and gives `>= 0.6.0-beta.3` as its only example. The grammar is
+not documented there. It was read from the azd source and the two semver libraries and is recorded in `docs/spikes/azd-required-versions.md`: `requiredVersions.azd`
+uses `blang/semver/v4` v4.0.0 `ParseRange`, `requiredVersions.extensions.<id>` uses `Masterminds/semver/v3` v3.4.0 `NewConstraint`.
+
+FND-CFG-001 now evaluates the range (ADR-004 Amendment 2, update 2026-10-16): an invalid range and a known azd version outside the range are error findings. The
+hand-written parsers (`internal/rules/cfg/versions.go`) are checked against the real libraries by a differential test over a committed fixture
+(`internal/rules/cfg/testdata/semver_diff.json`, generated once from both libraries in a scratch module; the libraries are not dependencies). Forms on which the
+differential run disagreed with the first parsers are reported as uncertain, not as errors: one-character tokens (blang drops them, so `*` and the hyphen in
+`1.0.0 - 2.0.0` do not behave as ranges), `x` outside the exact `N.x` and `N.M.x` forms, `!` followed by a space, and a few Masterminds wildcard and zero-version forms.
+The dev-build exemption (`0.0.0-dev.0`) covers the range comparison only, and only inside the CFG-001 azd window; an invalid range is still an error for a dev
+build because azd runs `ParseRange` (`project.go:64`) before the `IsDevVersion` skip (`project.go:70`).
+
+Not verified: azd itself was not executed, and older azd releases may use another range parser.

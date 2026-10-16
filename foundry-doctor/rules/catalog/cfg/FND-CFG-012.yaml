@@ -1,5 +1,5 @@
 id: FND-CFG-012
-version: 3
+version: 4
 group: CFG
 title: "Azure region values are valid"
 description: >-
@@ -120,3 +120,4 @@ notes: >-
   Version 3: a value built by variable expansion in the .env file (for example AZURE_LOCATION=${X}) is uncertain, not
   empty: the .env parser (godotenv grammar) expands an undefined variable to an empty string, so the parsed value does not
   show the intent.
+  Version 4: uncertain notes are no longer dropped when the rule also has findings. They are returned as uncertain skips next to the findings (one per distinct note), and the rule-level skip is kept only when there are no findings. An AZURE_LOCATION value that contains ${ (for example a single-quoted literal in the .env file) is uncertain, not input-unavailable: the value is set but it is not judged. A named environment that does not exist skips with input-unavailable: environment-not-found: <name>.

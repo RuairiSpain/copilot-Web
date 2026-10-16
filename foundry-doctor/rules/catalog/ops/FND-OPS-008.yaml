@@ -1,5 +1,5 @@
 id: FND-OPS-008
-version: 2
+version: 3
 group: OPS
 title: Evaluations run before promotion
 description: >-
@@ -122,3 +122,4 @@ notes: >-
   non-azd pipelines (Foundry SDK evaluation jobs) is not covered. The waf basis was removed after the Phase 0 Azure black
   belt review because no WAF pillar tag or WARA recommendation is cited here; the WAF mapping is added in Phase 4 when the
   guidance is verified.
+  Version 3: the two inconclusive outcomes (pipeline files exist but were not read; no .git directory found) carry the uncertain: reason head so readiness counts them as uncertain.

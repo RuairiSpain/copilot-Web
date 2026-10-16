@@ -265,6 +265,10 @@ func TestSelectionReasonDistinguishesCauses(t *testing.T) {
 	}{
 		{"none", Source{}, map[string]*string{"dev": str("A=1\n")}, "no-environment-selected"},
 		{"default names no directory", Source{DefaultEnvironment: "nope"}, map[string]*string{"dev": str("A=1\n")}, "default-environment-not-found"},
+		{"explicit name has no directory", Source{Environment: "nosuch"}, map[string]*string{"dev": str("A=1\n")}, "environment-not-found: nosuch"},
+		{"explicit name equal to the default stays default", Source{Environment: "nope", DefaultEnvironment: "nope"}, map[string]*string{"dev": str("A=1\n")}, "default-environment-not-found"},
+		{"explicit name is sanitised", Source{Environment: "a b;c\n"}, map[string]*string{"dev": str("A=1\n")}, "environment-not-found: a?b?c?"},
+		{"explicit name is capped", Source{Environment: strings.Repeat("e", 60)}, map[string]*string{"dev": str("A=1\n")}, "environment-not-found: " + strings.Repeat("e", 40) + "..."},
 		{"selected env file missing", Source{Environment: "dev"}, map[string]*string{"dev": nil}, "env-file-missing"},
 		{"selected env file unparseable", Source{Environment: "dev"}, map[string]*string{"dev": str("A=\"unterminated\n")}, "env-file-unparseable"},
 	}

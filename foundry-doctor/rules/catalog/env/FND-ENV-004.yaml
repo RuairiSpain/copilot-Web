@@ -1,5 +1,5 @@
 id: FND-ENV-004
-version: 2
+version: 3
 group: ENV
 title: "Informational difference summary"
 description: >-
@@ -101,3 +101,4 @@ notes: >-
   "no differences"; project discovery reads defaultEnvironment (at most 100 environment directories) to select the
   environment for the FND-CFG rules. The compare view should mark the default environment but never treat it as the
   baseline.
+  Version 3: uncertain notes (an unusable environment, an environment with a missing value) are returned as uncertain skips next to findings, not dropped. Findings carry a Key: the check kind, the variable name when there is one, and the sorted environment pair, never a value or a value fingerprint, so a rotated value does not resurface a baselined finding.

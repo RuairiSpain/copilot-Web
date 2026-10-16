@@ -292,8 +292,18 @@ func Enrich(f sdk.Finding, cr catalog.Rule, profile string, sev sdk.Severity) sd
 		f.Fix = cr.Fix
 	}
 	if len(cr.Sources) > 0 {
-		f.DocsURL = cr.Sources[0].URL
-		f.LastVerified = cr.Sources[0].LastVerified
+		src := cr.Sources[0]
+		// A rule may name one of its own catalogue sources (by URL) when a
+		// finding rests on a different source than the first. A URL that is
+		// not a catalogue source is ignored, so a rule cannot inject a link.
+		for _, s := range cr.Sources {
+			if f.DocsURL != "" && s.URL == f.DocsURL {
+				src = s
+				break
+			}
+		}
+		f.DocsURL = src.URL
+		f.LastVerified = src.LastVerified
 	}
 	f.Confidence = lowerConfidence(ConfidenceFor(cr.Evidence.Confidence), f.Confidence)
 	f.Evidence = findings.Redact(f.Evidence)

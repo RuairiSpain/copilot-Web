@@ -76,3 +76,24 @@ func TestRegisteredIDsInCatalogue(t *testing.T) {
 		seen[r.ID()] = true
 	}
 }
+
+// The required-versions-azd-* findings cite a catalogue source of CFG-001; the
+// engine ignores a URL that is not one.
+func TestCFG001AzdFindingsCiteACatalogueSource(t *testing.T) {
+	rules, err := catalog.Load(context.Background(), ruledata.FS, ruledata.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range rules {
+		if r.ID != "FND-CFG-001" {
+			continue
+		}
+		for _, s := range r.Sources {
+			if s.URL == cfg001AzdSourceURL {
+				return
+			}
+		}
+		t.Fatalf("%s is not a source of FND-CFG-001", cfg001AzdSourceURL)
+	}
+	t.Fatal("FND-CFG-001 missing")
+}

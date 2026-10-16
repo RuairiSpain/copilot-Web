@@ -1,5 +1,5 @@
 id: FND-CFG-005
-version: 3
+version: 4
 group: CFG
 title: "No raw secrets in YAML/Bicep/environment blocks"
 description: >-
@@ -158,3 +158,4 @@ notes: >-
   Secret-name exclusions (limit, count, size, file, rotation, tokens) match whole underscore-delimited tokens, never
   substrings, so STORAGE_ACCOUNT_KEY and PROFILE_PASSWORD are not excluded. A literal under a secret-looking name that
   has no credential shape is reported as uncertain (name only).
+  Version 4: uncertain notes are no longer dropped when the rule also has findings. They are returned as uncertain skips next to the findings (one per distinct note), and the rule-level skip is kept only when there are no findings.

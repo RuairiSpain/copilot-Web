@@ -1,5 +1,5 @@
 id: FND-ENV-003
-version: 3
+version: 4
 group: ENV
 title: "Prod does not reference non-prod resource IDs"
 description: >-
@@ -126,3 +126,4 @@ notes: >-
   need an allow entry with a reason and expiry. Version 2 (2026-10-15): with no finding, an unusable .env, an
   environment with no tier, no visible prod or non-prod environment, or an environment with no resource group or
   resource identifier value gives an uncertain skip naming it, not a pass.
+  Version 4: uncertain notes (an unusable environment, an environment with a missing value) are returned as uncertain skips next to findings, not dropped. Findings carry a Key: the check kind, the variable name when there is one, and the sorted environment pair, never a value or a value fingerprint, so a rotated value does not resurface a baselined finding.

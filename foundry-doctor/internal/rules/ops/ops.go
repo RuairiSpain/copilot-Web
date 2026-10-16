@@ -987,9 +987,9 @@ func eval008(in *sdk.Input, p Providers) sdk.Result {
 	if !found {
 		switch {
 		case scan.Skipped > 0:
-			o.skips = append(o.skips, "pipeline files exist but were not read (symlink, oversize, invalid YAML or file-count cap)")
+			o.skips = append(o.skips, "uncertain: pipeline files exist but were not read (symlink, oversize, invalid YAML or file-count cap)")
 		case len(scan.Files) == 0 && !hasGit:
-			o.skips = append(o.skips, "no .git directory was found above the project, so only the project directory was searched for pipeline files")
+			o.skips = append(o.skips, "uncertain: no .git directory was found above the project, so only the project directory was searched for pipeline files")
 		default:
 			addF(loc, "no pipeline run step runs azd ai agent eval run in "+pipelineSearched)
 		}
