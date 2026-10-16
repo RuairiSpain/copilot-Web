@@ -1,6 +1,6 @@
 # ADR-010: Command-surface decisions for Phase 1
 
-Status: Accepted, amended 2026-10-16 (Amendments 1 to 3)
+Status: Accepted, amended 2026-10-16 (Amendments 1 to 4)
 Date: 2026-10-05
 
 ## Context
@@ -14,7 +14,7 @@ Each is recorded here instead of being chosen silently.
    JSON `findings`; the JSON summary still counts hidden findings in a `hidden` figure so nothing disappears silently. SARIF applies the same filter.
    `--fail-on` (default `error`) sets the threshold for exit 1 and is evaluated on all unsuppressed, non-baselined findings, whatever `--min-severity` shows.
    PRD section 7 says "at or above --fail-on" and does not mention `--min-severity`; this keeps the two independent.
-2. **Exit-code precedence** when several apply: 4, then 2, then 1, then 3, then 0. PRD section 7 does not order them.
+2. **Exit-code precedence** when several apply: 4, then 2, then 3, then 1, then 0 (amended, Amendment 4). PRD section 7 orders 2 over findings, and findings over a skip unless `--strict`.
 3. **Only `--local` is accepted in Phase 1.** `--local` is the default and may be given explicitly. `--preflight`, `--runtime`, `--security`, `--what-if`,
    `--export-tool-config` and `--llm-explain` are registered so the help text is stable, but using any of them exits 2 with
    `not available in this version`. The message never suggests the feature works. (PRD section 4 shows them; PRD section 9 excludes them.)
@@ -25,7 +25,7 @@ Each is recorded here instead of being chosen silently.
    Alternative `foundry-doctor.yaml` at the root was rejected because it adds a root-level file to every repository. `--config <path>` overrides it. Absence of the file is normal.
 6. **Profile names.** User-facing `--profile dev|test|prod`; internal and config names are `foundry-dev|foundry-test|foundry-prod` (PRD section 6 example `profile: foundry-prod`).
    The `profile:` key and `--profile` accept either form; the engine normalises to the long form, and reports print the long form. Any other value exits 2.
-   The default when neither is given is `foundry-dev`, the least disruptive for adoption; the PRD names no default (owner to confirm).
+   The default when neither is given is `foundry-prod` (amended, Amendment 4); the PRD names no default.
 7. **Per-environment layout** is `environments.<name>.policy` in the same file, as ADR-007 decision 4. `<name>` is an azd environment name. Only `policy` is allowed there in Phase 1.
 8. **Output path flag** is `--out`, as ADR-007. PRD `cmd/foundry` is `cmd/foundry-doctor` (CLAUDE.md layout, ADR-003).
 
@@ -90,3 +90,21 @@ Each is recorded here instead of being chosen silently.
 - Decision 9 (`--strict`) is unchanged: a partial skip is classified by its reason head like any other skip. A rule with findings and an `unresolved-expression` or `conditional-resource` partial skip
   therefore makes `--strict` exit 3, because a resource could not be checked. Findings alone still exit 1 first only when `ClassifyExit` says so (see Amendment 1 on the 3-before-1 order).
 - Readiness (`BuildReadiness`) is unchanged: a rule with an active finding is `blocked` whatever its partial skips.
+
+## Amendment 4 (2026-10-16): Phase 1 DoD audit
+
+- **Exit precedence (decision 2) is 4, 2, 3, 1, 0.** The original text said 4, 2, 1, 3, 0. PRD section 7 says: "If findings exist but a required input/dependency/authentication/permission is
+  unavailable, exit 2 takes precedence; if only optional checks are skipped, findings retain exit 1 unless `--strict` makes the result exit 3." So with `--strict`, a skip that hid a check gives 3 even
+  when findings exist, and without `--strict` findings give 1. The code (`report.ClassifyExit`) and its tests already did this. There is one classifier: `app.ExitCode` only maps its `Outcome`
+  (applying the `--strict` hidden-check rule of decision 9) and calls `report.ClassifyExit`; the exit constants in `internal/app` alias those in `internal/report`. This closes the first open item of Amendment 1.
+- **Default profile (decision 6) is `foundry-prod`.** PRD section 6 gives `profile: foundry-prod` only as a configuration example and states no default. `foundry-prod` is the stricter default: platform-basis rules are
+  errors in every profile and prod enforces the most, so an unconfigured run never under-reports. A team that wants the lighter profile sets `profile`, `--profile dev` or `FOUNDRY_DOCTOR_PROFILE`.
+  `doctor --help` prints the value from `config.DefaultProfile`. This closes the second open item of Amendment 1.
+- **Baseline generation: `doctor --write-baseline <path> [--force]`.** The PRD (sections 2, 7 and 9) requires baseline generation but names no command. Chosen: a flag on `doctor`, not a new subcommand, because it
+  needs exactly the same inputs, configuration, rule selection and engine as `doctor`. The path is relative to `--dir`, conventionally `.foundry-doctor/baseline.yaml` (YAML, as the loader reads). It records the
+  fingerprint and rule ID of every current finding before any baseline or suppression is applied (so the result does not depend on an earlier baseline), sorted by fingerprint, with no evidence, locations or
+  absolute paths. The write goes through `os.Root` on the project directory, creates parent directories, never follows a symbolic link (any component or the target), refuses absolute or escaping paths, and refuses to
+  replace an existing file unless `--force` is given. No report is rendered; stdout names the entry count and the run exits 0. Refusals (existing file, unsafe path, `--write-baseline` with `--baseline`, `--force`
+  without `--write-baseline`) exit 2. `--baseline` keeps its existing meaning (path relative to the working directory, or absolute); with no `--baseline`, `<dir>/.foundry-doctor/baseline.yaml` is used when it exists.
+- **Summary figures.** The JSON `summary` carries `hidden` (findings removed by `--min-severity`, whatever their suppression state; always present, 0 when nothing is hidden) and `skippedByReason` (skipped checks counted
+  by reason head, keys sorted). The console and Markdown summaries print the hidden count. This implements decision 1 and ADR-012 amendment 2.
