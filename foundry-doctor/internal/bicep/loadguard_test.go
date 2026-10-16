@@ -182,3 +182,49 @@ func TestGuardFileLoadsSymlinkToSensitiveDirIsRefused(t *testing.T) {
 		})
 	}
 }
+
+// S1: a module reached through a directory link that points outside the root
+// is refused, not skipped; the compiler would follow the link.
+func TestGuardFileLoadsModuleThroughOutsideDirLinkIsRefused(t *testing.T) {
+	root, base := guardProject(t, fileSet{"infra/main.bicep": "module m './ext/m.bicep' = {\n  name: 'm'\n}\n"})
+	outDir := filepath.Join(base, "outmods")
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(outDir, "m.bicep"), []byte("param a string\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outDir, filepath.Join(base, "proj", "infra", "ext")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	var ge *LoadGuardError
+	if err := GuardFileLoads(root, "infra/main.bicep"); !errors.As(err, &ge) || !strings.Contains(err.Error(), ReasonFileLoadOutsideProject) {
+		t.Fatalf("module through an outside directory link must be refused, got %v", err)
+	}
+}
+
+func TestGuardFileLoadsModuleThroughInsideLinkIsRefused(t *testing.T) {
+	root, base := guardProject(t, fileSet{
+		"infra/main.bicep":   "module m './ext/m.bicep' = {\n  name: 'm'\n}\n",
+		"infra/real/m.bicep": "param a string\n"})
+	if err := os.Symlink("real", filepath.Join(base, "proj", "infra", "ext")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	var ge *LoadGuardError
+	if err := GuardFileLoads(root, "infra/main.bicep"); !errors.As(err, &ge) {
+		t.Fatalf("module through a link must be refused, got %v", err)
+	}
+}
+
+// A missing module stays the compiler's diagnostic; an unreadable one is refused.
+func TestGuardFileLoadsMissingModuleAllowedDirectoryModuleRefused(t *testing.T) {
+	root, _ := guardProject(t, fileSet{"infra/main.bicep": "module m './nope.bicep' = {\n  name: 'm'\n}\n"})
+	if err := GuardFileLoads(root, "infra/main.bicep"); err != nil {
+		t.Fatalf("missing module: %v", err)
+	}
+	root2, _ := guardProject(t, fileSet{"infra/main.bicep": "module m './d' = {\n  name: 'm'\n}\n", "infra/d/x.bicep": "param a string\n"})
+	var ge *LoadGuardError
+	if err := GuardFileLoads(root2, "infra/main.bicep"); !errors.As(err, &ge) {
+		t.Fatalf("module path that is a directory must be refused, got %v", err)
+	}
+}

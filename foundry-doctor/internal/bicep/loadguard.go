@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path"
 	"strings"
@@ -67,7 +68,13 @@ func GuardFileLoads(root *os.Root, start string) error {
 			if file == first {
 				return &LoadGuardError{File: file, Detail: "source could not be read for the file-load scan"}
 			}
-			continue // a missing or unreadable module is the compiler's diagnostic
+			if errors.Is(err, fs.ErrNotExist) {
+				continue // a missing module is the compiler's diagnostic
+			}
+			// Any other failure (a link leaving the root, a permission error,
+			// a directory, an oversize file) means the file may be read by the
+			// compiler but not by the scan.
+			return &LoadGuardError{File: file, Detail: "referenced file could not be read for the file-load scan"}
 		}
 		if strings.HasSuffix(strings.ToLower(file), ".json") {
 			continue // an ARM JSON module cannot call load functions; only its location is checked
@@ -107,6 +114,9 @@ func GuardFileLoads(root *os.Root, start string) error {
 			rel, ok := projectRel(dir, ref)
 			if !ok {
 				return &LoadGuardError{File: file, Detail: "referenced Bicep, Bicep parameter or JSON module file is absolute or leaves the project root"}
+			}
+			if hasSymlink(root, rel) {
+				return &LoadGuardError{File: file, Detail: "referenced file path passes through a symbolic link"}
 			}
 			if seen[rel] {
 				continue
@@ -150,13 +160,18 @@ func sensitiveDir(rel string) string {
 }
 
 // hasSymlink reports whether any component of the root-relative path is a
-// symbolic link (or cannot be examined). A link inside the project could point
+// symbolic link or cannot be examined; a component that does not exist ends
+// the walk with false. It is used for load targets and for module, using,
+// extends and import references. A link inside the project could point
 // at .azure or .git, which the text check cannot see, so loads through links
 // are refused.
 func hasSymlink(root *os.Root, rel string) bool {
 	parts := strings.Split(rel, "/")
 	for i := range parts {
 		fi, err := root.Lstat(strings.Join(parts[:i+1], "/"))
+		if errors.Is(err, fs.ErrNotExist) {
+			return false // nothing further to follow; existence is checked by the caller
+		}
 		if err != nil || fi.Mode()&os.ModeSymlink != 0 {
 			return true
 		}
