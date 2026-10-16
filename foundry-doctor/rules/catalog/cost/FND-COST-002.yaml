@@ -66,7 +66,10 @@ fix: |
 sources:
 - url: https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/foundry-models/includes/concepts-deployment-types-content-6.md
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types; source file
+    MicrosoftDocs/azure-ai-docs:
+    articles/foundry/foundry-models/includes/concepts-deployment-types-content-6.md; retrieved 2026-10-04
   note: >-
     Provisioned types (GlobalProvisionedManaged, DataZoneProvisionedManaged, ProvisionedManaged) purchase a fixed number
     of PTUs for reserved capacity; Standard types are pay-per-token; minimum PTUs vary by model.
@@ -74,14 +77,16 @@ sources:
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/rest-api-specs/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
   note: >-
-    SkuName enumeration free, basic, standard, standard2, standard3, storage_optimized_l1, storage_optimized_l2; replicaCount
-    and partitionCount ranges. The serverless value appears in the sku description and in preview 2026-03-01-preview and
-    2026-09-01-preview files.
+    SkuName enumeration free, basic, standard, standard2, standard3, storage_optimized_l1,
+    storage_optimized_l2; replicaCount and partitionCount ranges. The serverless value appears in the sku
+    description and in preview 2026-03-01-preview and 2026-09-01-preview files. Branch URL, not commit-pinned.
 - url: https://learn.microsoft.com/azure/search/search-sku-tier
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/search/search-sku-tier.md
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/search/search-sku-tier; source file MicrosoftDocs/azure-ai-docs:
+    articles/search/search-sku-tier.md; retrieved 2026-10-04
   note: >-
     Search units (replicas x partitions) are the billing unit for Dedicated services, billed at a fixed hourly rate per
     unit and tier.
@@ -89,16 +94,17 @@ sources:
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/stable/2024-05-01/apimdeployment.json
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/rest-api-specs/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/stable/2024-05-01/apimdeployment.json
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/stable/2024-05-01/apimdeployment.json
   note: >-
-    ApiManagementServiceSkuProperties name enumeration Developer, Standard, Premium, Basic, Consumption, Isolated, BasicV2,
-    StandardV2; capacity is the number of deployed units (0 for Consumption).
+    ApiManagementServiceSkuProperties name enumeration Developer, Standard, Premium, Basic, Consumption,
+    Isolated, BasicV2, StandardV2; capacity is the number of deployed units (0 for Consumption). Branch URL,
+    not commit-pinned.
 - url: >-
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/rest-api-specs/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
-  note: ThroughputSettingsResource has throughput or autoscaleSettings, not both.
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
+  note: ThroughputSettingsResource has throughput or autoscaleSettings, not both. Branch URL, not commit-pinned.
 - url: >-
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2025-04-15/cosmos-db.json
   lastVerified: '2026-10-15'
@@ -110,7 +116,10 @@ sources:
     but not both") and is the options property of SQL database and container create-update properties. Fetched 2026-10-15.
 - url: https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/includes/concepts-standard-agent-setup-content.md
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup; source file
+    MicrosoftDocs/azure-ai-docs: articles/foundry/agents/includes/concepts-standard-agent-setup-content.md;
+    retrieved 2026-10-04
   note: >-
     Standard setup needs a Cosmos DB for NoSQL account with at least 3000 RU/s total; provisioned throughput and serverless
     are both supported.

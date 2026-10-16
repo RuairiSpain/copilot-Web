@@ -59,11 +59,13 @@ fix: |
 sources:
 - url: https://learn.microsoft.com/azure/api-management/llm-token-limit-policy
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-docs/articles/api-management/llm-token-limit-policy.md
+  verifiedVia: >-
+    https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/api-management/llm-token-limit-policy.md
   note: >-
-    Attributes counter-key (required), tokens-per-minute, token-quota, token-quota-period (Hourly, Daily, Weekly, Monthly,
-    Yearly), estimate-prompt-tokens (required); inbound section; scopes global, workspace, product, API, operation; 429
-    for rate, 403 for quota; either a rate limit or a quota or both must be specified. Page ms.date 04/01/2026.
+    Attributes counter-key (required), tokens-per-minute, token-quota, token-quota-period (Hourly, Daily,
+    Weekly, Monthly, Yearly), estimate-prompt-tokens (required); inbound section; scopes global, workspace,
+    product, API, operation; 429 for rate, 403 for quota; either a rate limit or a quota or both must be
+    specified. Page ms.date 04/01/2026. Branch URL, not commit-pinned.
 overlap:
   decision: native
   provisional: true

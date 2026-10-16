@@ -58,30 +58,31 @@ sources:
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/rest-api-specs/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
   note: >-
-    DatabaseAccountCreateUpdateProperties/GetProperties.disableLocalAuth: 'only MSI and AAD can be used exclusively for
-    authentication'.
+    DatabaseAccountCreateUpdateProperties/GetProperties.disableLocalAuth: 'only MSI and AAD can be used
+    exclusively for authentication'. Branch URL, not commit-pinned.
 - url: >-
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
   note: >-
-    CapabilityHostProperties.threadStorageConnections / vectorStoreConnections (description names CosmosDB) used for Foundry
-    correlation.
+    CapabilityHostProperties.threadStorageConnections / vectorStoreConnections (description names CosmosDB)
+    used for Foundry correlation. Branch URL, not commit-pinned.
 - url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.Cosmos.NoSQLLocalAuth/
   lastVerified: '2026-10-04'
-  verifiedVia: refs/psrule/docs/en/rules/Azure.Cosmos.NoSQLLocalAuth.md
-  note: Overlap source (PSRule for Azure rule documentation).
+  verifiedVia: >-
+    https://github.com/Azure/PSRule.Rules.Azure/blob/main/docs/en/rules/Azure.Cosmos.NoSQLLocalAuth.md
+  note: Overlap source (PSRule for Azure rule documentation). Branch URL, not commit-pinned.
 - url: https://github.com/MicrosoftDocs/azure-ai-docs/blob/e8d0ac6f7ebd7fd000e287657ab9beda5bccc1fa/articles/foundry/agents/includes/concepts-capability-hosts-content.md
   lastVerified: '2026-10-05'
   verifiedVia: >-
-    refs/azure-ai-docs @ e8d0ac6f7ebd7fd000e287657ab9beda5bccc1fa
-    articles/foundry/agents/includes/concepts-capability-hosts-content.md (ms.date 08/21/2026), "Required connection
-    properties"; foundry-samples @ d807d9a0b2e633040d896cd0ddd58c95e14ac6f1
-    infrastructure-setup-bicep/41-standard-agent-setup/modules-standard/ai-project-identity.bicep and
-    add-project-capability-host.bicep.
+    https://raw.githubusercontent.com/MicrosoftDocs/azure-ai-docs/e8d0ac6f7ebd7fd000e287657ab9beda5bccc1fa/articles/foundry/agents/includes/concepts-capability-hosts-content.md
+    (ms.date 08/21/2026), "Required connection properties";
+    https://raw.githubusercontent.com/microsoft-foundry/foundry-samples/d807d9a0b2e633040d896cd0ddd58c95e14ac6f1/infrastructure/infrastructure-setup-bicep/41-standard-agent-setup/modules-standard/ai-project-identity.bicep
+    and
+    https://raw.githubusercontent.com/microsoft-foundry/foundry-samples/d807d9a0b2e633040d896cd0ddd58c95e14ac6f1/infrastructure/infrastructure-setup-bicep/41-standard-agent-setup/modules-standard/add-project-capability-host.bicep.
   note: >-
     Legacy (connection) flow, verified: a project or account capability host lists connection NAMES in
     threadStorageConnections (Cosmos DB), vectorStoreConnections (AI Search), storageConnections (Storage) and

@@ -78,27 +78,32 @@ sources:
     https://github.com/Azure/azure-rest-api-specs/tree/main/specification/consumption/resource-manager/Microsoft.Consumption/Consumption/stable/2023-11-01
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/rest-api-specs/specification/consumption/resource-manager/Microsoft.Consumption/Consumption/stable/2023-11-01/consumption.json
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/consumption/resource-manager/Microsoft.Consumption/Consumption/stable/2023-11-01/consumption.json
     (2026-06-01/openapi.json also read, same budget properties)
   note: >-
-    BudgetProperties required category (enum Cost), amount, timeGrain, timePeriod; notifications up to five; Notification
-    properties enabled, operator (EqualTo, GreaterThan, GreaterThanOrEqualTo), threshold (percent, 0 to 1000), contactEmails,
-    contactRoles, contactGroups (subscription or resource group only), thresholdType (Actual, Forecasted).
+    BudgetProperties required category (enum Cost), amount, timeGrain, timePeriod; notifications up to five;
+    Notification properties enabled, operator (EqualTo, GreaterThan, GreaterThanOrEqualTo), threshold
+    (percent, 0 to 1000), contactEmails, contactRoles, contactGroups (subscription or resource group only),
+    thresholdType (Actual, Forecasted). Branch URL, not commit-pinned.
 - url: https://learn.microsoft.com/azure/cost-management-billing/costs/quick-create-budget-bicep
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-docs/articles/cost-management-billing/costs/quick-create-budget-bicep.md
+  verifiedVia: >-
+    https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/cost-management-billing/costs/quick-create-budget-bicep.md
   note: >-
-    Budgets notify only - resources are not affected and consumption is not stopped; supported scopes; start date must be
-    the first of the month. Page ms.date 06/26/2025.
+    Budgets notify only - resources are not affected and consumption is not stopped; supported scopes; start
+    date must be the first of the month. Page ms.date 06/26/2025. Branch URL, not commit-pinned.
 - url: https://learn.microsoft.com/azure/cost-management-billing/costs/tutorial-acm-create-budgets
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-docs/articles/cost-management-billing/costs/tutorial-acm-create-budgets.md
+  verifiedVia: >-
+    https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/cost-management-billing/costs/tutorial-acm-create-budgets.md
   note: >-
-    Subscription and resource-group scopes; action groups supported at those scopes only; evaluation is on actual cost,
-    not amortised cost.
+    Subscription and resource-group scopes; action groups supported at those scopes only; evaluation is on
+    actual cost, not amortised cost. Branch URL, not commit-pinned.
 - url: https://learn.microsoft.com/azure/foundry/concepts/manage-costs
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/concepts/manage-costs.md
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/concepts/manage-costs; source file MicrosoftDocs/azure-ai-docs:
+    articles/foundry/concepts/manage-costs.md; retrieved 2026-10-04
   note: >-
     Foundry cost guidance refers to comparing against budgets and alerts for spending anomalies with Cost Management. Page
     ms.date 08/27/2026.

@@ -57,19 +57,32 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/search/agentic-retrieval-how-to-set-retrieval-reasoning-effort
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/agentic-retrieval-how-to-set-retrieval-reasoning-effort.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/search/agentic-retrieval-how-to-set-retrieval-reasoning-effort; source
+      file MicrosoftDocs/azure-ai-docs:
+      articles/search/agentic-retrieval-how-to-set-retrieval-reasoning-effort.md; retrieved 2026-10-04
     note: Effort level table (minimal requires extractiveData and excludes answer synthesis and web; auto requires 2026-08-01-preview and a model, earlier versions return 400) and the medium-effort region list; default is low.
   - url: https://learn.microsoft.com/azure/search/agentic-retrieval-how-to-create-knowledge-base
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/agentic-retrieval-how-to-create-knowledge-base.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/search/agentic-retrieval-how-to-create-knowledge-base; source file
+      MicrosoftDocs/azure-ai-docs: articles/search/agentic-retrieval-how-to-create-knowledge-base.md;
+      retrieved 2026-10-04
     note: LLM optional in 2026-08-01-preview and unsupported in 2026-04-01 for non-web sources; web source requires an LLM; managed identity for models needs Basic tier or higher.
   - url: https://learn.microsoft.com/azure/search/search-limits-quotas-capacity
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/search-limits-quotas-capacity.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/search/search-limits-quotas-capacity; source file
+      MicrosoftDocs/azure-ai-docs: articles/search/search-limits-quotas-capacity.md; retrieved 2026-10-04
     note: Agentic retrieval limits per tier and knowledge source selection per API version and effort.
   - url: https://github.com/Azure/azure-rest-api-specs/tree/main/specification/search/data-plane/Search
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/search/data-plane/Search/preview/2026-08-01-preview/search.json and stable/2026-04-01/search.json (KnowledgeRetrievalReasoningEffortKind, KnowledgeRetrievalOutputMode, KnowledgeBase properties)
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/data-plane/Search/preview/2026-08-01-preview/search.json
+      and
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/data-plane/Search/stable/2026-04-01/search.json
+      (KnowledgeRetrievalReasoningEffortKind, KnowledgeRetrievalOutputMode, KnowledgeBase properties)
+    note: Branch URL, not commit-pinned.
 overlap:
   decision: native
   provisional: true

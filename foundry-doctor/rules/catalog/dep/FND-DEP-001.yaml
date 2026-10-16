@@ -60,24 +60,33 @@ sources:
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/subscriptions/stable/2022-12-01/subscriptions.json
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/rest-api-specs/specification/resources/resource-manager/Microsoft.Resources/subscriptions/stable/2022-12-01/subscriptions.json
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/subscriptions/stable/2022-12-01/subscriptions.json
   note: >-
-    GET /subscriptions/{subscriptionId} (Subscriptions_Get) and GET /tenants (Tenants_List); Subscription.tenantId and state
-    enum Enabled, Warned, PastDue, Disabled, Deleted.
+    GET /subscriptions/{subscriptionId} (Subscriptions_Get) and GET /tenants (Tenants_List);
+    Subscription.tenantId and state enum Enabled, Warned, PastDue, Disabled, Deleted. Branch URL, not
+    commit-pinned.
 - url: https://learn.microsoft.com/azure/azure-resource-manager/management/authenticate-multi-tenant
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-docs/articles/azure-resource-manager/management/authenticate-multi-tenant.md (ms.date 02/27/2026)
+  verifiedVia: >-
+    https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/azure-resource-manager/management/authenticate-multi-tenant.md
+    (ms.date 02/27/2026)
   note: >-
-    Resource Manager runs the request under the primary token identity; the primary token must be from a tenant that can
-    manage the subscription.
+    Resource Manager runs the request under the primary token identity; the primary token must be from a
+    tenant that can manage the subscription. Branch URL, not commit-pinned.
 - url: https://learn.microsoft.com/azure/developer/azure-developer-cli/manage-environment-variables
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azd-docs/articles/azure-developer-cli/manage-environment-variables.md (ms.date 08/06/2025)
-  note: AZURE_SUBSCRIPTION_ID and AZURE_TENANT_ID are set in the azd environment during provisioning.
+  verifiedVia: >-
+    https://github.com/MicrosoftDocs/azure-dev-docs/blob/main/articles/azure-developer-cli/manage-environment-variables.md
+    (ms.date 08/06/2025)
+  note: >-
+    AZURE_SUBSCRIPTION_ID and AZURE_TENANT_ID are set in the azd environment during provisioning. Branch URL,
+    not commit-pinned.
 - url: https://learn.microsoft.com/azure/developer/azure-developer-cli/reference
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azd-docs/articles/azure-developer-cli/reference.md (ms.date 09/30/2026)
-  note: azd auth login --check-status and --tenant-id.
+  verifiedVia: >-
+    https://github.com/MicrosoftDocs/azure-dev-docs/blob/main/articles/azure-developer-cli/reference.md
+    (ms.date 09/30/2026)
+  note: azd auth login --check-status and --tenant-id. Branch URL, not commit-pinned.
 - url: https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/general
   lastVerified: '2026-10-04'
   verifiedVia: >-

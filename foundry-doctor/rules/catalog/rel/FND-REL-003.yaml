@@ -47,28 +47,37 @@ fix: "resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2025-10-15' = {\n  
 sources:
 - url: https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/how-to/high-availability-resiliency.md and includes/how-to-high-availability-resiliency-1.md
-    (ms.date 09/21/2026)
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency and
+    includes/how-to-high-availability-resiliency-1.md (ms.date 09/21/2026); source file
+    MicrosoftDocs/azure-ai-docs: articles/foundry/how-to/high-availability-resiliency.md; retrieved 2026-10-04
   note: Foundry guidance on shared responsibility, delete locks, zone redundancy, recovery configuration and multi-region
     deployment.
 - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2025-10-15/cosmos-db.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/rest-api-specs/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2025-10-15/cosmos-db.json
-  note: Location.isZoneRedundant, BackupPolicyType (Periodic, Continuous), ContinuousModeBackupPolicy.continuousModeProperties.tier.
-    Tier value Continuous7Days taken from the Foundry article CLI example.
+  verifiedVia: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2025-10-15/cosmos-db.json
+  note: >-
+    Location.isZoneRedundant, BackupPolicyType (Periodic, Continuous),
+    ContinuousModeBackupPolicy.continuousModeProperties.tier. Tier value Continuous7Days taken from the
+    Foundry article CLI example. Branch URL, not commit-pinned.
 - url: https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/DocumentDB/databaseAccounts/recommendations.yaml
   lastVerified: '2026-10-04'
-  verifiedVia: refs/wara (git show HEAD:azure-resources/DocumentDB/databaseAccounts/recommendations.yaml)
-  note: WARA 921631f6-ed59-49a5-94c1-f0f3ececa580 (availability zones, pgVerified false), e544520b-8505-7841-9e77-1f1974ee86ec
-    (continuous backup, pgVerified true).
+  verifiedVia: >-
+    https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/DocumentDB/databaseAccounts/recommendations.yaml
+  note: >-
+    WARA 921631f6-ed59-49a5-94c1-f0f3ececa580 (availability zones, pgVerified false),
+    e544520b-8505-7841-9e77-1f1974ee86ec (continuous backup, pgVerified true). Branch URL, not commit-pinned.
 - url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.Cosmos.AvailabilityZone/
   lastVerified: '2026-10-04'
-  verifiedVia: refs/psrule/docs/en/rules/Azure.Cosmos.AvailabilityZone.md
-  note: Overlap source (PSRule for Azure rule documentation).
+  verifiedVia: >-
+    https://github.com/Azure/PSRule.Rules.Azure/blob/main/docs/en/rules/Azure.Cosmos.AvailabilityZone.md
+  note: Overlap source (PSRule for Azure rule documentation). Branch URL, not commit-pinned.
 - url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.Cosmos.ContinuousBackup/
   lastVerified: '2026-10-04'
-  verifiedVia: refs/psrule/docs/en/rules/Azure.Cosmos.ContinuousBackup.md
-  note: Overlap source (PSRule for Azure rule documentation).
+  verifiedVia: >-
+    https://github.com/Azure/PSRule.Rules.Azure/blob/main/docs/en/rules/Azure.Cosmos.ContinuousBackup.md
+  note: Overlap source (PSRule for Azure rule documentation). Branch URL, not commit-pinned.
 overlap:
   decision: adapt
   provisional: true

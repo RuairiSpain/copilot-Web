@@ -54,15 +54,20 @@ fix: |
 sources:
 - url: https://learn.microsoft.com/azure/foundry/openai/how-to/working-with-models
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/openai/includes/how-to-working-with-models-content.md
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/openai/how-to/working-with-models; source file
+    MicrosoftDocs/azure-ai-docs: articles/foundry/openai/includes/how-to-working-with-models-content.md;
+    retrieved 2026-10-04
   note: >-
     Version upgrade options table; null is equivalent to OnceCurrentVersionExpired; NoAutoUpgrade stops working at retirement.
 - url: >-
     https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/extensions/azure.ai.projects/schemas/azure.ai.project.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.projects/schemas/azure.ai.project.json
+  verifiedVia: >-
+    https://github.com/Azure/azure-dev/blob/main/cli/azd/extensions/azure.ai.projects/schemas/azure.ai.project.json
   note: >-
-    Deployment requires name, model {format, name, version} and sku; additionalProperties false (no upgrade policy field).
+    Deployment requires name, model {format, name, version} and sku; additionalProperties false (no upgrade
+    policy field). Branch URL, not commit-pinned.
 overlap:
   decision: native
   provisional: true

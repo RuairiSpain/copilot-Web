@@ -53,18 +53,23 @@ fix: |
 sources:
 - url: https://learn.microsoft.com/azure/foundry/agents/how-to/set-up-ci-cd-cli
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/set-up-ci-cd-cli.md
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/agents/how-to/set-up-ci-cd-cli; source file
+    MicrosoftDocs/azure-ai-docs: articles/foundry/agents/how-to/set-up-ci-cd-cli.md; retrieved 2026-10-04
   note: >-
     Verify with eval in CI: azd ai agent eval run for regression checks, fail the job if scores drop below your threshold;
     section on validating a candidate before production promotion. Page ms.date 09/23/2026 (preview).
 - url: https://learn.microsoft.com/azure/foundry/observability/how-to/azure-developer-cli-evaluation
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/azure-ai-docs/articles/foundry/observability/how-to/azure-developer-cli-evaluation.md and refs/azure-dev/cli/azd/extensions/azure.ai.agents/internal/pkg/agents/opt_eval/yaml.go
+    https://learn.microsoft.com/azure/foundry/observability/how-to/azure-developer-cli-evaluation and
+    https://github.com/Azure/azure-dev/blob/main/cli/azd/extensions/azure.ai.agents/internal/pkg/agents/opt_eval/yaml.go;
+    source file MicrosoftDocs/azure-ai-docs:
+    articles/foundry/observability/how-to/azure-developer-cli-evaluation.md; retrieved 2026-10-04
   note: >-
-    eval.yaml is the local evaluation recipe (agent target, dataset reference, evaluator references, thresholds); azd ai
-    agent eval generate/run/update; requires the azure.ai.agents extension 0.1.40-preview or later. Page ms.date 09/25/2026
-    (preview).
+    eval.yaml is the local evaluation recipe (agent target, dataset reference, evaluator references,
+    thresholds); azd ai agent eval generate/run/update; requires the azure.ai.agents extension 0.1.40-preview
+    or later. Page ms.date 09/25/2026 (preview). Branch URL, not commit-pinned.
 overlap:
   decision: native
   provisional: true

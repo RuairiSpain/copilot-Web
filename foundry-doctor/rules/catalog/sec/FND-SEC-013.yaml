@@ -25,7 +25,7 @@ compatibility:
   extensions: {}
   apiVersions: []
   preview: false
-  notes: "No azd dependency: reads policy XML in compiled ARM or live APIM policy Microsoft.ApiManagement policy XML (validate-azure-ad-token reference, ms.date 08/18/2026) - refs/azure-docs/articles/api-management/validate-azure-ad-token-policy.md"
+  notes: "No azd dependency: reads policy XML in compiled ARM or live APIM policy Microsoft.ApiManagement policy XML (validate-azure-ad-token reference, ms.date 08/18/2026) - https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/api-management/validate-azure-ad-token-policy.md (branch URL, not commit-pinned)"
 evidence:
   description: 'Policy XML at service, product, API or operation scope: a validate-azure-ad-token element whose
     tenant-id is organizations, common, or the matching https://login.microsoftonline.com/organizations|common URL,
@@ -41,16 +41,21 @@ fix: "<validate-azure-ad-token tenant-id=\"{{aad-tenant-id}}\">\n  <client-appli
 sources:
 - url: https://learn.microsoft.com/azure/api-management/validate-azure-ad-token-policy
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-docs/articles/api-management/validate-azure-ad-token-policy.md
-  note: 'tenant-id attribute: organizations / common accept any directory; client-application-ids and audiences.'
+  verifiedVia: >-
+    https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/api-management/validate-azure-ad-token-policy.md
+  note: >-
+    tenant-id attribute: organizations / common accept any directory; client-application-ids and audiences.
+    Branch URL, not commit-pinned.
 - url: https://learn.microsoft.com/azure/api-management/validate-jwt-policy
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-docs/articles/api-management/validate-jwt-policy.md
-  note: issuers and openid-config multi-tenant endpoint.
+  verifiedVia: >-
+    https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/api-management/validate-jwt-policy.md
+  note: issuers and openid-config multi-tenant endpoint. Branch URL, not commit-pinned.
 - url: https://learn.microsoft.com/azure/api-management/api-management-authenticate-authorize-ai-apis
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-docs/articles/api-management/api-management-authenticate-authorize-ai-apis.md
-  note: Recommends validate-azure-ad-token to validate audience and claims.
+  verifiedVia: >-
+    https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/api-management/api-management-authenticate-authorize-ai-apis.md
+  note: Recommends validate-azure-ad-token to validate audience and claims. Branch URL, not commit-pinned.
 overlap:
   decision: native
   provisional: true

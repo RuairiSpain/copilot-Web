@@ -60,16 +60,25 @@ fix: |-
 sources:
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
-    note: CapabilityHostProvisioningState, ProvisioningState, CapabilityHostProperties and ConnectionPropertiesV2.error read from the definitions; paths Projects_Get, ProjectCapabilityHosts_List, project connections.
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    note: >-
+      CapabilityHostProvisioningState, ProvisioningState, CapabilityHostProperties and
+      ConnectionPropertiesV2.error read from the definitions; paths Projects_Get, ProjectCapabilityHosts_List,
+      project connections. Branch URL, not commit-pinned.
   - url: https://learn.microsoft.com/azure/foundry/agents/concepts/capability-hosts
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/capability-hosts.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/concepts/capability-hosts; source file
+      MicrosoftDocs/azure-ai-docs: articles/foundry/agents/concepts/capability-hosts.md; retrieved 2026-10-04
     note: Capability host binding model (referenced by the azd extension README).
   - url: https://github.com/Azure/azure-dev/blob/main/cli/azd/extensions/azure.ai.agents/internal/cmd/doctor/checks_connections.go
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.agents/internal/cmd/doctor/checks_connections.go
-    note: Overlap source (remote.connections) and README Project storage diagnostics (capability host read at api-version 2025-06-01 in storage_rbac_query.go).
+    verifiedVia: >-
+      https://github.com/Azure/azure-dev/blob/main/cli/azd/extensions/azure.ai.agents/internal/cmd/doctor/checks_connections.go
+    note: >-
+      Overlap source (remote.connections) and README Project storage diagnostics (capability host read at
+      api-version 2025-06-01 in storage_rbac_query.go). Branch URL, not commit-pinned.
 overlap:
   decision: native
   provisional: true

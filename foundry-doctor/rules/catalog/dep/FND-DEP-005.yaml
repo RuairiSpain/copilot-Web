@@ -64,16 +64,25 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/foundry/openai/how-to/quota
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/openai/includes/quota-2.md (included by openai/how-to/quota.md, ms.date 05/04/2026), section "Programmatically check quota and capacity"
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/openai/how-to/quota (included by openai/how-to/quota.md,
+      ms.date 05/04/2026), section "Programmatically check quota and capacity"; source file
+      MicrosoftDocs/azure-ai-docs: articles/foundry/openai/includes/quota-2.md; retrieved 2026-10-04
     note: "Usages API (subscription and location) and Model Capacities API (subscription, model name/version/format); both also return retired models; name.value format; Cognitive Services Usages Reader at subscription scope."
   - url: https://learn.microsoft.com/azure/foundry/concepts/rbac-foundry
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/concepts/rbac-foundry.md (ms.date 09/16/2026), section "Access quota and usage information"
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/concepts/rbac-foundry (ms.date 09/16/2026), section "Access
+      quota and usage information"; source file MicrosoftDocs/azure-ai-docs:
+      articles/foundry/concepts/rbac-foundry.md; retrieved 2026-10-04
     note: "Cognitive Services Usages Reader at subscription scope is the least-privilege role; resource group, Foundry resource and project role assignments do not authorize subscription-level quota information."
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
-    note: "Usages_List, LocationBasedModelCapacities_List, ModelCapacities_List GET paths; Usage and ModelSkuCapacityProperties schemas; QuotaUsageStatus enum."
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    note: >-
+      Usages_List, LocationBasedModelCapacities_List, ModelCapacities_List GET paths; Usage and
+      ModelSkuCapacityProperties schemas; QuotaUsageStatus enum. Branch URL, not commit-pinned.
   - url: https://learn.microsoft.com/azure/role-based-access-control/permissions/ai-machine-learning
     lastVerified: "2026-10-04"
     verifiedVia: https://raw.githubusercontent.com/MicrosoftDocs/azure-docs/main/articles/role-based-access-control/permissions/ai-machine-learning.md

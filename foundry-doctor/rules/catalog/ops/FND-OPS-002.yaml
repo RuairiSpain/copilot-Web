@@ -51,27 +51,40 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/foundry/observability/how-to/trace-agent-setup
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/observability/how-to/trace-agent-setup.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/observability/how-to/trace-agent-setup; source file
+      MicrosoftDocs/azure-ai-docs: articles/foundry/observability/how-to/trace-agent-setup.md; retrieved
+      2026-10-04
     note: Server-side tracing is enabled automatically after an Application Insights resource is connected to the project. Page ms.date 07/31/2026 (preview).
   - url: https://learn.microsoft.com/azure/foundry/agents/how-to/configure-hosted-agent-telemetry
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/configure-hosted-agent-telemetry.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/how-to/configure-hosted-agent-telemetry; source file
+      MicrosoftDocs/azure-ai-docs: articles/foundry/agents/how-to/configure-hosted-agent-telemetry.md;
+      retrieved 2026-10-04
     note: APPLICATIONINSIGHTS_CONNECTION_STRING is platform-injected only when project monitoring is configured; it cannot be set in agent.yaml.
   - url: https://learn.microsoft.com/azure/foundry/observability/how-to/trace-ingestion-entra-authentication
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/observability/how-to/trace-ingestion-entra-authentication.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/observability/how-to/trace-ingestion-entra-authentication;
+      source file MicrosoftDocs/azure-ai-docs:
+      articles/foundry/observability/how-to/trace-ingestion-entra-authentication.md; retrieved 2026-10-04
     note: Troubleshooting row - only one connection per category (AppInsights) is allowed.
   - url: https://learn.microsoft.com/azure/azure-monitor/logs/data-retention-configure
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-monitor-docs/articles/azure-monitor/logs/data-retention-configure.md
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/azure-monitor-docs/blob/main/articles/azure-monitor/logs/data-retention-configure.md
     note: >-
-      Azure Monitor retention guidance states that retention beyond the included period is billed;
-      this supports presenting the observability requirement as a cost-versus-retention choice, not
-      as an unconditional production requirement. Page ms.date 09/02/2026.
+      Azure Monitor retention guidance states that retention beyond the included period is billed; this
+      supports presenting the observability requirement as a cost-versus-retention choice, not as an
+      unconditional production requirement. Page ms.date 09/02/2026. Branch URL, not commit-pinned.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
-    note: ConnectionCategory enumeration contains AppInsights; connections exist under accounts and accounts/projects.
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    note: >-
+      ConnectionCategory enumeration contains AppInsights; connections exist under accounts and
+      accounts/projects. Branch URL, not commit-pinned.
 overlap:
   decision: native
   provisional: true

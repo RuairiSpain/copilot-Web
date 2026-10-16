@@ -49,11 +49,16 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/foundry/agents/how-to/tools/model-context-protocol
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/tools/model-context-protocol.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/how-to/tools/model-context-protocol; source file
+      MicrosoftDocs/azure-ai-docs: articles/foundry/agents/how-to/tools/model-context-protocol.md; retrieved
+      2026-10-04
     note: "Best practices: use an allow list of tools by using allowed_tools; default includes all tools of the MCP server."
   - url: https://learn.microsoft.com/azure/foundry/agents/how-to/tools/toolbox
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/tools/toolbox.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/how-to/tools/toolbox; source file
+      MicrosoftDocs/azure-ai-docs: articles/foundry/agents/how-to/tools/toolbox.md; retrieved 2026-10-04
     note: Troubleshooting row - allowed_tools filter, case-sensitive tool names.
 overlap:
   decision: native

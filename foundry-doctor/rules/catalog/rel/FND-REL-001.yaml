@@ -48,21 +48,26 @@ sources:
   note: Service limits and SLA replica counts.
 - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/rest-api-specs/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
-  note: SearchServiceProperties.replicaCount, partitionCount, hostingMode and Sku.name descriptions.
+  verifiedVia: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
+  note: >-
+    SearchServiceProperties.replicaCount, partitionCount, hostingMode and Sku.name descriptions. Branch URL,
+    not commit-pinned.
 - url: https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/Search/searchServices/recommendations.yaml
   lastVerified: '2026-10-04'
-  verifiedVia: refs/wara (git show HEAD:azure-resources/Search/searchServices/recommendations.yaml)
-  note: WARA b376281d-bfec-4695-8f90-9a44544fdfa4 (replicas for AZ support) and dff62efe-c3a3-4621-98b3-c877c65cb195 (multi-region);
-    both pgVerified false.
+  verifiedVia: >-
+    https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/Search/searchServices/recommendations.yaml
+  note: >-
+    WARA b376281d-bfec-4695-8f90-9a44544fdfa4 (replicas for AZ support) and
+    dff62efe-c3a3-4621-98b3-c877c65cb195 (multi-region); both pgVerified false. Branch URL, not commit-pinned.
 - url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.Search.QuerySLA/
   lastVerified: '2026-10-04'
-  verifiedVia: refs/psrule/docs/en/rules/Azure.Search.QuerySLA.md
-  note: Overlap source (PSRule for Azure rule documentation).
+  verifiedVia: https://github.com/Azure/PSRule.Rules.Azure/blob/main/docs/en/rules/Azure.Search.QuerySLA.md
+  note: Overlap source (PSRule for Azure rule documentation). Branch URL, not commit-pinned.
 - url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.Search.IndexSLA/
   lastVerified: '2026-10-04'
-  verifiedVia: refs/psrule/docs/en/rules/Azure.Search.IndexSLA.md
-  note: Overlap source (PSRule for Azure rule documentation).
+  verifiedVia: https://github.com/Azure/PSRule.Rules.Azure/blob/main/docs/en/rules/Azure.Search.IndexSLA.md
+  note: Overlap source (PSRule for Azure rule documentation). Branch URL, not commit-pinned.
 overlap:
   decision: adapt
   provisional: true

@@ -62,23 +62,33 @@ fix: |-
 sources:
 - url: https://learn.microsoft.com/azure/foundry/guardrails/guardrails-overview
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/guardrails/guardrails-overview.md
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/guardrails/guardrails-overview; source file
+    MicrosoftDocs/azure-ai-docs: articles/foundry/guardrails/guardrails-overview.md; retrieved 2026-10-04
   note: >-
     'Default guardrails': models are assigned Microsoft.DefaultV2 by default; agents inherit the model deployment guardrail.
 - url: https://learn.microsoft.com/azure/foundry/agents/how-to/add-hosted-agent-guardrails
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/add-hosted-agent-guardrails.md
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/agents/how-to/add-hosted-agent-guardrails; source file
+    MicrosoftDocs/azure-ai-docs: articles/foundry/agents/how-to/add-hosted-agent-guardrails.md; retrieved
+    2026-10-04
   note: Hosted agent without rai_config has no guardrail; full ARM ID required; missing policy can fail open.
 - url: https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/azure-yaml-reference.md
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference; source file
+    MicrosoftDocs/azure-ai-docs: articles/foundry/agents/concepts/azure-yaml-reference.md; retrieved
+    2026-10-04
   note: '''Responsible AI policies'' policies[].type rai_policy and raiPolicyName.'
 - url: >-
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
-  note: DeploymentProperties.raiPolicyName; RaiPolicyProperties (basePolicyName, mode, contentFilters).
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+  note: >-
+    DeploymentProperties.raiPolicyName; RaiPolicyProperties (basePolicyName, mode, contentFilters). Branch
+    URL, not commit-pinned.
 overlap:
   decision: native
   provisional: true

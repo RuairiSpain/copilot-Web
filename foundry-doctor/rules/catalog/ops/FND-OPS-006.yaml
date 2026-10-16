@@ -60,22 +60,27 @@ fix: |
 sources:
 - url: https://learn.microsoft.com/azure/azure-monitor/logs/data-retention-configure
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-monitor-docs/articles/azure-monitor/logs/data-retention-configure.md
+  verifiedVia: >-
+    https://github.com/MicrosoftDocs/azure-monitor-docs/blob/main/articles/azure-monitor/logs/data-retention-configure.md
   note: >-
-    Default 30 days (90 for Usage, AzureActivity and Application Insights tables); analytics retention up to two years (730
-    days), total retention up to 12 years (4383 days); workspace properties.retentionInDays and features.immediatePurgeDataOn30Days;
-    table retentionInDays and totalRetentionInDays. Page ms.date 09/02/2026.
+    Default 30 days (90 for Usage, AzureActivity and Application Insights tables); analytics retention up to
+    two years (730 days), total retention up to 12 years (4383 days); workspace properties.retentionInDays and
+    features.immediatePurgeDataOn30Days; table retentionInDays and totalRetentionInDays. Page ms.date
+    09/02/2026. Branch URL, not commit-pinned.
 - url: >-
     https://github.com/Azure/azure-rest-api-specs/tree/main/specification/operationalinsights/resource-manager/Microsoft.OperationalInsights/OperationalInsights/stable/2026-03-01
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/rest-api-specs/specification/operationalinsights/resource-manager/Microsoft.OperationalInsights/OperationalInsights/stable/2026-03-01/openapi.json
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/operationalinsights/resource-manager/Microsoft.OperationalInsights/OperationalInsights/stable/2026-03-01/openapi.json
   note: >-
-    WorkspaceProperties.retentionInDays (allowed values per pricing plan); TableProperties.retentionInDays 4-730 and totalRetentionInDays
-    4-4383.
+    WorkspaceProperties.retentionInDays (allowed values per pricing plan); TableProperties.retentionInDays
+    4-730 and totalRetentionInDays 4-4383. Branch URL, not commit-pinned.
 - url: https://learn.microsoft.com/azure/foundry/observability/concepts/trace-agent-concept
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/observability/concepts/trace-agent-concept.md
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/observability/concepts/trace-agent-concept; source file
+    MicrosoftDocs/azure-ai-docs: articles/foundry/observability/concepts/trace-agent-concept.md; retrieved
+    2026-10-04
   note: Foundry trace data retention and sampling follow the Application Insights configuration.
 overlap:
   decision: adapt

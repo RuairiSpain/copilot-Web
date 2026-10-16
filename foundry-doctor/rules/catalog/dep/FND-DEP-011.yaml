@@ -81,15 +81,20 @@ sources:
 - url: https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/azure-ai-docs/articles/foundry/agents/includes/how-to-virtual-networks-content.md (included by agents/how-to/virtual-networks.md,
-    ms.date 06/15/2026; include ms.date 09/28/2026)
+    https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks (included by
+    agents/how-to/virtual-networks.md, ms.date 06/15/2026; include ms.date 09/28/2026); source file
+    MicrosoftDocs/azure-ai-docs: articles/foundry/agents/includes/how-to-virtual-networks-content.md;
+    retrieved 2026-10-04
   note: >-
     Delegation to Microsoft.App/environments; /27 or larger required, /24 recommended; allowed address spaces; reserved
     ranges; agent subnet cannot be shared; name at most 63 UTF-8 bytes (Container Apps-backed); same region as the VNet;
     troubleshooting texts for address space, provider registration and delegation.
 - url: https://learn.microsoft.com/azure/foundry/agents/concepts/limits-quotas-regions
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/limits-quotas-regions.md (ms.date 09/07/2026)
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/agents/concepts/limits-quotas-regions (ms.date 09/07/2026);
+    source file MicrosoftDocs/azure-ai-docs: articles/foundry/agents/concepts/limits-quotas-regions.md;
+    retrieved 2026-10-04
   note: >-
     Regional support for private networking: Foundry resource and VNet in the same region; Private VNet column of the supported
     regions table.

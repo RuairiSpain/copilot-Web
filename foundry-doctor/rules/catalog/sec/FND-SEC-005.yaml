@@ -55,20 +55,23 @@ sources:
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/keyvault/resource-manager/Microsoft.KeyVault/KeyVault/stable/2026-05-15/openapi.json
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/rest-api-specs/specification/keyvault/resource-manager/Microsoft.KeyVault/KeyVault/stable/2026-05-15/openapi.json
-  note: VaultProperties.enableSoftDelete / enablePurgeProtection / enableRbacAuthorization descriptions.
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/keyvault/resource-manager/Microsoft.KeyVault/KeyVault/stable/2026-05-15/openapi.json
+  note: >-
+    VaultProperties.enableSoftDelete / enablePurgeProtection / enableRbacAuthorization descriptions. Branch
+    URL, not commit-pinned.
 - url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.KeyVault.SoftDelete/
   lastVerified: '2026-10-04'
-  verifiedVia: refs/psrule/docs/en/rules/Azure.KeyVault.SoftDelete.md
-  note: Overlap source (PSRule for Azure rule documentation).
+  verifiedVia: https://github.com/Azure/PSRule.Rules.Azure/blob/main/docs/en/rules/Azure.KeyVault.SoftDelete.md
+  note: Overlap source (PSRule for Azure rule documentation). Branch URL, not commit-pinned.
 - url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.KeyVault.PurgeProtect/
   lastVerified: '2026-10-04'
-  verifiedVia: refs/psrule/docs/en/rules/Azure.KeyVault.PurgeProtect.md
-  note: Overlap source (PSRule for Azure rule documentation).
+  verifiedVia: >-
+    https://github.com/Azure/PSRule.Rules.Azure/blob/main/docs/en/rules/Azure.KeyVault.PurgeProtect.md
+  note: Overlap source (PSRule for Azure rule documentation). Branch URL, not commit-pinned.
 - url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.KeyVault.RBAC/
   lastVerified: '2026-10-04'
-  verifiedVia: refs/psrule/docs/en/rules/Azure.KeyVault.RBAC.md
-  note: Overlap source (PSRule for Azure rule documentation).
+  verifiedVia: https://github.com/Azure/PSRule.Rules.Azure/blob/main/docs/en/rules/Azure.KeyVault.RBAC.md
+  note: Overlap source (PSRule for Azure rule documentation). Branch URL, not commit-pinned.
 overlap:
   decision: reuse
   provisional: true

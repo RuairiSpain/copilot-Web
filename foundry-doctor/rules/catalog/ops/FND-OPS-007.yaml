@@ -58,17 +58,21 @@ fix: |
 sources:
 - url: https://learn.microsoft.com/azure/developer/azure-developer-cli/configure-devops-pipeline
   lastVerified: '2026-10-05'
-  verifiedVia: refs/azd-docs/articles/azure-developer-cli/configure-devops-pipeline.md
+  verifiedVia: >-
+    https://github.com/MicrosoftDocs/azure-dev-docs/blob/main/articles/azure-developer-cli/configure-devops-pipeline.md
   note: >-
-    azd pipeline config; azure-dev.yml in .github/workflows (GitHub Actions) and in .azuredevops/pipelines or .azdo/pipelines
-    (Azure Pipelines). Page ms.date 06/12/2026.
+    azd pipeline config; azure-dev.yml in .github/workflows (GitHub Actions) and in .azuredevops/pipelines or
+    .azdo/pipelines (Azure Pipelines). Page ms.date 06/12/2026. Branch URL, not commit-pinned.
 - url: https://github.com/Azure/azure-dev/blob/main/schemas/v1.0/azure.yaml.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-dev/schemas/v1.0/azure.yaml.json
+  verifiedVia: >-
+    https://raw.githubusercontent.com/Azure/azure-dev/170ebb858071da353cc9bf8657a377bff268ba36/schemas/v1.0/azure.yaml.json
   note: Top-level pipeline object with provider enumeration github and azdo, variables and secrets lists.
 - url: https://learn.microsoft.com/azure/foundry/agents/how-to/set-up-ci-cd-cli
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/set-up-ci-cd-cli.md
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/agents/how-to/set-up-ci-cd-cli; source file
+    MicrosoftDocs/azure-ai-docs: articles/foundry/agents/how-to/set-up-ci-cd-cli.md; retrieved 2026-10-04
   note: >-
     CI/CD for hosted agents with azd pipeline config and one pipeline or branch trigger per environment (preview). Page
     ms.date 09/23/2026.

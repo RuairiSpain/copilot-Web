@@ -48,22 +48,32 @@ fix: "resource lock 'Microsoft.Authorization/locks@2020-05-01' = {\n  name: 'pro
 sources:
 - url: https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/how-to/high-availability-resiliency.md and includes/how-to-high-availability-resiliency-1.md
-    (ms.date 09/21/2026)
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency and
+    includes/how-to-high-availability-resiliency-1.md (ms.date 09/21/2026); source file
+    MicrosoftDocs/azure-ai-docs: articles/foundry/how-to/high-availability-resiliency.md; retrieved 2026-10-04
   note: Foundry guidance on shared responsibility, delete locks, zone redundancy, recovery configuration and multi-region
     deployment.
 - url: https://learn.microsoft.com/azure/azure-resource-manager/management/lock-resources
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-docs/articles/azure-resource-manager/management/lock-resources.md
-  note: Lock inheritance, control-plane-only scope, and permissions required (Microsoft.Authorization/locks/*).
+  verifiedVia: >-
+    https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/azure-resource-manager/management/lock-resources.md
+  note: >-
+    Lock inheritance, control-plane-only scope, and permissions required (Microsoft.Authorization/locks/*).
+    Branch URL, not commit-pinned.
 - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Authorization/locks/stable/2020-05-01/locks.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/rest-api-specs/specification/resources/resource-manager/Microsoft.Authorization/locks/stable/2020-05-01/locks.json
-  note: 'ManagementLockProperties.level enum: NotSpecified, CanNotDelete, ReadOnly.'
+  verifiedVia: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Authorization/locks/stable/2020-05-01/locks.json
+  note: >-
+    ManagementLockProperties.level enum: NotSpecified, CanNotDelete, ReadOnly. Branch URL, not commit-pinned.
 - url: https://github.com/Azure/azure-policy/blob/master/built-in-policies/policyDefinitions/General/ResourceType_denyActionDelete.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-policy/built-in-policies/policyDefinitions/General/ResourceType_denyActionDelete.json
-  note: Built-in policy 78460a36-508a-49a4-b2b2-2f5ec564f4bb (denyAction delete); complementary, not equivalent.
+  verifiedVia: >-
+    https://github.com/Azure/azure-policy/blob/master/built-in-policies/policyDefinitions/General/ResourceType_denyActionDelete.json
+  note: >-
+    Built-in policy 78460a36-508a-49a4-b2b2-2f5ec564f4bb (denyAction delete); complementary, not equivalent.
+    Branch URL, not commit-pinned.
 overlap:
   decision: native
   provisional: true

@@ -60,21 +60,25 @@ sources:
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/resources/stable/2025-04-01/resources.json
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/rest-api-specs/specification/resources/resource-manager/Microsoft.Resources/resources/stable/2025-04-01/resources.json
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/resources/stable/2025-04-01/resources.json
   note: >-
-    Providers_Get, Providers_List and Providers_Register paths; Provider.registrationState (string, read-only) and resourceTypes[].locations.
+    Providers_Get, Providers_List and Providers_Register paths; Provider.registrationState (string, read-only)
+    and resourceTypes[].locations. Branch URL, not commit-pinned.
 - url: https://learn.microsoft.com/azure/azure-resource-manager/management/resource-providers-and-types
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/azure-docs/articles/azure-resource-manager/management/resource-providers-and-types.md (ms.date 02/27/2026)
+    https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/azure-resource-manager/management/resource-providers-and-types.md
+    (ms.date 02/27/2026)
   note: >-
-    Template-defined providers are registered automatically; supporting-resource providers are registered manually; /register/action
-    is in Contributor and Owner; do not block on the Registering state.
+    Template-defined providers are registered automatically; supporting-resource providers are registered
+    manually; /register/action is in Contributor and Owner; do not block on the Registering state. Branch URL,
+    not commit-pinned.
 - url: https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/azure-ai-docs/articles/foundry/agents/includes/how-to-virtual-networks-content.md (included by agents/how-to/virtual-networks.md,
-    ms.date 06/15/2026)
+    https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks (included by
+    agents/how-to/virtual-networks.md, ms.date 06/15/2026); source file MicrosoftDocs/azure-ai-docs:
+    articles/foundry/agents/includes/how-to-virtual-networks-content.md; retrieved 2026-10-04
   note: >-
     Providers that must be registered for the network-secured agent setup, and the Microsoft.Bing addition. The error text
     for missing Microsoft.App and Microsoft.ContainerService registration is quoted in the troubleshooting section.

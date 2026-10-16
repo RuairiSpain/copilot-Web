@@ -50,15 +50,22 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview
     lastVerified: "2026-10-05"
-    verifiedVia: refs/azd-docs/articles/azure-developer-cli/environments-overview.md
-    note: Each environment has its own Azure resource group and configuration; .azure/<env>/.env stores AZURE_RESOURCE_GROUP.
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/azure-dev-docs/blob/main/articles/azure-developer-cli/environments-overview.md
+    note: >-
+      Each environment has its own Azure resource group and configuration; .azure/<env>/.env stores
+      AZURE_RESOURCE_GROUP. Branch URL, not commit-pinned.
   - url: https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-dev/schemas/v1.0/azure.yaml.json
+    verifiedVia: >-
+      https://raw.githubusercontent.com/Azure/azure-dev/170ebb858071da353cc9bf8657a377bff268ba36/schemas/v1.0/azure.yaml.json
     note: Top-level and service resourceGroup override; supports environment variable substitution.
   - url: https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/azure-yaml-reference.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference; source file
+      MicrosoftDocs/azure-ai-docs: articles/foundry/agents/concepts/azure-yaml-reference.md; retrieved
+      2026-10-04
     note: Tearing down an environment deletes the resource group when the current environment created the Foundry project.
   - url: https://github.com/Azure/azure-dev/blob/azure-dev-cli_1.35.0/cli/azd/pkg/environment/local_file_data_store.go
     lastVerified: '2026-10-05'

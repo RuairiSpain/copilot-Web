@@ -55,20 +55,32 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/azure-resource-manager/management/tag-resources
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-docs/articles/azure-resource-manager/management/tag-resources.md
-    note: Limits - 50 tag name-value pairs per resource, resource group and subscription; tag name 512 characters, value 256 (storage accounts, name 128); tag names are case-insensitive for operations and values are case-sensitive.
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/azure-resource-manager/management/tag-resources.md
+    note: >-
+      Limits - 50 tag name-value pairs per resource, resource group and subscription; tag name 512 characters,
+      value 256 (storage accounts, name 128); tag names are case-insensitive for operations and values are
+      case-sensitive. Branch URL, not commit-pinned.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
-    note: Account, Project and Deployment definitions extend ProxyResource and define tags.
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    note: >-
+      Account, Project and Deployment definitions extend ProxyResource and define tags. Branch URL, not
+      commit-pinned.
   - url: https://learn.microsoft.com/azure/foundry/concepts/manage-costs
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/concepts/manage-costs.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/concepts/manage-costs; source file
+      MicrosoftDocs/azure-ai-docs: articles/foundry/concepts/manage-costs.md; retrieved 2026-10-04
     note: Cost analysis can be filtered by deployment tags and user-defined tags; Foundry projects carry an automatic project tag on usage. Page ms.date 08/27/2026.
   - url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.Resource.RequiredTags/
     lastVerified: "2026-10-04"
-    verifiedVia: refs/psrule/docs/en/rules/Azure.Resource.RequiredTags.md
-    note: PSRule AZURE_RESOURCE_REQUIRED_TAGS (case-sensitive names) and AZURE_TAG_FORMAT_FOR_<TAG_NAME>; WAF OE:04. Azure.Resource.UseTags (CO:03) only checks that some tag exists.
+    verifiedVia: >-
+      https://github.com/Azure/PSRule.Rules.Azure/blob/main/docs/en/rules/Azure.Resource.RequiredTags.md
+    note: >-
+      PSRule AZURE_RESOURCE_REQUIRED_TAGS (case-sensitive names) and AZURE_TAG_FORMAT_FOR_<TAG_NAME>; WAF
+      OE:04. Azure.Resource.UseTags (CO:03) only checks that some tag exists. Branch URL, not commit-pinned.
 overlap:
   decision: adapt
   provisional: true

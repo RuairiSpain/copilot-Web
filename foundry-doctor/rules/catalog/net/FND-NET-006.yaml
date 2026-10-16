@@ -57,15 +57,24 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/includes/how-to-virtual-networks-content.md (ms.date 09/28/2026)
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks (ms.date 09/28/2026); source
+      file MicrosoftDocs/azure-ai-docs: articles/foundry/agents/includes/how-to-virtual-networks-content.md;
+      retrieved 2026-10-04
     note: Limitations - RFC 1918 and RFC 6598 (excluding 100.100.0.0/17, 100.100.192.0/19, 100.100.224.0/19); no public ranges; reserved ranges list; no overlap with peered VNets.
   - url: https://learn.microsoft.com/azure/foundry/agents/concepts/networking-options
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/networking-options.md (ms.date 06/29/2026)
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/concepts/networking-options (ms.date 06/29/2026);
+      source file MicrosoftDocs/azure-ai-docs: articles/foundry/agents/concepts/networking-options.md;
+      retrieved 2026-10-04
     note: Bring-your-own virtual network requirements list the same RFC 1918 and RFC 6598 rule; managed virtual network when IP space overlaps.
   - url: https://learn.microsoft.com/azure/foundry/agents/concepts/agents-networking-deep-dive
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/agents-networking-deep-dive.md (ms.date 09/07/2026)
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/concepts/agents-networking-deep-dive (ms.date
+      09/07/2026); source file MicrosoftDocs/azure-ai-docs:
+      articles/foundry/agents/concepts/agents-networking-deep-dive.md; retrieved 2026-10-04
     note: Says RFC 1918 only and CGNAT 100.64.0.0/10 is not supported; conflicts with the other two articles.
 overlap:
   decision: native

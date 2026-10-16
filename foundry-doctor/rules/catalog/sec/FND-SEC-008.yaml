@@ -49,19 +49,21 @@ sources:
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/security/resource-manager/Microsoft.Security/Security/stable/2026-07-01/pricings.json
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/rest-api-specs/specification/security/resource-manager/Microsoft.Security/Security/stable/2026-07-01/pricings.json
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/security/resource-manager/Microsoft.Security/Security/stable/2026-07-01/pricings.json
   note: >-
-    PricingProperties.pricingTier (Free|Standard), inherited, extensions (AIPromptEvidence 'Available for AI plan').
+    PricingProperties.pricingTier (Free|Standard), inherited, extensions (AIPromptEvidence 'Available for AI
+    plan'). Branch URL, not commit-pinned.
 - url: >-
     https://github.com/Azure/azure-policy/blob/master/built-in-policies/policyDefinitions/Security%20Center/ASC_Azure_Defender_AI_Full_Features_DINE.json
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/azure-policy/built-in-policies/policyDefinitions/Security Center/ASC_Azure_Defender_AI_Full_Features_DINE.json
-  note: Policy rule uses Microsoft.Security/pricings name AI.
+    https://github.com/Azure/azure-policy/blob/master/built-in-policies/policyDefinitions/Security%20Center/ASC_Azure_Defender_AI_Full_Features_DINE.json
+  note: Policy rule uses Microsoft.Security/pricings name AI. Branch URL, not commit-pinned.
 - url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.Defender.Storage/
   lastVerified: '2026-10-04'
-  verifiedVia: refs/psrule/src/PSRule.Rules.Azure/rules/Azure.Defender.Rule.yaml
-  note: Plan names StorageAccounts, KeyVaults, CosmosDbs.
+  verifiedVia: >-
+    https://github.com/Azure/PSRule.Rules.Azure/blob/main/src/PSRule.Rules.Azure/rules/Azure.Defender.Rule.yaml
+  note: Plan names StorageAccounts, KeyVaults, CosmosDbs. Branch URL, not commit-pinned.
 overlap:
   decision: adapt
   provisional: true

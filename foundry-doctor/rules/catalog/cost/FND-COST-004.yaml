@@ -44,23 +44,34 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/search/search-sku-tier
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/search-sku-tier.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/search/search-sku-tier; source file MicrosoftDocs/azure-ai-docs:
+      articles/search/search-sku-tier.md; retrieved 2026-10-04
     note: Search units are replicas x partitions and are billed at a fixed hourly rate per unit and tier.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
-    note: replicaCount (1-12 standard, 1-3 basic) and partitionCount (1, 2, 3, 4, 6, 12) properties.
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
+    note: >-
+      replicaCount (1-12 standard, 1-3 basic) and partitionCount (1, 2, 3, 4, 6, 12) properties. Branch URL,
+      not commit-pinned.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/stable/2024-05-01/apimdeployment.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/stable/2024-05-01/apimdeployment.json
-    note: sku.name enumeration and sku.capacity (number of deployed units; 0 for Consumption).
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/stable/2024-05-01/apimdeployment.json
+    note: >-
+      sku.name enumeration and sku.capacity (number of deployed units; 0 for Consumption). Branch URL, not
+      commit-pinned.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
-    note: ThroughputSettingsResource throughput or autoscaleSettings.
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
+    note: ThroughputSettingsResource throughput or autoscaleSettings. Branch URL, not commit-pinned.
   - url: https://learn.microsoft.com/azure/foundry/concepts/manage-costs
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/concepts/manage-costs.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/concepts/manage-costs; source file
+      MicrosoftDocs/azure-ai-docs: articles/foundry/concepts/manage-costs.md; retrieved 2026-10-04
     note: Foundry estimates cover standard deployment costs only, not provisioned throughput, and do not reflect discounts or contracted pricing; invoices and meter records are the source of truth. Page ms.date 08/27/2026.
   - url: https://learn.microsoft.com/rest/api/cost-management/retail-prices/azure-retail-prices
     lastVerified: "2026-10-04"

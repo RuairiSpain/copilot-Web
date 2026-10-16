@@ -72,13 +72,17 @@ fix: |
 sources:
 - url: https://learn.microsoft.com/azure/azure-resource-manager/management/resource-name-rules
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-docs/articles/azure-resource-manager/management/resource-name-rules.md
+  verifiedVia: >-
+    https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/azure-resource-manager/management/resource-name-rules.md
   note: >-
-    Sections Microsoft.ApiManagement, App, CognitiveServices, ContainerRegistry, DocumentDB, Insights, KeyVault, OperationalInsights,
-    Storage read; Microsoft.Search is not in the table. Page ms.date 08/05/2026.
+    Sections Microsoft.ApiManagement, App, CognitiveServices, ContainerRegistry, DocumentDB, Insights,
+    KeyVault, OperationalInsights, Storage read; Microsoft.Search is not in the table. Page ms.date
+    08/05/2026. Branch URL, not commit-pinned.
 - url: https://learn.microsoft.com/azure/search/search-create-service-portal
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/search/search-create-service-portal.md
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/search/search-create-service-portal; source file
+    MicrosoftDocs/azure-ai-docs: articles/search/search-create-service-portal.md; retrieved 2026-10-04
   note: >-
     Search service name rules - unique in search.windows.net, 2-60 characters, lowercase letters, digits and dashes, no
     dash as first two or last character, no consecutive dashes. Page ms.date 07/20/2026.
@@ -86,15 +90,17 @@ sources:
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
   note: >-
-    accountName and projectName path parameters - pattern ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$, minLength 2, maxLength 64. deploymentName
-    has no pattern or length in the specification.
+    accountName and projectName path parameters - pattern ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$, minLength 2, maxLength
+    64. deploymentName has no pattern or length in the specification. Branch URL, not commit-pinned.
 - url: https://learn.microsoft.com/azure/azure-resource-manager/bicep/bicep-core-diagnostics
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-docs/articles/azure-resource-manager/bicep/bicep-core-diagnostics.md
+  verifiedVia: >-
+    https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/azure-resource-manager/bicep/bicep-core-diagnostics.md
   note: >-
-    BCP334 and BCP335 warn that a value can be shorter or longer than the target's configured minimum or maximum length.
+    BCP334 and BCP335 warn that a value can be shorter or longer than the target's configured minimum or
+    maximum length. Branch URL, not commit-pinned.
 overlap:
   decision: adapt
   provisional: true

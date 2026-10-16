@@ -69,18 +69,22 @@ sources:
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/deployments/stable/2026-06-01/deployments.json
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/rest-api-specs/specification/resources/resource-manager/Microsoft.Resources/deployments/stable/2026-06-01/deployments.json
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/deployments/stable/2026-06-01/deployments.json
   note: >-
-    Deployments_WhatIf and the subscription, management-group and tenant POST variants (long-running; 200, 202); WhatIfOperationResult,
-    WhatIfChange, ChangeType enum (Create, Delete, Ignore, Deploy, NoChange, Modify, Unsupported), DeploymentWhatIfSettings.resultFormat
-    (ResourceIdOnly, FullResourcePayloads).
+    Deployments_WhatIf and the subscription, management-group and tenant POST variants (long-running; 200,
+    202); WhatIfOperationResult, WhatIfChange, ChangeType enum (Create, Delete, Ignore, Deploy, NoChange,
+    Modify, Unsupported), DeploymentWhatIfSettings.resultFormat (ResourceIdOnly, FullResourcePayloads). Branch
+    URL, not commit-pinned.
 - url: https://learn.microsoft.com/azure/azure-resource-manager/templates/deploy-what-if
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-docs/articles/azure-resource-manager/templates/deploy-what-if.md (ms.date 06/26/2026)
+  verifiedVia: >-
+    https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/azure-resource-manager/templates/deploy-what-if.md
+    (ms.date 06/26/2026)
   note: >-
-    The what-if operation doesn't make any changes to existing resources; limits (500 nested templates, 800 resource groups,
-    5 minutes) set remaining changes to Ignore; reference function limitation; change types incl. NoEffect in the article;
-    ResourceIdOnly returns Deploy; complete-mode deletion.
+    The what-if operation doesn't make any changes to existing resources; limits (500 nested templates, 800
+    resource groups, 5 minutes) set remaining changes to Ignore; reference function limitation; change types
+    incl. NoEffect in the article; ResourceIdOnly returns Deploy; complete-mode deletion. Branch URL, not
+    commit-pinned.
 - url: https://learn.microsoft.com/azure/azure-resource-manager/templates/deploy-what-if
   lastVerified: '2026-10-04'
   verifiedVia: >-
@@ -97,10 +101,10 @@ sources:
     Microsoft.Resources/deployments/whatIf/action 'Predicts template deployment changes'; deployments/validate/action; deployments/write.
 - url: https://github.com/Azure/azure-dev/blob/main/cli/azd/docs/design/provision-validation.md
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-dev/cli/azd/docs/design/provision-validation.md
+  verifiedVia: https://github.com/Azure/azure-dev/blob/main/cli/azd/docs/design/provision-validation.md
   note: >-
-    azd runs a server-side ARM preflight (ValidatePreflight) before deploy, controlled by provision.preflight; the document
-    does not say it reports deletes.
+    azd runs a server-side ARM preflight (ValidatePreflight) before deploy, controlled by provision.preflight;
+    the document does not say it reports deletes. Branch URL, not commit-pinned.
 overlap:
   decision: native
   provisional: true

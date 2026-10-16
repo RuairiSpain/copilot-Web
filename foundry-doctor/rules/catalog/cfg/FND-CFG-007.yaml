@@ -62,13 +62,19 @@ fix: |
 sources:
 - url: https://learn.microsoft.com/azure/foundry/agents/how-to/tools/model-context-protocol
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/tools/model-context-protocol.md
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/agents/how-to/tools/model-context-protocol; source file
+    MicrosoftDocs/azure-ai-docs: articles/foundry/agents/how-to/tools/model-context-protocol.md; retrieved
+    2026-10-04
   note: >-
     Agent Service runtime only accepts a remote MCP server endpoint; local MCP servers must be self-hosted. Treat tool descriptions
     and results as untrusted.
 - url: https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/azure-yaml-reference.md
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference; source file
+    MicrosoftDocs/azure-ai-docs: articles/foundry/agents/concepts/azure-yaml-reference.md; retrieved
+    2026-10-04
   note: Connection target is an endpoint URL or ARM resource ID; examples use https.
 - url: https://github.com/Azure/azure-dev/blob/a64ca8fe04d0bc1b0375c32fed1b76573e2a91ef/cli/azd/extensions/azure.ai.connections/schemas/azure.ai.connection.json
   lastVerified: '2026-10-05'

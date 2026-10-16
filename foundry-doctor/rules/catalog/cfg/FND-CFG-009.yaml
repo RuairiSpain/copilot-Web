@@ -54,13 +54,15 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/foundry/agents/how-to/use-routines
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/use-routines.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/how-to/use-routines; source file
+      MicrosoftDocs/azure-ai-docs: articles/foundry/agents/how-to/use-routines.md; retrieved 2026-10-04
     note: "Schedule trigger: 5-field cron expression, minimum interval five minutes, time_zone IANA or Windows identifier."
   - url: https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/extensions/azure.ai.routines/schemas/azure.ai.routine.json
     lastVerified: "2026-10-04"
     verifiedVia: >-
-      refs/azure-dev/cli/azd/extensions/azure.ai.routines/schemas/azure.ai.routine.json from
-      azure.ai.routines 1.0.0-beta.8; immutable repository revision unavailable
+      https://raw.githubusercontent.com/Azure/azure-dev/a64ca8fe04d0bc1b0375c32fed1b76573e2a91ef/cli/azd/extensions/azure.ai.routines/schemas/azure.ai.routine.json
+      (commit of the azure.ai.routines 1.0.0-beta.8 release tag)
     note: >-
       Versioned schema evidence: trigger key cron_expression and type recurring/timer; cron is a string with no format
       constraint.

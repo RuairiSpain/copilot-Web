@@ -70,7 +70,9 @@ fix: |
 sources:
 - url: https://learn.microsoft.com/azure/foundry/how-to/stay-informed-service-health
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/how-to/stay-informed-service-health.md
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/how-to/stay-informed-service-health; source file
+    MicrosoftDocs/azure-ai-docs: articles/foundry/how-to/stay-informed-service-health.md; retrieved 2026-10-04
   note: >-
     Service Health alerts for platform events and Azure Monitor metric alerts on ModelRequests, ModelAvailabilityRate, TimeToResponse
     and NormalizedTimeBetweenTokens, with an action group. Page ms.date 06/29/2026.
@@ -78,26 +80,33 @@ sources:
     https://learn.microsoft.com/azure/azure-monitor/reference/supported-metrics/microsoft-cognitiveservices-accounts-metrics
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/azure-monitor-docs/articles/azure-monitor/reference/supported-metrics/microsoft-cognitiveservices-accounts-metrics.md
+    https://github.com/MicrosoftDocs/azure-monitor-docs/blob/main/articles/azure-monitor/reference/supported-metrics/microsoft-cognitiveservices-accounts-metrics.md
   note: >-
-    Metric names ModelAvailabilityRate, ModelRequests, TimeToResponse, NormalizedTimeBetweenTokens, ProvisionedUtilization
-    exist on Microsoft.CognitiveServices/accounts. Page ms.date 09/28/2026.
+    Metric names ModelAvailabilityRate, ModelRequests, TimeToResponse, NormalizedTimeBetweenTokens,
+    ProvisionedUtilization exist on Microsoft.CognitiveServices/accounts. Page ms.date 09/28/2026. Branch URL,
+    not commit-pinned.
 - url: https://learn.microsoft.com/azure/azure-resource-manager/management/resource-name-rules
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-docs/articles/azure-resource-manager/management/resource-name-rules.md
-  note: Microsoft.Insights resource types actionGroups, metricAlerts and scheduledQueryRules exist (name rules only).
+  verifiedVia: >-
+    https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/azure-resource-manager/management/resource-name-rules.md
+  note: >-
+    Microsoft.Insights resource types actionGroups, metricAlerts and scheduledQueryRules exist (name rules
+    only). Branch URL, not commit-pinned.
 - url: >-
     https://github.com/Azure/azure-rest-api-specs/tree/main/specification/monitor/resource-manager/Microsoft.Insights/Insights
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/rest-api-specs/specification/monitor/resource-manager/Microsoft.Insights/Insights (stable/2018-03-01/metricAlert_API.json,
-    stable/2026-01-01/metricAlert.json and activityLogAlerts_API.json, stable/2020-10-01/activityLogAlerts_API.json, stable/2026-03-01/scheduledQueryRule_API.json;
-    example MetricAlertApi/examples/2026-01-01/createOrUpdateMetricAlertSingleResource.json)
+    https://github.com/Azure/azure-rest-api-specs/tree/main/specification/monitor/resource-manager/Microsoft.Insights/Insights
+    (stable/2018-03-01/metricAlert_API.json, stable/2026-01-01/metricAlert.json and
+    activityLogAlerts_API.json, stable/2020-10-01/activityLogAlerts_API.json,
+    stable/2026-03-01/scheduledQueryRule_API.json; example
+    MetricAlertApi/examples/2026-01-01/createOrUpdateMetricAlertSingleResource.json)
   note: >-
-    API versions present in the specification; metric alert properties scopes, criteria (odata.type SingleResourceMultipleMetricCriteria,
-    allOf with metricName, operator, threshold, timeAggregation, criterionType), evaluationFrequency, windowSize, severity,
-    enabled and actions[].actionGroupId read from the example. A ServiceHealth activity log alert example exists under ActivityLogAlertsApi/examples/2023-01-01-preview
-    (preview).
+    API versions present in the specification; metric alert properties scopes, criteria (odata.type
+    SingleResourceMultipleMetricCriteria, allOf with metricName, operator, threshold, timeAggregation,
+    criterionType), evaluationFrequency, windowSize, severity, enabled and actions[].actionGroupId read from
+    the example. A ServiceHealth activity log alert example exists under
+    ActivityLogAlertsApi/examples/2023-01-01-preview (preview). Branch URL, not commit-pinned.
 overlap:
   decision: adapt
   provisional: true

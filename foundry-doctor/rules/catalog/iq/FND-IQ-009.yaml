@@ -61,32 +61,42 @@ fix: |
 sources:
 - url: https://learn.microsoft.com/azure/search/agentic-retrieval-how-to-retrieve
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/search/agentic-retrieval-how-to-retrieve.md
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/search/agentic-retrieval-how-to-retrieve; source file
+    MicrosoftDocs/azure-ai-docs: articles/search/agentic-retrieval-how-to-retrieve.md; retrieved 2026-10-04
   note: >-
     Ingestion-time configuration table, unfiltered results when ingestionPermissionOptions is not set, query-time header
     x-ms-query-source-authorization with a https://search.azure.com/.default token.
 - url: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-blob
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/search/agentic-knowledge-source-how-to-blob.md
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-blob; source file
+    MicrosoftDocs/azure-ai-docs: articles/search/agentic-knowledge-source-how-to-blob.md; retrieved 2026-10-04
   note: >-
     ingestionPermissionOptions requires 2026-08-01-preview; not supported by 2026-04-01; assetStore not supported with permissions.
 - url: https://learn.microsoft.com/azure/search/search-document-level-access-overview
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/search/search-document-level-access-overview.md
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/search/search-document-level-access-overview; source file
+    MicrosoftDocs/azure-ai-docs: articles/search/search-document-level-access-overview.md; retrieved
+    2026-10-04
   note: >-
     Approaches (security filters, ACL/RBAC scopes, sensitivity labels, SharePoint ACLs); ingestionPermissionOptions can't
     be combined with assetStore.
 - url: https://learn.microsoft.com/azure/foundry/agents/how-to/foundry-iq-connect
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/foundry-iq-connect.md
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/agents/how-to/foundry-iq-connect; source file
+    MicrosoftDocs/azure-ai-docs: articles/foundry/agents/how-to/foundry-iq-connect.md; retrieved 2026-10-04
   note: >-
     Forward the signed-in user's identity token in x-ms-query-source-authorization on the MCP tool connection; without it
     permission-enabled sources return results unfiltered.
 - url: https://github.com/Azure/azure-rest-api-specs/tree/main/specification/search/data-plane/Search
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/rest-api-specs/specification/search/data-plane/Search/preview/2026-08-01-preview/search.json (KnowledgeSourceIngestionPermissionOption
-    enum)
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/data-plane/Search/preview/2026-08-01-preview/search.json
+    (KnowledgeSourceIngestionPermissionOption enum)
+  note: Branch URL, not commit-pinned.
 overlap:
   decision: native
   provisional: true

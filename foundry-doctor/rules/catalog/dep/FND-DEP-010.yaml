@@ -58,12 +58,21 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/azure-resource-manager/management/lock-resources
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-docs/articles/azure-resource-manager/management/lock-resources.md (ms.date 02/06/2025)
-    note: "CanNotDelete and ReadOnly semantics; locks override user permissions; inheritance from parent scope including resources added later; POST operations blocked by ReadOnly; cannot-delete lock on a resource group prevents automatic deployment-history deletion (800-deployment limit)."
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/azure-resource-manager/management/lock-resources.md
+      (ms.date 02/06/2025)
+    note: >-
+      CanNotDelete and ReadOnly semantics; locks override user permissions; inheritance from parent scope
+      including resources added later; POST operations blocked by ReadOnly; cannot-delete lock on a resource
+      group prevents automatic deployment-history deletion (800-deployment limit). Branch URL, not
+      commit-pinned.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Authorization/locks/stable/2020-05-01/locks.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/resources/resource-manager/Microsoft.Authorization/locks/stable/2020-05-01/locks.json
-    note: "ManagementLocks_List* and _GetByScope GET paths; level enum NotSpecified, CanNotDelete, ReadOnly."
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Authorization/locks/stable/2020-05-01/locks.json
+    note: >-
+      ManagementLocks_List* and _GetByScope GET paths; level enum NotSpecified, CanNotDelete, ReadOnly. Branch
+      URL, not commit-pinned.
   - url: https://learn.microsoft.com/azure/role-based-access-control/permissions/management-and-governance
     lastVerified: "2026-10-04"
     verifiedVia: https://raw.githubusercontent.com/MicrosoftDocs/azure-docs/main/articles/role-based-access-control/permissions/management-and-governance.md

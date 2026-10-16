@@ -63,16 +63,21 @@ fix: |
 sources:
 - url: https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference
   lastVerified: '2026-10-05'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/azure-yaml-reference.md (ms.date 09/17/2026)
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference (ms.date 09/17/2026);
+    source file MicrosoftDocs/azure-ai-docs: articles/foundry/agents/concepts/azure-yaml-reference.md;
+    retrieved 2026-10-05
   note: Host list, extension compatibility, JSON schema validation section.
 - url: https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-dev/schemas/v1.0/azure.yaml.json
+  verifiedVia: >-
+    https://raw.githubusercontent.com/Azure/azure-dev/170ebb858071da353cc9bf8657a377bff268ba36/schemas/v1.0/azure.yaml.json
   note: Per-host if/then constraints for azure.ai.agent, azure.ai.project and the other azure.ai.* hosts.
 - url: >-
     https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json
+  verifiedVia: >-
+    https://raw.githubusercontent.com/Azure/azure-dev/a64ca8fe04d0bc1b0375c32fed1b76573e2a91ef/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json
   note: Prompt-agent required fields, unsupported modelType hosted_agent and targetAgent.
 overlap:
   decision: adapt

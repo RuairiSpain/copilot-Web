@@ -48,8 +48,11 @@ fix: "resource search 'Microsoft.Search/searchServices@2025-05-01' = {\n  name: 
 sources:
 - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/rest-api-specs/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
-  note: SearchServiceProperties.replicaCount, partitionCount, hostingMode and Sku.name descriptions.
+  verifiedVia: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
+  note: >-
+    SearchServiceProperties.replicaCount, partitionCount, hostingMode and Sku.name descriptions. Branch URL,
+    not commit-pinned.
 - url: https://learn.microsoft.com/azure/search/search-limits-quotas-capacity
   lastVerified: '2026-10-04'
   verifiedVia: https://raw.githubusercontent.com/MicrosoftDocs/azure-ai-docs/main/articles/search/search-limits-quotas-capacity.md
@@ -60,15 +63,18 @@ sources:
   note: Partition and replica combinations, 36 SU maximum, Basic SU limits by creation date.
 - url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.Search.SKU/
   lastVerified: '2026-10-04'
-  verifiedVia: refs/psrule/docs/en/rules/Azure.Search.SKU.md
-  note: Overlap source (PSRule for Azure rule documentation).
+  verifiedVia: https://github.com/Azure/PSRule.Rules.Azure/blob/main/docs/en/rules/Azure.Search.SKU.md
+  note: Overlap source (PSRule for Azure rule documentation). Branch URL, not commit-pinned.
 - url: https://github.com/Azure/azure-rest-api-specs/blob/c415ef063cd4c1833ecceff7f856295115d80c0d/specification/search/resource-manager/Microsoft.Search/Search/preview/2026-09-01-preview/search.json
   lastVerified: '2026-10-05'
   verifiedVia: >-
-    refs/rest-api-specs @ c415ef063cd4c1833ecceff7f856295115d80c0d search preview/2026-09-01-preview search.json (Sku,
-    SkuName, partitionCount, replicaCount descriptions identical to 2025-05-01 except the serverless value);
-    refs/azure-ai-docs articles/search/search-manage-azure-cli.md, search-manage-rest.md,
-    search-limits-quotas-capacity.md (ms.date 09/16/2026).
+    https://raw.githubusercontent.com/Azure/azure-rest-api-specs/c415ef063cd4c1833ecceff7f856295115d80c0d/specification/search/resource-manager/Microsoft.Search/Search/preview/2026-09-01-preview/search.json
+    (Sku, SkuName, partitionCount, replicaCount descriptions identical to 2025-05-01 except the serverless
+    value);
+    https://github.com/Azure/azure-rest-api-specs/blob/c415ef063cd4c1833ecceff7f856295115d80c0d/specification/search/resource-manager/Microsoft.Search/Search/preview/2026-09-01-preview/search.json
+    (ms.date 09/16/2026; Learn pages; source files MicrosoftDocs/azure-ai-docs:
+    articles/search/search-manage-azure-cli.md, search-manage-rest.md, search-limits-quotas-capacity.md;
+    retrieved 2026-10-05).
   note: >-
     Search SKU names and Basic partition limits compared between the specification and the articles; see notes.
 overlap:

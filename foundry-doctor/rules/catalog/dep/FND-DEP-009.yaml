@@ -87,10 +87,12 @@ sources:
 - url: >-
     https://github.com/Azure/azure-policy/blob/master/built-in-policies/policyDefinitions/General/AllowedLocations_Deny.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-policy/built-in-policies/policyDefinitions/General/AllowedLocations_Deny.json
+  verifiedVia: >-
+    https://github.com/Azure/azure-policy/blob/master/built-in-policies/policyDefinitions/General/AllowedLocations_Deny.json
   note: >-
-    Built-in 'Allowed locations' (e56962a6-4747-49cd-b67b-bf8b01975c4c); 'Allowed locations for resource groups' (e765b5de-1225-4ba3-bd56-1ac6695af988)
-    in General/ResourceGroupAllowedLocations_Deny.json.
+    Built-in 'Allowed locations' (e56962a6-4747-49cd-b67b-bf8b01975c4c); 'Allowed locations for resource
+    groups' (e765b5de-1225-4ba3-bd56-1ac6695af988) in General/ResourceGroupAllowedLocations_Deny.json. Branch
+    URL, not commit-pinned.
 overlap:
   decision: adapt
   provisional: true

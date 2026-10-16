@@ -41,12 +41,18 @@ fix: |
 sources:
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/subscriptions/stable/2022-12-01/subscriptions.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/resources/resource-manager/Microsoft.Resources/subscriptions/stable/2022-12-01/subscriptions.json
-    note: Subscriptions_ListLocations - all locations available for resource providers; each provider may support a subset.
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/subscriptions/stable/2022-12-01/subscriptions.json
+    note: >-
+      Subscriptions_ListLocations - all locations available for resource providers; each provider may support
+      a subset. Branch URL, not commit-pinned.
   - url: https://learn.microsoft.com/azure/developer/azure-developer-cli/manage-environment-variables
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azd-docs/articles/azure-developer-cli/manage-environment-variables.md
-    note: AZURE_LOCATION is the Azure region where resources are deployed, set during first provisioning.
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/azure-dev-docs/blob/main/articles/azure-developer-cli/manage-environment-variables.md
+    note: >-
+      AZURE_LOCATION is the Azure region where resources are deployed, set during first provisioning. Branch
+      URL, not commit-pinned.
 overlap:
   decision: adapt
   provisional: true

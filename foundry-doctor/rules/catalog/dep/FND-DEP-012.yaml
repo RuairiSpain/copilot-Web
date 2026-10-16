@@ -62,14 +62,20 @@ fix: |
 sources:
 - url: https://learn.microsoft.com/azure/foundry/agents/concepts/limits-quotas-regions
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/limits-quotas-regions.md (ms.date 09/07/2026)
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/agents/concepts/limits-quotas-regions (ms.date 09/07/2026);
+    source file MicrosoftDocs/azure-ai-docs: articles/foundry/agents/concepts/limits-quotas-regions.md;
+    retrieved 2026-10-04
   note: >-
     Supported regions table (Responses API, Agents, voice-based agents preview, Private VNet). This rule uses only the
     documented columns it can correlate deterministically from current inputs: Responses API, Agents, and Private VNet.
     Tool-by-region, Bing Search region, and model-region availability remain out of scope here.
 - url: https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/includes/how-to-virtual-networks-content.md (ms.date 06/15/2026)
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks (ms.date 06/15/2026); source file
+    MicrosoftDocs/azure-ai-docs: articles/foundry/agents/includes/how-to-virtual-networks-content.md;
+    retrieved 2026-10-04
   note: >-
     Foundry resource must be in the same region as the virtual network; every region where Agent Service is available supports
     the private Class A address space.
@@ -77,16 +83,18 @@ sources:
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/subscriptions/stable/2022-12-01/subscriptions.json
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/rest-api-specs/specification/resources/resource-manager/Microsoft.Resources/subscriptions/stable/2022-12-01/subscriptions.json
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/subscriptions/stable/2022-12-01/subscriptions.json
   note: >-
-    Subscriptions_ListLocations (GET /subscriptions/{subscriptionId}/locations); Location (name, displayName, regionalDisplayName,
-    metadata).
+    Subscriptions_ListLocations (GET /subscriptions/{subscriptionId}/locations); Location (name, displayName,
+    regionalDisplayName, metadata). Branch URL, not commit-pinned.
 - url: >-
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/resources/stable/2025-04-01/resources.json
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/rest-api-specs/specification/resources/resource-manager/Microsoft.Resources/resources/stable/2025-04-01/resources.json
-  note: Providers_Get (GET); ProviderResourceType.locations, locationMappings, zoneMappings.
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/resources/stable/2025-04-01/resources.json
+  note: >-
+    Providers_Get (GET); ProviderResourceType.locations, locationMappings, zoneMappings. Branch URL, not
+    commit-pinned.
 - url: https://learn.microsoft.com/azure/role-based-access-control/permissions/management-and-governance
   lastVerified: '2026-10-04'
   verifiedVia: >-

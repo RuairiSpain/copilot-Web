@@ -64,10 +64,11 @@ sources:
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
   note: >-
-    Models_List GET path; AccountModel (skus, lifecycleStatus, deprecation, isDefaultVersion), ModelSku (name, deprecationDate,
-    capacity), ModelLifecycleStatus enum, DeploymentModel (format, name, version).
+    Models_List GET path; AccountModel (skus, lifecycleStatus, deprecation, isDefaultVersion), ModelSku (name,
+    deprecationDate, capacity), ModelLifecycleStatus enum, DeploymentModel (format, name, version). Branch
+    URL, not commit-pinned.
 - url: https://learn.microsoft.com/azure/role-based-access-control/permissions/ai-machine-learning
   lastVerified: '2026-10-04'
   verifiedVia: >-
@@ -75,11 +76,17 @@ sources:
   note: Microsoft.CognitiveServices/locations/models/read ('Reads available models').
 - url: https://learn.microsoft.com/azure/foundry/agents/concepts/limits-quotas-regions
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/limits-quotas-regions.md (ms.date 09/07/2026)
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/agents/concepts/limits-quotas-regions (ms.date 09/07/2026);
+    source file MicrosoftDocs/azure-ai-docs: articles/foundry/agents/concepts/limits-quotas-regions.md;
+    retrieved 2026-10-04
   note: 'Troubleshooting: a model or version isn''t available in your region; gpt-5 models require registration.'
 - url: https://learn.microsoft.com/azure/foundry/how-to/create-resource-template
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/how-to/create-resource-template.md (ms.date 07/28/2026)
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/how-to/create-resource-template (ms.date 07/28/2026); source
+    file MicrosoftDocs/azure-ai-docs: articles/foundry/how-to/create-resource-template.md; retrieved
+    2026-10-04
   note: >-
     ServiceModelDeprecating error when a template references a retired or deprecating model version; az cognitiveservices
     model list --location.

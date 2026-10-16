@@ -52,15 +52,25 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/foundry/how-to/model-deployment-policy
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/how-to/model-deployment-policy.md and refs/azure-ai-docs/articles/foundry/includes/how-to-model-deployment-policy-2.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/how-to/model-deployment-policy; source files
+      MicrosoftDocs/azure-ai-docs: articles/foundry/how-to/model-deployment-policy.md,
+      articles/foundry/includes/how-to-model-deployment-policy-2.md; retrieved 2026-10-04
     note: Built-in policies "Foundry model deployments should only use approved models" and "should meet eligibility requirements"; evaluated at deployment time; parameters allowedPublishers and allowedAssetIds; asset IDs and publisher names are case-sensitive; policy takes at least 15 minutes to apply. Page ms.date 08/18/2026.
   - url: https://github.com/Azure/azure-policy/blob/master/built-in-policies/policyDefinitions/Cognitive%20Services/AllowDeployRegistryModels_Audit.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-policy/built-in-policies/policyDefinitions/Cognitive Services/AllowDeployRegistryModels_Audit.json
-    note: Definition aafe3651-cb78-4f68-9f81-e7e41509110f - effect Audit, Deny or Disabled (default Audit); parameters allowedPublishers and allowedAssetIds (both default empty); the rule targets type Microsoft.CognitiveServices.Data/accounts/deployments and matches model.publisher and model.assetId (contains).
+    verifiedVia: >-
+      https://github.com/Azure/azure-policy/blob/master/built-in-policies/policyDefinitions/Cognitive%20Services/AllowDeployRegistryModels_Audit.json
+    note: >-
+      Definition aafe3651-cb78-4f68-9f81-e7e41509110f - effect Audit, Deny or Disabled (default Audit);
+      parameters allowedPublishers and allowedAssetIds (both default empty); the rule targets type
+      Microsoft.CognitiveServices.Data/accounts/deployments and matches model.publisher and model.assetId
+      (contains). Branch URL, not commit-pinned.
   - url: https://learn.microsoft.com/azure/foundry/how-to/model-router-policy
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/how-to/model-router-policy.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/how-to/model-router-policy; source file
+      MicrosoftDocs/azure-ai-docs: articles/foundry/how-to/model-router-policy.md; retrieved 2026-10-04
     note: Model router honors the same policy; a model router deployment with an unapproved model is rejected with a policy violation across REST, CLI and ARM templates. Page ms.date 08/19/2026.
 overlap:
   decision: adapt

@@ -46,16 +46,25 @@ fix: |-
 sources:
   - url: https://github.com/Azure/azure-dev/blob/main/cli/azd/extensions/azure.ai.agents/internal/cmd/doctor/checks_agent_status.go
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.agents/internal/cmd/doctor/checks_agent_status.go
-    note: GET /agents/{name}/versions/{version}; statuses Active, Creating, Failed; Reader-level comment.
+    verifiedVia: >-
+      https://github.com/Azure/azure-dev/blob/main/cli/azd/extensions/azure.ai.agents/internal/cmd/doctor/checks_agent_status.go
+    note: >-
+      GET /agents/{name}/versions/{version}; statuses Active, Creating, Failed; Reader-level comment. Branch
+      URL, not commit-pinned.
   - url: https://github.com/Azure/azure-dev/blob/main/cli/azd/extensions/azure.ai.agents/internal/cmd/doctor/checks_foundry_endpoint.go
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.agents/internal/cmd/doctor/checks_foundry_endpoint.go
-    note: GET <endpoint>/agents?api-version=v1&limit=1 reachability probe and HTTP status mapping.
+    verifiedVia: >-
+      https://github.com/Azure/azure-dev/blob/main/cli/azd/extensions/azure.ai.agents/internal/cmd/doctor/checks_foundry_endpoint.go
+    note: >-
+      GET <endpoint>/agents?api-version=v1&limit=1 reachability probe and HTTP status mapping. Branch URL, not
+      commit-pinned.
   - url: https://github.com/Azure/azure-dev/blob/main/cli/azd/extensions/azure.ai.agents/internal/pkg/azure/foundry_projects_client.go
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.agents/internal/pkg/azure/foundry_projects_client.go
-    note: connections list at <endpoint>/connections?api-version=v1; a per-connection credentials operation exists and must be avoided.
+    verifiedVia: >-
+      https://github.com/Azure/azure-dev/blob/main/cli/azd/extensions/azure.ai.agents/internal/pkg/azure/foundry_projects_client.go
+    note: >-
+      connections list at <endpoint>/connections?api-version=v1; a per-connection credentials operation exists
+      and must be avoided. Branch URL, not commit-pinned.
 overlap:
   decision: adapt
   provisional: true

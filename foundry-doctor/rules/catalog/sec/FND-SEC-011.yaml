@@ -43,11 +43,17 @@ fix: "# azure.yaml (azure.ai.project service)\nnetwork:\n  peSubnet:\n    vnet: 
 sources:
 - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
-  note: AccountProperties.restrictOutboundNetworkAccess, allowedFqdnList; definitions IsolationMode and ManagedNetworkSettings.
+  verifiedVia: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+  note: >-
+    AccountProperties.restrictOutboundNetworkAccess, allowedFqdnList; definitions IsolationMode and
+    ManagedNetworkSettings. Branch URL, not commit-pinned.
 - url: https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/azure-yaml-reference.md
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference; source file
+    MicrosoftDocs/azure-ai-docs: articles/foundry/agents/concepts/azure-yaml-reference.md; retrieved
+    2026-10-04
   note: '''network'' section: isolationMode values and peSubnet/agentSubnet.'
 overlap:
   decision: native

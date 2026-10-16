@@ -57,20 +57,26 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference
     lastVerified: "2026-10-05"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/azure-yaml-reference.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference; source file
+      MicrosoftDocs/azure-ai-docs: articles/foundry/agents/concepts/azure-yaml-reference.md; retrieved
+      2026-10-05
     note: "Connection changes apply during azd provision. Store credential values in your azd environment and reference them with ${VAR} instead of putting secrets in azure.yaml."
   - url: https://learn.microsoft.com/azure/developer/azure-developer-cli/manage-environment-variables
     lastVerified: "2026-10-05"
-    verifiedVia: refs/azd-docs/articles/azure-developer-cli/manage-environment-variables.md
-    note: Never store secrets in an azd .env file.
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/azure-dev-docs/blob/main/articles/azure-developer-cli/manage-environment-variables.md
+    note: Never store secrets in an azd .env file. Branch URL, not commit-pinned.
   - url: https://learn.microsoft.com/azure/developer/azure-developer-cli/environment-secrets
     lastVerified: "2026-10-05"
-    verifiedVia: refs/azd-docs/articles/azure-developer-cli/environment-secrets.md
-    note: azd env set-secret and Key Vault references.
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/azure-dev-docs/blob/main/articles/azure-developer-cli/environment-secrets.md
+    note: azd env set-secret and Key Vault references. Branch URL, not commit-pinned.
   - url: https://learn.microsoft.com/azure/azure-resource-manager/bicep/linter-rule-secure-secrets-in-parameters
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-docs/articles/azure-resource-manager/bicep/linter-rule-secure-secrets-in-parameters.md
-    note: Bicep linter rule code secure-secrets-in-params.
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/azure-resource-manager/bicep/linter-rule-secure-secrets-in-parameters.md
+    note: Bicep linter rule code secure-secrets-in-params. Branch URL, not commit-pinned.
 overlap:
   decision: adapt
   provisional: true

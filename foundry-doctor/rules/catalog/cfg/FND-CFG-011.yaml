@@ -58,15 +58,23 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/azure-yaml-reference.md (ms.date 09/17/2026)
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference (ms.date 09/17/2026);
+      source file MicrosoftDocs/azure-ai-docs: articles/foundry/agents/concepts/azure-yaml-reference.md;
+      retrieved 2026-10-04
     note: Extension compatibility, legacy configuration migration, metadata and schema limitations, reserved prefixes, preview banner.
   - url: https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-dev/schemas/v1.0/azure.yaml.json from the azd 1.36.0-beta.1 clone; immutable repository revision unavailable
+    verifiedVia: >-
+      https://raw.githubusercontent.com/Azure/azure-dev/170ebb858071da353cc9bf8657a377bff268ba36/schemas/v1.0/azure.yaml.json
+      (commit of tag azure-dev-cli_1.35.0; identical to main at 1.36.0-beta.1 per
+      docs/development/phase-1-fact-check.md)
     note: Versioned schema evidence for agent project/host and service-level env; config deprecated on azure.ai.agent; microsoft.foundry legacy host comment.
   - url: https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json from azure.ai.agents 1.0.0-beta.18; immutable repository revision unavailable
+    verifiedVia: >-
+      https://raw.githubusercontent.com/Azure/azure-dev/a64ca8fe04d0bc1b0375c32fed1b76573e2a91ef/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json
+      (commit of the azure.ai.agents 1.0.0-beta.18 release tag)
     note: Versioned extension schema evidence for the required project, host, kind and service-level env fields used by the fix.
 overlap:
   decision: native

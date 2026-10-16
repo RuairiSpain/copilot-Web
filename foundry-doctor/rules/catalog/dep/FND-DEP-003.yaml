@@ -65,24 +65,28 @@ sources:
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/authorization/resource-manager/Microsoft.Authorization/Authorization/stable/2022-04-01/authorization-RoleDefinitionsCalls.json
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/rest-api-specs/specification/authorization/resource-manager/Microsoft.Authorization/Authorization/stable/2022-04-01/authorization-RoleDefinitionsCalls.json
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/authorization/resource-manager/Microsoft.Authorization/Authorization/stable/2022-04-01/authorization-RoleDefinitionsCalls.json
   note: >-
-    Permissions_ListForResourceGroup and Permissions_ListForResource paths; Permission properties actions, notActions, dataActions,
-    notDataActions.
+    Permissions_ListForResourceGroup and Permissions_ListForResource paths; Permission properties actions,
+    notActions, dataActions, notDataActions. Branch URL, not commit-pinned.
 - url: >-
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/authorization/resource-manager/Microsoft.Authorization/Authorization/stable/2022-04-01/authorization-RoleAssignmentsCalls.json
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/rest-api-specs/specification/authorization/resource-manager/Microsoft.Authorization/Authorization/stable/2022-04-01/authorization-RoleAssignmentsCalls.json
-  note: RoleAssignments_ListForSubscription, ListForResourceGroup, ListForScope (GET).
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/authorization/resource-manager/Microsoft.Authorization/Authorization/stable/2022-04-01/authorization-RoleAssignmentsCalls.json
+  note: >-
+    RoleAssignments_ListForSubscription, ListForResourceGroup, ListForScope (GET). Branch URL, not
+    commit-pinned.
 - url: https://learn.microsoft.com/azure/azure-resource-manager/templates/deploy-what-if
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    https://raw.githubusercontent.com/MicrosoftDocs/azure-docs/main/includes/template-deploy-permissions.md (include, ms.date
-    08/19/2025, used by refs/azure-docs/articles/azure-resource-manager/templates/deploy-what-if.md)
+    https://raw.githubusercontent.com/MicrosoftDocs/azure-docs/main/includes/template-deploy-permissions.md
+    (include, ms.date 08/19/2025, used by
+    https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/azure-resource-manager/templates/deploy-what-if.md)
   note: >-
-    To deploy you need write access on the resources and access to all operations on Microsoft.Resources/deployments; what-if
-    has the same permission requirements.
+    To deploy you need write access on the resources and access to all operations on
+    Microsoft.Resources/deployments; what-if has the same permission requirements. Branch URL, not
+    commit-pinned.
 - url: https://learn.microsoft.com/azure/role-based-access-control/permissions/management-and-governance
   lastVerified: '2026-10-04'
   verifiedVia: >-
@@ -90,10 +94,11 @@ sources:
   note: Microsoft.Authorization/permissions/read and roleAssignments/read; Microsoft.Resources/deployments/write.
 - url: https://github.com/Azure/azure-dev/blob/main/cli/azd/docs/design/provision-validation.md
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-dev/cli/azd/docs/design/provision-validation.md
+  verifiedVia: https://github.com/Azure/azure-dev/blob/main/cli/azd/docs/design/provision-validation.md
   note: >-
-    azd local provision validation: detects Microsoft.Authorization/roleAssignments in the Bicep snapshot and warns when
-    the principal lacks roleAssignments/write on the subscription. The only built-in check listed.
+    azd local provision validation: detects Microsoft.Authorization/roleAssignments in the Bicep snapshot and
+    warns when the principal lacks roleAssignments/write on the subscription. The only built-in check listed.
+    Branch URL, not commit-pinned.
 overlap:
   decision: adapt
   provisional: true

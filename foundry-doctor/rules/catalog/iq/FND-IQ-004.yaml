@@ -51,19 +51,30 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/search/vector-search-how-to-create-index
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/vector-search-how-to-create-index.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/search/vector-search-how-to-create-index; source file
+      MicrosoftDocs/azure-ai-docs: articles/search/vector-search-how-to-create-index.md; retrieved 2026-10-04
     note: dimensions must be set to the same value used by the embedding skill; ada-002 fixed at 1536, text-embedding-3-small 1 to 1536, text-embedding-3-large 1 to 3072; indexers throw an error on mismatched vector lengths.
   - url: https://learn.microsoft.com/azure/search/cognitive-search-skill-azure-openai-embedding
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/cognitive-search-skill-azure-openai-embedding.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/search/cognitive-search-skill-azure-openai-embedding; source file
+      MicrosoftDocs/azure-ai-docs: articles/search/cognitive-search-skill-azure-openai-embedding.md; retrieved
+      2026-10-04
     note: Skill dimensions parameter and Supported dimensions by modelName table.
   - url: https://learn.microsoft.com/azure/search/vector-search-vectorizer-azure-open-ai
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/vector-search-vectorizer-azure-open-ai.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/search/vector-search-vectorizer-azure-open-ai; source file
+      MicrosoftDocs/azure-ai-docs: articles/search/vector-search-vectorizer-azure-open-ai.md; retrieved
+      2026-10-04
     note: Vectorizer parameters resourceUri, deploymentId, modelName; expected field dimensions; API Management endpoints supported.
   - url: https://github.com/Azure/azure-rest-api-specs/tree/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/models.tsp (DeploymentModel name, version)
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/models.tsp
+      (DeploymentModel name, version)
+    note: Branch URL, not commit-pinned.
 overlap:
   decision: native
   provisional: true

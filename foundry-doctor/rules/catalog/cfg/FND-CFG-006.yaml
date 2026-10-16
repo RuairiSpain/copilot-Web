@@ -59,23 +59,34 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/azure-yaml-reference.md (ms.date 09/17/2026)
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference (ms.date 09/17/2026);
+      source file MicrosoftDocs/azure-ai-docs: articles/foundry/agents/concepts/azure-yaml-reference.md;
+      retrieved 2026-10-04
     note: Variable substitution table; env section; AGENT_<SERVICE>_* values written after deployment; reserved FOUNDRY_ and AGENT_ prefixes.
   - url: https://learn.microsoft.com/azure/foundry/agents/how-to/author-azure-yaml
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/author-azure-yaml.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/how-to/author-azure-yaml; source file
+      MicrosoftDocs/azure-ai-docs: articles/foundry/agents/how-to/author-azure-yaml.md; retrieved 2026-10-04
     note: "Troubleshooting: a ${VAR} value is empty at runtime when it is not set in the active azd environment."
   - url: https://learn.microsoft.com/azure/developer/azure-developer-cli/manage-environment-variables
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azd-docs/articles/azure-developer-cli/manage-environment-variables.md
-    note: Standard azd environment variables and when they are set.
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/azure-dev-docs/blob/main/articles/azure-developer-cli/manage-environment-variables.md
+    note: Standard azd environment variables and when they are set. Branch URL, not commit-pinned.
   - url: https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/extensions/azure.ai.agents/internal/synthesis/synthesizer.go
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.agents/internal/synthesis/synthesizer.go
-    note: resolveVars - unresolved reference is an error naming the variable; ${VAR:-default} supported (extension source, not Learn).
+    verifiedVia: >-
+      https://github.com/Azure/azure-dev/blob/main/cli/azd/extensions/azure.ai.agents/internal/synthesis/synthesizer.go
+    note: >-
+      resolveVars - unresolved reference is an error naming the variable; ${VAR:-default} supported (extension
+      source, not Learn). Branch URL, not commit-pinned.
   - url: https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json from azure.ai.agents 1.0.0-beta.18; immutable repository revision unavailable
+    verifiedVia: >-
+      https://raw.githubusercontent.com/Azure/azure-dev/a64ca8fe04d0bc1b0375c32fed1b76573e2a91ef/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json
+      (commit of the azure.ai.agents 1.0.0-beta.18 release tag)
     note: Schema evidence for the required project and agent fields used by the fix.
   - url: https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/pkg/environment/environment.go
     lastVerified: "2026-10-15"
