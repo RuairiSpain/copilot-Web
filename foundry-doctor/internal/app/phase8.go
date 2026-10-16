@@ -65,6 +65,16 @@ func (m iqSnapshotModel) FromDefault(r sdk.ARMResource) []string {
 	return nil
 }
 
+// FromDefaultPaths forwards armmodel.Model.FromDefaultPaths.
+func (m iqSnapshotModel) FromDefaultPaths(r sdk.ARMResource) []string {
+	if v, ok := m.ARMModel.(interface {
+		FromDefaultPaths(sdk.ARMResource) []string
+	}); ok {
+		return v.FromDefaultPaths(r)
+	}
+	return nil
+}
+
 func withPhase8Snapshot(ctx context.Context, in RunInput) sdk.ARMModel {
 	if in.Local || in.ARM == nil || in.AzureYAML == nil {
 		return in.ARM

@@ -332,10 +332,20 @@ type defaultProvenance interface {
 	FromDefault(sdk.ARMResource) []string
 }
 
-// capDefaultDerived lowers a finding's confidence to medium when the resource
-// it names took a fact from a parameter default. A default is not what the
-// deployment necessarily uses, so a finding built on it is not certain. The
-// evidence text and the fingerprint are left alone.
+// defaultPathProvenance is implemented by an ARM model that records where a
+// parameter default landed in a resource (armmodel.Model.FromDefaultPaths).
+type defaultPathProvenance interface {
+	FromDefaultPaths(sdk.ARMResource) []string
+}
+
+// capDefaultDerived lowers a finding's confidence to medium when a parameter
+// default fed what the finding reports: the resource's condition (its own or
+// an ancestor module's), or the property, sku, identity, tags or scope the
+// finding names in its Key or Evidence (ADR-018 amendment 2). A default that
+// only shaped the resource name or region does not cap, and neither does one
+// that shaped an unrelated property. A model that cannot say where the default
+// landed falls back to capping on any default. The evidence text and the
+// fingerprint are left alone.
 func capDefaultDerived(f sdk.Finding, m sdk.ARMModel) sdk.Finding {
 	dp, ok := m.(defaultProvenance)
 	if !ok || m == nil || f.Resource.Name == "" {
@@ -345,14 +355,37 @@ func capDefaultDerived(f sdk.Finding, m sdk.ARMModel) sdk.Finding {
 		if !strings.EqualFold(r.Type, f.Resource.Type) || armexpr.StripScope(r.Name) != f.Resource.Name {
 			continue
 		}
-		if len(dp.FromDefault(r)) > 0 {
-			if f.Confidence.Rank() == 0 || f.Confidence.Rank() > sdk.ConfidenceMedium.Rank() {
-				f.Confidence = sdk.ConfidenceMedium
-			}
-			break
+		if len(dp.FromDefault(r)) == 0 {
+			continue
 		}
+		if pp, ok := m.(defaultPathProvenance); ok && !defaultFeedsFinding(pp.FromDefaultPaths(r), f) {
+			continue
+		}
+		if f.Confidence.Rank() == 0 || f.Confidence.Rank() > sdk.ConfidenceMedium.Rank() {
+			f.Confidence = sdk.ConfidenceMedium
+		}
+		break
 	}
 	return f
+}
+
+// defaultFeedsFinding reports whether one of the default-shaped paths is the
+// condition or is named in the finding's Key or Evidence.
+func defaultFeedsFinding(paths []string, f sdk.Finding) bool {
+	text := strings.ToLower(f.Key + "\n" + f.Evidence)
+	for _, p := range paths {
+		switch p {
+		case "condition":
+			return true
+		case "name", "location":
+			continue
+		}
+		leaf := strings.ToLower(strings.TrimPrefix(p, "properties."))
+		if leaf != "" && strings.Contains(text, leaf) {
+			return true
+		}
+	}
+	return false
 }
 
 // lowerConfidence applies a rule's per-finding confidence override: only a

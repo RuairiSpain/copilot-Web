@@ -153,7 +153,7 @@ func union(a, b []string) []string {
 }
 
 // addMeta merges the per-resource detail of res into the model.
-func (m *Model) addMeta(res sdk.ARMResource, tagsExpr bool, defaults []string) {
+func (m *Model) addMeta(res sdk.ARMResource, tagsExpr bool, defaults, paths []string) {
 	if !tagsExpr && len(defaults) == 0 {
 		return
 	}
@@ -161,6 +161,7 @@ func (m *Model) addMeta(res sdk.ARMResource, tagsExpr bool, defaults []string) {
 	cur := m.meta[k]
 	cur.tagsExpr = cur.tagsExpr || tagsExpr
 	cur.defaults = union(cur.defaults, defaults)
+	cur.defaultPaths = union(cur.defaultPaths, paths)
 	m.meta[k] = cur
 }
 
@@ -183,12 +184,84 @@ func (m *Model) Variable(name string) (any, bool) {
 	if m == nil {
 		return nil, false
 	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	return m.variable(strings.ToLower(name), 0)
 }
 
+// variable resolves one root variable, memoised. A variable that is being
+// resolved already is a cycle and is unknown. The default-derived parameters
+// it used are noted again on every memo hit, so provenance is not lost.
 func (m *Model) variable(key string, depth int) (any, bool) {
+	if e, ok := m.memo[key]; ok {
+		m.bud.note(e.defaults...)
+		return e.v, e.ok
+	}
+	if m.busy[key] || depth > maxVariableDepth {
+		return nil, false
+	}
+	m.busy[key] = true
+	var v any
+	var ok bool
+	defs := m.bud.collect(func() { v, ok = m.variableUncached(key, depth) })
+	delete(m.busy, key)
+	m.memo[key] = varMemo{v: v, ok: ok, defaults: defs}
+	return v, ok
+}
+
+// foldVariables replaces variables('x') in s by the literal the root variable
+// evaluates to (a string without expression syntax, a bool or an integer).
+// A variable that is unknown, depends on a parameter without a value, is an
+// object, an array or still an expression is left in place. Folded text is
+// bounded by MaxExprBytes per expression and MaxSubstitutedBytes per model.
+func (m *Model) foldVariables(s string, bud *budget) string {
+	if !strings.Contains(strings.ToLower(s), "variables(") {
+		return s
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	used := 0
+	out := armexpr.RewriteRefs(s, func(kind, name string) (string, bool) {
+		if kind != armexpr.RefVariable {
+			return "", false
+		}
+		v, ok := m.variable(strings.ToLower(name), 0)
+		if !ok {
+			return "", false
+		}
+		var t string
+		switch y := v.(type) {
+		case string:
+			if armexpr.IsExpression(y) {
+				return "", false
+			}
+			t = armexpr.QuoteLiteral(y)
+		case bool:
+			t = boolText(y)
+		case float64:
+			if y != float64(int64(y)) {
+				return "", false
+			}
+			t = strconv.FormatInt(int64(y), 10)
+		default:
+			return "", false
+		}
+		if len(t) > MaxBindingBytes || used+len(t) > MaxExprBytes || bud.subst+len(t) > MaxSubstitutedBytes {
+			return "", false
+		}
+		used += len(t)
+		bud.subst += len(t)
+		return t, true
+	})
+	if out != s {
+		out = armexpr.Simplify(out)
+	}
+	return out
+}
+
+func (m *Model) variableUncached(key string, depth int) (any, bool) {
 	raw, ok := m.vars[key]
-	if !ok || depth > maxVariableDepth {
+	if !ok {
 		return nil, false
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))

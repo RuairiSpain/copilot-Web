@@ -14,7 +14,7 @@ const (
 
 // Eval evaluates an ARM expression ("[...]") that consists only of literals
 // and the pure functions true, false, not, and, or, equals, if, concat,
-// format, toLower, toUpper and empty. It returns a string, bool or int64.
+// format, toLower, toUpper, empty, length and contains (strings only). It returns a string, bool or int64.
 //
 // It is not an ARM evaluator. Anything else (a parameter or variable
 // reference, resourceGroup(), uniqueString(), a property access, a format
@@ -267,6 +267,23 @@ func applyFn(name string, args []any) (any, bool) {
 		return t == "", ok
 	case "format":
 		return formatFn(args)
+	case "length":
+		if len(args) != 1 {
+			return nil, false
+		}
+		t, ok := args[0].(string)
+		return int64(len(t)), ok
+	case "contains":
+		if len(args) != 2 {
+			return nil, false
+		}
+		a, ok1 := args[0].(string)
+		b, ok2 := args[1].(string)
+		if !ok1 || !ok2 {
+			return nil, false
+		}
+		// ARM contains() on strings is case-insensitive.
+		return strings.Contains(strings.ToLower(a), strings.ToLower(b)), true
 	}
 	return nil, false
 }

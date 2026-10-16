@@ -157,7 +157,7 @@ func TestParameterFileResolvedFromSelectedEnvironment(t *testing.T) {
 	if ai.Properties["publicNetworkAccess"] != "Disabled" {
 		t.Errorf("${PNA=Disabled}: %v", ai.Properties["publicNetworkAccess"])
 	}
-	srch := resource(t, got.model, tSearch, "[variables('searchName')]")
+	srch := resource(t, got.model, tSearch, "dev-srch")
 	if armexpr.PresenceOf(srch.Conditional, srch.Condition, srch.Looped) != armexpr.Deployed {
 		t.Errorf("deploySearch=true overrides the false default: condition %q", srch.Condition)
 	}
@@ -193,7 +193,7 @@ func TestParameterFileUnresolvedWithoutEnvironment(t *testing.T) {
 		t.Errorf("the unresolved parameters must be named: %q", got.log)
 	}
 	// deploySearch is not set: the literal default false applies, as a default.
-	srch := resource(t, got.model, tSearch, "[variables('searchName')]")
+	srch := resource(t, got.model, tSearch, "demo-srch")
 	if armexpr.PresenceOf(srch.Conditional, srch.Condition, srch.Looped) != armexpr.NotDeployed {
 		t.Errorf("default false: %q", srch.Condition)
 	}
@@ -260,7 +260,7 @@ func TestBicepparamTakesPrecedenceOverParametersJSON(t *testing.T) {
 		t.Fatal(got.err)
 	}
 	resource(t, got.model, tAI, "frombicepparam-ai")
-	srch := resource(t, got.model, tSearch, "[variables('searchName')]")
+	srch := resource(t, got.model, tSearch, "frombicepparam-srch")
 	if armexpr.PresenceOf(srch.Conditional, srch.Condition, srch.Looped) != armexpr.NotDeployed {
 		t.Errorf("deploySearch=false from the bicepparam must win: %q", srch.Condition)
 	}

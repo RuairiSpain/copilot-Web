@@ -20,6 +20,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/armexpr"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/bicep"
@@ -118,12 +119,28 @@ type Model struct {
 	// values into one of their expressions.
 	vars  map[string]json.RawMessage
 	varTx func(string) string
+	// bud notes the default-derived parameters behind a memoised variable;
+	// mu guards memo and busy, which Variable fills after the build too.
+	bud  *budget
+	mu   sync.Mutex
+	memo map[string]varMemo
+	busy map[string]bool
+}
+
+// varMemo is a resolved variable with the default-derived parameters it used.
+type varMemo struct {
+	v        any
+	ok       bool
+	defaults []string
 }
 
 // resMeta is per-resource detail that sdk.ARMResource does not carry.
 type resMeta struct {
 	tagsExpr bool
 	defaults []string
+	// defaultPaths are the top-level paths shaped by a default (see
+	// FromDefaultPaths).
+	defaultPaths []string
 }
 
 // resourceKey identifies a model resource by the text rules see. Two
@@ -151,6 +168,21 @@ func (m *Model) FromDefault(r sdk.ARMResource) []string {
 		return nil
 	}
 	return append([]string(nil), m.meta[resourceKey(r)].defaults...)
+}
+
+// FromDefaultPaths returns the top-level paths of the resource whose value was
+// shaped by the literal default of a parameter (applied because a parameter
+// file exists but does not set it), sorted; nil when none was. A path is
+// "condition" (the resource's own condition, or an ancestor module's
+// condition or loop), "name", "location", "scope", "tags", "sku", "identity"
+// or "properties.<key>" for a top-level key of properties. FromDefault lists
+// the parameters; this lists where they landed, so a rule finding can be
+// capped only when a default fed the property or condition it reports.
+func (m *Model) FromDefaultPaths(r sdk.ARMResource) []string {
+	if m == nil {
+		return nil
+	}
+	return append([]string(nil), m.meta[resourceKey(r)].defaultPaths...)
 }
 
 var (
@@ -313,12 +345,22 @@ func FromTemplate(t *bicep.Template, raw []byte, opt Options) (*Model, error) {
 	mapper := bicep.Mapper{Entry: opt.Entry, Modules: opt.Modules}
 	usedPaths := map[string]bool{}
 	bud := &budget{}
-	rootTx := injector(rootBindings(t, opt), bud)
+	bound := rootBindings(t, opt)
+	paramTx := injector(bound, bud)
 	m.vars = map[string]json.RawMessage{}
 	for _, v := range t.Variables {
 		m.vars[strings.ToLower(v.Name)] = v.Value
 	}
-	m.varTx = rootTx
+	m.varTx = paramTx
+	m.bud = bud
+	m.memo = map[string]varMemo{}
+	m.busy = map[string]bool{}
+	rootTx := paramTx
+	if len(opt.Parameters) > 0 || opt.ParametersProvided {
+		// A parameter file exists: fold the root variables that evaluate to a
+		// literal (ADR-018 amendment 2). Without one nothing is folded.
+		rootTx = func(s string) string { return m.foldVariables(paramTx(s), bud) }
+	}
 	var walk func(t *bicep.Template, sc scope, ancestors []bicep.Resource)
 	walk = func(t *bicep.Template, sc scope, ancestors []bicep.Resource) {
 		symbolic := map[string]bool{}
@@ -391,15 +433,19 @@ func FromTemplate(t *bicep.Template, raw []byte, opt Options) (*Model, error) {
 			}
 			node := resolve(doc, r.Pointer)
 			var res sdk.ARMResource
-			used := bud.collect(func() { res = toResource(r, node, loc, sc) })
+			var paths []string
+			used := bud.collect(func() { res, paths = toResource(r, node, loc, sc) })
 			used = union(used, sc.defaults)
+			if len(sc.defaults) > 0 {
+				paths = union(paths, []string{"condition"})
+			}
 			bud.text += resourceBytes(res)
 			m.resources = append(m.resources, res)
 			pl := placement(r, sc, symbolic, mods)
 			pl.DefaultParams = used
 			m.placements = append(m.placements, pl)
 			tags, _ := node["tags"].(string)
-			m.addMeta(res, armexpr.IsExpression(tags) && len(res.Tags) == 0, used)
+			m.addMeta(res, armexpr.IsExpression(tags) && len(res.Tags) == 0, used, paths)
 		}
 	}
 	walk(t, scope{tx: rootTx, bud: bud}, nil)
@@ -669,22 +715,33 @@ func bindingText(v any, callerTx func(string) string) (string, bool) {
 	return "", false
 }
 
-func toResource(r bicep.Resource, node map[string]any, bl bicep.Location, sc scope) sdk.ARMResource {
+func toResource(r bicep.Resource, node map[string]any, bl bicep.Location, sc scope) (sdk.ARMResource, []string) {
 	tx := func(s string) string { return normalizeLiteralRef(sc.tx(s)) }
+	// paths collects where a parameter default landed (FromDefaultPaths).
+	var paths []string
+	at := func(path string, f func()) {
+		if len(sc.bud.collect(f)) > 0 {
+			paths = append(paths, path)
+		}
+	}
 	res := sdk.ARMResource{
-		Type: r.Type, Name: tx(r.Name), APIVersion: r.APIVersion,
+		Type: r.Type, APIVersion: r.APIVersion,
 		Location: sdk.Location{File: bl.File},
 	}
+	at("name", func() { res.Name = tx(r.Name) })
 	if p := bytes.TrimSpace(r.Properties); len(p) > 0 && string(p) != "null" {
 		var props map[string]any
 		if json.Unmarshal(p, &props) == nil {
-			res.Properties = normalizeValue(props, tx).(map[string]any)
+			res.Properties = make(map[string]any, len(props))
+			for k, v := range props {
+				at("properties."+k, func() { res.Properties[k] = normalizeValue(v, tx) })
+			}
 		}
 	}
 	if tags, ok := node["tags"].(map[string]any); ok {
-		res.Tags = normalizeValue(tags, tx).(map[string]any)
+		at("tags", func() { res.Tags = normalizeValue(tags, tx).(map[string]any) })
 	}
-	res.Region = tx(str(node["location"]))
+	at("location", func() { res.Region = tx(str(node["location"])) })
 	if zones, ok := node["zones"].([]any); ok {
 		for _, z := range zones {
 			if s, ok := z.(string); ok {
@@ -693,21 +750,23 @@ func toResource(r bicep.Resource, node map[string]any, bl bicep.Location, sc sco
 		}
 	}
 	res.Kind = str(node["kind"])
-	res.Conditional, res.Condition, res.Looped = r.Conditional, sc.tx(r.Condition), r.Copy != nil
+	res.Conditional, res.Looped = r.Conditional, r.Copy != nil
+	at("condition", func() { res.Condition = sc.tx(r.Condition) })
 	inheritPresence(&res, sc)
 	if sku, ok := node["sku"].(map[string]any); ok {
-		res.SKU = normalizeValue(sku, tx).(map[string]any)
+		at("sku", func() { res.SKU = normalizeValue(sku, tx).(map[string]any) })
 		if n := str(sku["name"]); n != "" && !strings.HasPrefix(n, "[") {
 			res.SKUName = n
 		}
 	}
 	if id, ok := node["identity"].(map[string]any); ok {
-		res.Identity = normalizeValue(id, tx).(map[string]any)
+		at("identity", func() { res.Identity = normalizeValue(id, tx).(map[string]any) })
 	}
 	// The scope stays unfolded: resourceId('type', 'name') folded to the bare
 	// name would lose the type IDN-004 needs to classify the scope.
-	res.Scope = sc.tx(str(node["scope"]))
-	return res
+	at("scope", func() { res.Scope = sc.tx(str(node["scope"])) })
+	sort.Strings(paths)
+	return res, paths
 }
 
 // inheritPresence folds the ancestor modules' condition and loop into the

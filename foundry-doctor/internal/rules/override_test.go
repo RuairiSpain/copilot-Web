@@ -89,6 +89,41 @@ func (m provModel) FromDefault(r sdk.ARMResource) []string {
 	return nil
 }
 
+type pathModel struct {
+	provModel
+	paths map[string][]string
+}
+
+func (m pathModel) FromDefaultPaths(r sdk.ARMResource) []string { return m.paths[r.Name] }
+
+// P4: a default caps confidence only when it fed the checked property or the
+// condition; a name or region default, or an unrelated property, does not.
+func TestCapDefaultDerivedNarrowedByPath(t *testing.T) {
+	res := []sdk.ARMResource{{Type: "Microsoft.Search/searchServices", Name: "a"}}
+	f := sdk.Finding{Resource: sdk.ResourceRef{Type: "Microsoft.Search/searchServices", Name: "a"},
+		Key: "publicNetworkAccess", Evidence: "properties.publicNetworkAccess is Enabled"}
+	for _, tc := range []struct {
+		name  string
+		paths []string
+		want  sdk.Confidence
+	}{
+		{"condition default", []string{"condition"}, sdk.ConfidenceMedium},
+		{"property named by the finding", []string{"properties.publicNetworkAccess"}, sdk.ConfidenceMedium},
+		{"name default only", []string{"name"}, ""},
+		{"location default only", []string{"location"}, ""},
+		{"name and location only", []string{"location", "name"}, ""},
+		{"unrelated property", []string{"properties.replicaCount"}, ""},
+		{"no path recorded", nil, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := pathModel{provModel: provModel{res: res, fromDflt: map[string]bool{"a": true}}, paths: map[string][]string{"a": tc.paths}}
+			if got := capDefaultDerived(f, m).Confidence; got != tc.want {
+				t.Errorf("confidence %q want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestCapDefaultDerivedLowersConfidenceOnly(t *testing.T) {
 	m := provModel{res: []sdk.ARMResource{{Type: "Microsoft.Search/searchServices", Name: "a"}, {Type: "Microsoft.Search/searchServices", Name: "b"}},
 		fromDflt: map[string]bool{"a": true}}

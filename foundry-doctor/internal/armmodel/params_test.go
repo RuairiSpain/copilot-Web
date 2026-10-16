@@ -56,7 +56,7 @@ func TestParameterFileValuesResolveRoot(t *testing.T) {
 	if got := ai.Properties["customSubDomainName"]; got != "dev-ai" {
 		t.Errorf("customSubDomainName %v", got)
 	}
-	srch := byName(t, m, typeSearch, "[variables('searchName')]")
+	srch := byName(t, m, typeSearch, "dev-srch")
 	if got := presence(srch); got != armexpr.Deployed {
 		t.Errorf("deploySearch=true must deploy the search service, presence %v (condition %q)", got, srch.Condition)
 	}
@@ -84,7 +84,7 @@ func TestParameterFileFalseConditionNotDeployed(t *testing.T) {
 		ParametersProvided: true,
 		Parameters:         map[string]any{"prefix": "dev", "deploySearch": false},
 	})
-	if got := presence(byName(t, m, typeSearch, "[variables('searchName')]")); got != armexpr.NotDeployed {
+	if got := presence(byName(t, m, typeSearch, "dev-srch")); got != armexpr.NotDeployed {
 		t.Errorf("presence %v, want NotDeployed", got)
 	}
 	if got := presence(byName(t, m, typeSearch, "dev-msrch")); got != armexpr.NotDeployed {
@@ -123,7 +123,7 @@ func TestLiteralDefaultAppliedWithProvenance(t *testing.T) {
 		t.Errorf("expression default must stay unresolved, region %q", ai.Region)
 	}
 	// The false default of deploySearch drives the condition and the module.
-	srch := byName(t, m, typeSearch, "[variables('searchName')]")
+	srch := byName(t, m, typeSearch, "dev-srch")
 	if got := presence(srch); got != armexpr.NotDeployed {
 		t.Errorf("default false: presence %v", got)
 	}
@@ -184,7 +184,7 @@ func TestParameterCoercionAndTypeMismatch(t *testing.T) {
 			"prefix": "dev", "deploySearch": "true", "capacity": "5", "publicNetworkAccess": true,
 		},
 	})
-	srch := byName(t, m, typeSearch, "[variables('searchName')]")
+	srch := byName(t, m, typeSearch, "dev-srch")
 	if presence(srch) != armexpr.Deployed || srch.Properties["replicaCount"] != float64(5) {
 		t.Errorf("coercion failed: %v %v", presence(srch), srch.Properties["replicaCount"])
 	}
@@ -242,7 +242,7 @@ func TestTagsAreExpression(t *testing.T) {
 	if len(byName(t, m, typeAI, "dev-ai").Tags) != 0 {
 		t.Error("Resource.Tags must stay empty for expression tags")
 	}
-	if got := byName(t, m, typeSearch, "[variables('searchName')]").Tags["owner"]; got != "platform" {
+	if got := byName(t, m, typeSearch, "dev-srch").Tags["owner"]; got != "platform" {
 		t.Errorf("map tags unchanged, got %v", got)
 	}
 	var nilModel *armmodel.Model
