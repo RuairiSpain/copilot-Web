@@ -61,7 +61,7 @@ This branch holds the implementation merged from `main` (PR #18, which delivered
 
 `failed=0 skipped=1`. Under PRD section 22 a strict run with a skipped gate is not a pass; the skipped gate is `govulncheck`, which runs in GitHub CI (`quality` job, now `--strict`) where the database is reachable. `GOOS=windows go vet ./...` also passes locally.
 
-GitHub CI on PR #29 (workflow `foundry-doctor-ci`): the 12 repository checks plus CodeQL and dependency review were all green at d3115de and at 9214baf, including `govulncheck` on Go 1.26.9, tests on ubuntu, macOS and Windows, smoke samples on three operating systems, the cross-platform build, the ADR-005 import boundary and the ADR-003 namespace check. Later merge commits produced check suites with nothing failing, except one Windows test (`TestFileURIPathAndSafePath` assumed POSIX path spelling) that was fixed in 06ab397. The run on head 83e055e had four jobs still in progress when this file was written (`go test` on Windows, `lint, vet, vulncheck, catalogue` in `--strict` mode, `cross-platform build and checksums`, `ci`); confirm them on the PR before merging. Coverage of the engine packages: all at or above 80% (rules 97%, findings 87%, baseline 97%, report 94%, config 99%).
+GitHub CI on PR #29 (workflow `foundry-doctor-ci`): the run on head 83e055e (run 53) completed successfully, including `lint, vet, vulncheck, catalogue` in `verify-phase.sh --strict` mode (so `govulncheck` passed on Go 1.26.9), `go test` on ubuntu, macOS and Windows, smoke samples on three operating systems, the cross-platform build, the ADR-005 import boundary and the ADR-003 namespace check; CodeQL and dependency review were also green on the PR. Runs that failed earlier on this branch and were fixed: `staticcheck` (unused function, fixed in d557157), Windows `TestBuildParams` and `TestFileURIPathAndSafePath` (tests assumed POSIX path spelling, fixed in 9214baf and 06ab397), the secret scan (fake secret-shaped literal in a test, fixed in af260e4). The run on the docs-only commit a02fc50 (this hand-off) was still in progress when this file was last edited; confirm it on the PR. Coverage of the engine packages: all at or above 80% (rules 97%, findings 87%, baseline 97%, report 94%, config 99%).
 
 Not run: the Bicep-backed samples and the `spike`-tagged real-CLI tests in the audit environment (no Bicep CLI); they run in CI smoke (Bicep 0.48.1 installed in the job). `foundry-doctor-release.yml` (signing, SBOM, provenance) has never been run.
 
@@ -109,7 +109,7 @@ Go 1.26.9 (core and extension, ADR-005 Amendment 1); Bicep CLI 0.48.1 (ADR-015);
 
 ## Exact next-phase prerequisites
 
-1. Confirm the four jobs that were still running on 83e055e (listed above) and the `--strict` quality job are green on the PR head.
+1. Confirm the CI run on the final PR head (the run on the docs-only commit that adds this file) is green.
 2. Obtain and record a re-review (or an explicit acceptance of the recorded verdicts) from the Foundry lead and the Azure black belt on the final head.
 3. Resolve the two open decisions flagged in this hand-off: keep exit order 4, 2, 3, 1, 0 and default profile `foundry-prod`, or change them.
 4. Run `foundry-rules/` once under PowerShell with PSRule and record the result.
