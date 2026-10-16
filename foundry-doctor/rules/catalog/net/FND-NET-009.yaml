@@ -1,5 +1,5 @@
 id: FND-NET-009
-version: 1
+version: 3
 group: NET
 title: "APIM SKU supports required private backend connectivity"
 description: >-
@@ -59,24 +59,45 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/api-management/virtual-network-concepts
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-docs/articles/api-management/virtual-network-concepts.md (ms.date 11/13/2025)
-    note: Networking models by supported tier (table); VNet integration for v2 tiers; inbound private endpoint tiers.
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/api-management/virtual-network-concepts.md
+      (ms.date 11/13/2025)
+    note: >-
+      Networking models by supported tier (table); VNet integration for v2 tiers; inbound private endpoint
+      tiers. Branch URL, not commit-pinned.
   - url: https://learn.microsoft.com/azure/api-management/private-endpoint
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-docs/articles/api-management/private-endpoint.md (ms.date 06/09/2026)
-    note: Inbound private endpoint availability and limitations (classic tiers cannot combine with VNet injection).
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/api-management/private-endpoint.md
+      (ms.date 06/09/2026)
+    note: >-
+      Inbound private endpoint availability and limitations (classic tiers cannot combine with VNet
+      injection). Branch URL, not commit-pinned.
   - url: https://learn.microsoft.com/azure/api-management/integrate-vnet-outbound
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-docs/articles/api-management/integrate-vnet-outbound.md (ms.date 12/04/2025) and inject-vnet-v2.md (ms.date 10/08/2025)
-    note: V2 integration subnet delegated to Microsoft.Web/serverFarms; Premium v2 injection subnet delegated to Microsoft.Web/hostingEnvironments.
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/api-management/integrate-vnet-outbound.md
+      (ms.date 12/04/2025) and
+      https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/api-management/inject-vnet-v2.md (ms.date
+      10/08/2025)
+    note: >-
+      V2 integration subnet delegated to Microsoft.Web/serverFarms; Premium v2 injection subnet delegated to
+      Microsoft.Web/hostingEnvironments. Branch URL, not commit-pinned.
   - url: https://learn.microsoft.com/azure/foundry/agents/how-to/ai-gateway
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/ai-gateway.md (Supported configurations section)
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/how-to/ai-gateway (Supported configurations section);
+      source file MicrosoftDocs/azure-ai-docs: articles/foundry/agents/how-to/ai-gateway.md; retrieved
+      2026-10-04
     note: For full network isolation deploy Foundry and API Management together (template 16) or a self-hosted gateway reachable in the Agent Service VNet; prompt agents only.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/preview/2025-09-01-preview/openapi.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/preview/2025-09-01-preview/openapi.json
-    note: SkuType enum Developer, Standard, Premium, Basic, Consumption, Isolated, BasicV2, StandardV2, PremiumV2; VirtualNetworkType None/External/Internal; ApiManagementServiceBaseProperties virtualNetworkConfiguration, privateEndpointConnections.
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/preview/2025-09-01-preview/openapi.json
+    note: >-
+      SkuType enum Developer, Standard, Premium, Basic, Consumption, Isolated, BasicV2, StandardV2, PremiumV2;
+      VirtualNetworkType None/External/Internal; ApiManagementServiceBaseProperties
+      virtualNetworkConfiguration, privateEndpointConnections. Branch URL, not commit-pinned.
 overlap:
   decision: adapt
   provisional: true

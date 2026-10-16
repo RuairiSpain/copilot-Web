@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/armexpr"
 	runtimegw "github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/gateway"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
@@ -39,7 +40,7 @@ func (r rule) Evaluate(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 		return sdk.Result{}, fmt.Errorf("%s: %w", r.id, err)
 	}
 	if in == nil || in.ARM == nil {
-		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable}}, nil
+		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable + ": compiled ARM model unavailable"}}, nil
 	}
 	return r.fn(in), nil
 }
@@ -47,35 +48,81 @@ func (r rule) Evaluate(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 type outcome struct {
 	findings   []sdk.Finding
 	unresolved bool
-	skip       string
+	// cond is set when a conditional or looped resource that the rule
+	// inspects could not be classified as deployed or not.
+	cond bool
+	skip string
 }
 
 func (o *outcome) add(r sdk.ARMResource, evidence string) {
 	o.findings = append(o.findings, sdk.Finding{
-		Resource: sdk.ResourceRef{Type: r.Type, Name: r.Name},
+		Resource: sdk.ResourceRef{Type: r.Type, Name: armexpr.StripScope(r.Name)},
 		Location: r.Location,
-		Evidence: evidence,
+		Evidence: armexpr.StripScope(evidence),
 	})
+}
+
+// addKey adds a finding with a stable Key that separates several findings of
+// one rule on one resource.
+func (o *outcome) addKey(r sdk.ARMResource, key, evidence string) {
+	o.add(r, evidence)
+	o.findings[len(o.findings)-1].Key = key
 }
 
 func (o *outcome) result() sdk.Result {
 	if len(o.findings) > 0 {
-		return sdk.Result{Findings: o.findings}
+		// What was not evaluated is returned as Skips next to the findings
+		// (review M3, ADR-008 amendment 3).
+		var notes []string
+		if o.unresolved {
+			notes = append(notes, "unresolved-expression: a decisive value could not be resolved")
+		}
+		if o.cond {
+			notes = append(notes, "conditional-deployment-unresolved: a resource may not be deployed")
+		}
+		if o.skip != "" {
+			notes = append(notes, o.skip)
+		}
+		var skips []sdk.Skip
+		for _, n := range notes {
+			skips = append(skips, sdk.Skip{Reason: armexpr.StripScope(n)})
+		}
+		return sdk.Result{Findings: o.findings, Skips: skips}
 	}
 	if o.unresolved {
 		return sdk.Result{Skipped: &sdk.Skip{Reason: "unresolved-expression"}}
 	}
+	if o.cond {
+		return sdk.Result{Skipped: &sdk.Skip{Reason: "conditional-deployment-unresolved"}}
+	}
 	if o.skip != "" {
-		return sdk.Result{Skipped: &sdk.Skip{Reason: o.skip}}
+		return sdk.Result{Skipped: &sdk.Skip{Reason: armexpr.StripScope(o.skip)}}
 	}
 	return sdk.Result{}
 }
 
 func eval001(in *sdk.Input) sdk.Result {
 	o := &outcome{}
-	budgets := byType(in.ARM, typeBudget)
+	live, unc := liveResources(in.ARM)
+	var budgets []sdk.ARMResource
+	for _, r := range live {
+		if strings.EqualFold(r.Type, typeBudget) {
+			budgets = append(budgets, r)
+		}
+	}
+	for _, r := range unc {
+		if strings.EqualFold(r.Type, typeBudget) {
+			o.cond = true
+		}
+	}
 	if len(budgets) == 0 {
-		return sdk.Result{Findings: []sdk.Finding{{Evidence: "no Microsoft.Consumption/budgets resource was found in the compiled plan"}}}
+		if o.cond {
+			return o.result()
+		}
+		// A budget is a subscription or resource-group object that is often
+		// created outside the project repository, so its absence from the plan
+		// is not proof that none exists (FND-COST-001 evidence).
+		return sdk.Result{Skipped: &sdk.Skip{Reason: "budget-managed-outside-repository"}}
 	}
 	valid := false
 	for _, b := range budgets {
@@ -84,37 +131,50 @@ func eval001(in *sdk.Input) sdk.Result {
 			props = b.Properties
 		}
 		if category := str(props["category"]); category != "" && !strings.EqualFold(category, "Cost") {
-			o.add(b, "budget category is not Cost")
+			o.addKey(b, "budget-category-is-not-cost", "budget category is not Cost")
 			continue
 		}
 		if amount, ok := number(props["amount"]); ok && amount <= 0 {
-			o.add(b, "budget amount must be positive")
+			o.addKey(b, "budget-amount-must-be-positive", "budget amount must be positive")
 		}
 		if str(props["timeGrain"]) == "" {
-			o.add(b, "budget timeGrain is missing")
+			o.addKey(b, "budget-timegrain-is-missing", "budget timeGrain is missing")
 		}
 		if tp := mapAt(props, "timePeriod"); tp == nil || str(tp["startDate"]) == "" {
-			o.add(b, "budget timePeriod.startDate is missing")
+			if s, ok := props["timePeriod"].(string); !(ok && isExpr(s)) {
+				o.addKey(b, "budget-timeperiod-startdate-is-missing", "budget timePeriod.startDate is missing")
+			}
+		}
+		if s, ok := props["notifications"].(string); ok && isExpr(s) {
+			o.unresolved = true
+			continue
 		}
 		notifications := mapAt(props, "notifications")
 		if notifications == nil {
-			o.add(b, "budget has no notifications")
+			o.addKey(b, "budget-has-no-notifications", "budget has no notifications")
 			continue
 		}
 		if len(notifications) > 5 {
-			o.add(b, "budget has more than five notifications")
+			o.addKey(b, "budget-has-more-than-five-notifications", "budget has more than five notifications")
 		}
-		var enabled, forecasted bool
+		var enabled, forecasted, unresolved bool
 		for _, raw := range notifications {
 			n, _ := raw.(map[string]any)
 			if n == nil {
 				continue
 			}
-			if strings.HasPrefix(str(n["enabled"]), "[") || strings.HasPrefix(str(n["thresholdType"]), "[") {
-				o.unresolved = true
+			if isExpr(str(n["enabled"])) || isExpr(str(n["thresholdType"])) || isExpr(str(n["operator"])) {
+				unresolved = true
 				continue
 			}
-			if truthy(n["enabled"]) && str(n["operator"]) != "" && hasContact(n) {
+			if !truthy(n["enabled"]) || str(n["operator"]) == "" {
+				continue
+			}
+			has, contactUnresolved := contactStatus(n)
+			if contactUnresolved {
+				unresolved = true
+			}
+			if has {
 				enabled = true
 				if strings.EqualFold(str(n["thresholdType"]), "Forecasted") {
 					forecasted = true
@@ -122,11 +182,19 @@ func eval001(in *sdk.Input) sdk.Result {
 			}
 		}
 		if !enabled {
-			o.add(b, "budget has no enabled notification with a contact")
+			if unresolved {
+				o.unresolved = true
+				continue
+			}
+			o.addKey(b, "budget-has-no-enabled-notification-with-a-contact", "budget has no enabled notification with a contact")
 			continue
 		}
 		if !forecasted {
-			o.add(b, "budget has no forecasted-cost notification")
+			if unresolved {
+				o.unresolved = true
+				continue
+			}
+			o.addKey(b, "budget-has-no-forecasted-cost-notification", "budget has no forecasted-cost notification")
 			continue
 		}
 		valid = true
@@ -144,15 +212,21 @@ func eval002(in *sdk.Input) sdk.Result {
 	o := &outcome{}
 	limit, hasLimit := cosmosLimit(in)
 	exemptions := exemptionSet(in)
-	for _, r := range in.ARM.Resources() {
+	live, unc := liveResources(in.ARM)
+	for _, r := range unc {
+		if !exempt(exemptions, r.Name) && costRelevant(r.Type) {
+			o.cond = true
+		}
+	}
+	for _, r := range live {
 		if exempt(exemptions, r.Name) {
 			continue
 		}
 		switch {
 		case strings.EqualFold(r.Type, typeDeployment):
-			switch r.SKUName {
-			case "GlobalProvisionedManaged", "DataZoneProvisionedManaged", "ProvisionedManaged":
-				o.add(r, "development environment uses provisioned throughput model capacity")
+			switch strings.ToLower(strings.TrimSpace(r.SKUName)) {
+			case "globalprovisionedmanaged", "datazoneprovisionedmanaged", "provisionedmanaged":
+				o.addKey(r, "dev:provisioned-throughput", "development environment uses provisioned throughput model capacity")
 			case "":
 				if skuUnresolved(r) {
 					o.unresolved = true
@@ -161,7 +235,7 @@ func eval002(in *sdk.Input) sdk.Result {
 		case strings.EqualFold(r.Type, typeSearch):
 			switch strings.ToLower(r.SKUName) {
 			case "standard2", "standard3", "storage_optimized_l1", "storage_optimized_l2":
-				o.add(r, "development environment uses a production-sized Search tier")
+				o.addKey(r, "dev:search-tier", "development environment uses a production-sized Search tier")
 			case "":
 				if skuUnresolved(r) {
 					o.unresolved = true
@@ -169,22 +243,22 @@ func eval002(in *sdk.Input) sdk.Result {
 			}
 			if v, ok := intAt(r.Properties, "replicaCount"); ok {
 				if v > 1 {
-					o.add(r, "development environment uses more than one Search replica")
+					o.addKey(r, "dev:search-replicas", "development environment uses more than one Search replica")
 				}
 			} else if propUnresolved(r.Properties, "replicaCount") {
 				o.unresolved = true
 			}
 			if v, ok := intAt(r.Properties, "partitionCount"); ok {
 				if v > 1 {
-					o.add(r, "development environment uses more than one Search partition")
+					o.addKey(r, "dev:search-partitions", "development environment uses more than one Search partition")
 				}
 			} else if propUnresolved(r.Properties, "partitionCount") {
 				o.unresolved = true
 			}
 		case strings.EqualFold(r.Type, typeAPIM):
-			switch r.SKUName {
-			case "Premium", "Isolated":
-				o.add(r, "development environment uses a production-sized API Management tier")
+			switch strings.ToLower(strings.TrimSpace(r.SKUName)) {
+			case "premium", "isolated":
+				o.addKey(r, "dev:apim-tier", "development environment uses a production-sized API Management tier")
 			case "":
 				if skuUnresolved(r) {
 					o.unresolved = true
@@ -192,22 +266,23 @@ func eval002(in *sdk.Input) sdk.Result {
 			}
 			if v, ok := skuCapacity(r); ok {
 				if v > 1 {
-					o.add(r, "development environment uses more than one API Management unit")
+					o.addKey(r, "dev:apim-units", "development environment uses more than one API Management unit")
 				}
 			} else if r.SKU != nil && propUnresolved(r.SKU, "capacity") {
 				o.unresolved = true
 			}
-		case strings.HasSuffix(strings.ToLower(r.Type), "/throughputsettings"):
+		case cosmosThroughputType(r.Type):
+			// The policy limit is applied exactly as configured.
 			if throughput, ok := cosmosThroughput(r); ok {
-				if hasLimit && throughput > float64(max(limit, 3000)) {
-					o.add(r, "development environment Cosmos DB throughput exceeds the configured policy limit")
+				if hasLimit && throughput > float64(limit) {
+					o.addKey(r, "dev:cosmos-throughput", "development environment Cosmos DB throughput exceeds the configured policy limit")
 				}
 			} else if propThroughputUnresolved(r) {
 				o.unresolved = true
 			}
 			if autoscale, ok := cosmosAutoscale(r); ok {
-				if hasLimit && autoscale > max(limit, 3000) {
-					o.add(r, "development environment Cosmos DB autoscale maxThroughput exceeds the configured policy limit")
+				if hasLimit && autoscale > limit {
+					o.addKey(r, "dev:cosmos-autoscale", "development environment Cosmos DB autoscale maxThroughput exceeds the configured policy limit")
 				}
 			} else if propAutoscaleUnresolved(r) {
 				o.unresolved = true
@@ -218,6 +293,26 @@ func eval002(in *sdk.Input) sdk.Result {
 		o.skip = sdk.SkipMissingPolicyKey("policy.cost.devMaxCosmosThroughput")
 	}
 	return o.result()
+}
+
+// costRelevant reports whether eval002 inspects resources of the given type.
+func costRelevant(typ string) bool {
+	return strings.EqualFold(typ, typeDeployment) || strings.EqualFold(typ, typeSearch) ||
+		strings.EqualFold(typ, typeAPIM) || cosmosThroughputType(typ)
+}
+
+const (
+	cosmosSQLDatabase  = "microsoft.documentdb/databaseaccounts/sqldatabases"
+	cosmosSQLContainer = "microsoft.documentdb/databaseaccounts/sqldatabases/containers"
+)
+
+// cosmosThroughputType matches throughputSettings resources and the Cosmos DB
+// SQL databases and containers, whose properties.options.throughput and
+// properties.options.autoscaleSettings.maxThroughput set throughput at creation
+// (CreateUpdateOptions in the Microsoft.DocumentDB 2025-04-15 specification).
+func cosmosThroughputType(typ string) bool {
+	t := strings.ToLower(typ)
+	return strings.HasSuffix(t, "/throughputsettings") || t == cosmosSQLDatabase || t == cosmosSQLContainer
 }
 
 func eval003(in *sdk.Input) sdk.Result {
@@ -244,13 +339,15 @@ func eval003(in *sdk.Input) sdk.Result {
 				o.findings = append(o.findings, sdk.Finding{
 					Resource: sdk.ResourceRef{Type: "Microsoft.ApiManagement/service/apis", Name: api.Name},
 					Location: api.SourceLocation,
+					Key:      "llm-token-limit-missing",
 					Evidence: "AI gateway API is missing llm-token-limit in inbound policy",
 				})
 				continue
 			}
-			for _, el := range limits {
+			for li, el := range limits {
 				if !tokenLimitValid(el) {
 					o.findings = append(o.findings, sdk.Finding{
+						Key:      fmt.Sprintf("llm-token-limit-invalid:%d", li),
 						Resource: sdk.ResourceRef{Type: "Microsoft.ApiManagement/service/apis", Name: api.Name},
 						Location: api.SourceLocation,
 						Evidence: "llm-token-limit is present but missing required attributes or quota settings",
@@ -267,11 +364,17 @@ func eval003(in *sdk.Input) sdk.Result {
 
 func eval004(in *sdk.Input) sdk.Result {
 	if in == nil || in.ARM == nil {
-		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable}}
+		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable + ": compiled ARM model unavailable"}}
 	}
 	o := &outcome{}
 	supported := 0
-	for _, r := range in.ARM.Resources() {
+	live, unc := liveResources(in.ARM)
+	for _, r := range unc {
+		if costRelevant(r.Type) {
+			o.cond = true
+		}
+	}
+	for _, r := range live {
 		switch {
 		case strings.EqualFold(r.Type, typeSearch):
 			if strings.EqualFold(r.SKUName, "free") || strings.EqualFold(r.SKUName, "serverless") {
@@ -279,13 +382,13 @@ func eval004(in *sdk.Input) sdk.Result {
 			}
 			supported++
 			if _, ok := intAt(r.Properties, "replicaCount"); !ok {
-				o.add(r, "fixed-capacity estimate is incomplete because Search replicaCount is unresolved")
+				o.addKey(r, "incomplete:search-replicas", "fixed-capacity estimate is incomplete because Search replicaCount is unresolved")
 			}
 			if _, ok := intAt(r.Properties, "partitionCount"); !ok {
-				o.add(r, "fixed-capacity estimate is incomplete because Search partitionCount is unresolved")
+				o.addKey(r, "incomplete:search-partitions", "fixed-capacity estimate is incomplete because Search partitionCount is unresolved")
 			}
 			if _, ok := literalRegion(r.Region); !ok {
-				o.add(r, "fixed-capacity estimate is incomplete because Search region is unresolved")
+				o.addKey(r, "incomplete:search-region", "fixed-capacity estimate is incomplete because Search region is unresolved")
 			}
 		case strings.EqualFold(r.Type, typeAPIM):
 			if strings.EqualFold(r.SKUName, "Consumption") {
@@ -293,10 +396,10 @@ func eval004(in *sdk.Input) sdk.Result {
 			}
 			supported++
 			if _, ok := skuCapacity(r); !ok {
-				o.add(r, "fixed-capacity estimate is incomplete because API Management sku.capacity is unresolved")
+				o.addKey(r, "incomplete:apim-capacity", "fixed-capacity estimate is incomplete because API Management sku.capacity is unresolved")
 			}
 			if _, ok := literalRegion(r.Region); !ok {
-				o.add(r, "fixed-capacity estimate is incomplete because API Management region is unresolved")
+				o.addKey(r, "incomplete:apim-region", "fixed-capacity estimate is incomplete because API Management region is unresolved")
 			}
 		case strings.HasSuffix(strings.ToLower(r.Type), "/throughputsettings"):
 			supported++
@@ -304,38 +407,28 @@ func eval004(in *sdk.Input) sdk.Result {
 				continue
 			}
 			if max, ok := cosmosAutoscale(r); ok {
-				o.add(r, "fixed-capacity estimate is incomplete because Cosmos autoscale retail meter mapping is UNVERIFIED (maxThroughput="+strconv.Itoa(max)+")")
+				o.addKey(r, "incomplete:cosmos-autoscale-meter", "fixed-capacity estimate is incomplete because Cosmos autoscale retail meter mapping is UNVERIFIED (maxThroughput="+strconv.Itoa(max)+")")
 				continue
 			}
-			o.add(r, "fixed-capacity estimate is incomplete because Cosmos throughput is unresolved")
+			o.addKey(r, "incomplete:cosmos-throughput", "fixed-capacity estimate is incomplete because Cosmos throughput is unresolved")
 		case strings.EqualFold(r.Type, typeDeployment):
-			switch strings.TrimSpace(r.SKUName) {
-			case "GlobalProvisionedManaged", "DataZoneProvisionedManaged", "ProvisionedManaged":
+			switch strings.ToLower(strings.TrimSpace(r.SKUName)) {
+			case "globalprovisionedmanaged", "datazoneprovisionedmanaged", "provisionedmanaged":
 				supported++
-				o.add(r, "fixed-capacity estimate is incomplete because PTU retail meter mapping remains UNVERIFIED for generic deployment SKUs")
+				o.addKey(r, "incomplete:ptu-meter", "fixed-capacity estimate is incomplete because PTU retail meter mapping remains UNVERIFIED for generic deployment SKUs")
 			}
 		}
 	}
 	if supported == 0 {
+		if o.cond {
+			return o.result()
+		}
 		return sdk.Result{Skipped: &sdk.Skip{Reason: "no-supported-fixed-capacity-resources"}}
 	}
 	if len(o.findings) == 0 {
 		return sdk.Result{}
 	}
 	return o.result()
-}
-
-func byType(m sdk.ARMModel, typ string) []sdk.ARMResource {
-	var out []sdk.ARMResource
-	if m == nil {
-		return nil
-	}
-	for _, r := range m.Resources() {
-		if strings.EqualFold(r.Type, typ) {
-			out = append(out, r)
-		}
-	}
-	return out
 }
 
 func isDev(in *sdk.Input) bool {
@@ -440,13 +533,30 @@ func truthy(v any) bool {
 	}
 }
 
-func hasContact(m map[string]any) bool {
+// contactStatus reports whether a notification has a literal contact and whether
+// any contact list is an unresolved ARM expression (a string starting with "["
+// that is not "[[", or a list that holds such a string). An expression-valued
+// list is unresolved, never empty.
+func contactStatus(m map[string]any) (has, unresolved bool) {
 	for _, k := range []string{"contactEmails", "contactRoles", "contactGroups"} {
-		if xs := stringsFrom(m[k]); len(xs) > 0 {
-			return true
+		switch x := m[k].(type) {
+		case string:
+			if isExpr(x) {
+				unresolved = true
+			} else if strings.TrimSpace(x) != "" {
+				has = true
+			}
+		default:
+			for _, s := range stringsFrom(x) {
+				if isExpr(s) {
+					unresolved = true
+				} else {
+					has = true
+				}
+			}
 		}
 	}
-	return false
+	return has, unresolved && !has
 }
 
 func number(v any) (float64, bool) {
@@ -487,8 +597,18 @@ func skuCapacity(r sdk.ARMResource) (float64, bool) {
 	return number(r.SKU["capacity"])
 }
 
+// throughputBag returns the object that holds throughput: properties.resource
+// for throughputSettings, properties.options for SQL databases and containers.
+func throughputBag(r sdk.ARMResource) map[string]any {
+	t := strings.ToLower(r.Type)
+	if t == cosmosSQLDatabase || t == cosmosSQLContainer {
+		return mapAt(r.Properties, "options")
+	}
+	return mapAt(r.Properties, "resource")
+}
+
 func cosmosThroughput(r sdk.ARMResource) (float64, bool) {
-	resource := mapAt(r.Properties, "resource")
+	resource := throughputBag(r)
 	if resource == nil {
 		return 0, false
 	}
@@ -496,7 +616,7 @@ func cosmosThroughput(r sdk.ARMResource) (float64, bool) {
 }
 
 func cosmosAutoscale(r sdk.ARMResource) (int, bool) {
-	resource := mapAt(r.Properties, "resource")
+	resource := throughputBag(r)
 	if resource == nil {
 		return 0, false
 	}
@@ -509,24 +629,17 @@ func cosmosAutoscale(r sdk.ARMResource) (int, bool) {
 }
 
 func propThroughputUnresolved(r sdk.ARMResource) bool {
-	resource := mapAt(r.Properties, "resource")
+	resource := throughputBag(r)
 	return propUnresolved(resource, "throughput")
 }
 
 func propAutoscaleUnresolved(r sdk.ARMResource) bool {
-	resource := mapAt(r.Properties, "resource")
+	resource := throughputBag(r)
 	if resource == nil {
 		return false
 	}
 	auto := mapAt(resource, "autoscaleSettings")
 	return propUnresolved(auto, "maxThroughput")
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 func tokenLimitValid(el runtimegw.PolicyElement) bool {

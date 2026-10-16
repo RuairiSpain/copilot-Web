@@ -1,5 +1,5 @@
 id: FND-ENV-002
-version: 1
+version: 4
 group: ENV
 title: "Environment-bound names/IDs/rules were not copied unchanged"
 description: >-
@@ -18,18 +18,25 @@ severity:
   test: warning
   prod: warning
 compatibility:
-  azd: ">=1.34.2 <=1.36.0-beta.1"
+  azd: ">=1.34.2 <=1.36.0"
   extensions: {}
   apiVersions: []
   preview: true
-  notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from a changelog and was not verified."
+  notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is azd 1.36.0 (tag azure-dev-cli_1.36.0, acebba1e388b489a91ab8e2487a676359ab516a1, released 2026-10-14; the first clone read at 1.36.0-beta.1 is earlier evidence). The earlier >=1.27.1 lower bound came from a changelog and was not verified. Window widened 2026-10-16 (azd 1.36.0 = azure-dev-cli_1.36.0, acebba1e388b489a91ab8e2487a676359ab516a1, released 2026-10-14). Checked by git diff of the Azure/azure-dev tags azure-dev-cli_1.35.0 (170ebb858071da353cc9bf8657a377bff268ba36) and azure-dev-cli_1.36.0 (blobless clone https://github.com/Azure/azure-dev) over cli/azd/pkg/environment (azdcontext, local_file_data_store.go, environment.go), cli/azd/go.mod, cli/azd/pkg/project and cli/azd/pkg/infra/provisioning/bicep: unchanged are the godotenv version and .env read (godotenv.Read), the .azure/<env>/.env and .azure/config.json layout and constants, defaultEnvironment, the AZURE_* key constants, the environment name regexp ^[a-zA-Z0-9-\\(\\)_\\.]{1,64}$ and the resourceGroup resolution code. Tightened in 1.36.0 and recorded in docs/tool-compatibility.md section 6: dot-only names, trailing-dot names on Windows, symbolic-link state paths and an invalid defaultEnvironment now error. Example URL: https://github.com/Azure/azure-dev/compare/azure-dev-cli_1.35.0...azure-dev-cli_1.36.0"
 evidence:
   description: >-
     Compare per-environment .env files and per-environment parameter files by key. For keys classified as
-    environment-bound (ARM resource IDs, *.services.ai.azure.com and other service endpoints, keys ending in _NAME,
-    _ENDPOINT, _ID, _RESOURCE_GROUP, AZURE_SUBSCRIPTION_ID), report keys whose values are byte-equal in two
-    environments that have different AZURE_ENV_NAME. Values are never printed; the finding carries the key and a
-    salted hash fingerprint.
+    environment-bound, report keys whose values are byte-equal in two environments that have different, non-empty
+    AZURE_ENV_NAME. Environment-bound (finding): values that are ARM resource IDs or *.services.ai.azure.com hosts,
+    AZURE_SUBSCRIPTION_ID, and keys ending in _ENDPOINT or _RESOURCE_GROUP. Possibly environment-bound (uncertain
+    skip, never a finding): other keys ending in _NAME or _ID. Never reported: keys naming a tenant, principal,
+    deployment or model (AZURE_TENANT_ID, *_PRINCIPAL_ID, MODEL_DEPLOYMENT_NAME and similar), which are shared on
+    purpose. A pair of environments with an empty or equal AZURE_ENV_NAME, and any environment whose .env is missing,
+    unreadable, over-size, truncated or unparseable, is named in an uncertain skip; the rule never passes on such
+    input. Values are never printed; the finding carries the key and a salted hash fingerprint. Values under secret-looking key
+    names (KEY, SECRET, TOKEN and similar) are digested before the rule runs; the value shape (resource ID or bare
+    endpoint URL) is classified first and carried next to the digest, so such a key is judged exactly like the same
+    value under another name. With fewer than two environments the rule is not applicable.
   confidence: likely
 recommendation: >-
   Review each reported key and give the environment its own value, or suppress the finding with a reason and
@@ -41,17 +48,15 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview
     lastVerified: "2026-10-05"
-    verifiedVia: refs/azd-docs/articles/azure-developer-cli/environments-overview.md
-    note: Environment isolation and the contents of .azure/<env>/.env (context only; no source states that copied values are an error).
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/azure-dev-docs/blob/main/articles/azure-developer-cli/environments-overview.md
+    note: >-
+      Environment isolation and the contents of .azure/<env>/.env (context only; no source states that copied
+      values are an error). Branch URL, not commit-pinned.
   - url: https://github.com/Azure/azure-dev/blob/azure-dev-cli_1.35.0/cli/azd/pkg/environment/local_file_data_store.go
     lastVerified: '2026-10-05'
     verifiedVia: >-
-      Azure/azure-dev azure-dev-cli_1.35.0 (170ebb8) cli/azd/pkg/environment/local_file_data_store.go (godotenv.Read
-      of <env root>/.env, godotenv.Marshal on save), environment.go (marshallDotEnv, fixupUnquotedDotenv,
-      AZURE_ENV_NAME and AZURE_RESOURCE_GROUP constants) and azdcontext/azdcontext.go (EnvironmentDirectoryName
-      .azure, DotEnvFileName .env, ConfigFileName config.json, configFile.DefaultEnvironment); git diff to main
-      afe4b2b is empty for pkg/environment. github.com/joho/godotenv v1.5.1 (Go proxy zip, tag commit 3fc4292, MIT)
-      parser.go.
+      https://github.com/Azure/azure-dev/blob/azure-dev-cli_1.35.0/cli/azd/pkg/environment/local_file_data_store.go; Azure/azure-dev azure-dev-cli_1.35.0 (170ebb8) cli/azd/pkg/environment/local_file_data_store.go (godotenv.Read of <env root>/.env, godotenv.Marshal on save), environment.go (marshallDotEnv, fixupUnquotedDotenv, AZURE_ENV_NAME and AZURE_RESOURCE_GROUP constants) and azdcontext/azdcontext.go (EnvironmentDirectoryName .azure, DotEnvFileName .env, ConfigFileName config.json, configFile.DefaultEnvironment); git diff to main afe4b2b is empty for pkg/environment. github.com/joho/godotenv v1.5.1 (Go proxy zip, tag commit 3fc4292, MIT) parser.go.
     note: >-
       Verified .env grammar (godotenv v1.5.1 as used by azd): KEY=VALUE or KEY: VALUE with an optional leading `export
       `; key characters letters, digits, `_` and `.` (anything else is a parse error); a line whose first non-space
@@ -93,11 +98,22 @@ tests:
   negative:
     - environment-specific-values
     - shared-value-suppressed-with-reason
+    - identical-tenant-id-and-model-deployment-name
   skipped:
     - single-environment-visible
+    - equal-or-empty-azure-env-name-uncertain
+    - identical-name-or-id-key-uncertain
+    - env-file-unparseable-uncertain
 notes: >-
   Product opinion. The classification of keys as environment-bound is a heuristic of Foundry Doctor, not a documented
   azd property, which is why confidence is likely and severity never exceeds warning. Phase 1 fact check (2026-10-05):
   the .env grammar azd reads is verified (godotenv v1.5.1, see sources); values are compared after parsing, so quoting
   differences do not hide a copy. Variable references inside a value are expanded by the parser only from earlier keys
-  of the same file, so compare the parsed (expanded) value and report the key name only.
+  of the same file, so compare the parsed (expanded) value and report the key name only. Version 2 (2026-10-15):
+  the _NAME/_ID suffix classification is a Foundry Doctor heuristic with no primary source, so only resource IDs,
+  service hosts, subscription, endpoint and resource-group keys produce findings and the suffix-only hits are
+  uncertain. The .env parser is an in-repository port of the godotenv v1.5.1 grammar (internal/project/dotenv.go),
+  checked against the module's output on a 26-input corpus; the module is not a dependency (it is absent from
+  docs/licence-inventory.md). Secret-looking values (names containing KEY, SECRET, TOKEN, PASSWORD, PWD,
+  CONNECTIONSTRING, CREDENTIAL, SAS or SIG) are replaced by a digest after parsing.
+  Version 4: uncertain notes (an unusable environment, an environment with a missing value) are returned as uncertain skips next to findings, not dropped. Findings carry a Key: the check kind, the variable name when there is one, and the sorted environment pair, never a value or a value fingerprint, so a rotated value does not resurface a baselined finding.

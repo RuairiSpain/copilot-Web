@@ -51,3 +51,17 @@ One module that imports `azdext` would force the whole core, and the standalone 
 - The binary-size cost of importing the azd module is unmeasured.
 - Whether a standalone binary can ever use `azdext` is answered in ADR-003: it cannot run without azd, which sets
   `AZD_SERVER` and `AZD_ACCESS_TOKEN` only when it launches an extension.
+
+## Amendment 1 (2026-10-15): core and extension move to Go 1.26.9
+
+The user decided to bump the Go directive. `govulncheck` in CI reported 12 reachable standard-library vulnerabilities under Go 1.25.13
+(for example `html/template`, called from `internal/report/html/report.go`), and the fixes are published only in Go 1.26.x releases
+(`html/template` fixed in 1.26.9).
+
+- `foundry-doctor/go.mod`, `foundry-doctor/extension/go.mod` and `foundry-doctor/go.work` now declare `go 1.26.9`.
+- This replaces Decision 1 (`go 1.25.12`, later 1.25.13). The module split stays: the extension keeps its own module and the core keeps the
+  `GOWORK=off` import boundary check.
+- The `golang.org/x/sync` 0.19.x pin existed only because v0.23.0 needs Go 1.26.0. It may be lifted separately; this amendment does not change it.
+- `gopls` was pinned to v0.21.1 because v0.22.0 and later declare Go 1.26.0. The pin is no longer required by the toolchain and can be reviewed.
+- Verification: `go build`, `go vet` and `go test ./...` pass with Go 1.26.9 locally. `govulncheck` could not run in the authoring sandbox
+  (`vuln.go.dev` is blocked); the CI run on the pull request is the evidence.

@@ -1,5 +1,5 @@
 id: FND-SEC-002
-version: 1
+version: 3
 group: SEC
 title: AI Search key authentication disabled or RBAC-only
 description: >-
@@ -59,25 +59,28 @@ sources:
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/rest-api-specs/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
   note: >-
-    SearchServiceProperties.disableLocalAuth, authOptions (DataPlaneAuthOptions: apiKeyOnly | aadOrApiKey.aadAuthFailureMode);
-    descriptions state the two are mutually exclusive.
+    SearchServiceProperties.disableLocalAuth, authOptions (DataPlaneAuthOptions: apiKeyOnly |
+    aadOrApiKey.aadAuthFailureMode); descriptions state the two are mutually exclusive. Branch URL, not
+    commit-pinned.
 - url: >-
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/preview/2026-09-01-preview/search.json
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/rest-api-specs/specification/search/resource-manager/Microsoft.Search/Search/preview/2026-09-01-preview/search.json
-  note: Same property names present in 2026-09-01-preview.
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/preview/2026-09-01-preview/search.json
+  note: Same property names present in 2026-09-01-preview. Branch URL, not commit-pinned.
 - url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.AI.DisableLocalAuth/
   lastVerified: '2026-10-04'
-  verifiedVia: refs/psrule/docs/en/rules/Azure.AI.DisableLocalAuth.md
-  note: Overlap source (PSRule for Azure rule documentation).
+  verifiedVia: https://github.com/Azure/PSRule.Rules.Azure/blob/main/docs/en/rules/Azure.AI.DisableLocalAuth.md
+  note: Overlap source (PSRule for Azure rule documentation). Branch URL, not commit-pinned.
 - url: https://github.com/Azure/azure-rest-api-specs/blob/c415ef063cd4c1833ecceff7f856295115d80c0d/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
   lastVerified: '2026-10-05'
   verifiedVia: >-
-    refs/rest-api-specs @ c415ef063cd4c1833ecceff7f856295115d80c0d (2026-10-03) cognitiveservices stable/2026-09-01
-    and preview/2026-07-15-preview cognitiveservices.json.
+    https://raw.githubusercontent.com/Azure/azure-rest-api-specs/c415ef063cd4c1833ecceff7f856295115d80c0d/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    and
+    https://raw.githubusercontent.com/Azure/azure-rest-api-specs/c415ef063cd4c1833ecceff7f856295115d80c0d/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/preview/2026-07-15-preview/cognitiveservices.json
+    (commit dated 2026-10-03)
   note: >-
     ARM spec stable 2026-09-01: CapabilityHostProperties and ProjectCapabilityHostProperties carry
     aiServicesConnections, vectorStoreConnections, storageConnections, threadStorageConnections (string arrays of
@@ -89,11 +92,11 @@ sources:
 - url: https://github.com/MicrosoftDocs/azure-ai-docs/blob/e8d0ac6f7ebd7fd000e287657ab9beda5bccc1fa/articles/foundry/agents/includes/concepts-capability-hosts-content.md
   lastVerified: '2026-10-05'
   verifiedVia: >-
-    refs/azure-ai-docs @ e8d0ac6f7ebd7fd000e287657ab9beda5bccc1fa
-    articles/foundry/agents/includes/concepts-capability-hosts-content.md (ms.date 08/21/2026), "Required connection
-    properties"; foundry-samples @ d807d9a0b2e633040d896cd0ddd58c95e14ac6f1
-    infrastructure-setup-bicep/41-standard-agent-setup/modules-standard/ai-project-identity.bicep and
-    add-project-capability-host.bicep.
+    https://raw.githubusercontent.com/MicrosoftDocs/azure-ai-docs/e8d0ac6f7ebd7fd000e287657ab9beda5bccc1fa/articles/foundry/agents/includes/concepts-capability-hosts-content.md
+    (ms.date 08/21/2026), "Required connection properties";
+    https://raw.githubusercontent.com/microsoft-foundry/foundry-samples/d807d9a0b2e633040d896cd0ddd58c95e14ac6f1/infrastructure/infrastructure-setup-bicep/41-standard-agent-setup/modules-standard/ai-project-identity.bicep
+    and
+    https://raw.githubusercontent.com/microsoft-foundry/foundry-samples/d807d9a0b2e633040d896cd0ddd58c95e14ac6f1/infrastructure/infrastructure-setup-bicep/41-standard-agent-setup/modules-standard/add-project-capability-host.bicep.
   note: >-
     Legacy (connection) flow, verified: a project or account capability host lists connection NAMES in
     threadStorageConnections (Cosmos DB), vectorStoreConnections (AI Search), storageConnections (Storage) and

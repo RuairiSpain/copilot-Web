@@ -1,0 +1,58 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.48.1.52935",
+      "templateHash": "10249192466979368950"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    },
+    "existingAccountResourceId": {
+      "type": "string",
+      "defaultValue": ""
+    },
+    "customName": {
+      "type": "string",
+      "defaultValue": ""
+    }
+  },
+  "variables": {
+    "useExisting": "[not(empty(parameters('existingAccountResourceId')))]",
+    "accountName": "[if(equals(length(parameters('customName')), 0), 'auto-ai', parameters('customName'))]",
+    "viaVariable": "[and(not(variables('useExisting')), contains(variables('accountName'), 'ai'))]"
+  },
+  "resources": [
+    {
+      "condition": "[not(variables('useExisting'))]",
+      "type": "Microsoft.CognitiveServices/accounts",
+      "apiVersion": "2025-06-01",
+      "name": "[variables('accountName')]",
+      "location": "[parameters('location')]",
+      "kind": "AIServices",
+      "sku": {
+        "name": "S0"
+      },
+      "properties": {
+        "customSubDomainName": "[variables('accountName')]",
+        "disableLocalAuth": true
+      }
+    },
+    {
+      "condition": "[variables('viaVariable')]",
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2023-05-01",
+      "name": "stgvarcond",
+      "location": "[parameters('location')]",
+      "kind": "StorageV2",
+      "sku": {
+        "name": "Standard_LRS"
+      }
+    }
+  ]
+}

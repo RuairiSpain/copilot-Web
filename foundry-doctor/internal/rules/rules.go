@@ -8,11 +8,14 @@ package rules
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"slices"
 	"strings"
 
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/armexpr"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/catalog"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/findings"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
@@ -102,6 +105,10 @@ type Engine struct {
 	Selector Selector
 	// Required marks IDs whose skips make the run fail (user explicitly asked).
 	Required []string
+	// Synthetic is set when the project has no on-disk infrastructure (ADR-004,
+	// ADR-012). Rules that need only ARM input are then skipped with
+	// SkipSyntheticInfrastructure before they run.
+	Synthetic bool
 }
 
 // Report is the outcome of a run, sorted deterministically.
@@ -110,6 +117,10 @@ type Report struct {
 	Skipped  []sdk.Skip
 	// Evaluated lists IDs that actually ran (even with no findings).
 	Evaluated []string
+	// SkippedByReason counts skips by reason head (see ReasonHead).
+	SkippedByReason map[string]int
+	// Diagnostics lists engine-level problems such as fingerprint collisions.
+	Diagnostics []string
 }
 
 // Run evaluates all selected catalogue rules against in. in.Profile must be a
@@ -135,6 +146,9 @@ func (e *Engine) Run(ctx context.Context, in *sdk.Input) (*Report, error) {
 		skip := func(reason string) {
 			rep.Skipped = append(rep.Skipped, sdk.Skip{RuleID: cr.ID, Reason: reason, Required: slices.Contains(e.Required, cr.ID)})
 		}
+		skipMissing := func(reason, capability string) {
+			rep.Skipped = append(rep.Skipped, sdk.Skip{RuleID: cr.ID, Reason: reason, MissingCapability: capability, Required: slices.Contains(e.Required, cr.ID)})
+		}
 		impl, ok := e.Registry.Get(cr.ID)
 		if !ok {
 			skip(sdk.SkipNotImplemented)
@@ -145,9 +159,13 @@ func (e *Engine) Run(ctx context.Context, in *sdk.Input) (*Report, error) {
 			skip(reason)
 			continue
 		}
+		if e.Synthetic && in.ARM == nil && NeedsARMOnly(cr) {
+			skipMissing(sdk.SkipSyntheticInfrastructure, MissingARMCapability)
+			continue
+		}
 		if !cr.Compatibility.Azd.Empty() {
 			if in.AzdVersion == "" {
-				skip(sdk.SkipInputUnavailable)
+				skipMissing(sdk.SkipAzdVersionUnknown, "azd version")
 				continue
 			}
 			if !cr.Compatibility.Azd.Contains(in.AzdVersion) {
@@ -161,7 +179,7 @@ func (e *Engine) Run(ctx context.Context, in *sdk.Input) (*Report, error) {
 			continue
 		}
 		if res.Skipped != nil {
-			if len(res.Findings) > 0 {
+			if len(res.Findings) > 0 || len(res.Skips) > 0 {
 				skip(SkipRuleError)
 				continue
 			}
@@ -174,11 +192,20 @@ func (e *Engine) Run(ctx context.Context, in *sdk.Input) (*Report, error) {
 			continue
 		}
 		rep.Evaluated = append(rep.Evaluated, cr.ID)
+		for _, s := range res.Skips {
+			s.RuleID = cr.ID
+			if slices.Contains(e.Required, cr.ID) {
+				s.Required = true
+			}
+			rep.Skipped = append(rep.Skipped, s)
+		}
 		for _, f := range res.Findings {
-			rep.Findings = append(rep.Findings, Enrich(f, cr, in.Profile, sev))
+			rep.Findings = append(rep.Findings, Enrich(capDefaultDerived(f, in.ARM), cr, in.Profile, sev))
 		}
 	}
+	rep.Findings, rep.Diagnostics = resolveFingerprintCollisions(rep.Findings)
 	findings.Sort(rep.Findings)
+	rep.SkippedByReason = SkippedByReason(rep.Skipped)
 	slices.SortFunc(rep.Skipped, func(a, b sdk.Skip) int {
 		if c := strings.Compare(a.RuleID, b.RuleID); c != 0 {
 			return c
@@ -253,7 +280,7 @@ func ConfidenceFor(c string) sdk.Confidence {
 func Enrich(f sdk.Finding, cr catalog.Rule, profile string, sev sdk.Severity) sdk.Finding {
 	f.RuleID = cr.ID
 	f.RuleVersion = cr.Version
-	f.Severity = sev
+	f.Severity = lowerSeverity(sev, f.Severity, cr)
 	f.Category = sdk.Category(cr.Category)
 	f.Pillar = cr.Pillar
 	f.Basis = slices.Clone(cr.Basis)
@@ -265,11 +292,187 @@ func Enrich(f sdk.Finding, cr catalog.Rule, profile string, sev sdk.Severity) sd
 		f.Fix = cr.Fix
 	}
 	if len(cr.Sources) > 0 {
-		f.DocsURL = cr.Sources[0].URL
-		f.LastVerified = cr.Sources[0].LastVerified
+		src := cr.Sources[0]
+		// A rule may name one of its own catalogue sources (by URL) when a
+		// finding rests on a different source than the first. A URL that is
+		// not a catalogue source is ignored, so a rule cannot inject a link.
+		for _, s := range cr.Sources {
+			if f.DocsURL != "" && s.URL == f.DocsURL {
+				src = s
+				break
+			}
+		}
+		f.DocsURL = src.URL
+		f.LastVerified = src.LastVerified
 	}
-	f.Confidence = ConfidenceFor(cr.Evidence.Confidence)
+	f.Confidence = lowerConfidence(ConfidenceFor(cr.Evidence.Confidence), f.Confidence)
 	f.Evidence = findings.Redact(f.Evidence)
 	f.Fingerprint = findings.Fingerprint(f)
 	return f
+}
+
+// lowerSeverity applies a rule's per-finding severity override (ADR-008
+// amendment 3). The catalogue severity wins unless the override is valid and
+// strictly lower. Platform-basis rules are error in every profile, so an
+// override is ignored for them.
+func lowerSeverity(cat, override sdk.Severity, cr catalog.Rule) sdk.Severity {
+	if slices.Contains(cr.Basis, PlatformBasis) {
+		return cat
+	}
+	if override.Valid() && override.Rank() < cat.Rank() {
+		return override
+	}
+	return cat
+}
+
+// defaultProvenance is implemented by the ARM model when it can say that a
+// resource's facts came from a parameter's Bicep default (applied because a
+// parameter file exists but does not set the parameter; ADR-018).
+type defaultProvenance interface {
+	FromDefault(sdk.ARMResource) []string
+}
+
+// defaultPathProvenance is implemented by an ARM model that records where a
+// parameter default landed in a resource (armmodel.Model.FromDefaultPaths).
+type defaultPathProvenance interface {
+	FromDefaultPaths(sdk.ARMResource) []string
+}
+
+// capDefaultDerived lowers a finding's confidence to medium when a parameter
+// default fed what the finding reports: the resource's condition (its own or
+// an ancestor module's), or the property, sku, identity, tags or scope the
+// finding names in its Key or Evidence (ADR-018 amendment 2). A default that
+// only shaped the resource name or region does not cap, and neither does one
+// that shaped an unrelated property. A model that cannot say where the default
+// landed falls back to capping on any default. The evidence text and the
+// fingerprint are left alone.
+func capDefaultDerived(f sdk.Finding, m sdk.ARMModel) sdk.Finding {
+	dp, ok := m.(defaultProvenance)
+	if !ok || m == nil || f.Resource.Name == "" {
+		return f
+	}
+	for _, r := range m.Resources() {
+		if !strings.EqualFold(r.Type, f.Resource.Type) || armexpr.StripScope(r.Name) != f.Resource.Name {
+			continue
+		}
+		if len(dp.FromDefault(r)) == 0 {
+			continue
+		}
+		if pp, ok := m.(defaultPathProvenance); ok && !defaultFeedsFinding(pp.FromDefaultPaths(r), f) {
+			continue
+		}
+		if f.Confidence.Rank() == 0 || f.Confidence.Rank() > sdk.ConfidenceMedium.Rank() {
+			f.Confidence = sdk.ConfidenceMedium
+		}
+		break
+	}
+	return f
+}
+
+// defaultFeedsFinding reports whether one of the default-shaped paths is the
+// condition or is named in the finding's Key or Evidence.
+func defaultFeedsFinding(paths []string, f sdk.Finding) bool {
+	text := strings.ToLower(f.Key + "\n" + f.Evidence)
+	for _, p := range paths {
+		switch p {
+		case "condition":
+			return true
+		case "name", "location":
+			continue
+		}
+		leaf := strings.ToLower(strings.TrimPrefix(p, "properties."))
+		if leaf != "" && strings.Contains(text, leaf) {
+			return true
+		}
+	}
+	return false
+}
+
+// lowerConfidence applies a rule's per-finding confidence override: only a
+// valid, strictly lower value is honoured.
+func lowerConfidence(cat, override sdk.Confidence) sdk.Confidence {
+	if override.Rank() > 0 && override.Rank() < cat.Rank() {
+		return override
+	}
+	return cat
+}
+
+// MissingARMCapability is the MissingCapability text of synthetic-infrastructure skips.
+const MissingARMCapability = "compiled ARM template"
+
+// NeedsARMOnly reports whether the catalogue lists the compiled ARM template as
+// an input and no input that can be read without it (azure.yaml or the azd
+// environment). Such a rule cannot run in a project with no on-disk
+// infrastructure (ADR-012 decision 4). A rule that also lists azure.yaml or
+// azd-env runs and skips its ARM sub-checks itself.
+func NeedsARMOnly(cr catalog.Rule) bool {
+	return slices.Contains(cr.Inputs, "bicep-arm") &&
+		!slices.Contains(cr.Inputs, "azure.yaml") && !slices.Contains(cr.Inputs, "azd-env")
+}
+
+// resolveFingerprintCollisions applies the ADR-008 (amendment 2) rules.
+//
+// A finding whose rule set no Finding.Key gets a Key derived from the finding
+// itself: "auto:<line>:<column>:<12 hex of SHA-256 of the redacted evidence>".
+// The derivation never looks at other findings, so a fingerprint does not
+// change when a sibling appears or disappears. A diagnostic names every rule
+// whose key-less findings would otherwise have shared a fingerprint.
+//
+// Only exact duplicates (same fingerprint, location and evidence) merge.
+// Findings with equal fingerprints but different location or evidence are all
+// kept; if a rule set a Key that failed to separate them, a diagnostic says so.
+func resolveFingerprintCollisions(fs []sdk.Finding) ([]sdk.Finding, []string) {
+	base := map[string]map[string]bool{} // base fingerprint -> distinct identities
+	for _, f := range fs {
+		if f.Key != "" {
+			continue
+		}
+		if base[f.Fingerprint] == nil {
+			base[f.Fingerprint] = map[string]bool{}
+		}
+		base[f.Fingerprint][fmt.Sprintf("%d:%d:%s", f.Location.Line, f.Location.Column, f.Evidence)] = true
+	}
+	diagSet := map[string]bool{}
+	for i := range fs {
+		f := &fs[i]
+		if f.Key != "" {
+			continue
+		}
+		if len(base[f.Fingerprint]) > 1 {
+			diagSet[fmt.Sprintf("%s: findings share a fingerprint because the rule sets no Finding.Key; fingerprints were derived from location and evidence", f.RuleID)] = true
+		}
+		sum := sha256.Sum256([]byte(f.Evidence))
+		f.Key = fmt.Sprintf("auto:%d:%d:%s", f.Location.Line, f.Location.Column, hex.EncodeToString(sum[:])[:12])
+		f.Fingerprint = findings.Fingerprint(*f)
+	}
+	type ident struct {
+		fp, ev string
+		loc    sdk.Location
+	}
+	seen := map[ident]bool{}
+	keyedLocs := map[string]map[string]bool{}
+	out := make([]sdk.Finding, 0, len(fs))
+	for _, f := range fs {
+		id := ident{f.Fingerprint, f.Evidence, f.Location}
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, f)
+		if !strings.HasPrefix(f.Key, "auto:") {
+			if keyedLocs[f.Fingerprint] == nil {
+				keyedLocs[f.Fingerprint] = map[string]bool{}
+			}
+			keyedLocs[f.Fingerprint][fmt.Sprintf("%v|%s", f.Location, f.Evidence)] = true
+			if len(keyedLocs[f.Fingerprint]) > 1 {
+				diagSet[fmt.Sprintf("%s: findings share a fingerprint although the rule sets Finding.Key; the Key does not separate them", f.RuleID)] = true
+			}
+		}
+	}
+	diags := make([]string, 0, len(diagSet))
+	for d := range diagSet {
+		diags = append(diags, d)
+	}
+	slices.Sort(diags)
+	return out, diags
 }

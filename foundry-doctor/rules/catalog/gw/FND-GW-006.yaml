@@ -57,20 +57,32 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/api-management/llm-emit-token-metric-policy
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-docs/articles/api-management/llm-emit-token-metric-policy.md
-    note: Prerequisites - Application Insights integration, Application Insights logging for LLM APIs, custom metrics with dimensions.
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/api-management/llm-emit-token-metric-policy.md
+    note: >-
+      Prerequisites - Application Insights integration, Application Insights logging for LLM APIs, custom
+      metrics with dimensions. Branch URL, not commit-pinned.
   - url: https://learn.microsoft.com/azure/api-management/api-management-howto-app-insights
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-docs/articles/api-management/api-management-howto-app-insights.md
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/api-management/api-management-howto-app-insights.md
     note: >-
-      Emit custom metrics steps: enable custom metrics with dimensions, add metrics true to the applicationInsights diagnostic, and configure the logger at the scope.
+      Emit custom metrics steps: enable custom metrics with dimensions, add metrics true to the
+      applicationInsights diagnostic, and configure the logger at the scope. Branch URL, not commit-pinned.
   - url: https://learn.microsoft.com/azure/api-management/api-management-howto-llm-logs
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-docs/articles/api-management/api-management-howto-llm-logs.md
-    note: Diagnostic setting for Logs related to generative AI gateway to a Log Analytics workspace for token usage and optional prompts and completions.
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/api-management/api-management-howto-llm-logs.md
+    note: >-
+      Diagnostic setting for Logs related to generative AI gateway to a Log Analytics workspace for token
+      usage and optional prompts and completions. Branch URL, not commit-pinned.
   - url: https://github.com/Azure/azure-rest-api-specs/tree/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/preview/2025-09-01-preview/openapi.json (LoggerContractProperties.loggerType azureEventHub|applicationInsights|azureMonitor; DiagnosticContractProperties.loggerId, metrics, largeLanguageModel)
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/preview/2025-09-01-preview/openapi.json
+      (LoggerContractProperties.loggerType azureEventHub|applicationInsights|azureMonitor;
+      DiagnosticContractProperties.loggerId, metrics, largeLanguageModel)
+    note: Branch URL, not commit-pinned.
 overlap:
   decision: native
   provisional: true

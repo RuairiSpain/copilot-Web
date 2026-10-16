@@ -6,6 +6,7 @@ package cfg
 import (
 	"context"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -48,7 +49,7 @@ type Providers struct {
 // document is the richer view of *azureyaml.Document the rules consume.
 type document interface {
 	sdk.AzureYAMLView
-	Root() *yaml.Node
+	Resolved() *yaml.Node
 	Diagnostics() []azureyaml.Diagnostic
 }
 
@@ -61,7 +62,7 @@ func loadDoc(in *sdk.Input) (document, bool) {
 		return nil, false
 	}
 	d, ok := in.AzureYAML.(document)
-	if !ok || d.Root() == nil {
+	if !ok || d.Resolved() == nil {
 		return nil, false
 	}
 	return d, true
@@ -177,7 +178,7 @@ func (s service) usesName(name string) bool {
 
 func serviceList(d document) []service {
 	var out []service
-	for _, p := range pairs(child(d.Root(), "services")) {
+	for _, p := range pairs(child(d.Resolved(), "services")) {
 		if p.Val.Kind != yaml.MappingNode {
 			continue
 		}
@@ -216,11 +217,14 @@ func loc(d document, n *yaml.Node) sdk.Location {
 }
 
 // finding builds a finding anchored at n (or the service key when n is nil).
-func finding(d document, s service, n *yaml.Node, evidence string) sdk.Finding {
+// key is the stable discriminator (check kind, plus field path or variable
+// name) that separates this finding from others of the rule on the same
+// resource. It must not depend on sibling findings, line numbers or values.
+func finding(d document, s service, n *yaml.Node, key, evidence string) sdk.Finding {
 	if n == nil {
 		n = s.Key
 	}
-	f := sdk.Finding{Location: loc(d, n), Evidence: evidence}
+	f := sdk.Finding{Key: key, Location: loc(d, n), Evidence: evidence}
 	if s.Name != "" {
 		f.Resource = sdk.ResourceRef{Type: s.Host, Name: s.Name}
 	}
@@ -228,6 +232,38 @@ func finding(d document, s service, n *yaml.Node, evidence string) sdk.Finding {
 }
 
 func ok(fs []sdk.Finding) sdk.Result { return sdk.Result{Findings: fs} }
+
+// uncertainPrefix starts the Skip.Reason of an inconclusive outcome. It
+// matches the prefix the report layer reads as "uncertain".
+const uncertainPrefix = "uncertain: "
+
+// withNotes reports the notes next to the findings. With findings, each
+// distinct note becomes one uncertain sdk.Skip so a finding never hides what
+// the rule could not decide (ADR-008 amendment 3). Without findings, notes make
+// the rule inconclusive: the result is a rule-level skip with an uncertain
+// reason, never a pass.
+func withNotes(fs []sdk.Finding, notes []string) sdk.Result {
+	if len(notes) == 0 {
+		return ok(fs)
+	}
+	seen := map[string]bool{}
+	var uniq []string
+	for _, n := range notes {
+		if !seen[n] {
+			seen[n] = true
+			uniq = append(uniq, n)
+		}
+	}
+	sort.Strings(uniq)
+	if len(fs) == 0 {
+		return skip(uncertainPrefix + strings.Join(uniq, "; "))
+	}
+	skips := make([]sdk.Skip, 0, len(uniq))
+	for _, n := range uniq {
+		skips = append(skips, sdk.Skip{Reason: uncertainPrefix + n})
+	}
+	return sdk.Result{Findings: fs, Skips: skips}
+}
 
 var varName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
@@ -261,6 +297,47 @@ func varRefs(s string) []string {
 		if varName.MatchString(name) {
 			out = append(out, name)
 		}
+	}
+	return out
+}
+
+// unusualForms returns, for each ${NAME<op>...} reference whose operator is
+// not the documented inline default ":-", the name and the operator (for
+// example "X:?" or "X:+" or "X="). azd core expands with drone/envsubst, whose
+// full operator set no source in this repository documents for azure.yaml, so
+// the caller treats these as uncertain, never as undefined. Default text after
+// the operator is not returned.
+func unusualForms(s string) []string {
+	var out []string
+	for i := 0; i < len(s); i++ {
+		if s[i] != '$' {
+			continue
+		}
+		if i+1 < len(s) && s[i+1] == '$' {
+			i++
+			continue
+		}
+		if !strings.HasPrefix(s[i:], "${") || strings.HasPrefix(s[i:], "${{") {
+			continue
+		}
+		end := strings.IndexByte(s[i:], '}')
+		if end < 0 {
+			return out
+		}
+		inner := s[i+2 : i+end]
+		i += end
+		j := 0
+		for j < len(inner) && (inner[j] == '_' || inner[j] >= 'A' && inner[j] <= 'Z' || inner[j] >= 'a' && inner[j] <= 'z' || j > 0 && inner[j] >= '0' && inner[j] <= '9') {
+			j++
+		}
+		if j == 0 || j == len(inner) || strings.HasPrefix(inner[j:], ":-") {
+			continue
+		}
+		op := inner[j : j+1]
+		if op == ":" && j+1 < len(inner) {
+			op = inner[j : j+2]
+		}
+		out = append(out, inner[:j]+op)
 	}
 	return out
 }

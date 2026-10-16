@@ -1,5 +1,5 @@
 id: FND-NET-002
-version: 1
+version: 3
 group: NET
 title: Dependent services public access/default-deny/private endpoints
 description: >-
@@ -68,33 +68,44 @@ fix: |
 sources:
 - url: https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/includes/how-to-virtual-networks-content.md (ms.date 09/28/2026)
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks (ms.date 09/28/2026); source file
+    MicrosoftDocs/azure-ai-docs: articles/foundry/agents/includes/how-to-virtual-networks-content.md;
+    retrieved 2026-10-04
   note: >-
     Private endpoints to Search, Storage and Cosmos DB are not auto-created; verify step confirms public network access
     Disabled on each; group IDs per DNS zone table.
 - url: https://learn.microsoft.com/azure/foundry/agents/concepts/networking-options
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/networking-options.md (ms.date 06/29/2026)
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/agents/concepts/networking-options (ms.date 06/29/2026); source
+    file MicrosoftDocs/azure-ai-docs: articles/foundry/agents/concepts/networking-options.md; retrieved
+    2026-10-04
   note: Private endpoints and private DNS zones for the account and each data resource you bring.
 - url: https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/azure-ai-docs/articles/foundry/agents/includes/concepts-standard-agent-setup-content.md (ms.date 09/09/2026)
+    https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup (ms.date 09/09/2026);
+    source file MicrosoftDocs/azure-ai-docs:
+    articles/foundry/agents/includes/concepts-standard-agent-setup-content.md; retrieved 2026-10-04
   note: Standard setup brings Storage, Cosmos DB and AI Search; capability settings reference their resource IDs.
 - url: >-
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/preview/2026-07-15-preview/cognitiveservices.json
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/preview/2026-07-15-preview/cognitiveservices.json
-  note: CapabilitySettings documentStore, vectorStore, blobStore (ARM IDs) on account and project.
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/preview/2026-07-15-preview/cognitiveservices.json
+  note: >-
+    CapabilitySettings documentStore, vectorStore, blobStore (ARM IDs) on account and project. Branch URL, not
+    commit-pinned.
 - url: >-
     https://github.com/Azure/azure-rest-api-specs/tree/main/specification/storage/resource-manager/Microsoft.Storage/stable/2026-09-01
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/rest-api-specs/specification/{storage,cosmos-db,search,keyvault}/resource-manager (openapi.json / search.json)
+    https://github.com/Azure/azure-rest-api-specs/tree/main/specification (storage, cosmos-db, search and
+    keyvault resource-manager folders; openapi.json / search.json)
   note: >-
-    Property names publicNetworkAccess, networkAcls.defaultAction, isVirtualNetworkFilterEnabled, ipRules, virtualNetworkRules
-    read in each spec.
+    Property names publicNetworkAccess, networkAcls.defaultAction, isVirtualNetworkFilterEnabled, ipRules,
+    virtualNetworkRules read in each spec. Branch URL, not commit-pinned.
 overlap:
   decision: adapt
   provisional: true
@@ -149,6 +160,7 @@ tests:
   - dependent-resource-id-unresolvable-parameter
   - legacy-capability-host-connection-not-resolvable-offline
 notes: >-
+  Review B3: an expression-valued networkInjections (for example a ternary over a parameter, as in Microsoft sample 15) makes the rule uncertain, not not-applicable.
   The Foundry source explicitly says to verify Disabled for the three stores; less restrictive firewall combinations are
   not accepted as equivalent. Unverified: Defender/Advisor mappings; their empty arrays mean unresearched. The Foundry doc says the agent state stores are required
   for the standard setup; platform-managed data resources (networking-options) are an alternative, in which case there are

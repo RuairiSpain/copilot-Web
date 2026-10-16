@@ -1,5 +1,5 @@
 id: FND-CFG-003
-version: 1
+version: 4
 group: CFG
 title: "All inter-service references resolve"
 description: >-
@@ -22,13 +22,22 @@ severity:
   test: error
   prod: error
 compatibility:
-  azd: ">=1.34.2 <=1.36.0-beta.1"
+  azd: ">=1.34.2 <=1.36.0"
   extensions:
     azure.ai.agents: ">=1.0.0-beta.18 <=1.0.0-beta.18"
-    azure.ai.projects: ">=1.0.0-beta.13 <=1.0.0-beta.13"
+    azure.ai.projects: ">=1.0.0-beta.13 <=1.0.0-beta.14"
   apiVersions: []
   preview: true
-  notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from a changelog and was not verified. Extension ranges are exactly the versions whose schemas or source were read; widen them in Phase 1 by reading older tags."
+  notes: >-
+    azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18,
+    projects beta.13 need >=1.34.2); the maximum is azd 1.36.0 (tag azure-dev-cli_1.36.0, acebba1e388b489a91ab8e2487a676359ab516a1, released 2026-10-14; the first clone read at 1.36.0-beta.1 is earlier evidence). The earlier >=1.27.1 lower
+    bound came from a changelog and was not verified. Extension ranges are exactly the versions whose schemas or
+    source were read; widen them in Phase 1 by reading older tags. Window widened 2026-10-16: azd to 1.36.0 (tag
+    azure-dev-cli_1.36.0, acebba1, released 2026-10-14); azure.ai.projects to 1.0.0-beta.14. The azd and extension
+    changelogs and the schema and source diffs from the previously verified versions were read; none touches this
+    rule's verified facts for the widened fields (see docs/tool-compatibility.md section 6). azure.ai.agents stays at
+    beta.18: memory model keys became chatModel and embeddingModel in beta.19 and prompt-agent Connection references
+    resolve by service key or effective resource name since beta.20.
 evidence:
   description: >-
     Build typed edges from toolboxes, connections, toolbox tools[].connection and
@@ -66,19 +75,27 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/foundry/agents/how-to/author-azure-yaml
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/author-azure-yaml.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/how-to/author-azure-yaml; source file
+      MicrosoftDocs/azure-ai-docs: articles/foundry/agents/how-to/author-azure-yaml.md; retrieved 2026-10-04
     note: "Troubleshooting: every entry in uses must match a service name; toolbox must be in both uses and toolboxes."
   - url: https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/azure-yaml-reference.md (ms.date 09/17/2026)
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference (ms.date 09/17/2026);
+      source file MicrosoftDocs/azure-ai-docs: articles/foundry/agents/concepts/azure-yaml-reference.md;
+      retrieved 2026-10-04
     note: Dependencies with uses, toolbox connection field, conversationEngine.name, memoryStores chatModel/embeddingModel.
   - url: https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-dev/schemas/v1.0/azure.yaml.json
+    verifiedVia: >-
+      https://raw.githubusercontent.com/Azure/azure-dev/170ebb858071da353cc9bf8657a377bff268ba36/schemas/v1.0/azure.yaml.json
     note: Generic uses description - "service names and resource names"; top-level resources map.
   - url: https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json from azure.ai.agents 1.0.0-beta.18; immutable repository revision unavailable
+    verifiedVia: >-
+      https://raw.githubusercontent.com/Azure/azure-dev/a64ca8fe04d0bc1b0375c32fed1b76573e2a91ef/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json
+      (commit of the azure.ai.agents 1.0.0-beta.18 release tag)
     note: Schema evidence for the required project and agent fields used by the fix.
 overlap:
   decision: native
@@ -121,7 +138,9 @@ tests:
   uncertain:
     - generic-uses-target-not-found-in-services-or-resources
     - routine-agent-use-relationship-not-documented
+    - memory-model-with-project-deployments-absent
 notes: >-
   Generic uses and routine relationships remain uncertain and do not produce violations. The generic
   schema permits resource names while the Foundry article discusses service names; compiled Bicep does
   not prove how an extension resolves that name. Defender and Advisor overlap is unresearched.
+  Version 4: uncertain notes are no longer dropped when the rule also has findings. They are returned as uncertain skips next to the findings (one per distinct note), and the rule-level skip is kept only when there are no findings.

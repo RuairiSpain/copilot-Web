@@ -6,7 +6,7 @@
 # Environment overrides:
 #   BUILD_PKG      main package to build (default ./cmd/foundry-doctor)
 #   BINARY_NAME    output name prefix (default foundry-doctor)
-#   VERSION_VAR    fully qualified variable set by -X (default <module>/internal/buildinfo.Version).
+#   VERSION_VAR    fully qualified variable set by -X (default main.version, the variable in cmd/foundry-doctor that scripts/release uses).
 #                  Go ignores -X for a variable that does not exist, so the packet that owns the version
 #                  variable must keep this default in sync (see docs/development/ci.md).
 # Output: DIR/<name>_<version>_<os>_<arch>[.exe] and DIR/SHA256SUMS.
@@ -32,8 +32,8 @@ if ! command -v go >/dev/null 2>&1; then echo "SKIPPED: go toolchain not install
 if [ ! -f go.mod ]; then echo "SKIPPED: no go.mod"; exit 5; fi
 if [ ! -d "$BUILD_PKG" ]; then echo "SKIPPED: $BUILD_PKG does not exist yet, nothing to build"; exit 5; fi
 
-MODULE="$(go list -m 2>/dev/null)" || { echo "cannot read module path" >&2; exit 1; }
-VERSION_VAR="${VERSION_VAR:-$MODULE/internal/buildinfo.Version}"
+MODULE="$(GOWORK=off go list -m 2>/dev/null)" || { echo "cannot read module path" >&2; exit 1; }
+VERSION_VAR="${VERSION_VAR:-main.version}"
 if [ -z "$VERSION" ]; then VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo dev)"; fi
 VERSION="${VERSION#foundry-doctor/}"
 case "$VERSION" in ''|*[!A-Za-z0-9._+-]*) echo "invalid version '$VERSION' (allowed: A-Z a-z 0-9 . _ + -)" >&2; exit 2 ;; esac

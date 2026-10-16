@@ -63,22 +63,34 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-search-index
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/agentic-knowledge-source-how-to-search-index.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-search-index; source file
+      MicrosoftDocs/azure-ai-docs: articles/search/agentic-knowledge-source-how-to-search-index.md; retrieved
+      2026-10-04
     note: >-
       Query hints table: a filter hint "field must identify a filterable index field"; baseFilter added in
       2026-05-01-preview; queryHints in 2026-08-01-preview.
   - url: https://learn.microsoft.com/azure/search/search-filters
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/search-filters.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/search/search-filters; source file MicrosoftDocs/azure-ai-docs:
+      articles/search/search-filters.md; retrieved 2026-10-04
     note: >-
       Filters apply to fields attributed filterable; you can't modify an existing field to make it filterable.
   - url: https://learn.microsoft.com/azure/search/search-security-trimming-for-azure-search
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/search-security-trimming-for-azure-search.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/search/search-security-trimming-for-azure-search; source file
+      MicrosoftDocs/azure-ai-docs: articles/search/search-security-trimming-for-azure-search.md; retrieved
+      2026-10-04
     note: Security field must be Collection(Edm.String) with filterable true; retrievable false is the documented pattern.
   - url: https://github.com/Azure/azure-rest-api-specs/tree/main/specification/search/data-plane/Search
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/search/data-plane/Search/models-service.tsp (SearchIndexKnowledgeSourceParameters, baseFilter @added 2026-05-01-preview, queryHints @added 2026-08-01-preview)
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/data-plane/Search/models-service.tsp
+      (SearchIndexKnowledgeSourceParameters, baseFilter @added 2026-05-01-preview, queryHints @added
+      2026-08-01-preview)
+    note: Branch URL, not commit-pinned.
 overlap:
   decision: native
   provisional: true

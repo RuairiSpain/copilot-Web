@@ -1,5 +1,5 @@
 id: FND-IDN-001
-version: 1
+version: 3
 group: IDN
 title: "Managed identities used for Foundry and workloads"
 description: >-
@@ -66,24 +66,42 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/includes/concepts-standard-agent-setup-content.md (concept ms.date 07/09/2026; Phase 3 and 4 runtime roles for the project managed identity, SMI and UMI)
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup (concept ms.date
+      07/09/2026; Phase 3 and 4 runtime roles for the project managed identity, SMI and UMI); source file
+      MicrosoftDocs/azure-ai-docs: articles/foundry/agents/includes/concepts-standard-agent-setup-content.md;
+      retrieved 2026-10-04
     note: The project managed identity includes SMI and UMI; roles govern runtime access for running agents.
   - url: https://learn.microsoft.com/azure/foundry/agents/concepts/hosted-agent-permissions
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/hosted-agent-permissions.md (ms.date 04/21/2026)
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/concepts/hosted-agent-permissions (ms.date 04/21/2026);
+      source file MicrosoftDocs/azure-ai-docs: articles/foundry/agents/concepts/hosted-agent-permissions.md;
+      retrieved 2026-10-04
     note: The project has a managed identity; user-assigned managed identity is supported only when configured at project creation and the type cannot be changed afterwards.
   - url: https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/includes/how-to-virtual-networks-content.md (Runtime access after deployment)
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks (Runtime access after
+      deployment); source file MicrosoftDocs/azure-ai-docs:
+      articles/foundry/agents/includes/how-to-virtual-networks-content.md; retrieved 2026-10-04
     note: The project managed identity is what running agents use to reach Cosmos DB, Search and Storage.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
-    note: Identity definition (type, principalId, tenantId, userAssignedIdentities), ResourceIdentityType enum, present on Account and Project.
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    note: >-
+      Identity definition (type, principalId, tenantId, userAssignedIdentities), ResourceIdentityType enum,
+      present on Account and Project. Branch URL, not commit-pinned.
   - url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.AI.ManagedIdentity/
     lastVerified: "2026-10-04"
-    verifiedVia: refs/psrule/docs/en/rules/Azure.AI.ManagedIdentity.md and refs/psrule/src/PSRule.Rules.Azure/rules/Azure.AI.Rule.yaml (ref AZR-000281, Security, MCSB IM-1 and IM-3; where kind in TextAnalytics)
-    note: PSRule applies only to kind TextAnalytics, so it does not cover kind AIServices accounts or projects.
+    verifiedVia: >-
+      https://github.com/Azure/PSRule.Rules.Azure/blob/main/docs/en/rules/Azure.AI.ManagedIdentity.md and
+      https://github.com/Azure/PSRule.Rules.Azure/blob/main/src/PSRule.Rules.Azure/rules/Azure.AI.Rule.yaml
+      (ref AZR-000281, Security, MCSB IM-1 and IM-3; where kind in TextAnalytics)
+    note: >-
+      PSRule applies only to kind TextAnalytics, so it does not cover kind AIServices accounts or projects.
+      Branch URL, not commit-pinned.
 overlap:
   decision: adapt
   provisional: true
@@ -138,6 +156,10 @@ tests:
   uncertain:
     - workload-identity-set-by-module-output
 notes: >-
+  Scope decision (review M14): the rule evaluates accounts of kind AIServices (the Foundry resource) that own projects or
+  deployments, and accounts/projects. An account of kind OpenAI with model deployments and no identity is deliberately not
+  reported: this entry is about the Foundry account and its projects, and no source cited here states that a standalone
+  Azure OpenAI account needs a managed identity. Extending the rule to OpenAI-kind accounts needs a verified source first.
   Unverified: whether the platform rejects or degrades a Foundry account created without an identity
   (no source states it; the severity is security-basis, not platform). Unverified: Defender for Cloud
   and Advisor equivalents were not available in any clone. The sources do not state whether an

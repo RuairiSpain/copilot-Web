@@ -54,6 +54,9 @@ type Run struct {
 	Skipped []sdk.Skip
 	// ExitCode is the classified exit code (see ClassifyExit).
 	ExitCode int
+	// Hidden is the number of findings removed by --min-severity before
+	// rendering. It is shown in the console, Markdown and JSON summaries.
+	Hidden int
 	// GeneratedAt is an optional injected timestamp (RFC 3339). Empty means
 	// no timestamp is emitted, keeping output byte-for-byte reproducible.
 	GeneratedAt string

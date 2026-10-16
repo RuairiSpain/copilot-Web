@@ -32,7 +32,7 @@ func TestLaterRules(t *testing.T) {
 		{
 			name:     "sec005 purge protection",
 			id:       "FND-SEC-005",
-			in:       &sdk.Input{ARM: model{res(typeKeyVault, "kv", props{"enableSoftDelete": true, "enablePurgeProtection": false, "enableRbacAuthorization": true})}},
+			in:       &sdk.Input{ARM: model{res(typeKeyVault, "kv", props{"enableSoftDelete": true, "enablePurgeProtection": false, "enableRbacAuthorization": true}), res(typeAccounts+"/connections", "acct/kvconn", props{"metadata": props{"ResourceId": "kv"}})}},
 			findings: 1, contains: "enablePurgeProtection",
 		},
 		{
@@ -81,7 +81,7 @@ func TestLaterRules(t *testing.T) {
 			name:     "sec014 secret output name",
 			id:       "FND-SEC-014",
 			in:       &sdk.Input{ARM: armOutStub{names: []string{"accountPassword"}}},
-			findings: 1, contains: "secret-shaped",
+			findings: 1, contains: "output name contains",
 		},
 	}
 	for _, tc := range tests {
@@ -92,6 +92,14 @@ func TestLaterRules(t *testing.T) {
 			}
 			if len(out.Findings) != tc.findings {
 				t.Fatalf("findings=%d want %d: %+v", len(out.Findings), tc.findings, out.Findings)
+			}
+			switch tc.id {
+			case "FND-SEC-008", "FND-SEC-009", "FND-SEC-012", "FND-SEC-013":
+				for _, f := range out.Findings {
+					if f.Key == "" {
+						t.Errorf("%s finding sets no Finding.Key: %+v", tc.id, f)
+					}
+				}
 			}
 			if tc.contains != "" && tc.findings > 0 && !strings.Contains(out.Findings[0].Evidence, tc.contains) {
 				t.Fatalf("evidence %q lacks %q", out.Findings[0].Evidence, tc.contains)

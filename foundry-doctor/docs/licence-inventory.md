@@ -19,7 +19,7 @@ material cannot be misclassified as MIT.
 ## Exact selected Go module graph
 
 The main module is
-`github.com/ruairispain/copilot-web/foundry-doctor` (`go 1.25.12`). It is
+`github.com/ruairispain/copilot-web/foundry-doctor` (`go 1.26.9`). It is
 project code rather than a third-party dependency and is not listed as a
 redistributed dependency.
 
@@ -55,9 +55,9 @@ with Foundry Doctor.
 
 | Tool/input | Pinned state in CI | Licence / role |
 |---|---|---|
-| Go | `go.mod` directive `1.25.12`, `GOTOOLCHAIN=local` | Toolchain and standard library; BSD-3-Clause |
-| `govulncheck` | `golang.org/x/vuln/cmd/govulncheck@v1.7.0` | BSD-3-Clause; strict reachable-code vulnerability gate; Go 1.25 compatible |
-| Staticcheck | `honnef.co/go/tools/cmd/staticcheck@v0.6.1` | MIT; static analysis; Go 1.25 compatible |
+| Go | `go.mod` directive `1.26.9`, `GOTOOLCHAIN=local` | Toolchain and standard library; BSD-3-Clause |
+| `govulncheck` | `golang.org/x/vuln/cmd/govulncheck@v1.7.0` | BSD-3-Clause; strict reachable-code vulnerability gate; Go 1.26 compatible |
+| Staticcheck | `honnef.co/go/tools/cmd/staticcheck@v0.6.1` | MIT; static analysis; Go 1.26 compatible |
 | Bicep CLI | `v0.48.1` | MIT; tagged offline spike only, not shipped |
 | Azure Developer CLI schema/source monitor | `afe4b2b4d262bab4c11f4937e7a7942557ab0ecd` | MIT; exact commit used for local schema resolution and the ADR-003 namespace collision monitor |
 | Python schema environment | PyYAML `6.0.3`; jsonschema `4.25.1`; referencing `0.36.2`; attrs `25.3.0`; jsonschema-specifications `2025.4.1`; rpds-py `0.27.1` | Pinned, CI-only schema spike dependencies; not shipped |

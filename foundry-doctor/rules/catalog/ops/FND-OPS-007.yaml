@@ -1,5 +1,5 @@
 id: FND-OPS-007
-version: 1
+version: 3
 group: OPS
 title: CI/CD pipeline exists
 description: >-
@@ -22,25 +22,36 @@ severity:
   test: warning
   prod: warning
 compatibility:
-  azd: '>=1.34.2 <=1.36.0-beta.1'
+  azd: '>=1.34.2 <=1.36.0'
   extensions:
-    azure.ai.agents: '>=1.0.0-beta.18 <=1.0.0-beta.18'
+    azure.ai.agents: '>=1.0.0-beta.18 <=1.0.0-beta.20'
   apiVersions: []
   preview: true
   notes: >-
-    azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects
-    beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from
-    a changelog and was not verified. Extension ranges are exactly the versions whose schemas or source were read; widen
-    them in Phase 1 by reading older tags.
+    azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18,
+    projects beta.13 need >=1.34.2); the maximum is azd 1.36.0 (tag azure-dev-cli_1.36.0, acebba1e388b489a91ab8e2487a676359ab516a1, released 2026-10-14; the first clone read at 1.36.0-beta.1 is earlier evidence). The earlier >=1.27.1 lower
+    bound came from a changelog and was not verified. Extension ranges are exactly the versions whose schemas or
+    source were read; widen them in Phase 1 by reading older tags. Window widened 2026-10-16: azd to 1.36.0 (tag
+    azure-dev-cli_1.36.0, acebba1, released 2026-10-14); azure.ai.agents to 1.0.0-beta.20. The azd and extension
+    changelogs and the schema and source diffs from the previously verified versions were read; none touches this
+    rule's verified facts for the widened fields (see docs/tool-compatibility.md section 6).
 evidence:
   description: >-
-    File-system and azure.yaml evidence only, no pipeline execution. Pass when at least one of the following exists -
-    a file azure-dev.yml or azure-dev.yaml (the names azd writes and detects) or another workflow file that invokes
-    azd under .github/workflows; a file azure-dev.yml or azure-dev.yaml under .azdo/pipelines or
-    .azuredevops/pipelines; or an azure.yaml top-level pipeline section whose provider is github or azdo (schema
-    enumeration). Report when none exists and the active profile is test or prod. A pipeline definition that exists
-    but does not invoke azd provision, deploy or up is reported as uncertain, because other deployment tools are
-    valid. Other CI systems are not detected and the finding says so.
+    File-system and azure.yaml evidence only, no pipeline execution. Pipeline files are looked up from the git repository root (the
+    nearest ancestor of the project directory that contains .git); when no .git is found only the project directory is
+    searched and an absent pipeline is uncertain, not a finding. Only .yml and .yaml files are read, in
+    .github/workflows (GitHub Actions run steps) and in .azdo/pipelines and .azuredevops/pipelines (Azure Pipelines
+    script, bash, pwsh and powershell steps). Files are opened through a root-bounded handle, symlinks are skipped, each
+    file is capped at 256 KiB and at most 100 files are read; a skipped file makes the result uncertain. Pass when a parsed
+    step command runs azd provision, deploy or up. Each shell run line is tokenised and azd must be in command position
+    (start of the text or of a command after ;, &, &&, ||, |, ( , $( or a backtick) directly followed by provision,
+    deploy or up. Comments, quoted strings, arguments such as echo azd up, and code under if false or while false do not
+    count. A run step with a heredoc, function definition, eval or sh -c, unterminated quote or computed azd
+    subcommand cannot be followed and makes the result uncertain, never a pass. The azure.yaml
+    pipeline section is configuration and is not evidence. Report, with the azure.yaml location, when no pipeline file
+    exists and the active profile is test or prod. A pipeline definition that exists but has no azd provision, deploy or
+    up step is reported as uncertain, because other deployment tools are valid. Other CI systems are not detected and
+    the finding says so.
   confidence: likely
 recommendation: >-
   Run azd pipeline config to generate azure-dev.yml and the federated credential for GitHub Actions or Azure Pipelines,
@@ -50,27 +61,28 @@ fix: |
 sources:
 - url: https://learn.microsoft.com/azure/developer/azure-developer-cli/configure-devops-pipeline
   lastVerified: '2026-10-05'
-  verifiedVia: refs/azd-docs/articles/azure-developer-cli/configure-devops-pipeline.md
+  verifiedVia: >-
+    https://github.com/MicrosoftDocs/azure-dev-docs/blob/main/articles/azure-developer-cli/configure-devops-pipeline.md
   note: >-
-    azd pipeline config; azure-dev.yml in .github/workflows (GitHub Actions) and in .azuredevops/pipelines or .azdo/pipelines
-    (Azure Pipelines). Page ms.date 06/12/2026.
+    azd pipeline config; azure-dev.yml in .github/workflows (GitHub Actions) and in .azuredevops/pipelines or
+    .azdo/pipelines (Azure Pipelines). Page ms.date 06/12/2026. Branch URL, not commit-pinned.
 - url: https://github.com/Azure/azure-dev/blob/main/schemas/v1.0/azure.yaml.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-dev/schemas/v1.0/azure.yaml.json
+  verifiedVia: >-
+    https://raw.githubusercontent.com/Azure/azure-dev/170ebb858071da353cc9bf8657a377bff268ba36/schemas/v1.0/azure.yaml.json
   note: Top-level pipeline object with provider enumeration github and azdo, variables and secrets lists.
 - url: https://learn.microsoft.com/azure/foundry/agents/how-to/set-up-ci-cd-cli
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/set-up-ci-cd-cli.md
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/agents/how-to/set-up-ci-cd-cli; source file
+    MicrosoftDocs/azure-ai-docs: articles/foundry/agents/how-to/set-up-ci-cd-cli.md; retrieved 2026-10-04
   note: >-
     CI/CD for hosted agents with azd pipeline config and one pipeline or branch trigger per environment (preview). Page
     ms.date 09/23/2026.
 - url: https://github.com/Azure/azure-dev/blob/azure-dev-cli_1.35.0/cli/azd/pkg/pipeline/pipeline.go
   lastVerified: '2026-10-05'
   verifiedVia: >-
-    Azure/azure-dev azure-dev-cli_1.35.0 (170ebb8) cli/azd/pkg/pipeline/pipeline.go (pipelineFileNames,
-    pipelineProviderFiles, gitHubRoot, azdoRoot, azdoRootAlt), github_provider.go (any .yml/.yaml under
-    .github/workflows counts as a workflow once tracked by git), resources/pipeline/.github/azure-dev.ymlt and
-    .azdo/azure-dev.ymlt templates; schemas/v1.0/azure.yaml.json `pipeline` property; unchanged on main afe4b2b.
+    https://github.com/Azure/azure-dev/blob/azure-dev-cli_1.35.0/cli/azd/pkg/pipeline/pipeline.go; Azure/azure-dev azure-dev-cli_1.35.0 (170ebb8) cli/azd/pkg/pipeline/pipeline.go (pipelineFileNames, pipelineProviderFiles, gitHubRoot, azdoRoot, azdoRootAlt), github_provider.go (any .yml/.yaml under .github/workflows counts as a workflow once tracked by git), resources/pipeline/.github/azure-dev.ymlt and .azdo/azure-dev.ymlt templates; schemas/v1.0/azure.yaml.json `pipeline` property; unchanged on main afe4b2b.
   note: >-
     Verified paths: GitHub .github/workflows/azure-dev.yml or azure-dev.yaml; Azure DevOps
     .azdo/pipelines/azure-dev.yml|yaml and .azuredevops/pipelines/azure-dev.yml|yaml (default file name
@@ -110,7 +122,7 @@ tests:
   negative:
   - github-workflows-azure-dev-yml
   - azdo-pipelines-azure-dev-yml
-  - azure-yaml-pipeline-section-with-provider
+  - azure-yaml-pipeline-section-with-provider-is-not-evidence
   skipped:
   - dev-profile
   - repository-root-not-available

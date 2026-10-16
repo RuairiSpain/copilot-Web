@@ -1,12 +1,13 @@
 id: FND-ENV-001
-version: 1
+version: 5
 group: ENV
 title: "Environments do not unintentionally share resource groups"
 description: >-
   Two azd environments of the same project (for example dev and prod) should not resolve to the same resource
-  group. azd documents one resource group per environment for isolation; azure.yaml resourceGroup overrides the
-  name used for provisioning, and a value without an environment-specific component makes every environment
-  target the same group, so tearing down or redeploying one environment affects the other.
+  group. azd documents one resource group per environment for isolation. The Bicep provider reads only
+  AZURE_RESOURCE_GROUP from the environment; the azure.yaml resourceGroup (project or service level) applies when azd
+  resolves a service's deployment target. A resourceGroup literal without an environment-specific component makes
+  every environment's services target the same group, so redeploying or tearing down one environment affects the other.
 status: verified
 phases: ["1"]
 inputs: ["azure.yaml", "azd-env"]
@@ -18,11 +19,11 @@ severity:
   test: warning
   prod: error
 compatibility:
-  azd: ">=1.34.2 <=1.36.0-beta.1"
+  azd: ">=1.34.2 <=1.36.0"
   extensions: {}
   apiVersions: []
   preview: true
-  notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from a changelog and was not verified."
+  notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is azd 1.36.0 (tag azure-dev-cli_1.36.0, acebba1e388b489a91ab8e2487a676359ab516a1, released 2026-10-14; the first clone read at 1.36.0-beta.1 is earlier evidence). The earlier >=1.27.1 lower bound came from a changelog and was not verified. Window widened 2026-10-16 (azd 1.36.0 = azure-dev-cli_1.36.0, acebba1e388b489a91ab8e2487a676359ab516a1, released 2026-10-14). Checked by git diff of the Azure/azure-dev tags azure-dev-cli_1.35.0 (170ebb858071da353cc9bf8657a377bff268ba36) and azure-dev-cli_1.36.0 (blobless clone https://github.com/Azure/azure-dev) over cli/azd/pkg/environment (azdcontext, local_file_data_store.go, environment.go), cli/azd/go.mod, cli/azd/pkg/project and cli/azd/pkg/infra/provisioning/bicep: unchanged are the godotenv version and .env read (godotenv.Read), the .azure/<env>/.env and .azure/config.json layout and constants, defaultEnvironment, the AZURE_* key constants, the environment name regexp ^[a-zA-Z0-9-\\(\\)_\\.]{1,64}$ and the resourceGroup resolution code. Tightened in 1.36.0 and recorded in docs/tool-compatibility.md section 6: dot-only names, trailing-dot names on Windows, symbolic-link state paths and an invalid defaultEnvironment now error. Example URL: https://github.com/Azure/azure-dev/compare/azure-dev-cli_1.35.0...azure-dev-cli_1.36.0"
 evidence:
   description: >-
     Collect AZURE_RESOURCE_GROUP (and AZURE_SUBSCRIPTION_ID) from every .azure/<env>/.env visible in the workspace,
@@ -30,9 +31,14 @@ evidence:
     values. The effective group of an environment follows azd's order: service resourceGroup, then project
     resourceGroup (each used only when non-blank after substitution), then AZURE_RESOURCE_GROUP; both candidates are
     still compared because the provisioning scope reads AZURE_RESOURCE_GROUP. Report two environments whose
-    subscription and resource group names are equal (case-insensitive), and report a resourceGroup literal that
-    contains no variable reference when more than one environment exists. Environments that are not locally present
-    are not guessed; the rule is skipped for them.
+    subscription and resource group names are equal (case-insensitive), and report the top-level resourceGroup when it
+    is a literal with no variable reference and more than one environment exists. A literal services.<name>.resourceGroup
+    is reported as an uncertain skip naming the service, not as a finding: the azd schema describes it only as the group
+    that contains the resource and no source says it defeats environment isolation. With fewer than two environments
+    the rule is not applicable (skip not-applicable). Environments that are not locally present are not guessed. An environment whose .env is missing,
+    unreadable, over 256 KiB, holds more than 2000 keys or does not parse with the godotenv grammar, and an
+    environment with no AZURE_SUBSCRIPTION_ID or AZURE_RESOURCE_GROUP, is named in an uncertain skip when no finding
+    is produced; the rule never passes on such input.
   confidence: likely
 recommendation: >-
   Give each environment its own resource group, for example by including the environment name in the group name
@@ -44,25 +50,27 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview
     lastVerified: "2026-10-05"
-    verifiedVia: refs/azd-docs/articles/azure-developer-cli/environments-overview.md
-    note: Each environment has its own Azure resource group and configuration; .azure/<env>/.env stores AZURE_RESOURCE_GROUP.
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/azure-dev-docs/blob/main/articles/azure-developer-cli/environments-overview.md
+    note: >-
+      Each environment has its own Azure resource group and configuration; .azure/<env>/.env stores
+      AZURE_RESOURCE_GROUP. Branch URL, not commit-pinned.
   - url: https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-dev/schemas/v1.0/azure.yaml.json
+    verifiedVia: >-
+      https://raw.githubusercontent.com/Azure/azure-dev/170ebb858071da353cc9bf8657a377bff268ba36/schemas/v1.0/azure.yaml.json
     note: Top-level and service resourceGroup override; supports environment variable substitution.
   - url: https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/azure-yaml-reference.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference; source file
+      MicrosoftDocs/azure-ai-docs: articles/foundry/agents/concepts/azure-yaml-reference.md; retrieved
+      2026-10-04
     note: Tearing down an environment deletes the resource group when the current environment created the Foundry project.
   - url: https://github.com/Azure/azure-dev/blob/azure-dev-cli_1.35.0/cli/azd/pkg/environment/local_file_data_store.go
     lastVerified: '2026-10-05'
     verifiedVia: >-
-      Azure/azure-dev azure-dev-cli_1.35.0 (170ebb8) cli/azd/pkg/environment/local_file_data_store.go (godotenv.Read
-      of <env root>/.env, godotenv.Marshal on save), environment.go (marshallDotEnv, fixupUnquotedDotenv,
-      AZURE_ENV_NAME and AZURE_RESOURCE_GROUP constants) and azdcontext/azdcontext.go (EnvironmentDirectoryName
-      .azure, DotEnvFileName .env, ConfigFileName config.json, configFile.DefaultEnvironment); git diff to main
-      afe4b2b is empty for pkg/environment. github.com/joho/godotenv v1.5.1 (Go proxy zip, tag commit 3fc4292, MIT)
-      parser.go.
+      https://github.com/Azure/azure-dev/blob/azure-dev-cli_1.35.0/cli/azd/pkg/environment/local_file_data_store.go; Azure/azure-dev azure-dev-cli_1.35.0 (170ebb8) cli/azd/pkg/environment/local_file_data_store.go (godotenv.Read of <env root>/.env, godotenv.Marshal on save), environment.go (marshallDotEnv, fixupUnquotedDotenv, AZURE_ENV_NAME and AZURE_RESOURCE_GROUP constants) and azdcontext/azdcontext.go (EnvironmentDirectoryName .azure, DotEnvFileName .env, ConfigFileName config.json, configFile.DefaultEnvironment); git diff to main afe4b2b is empty for pkg/environment. github.com/joho/godotenv v1.5.1 (Go proxy zip, tag commit 3fc4292, MIT) parser.go.
     note: >-
       Verified .env grammar (godotenv v1.5.1 as used by azd): KEY=VALUE or KEY: VALUE with an optional leading `export
       `; key characters letters, digits, `_` and `.` (anything else is a parse error); a line whose first non-space
@@ -77,10 +85,7 @@ sources:
   - url: https://github.com/Azure/azure-dev/blob/azure-dev-cli_1.35.0/cli/azd/pkg/project/resource_manager.go
     lastVerified: '2026-10-05'
     verifiedVia: >-
-      Azure/azure-dev azure-dev-cli_1.35.0 (170ebb8) cli/azd/pkg/project/resource_manager.go GetResourceGroupName and
-      GetTargetResource, service_manager.go (service then project template), project_config.go and service_config.go
-      (`resourceGroup` fields are osutil.ExpandableString), infra/provisioning/bicep/bicep_provider.go
-      (ensureResourceGroup, inferScopeFromEnv); unchanged on main afe4b2b (git diff empty).
+      https://github.com/Azure/azure-dev/blob/azure-dev-cli_1.35.0/cli/azd/pkg/project/resource_manager.go; Azure/azure-dev azure-dev-cli_1.35.0 (170ebb8) cli/azd/pkg/project/resource_manager.go GetResourceGroupName and GetTargetResource, service_manager.go (service then project template), project_config.go and service_config.go (`resourceGroup` fields are osutil.ExpandableString), infra/provisioning/bicep/bicep_provider.go (ensureResourceGroup, inferScopeFromEnv); unchanged on main afe4b2b (git diff empty).
     note: >-
       Verified precedence for resolving a service target group: service-level resourceGroup, then project-level
       resourceGroup, each after ${VAR} substitution and used only when non-blank; otherwise AZURE_RESOURCE_GROUP from
@@ -117,15 +122,25 @@ tests:
   positive:
     - dev-and-prod-same-resource-group
     - literal-resourcegroup-with-two-environments
+    - literal-service-resourcegroup-with-two-environments
   negative:
     - env-name-in-resourcegroup
     - distinct-subscriptions-same-group-name
   skipped:
     - single-environment-visible
     - env-files-not-in-workspace
+    - env-file-missing-or-unparseable-uncertain
+    - env-without-resource-group-uncertain
 notes: >-
   Intended sharing (for example a shared model-hosting group) is legitimate, hence the suppression path. Phase 1 fact
   check (2026-10-05): azd source shows the azure.yaml resourceGroup (service, then project) wins over
   AZURE_RESOURCE_GROUP when resolving a service target, and AZURE_RESOURCE_GROUP is the fallback; the Bicep
-  provisioning scope reads AZURE_RESOURCE_GROUP. Both sources are therefore evaluated and the report states which one
-  wins for service targets.
+  provisioning scope reads only AZURE_RESOURCE_GROUP (the azure.yaml resourceGroup is not read there). Both sources
+  are therefore evaluated: the .env pair for the provisioning scope, the azure.yaml literal for service targets.
+  Version 2 (2026-10-15): wording corrected as above; per-service resourceGroup literals are checked; unusable or
+  incomplete environments produce an uncertain skip instead of a silent pass. The .env parser is an in-repository
+  port of the godotenv v1.5.1 grammar (internal/project/dotenv.go), checked against the module's output on a
+  26-input corpus; the module is not a dependency. .azure/config.json defaultEnvironment is read by project
+  discovery to select the environment for the FND-CFG rules; this rule compares every environment directory (at most 100).
+  Version 4: the uncertain note for a service-level literal resourceGroup is reported once, not once per environment.
+  Version 5: uncertain notes (an unusable environment, an environment with a missing value) are returned as uncertain skips next to findings, not dropped. Findings carry a Key: the check kind, the variable name when there is one, and the sorted environment pair, never a value or a value fingerprint, so a rotated value does not resurface a baselined finding.

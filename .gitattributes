@@ -2,3 +2,6 @@ foundry-doctor/go.mod text eol=lf
 foundry-doctor/go.sum text eol=lf
 foundry-doctor/scripts/*.sh text eol=lf
 foundry-doctor/scripts/claude/*.sh text eol=lf
+
+# Golden files, generated docs and fixtures are compared byte for byte; keep LF on every OS.
+foundry-doctor/** text=auto eol=lf

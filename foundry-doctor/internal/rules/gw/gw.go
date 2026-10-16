@@ -34,7 +34,7 @@ func (r rule) Evaluate(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 		return sdk.Result{}, fmt.Errorf("%s: %w", r.id, err)
 	}
 	if in == nil || in.ARM == nil {
-		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable}}, nil
+		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable + ": compiled ARM model unavailable"}}, nil
 	}
 	return r.fn(in), nil
 }

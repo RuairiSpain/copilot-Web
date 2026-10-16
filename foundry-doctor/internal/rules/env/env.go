@@ -1,5 +1,10 @@
 // Package env implements the Phase 1 FND-ENV-* rules. They are static checks
 // over per-environment azd values; they never call Azure.
+//
+// A rule never passes on input it could not read. Environments whose .env file
+// is missing, unreadable, over-size, truncated or unparseable, pairs that
+// cannot be told apart, and environments without the values a check needs are
+// reported as an uncertain skip that names them (see report.UncertainPrefix).
 package env
 
 import (
@@ -7,9 +12,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"net/url"
 	"sort"
 	"strings"
 
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/report"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
 
@@ -19,14 +26,94 @@ const TierPolicyKey = "environments.tiers"
 
 const fingerprintSalt = "foundry-doctor/env/v1"
 
+// Status reports whether an environment's .env file could be used. Any status
+// other than StatusOK means the environment's values are absent or partial, so
+// no rule may treat the environment as having "no differences".
+type Status string
+
+// Environment value file statuses.
+const (
+	StatusOK          Status = "" // zero value: file read and parsed completely
+	StatusMissing     Status = "missing"
+	StatusUnreadable  Status = "unreadable"
+	StatusOversize    Status = "over-size"
+	StatusTruncated   Status = "truncated"
+	StatusUnparseable Status = "unparseable"
+)
+
 // Environment is one azd environment's static view.
 type Environment struct {
-	Name            string
-	Subscription    string
-	ResourceGroup   string
-	LiteralRGInYAML bool // azure.yaml pins resourceGroup literally
-	Values          map[string]string
+	Name          string
+	Subscription  string
+	ResourceGroup string
+	// LiteralRGAt lists the azure.yaml locations whose resourceGroup is a
+	// literal without variable reference, for example "resourceGroup" or
+	// "services.web.resourceGroup".
+	LiteralRGAt []string
+	// Status is the state of the environment's .env file.
+	Status Status
+	Values map[string]string
+	// Shapes holds the shape of values that were replaced by a digest. A key
+	// absent here has its shape derived from the value.
+	Shapes map[string]Shape
 }
+
+// Shape says what kind of non-secret identifier a value is. The app layer
+// digests values under secret-looking key names before the rules see them; it
+// classifies the value first and carries the shape next to the digest, so a
+// Key Vault resource ID under AZURE_KEYVAULT_ID is treated like the same ID
+// under AZURE_VAULT_ID. A value that is not one of these shapes stays plain.
+type Shape string
+
+// Value shapes.
+const (
+	ShapePlain           Shape = ""
+	ShapeResourceID      Shape = "resource-id"
+	ShapeFoundryEndpoint Shape = "foundry-endpoint" // https URL on *.services.ai.azure.com
+	ShapeEndpoint        Shape = "endpoint"         // other https URL on *.azure.com or *.azure.net
+)
+
+// ClassifyShape returns the strict shape of v: an ARM resource ID, or a bare
+// https URL with no user info, query or fragment. Anything else, including
+// connection strings and SAS URLs, is plain.
+func ClassifyShape(v string) Shape {
+	t := strings.TrimSpace(v)
+	if strings.HasPrefix(strings.ToLower(t), "/subscriptions/") && !strings.ContainsAny(t, " ;?=") {
+		return ShapeResourceID
+	}
+	u, err := url.Parse(t)
+	if err != nil || !strings.EqualFold(u.Scheme, "https") || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Host == "" {
+		return ShapePlain
+	}
+	h := strings.ToLower(u.Hostname())
+	switch {
+	case strings.HasSuffix(h, ".services.ai.azure.com"):
+		return ShapeFoundryEndpoint
+	case strings.HasSuffix(h, ".azure.com"), strings.HasSuffix(h, ".azure.net"):
+		return ShapeEndpoint
+	}
+	return ShapePlain
+}
+
+// shapeOf returns the shape of key k in e: the app-supplied shape when the
+// value was digested, otherwise derived from the value.
+func (e Environment) shapeOf(k, v string) Shape {
+	if s, ok := e.Shapes[k]; ok {
+		return s
+	}
+	l := strings.ToLower(v)
+	switch {
+	case strings.HasPrefix(l, "/subscriptions/"):
+		return ShapeResourceID
+	case strings.Contains(l, ".services.ai.azure.com"):
+		return ShapeFoundryEndpoint
+	case strings.Contains(l, ".azure.com"), strings.Contains(l, ".azure.net"):
+		return ShapeEndpoint
+	}
+	return ShapePlain
+}
+
+func (e Environment) usable() bool { return e.Status == StatusOK }
 
 // Provider supplies environments. Input does not carry them, so rules skip
 // unless the coordinator supplies an implementation via RegisterWith.
@@ -34,10 +121,20 @@ type Provider interface {
 	Environments() []Environment
 }
 
+// outcome is what a rule body returns: findings, plus notes naming what it
+// could not decide. When there are no findings but there are notes, the rule
+// is reported as an uncertain skip, never as a pass.
+type outcome struct {
+	findings []sdk.Finding
+	notes    []string
+	// skip, when set, is a complete skip reason (for example a missing policy key).
+	skip string
+}
+
 type rule struct {
 	id string
 	p  Provider
-	fn func(context.Context, *sdk.Input, []Environment) sdk.Result
+	fn func(context.Context, *sdk.Input, []Environment) outcome
 }
 
 func (r rule) ID() string { return r.id }
@@ -46,20 +143,65 @@ func (r rule) Evaluate(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 	if in == nil || r.p == nil {
 		return skip(r.id), nil
 	}
-	envs := r.p.Environments()
+	all := r.p.Environments()
+	if len(all) < 2 {
+		// Nothing to compare: the project has fewer than two environments.
+		return sdk.Result{Skipped: &sdk.Skip{RuleID: r.id, Reason: sdk.SkipNotApplicable + ": fewer than two azd environments"}}, nil
+	}
+	sort.SliceStable(all, func(i, j int) bool { return all[i].Name < all[j].Name })
+	var envs []Environment
+	var notes []string
+	for _, e := range all {
+		if e.usable() {
+			envs = append(envs, e)
+			continue
+		}
+		notes = append(notes, fmt.Sprintf("environment %s: .env %s", e.Name, e.Status))
+	}
 	if len(envs) < 2 {
-		return skip(r.id), nil
+		return uncertain(r.id, notes), nil
 	}
-	sort.SliceStable(envs, func(i, j int) bool { return envs[i].Name < envs[j].Name })
-	res := r.fn(ctx, in, envs)
-	if res.Skipped != nil {
-		res.Skipped.RuleID = r.id
+	out := r.fn(ctx, in, envs)
+	if out.skip != "" {
+		return sdk.Result{Skipped: &sdk.Skip{RuleID: r.id, Reason: out.skip}}, nil
 	}
-	return res, nil
+	notes = dedupe(append(notes, out.notes...))
+	if len(out.findings) > 0 {
+		// Notes ride next to the findings as uncertain skips; a finding never
+		// hides what the rule could not decide (ADR-008 amendment 3).
+		return sdk.Result{Findings: out.findings, Skips: uncertainSkips(r.id, notes)}, nil
+	}
+	if len(notes) > 0 {
+		return uncertain(r.id, notes), nil
+	}
+	return sdk.Result{}, nil
+}
+
+// uncertainSkips builds one uncertain skip per note, capped like uncertain.
+func uncertainSkips(id string, notes []string) []sdk.Skip {
+	const limit = 8
+	if len(notes) > limit {
+		notes = append(notes[:limit:limit], fmt.Sprintf("and %d more", len(notes)-limit))
+	}
+	var out []sdk.Skip
+	for _, n := range notes {
+		out = append(out, sdk.Skip{RuleID: id, Reason: report.UncertainPrefix + "cannot decide: " + n})
+	}
+	return out
+}
+
+// uncertain builds a skip that readiness reports as uncertain. Notes name
+// environments and keys only, never values.
+func uncertain(id string, notes []string) sdk.Result {
+	const limit = 8
+	if len(notes) > limit {
+		notes = append(notes[:limit:limit], fmt.Sprintf("and %d more", len(notes)-limit))
+	}
+	return sdk.Result{Skipped: &sdk.Skip{RuleID: id, Reason: report.UncertainPrefix + "cannot decide: " + strings.Join(notes, "; ")}}
 }
 
 func skip(id string) sdk.Result {
-	return sdk.Result{Skipped: &sdk.Skip{RuleID: id, Reason: sdk.SkipInputUnavailable}}
+	return sdk.Result{Skipped: &sdk.Skip{RuleID: id, Reason: sdk.SkipInputUnavailable + ": no azd environment provider is wired for this run"}}
 }
 
 // Register returns rules with no provider; they skip until wired.
@@ -81,16 +223,21 @@ func Fingerprint(v string) string {
 	return hex.EncodeToString(h[:])[:12]
 }
 
-func finding(resource, evidence string) sdk.Finding {
-	return sdk.Finding{Resource: sdk.ResourceRef{Type: "azd-environment", Name: resource}, Evidence: evidence}
+// finding builds a finding. key is the stable discriminator: check kind, then
+// the variable name when there is one, then the sorted environment pair. It
+// never contains a value or a value fingerprint, so a rotated value does not
+// make a baselined finding reappear.
+func finding(key, resource, evidence string) sdk.Finding {
+	return sdk.Finding{Key: key, Resource: sdk.ResourceRef{Type: "azd-environment", Name: resource}, Evidence: evidence}
 }
 
-func eval001(_ context.Context, _ *sdk.Input, envs []Environment) sdk.Result {
-	var fs []sdk.Finding
+func eval001(_ context.Context, _ *sdk.Input, envs []Environment) outcome {
+	var out outcome
 	seen := map[string][]string{}
 	var keys []string
 	for _, e := range envs {
 		if e.Subscription == "" || e.ResourceGroup == "" {
+			out.notes = append(out.notes, fmt.Sprintf("environment %s: no AZURE_SUBSCRIPTION_ID or AZURE_RESOURCE_GROUP value", e.Name))
 			continue
 		}
 		k := strings.ToLower(e.Subscription) + "/" + strings.ToLower(e.ResourceGroup)
@@ -102,42 +249,73 @@ func eval001(_ context.Context, _ *sdk.Input, envs []Environment) sdk.Result {
 	sort.Strings(keys)
 	for _, k := range keys {
 		if n := seen[k]; len(n) > 1 {
-			fs = append(fs, finding(strings.Join(n, ","), fmt.Sprintf("environments %s share one subscription and resource group", strings.Join(n, ", "))))
+			out.findings = append(out.findings, finding("shared-subscription-resource-group:"+strings.Join(n, ","), strings.Join(n, ","), fmt.Sprintf("environments %s share one subscription and resource group", strings.Join(n, ", "))))
 		}
 	}
 	for _, e := range envs {
-		if e.LiteralRGInYAML {
-			fs = append(fs, finding(e.Name, "azure.yaml pins a literal resourceGroup while multiple environments exist"))
+		var services []string
+		for _, at := range e.LiteralRGAt {
+			if at != "resourceGroup" {
+				services = append(services, at)
+			}
+		}
+		if len(services) < len(e.LiteralRGAt) {
+			out.findings = append(out.findings, finding("literal-resource-group:"+e.Name, e.Name, "azure.yaml pins a literal resourceGroup (resourceGroup) while multiple environments exist"))
+		}
+		if len(services) > 0 {
+			// The azd schema describes a service-level resourceGroup as the group
+			// that contains the resource; no source says a literal value breaks
+			// environment isolation, so this is uncertain, not an error.
+			out.notes = append(out.notes, fmt.Sprintf("azure.yaml sets a literal %s; the azd schema does not say whether that defeats environment isolation", strings.Join(services, ", ")))
 		}
 	}
-	return sdk.Result{Findings: fs}
+	// A service-level literal is identical in every environment; say it once.
+	out.notes = dedupe(out.notes)
+	return out
 }
 
-func envBound(k, v string) bool {
+// Classes of key for FND-ENV-002.
+const (
+	classNone   = iota
+	classStrong // resource ID, endpoint, subscription or resource group
+	classWeak   // _NAME or _ID suffix only: a heuristic, reported as uncertain
+)
+
+// excludedFromBound lists name fragments of keys that identify tenants,
+// identities or model deployments. Those are shared on purpose far more often
+// than not, so they are never reported.
+var excludedFromBound = []string{"TENANT", "PRINCIPAL", "DEPLOYMENT", "MODEL"}
+
+func classify(k string, shape Shape) int {
 	u := strings.ToUpper(k)
-	l := strings.ToLower(v)
 	switch {
 	case k == "AZURE_ENV_NAME":
-		return false
+		return classNone
 	case u == "AZURE_SUBSCRIPTION_ID":
-		return true
-	case strings.HasPrefix(l, "/subscriptions/"), strings.Contains(l, ".services.ai.azure.com"):
-		return true
-	}
-	for _, s := range []string{"_NAME", "_ENDPOINT", "_ID", "_RESOURCE_GROUP"} {
-		if strings.HasSuffix(u, s) {
-			return true
+		return classStrong
+	case shape == ShapeResourceID, shape == ShapeFoundryEndpoint:
+		return classStrong
+	case strings.HasSuffix(u, "_ENDPOINT"), strings.HasSuffix(u, "_RESOURCE_GROUP"):
+		return classStrong
+	case strings.HasSuffix(u, "_NAME"), strings.HasSuffix(u, "_ID"):
+		for _, x := range excludedFromBound {
+			if strings.Contains(u, x) {
+				return classNone
+			}
 		}
+		return classWeak
 	}
-	return false
+	return classNone
 }
 
-func eval002(_ context.Context, _ *sdk.Input, envs []Environment) sdk.Result {
-	var fs []sdk.Finding
+func eval002(_ context.Context, _ *sdk.Input, envs []Environment) outcome {
+	var out outcome
 	for i := 0; i < len(envs); i++ {
 		for j := i + 1; j < len(envs); j++ {
 			a, b := envs[i], envs[j]
-			if a.Values["AZURE_ENV_NAME"] == b.Values["AZURE_ENV_NAME"] {
+			na, nb := a.Values["AZURE_ENV_NAME"], b.Values["AZURE_ENV_NAME"]
+			if na == "" || nb == "" || na == nb {
+				out.notes = append(out.notes, fmt.Sprintf("environments %s and %s: AZURE_ENV_NAME is empty or equal, so a copied value cannot be told from a shared one", a.Name, b.Name))
 				continue
 			}
 			var ks []string
@@ -147,14 +325,19 @@ func eval002(_ context.Context, _ *sdk.Input, envs []Environment) sdk.Result {
 			sort.Strings(ks)
 			for _, k := range ks {
 				va, ok := b.Values[k]
-				if !ok || va == "" || va != a.Values[k] || !envBound(k, va) {
+				if !ok || va == "" || va != a.Values[k] {
 					continue
 				}
-				fs = append(fs, finding(k, fmt.Sprintf("key %s has identical value (fingerprint %s) in environments %s and %s", k, Fingerprint(va), a.Name, b.Name)))
+				switch classify(k, a.shapeOf(k, va)) {
+				case classStrong:
+					out.findings = append(out.findings, finding("identical-value:"+k+":"+envPair(a.Name, b.Name), k, fmt.Sprintf("key %s has identical value (fingerprint %s) in environments %s and %s", k, Fingerprint(va), a.Name, b.Name)))
+				case classWeak:
+					out.notes = append(out.notes, fmt.Sprintf("key %s has identical value (fingerprint %s) in %s and %s; a _NAME or _ID key is not known to be environment-bound", k, Fingerprint(va), a.Name, b.Name))
+				}
 			}
 		}
 	}
-	return sdk.Result{Findings: fs}
+	return out
 }
 
 func tiers(in *sdk.Input) (map[string]string, bool) {
@@ -183,6 +366,29 @@ func tiers(in *sdk.Input) (map[string]string, bool) {
 	return out, len(out) > 0
 }
 
+// envPair names two environments in sorted order.
+func envPair(a, b string) string {
+	if b < a {
+		a, b = b, a
+	}
+	return a + "," + b
+}
+
+// targetVar names the variable that carries the normalised target value k in e
+// (the lexicographically smallest, so the choice is stable).
+func targetVar(e Environment, k string) string {
+	if norm(e.ResourceGroup) == k {
+		return "AZURE_RESOURCE_GROUP"
+	}
+	best := ""
+	for name, v := range e.Values {
+		if e.shapeOf(name, v) != ShapePlain && norm(v) == k && (best == "" || name < best) {
+			best = name
+		}
+	}
+	return best
+}
+
 func norm(v string) string { return strings.ToLower(strings.TrimSpace(v)) }
 
 func targets(e Environment) map[string]string {
@@ -193,31 +399,55 @@ func targets(e Environment) map[string]string {
 		}
 	}
 	add("resource group", e.ResourceGroup)
-	for _, v := range e.Values {
-		l := norm(v)
-		if strings.HasPrefix(l, "/subscriptions/") || strings.Contains(l, ".azure.com") || strings.Contains(l, ".azure.net") {
+	for k, v := range e.Values {
+		if e.shapeOf(k, v) != ShapePlain {
 			add("resource identifier", v)
 		}
 	}
 	return m
 }
 
-func eval003(_ context.Context, in *sdk.Input, envs []Environment) sdk.Result {
+func eval003(_ context.Context, in *sdk.Input, envs []Environment) outcome {
 	t, ok := tiers(in)
 	if !ok {
-		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipMissingPolicyKey(TierPolicyKey)}}
+		return outcome{skip: sdk.SkipMissingPolicyKey(TierPolicyKey)}
 	}
-	var fs []sdk.Finding
+	var out outcome
+	prods, others := 0, 0
+	for _, e := range envs {
+		switch t[e.Name] {
+		case "prod":
+			prods++
+		case "":
+			out.notes = append(out.notes, fmt.Sprintf("environment %s: no tier in %s", e.Name, TierPolicyKey))
+		default:
+			others++
+		}
+	}
+	if prods == 0 {
+		out.notes = append(out.notes, "no visible environment is configured as prod")
+	}
+	if others == 0 {
+		out.notes = append(out.notes, "no visible environment is configured as non-prod")
+	}
 	for _, p := range envs {
 		if t[p.Name] != "prod" {
 			continue
 		}
 		pt := targets(p)
+		if len(pt) == 0 {
+			out.notes = append(out.notes, fmt.Sprintf("environment %s: no resource group or resource identifier values", p.Name))
+			continue
+		}
 		for _, o := range envs {
 			if o.Name == p.Name || t[o.Name] == "" || t[o.Name] == "prod" {
 				continue
 			}
 			ot := targets(o)
+			if len(ot) == 0 {
+				out.notes = append(out.notes, fmt.Sprintf("environment %s: no resource group or resource identifier values", o.Name))
+				continue
+			}
 			var ks []string
 			for k := range pt {
 				if _, hit := ot[k]; hit {
@@ -226,11 +456,24 @@ func eval003(_ context.Context, in *sdk.Input, envs []Environment) sdk.Result {
 			}
 			sort.Strings(ks)
 			for _, k := range ks {
-				fs = append(fs, finding(p.Name, fmt.Sprintf("prod environment %s shares %s (fingerprint %s) with non-prod environment %s", p.Name, pt[k], Fingerprint(k), o.Name)))
+				out.findings = append(out.findings, finding("prod-shares-target:"+pt[k]+":"+targetVar(p, k)+":"+envPair(p.Name, o.Name), p.Name, fmt.Sprintf("prod environment %s shares %s (fingerprint %s) with non-prod environment %s", p.Name, pt[k], Fingerprint(k), o.Name)))
 			}
 		}
 	}
-	return sdk.Result{Findings: fs}
+	out.notes = dedupe(out.notes)
+	return out
+}
+
+func dedupe(in []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, s := range in {
+		if !seen[s] {
+			seen[s] = true
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 func secretKey(k string) bool {
@@ -243,8 +486,8 @@ func secretKey(k string) bool {
 	return false
 }
 
-func eval004(_ context.Context, _ *sdk.Input, envs []Environment) sdk.Result {
-	var fs []sdk.Finding
+func eval004(_ context.Context, _ *sdk.Input, envs []Environment) outcome {
+	var out outcome
 	for i := 0; i < len(envs); i++ {
 		for j := i + 1; j < len(envs); j++ {
 			a, b := envs[i], envs[j]
@@ -263,22 +506,22 @@ func eval004(_ context.Context, _ *sdk.Input, envs []Environment) sdk.Result {
 			for _, k := range ks {
 				va, ina := a.Values[k]
 				vb, inb := b.Values[k]
-				var ev string
+				var ev, kind string
 				switch {
 				case ina && !inb:
-					ev = fmt.Sprintf("key %s only in %s", k, a.Name)
+					ev, kind = fmt.Sprintf("key %s only in %s", k, a.Name), "key-only-in:"+a.Name
 				case inb && !ina:
-					ev = fmt.Sprintf("key %s only in %s", k, b.Name)
+					ev, kind = fmt.Sprintf("key %s only in %s", k, b.Name), "key-only-in:"+b.Name
 				case va != vb && secretKey(k):
-					ev = fmt.Sprintf("key %s differs between %s and %s", k, a.Name, b.Name)
+					ev, kind = fmt.Sprintf("key %s differs between %s and %s", k, a.Name, b.Name), "key-differs"
 				case va != vb:
-					ev = fmt.Sprintf("key %s differs between %s (%s) and %s (%s)", k, a.Name, Fingerprint(va), b.Name, Fingerprint(vb))
+					ev, kind = fmt.Sprintf("key %s differs between %s (%s) and %s (%s)", k, a.Name, Fingerprint(va), b.Name, Fingerprint(vb)), "key-differs"
 				default:
 					continue
 				}
-				fs = append(fs, finding(k, ev))
+				out.findings = append(out.findings, finding(kind+":"+k+":"+envPair(a.Name, b.Name), k, ev))
 			}
 		}
 	}
-	return sdk.Result{Findings: fs}
+	return out
 }

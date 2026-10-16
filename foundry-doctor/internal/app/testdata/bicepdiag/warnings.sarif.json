@@ -1,0 +1,73 @@
+{
+  "$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "bicep"
+        }
+      },
+      "results": [
+        {
+          "ruleId": "no-unused-params",
+          "message": {
+            "text": "Parameter \"adminPassword\" is declared but never used. [https://aka.ms/bicep/linter-diagnostics#no-unused-params]"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file://{{ROOT}}/infra/main.bicep"
+                },
+                "region": {
+                  "startLine": 2,
+                  "charOffset": 7
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "secure-secrets-in-params",
+          "message": {
+            "text": "Parameter 'adminPassword' may represent a secret (according to its name) and must be declared with the '@secure()' attribute. [https://aka.ms/bicep/linter-diagnostics#secure-secrets-in-params]"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file://{{ROOT}}/infra/main.bicep"
+                },
+                "region": {
+                  "startLine": 2,
+                  "charOffset": 7
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "no-hardcoded-env-urls",
+          "message": {
+            "text": "Environment URLs should not be hardcoded. Use the environment() function to ensure compatibility across clouds. Found this disallowed host: \"management.azure.com\" [https://aka.ms/bicep/linter-diagnostics#no-hardcoded-env-urls]"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file://{{ROOT}}/infra/main.bicep"
+                },
+                "region": {
+                  "startLine": 3,
+                  "charOffset": 20
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "columnKind": "utf16CodeUnits"
+    }
+  ]
+}

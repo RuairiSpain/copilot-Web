@@ -53,18 +53,23 @@ fix: "resource backend 'Microsoft.ApiManagement/service/backends@2025-09-01-prev
 sources:
 - url: https://learn.microsoft.com/azure/api-management/backends
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-docs/articles/api-management/backends.md
-  note: 'Circuit breaker section: one rule per backend, not on Consumption tier, approximate across instances, Azure OpenAI
-    429 Retry-After guidance, Bicep example with API 2023-09-01-preview.'
+  verifiedVia: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/api-management/backends.md
+  note: >-
+    Circuit breaker section: one rule per backend, not on Consumption tier, approximate across instances,
+    Azure OpenAI 429 Retry-After guidance, Bicep example with API 2023-09-01-preview. Branch URL, not
+    commit-pinned.
 - url: https://learn.microsoft.com/azure/api-management/retry-policy
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-docs/articles/api-management/retry-policy.md
-  note: Retry policy reference (ms.date 09/11/2025).
+  verifiedVia: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/api-management/retry-policy.md
+  note: Retry policy reference (ms.date 09/11/2025). Branch URL, not commit-pinned.
 - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/preview/2025-09-01-preview/openapi.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/rest-api-specs/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/preview/2025-09-01-preview/openapi.json
-  note: BackendCircuitBreaker.rules, CircuitBreakerRule (name, failureCondition, tripDuration, acceptRetryAfter), CircuitBreakerFailureCondition
-    (count, percentage, interval, statusCodeRanges).
+  verifiedVia: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/preview/2025-09-01-preview/openapi.json
+  note: >-
+    BackendCircuitBreaker.rules, CircuitBreakerRule (name, failureCondition, tripDuration, acceptRetryAfter),
+    CircuitBreakerFailureCondition (count, percentage, interval, statusCodeRanges). Branch URL, not
+    commit-pinned.
 overlap:
   decision: native
   provisional: true

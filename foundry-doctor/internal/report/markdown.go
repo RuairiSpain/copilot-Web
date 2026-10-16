@@ -86,8 +86,8 @@ func Markdown(w io.Writer, fs []sdk.Finding, run Run) error {
 	if run.GeneratedAt != "" {
 		fmt.Fprintf(&b, "- Generated: %s\n", codeSpan(run.GeneratedAt))
 	}
-	fmt.Fprintf(&b, "\n## Summary\n\n| Errors | Warnings | Info | Suppressed | Baselined | Skipped |\n|---|---|---|---|---|---|\n| %d | %d | %d | %d | %d | %d |\n",
-		c.Error, c.Warning, c.Info, c.Suppressed, c.Baselined, len(skips))
+	fmt.Fprintf(&b, "\n## Summary\n\n| Errors | Warnings | Info | Suppressed | Baselined | Hidden by --min-severity | Skipped |\n|---|---|---|---|---|---|---|\n| %d | %d | %d | %d | %d | %d | %d |\n",
+		c.Error, c.Warning, c.Info, c.Suppressed, c.Baselined, run.Hidden, len(skips))
 
 	b.WriteString("\n## Findings\n\n")
 	n := 0

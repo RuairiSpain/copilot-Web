@@ -62,7 +62,6 @@ func TestParseErrors(t *testing.T) {
 		{"syntax", "a: [1, 2\n", false},
 		{"scalar root", "hello\n", false},
 		{"list root", "- a\n", false},
-		{"multi doc", "a: 1\n---\nb: 2\n", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -74,6 +73,32 @@ func TestParseErrors(t *testing.T) {
 				t.Errorf("ErrEmpty mismatch: %v", err)
 			}
 		})
+	}
+}
+
+// azd decodes only the first YAML document (project.Parse calls yaml.Unmarshal
+// from github.com/braydonk/yaml v0.9.0), so extra documents are a diagnostic,
+// not an input error.
+func TestMultipleDocumentsAreAWarning(t *testing.T) {
+	for _, in := range []string{"a: 1\n---\nb: 2\n", "a: 1\n---\n", "a: 1\n---\n[unterminated\n"} {
+		d, err := Parse([]byte(in), "azure.yaml")
+		if err != nil {
+			t.Fatalf("%q: %v", in, err)
+		}
+		var found bool
+		for _, dg := range d.Diagnostics() {
+			found = found || dg.Message == MultiDocumentMessage
+		}
+		if !found {
+			t.Errorf("%q: no multi-document diagnostic: %+v", in, d.Diagnostics())
+		}
+		if v, _, ok := d.Lookup("a"); !ok || v != "1" {
+			t.Errorf("%q: first document not read: %q %v", in, v, ok)
+		}
+	}
+	d, err := Parse([]byte("a: 1\n"), "azure.yaml")
+	if err != nil || len(d.Diagnostics()) != 0 {
+		t.Fatalf("single document: %v %+v", err, d)
 	}
 }
 

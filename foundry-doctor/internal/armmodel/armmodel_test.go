@@ -111,8 +111,8 @@ func TestFromARMMapsAllFields(t *testing.T) {
 	}
 
 	child := rs[2]
-	if child.Name != "acct/proj" || child.Scope != "acct/proj" {
-		t.Errorf("child refs must normalize to literal paths: %+v", child)
+	if child.Name != "acct/proj" || child.Scope != "[resourceId('Microsoft.CognitiveServices/accounts/projects', 'acct', 'proj')]" {
+		t.Errorf("child names normalize to literal paths and the scope stays an unfolded resourceId (R4): %+v", child)
 	}
 
 	st := rs[3]

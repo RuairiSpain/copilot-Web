@@ -1,5 +1,5 @@
 id: FND-NET-003
-version: 1
+version: 3
 group: NET
 title: Private endpoint DNS zone groups and VNet links
 description: >-
@@ -35,8 +35,10 @@ compatibility:
   notes: Not version dependent; reads compiled ARM JSON and ARM state (azd 1.36.0-beta.1 clone checked)
 evidence:
   description: >-
-    For each Microsoft.Network/privateEndpoints whose privateLinkServiceConnections.groupIds and target type are
-    known, find child privateDnsZoneGroups and read properties.privateDnsZoneConfigs[].properties.privateDnsZoneId.
+    For each deployed Microsoft.Network/privateEndpoints that targets the Foundry account or a store linked to it by a
+    Foundry connection, capability host or capabilitySettings (endpoints of other resources are not applicable; an
+    endpoint whose target cannot be correlated is skipped as scope-uncertain; a conditional endpoint is skipped) and
+    whose privateLinkServiceConnections.groupIds and target type are known, find child privateDnsZoneGroups and read properties.privateDnsZoneConfigs[].properties.privateDnsZoneId.
     Finding 1: no zone group. Finding 2: zone group lacks one of the expected zone names for the group ID (public
     cloud: account needs privatelink.cognitiveservices.azure.com, privatelink.openai.azure.com and
     privatelink.services.ai.azure.com; searchService needs privatelink.search.windows.net; Cosmos DB Sql needs
@@ -76,35 +78,45 @@ fix: |
 sources:
 - url: https://learn.microsoft.com/azure/private-link/private-endpoint-dns
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-docs/articles/private-link/private-endpoint-dns.md (ms.date 08/11/2026)
+  verifiedVia: >-
+    https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/private-link/private-endpoint-dns.md
+    (ms.date 08/11/2026)
   note: >-
-    Per-service zone names and group IDs; Foundry Tools footnote 4 with the three account zones; Azure Government and China
-    tables.
+    Per-service zone names and group IDs; Foundry Tools footnote 4 with the three account zones; Azure
+    Government and China tables. Branch URL, not commit-pinned.
 - url: https://learn.microsoft.com/azure/private-link/private-endpoint-dns-integration
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-docs/articles/private-link/private-endpoint-dns-integration.md (ms.date 06/25/2025)
-  note: DNS zone group definition and limits (up to five zones, one zone per name, one zone group per endpoint).
+  verifiedVia: >-
+    https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/private-link/private-endpoint-dns-integration.md
+    (ms.date 06/25/2025)
+  note: >-
+    DNS zone group definition and limits (up to five zones, one zone per name, one zone group per endpoint).
+    Branch URL, not commit-pinned.
 - url: https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/includes/how-to-virtual-networks-content.md (ms.date 09/28/2026)
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks (ms.date 09/28/2026); source file
+    MicrosoftDocs/azure-ai-docs: articles/foundry/agents/includes/how-to-virtual-networks-content.md;
+    retrieved 2026-10-04
   note: DNS zone configurations summary; troubleshooting says verify each private DNS zone is linked to the VNet.
 - url: https://learn.microsoft.com/azure/dns/private-dns-virtual-network-links
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-docs/articles/dns/private-dns-virtual-network-links.md (ms.date 05/15/2024)
-  note: A zone without a link to a VNet is not resolvable from it (resolution virtual network concept).
+  verifiedVia: >-
+    https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/dns/private-dns-virtual-network-links.md
+    (ms.date 05/15/2024)
+  note: >-
+    A zone without a link to a VNet is not resolvable from it (resolution virtual network concept). Branch
+    URL, not commit-pinned.
 - url: >-
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/network/resource-manager/Microsoft.Network/Network/stable/2024-05-01/privateEndpoint.json
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    raw.githubusercontent.com/Azure/azure-rest-api-specs/main/.../Network/stable/2024-05-01/privateEndpoint.json (PrivateDnsZoneGroupPropertiesFormat.privateDnsZoneConfigs[].properties.privateDnsZoneId)
-    and .../privatedns/.../PrivateDns/stable/2024-06-01/privatedns.json (VirtualNetworkLinkProperties)
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/network/resource-manager/Microsoft.Network/Network/stable/2024-05-01/privateEndpoint.json; raw.githubusercontent.com/Azure/azure-rest-api-specs/main/.../Network/stable/2024-05-01/privateEndpoint.json (PrivateDnsZoneGroupPropertiesFormat.privateDnsZoneConfigs[].properties.privateDnsZoneId) and .../privatedns/.../PrivateDns/stable/2024-06-01/privatedns.json (VirtualNetworkLinkProperties)
   note: Property names for zone groups and VNet links.
 - url: https://github.com/MicrosoftDocs/azure-docs/blob/eb1e05deecc53c7a1a192453a3b8183e45f73c10/articles/private-link/private-endpoint-dns.md
   lastVerified: '2026-10-05'
   verifiedVia: >-
-    MicrosoftDocs/azure-docs main @ eb1e05deecc53c7a1a192453a3b8183e45f73c10 (2026-10-04),
-    articles/private-link/private-endpoint-dns.md (ms.date 08/11/2026), fetched from raw.githubusercontent.com on
-    2026-10-05 (path absent from the sparse local clone).
+    https://github.com/MicrosoftDocs/azure-docs/blob/eb1e05deecc53c7a1a192453a3b8183e45f73c10/articles/private-link/private-endpoint-dns.md; MicrosoftDocs/azure-docs main @ eb1e05deecc53c7a1a192453a3b8183e45f73c10 (2026-10-04), articles/private-link/private-endpoint-dns.md (ms.date 08/11/2026), fetched from raw.githubusercontent.com on 2026-10-05 (path absent from the sparse local clone).
   note: >-
     Verified public-cloud zone table for group IDs: Foundry Tools account -> privatelink.cognitiveservices.azure.com,
     privatelink.openai.azure.com, privatelink.services.ai.azure.com (footnote: configure DNS for each endpoint the
@@ -165,6 +177,7 @@ tests:
   - custom-dns-server-declared-in-config
   - dine-policy-manages-dns-zone-group
 notes: >-
+  Review M6: the rule is not-applicable when no private endpoint targets the Foundry account or a linked store, and skips as profile-key-missing:network.cloud when an endpoint is in scope and the cloud cannot be determined from literal regions.
   Unverified: DNS zone names for sovereign clouds were read from the Private Link table only for the services listed
   there (Foundry Government lists a single cognitiveservices zone); the docs' own statement that DNS zone groups are
   optional when custom DNS is used is why confidence is likely and basis is reliability, not platform. Zone names

@@ -1,5 +1,5 @@
 id: FND-NET-001
-version: 1
+version: 4
 group: NET
 title: Foundry public access/private endpoint posture
 description: >-
@@ -41,7 +41,9 @@ evidence:
     Disabled and no Microsoft.Network/privateEndpoints resource has a privateLinkServiceConnection whose privateLinkServiceId
     is the account ID and groupIds contains "account" (live mode also requires privateLinkServiceConnectionState approved).
     Restricted mode (Enabled with defaultAction Deny) is accepted here and checked by FND-NET-007. Skip when the private
-    endpoint can only be a parameter or an existing resource that is not visible, and say so.
+    endpoint can only be a parameter or an existing resource that is not visible, and say so. The entra-only policy downgrade to
+    warning applies only when properties.disableLocalAuth is provably true on the account; otherwise the severity is not lowered
+    and the evidence says so. The allowed policy still lowers to info.
   confidence: certain
 recommendation: >-
   For test and production set publicNetworkAccess to Disabled and add a private endpoint with group ID account in the VNet
@@ -74,13 +76,18 @@ fix: |
 sources:
 - url: https://learn.microsoft.com/azure/foundry/agents/concepts/networking-options
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/networking-options.md (ms.date 06/29/2026)
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/agents/concepts/networking-options (ms.date 06/29/2026); source
+    file MicrosoftDocs/azure-ai-docs: articles/foundry/agents/concepts/networking-options.md; retrieved
+    2026-10-04
   note: >-
     Default is fully public; inbound is public (optionally selected IPs) or private endpoint; isolation of egress implies
     private endpoint inbound.
 - url: https://learn.microsoft.com/azure/foundry/how-to/configure-private-link
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/how-to/configure-private-link.md (ms.date 09/29/2026)
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/how-to/configure-private-link (ms.date 09/29/2026); source file
+    MicrosoftDocs/azure-ai-docs: articles/foundry/how-to/configure-private-link.md; retrieved 2026-10-04
   note: >-
     PNA flag decides whether a private endpoint is required; Disabled, selected IPs and all networks; connection stays Pending
     until approved.
@@ -88,13 +95,15 @@ sources:
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
   note: >-
-    AccountProperties publicNetworkAccess enum Enabled/Disabled; NetworkRuleSet defaultAction Allow/Deny, bypass None/AzureServices,
-    ipRules, virtualNetworkRules.
+    AccountProperties publicNetworkAccess enum Enabled/Disabled; NetworkRuleSet defaultAction Allow/Deny,
+    bypass None/AzureServices, ipRules, virtualNetworkRules. Branch URL, not commit-pinned.
 - url: https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/virtual-networks.md (ms.date 06/15/2026)
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks (ms.date 06/15/2026); source file
+    MicrosoftDocs/azure-ai-docs: articles/foundry/agents/how-to/virtual-networks.md; retrieved 2026-10-04
   note: Private endpoint group ID account; projects inherit the account network posture.
 overlap:
   decision: adapt
@@ -155,4 +164,5 @@ notes: >-
   recommendation is cited here; the WAF mapping is added in Phase 4 when the guidance is verified. A profile that declares
   a public-by-design posture (Entra-only public access) should downgrade this finding; the profile key is policy.network.publicAccess
   (ADR-007). Profile key: policy.network.publicAccess (ADR-007); entra-only and allowed lower the severity, they never skip
-  the rule.
+  the rule. Since version 3 the rule sets the lower severity itself through the per-finding override (ADR-008 amendment 3):
+  entra-only gives warning and allowed gives info. The override only lowers, so dev (info) is unchanged. Version 4 (review P5): entra-only lowers the severity only when properties.disableLocalAuth is provably true on the account, because Entra-only access is an authentication claim; otherwise the severity is kept and the evidence names the reason.

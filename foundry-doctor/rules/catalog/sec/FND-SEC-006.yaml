@@ -1,5 +1,5 @@
 id: FND-SEC-006
-version: 1
+version: 3
 group: SEC
 title: Firewall rules reject private/open ranges
 description: IP firewall rules on Foundry-related resources must not contain open ranges (0.0.0.0/0, or 0.0.0.0
@@ -45,24 +45,33 @@ fix: "networkAcls: {\n  defaultAction: 'Deny'\n  ipRules: [\n    { value: '203.0
 sources:
 - url: https://learn.microsoft.com/azure/storage/common/storage-network-security-limitations
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-docs/articles/storage/common/storage-network-security-limitations.md
-  note: '''Restrictions for IP network rules'': RFC 1918 ranges aren''t allowed in IP rules.'
+  verifiedVia: >-
+    https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/storage/common/storage-network-security-limitations.md
+  note: >-
+    'Restrictions for IP network rules': RFC 1918 ranges aren't allowed in IP rules. Branch URL, not
+    commit-pinned.
 - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/rest-api-specs/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
-  note: IpAddressOrRange.ipAddressOrRange description lists ranges not enforceable by the IP address filter.
+  verifiedVia: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
+  note: >-
+    IpAddressOrRange.ipAddressOrRange description lists ranges not enforceable by the IP address filter.
+    Branch URL, not commit-pinned.
 - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/keyvault/resource-manager/Microsoft.KeyVault/KeyVault/stable/2026-05-15/openapi.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/rest-api-specs/specification/keyvault/resource-manager/Microsoft.KeyVault/KeyVault/stable/2026-05-15/openapi.json
-  note: IPRule / NetworkRuleSet property names.
+  verifiedVia: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/keyvault/resource-manager/Microsoft.KeyVault/KeyVault/stable/2026-05-15/openapi.json
+  note: IPRule / NetworkRuleSet property names. Branch URL, not commit-pinned.
 - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/rest-api-specs/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
-  note: NetworkRuleSet.ipRules / IpRule.
+  verifiedVia: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
+  note: NetworkRuleSet.ipRules / IpRule. Branch URL, not commit-pinned.
 - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
-  note: NetworkRuleSet.ipRules / IpRule.
+  verifiedVia: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+  note: NetworkRuleSet.ipRules / IpRule. Branch URL, not commit-pinned.
 overlap:
   decision: native
   provisional: true
@@ -105,4 +114,4 @@ tests:
 testability: Deterministic CIDR parsing on ARM JSON; no network access needed.
 notes: 'Mixed basis: private ranges on Storage/Cosmos are platform-documented, open ranges are a security judgement.
   Kept as basis security (non-platform) so dev can be warning; the catalogue schema forces error in every profile
-  if platform were listed. Raised as a PRD ambiguity.'
+  if platform were listed. Raised as a PRD ambiguity. Review M9: the rule evaluates only Foundry accounts (kind AIServices) and the Cosmos DB, Key Vault, Search and Storage resources that a Foundry connection or capability host links to; other resources are out of scope.'

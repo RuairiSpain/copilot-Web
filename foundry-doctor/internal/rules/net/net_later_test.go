@@ -25,7 +25,7 @@ func TestNET006009010011(t *testing.T) {
 				acct("a", m{"publicNetworkAccess": "Disabled", "networkInjections": l{m{"scenario": "agent", "subnetArmId": "/s/providers/Microsoft.Network/virtualNetworks/vn/subnets/agents"}}}),
 				{Type: "Microsoft.Network/virtualNetworks", Name: "vn", Properties: m{"addressSpace": m{"addressPrefixes": l{"44.0.0.0/16"}}, "subnets": l{m{"name": "agents", "properties": m{"addressPrefix": "44.0.0.0/24"}}}}},
 			},
-			findings: 1, contains: "private address space",
+			findings: 1, contains: "RFC 1918",
 		},
 		{
 			name:     "net009 classic sku mismatch",
@@ -58,6 +58,13 @@ func TestNET006009010011(t *testing.T) {
 			}
 			if len(res.Findings) != tc.findings {
 				t.Fatalf("findings=%d want %d: %+v", len(res.Findings), tc.findings, res.Findings)
+			}
+			if tc.rule.ID() == "FND-NET-009" || tc.rule.ID() == "FND-NET-010" {
+				for _, f := range res.Findings {
+					if f.Key == "" {
+						t.Errorf("%s finding sets no Finding.Key: %+v", tc.rule.ID(), f)
+					}
+				}
 			}
 			if tc.contains != "" && tc.findings > 0 {
 				found := false

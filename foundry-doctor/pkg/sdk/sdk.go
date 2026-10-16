@@ -57,6 +57,19 @@ const (
 	ConfidenceLow    Confidence = "low"
 )
 
+// Rank orders confidences: low < medium < high. Unknown values rank 0.
+func (c Confidence) Rank() int {
+	switch c {
+	case ConfidenceLow:
+		return 1
+	case ConfidenceMedium:
+		return 2
+	case ConfidenceHigh:
+		return 3
+	}
+	return 0
+}
+
 // Category classifies a rule as must-have or nice-to-have.
 type Category string
 
@@ -90,25 +103,37 @@ type Suppression struct {
 
 // Finding is a single result. See PRD section 7.
 type Finding struct {
-	RuleID         string       `json:"ruleId"`
-	RuleVersion    int          `json:"ruleVersion"`
-	Severity       Severity     `json:"severity"`
-	Category       Category     `json:"category,omitempty"`
-	Pillar         string       `json:"pillar,omitempty"`
-	Basis          []string     `json:"basis,omitempty"`
-	Profile        string       `json:"profile,omitempty"`
-	Resource       ResourceRef  `json:"resource"`
-	Location       Location     `json:"location"`
-	Evidence       string       `json:"evidence,omitempty"`
-	Recommendation string       `json:"recommendation,omitempty"`
-	Fix            string       `json:"fix,omitempty"`
-	DocsURL        string       `json:"docsUrl,omitempty"`
-	LastVerified   string       `json:"lastVerified,omitempty"`
-	Confidence     Confidence   `json:"confidence,omitempty"`
-	Suppressed     *Suppression `json:"suppressed,omitempty"`
-	Baselined      bool         `json:"baselined,omitempty"`
-	Fingerprint    string       `json:"fingerprint"`
-	Adapter        string       `json:"adapter,omitempty"`
+	RuleID      string `json:"ruleId"`
+	RuleVersion int    `json:"ruleVersion"`
+	// Severity is filled by the engine from the catalogue. A rule MAY set it to
+	// a LOWER severity than the catalogue value for this one finding (ADR-008
+	// amendment 3); the engine ignores a value that is not lower and ignores
+	// it for platform-basis rules. It never feeds the fingerprint.
+	Severity Severity    `json:"severity"`
+	Category Category    `json:"category,omitempty"`
+	Pillar   string      `json:"pillar,omitempty"`
+	Basis    []string    `json:"basis,omitempty"`
+	Profile  string      `json:"profile,omitempty"`
+	Resource ResourceRef `json:"resource"`
+	// Key is a rule-chosen stable discriminator (resource key, variable name,
+	// property path) that separates two findings of one rule on one resource.
+	// It is part of the fingerprint (ADR-008). It must not contain secret values.
+	Key            string   `json:"key,omitempty"`
+	Location       Location `json:"location"`
+	Evidence       string   `json:"evidence,omitempty"`
+	Recommendation string   `json:"recommendation,omitempty"`
+	Fix            string   `json:"fix,omitempty"`
+	DocsURL        string   `json:"docsUrl,omitempty"`
+	LastVerified   string   `json:"lastVerified,omitempty"`
+	// Confidence is filled by the engine from the catalogue evidence confidence.
+	// A rule MAY set a LOWER confidence for this one finding (ADR-008
+	// amendment 3); a value that is not lower is ignored. It never feeds the
+	// fingerprint.
+	Confidence  Confidence   `json:"confidence,omitempty"`
+	Suppressed  *Suppression `json:"suppressed,omitempty"`
+	Baselined   bool         `json:"baselined,omitempty"`
+	Fingerprint string       `json:"fingerprint"`
+	Adapter     string       `json:"adapter,omitempty"`
 }
 
 // Skip reports a check that did not run. Skipped is never a pass.
@@ -118,6 +143,9 @@ type Skip struct {
 	// Required marks a skip of an input the user explicitly asked to validate.
 	// A required skip makes the run exit 2 (PRD section 7).
 	Required bool `json:"required,omitempty"`
+	// MissingCapability names the input or capability whose absence caused the
+	// skip, for example "compiled ARM template" or "azd version".
+	MissingCapability string `json:"missingCapability,omitempty"`
 }
 
 // Skip reason constants understood by the platform.
@@ -126,6 +154,15 @@ const (
 	SkipUnsupportedVersion = "unsupported-version"
 	SkipInputUnavailable   = "input-unavailable"
 	SkipProfileKeyPrefix   = "profile-key-missing:"
+	// SkipAzdVersionUnknown: the rule has an azd compatibility range and the
+	// azd version could not be determined.
+	SkipAzdVersionUnknown = "azd-version-unknown"
+	// SkipSyntheticInfrastructure: the rule needs a compiled ARM template and the
+	// project has no on-disk infrastructure (ADR-004, ADR-012).
+	SkipSyntheticInfrastructure = "synthetic-infrastructure"
+	// SkipNotApplicable: the rule ran its applicability check and the project has
+	// nothing it applies to. Not a hidden check.
+	SkipNotApplicable = "not-applicable"
 )
 
 // SkipMissingPolicyKey builds the standard reason for a missing policy key.
@@ -137,6 +174,13 @@ type Result struct {
 	// Skipped, when non-nil, means the rule did not evaluate. Findings must
 	// then be empty.
 	Skipped *Skip
+	// Skips lists per-resource checks the rule could not evaluate while it
+	// still evaluated others. It may accompany Findings (or be set alone when
+	// the rule ran but nothing was reported). The engine reports each entry as
+	// a skip of the rule; skips never alter a finding or its fingerprint. It
+	// must not be combined with Skipped. Each Reason should start with a
+	// reason head (for example "unresolved-expression") and name the resource.
+	Skips []Skip
 }
 
 // Rule is implemented by packet B (and later) rule packages. Implementations
@@ -202,6 +246,13 @@ type ARMResource struct {
 	Zones []string
 	// Kind is the resource "kind" (for example AIServices); empty when absent.
 	Kind string
+	// Conditional is true when the resource has an `if (...)` condition.
+	// Condition holds the raw condition expression ("" when unconditional).
+	// A literal "false" means the resource is not deployed.
+	Conditional bool
+	Condition   string
+	// Looped is true when the resource is deployed through a `for` copy loop.
+	Looped bool
 	// SKUName is the resource sku.name when present and literal; empty otherwise.
 	SKUName string
 	// SKU is the top-level resource "sku" object (name, capacity, tier, ...).

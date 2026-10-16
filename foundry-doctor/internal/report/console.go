@@ -69,8 +69,8 @@ func Console(w io.Writer, fs []sdk.Finding, run Run) error {
 	if run.Readiness != nil {
 		run.Readiness.console(&b)
 	}
-	fmt.Fprintf(&b, "Summary: %d error, %d warning, %d info; %d suppressed, %d baselined; %d skipped; exit code %d\n",
-		c.Error, c.Warning, c.Info, c.Suppressed, c.Baselined, len(skips), run.ExitCode)
+	fmt.Fprintf(&b, "Summary: %d error, %d warning, %d info; %d suppressed, %d baselined; %d hidden by --min-severity; %d skipped; exit code %d\n",
+		c.Error, c.Warning, c.Info, c.Suppressed, c.Baselined, run.Hidden, len(skips), run.ExitCode)
 	_, err := io.WriteString(w, b.String())
 	return err
 }

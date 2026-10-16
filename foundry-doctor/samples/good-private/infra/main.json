@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.48.1.52935",
-      "templateHash": "9187019325578466569"
+      "templateHash": "18310728205560738043"
     }
   },
   "variables": {
@@ -58,14 +58,25 @@
       ]
     },
     {
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "apiVersion": "2023-11-01",
+      "name": "fdgoodsafe-pe-nsg",
+      "location": "swedencentral",
+      "properties": {}
+    },
+    {
       "type": "Microsoft.Network/virtualNetworks/subnets",
       "apiVersion": "2023-11-01",
       "name": "[format('{0}/{1}', 'fdgoodsafe-vnet', 'private-endpoints')]",
       "properties": {
         "addressPrefix": "10.20.1.0/24",
-        "privateEndpointNetworkPolicies": "Disabled"
+        "privateEndpointNetworkPolicies": "Disabled",
+        "networkSecurityGroup": {
+          "id": "[resourceId('Microsoft.Network/networkSecurityGroups', 'fdgoodsafe-pe-nsg')]"
+        }
       },
       "dependsOn": [
+        "[resourceId('Microsoft.Network/networkSecurityGroups', 'fdgoodsafe-pe-nsg')]",
         "[resourceId('Microsoft.Network/virtualNetworks', 'fdgoodsafe-vnet')]"
       ]
     },

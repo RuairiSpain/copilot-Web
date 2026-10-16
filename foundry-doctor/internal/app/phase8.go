@@ -35,6 +35,46 @@ func (m iqSnapshotModel) Outputs() []sdk.ARMOutput {
 	return nil
 }
 
+// The optional ARM model interfaces that rules assert on (template variables,
+// expression-valued tags, default-derived parameters) are forwarded, because
+// embedding sdk.ARMModel hides everything but its own methods.
+
+// Variable forwards armmodel.Model.Variable.
+func (m iqSnapshotModel) Variable(name string) (any, bool) {
+	if v, ok := m.ARMModel.(interface{ Variable(string) (any, bool) }); ok {
+		return v.Variable(name)
+	}
+	return nil, false
+}
+
+// TagsAreExpression forwards armmodel.Model.TagsAreExpression.
+func (m iqSnapshotModel) TagsAreExpression(r sdk.ARMResource) bool {
+	if v, ok := m.ARMModel.(interface{ TagsAreExpression(sdk.ARMResource) bool }); ok {
+		return v.TagsAreExpression(r)
+	}
+	return false
+}
+
+// FromDefault forwards armmodel.Model.FromDefault.
+func (m iqSnapshotModel) FromDefault(r sdk.ARMResource) []string {
+	if v, ok := m.ARMModel.(interface {
+		FromDefault(sdk.ARMResource) []string
+	}); ok {
+		return v.FromDefault(r)
+	}
+	return nil
+}
+
+// FromDefaultPaths forwards armmodel.Model.FromDefaultPaths.
+func (m iqSnapshotModel) FromDefaultPaths(r sdk.ARMResource) []string {
+	if v, ok := m.ARMModel.(interface {
+		FromDefaultPaths(sdk.ARMResource) []string
+	}); ok {
+		return v.FromDefaultPaths(r)
+	}
+	return nil
+}
+
 func withPhase8Snapshot(ctx context.Context, in RunInput) sdk.ARMModel {
 	if in.Local || in.ARM == nil || in.AzureYAML == nil {
 		return in.ARM

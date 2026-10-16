@@ -1,8 +1,6 @@
 package app
 
 import (
-	"bufio"
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -10,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -89,36 +88,67 @@ type envStore struct {
 	src  Source
 	view sdk.AzureYAMLView
 
-	once sync.Once
-	envs []env.Environment
-	byEn map[string]map[string]string
+	once   sync.Once
+	envs   []env.Environment
+	byEn   map[string]map[string]string
+	expand map[string]map[string]bool
+	shapes map[string]map[string]env.Shape
+	status map[string]env.Status
+}
+
+// literalResourceGroups lists the azure.yaml locations whose resourceGroup is
+// a non-empty literal without a variable reference: the top-level key and the
+// key of each service.
+func literalResourceGroups(view sdk.AzureYAMLView) []string {
+	if view == nil {
+		return nil
+	}
+	var at []string
+	literal := func(path ...string) bool {
+		v, _, ok := view.Lookup(path...)
+		return ok && strings.TrimSpace(v) != "" && !strings.Contains(v, "${")
+	}
+	if literal("resourceGroup") {
+		at = append(at, "resourceGroup")
+	}
+	for _, n := range view.ServiceNames() {
+		if literal("services", n, "resourceGroup") {
+			at = append(at, "services."+n+".resourceGroup")
+		}
+	}
+	return at
 }
 
 func (s *envStore) load() {
 	s.once.Do(func() {
 		s.byEn = map[string]map[string]string{}
+		s.expand = map[string]map[string]bool{}
+		s.shapes = map[string]map[string]env.Shape{}
+		s.status = map[string]env.Status{}
 		if s.src.Dir == "" {
 			return
 		}
-		root, err := os.OpenRoot(s.src.Dir)
-		if err != nil {
-			return
-		}
-		defer root.Close()
 		names := slices.Clone(s.src.Environments)
 		slices.Sort(names)
-		literalRG := false
-		if s.view != nil {
-			if v, _, ok := s.view.Lookup("resourceGroup"); ok {
-				literalRG = v != "" && !strings.Contains(v, "${")
-			}
+		root, rootErr := os.OpenRoot(s.src.Dir)
+		if rootErr == nil {
+			defer root.Close()
 		}
+		literalRG := literalResourceGroups(s.view)
 		for _, n := range names {
-			vals := readEnvFile(root, path.Join(project.AzureDir, n, ".env"))
+			vals, st := map[string]string{}, env.StatusUnreadable
+			var shapes map[string]env.Shape
+			var expanded map[string]bool
+			if rootErr == nil {
+				vals, shapes, expanded, st = readEnvFile(root, path.Join(project.AzureDir, n, ".env"))
+			}
+			s.expand[n] = expanded
 			s.byEn[n] = vals
+			s.shapes[n] = shapes
+			s.status[n] = st
 			s.envs = append(s.envs, env.Environment{
 				Name: n, Subscription: vals["AZURE_SUBSCRIPTION_ID"], ResourceGroup: vals["AZURE_RESOURCE_GROUP"],
-				LiteralRGInYAML: literalRG, Values: vals,
+				LiteralRGAt: literalRG, Status: st, Values: vals, Shapes: shapes,
 			})
 		}
 	})
@@ -136,10 +166,80 @@ func (s *envStore) Selected() (string, bool) {
 	if s.src.Environment == "" {
 		return "", false
 	}
-	if _, ok := s.byEn[s.src.Environment]; !ok {
+	if _, ok := s.byEn[s.src.Environment]; !ok || s.status[s.src.Environment] != env.StatusOK {
 		return "", false
 	}
 	return s.src.Environment, true
+}
+
+// SelectionReason implements cfg.EnvSelection. It says why Selected reports
+// false: no environment chosen, the chosen environment's .env file is
+// missing or unusable, or the chosen environment is not a directory under .azure.
+func (s *envStore) SelectionReason() string {
+	s.load()
+	name := s.src.Environment
+	if name == "" {
+		if s.src.DefaultEnvironment != "" {
+			return "default-environment-not-found"
+		}
+		return "no-environment-selected"
+	}
+	if _, ok := s.byEn[name]; !ok {
+		if name == s.src.DefaultEnvironment {
+			return "default-environment-not-found"
+		}
+		return "environment-not-found: " + sanitizeEnvName(name)
+	}
+	switch s.status[name] {
+	case env.StatusMissing:
+		return "env-file-missing"
+	case env.StatusUnparseable:
+		return "env-file-unparseable"
+	case env.StatusOversize, env.StatusTruncated:
+		return "env-file-oversize"
+	default:
+		return "env-file-unreadable"
+	}
+}
+
+// sanitizeEnvName keeps an explicit environment name safe for a skip text:
+// only letters, digits, hyphen, underscore and dot, capped at 40 characters.
+func sanitizeEnvName(n string) string {
+	var b strings.Builder
+	for i, r := range n {
+		if i >= 40 {
+			b.WriteString("...")
+			break
+		}
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_', r == '.':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('?')
+		}
+	}
+	return b.String()
+}
+
+// SelectedByName implements cfg.EnvNameSelection. The environment counts as
+// selected by name when a name was given and it is not just the default from
+// .azure/config.json. A name that equals the default is treated as the default,
+// which only makes the rules less certain, never more.
+func (s *envStore) SelectedByName() bool {
+	if _, ok := s.Selected(); !ok {
+		return false
+	}
+	return s.src.Environment != s.src.DefaultEnvironment
+}
+
+// ExpandedKeys implements cfg.ExpandedKeys.
+func (s *envStore) ExpandedKeys() map[string]bool {
+	s.load()
+	out := map[string]bool{}
+	for k := range s.expand[s.src.Environment] {
+		out[k] = true
+	}
+	return out
 }
 
 // Values implements cfg.EnvView.
@@ -167,46 +267,79 @@ func digest(v string) string {
 	return "sha256:" + hex.EncodeToString(h[:8])
 }
 
-// readEnvFile parses KEY=VALUE lines. It returns an empty map when the file is
-// missing, unreadable, not regular or too large.
-func readEnvFile(root *os.Root, rel string) map[string]string {
-	out := map[string]string{}
+// readEnvFile parses an azd .env file with the godotenv v1.5.1 grammar
+// (project.ParseDotEnv). It returns the status of the file with the values:
+// anything other than env.StatusOK comes with an empty map, because a partial
+// view would let a comparison pass on missing data. Secret-looking values are
+// replaced by a digest after parsing, so variable expansion sees real values.
+func readEnvFile(root *os.Root, rel string) (map[string]string, map[string]env.Shape, map[string]bool, env.Status) {
+	none := map[string]string{}
 	f, err := root.Open(rel)
 	if err != nil {
-		return out
+		if errors.Is(err, fs.ErrNotExist) {
+			return none, nil, nil, env.StatusMissing
+		}
+		return none, nil, nil, env.StatusUnreadable
 	}
 	defer f.Close()
-	if fi, err := f.Stat(); err != nil || !fi.Mode().IsRegular() || fi.Size() > maxEnvFileBytes {
-		return out
+	fi, err := f.Stat()
+	if err != nil || !fi.Mode().IsRegular() {
+		return none, nil, nil, env.StatusUnreadable
+	}
+	if fi.Size() > maxEnvFileBytes {
+		return none, nil, nil, env.StatusOversize
 	}
 	data, err := io.ReadAll(io.LimitReader(f, maxEnvFileBytes+1))
-	if err != nil || len(data) > maxEnvFileBytes {
-		return out
+	if err != nil {
+		return none, nil, nil, env.StatusUnreadable
 	}
-	sc := bufio.NewScanner(bytes.NewReader(data))
-	sc.Buffer(make([]byte, 0, 4096), 64<<10)
-	for sc.Scan() && len(out) < maxEnvKeys {
-		line := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(sc.Text()), "\ufeff"))
-		line = strings.TrimSpace(strings.TrimPrefix(line, "export "))
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		k, v, ok := strings.Cut(line, "=")
-		k = strings.TrimSpace(k)
-		if !ok || k == "" || strings.ContainsAny(k, " \t") {
-			continue
-		}
-		v = strings.TrimSpace(v)
-		if len(v) >= 2 && (v[0] == '"' && v[len(v)-1] == '"' || v[0] == '\'' && v[len(v)-1] == '\'') {
-			v = v[1 : len(v)-1]
-		}
+	if len(data) > maxEnvFileBytes {
+		return none, nil, nil, env.StatusOversize
+	}
+	parsed, err := project.ParseDotEnv(data)
+	if err != nil {
+		return none, nil, nil, env.StatusUnparseable
+	}
+	if len(parsed) > maxEnvKeys {
+		return none, nil, nil, env.StatusTruncated
+	}
+	delete(parsed, "") // godotenv yields an empty key for a last line without separator
+	var shapes map[string]env.Shape
+	for k, v := range parsed {
 		if v != "" && secretishKey(k) {
-			v = digest(v)
+			// Classify before digesting: a resource ID or bare endpoint URL
+			// under a key such as AZURE_KEYVAULT_ID keeps its shape.
+			if sh := env.ClassifyShape(v); sh != env.ShapePlain {
+				if shapes == nil {
+					shapes = map[string]env.Shape{}
+				}
+				shapes[k] = sh
+			}
+			parsed[k] = digest(v)
 		}
-		out[k] = v
+	}
+	return parsed, shapes, expandedKeys(data), env.StatusOK
+}
+
+// envAssignRe matches the start of a .env statement: optional export, the key
+// and the separator, then the raw value text on that line.
+var envAssignRe = regexp.MustCompile(`(?m)^[ \t]*(?:export[ \t]+)?([A-Za-z0-9_.]+)[ \t]*[=:][ \t]*(.*)$`)
+
+// expandedKeys returns the keys whose last assignment has a raw value that
+// can trigger variable expansion in the godotenv grammar: a '$' outside a
+// single-quoted value. It scans lines only; a double-quoted value that spans
+// lines is judged by its first line, which is where the key and any '$' that
+// matters for a short value like AZURE_LOCATION sit.
+func expandedKeys(data []byte) map[string]bool {
+	out := map[string]bool{}
+	for _, m := range envAssignRe.FindAllSubmatch(data, -1) {
+		raw := strings.TrimSpace(string(m[2]))
+		out[string(m[1])] = strings.Contains(raw, "$") && !strings.HasPrefix(raw, "'")
+	}
+	for k, v := range out {
+		if !v {
+			delete(out, k)
+		}
 	}
 	return out
 }
-
-var _ = errors.Is
-var _ = fs.ErrNotExist

@@ -50,23 +50,37 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/search/vector-search-how-to-create-index
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/vector-search-how-to-create-index.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/search/vector-search-how-to-create-index; source file
+      MicrosoftDocs/azure-ai-docs: articles/search/vector-search-how-to-create-index.md; retrieved 2026-10-04
     note: Field attributes (type, dimensions, vectorSearchProfile), unique names per configuration type, embedding model dimension ranges.
   - url: https://learn.microsoft.com/azure/search/search-limits-quotas-capacity
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/search-limits-quotas-capacity.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/search/search-limits-quotas-capacity; source file
+      MicrosoftDocs/azure-ai-docs: articles/search/search-limits-quotas-capacity.md; retrieved 2026-10-04
     note: "Index limits table: Maximum dimensions per vector field is 4096 on every tier."
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/data-plane/Search/stable/2026-04-01/search.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/search/data-plane/Search/stable/2026-04-01/search.json (definitions.SearchField.properties.dimensions minimum 2, maximum 4096)
-    note: "Field-level dimension bounds. The per-model ranges (for example 1 to 1536) are separate constraints, checked only against the vectorizer modelName."
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/data-plane/Search/stable/2026-04-01/search.json
+      (definitions.SearchField.properties.dimensions minimum 2, maximum 4096)
+    note: >-
+      Field-level dimension bounds. The per-model ranges (for example 1 to 1536) are separate constraints,
+      checked only against the vectorizer modelName. Branch URL, not commit-pinned.
   - url: https://learn.microsoft.com/azure/search/vector-search-how-to-assign-narrow-data-types
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/vector-search-how-to-assign-narrow-data-types.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/search/vector-search-how-to-assign-narrow-data-types; source file
+      MicrosoftDocs/azure-ai-docs: articles/search/vector-search-how-to-assign-narrow-data-types.md; retrieved
+      2026-10-04
     note: Collection(Edm.Single), Half, Int16, SByte; Byte only with packed binary data types.
   - url: https://learn.microsoft.com/azure/search/vector-search-vectorizer-azure-open-ai
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/vector-search-vectorizer-azure-open-ai.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/search/vector-search-vectorizer-azure-open-ai; source file
+      MicrosoftDocs/azure-ai-docs: articles/search/vector-search-vectorizer-azure-open-ai.md; retrieved
+      2026-10-04
     note: Expected field dimensions by modelName (min and max).
 overlap:
   decision: native

@@ -31,11 +31,36 @@ func acct(name string, props m) sdk.ARMResource {
 	return sdk.ARMResource{Type: "Microsoft.CognitiveServices/accounts", Name: name, Kind: "AIServices", Region: "swedencentral", Properties: props}
 }
 
+// groupTypes maps a private link group ID to the resource type it targets.
+var groupTypes = map[string]string{
+	"account":       "Microsoft.CognitiveServices/accounts",
+	"blob":          "Microsoft.Storage/storageAccounts",
+	"searchService": "Microsoft.Search/searchServices",
+	"Sql":           "Microsoft.DocumentDB/databaseAccounts",
+	"vault":         "Microsoft.KeyVault/vaults",
+	"gateway":       "Microsoft.ApiManagement/service",
+	"azuremonitor":  "Microsoft.Insights/privateLinkScopes",
+}
+
+func rid(typ, name string) string {
+	return "/subscriptions/s/resourceGroups/r/providers/" + typ + "/" + name
+}
+
 func pe(name, target, group string) sdk.ARMResource {
 	return sdk.ARMResource{Type: "Microsoft.Network/privateEndpoints", Name: name, Region: "swedencentral", Properties: m{
 		"subnet":                        m{"id": "/subscriptions/s/resourceGroups/r/providers/Microsoft.Network/virtualNetworks/vn/subnets/pes"},
-		"privateLinkServiceConnections": l{m{"properties": m{"privateLinkServiceId": "/x/providers/Foo/bar/" + target, "groupIds": l{group}}}},
+		"privateLinkServiceConnections": l{m{"properties": m{"privateLinkServiceId": rid(groupTypes[group], target), "groupIds": l{group}}}},
 	}}
+}
+
+// foundryStores is a Foundry account whose capabilitySettings link a storage
+// account, a search service, a Cosmos account and a key vault named "s", so
+// private endpoints for them are in FND-NET-003 scope.
+func foundryStores() sdk.ARMResource {
+	return acct("a", m{"capabilitySettings": m{
+		"blobStore": rid("Microsoft.Storage/storageAccounts", "s"), "vectorStore": rid("Microsoft.Search/searchServices", "s"),
+		"documentStore": rid("Microsoft.DocumentDB/databaseAccounts", "s"), "vault": rid("Microsoft.KeyVault/vaults", "s"),
+	}})
 }
 
 func TestAllRulesSkipWithoutARM(t *testing.T) {
@@ -51,7 +76,7 @@ func TestAllRulesSkipWithoutARM(t *testing.T) {
 		seen[r.ID()] = true
 		for _, in := range []*sdk.Input{{}, nil} {
 			res, err := r.Evaluate(context.Background(), in)
-			if err != nil || res.Skipped == nil || res.Skipped.Reason != sdk.SkipInputUnavailable || len(res.Findings) != 0 {
+			if err != nil || res.Skipped == nil || !strings.HasPrefix(res.Skipped.Reason, sdk.SkipInputUnavailable+": ") || len(res.Findings) != 0 {
 				t.Fatalf("%s: want input-unavailable skip, got %+v %v", r.ID(), res, err)
 			}
 		}
@@ -134,11 +159,23 @@ func TestNET003(t *testing.T) {
 		want int
 		skip bool
 	}{
-		{"no zone group", []sdk.ARMResource{pe("p", "s", "searchService")}, 1, false},
-		{"wrong zone", []sdk.ARMResource{pe("p", "s", "blob"), zg}, 1, false},
-		{"missing link", []sdk.ARMResource{pe("p", "s", "searchService"), zg, zone}, 1, false},
-		{"complete", []sdk.ARMResource{pe("p", "s", "searchService"), zg, zone, link}, 0, false},
-		{"zone not visible (zone group verified, link unverifiable)", []sdk.ARMResource{pe("p", "s", "searchService"), zg}, 0, false},
+		{"no zone group", []sdk.ARMResource{foundryStores(), pe("p", "s", "searchService")}, 1, false},
+		{"wrong zone", []sdk.ARMResource{foundryStores(), pe("p", "s", "blob"), zg}, 1, false},
+		{"missing link", []sdk.ARMResource{foundryStores(), pe("p", "s", "searchService"), zg, zone}, 1, false},
+		{"complete", []sdk.ARMResource{foundryStores(), pe("p", "s", "searchService"), zg, zone, link}, 0, false},
+		{"zone not visible (zone group verified, link unverifiable)", []sdk.ARMResource{foundryStores(), pe("p", "s", "searchService"), zg}, 0, false},
+		{"endpoint of an unrelated storage account is not applicable", []sdk.ARMResource{foundryStores(), pe("p", "unrelated", "blob")}, 0, true},
+		{"endpoint of the Foundry account itself", []sdk.ARMResource{foundryStores(), pe("p", "a", "account")}, 1, false},
+		{"conditional endpoint skips", []sdk.ARMResource{foundryStores(), func() sdk.ARMResource {
+			p := pe("p", "s", "searchService")
+			p.Conditional, p.Condition = true, "[parameters('deploy')]"
+			return p
+		}()}, 0, true},
+		{"not deployed endpoint is ignored", []sdk.ARMResource{foundryStores(), func() sdk.ARMResource {
+			p := pe("p", "s", "searchService")
+			p.Conditional, p.Condition = true, "false"
+			return p
+		}()}, 0, true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -233,7 +270,7 @@ func TestNET008(t *testing.T) {
 	}{
 		{"free with pe", []sdk.ARMResource{srch("free", ""), pe("p", "s", "searchService")}, 1, false},
 		{"Free mixed case disabled", []sdk.ARMResource{srch("Free", "Disabled"), pe("p", "s", "searchService")}, 1, false},
-		{"free vector store", []sdk.ARMResource{srch("free", ""), acct("a", m{"publicNetworkAccess": "Disabled", "capabilitySettings": m{"vectorStore": "/x/searchServices/s"}})}, 1, false},
+		{"free vector store", []sdk.ARMResource{srch("free", ""), acct("a", m{"publicNetworkAccess": "Disabled", "capabilitySettings": m{"vectorStore": rid("Microsoft.Search/searchServices", "s")}})}, 1, false},
 		{"free public alone", []sdk.ARMResource{srch("free", "")}, 0, false},
 		{"standard with pe", []sdk.ARMResource{srch("standard", ""), pe("p", "s", "searchService")}, 0, false},
 		{"s1 not free", []sdk.ARMResource{srch("standard3", "Disabled"), pe("p", "s", "searchService")}, 0, false},
@@ -263,9 +300,12 @@ func TestDeterministicAndNoSecrets(t *testing.T) {
 }
 
 func TestZoneNameOfResourceIDExpression(t *testing.T) {
-	got := zoneNameOf("[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.search.windows.net')]")
-	if got != "privatelink.search.windows.net" {
-		t.Fatalf("zoneNameOf() = %q", got)
+	got, ok := zoneNameOf("[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.search.windows.net')]")
+	if !ok || got != "privatelink.search.windows.net" {
+		t.Fatalf("zoneNameOf() = %q, %v", got, ok)
+	}
+	if _, ok := zoneNameOf("[parameters('zone')]"); ok {
+		t.Fatal("a parameter zone ID must not resolve")
 	}
 }
 
@@ -275,11 +315,17 @@ func (p fakePolicy) Get(k string) (any, bool) { v, ok := p[k]; return v, ok }
 
 func TestNET003Cloud(t *testing.T) {
 	build := func(region, group, zoneName string) []sdk.ARMResource {
-		p := pe("p", "s", group)
+		target := "s"
+		if group == "account" {
+			target = "a"
+		}
+		p := pe("p", target, group)
 		p.Region = region
 		zgr := sdk.ARMResource{Type: "Microsoft.Network/privateEndpoints/privateDnsZoneGroups", Name: "p/default", Properties: m{
 			"privateDnsZoneConfigs": l{m{"properties": m{"privateDnsZoneId": "/z/privateDnsZones/" + zoneName}}}}}
-		return []sdk.ARMResource{p, zgr}
+		fs := foundryStores()
+		fs.Region = region
+		return []sdk.ARMResource{fs, p, zgr}
 	}
 	tests := []struct {
 		name   string
@@ -297,10 +343,13 @@ func TestNET003Cloud(t *testing.T) {
 		{"china public names", build("chinanorth3", "vault", "privatelink.vaultcore.azure.net"), nil, 1, ""},
 		{"china uncatalogued group", build("chinanorth3", "account", "privatelink.cognitiveservices.azure.cn"), nil, 0, "skip"},
 		{"unknown region", build("[parameters('loc')]", "blob", "privatelink.blob.core.windows.net"), nil, 0, "skip"},
-		{"policy overrides region", build("swedencentral", "blob", "privatelink.blob.core.usgovcloudapi.net"), fakePolicy{"policy.network.cloud": "usgov"}, 0, ""},
-		{"bad policy value", build("swedencentral", "blob", "privatelink.blob.core.windows.net"), fakePolicy{"policy.network.cloud": "mars"}, 0, "skip"},
-		{"central dns", build("swedencentral", "blob", "x"), fakePolicy{"policy.network.centralDns": true}, 0, "skip"},
-		{"policy managed", build("swedencentral", "blob", "x"), fakePolicy{"policy.network.dnsManagedByPolicy": true}, 0, "skip"},
+		{"policy overrides region", build("swedencentral", "blob", "privatelink.blob.core.usgovcloudapi.net"), fakePolicy{"network.cloud": "usgov"}, 0, ""},
+		{"bad policy value", build("swedencentral", "blob", "privatelink.blob.core.windows.net"), fakePolicy{"network.cloud": "mars"}, 0, "skip"},
+		{"central dns", build("swedencentral", "blob", "x"), fakePolicy{"network.centralDns": true}, 0, "skip"},
+		{"policy managed (legacy bool)", build("swedencentral", "blob", "x"), fakePolicy{"network.dnsManagedByPolicy": true}, 0, "skip"},
+		{"policy managed (ADR-007 list)", build("swedencentral", "blob", "x"), fakePolicy{"managedByAzurePolicy": []string{"private-dns-zone-group"}}, 0, "skip"},
+		{"ADR-007 list without the entry still evaluates", build("swedencentral", "blob", "privatelink.blob.core.windows.net"), fakePolicy{"managedByAzurePolicy": []string{"diagnostic-settings"}}, 0, ""},
+		{"prefixed ADR keys are not read", build("swedencentral", "blob", "x"), fakePolicy{"policy.network.centralDns": true}, 1, ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

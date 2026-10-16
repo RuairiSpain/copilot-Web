@@ -22,7 +22,7 @@ severity:
 compatibility:
   azd: ""
   extensions:
-    azure.ai.agents: ">=1.0.0-beta.18 <=1.0.0-beta.18"
+    azure.ai.agents: ">=1.0.0-beta.18 <=1.0.0-beta.20"
   apiVersions:
     - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts/projects, version: "2026-09-01" }
     - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts/projects/capabilityHosts, version: "2026-09-01" }
@@ -32,7 +32,15 @@ compatibility:
     - { plane: management, provider: Microsoft.Authorization, resourceType: roleAssignments, version: "2022-04-01" }
     - { plane: management, provider: Microsoft.DocumentDB, resourceType: databaseAccounts/sqlRoleAssignments, version: "2025-10-15" }
   preview: true
-  notes: "No dependency on azd behaviour. The overlapping check was read in azd extension azure.ai.agents 1.0.0-beta.18 (internal/cmd/doctor/checks_storage_rbac.go); the core azd version was not pinned in the clone. azure.ai.agents 1.0.0-beta.18: read for overlap only. Extension ranges are exactly the versions whose schemas or source were read; widen them in Phase 1 by reading older tags. Microsoft.CognitiveServices projects capabilityHosts connections 2026-09-01: stable. Microsoft.Authorization/roleAssignments 2022-04-01: stable. Microsoft.DocumentDB sqlRoleAssignments 2025-10-15: stable."
+  notes: >-
+    No dependency on azd behaviour. The overlapping check was read in azd extension azure.ai.agents 1.0.0-beta.18
+    (internal/cmd/doctor/checks_storage_rbac.go); the core azd version was not pinned in the clone. azure.ai.agents
+    1.0.0-beta.18: read for overlap only. Extension ranges are exactly the versions whose schemas or source were read;
+    widen them in Phase 1 by reading older tags. Microsoft.CognitiveServices projects capabilityHosts connections
+    2026-09-01: stable. Microsoft.Authorization/roleAssignments 2022-04-01: stable. Microsoft.DocumentDB
+    sqlRoleAssignments 2025-10-15: stable. Window widened 2026-10-16: azure.ai.agents to 1.0.0-beta.20. The azd and
+    extension changelogs and the schema and source diffs from the previously verified versions were read; none touches
+    this rule's verified facts for the widened fields (see docs/tool-compatibility.md section 6).
 evidence:
   description: >-
     Read-only probes. (1) GET project (2026-09-01) for identity.principalId. (2) GET project capabilityHosts (2026-09-01)
@@ -68,32 +76,50 @@ fix: |-
 sources:
   - url: https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/includes/concepts-standard-agent-setup-content.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup; source file
+      MicrosoftDocs/azure-ai-docs: articles/foundry/agents/includes/concepts-standard-agent-setup-content.md;
+      retrieved 2026-10-04
     note: Phase 4 role table for the project managed identity (Search, Blob containers, Cosmos DB).
   - url: https://learn.microsoft.com/azure/foundry/concepts/administrator-guide
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/concepts/administrator-guide.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/concepts/administrator-guide; source file
+      MicrosoftDocs/azure-ai-docs: articles/foundry/concepts/administrator-guide.md; retrieved 2026-10-04
     note: Data-plane role per backing resource; Cosmos role must be assigned with az cosmosdb sql role assignment or Bicep.
   - url: https://learn.microsoft.com/azure/search/search-security-rbac
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/search-security-rbac.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/search/search-security-rbac; source file MicrosoftDocs/azure-ai-docs:
+      articles/search/search-security-rbac.md; retrieved 2026-10-04
     note: Search role GUIDs (Search Service Contributor 7ca78c08-..., Search Index Data Contributor 8ebe5a00-..., Search Index Data Reader 1407120a-...).
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/authorization/resource-manager/Microsoft.Authorization/Authorization/stable/2022-04-01/authorization-RoleAssignmentsCalls.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/authorization/resource-manager/Microsoft.Authorization/Authorization/stable/2022-04-01/authorization-RoleAssignmentsCalls.json
-    note: RoleAssignments_ListForScope; $filter=principalId eq {id} returns assignments at, above or below the scope.
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/authorization/resource-manager/Microsoft.Authorization/Authorization/stable/2022-04-01/authorization-RoleAssignmentsCalls.json
+    note: >-
+      RoleAssignments_ListForScope; $filter=principalId eq {id} returns assignments at, above or below the
+      scope. Branch URL, not commit-pinned.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
-    note: ProjectCapabilityHosts_List path; CapabilityHostProperties storageConnections, threadStorageConnections, vectorStoreConnections.
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    note: >-
+      ProjectCapabilityHosts_List path; CapabilityHostProperties storageConnections, threadStorageConnections,
+      vectorStoreConnections. Branch URL, not commit-pinned.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2025-10-15/cosmos-db.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2025-10-15
-    note: databaseAccounts/{accountName}/sqlRoleAssignments and sqlRoleDefinitions paths (found in example files and path keys).
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/tree/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2025-10-15
+    note: >-
+      databaseAccounts/{accountName}/sqlRoleAssignments and sqlRoleDefinitions paths (found in example files
+      and path keys). Branch URL, not commit-pinned.
   - url: https://github.com/Azure/azure-dev/blob/main/cli/azd/extensions/azure.ai.agents/internal/cmd/doctor/checks_storage_rbac.go
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.agents (README.md Project storage diagnostics; internal/project/storage_rbac_query.go)
-    note: Overlap source. Microsoft's own check covers Storage only.
+    verifiedVia: >-
+      https://github.com/Azure/azure-dev/tree/main/cli/azd/extensions/azure.ai.agents (README.md Project
+      storage diagnostics; internal/project/storage_rbac_query.go)
+    note: Overlap source. Microsoft's own check covers Storage only. Branch URL, not commit-pinned.
 overlap:
   decision: adapt
   provisional: true

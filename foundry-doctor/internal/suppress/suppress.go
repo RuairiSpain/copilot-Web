@@ -3,9 +3,8 @@
 // Every suppression needs a reason, an owner and an expiry date. A live
 // suppression marks matching findings (Finding.Suppressed). An expired
 // suppression no longer hides anything and yields an error finding with the
-// engine-internal rule ID ExpiredRuleID. That ID is not a catalogue rule (the
-// catalogue only holds product rules); it is documented here and in the
-// report contract.
+// engine diagnostic ID ExpiredRuleID (ADR-009). That ID is not a catalogue rule
+// (the catalogue only holds product rules).
 package suppress
 
 import (
@@ -34,7 +33,7 @@ const DefaultPath = ".foundry-doctor/suppressions.yaml"
 const MaxBytes = 1 << 20
 
 // ExpiredRuleID is the engine-internal rule ID for an expired suppression.
-const ExpiredRuleID = "FND-SUPPRESS-001"
+const ExpiredRuleID = "FND-SYS-SUPPRESSION-EXPIRED"
 
 // ExpiredRuleVersion is the version of the expired-suppression check.
 const ExpiredRuleVersion = 1
@@ -43,7 +42,9 @@ const ExpiredRuleVersion = 1
 const DateLayout = "2006-01-02"
 
 var (
-	ruleIDRE      = regexp.MustCompile(`^FND-[A-Z]+-[0-9]{3}$`)
+	// ruleIDRE accepts catalogue IDs and compiler diagnostic IDs (ADR-009).
+	// FND-SYS-* engine diagnostics are deliberately not suppressible.
+	ruleIDRE      = regexp.MustCompile(`^(?:FND-[A-Z]+-[0-9]{3}|bicep/[A-Za-z0-9][A-Za-z0-9_.\-]{0,63})$`)
 	fingerprintRE = regexp.MustCompile(`^[0-9a-f]{32}$`)
 )
 
@@ -227,7 +228,6 @@ func expiredFinding(e Entry) sdk.Finding {
 		RuleID:      ExpiredRuleID,
 		RuleVersion: ExpiredRuleVersion,
 		Severity:    sdk.SeverityError,
-		Category:    sdk.CategoryMustHave,
 		Resource:    sdk.ResourceRef{Type: "suppression", Name: sel},
 		Evidence:    fmt.Sprintf("suppression for %s owned by %s expired on %s", sel, e.Owner, e.Expires),
 		Recommendation: "Fix the underlying finding, or renew the suppression with a new expiry " +

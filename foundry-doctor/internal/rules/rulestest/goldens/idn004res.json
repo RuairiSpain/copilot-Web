@@ -1,0 +1,149 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.48.1.52935",
+      "templateHash": "14529227581810270903"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.CognitiveServices/accounts",
+      "apiVersion": "2025-06-01",
+      "name": "locked",
+      "location": "[parameters('location')]",
+      "kind": "AIServices",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "sku": {
+        "name": "S0"
+      },
+      "properties": {
+        "customSubDomainName": "locked",
+        "disableLocalAuth": true
+      }
+    },
+    {
+      "type": "Microsoft.CognitiveServices/accounts/projects",
+      "apiVersion": "2025-06-01",
+      "name": "[format('{0}/{1}', 'locked', 'proj')]",
+      "location": "[parameters('location')]",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {},
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', 'locked')]"
+      ]
+    },
+    {
+      "type": "Microsoft.CognitiveServices/accounts",
+      "apiVersion": "2025-06-01",
+      "name": "open",
+      "location": "[parameters('location')]",
+      "kind": "AIServices",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "sku": {
+        "name": "S0"
+      },
+      "properties": {
+        "customSubDomainName": "open"
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2023-05-01",
+      "name": "stgdemo",
+      "location": "[parameters('location')]",
+      "kind": "StorageV2",
+      "sku": {
+        "name": "Standard_LRS"
+      }
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults",
+      "apiVersion": "2023-07-01",
+      "name": "kvdemo",
+      "location": "[parameters('location')]",
+      "properties": {
+        "tenantId": "[subscription().tenantId]",
+        "sku": {
+          "family": "A",
+          "name": "standard"
+        },
+        "enableRbacAuthorization": true
+      }
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.CognitiveServices/accounts', 'locked')]",
+      "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', 'locked'), 'contrib')]",
+      "properties": {
+        "principalId": "[reference(resourceId('Microsoft.CognitiveServices/accounts/projects', 'locked', 'proj'), '2025-06-01', 'full').identity.principalId]",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b24988ac-6180-42a0-ab88-20f7382dd24c')]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', 'locked')]",
+        "[resourceId('Microsoft.CognitiveServices/accounts/projects', 'locked', 'proj')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.CognitiveServices/accounts', 'open')]",
+      "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', 'open'), 'contrib')]",
+      "properties": {
+        "principalId": "[reference(resourceId('Microsoft.CognitiveServices/accounts/projects', 'locked', 'proj'), '2025-06-01', 'full').identity.principalId]",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b24988ac-6180-42a0-ab88-20f7382dd24c')]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts/projects', 'locked', 'proj')]",
+        "[resourceId('Microsoft.CognitiveServices/accounts', 'open')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.Storage/storageAccounts', 'stgdemo')]",
+      "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', 'stgdemo'), 'contrib')]",
+      "properties": {
+        "principalId": "[reference(resourceId('Microsoft.CognitiveServices/accounts/projects', 'locked', 'proj'), '2025-06-01', 'full').identity.principalId]",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b24988ac-6180-42a0-ab88-20f7382dd24c')]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts/projects', 'locked', 'proj')]",
+        "[resourceId('Microsoft.Storage/storageAccounts', 'stgdemo')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.KeyVault/vaults', 'kvdemo')]",
+      "name": "[guid(resourceId('Microsoft.KeyVault/vaults', 'kvdemo'), 'contrib')]",
+      "properties": {
+        "principalId": "[reference(resourceId('Microsoft.CognitiveServices/accounts/projects', 'locked', 'proj'), '2025-06-01', 'full').identity.principalId]",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b24988ac-6180-42a0-ab88-20f7382dd24c')]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts/projects', 'locked', 'proj')]",
+        "[resourceId('Microsoft.KeyVault/vaults', 'kvdemo')]"
+      ]
+    }
+  ]
+}

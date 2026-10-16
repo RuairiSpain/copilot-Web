@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/armexpr"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
 
@@ -22,18 +23,20 @@ func evalIDN005(in *sdk.Input) sdk.Result {
 	)
 	assignments := ofType(in, typeRoleAssign)
 	if len(assignments) == 0 {
-		return skip(sdk.SkipInputUnavailable)
+		return skip(sdk.SkipInputUnavailable + ": no role assignment resource in the compiled ARM model")
 	}
 	for _, r := range assignments {
-		def, present, isExpr := strOf(r.Properties, "roleDefinitionId")
+		def, present := rawStr(r.Properties, "roleDefinitionId")
 		if !present {
 			continue
 		}
-		if isExpr {
-			unresolved = true
+		role, gok := armexpr.RoleDefinitionGUID(def)
+		if !gok {
+			if armexpr.IsExpression(def) {
+				unresolved = true
+			}
 			continue
 		}
-		role := roleGUID(def)
 		label, ok := humanPrivilegedRole(role)
 		if !ok {
 			continue
@@ -56,9 +59,9 @@ func evalIDN005(in *sdk.Input) sdk.Result {
 			subOwners++
 		}
 		findings = append(findings, sdk.Finding{
-			Resource: sdk.ResourceRef{Type: r.Type, Name: r.Name},
+			Resource: sdk.ResourceRef{Type: r.Type, Name: armexpr.StripScope(r.Name)},
 			Location: r.Location,
-			Evidence: fmt.Sprintf("%s assignment for principalType %s at scope %q is standing human admin access that requires review", label, pt, r.Scope),
+			Evidence: fmt.Sprintf("%s assignment for principalType %s at scope %q is standing human admin access that requires review", label, pt, armexpr.StripScope(r.Scope)),
 		})
 	}
 	if subOwners > 3 {

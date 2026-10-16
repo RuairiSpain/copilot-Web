@@ -1,5 +1,5 @@
 id: FND-CFG-004
-version: 1
+version: 4
 group: CFG
 title: "Prompt model or hosted source/image is valid"
 description: >-
@@ -8,7 +8,8 @@ description: >-
   hosted) must have an agent source (project path that exists, with a Dockerfile for container
   builds) or a prebuilt image, must not combine codeConfiguration with image-based container
   configuration, must give codeConfiguration both runtime and entryPoint, and must keep container
-  resources inside the documented range (cpu 0.25 to 4.0, memory 0.5Gi to 8.0Gi). Voice agents
+  resources (container.resources.cpu and container.resources.memory) inside the documented range (cpu 0.25 to 4.0
+  cores, memory 0.5Gi to 8.0Gi; the schema allows cpu such as 500m and memory with Ki, Mi, Gi and decimal suffixes, which are normalised). Voice agents
   require a model unless they use conversationEngine.
 status: verified
 phases: ["1"]
@@ -21,13 +22,21 @@ severity:
   test: error
   prod: error
 compatibility:
-  azd: ">=1.34.2 <=1.36.0-beta.1"
+  azd: ">=1.34.2 <=1.36.0"
   extensions:
-    azure.ai.agents: ">=1.0.0-beta.18 <=1.0.0-beta.18"
-    azure.ai.projects: ">=1.0.0-beta.13 <=1.0.0-beta.13"
+    azure.ai.agents: ">=1.0.0-beta.18 <=1.0.0-beta.20"
+    azure.ai.projects: ">=1.0.0-beta.13 <=1.0.0-beta.14"
   apiVersions: []
   preview: true
-  notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from a changelog and was not verified. Extension ranges are exactly the versions whose schemas or source were read; widen them in Phase 1 by reading older tags."
+  notes: >-
+    azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18,
+    projects beta.13 need >=1.34.2); the maximum is azd 1.36.0 (tag azure-dev-cli_1.36.0, acebba1e388b489a91ab8e2487a676359ab516a1, released 2026-10-14; the first clone read at 1.36.0-beta.1 is earlier evidence). The earlier >=1.27.1 lower
+    bound came from a changelog and was not verified. Extension ranges are exactly the versions whose schemas or
+    source were read; widen them in Phase 1 by reading older tags. Window widened 2026-10-16: azd to 1.36.0 (tag
+    azure-dev-cli_1.36.0, acebba1, released 2026-10-14); azure.ai.agents to 1.0.0-beta.20; azure.ai.projects to
+    1.0.0-beta.14. The azd and extension changelogs and the schema and source diffs from the previously verified
+    versions were read; none touches this rule's verified facts for the widened fields (see docs/tool-compatibility.md
+    section 6).
 evidence:
   description: >-
     For kind prompt: model and instructions are non-blank strings and model equals the name of a
@@ -35,7 +44,10 @@ evidence:
     the deployment comes from a $ref file that cannot be read). For kind hosted: project is present
     and the directory exists; when no image is set and codeConfiguration is absent, a Dockerfile exists
     under project; codeConfiguration and image are not both set; codeConfiguration has runtime and
-    entryPoint; cpu and memory parse and fall within the documented bounds.
+    entryPoint; container.resources.cpu and container.resources.memory parse and fall within the documented bounds. When the project
+    declares no deployments key, the model-to-deployment match is unknown and the result is uncertain. A hosted agent with no
+    Dockerfile, image or codeConfiguration but with runtime, startupCommand or skill is accepted; with none of them the
+    source is unclear and the result is uncertain.
   confidence: likely
 recommendation: >-
   Set model to the name of a deployment declared on the project, provide instructions for prompt agents,
@@ -59,16 +71,28 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference
     lastVerified: "2026-10-05"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/azure-yaml-reference.md (ms.date 09/17/2026)
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference (ms.date 09/17/2026);
+      source file MicrosoftDocs/azure-ai-docs: articles/foundry/agents/concepts/azure-yaml-reference.md;
+      retrieved 2026-10-05
     note: Agent fields, container resource bounds, codeConfiguration vs image, voice model fields.
   - url: https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json from azure.ai.agents 1.0.0-beta.18; immutable repository revision unavailable
+    verifiedVia: >-
+      https://raw.githubusercontent.com/Azure/azure-dev/a64ca8fe04d0bc1b0375c32fed1b76573e2a91ef/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json
+      (commit of the azure.ai.agents 1.0.0-beta.18 release tag)
     note: "Versioned schema evidence: prompt agent requires project, model and instructions; CodeConfiguration requires runtime and entryPoint; registryConnectionId requires hosted and no codeConfiguration."
   - url: https://learn.microsoft.com/azure/foundry/agents/how-to/author-azure-yaml
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/author-azure-yaml.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/how-to/author-azure-yaml; source file
+      MicrosoftDocs/azure-ai-docs: articles/foundry/agents/how-to/author-azure-yaml.md; retrieved 2026-10-04
     note: Deploy modes (code vs container), prebuilt image.
+  - url: https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json
+    lastVerified: "2026-10-15"
+    verifiedVia: >-
+      https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json (fetched 2026-10-15; branch URL, immutable revision unavailable)
+    note: "ContainerSettings.resources (ResourceSettings): cpu pattern ^[0-9]+(\\.[0-9]+)?m?$ and memory pattern with Ki|Mi|Gi|Ti|Pi|Ei|k|M|G|T|P|E suffixes; startupCommand is a service property. Numeric bounds still come from the Learn reference above."
 overlap:
   decision: native
   provisional: true
@@ -103,17 +127,27 @@ tests:
     - hosted-agent-project-dir-missing
     - hosted-agent-code-configuration-and-image
     - hosted-agent-cpu-above-4
+    - container-resources-memory-above-8Gi
     - code-configuration-missing-entrypoint
   negative:
     - prompt-agent-model-matches-deployment
     - hosted-agent-prebuilt-image
     - hosted-agent-code-deploy
+    - hosted-agent-runtime-and-startup-command
+    - container-resources-512Mi-and-500m
   skipped:
     - project-uses-existing-endpoint
     - deployments-in-ref-file-unreadable
+  uncertain:
+    - project-declares-no-deployments
+    - hosted-agent-no-dockerfile-image-or-runtime
 notes: >-
   Unverified: whether project is still required when image is set. The v1.0 schema requires project for
   host azure.ai.agent, while the reference describes image as skipping the Dockerfile build; the rule follows
   the schema and flags it only when project is absent in both. The generic "project and image together are invalid"
   statement in the schema applies to host containerapp only and is not applied here. The image reference
   format is not documented beyond an example and is not validated (no tag-pinning claim is made).
+  Quantity forms: only cpu as a plain decimal and memory with Ki, Mi, Gi or Ti suffixes are range-checked. The schema
+  patterns also accept cpu with an m suffix, memory with decimal suffixes (k, M, G, T, P, E), Pi/Ei and bare numbers; how
+  the service reads those is not verified, so they are reported as uncertain, never as out of range.
+  Version 4: uncertain notes are no longer dropped when the rule also has findings. They are returned as uncertain skips next to the findings (one per distinct note), and the rule-level skip is kept only when there are no findings.

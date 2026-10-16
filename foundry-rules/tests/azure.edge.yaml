@@ -1,0 +1,23 @@
+name: edge-project
+services:
+  ai-project:
+    host: azure.ai.project
+  triage:
+    host: azure.ai.agent
+    project: ${AGENT_SRC}
+    uses: [ai-project]
+    kind: hosted
+    name: ${AGENT_NAME}
+    toolboxes: ['${TOOLBOX_NAME}']
+  triage-copy:
+    host: azure.ai.agent
+    project: ${AGENT_SRC}
+    uses: [ai-project]
+    kind: hosted
+    name: ${AGENT_NAME}
+  agent-tools:
+    host: azure.ai.toolbox
+    uses: [ai-project]
+    tools:
+      - type: mcp
+        connection: ${CONN_NAME}
