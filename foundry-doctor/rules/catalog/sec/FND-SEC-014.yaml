@@ -25,7 +25,7 @@ compatibility:
   apiVersions: []
   preview: true
   notes: >-
-    azd verified at exactly 1.36.0-beta.1. Azd stores entry-point outputs as environment values per azd docs Bicep
+    azd: the lower bound 1.36.0-beta.1 is the first version read (clone); the upper bound is azd 1.36.0 (tag azure-dev-cli_1.36.0, acebba1e388b489a91ab8e2487a676359ab516a1, released 2026-10-14), read by tag diff on 2026-10-16. Azd stores entry-point outputs as environment values per azd docs Bicep
     linter rule outputs-should-not-contain-secrets (Learn ms.date 10/30/2025) -
     https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/azure-resource-manager/bicep/linter-rule-outputs-should-not-contain-secrets.md
     (branch URL, not commit-pinned) Window widened 2026-10-16: azd to 1.36.0 (tag azure-dev-cli_1.36.0, acebba1,
@@ -77,10 +77,7 @@ sources:
 - url: https://github.com/Azure/bicep/blob/4d4395e327b32da45ae3d961aa464d28e54d26f7/src/Bicep.Core/Analyzers/Linter/Rules/OutputsShouldNotContainSecretsRule.cs
   lastVerified: '2026-10-05'
   verifiedVia: >-
-    Azure/bicep @ 4d4395e327b32da45ae3d961aa464d28e54d26f7 (2026-10-02, MIT)
-    src/Bicep.Core/Analyzers/Linter/Rules/OutputsShouldNotContainSecretsRule.cs: Code =
-    "outputs-should-not-contain-secrets", category Security; outputs with the @secure decorator are skipped; an output
-    whose name contains "password" is reported.
+    https://github.com/Azure/bicep/blob/4d4395e327b32da45ae3d961aa464d28e54d26f7/src/Bicep.Core/Analyzers/Linter/Rules/OutputsShouldNotContainSecretsRule.cs; Azure/bicep @ 4d4395e327b32da45ae3d961aa464d28e54d26f7 (2026-10-02, MIT) src/Bicep.Core/Analyzers/Linter/Rules/OutputsShouldNotContainSecretsRule.cs: Code = "outputs-should-not-contain-secrets", category Security; outputs with the @secure decorator are skipped; an output whose name contains "password" is reported.
   note: >-
     Rule ID confirmed in source. The related IDs secure-secrets-in-params and secure-parameter-default are parameter
     rules and do not replace this one.

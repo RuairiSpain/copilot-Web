@@ -111,15 +111,12 @@ sources:
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/network/resource-manager/Microsoft.Network/Network/stable/2024-05-01/privateEndpoint.json
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    raw.githubusercontent.com/Azure/azure-rest-api-specs/main/.../Network/stable/2024-05-01/privateEndpoint.json (PrivateDnsZoneGroupPropertiesFormat.privateDnsZoneConfigs[].properties.privateDnsZoneId)
-    and .../privatedns/.../PrivateDns/stable/2024-06-01/privatedns.json (VirtualNetworkLinkProperties)
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/network/resource-manager/Microsoft.Network/Network/stable/2024-05-01/privateEndpoint.json; raw.githubusercontent.com/Azure/azure-rest-api-specs/main/.../Network/stable/2024-05-01/privateEndpoint.json (PrivateDnsZoneGroupPropertiesFormat.privateDnsZoneConfigs[].properties.privateDnsZoneId) and .../privatedns/.../PrivateDns/stable/2024-06-01/privatedns.json (VirtualNetworkLinkProperties)
   note: Property names for zone groups and VNet links.
 - url: https://github.com/MicrosoftDocs/azure-docs/blob/eb1e05deecc53c7a1a192453a3b8183e45f73c10/articles/private-link/private-endpoint-dns.md
   lastVerified: '2026-10-05'
   verifiedVia: >-
-    MicrosoftDocs/azure-docs main @ eb1e05deecc53c7a1a192453a3b8183e45f73c10 (2026-10-04),
-    articles/private-link/private-endpoint-dns.md (ms.date 08/11/2026), fetched from raw.githubusercontent.com on
-    2026-10-05 (path absent from the sparse local clone).
+    https://github.com/MicrosoftDocs/azure-docs/blob/eb1e05deecc53c7a1a192453a3b8183e45f73c10/articles/private-link/private-endpoint-dns.md; MicrosoftDocs/azure-docs main @ eb1e05deecc53c7a1a192453a3b8183e45f73c10 (2026-10-04), articles/private-link/private-endpoint-dns.md (ms.date 08/11/2026), fetched from raw.githubusercontent.com on 2026-10-05 (path absent from the sparse local clone).
   note: >-
     Verified public-cloud zone table for group IDs: Foundry Tools account -> privatelink.cognitiveservices.azure.com,
     privatelink.openai.azure.com, privatelink.services.ai.azure.com (footnote: configure DNS for each endpoint the

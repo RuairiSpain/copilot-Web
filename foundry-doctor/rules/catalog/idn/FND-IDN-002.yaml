@@ -106,7 +106,8 @@ sources:
     note: Foundry User for the project identity on the account, Container Registry Repository Reader or AcrPull on the registry, Log Analytics Data Reader for evaluations.
   - url: https://learn.microsoft.com/azure/role-based-access-control/built-in-roles
     lastVerified: "2026-10-04"
-    verifiedVia: github.com/MicrosoftDocs/azure-docs articles/role-based-access-control/built-in-roles/{ai-machine-learning,storage,databases,containers,monitor}.md (ms.date 07/01/2026; role id fields)
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/role-based-access-control/built-in-roles; github.com/MicrosoftDocs/azure-docs articles/role-based-access-control/built-in-roles/{ai-machine-learning,storage,databases,containers,monitor}.md (ms.date 07/01/2026; role id fields)
     note: Role definition GUIDs listed in the evidence.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2025-10-15/rbac.json
     lastVerified: "2026-10-04"

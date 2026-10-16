@@ -28,7 +28,7 @@ compatibility:
   preview: true
   notes: >-
     azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18,
-    projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower
+    projects beta.13 need >=1.34.2); the maximum is azd 1.36.0 (tag azure-dev-cli_1.36.0, acebba1e388b489a91ab8e2487a676359ab516a1, released 2026-10-14; the first clone read at 1.36.0-beta.1 is earlier evidence). The earlier >=1.27.1 lower
     bound came from a changelog and was not verified. Extension ranges are exactly the versions whose schemas or
     source were read; widen them in Phase 1 by reading older tags. Window widened 2026-10-16: azd to 1.36.0 (tag
     azure-dev-cli_1.36.0, acebba1, released 2026-10-14). The azd and extension changelogs and the schema and source
@@ -98,7 +98,8 @@ sources:
     note: Schema evidence for the required project and agent fields used by the fix.
   - url: https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/pkg/environment/environment.go
     lastVerified: "2026-10-15"
-    verifiedVia: raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/pkg/environment/environment.go fetched 2026-10-15; immutable revision unavailable
+    verifiedVia: >-
+      https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/pkg/environment/environment.go (fetched 2026-10-15; branch URL, immutable revision unavailable)
     note: "Constants naming the azd-defined environment keys (AZURE_ENV_NAME, AZURE_LOCATION, AZURE_SUBSCRIPTION_ID, AZURE_PRINCIPAL_ID, AZURE_PRINCIPAL_TYPE, AZURE_TENANT_ID, AZURE_CONTAINER_REGISTRY_ENDPOINT, AZURE_CONTAINER_APPS_ENVIRONMENT_DEFAULT_DOMAIN, AZURE_APP_SERVICE_DASHBOARD_URI, AZURE_AKS_CLUSTER_NAME, AZURE_RESOURCE_GROUP, AZD_PLATFORM_TYPE). The source defines the names; it does not state which are always set."
 overlap:
   decision: native
