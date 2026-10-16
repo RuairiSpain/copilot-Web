@@ -1,5 +1,5 @@
 id: FND-ENV-002
-version: 3
+version: 4
 group: ENV
 title: "Environment-bound names/IDs/rules were not copied unchanged"
 description: >-
@@ -121,3 +121,4 @@ notes: >-
   checked against the module's output on a 26-input corpus; the module is not a dependency (it is absent from
   docs/licence-inventory.md). Secret-looking values (names containing KEY, SECRET, TOKEN, PASSWORD, PWD,
   CONNECTIONSTRING, CREDENTIAL, SAS or SIG) are replaced by a digest after parsing.
+  Version 4: uncertain notes (an unusable environment, an environment with a missing value) are returned as uncertain skips next to findings, not dropped. Findings carry a Key: the check kind, the variable name when there is one, and the sorted environment pair, never a value or a value fingerprint, so a rotated value does not resurface a baselined finding.

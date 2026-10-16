@@ -1,5 +1,5 @@
 id: FND-CFG-003
-version: 3
+version: 4
 group: CFG
 title: "All inter-service references resolve"
 description: >-
@@ -143,3 +143,4 @@ notes: >-
   Generic uses and routine relationships remain uncertain and do not produce violations. The generic
   schema permits resource names while the Foundry article discusses service names; compiled Bicep does
   not prove how an extension resolves that name. Defender and Advisor overlap is unresearched.
+  Version 4: uncertain notes are no longer dropped when the rule also has findings. They are returned as uncertain skips next to the findings (one per distinct note), and the rule-level skip is kept only when there are no findings.

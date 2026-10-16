@@ -185,7 +185,10 @@ func (s *envStore) SelectionReason() string {
 		return "no-environment-selected"
 	}
 	if _, ok := s.byEn[name]; !ok {
-		return "default-environment-not-found"
+		if name == s.src.DefaultEnvironment {
+			return "default-environment-not-found"
+		}
+		return "environment-not-found: " + sanitizeEnvName(name)
 	}
 	switch s.status[name] {
 	case env.StatusMissing:
@@ -197,6 +200,25 @@ func (s *envStore) SelectionReason() string {
 	default:
 		return "env-file-unreadable"
 	}
+}
+
+// sanitizeEnvName keeps an explicit environment name safe for a skip text:
+// only letters, digits, hyphen, underscore and dot, capped at 40 characters.
+func sanitizeEnvName(n string) string {
+	var b strings.Builder
+	for i, r := range n {
+		if i >= 40 {
+			b.WriteString("...")
+			break
+		}
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_', r == '.':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('?')
+		}
+	}
+	return b.String()
 }
 
 // SelectedByName implements cfg.EnvNameSelection. The environment counts as

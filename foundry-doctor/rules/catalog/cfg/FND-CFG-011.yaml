@@ -1,5 +1,5 @@
 id: FND-CFG-011
-version: 4
+version: 5
 group: CFG
 title: "Preview/retired fields are version-aware"
 description: >-
@@ -132,3 +132,4 @@ notes: >-
   requiredVersions.extensions: comma- and space-separated constraints are accepted. A floor above the highest tested
   version is reported as uncertain (not verified). A floor below the tested minimum is informational and does not make
   the rule inconclusive.
+  Version 5: uncertain notes are no longer dropped when the rule also has findings. They are returned as uncertain skips next to the findings (one per distinct note), and the rule-level skip is kept only when there are no findings.

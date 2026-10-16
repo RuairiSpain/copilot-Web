@@ -85,43 +85,47 @@ func evalCFG009(in *sdk.Input) sdk.Result {
 		return skip(sdk.SkipInputUnavailable + ": azure.yaml unavailable")
 	}
 	st := cfgState{}
+	declared := false
 	for _, s := range serviceList(d) {
 		if strings.ToLower(s.Host) != "azure.ai.routine" {
 			continue
 		}
 		for _, trig := range pairs(s.get("triggers")) {
+			declared = true
 			checkRoutineTrigger(d, s, trig.Key, trig.Val, &st)
 		}
 	}
-	if len(st.fs) > 0 {
-		return ok(st.fs)
+	if !declared {
+		return skip(sdk.SkipNotApplicable + ": no azure.ai.routine service declares triggers")
 	}
-	if !st.evaluated {
-		if len(st.skips) == 0 {
-			return skip(sdk.SkipNotApplicable + ": project has no recurring routine triggers")
-		}
-		return skip(strings.Join(st.skips, "; "))
-	}
-	if len(st.skips) > 0 {
-		return skip(strings.Join(st.skips, "; "))
-	}
-	return sdk.Result{}
+	return withNotes(st.fs, st.skips)
 }
 
+// checkRoutineTrigger evaluates one trigger. The rule knows the beta.8
+// spelling only (type recurring, cron_expression, time_zone; compatibility
+// window azure.ai.routines beta.8). Routines beta.9 renamed authored keys to
+// camelCase and rejects the snake_case spellings, and the beta.10 schema names
+// the trigger type schedule with cronExpression and timeZone. No source states
+// that the beta.8 cadence facts carry over to those spellings, so every trigger
+// the rule does not understand is an uncertain note, never not-applicable.
 func checkRoutineTrigger(d document, s service, key, trig *yaml.Node, st *cfgState) {
 	typNode := child(trig, "type")
 	typ := strings.ToLower(strings.TrimSpace(scalar(typNode)))
 	if typ == "" || containsRef(typ) {
-		st.skips = append(st.skips, s.Name+": trigger "+key.Value+" type is unresolved")
+		st.skips = append(st.skips, s.Name+": trigger "+key.Value+" type is missing or unresolved")
 		return
 	}
 	switch typ {
 	case "recurring":
 		cronNode := child(trig, "cron_expression")
 		if cronNode == nil {
-			if child(trig, "cron") != nil {
-				st.skips = append(st.skips, s.Name+": uncertain: recurring trigger "+key.Value+" uses cron instead of cron_expression")
-				return
+			switch {
+			case child(trig, "cronExpression") != nil:
+				st.skips = append(st.skips, s.Name+": recurring trigger "+key.Value+" uses cronExpression (azure.ai.routines beta.9 and later spelling); only the beta.8 spelling cron_expression is evaluated")
+			case child(trig, "cron") != nil:
+				st.skips = append(st.skips, s.Name+": recurring trigger "+key.Value+" uses cron instead of cron_expression")
+			default:
+				st.skips = append(st.skips, s.Name+": recurring trigger "+key.Value+" has no cron_expression key the rule understands")
 			}
 			return
 		}
@@ -132,16 +136,16 @@ func checkRoutineTrigger(d document, s service, key, trig *yaml.Node, st *cfgSta
 		}
 		tzNode := child(trig, "time_zone")
 		if tzNode == nil || strings.TrimSpace(scalar(tzNode)) == "" {
-			st.skips = append(st.skips, s.Name+": uncertain: recurring trigger "+key.Value+" has no time_zone")
+			st.skips = append(st.skips, s.Name+": recurring trigger "+key.Value+" has no time_zone")
 			return
 		}
 		if !validRoutineTimeZone(strings.TrimSpace(scalar(tzNode))) {
-			st.skips = append(st.skips, s.Name+": uncertain: recurring trigger "+key.Value+" time_zone is not in bundled identifier data")
+			st.skips = append(st.skips, s.Name+": recurring trigger "+key.Value+" time_zone is not in bundled identifier data")
 			return
 		}
 		expr, minGap, uncertain := parseRoutineCron(cron)
 		if uncertain != "" {
-			st.skips = append(st.skips, s.Name+": uncertain: trigger "+key.Value+" "+uncertain)
+			st.skips = append(st.skips, s.Name+": trigger "+key.Value+" "+uncertain)
 			return
 		}
 		st.evaluated = true
@@ -153,11 +157,9 @@ func checkRoutineTrigger(d document, s service, key, trig *yaml.Node, st *cfgSta
 			st.fs = append(st.fs, finding(d, s, cronNode, "cron-too-frequent:"+key.Value, fmt.Sprintf("trigger %q cron_expression %q fires more often than every five minutes", key.Value, cron)))
 		}
 	case "schedule":
-		if child(trig, "cron_expression") != nil {
-			st.skips = append(st.skips, s.Name+": uncertain: trigger "+key.Value+" uses schedule with cron_expression")
-		}
+		st.skips = append(st.skips, s.Name+": trigger "+key.Value+" has type schedule (azure.ai.routines beta.10 schema, cronExpression and timeZone); the rule evaluates only the beta.8 recurring spelling")
 	default:
-		st.skips = append(st.skips, s.Name+": trigger "+key.Value+" type "+typ+" is out of scope")
+		st.skips = append(st.skips, s.Name+": trigger "+key.Value+" type "+clip(typ)+" is not evaluated by this rule")
 	}
 }
 

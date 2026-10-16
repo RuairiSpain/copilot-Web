@@ -225,15 +225,12 @@ func splitAzdOp(tok string) (op, rest string) {
 // half-open span [lo, hi). isWild reports whether the token uses a wildcard;
 // ok is false for a wildcard shape the research note does not cover.
 func azdWildcard(tok string) (lo, hi semver, isWild, ok bool) {
+	// blang ParseRange treats any token containing "x" (anywhere, including a
+	// pre-release identifier) as a wildcard and rejects or rewrites it in ways
+	// only the exact forms below are verified for.
 	core := tok
-	if i := strings.IndexAny(core, "-+"); i >= 0 {
-		core = core[:i]
-	}
 	if !strings.Contains(core, "x") {
 		return lo, hi, false, true
-	}
-	if core != tok {
-		return lo, hi, true, false // pre-release on a wildcard: not covered
 	}
 	parts := strings.Split(core, ".")
 	num := func(s string) (uint64, bool) {
@@ -269,6 +266,11 @@ func parseAzdRange(s string) (azdRange, parseStatus) {
 	if len(toks) == 0 {
 		return nil, parseInvalid
 	}
+	if strings.ContainsAny(s, "\t\r\n\v\f") {
+		// blang splits on the space character only; other whitespace stays
+		// inside a token and is then rejected.
+		return nil, parseUnverified
+	}
 	var groups azdRange
 	var cur []azdCmp
 	sawTerm := false // a comparator was added since the last "||"
@@ -291,7 +293,19 @@ func parseAzdRange(s string) (azdRange, parseStatus) {
 		if strings.Contains(tok, "||") {
 			return nil, parseUnverified // "||" glued to a version: tokenisation not verified
 		}
+		// blang splitAndTrim drops a one-character token, except that "<", ">"
+		// and "=" keep the following space attached. Any other one-character
+		// token (including "!" before a space) is not verified.
+		if len(tok) == 1 && tok != "<" && tok != ">" && tok != "=" {
+			return nil, parseUnverified
+		}
 		op, rest := splitAzdOp(tok)
+		if rest != "" && strings.ContainsRune("<>=", rune(tok[len(tok)-1])) && i+1 < len(toks) && strings.Contains(toks[i+1], "x") {
+			// An unrecognised operator ending in <, > or = glues the next
+			// token to itself, and blang then expands the "x" wildcard with no
+			// valid operator (for example "<> 1.x" is accepted).
+			return nil, parseUnverified
+		}
 		if rest == "" {
 			if i+1 >= len(toks) || toks[i+1] == "||" {
 				return nil, parseInvalid
@@ -396,6 +410,8 @@ type partial struct {
 	n   int // specified components, 0 means fully wild
 	v   semver
 	pre bool
+	// unverified: the library accepts the form but its meaning is not verified.
+	unverified bool
 }
 
 func parseMMVersion(s string) (partial, bool) {
@@ -431,8 +447,15 @@ func parseMMVersion(s string) (partial, bool) {
 			return partial{}, false
 		}
 	}
+	for _, id := range pre {
+		if isDigits(id) && hasLeadingZero(id) {
+			return partial{}, false // Masterminds v3.4.0 rejects a numeric pre-release with a leading zero
+		}
+	}
 	if wild && p.pre {
-		return partial{}, false
+		// Masterminds accepts a wildcard with a pre-release (for example
+		// 1.2.x-beta) but what it means is not verified.
+		p.unverified = true
 	}
 	p.v.major, p.v.minor, p.v.patch = nums[0], nums[1], nums[2]
 	return p, true
@@ -533,6 +556,17 @@ func (g *mmGroup) apply(iv interval, p partial) {
 	}
 }
 
+// mmQuirk reports comparators whose Masterminds v3.4.0 behaviour differs from
+// the bound model and was found by the differential test
+// (testdata/semver_diff.json): "<", "<=" and "^" with a bare wildcard match
+// nothing, and "~" with a zero version matches every version.
+func mmQuirk(op string, p partial) bool {
+	if p.n == 0 && (op == "<" || op == "<=" || op == "^") {
+		return true
+	}
+	return op == "~" && p.n == 3 && p.v.major == 0 && p.v.minor == 0 && p.v.patch == 0
+}
+
 // parseMMGroup parses one "||" alternative: comma- or space-separated
 // comparators, with "a - b" hyphen ranges.
 func parseMMGroup(s string) (mmGroup, parseStatus) {
@@ -549,6 +583,9 @@ func parseMMGroup(s string) (mmGroup, parseStatus) {
 				b, bok := parseMMVersion(toks[i+2])
 				if !aok || !bok {
 					return g, parseInvalid
+				}
+				if a.unverified || b.unverified || b.n == 0 {
+					return g, parseUnverified
 				}
 				g.apply(mmInterval(">=", a), a)
 				g.apply(mmInterval("<=", b), b)
@@ -567,6 +604,9 @@ func parseMMGroup(s string) (mmGroup, parseStatus) {
 			p, ok := parseMMVersion(rest)
 			if !ok {
 				return g, parseInvalid
+			}
+			if p.unverified || mmQuirk(op, p) {
+				return g, parseUnverified
 			}
 			g.apply(mmInterval(op, p), p)
 			count++

@@ -1,5 +1,5 @@
 id: FND-CFG-004
-version: 3
+version: 4
 group: CFG
 title: "Prompt model or hosted source/image is valid"
 description: >-
@@ -149,3 +149,4 @@ notes: >-
   Quantity forms: only cpu as a plain decimal and memory with Ki, Mi, Gi or Ti suffixes are range-checked. The schema
   patterns also accept cpu with an m suffix, memory with decimal suffixes (k, M, G, T, P, E), Pi/Ei and bare numbers; how
   the service reads those is not verified, so they are reported as uncertain, never as out of range.
+  Version 4: uncertain notes are no longer dropped when the rule also has findings. They are returned as uncertain skips next to the findings (one per distinct note), and the rule-level skip is kept only when there are no findings.

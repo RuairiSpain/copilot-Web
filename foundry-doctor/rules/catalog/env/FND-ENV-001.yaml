@@ -1,5 +1,5 @@
 id: FND-ENV-001
-version: 4
+version: 5
 group: ENV
 title: "Environments do not unintentionally share resource groups"
 description: >-
@@ -151,3 +151,4 @@ notes: >-
   26-input corpus; the module is not a dependency. .azure/config.json defaultEnvironment is read by project
   discovery to select the environment for the FND-CFG rules; this rule compares every environment directory (at most 100).
   Version 4: the uncertain note for a service-level literal resourceGroup is reported once, not once per environment.
+  Version 5: uncertain notes (an unusable environment, an environment with a missing value) are returned as uncertain skips next to findings, not dropped. Findings carry a Key: the check kind, the variable name when there is one, and the sorted environment pair, never a value or a value fingerprint, so a rotated value does not resurface a baselined finding.

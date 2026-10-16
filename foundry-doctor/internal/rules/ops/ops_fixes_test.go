@@ -517,6 +517,31 @@ func TestOPS008EvalPipeline(t *testing.T) {
 	}
 }
 
+// N3-5: both inconclusive OPS-008 outcomes carry the uncertain reason head.
+func TestOPS008SkipsAreUncertain(t *testing.T) {
+	agentYAML := "name: d\nservices:\n  a:\n    host: azure.ai.agent\n"
+	goodEval := "agent: a\ndataset_file: d.jsonl\nevaluators:\n- name: x\n"
+	noGit := t.TempDir()
+	writeFile(t, noGit, "eval.yaml", goodEval)
+	unread := t.TempDir()
+	if err := os.Mkdir(filepath.Join(unread, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, unread, "eval.yaml", goodEval)
+	writeFile(t, unread, ".github/workflows/azure-dev.yml", "a: [x\n")
+	for name, tc := range map[string]struct{ root, want string }{
+		"no .git":             {noGit, "uncertain: no .git directory"},
+		"pipeline files read": {unread, "uncertain: pipeline files exist but were not read"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := eval(t, "FND-OPS-008", Providers{Root: tc.root}, prodInput(t, agentYAML))
+			if got.Skipped == nil || !strings.HasPrefix(got.Skipped.Reason, tc.want) {
+				t.Fatalf("want skip starting %q, got %+v", tc.want, got)
+			}
+		})
+	}
+}
+
 func TestExprHelpers(t *testing.T) {
 	for s, want := range map[string]bool{"[parameters('a')]": true, "[[literal": false, "plain": false, "": false, " [format('x')]": true} {
 		if isExpr(s) != want {

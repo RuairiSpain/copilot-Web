@@ -1,5 +1,5 @@
 id: FND-CFG-006
-version: 4
+version: 5
 group: CFG
 title: "Every variable has an environment or infrastructure producer"
 description: >-
@@ -163,3 +163,4 @@ notes: >-
   INVOCATIONS_WS_ENDPOINT} are producers for azure.ai.agent services only; any other AGENT_* name is uncertain. A key
   with an empty value is not a producer and is uncertain. Without a usable environment the rule skips with
   input-unavailable and a named reason: no-environment-selected, env-file-missing or default-environment-not-found.
+  Version 5: uncertain notes are no longer dropped when the rule also has findings. They are returned as uncertain skips next to the findings (one per distinct note), and the rule-level skip is kept only when there are no findings. The AGENT_<SERVICE> key mirrors azd agentServiceKey (azure.ai.agents 1.0.0-beta.20, service_target_agent.go): a space and a hyphen become an underscore, then upper-case; nothing else is replaced. A service name with any other character (for example a dot) gives no verified AGENT_ names, so references to them are uncertain. The A2A endpoint suffix is added (displayableProtocols: RESPONSES, INVOCATIONS, A2A, INVOCATIONS_WS). A named environment that does not exist skips with input-unavailable: environment-not-found: <name> (name sanitised and capped at 40 characters); default-environment-not-found is only for a defaultEnvironment value.
