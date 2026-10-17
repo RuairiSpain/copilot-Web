@@ -29,8 +29,11 @@ jobs:
         env:
           AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+        # --strict is not used: FND-DEP-008 and FND-DEP-009 are uncertain by design, and --strict (exit 3) would always
+        # exit 3 and also outranks exit 1 (ADR-010), masking a real error finding. Read the report: exit 0 does not mean
+        # ready when it prints "N check(s) uncertain".
         run: |
-          foundry-doctor preflight --what-if --strict \
+          foundry-doctor preflight --what-if \
             --resource-group <resource-group> --location <location> \
             --approved-scope /subscriptions/<subscription-id>/resourceGroups/<shared-network-rg> \
             --format json --out preflight.json

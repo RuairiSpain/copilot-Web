@@ -45,7 +45,7 @@ The DEP agent could not verify whether a what-if leaves a deployment record or a
 8. **Response payloads that can carry secrets or content are discarded at the client boundary, never logged or persisted:**
    `properties.outputs` and `properties.parameters` of deployments (FND-DEP-010), the `before` and `after` bodies of what-if
    results (FND-DEP-008; amended in Phase 2: what-if is requested as `ResourceIdOnly`, so no `before` or `after` body is returned at all, see ADR-021 c), the `resourceContent` we send to
-   `checkPolicyRestrictions` (built from non-secret template content only, FND-DEP-009), and the free-text error strings of
+   `checkPolicyRestrictions` (FND-DEP-009; built from non-secret template content only, after sanitising: the planned name, properties, tags, sku, kind, identity and zones. Unresolved expressions and secret-like values are dropped and a deny after any dropped field is only an uncertain note. Tag values are free text, so they are sanitised like every other string and the residual risk is that a secret typed into a tag value under an innocuous name is not recognised. At most 50 resources are checked per run), and the free-text error strings of
    Search indexers (FND-RUN-006, reduced to an error code and counts before storage).
 9. **"Reader suffices" is a hypothesis until tested.** The rows marked Reader in the DEP tables rest on RBAC action names alone.
    The Phase 2 replay suite must run every such row with a Reader-only identity before the permission matrix says Reader suffices.

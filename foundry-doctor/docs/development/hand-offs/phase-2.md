@@ -1,6 +1,6 @@
 # Phase 2 hand-off: Azure read-only adapters and preflight
 
-Status: **gate round 1 on 2026-10-17: Foundry lead REJECT, Azure black belt REJECT. Gate round 2 on 2026-10-17: Foundry lead ACCEPT with conditions, Azure black belt REJECT. Phase 2 is not complete.** Round 2 remediation is done and awaits re-review (below). The parent session updates this file after the re-review; no item here is claimed fixed until a reviewer confirms it. The security and Go principal reviews are deferred by ADR-019.
+Status: **gate round 1 on 2026-10-17: Foundry lead REJECT, Azure black belt REJECT. Gate round 2: Foundry lead ACCEPT with conditions, Azure black belt REJECT. Gate round 3: both ACCEPT with conditions, no blocking findings. Phase 2 is not complete until the loop 3 conditions are confirmed and the OIDC CI evidence exists.** Round 3 remediation is done and awaits confirmation (below). The parent session updates this file after the re-review; no item here is claimed fixed until a reviewer confirms it. The security and Go principal reviews are deferred by ADR-019.
 
 ## Delivered
 - `internal/azure`: read-only adapters (inventory, permissions, models, policy, what-if, names, regions, deployments, subnet links), allow-listed transport, token acquisition from `AZURE_ACCESS_TOKEN`, `azd auth token` or `az account get-access-token` (ADR-021 a). One flat package (ADR-021 f).
@@ -55,6 +55,21 @@ Foundry lead: **ACCEPT with conditions** (new blocker N-B1). Azure black belt: *
 
 Rules raised to `version: 3` in round 2: FND-DEP-002, FND-DEP-008, FND-DEP-009, FND-DEP-010.
 
+## Gate round 3 (2026-10-17) and remediation
+Both reviewers: **ACCEPT with conditions**, no blocking findings. Summaries are in the two review records. Nothing below is closed until a reviewer confirms it.
+
+| Condition | Status |
+|---|---|
+| C1 Phase allocation for scope-policy owner rules (lead decision) | fixed in loop 3, pending confirmation: ADR-022; ADR-021 (e) updated; the DoD cross-resource-group item stays PARTLY MET and is a release gate for v1 |
+| OIDC sample used `--strict` | fixed in loop 3, pending confirmation (`samples/preflight/github-oidc.example.yml`) |
+| What-if role lacked the resource-group-qualified `operationstatuses/read` | fixed in loop 3, pending confirmation (`preflight-whatif-role.json`) |
+| `docs/preflight.md`: DEP-002 uncertain by design, `--strict` masks exit 1, exit 0 is not ready, narrowed DEP-008 demotion | fixed in loop 3, pending confirmation |
+| Catalogue: FND-DEP-008 v4, FND-DEP-010 and FND-DEP-002 stale sentences | fixed in loop 3, pending confirmation (catalogue validated and regenerated) |
+| ADR-006 item 8: content sent to checkPolicyRestrictions, 50-resource cap | fixed in loop 3, pending confirmation |
+| Pinned Bicep digest re-derivation note; full-SHA recommendation for `source-ref` | fixed in loop 3, pending confirmation (`samples/preflight/README.md`, reusable caller sample) |
+
+Rules raised to `version: 4` in loop 3: FND-DEP-008 (narrowed subscription-scope demotion). The Go code must match the narrowed wording (`internal/preflight/rules_b.go` currently demotes any non-destructive change inside the subscription): code owner action.
+
 ## Commands implemented
 `foundry-doctor preflight` (flags in `docs/preflight.md`).
 
@@ -65,10 +80,10 @@ Last full run before the gate (windows/arm64, Go 1.25.13): gofmt, go vet, go tes
 Deferred by ADR-019 to Phase 9. Not met. Evidence meanwhile: allow-list tests, token held in memory only, no secrets in reports (implementers' tests, not an independent review).
 
 ## Foundry lead review
-Round 1: REJECT (2026-10-17). Round 2: ACCEPT with conditions (2026-10-17), new blocker N-B1 fixed in round 2, pending re-review. See `docs/development/reviews/phase-2-foundry-lead.md`.
+Round 1: REJECT (2026-10-17). Round 2: ACCEPT with conditions (2026-10-17), new blocker N-B1 fixed in round 2. Round 3: ACCEPT with conditions, no blockers (2026-10-17), conditions fixed in loop 3, pending confirmation. See `docs/development/reviews/phase-2-foundry-lead.md`.
 
 ## Azure black belt review
-Round 1: REJECT (2026-10-17). Round 2: REJECT (2026-10-17), N1-N4 fixed in round 2, pending re-review. See `docs/development/reviews/phase-2-azure-black-belt.md`.
+Round 1: REJECT (2026-10-17). Round 2: REJECT (2026-10-17), N1-N4 fixed in round 2. Round 3: ACCEPT with conditions, no blockers (2026-10-17), conditions fixed in loop 3, pending confirmation. See `docs/development/reviews/phase-2-azure-black-belt.md`.
 
 ## Known limitations
 See `docs/preflight.md` (Limitations): DEP-009 always uncertain; DEP-007 skips Cosmos DB and ACR gaps; DEP-008 cannot see deletions; required parameters must be resolvable; subscription-scope deployments; scope policy coverage (exactly what-if predicted change IDs and the agent network-injection subnet); Reader sufficiency is a hypothesis. Added in round 2:
@@ -78,7 +93,7 @@ See `docs/preflight.md` (Limitations): DEP-009 always uncertain; DEP-007 skips C
 - FND-DEP-008 and FND-DEP-009 are uncertain by design, so `--strict` exits 3 on them; the reusable workflow therefore does not use `--strict` and exposes a `what-if` input (default false).
 - Subscription-scope what-if without `--approved-scope`: Creates outside the resource group but under the subscription are uncertain notes; a subscription-scope template needs the what-if right at the subscription.
 - The what-if poll URL shape is inferred and UNVERIFIED (ARM Location URLs are opaque).
-- Four cross-resource-group reference kinds (connection targets, private endpoint subnets, role-assignment scopes, Key Vault references) are not covered; ADR-021 (e) names an owner rule and exit criterion for each. Two owners (FND-NET-002, FND-SEC-005) have no PRD phase able to carry the live check and FND-IDN-002 has a Phase 2 slot the Phase 2 scope does not use: a lead decision (ADR) is needed. DEP-012 matrix covers Agents, Responses and Private VNet only; the 365-day staleness and the DEP-010 margin of 80 are product decisions. DEP-011 link ownership is untested against real tenants.
+- Four cross-resource-group reference kinds (connection targets, private endpoint subnets, role-assignment scopes, Key Vault references) are not covered; ADR-021 (e) names an owner rule and exit criterion for each. Phase allocation of the four owners is decided in ADR-022 (FND-RUN-003, FND-IDN-002 and FND-NET-002 live parts Phase 3; FND-SEC-005 Phase 8); the DoD item is partly met and is a release gate for v1. DEP-012 matrix covers Agents, Responses and Private VNet only; the 365-day staleness and the DEP-010 margin of 80 are product decisions. DEP-011 link ownership is untested against real tenants.
 
 ## Deferred issues with rationale
 - Reader-only replay and live disposable-subscription tests: no Azure environment (ADR-021 d).
@@ -104,14 +119,14 @@ Statuses are conservative while the re-review is pending.
 | No preflight check writes or changes Azure resources | unmet pending re-review | Allow-list test in `internal/azure` (GET plus named POST reads); ADR-006; not independently reviewed (ADR-019) |
 | Lack of permission identifies the exact skipped capability | unmet pending re-review | 403 degrades to `capability unavailable: <capability> at <path> (missing permission: <action>)`; matrix action names being corrected (D3) |
 | What-if destructive changes surfaced with resource IDs | partly met, DEP-008 deletions uncertain | `ResourceIdOnly` what-if returns IDs and change types; Incremental mode cannot report deletions (ADR-021 c) |
-| Cross-resource-group references follow explicit scope policy | met for what-if predicted change IDs and the agent subnet only; waived-by-ADR-021 (e) for the other four kinds, each with an owner rule | `--approved-scope`, FND-DEP-008 and FND-DEP-011 tests; ADR-021 (e) table |
-| CI supports OIDC and no client secrets are required | unmet until the workflow runs | `foundry-doctor-preflight.yml` uses `azure/login` with `vars.*`, `id-token: write`, no secrets; never run on GitHub |
+| Cross-resource-group references follow explicit scope policy | PARTLY MET: what-if predicted change IDs and the agent subnet only. Release gate for v1 (ADR-022): blocks the Phase 9 / v1 hand-off until connection targets (FND-RUN-003, Phase 3), role-assignment scopes (FND-IDN-002, Phase 3), private endpoint subnets (FND-NET-002, Phase 3) and Key Vault references (FND-SEC-005, Phase 8) are covered with the positive and uncertain tests of ADR-021 (e) | `--approved-scope`, FND-DEP-008 and FND-DEP-011 tests; ADR-021 (e) table; ADR-022 |
+| CI supports OIDC and no client secrets are required | unmet until the workflow runs on GitHub: run it once in a test repository with `what-if` false and true and record the evidence | `foundry-doctor-preflight.yml` uses `azure/login` with `vars.*`, `id-token: write`, no secrets; never run on GitHub |
 | Recorded Azure API fixtures for deterministic tests | partly met | Fixtures in `internal/azure/testdata`; none recorded from a live subscription |
 | Integration tests in disposable subscriptions; Reader-only replay (ADR-006 item 9) | waived-by-ADR-021 (d) | Exit criterion in ADR-021 (d) |
 | Azure SDK for Go and Resource Graph used | waived-by-ADR-021 (a, b) | Token acquisition via CLI and ARM list calls |
 | Permission matrix documenting Reader and elevated read requirements | partly met | `docs/permissions-matrix.md`; some rows UNVERIFIED; Reader sufficiency labelled hypothesis |
 | Sample OIDC configuration and least-privilege role guidance | met pending re-review | `samples/preflight/` (read-only role, what-if role, caller samples) and `docs/preflight.md` |
-| Independent Foundry lead and Azure black belt reviews | unmet | Round 1 REJECT both; round 2: Foundry lead ACCEPT with conditions, Azure black belt REJECT (2026-10-17); round 2 fixes pending re-review |
+| Independent Foundry lead and Azure black belt reviews | unmet | Round 1 REJECT both; round 2: Foundry lead ACCEPT with conditions, Azure black belt REJECT (2026-10-17); round 2 fixes pending re-review; round 3: both ACCEPT with conditions (2026-10-17), conditions fixed in loop 3, pending confirmation |
 | Security and Go principal reviews | waived-by-ADR-019 | Deferred to Phase 9 |
 | Hand-off written, DoD audited | met | This file |
 

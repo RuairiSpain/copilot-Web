@@ -63,7 +63,7 @@ failing check look ready.
 | `--what-if` (alias `--preflight`) | Opt in to ARM what-if (FND-DEP-008). Off by default. |
 | `--approved-scope <id>` | Extra scope that cross-resource-group references may target. Repeatable. |
 | `--allow-delete <id>` | Accept a predicted deletion of this resource. Repeatable. |
-| `--strict` | Exit 3 when a skip or an uncertain result hid a check (by-design skips do not count). Not used by the reusable workflow, see Limitations. |
+| `--strict` | Exit 3 when a skip or an uncertain result hid a check (by-design skips do not count). Exit 3 outranks exit 1 (ADR-010 precedence 4, 2, 3, 1, 0), so with `--strict` a real error finding is masked whenever any check is uncertain. Because FND-DEP-002, FND-DEP-008 and FND-DEP-009 are uncertain by design, `preflight --strict` is of limited use and the reusable workflow does not use it, see Limitations. |
 
 ## Cross-resource-group scope policy
 
@@ -155,9 +155,10 @@ secret.
   kinds: the resource IDs of what-if predicted changes (FND-DEP-008) and the
   agent network-injection subnet (FND-DEP-011). Nothing else is covered:
   connection targets (owner FND-RUN-003, Phase 3), private endpoint subnets
-  (FND-NET-002), role-assignment scopes (FND-IDN-002) and Key Vault references
-  (FND-SEC-005) are waived by ADR-021 (e), which gives each an owner rule and an
-  exit criterion. References built from unresolved expressions are reported
+  (FND-NET-002, Phase 3), role-assignment scopes (FND-IDN-002, Phase 3) and Key
+  Vault references (FND-SEC-005, Phase 8) are waived by ADR-021 (e), which gives
+  each an owner rule and an exit criterion, and phased by ADR-022. The DoD item
+  stays partly met and is a release gate for v1. References built from unresolved expressions are reported
   uncertain, not covered.
 - **FND-DEP-002 can never pass in Phase 2.** The supporting-provider set (a)
   (providers the template references but does not define) cannot be derived
@@ -177,17 +178,26 @@ secret.
   never logged or written to a report, but it does leave the machine. Name
   secret parameters accordingly or keep them out of the parameter file used for
   preflight.
-- **FND-DEP-008 and FND-DEP-009 are uncertain by design**, so `--strict` exits 3
-  whenever they run: an uncertain outcome is a skip whose reason starts with
+- **FND-DEP-002, FND-DEP-008 and FND-DEP-009 are uncertain by design**, so `--strict` exits 3
+  whenever they run (FND-DEP-002 never passes, see above): an uncertain outcome is a skip whose reason starts with
   `uncertain:`, and that head is not on the by-design list in
   `internal/rules/skipclass.go`, so it counts as a skip that hid a check. The
   reusable workflow therefore does not use `--strict`, and it exposes a
   `what-if` input (boolean, default false) that adds `--what-if`; without it
   FND-DEP-008 is skipped.
-- **Subscription-scope what-if without `--approved-scope`.** A Create outside
-  the target resource group but under the target subscription is expected for a
-  subscription-scope template, so it is an `uncertain` note, not a finding.
-  Anything outside the target subscription is still a finding. A
+- **Exit 0 does not mean ready.** An uncertain result is reported and exits 0
+  (exit 3 only under `--strict`). The report prints `N check(s) uncertain`;
+  readiness counts uncertain and skipped checks as not ready. Read the report,
+  not only the exit code. Because exit 3 outranks exit 1, `--strict` also hides
+  a real error finding behind exit 3 when any check is uncertain (ADR-010).
+- **Subscription-scope what-if without `--approved-scope` (narrowed in
+  FND-DEP-008 version 4).** In a subscription-scope template, a Create of a
+  subscription-level resource (a resource ID under the target subscription with
+  no `resourceGroups` segment, for example a role assignment) or of the
+  resource group itself is an `uncertain` note, not a finding. A Create, Modify
+  or Deploy of a resource inside a different resource group is a finding unless
+  that group is within `--approved-scope`. A Delete, and any change outside the
+  target subscription, is a finding. A
   subscription-scope template needs the what-if right
   (`Microsoft.Resources/deployments/whatIf/action`) at the subscription scope;
   a role assigned only at the resource group does not suffice and the check

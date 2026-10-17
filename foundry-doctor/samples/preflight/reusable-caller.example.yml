@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   preflight:
-    # Pin to a tag or full commit SHA in real use.
+    # Pin to a tag or, better, a full 40-hex commit SHA in real use. A tag can be moved; a SHA cannot.
     uses: RuairiSpain/copilot-Web/.github/workflows/foundry-doctor-preflight.yml@main
     with:
       environment: <environment-name>
@@ -25,4 +25,5 @@ jobs:
       # see README.md in this directory. --strict is not used by the workflow (some checks are uncertain by design).
       what-if: false
       # Only when source-repository is set to a repository other than the caller: pass a tag (vX.Y.Z) or full 40-hex SHA.
+      # In cross-repository use prefer the full SHA: it is the only form that cannot be re-pointed after review.
       # source-ref: <tag-or-40-hex-sha>

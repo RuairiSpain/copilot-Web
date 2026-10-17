@@ -50,7 +50,10 @@ func TestDEP009SendsTagsSkuKindIdentityZones(t *testing.T) {
 func TestDEP009DroppedFieldsDowngradeDenyToUncertain(t *testing.T) {
 	deny := []azure.PolicyRestriction{{Kind: azure.RestrictionObservedDenial, Effect: "deny", AssignmentID: "a1", Message: "blocked"}}
 	for name, mod := range map[string]func(*sdk.ARMResource){
-		"expression tag":  func(r *sdk.ARMResource) { r.Tags = map[string]any{"env": "[parameters('env')]"} },
+		"expression tag": func(r *sdk.ARMResource) { r.Tags = map[string]any{"env": "[parameters('env')]"} },
+		"credential-shaped tag": func(r *sdk.ARMResource) {
+			r.Tags = map[string]any{"note": "DefaultEndpointsProtocol=https;AccountName=a;" + "Account" + "Key=zzzz=="}
+		},
 		"expression sku":  func(r *sdk.ARMResource) { r.SKU = map[string]any{"name": "[parameters('sku')]"} },
 		"expression prop": func(r *sdk.ARMResource) { r.Properties = map[string]any{"publicNetworkAccess": "[parameters('p')]"} },
 	} {

@@ -324,6 +324,8 @@ func TestDEP002(t *testing.T) {
 		{"network-secured: state not returned is uncertain", []sdk.ARMResource{agentAccount(sid)}, all("Registered")[1:], nil, oUncertain, "was not returned"},
 		{"not network-secured: Microsoft.App is not required", []sdk.ARMResource{res(typeAccount, "acct"), storage}, with(all("Registered"), "Microsoft.App", "NotRegistered"), nil, oUncertain, "cannot be derived from the compiled model"},
 		{"template-defined provider that is unregistered is not reported here", []sdk.ARMResource{storage}, []azure.ProviderState{{Namespace: "Microsoft.Storage", State: "NotRegistered"}}, nil, oUncertain, "Microsoft.Bing is not evaluated"},
+		{"empty provider list, not network-injected, is uncertain", []sdk.ARMResource{res(typeAccount, "acct"), storage}, []azure.ProviderState{}, nil, oUncertain, "DEP-002 never passes"},
+		{"empty provider list, network-injected, is uncertain", []sdk.ARMResource{agentAccount(sid)}, []azure.ProviderState{}, nil, oUncertain, "was not returned"},
 		{"never a pass: no injection and nothing to evaluate", []sdk.ARMResource{storage}, nil, nil, oUncertain, "DEP-002 never passes"},
 		{"never a pass: injected, all registered, still names part (a) and Bing", []sdk.ARMResource{agentAccount(sid)}, all("Registered"), nil, oUncertain, "Microsoft.Bing"},
 		{"no Azure context is skipped naming the capability", []sdk.ARMResource{agentAccount(sid)}, nil, func(d *Deps) { d.Context = nil }, oSkipped, "Microsoft.Resources/subscriptions/providers/read"},
@@ -363,6 +365,8 @@ func TestDEP010LockApplicability(t *testing.T) {
 		text     string
 	}{
 		{"ReadOnly lock on an unrelated resource group is ignored", []azure.Lock{lock("ReadOnly", subID+"/resourceGroups/other")}, nil, nil, nil, oPass, ""},
+		{"ReadOnly lock on sibling group rg2 does not cover target rg", []azure.Lock{lock("ReadOnly", rgID+"2")}, nil, nil, nil, oPass, ""},
+		{"ReadOnly lock on a resource in sibling group rg2 does not cover target rg", []azure.Lock{lock("ReadOnly", rgID+"2/providers/Microsoft.Storage/storageAccounts/stfoo123")}, nil, nil, nil, oPass, ""},
 		{"ReadOnly lock on an unrelated resource in the group is ignored", []azure.Lock{lock("ReadOnly", rgID+"/providers/Microsoft.Storage/storageAccounts/other")}, nil, nil, nil, oPass, ""},
 		{"ReadOnly lock on a child of a planned resource does not cover it", []azure.Lock{lock("ReadOnly", planned+"/blobServices/default")}, nil, nil, nil, oPass, ""},
 		{"ReadOnly lock on the target group fails", []azure.Lock{lock("ReadOnly", rgID)}, nil, nil, nil, oFail, "blocks writes"},

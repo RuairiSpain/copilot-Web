@@ -16,8 +16,9 @@ name: foundry-doctor-preflight
 # When source-repository differs from the calling repository (the default points at RuairiSpain/copilot-Web), the caller
 # must pass source-ref as a release tag (vX.Y.Z) or a full 40-character commit SHA; a branch such as main is rejected.
 #
-# --strict is deliberately not used. Some checks are uncertain by design (FND-DEP-008 Incremental mode and FND-DEP-009),
-# so --strict would always exit 3 and the job could never succeed. Exit codes (foundry-doctor README, "Exit codes"):
+# --strict is deliberately not used. Some checks are uncertain by design (FND-DEP-002, FND-DEP-008 Incremental mode and
+# FND-DEP-009), so --strict would always exit 3 and the job could never succeed. Exit 3 also outranks exit 1 (ADR-010
+# precedence 4,2,3,1,0), so --strict would mask a real error finding. Exit codes (foundry-doctor README, "Exit codes"):
 # 0 clean, 1 at least one finding at or above --fail-on (default error), 2 validation could not run (invalid input,
 # unavailable dependency), 3 only with --strict (a skip hid a check), 4 internal error. The job exits with the doctor's
 # code, so any non-zero code fails the job; exit 1 is the documented findings policy and the evidence artifact says why.

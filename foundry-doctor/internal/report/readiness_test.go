@@ -69,3 +69,29 @@ func TestBuildReadinessNoRules(t *testing.T) {
 		t.Errorf("unexpected rule output: %s", b.String())
 	}
 }
+
+func TestConsoleReadinessUncertainLine(t *testing.T) {
+	render := func(r *Readiness) string {
+		var b strings.Builder
+		if err := Console(&b, nil, Run{ToolVersion: "1", Profile: "p", Readiness: r}); err != nil {
+			t.Fatal(err)
+		}
+		return b.String()
+	}
+	two := BuildReadiness([]string{"A", "B", "C"}, nil, []sdk.Skip{
+		{RuleID: "A", Reason: UncertainPrefix + "x"}, {RuleID: "B", Reason: UncertainPrefix + "y"},
+	})
+	got := render(two)
+	if strings.Count(got, "2 check(s) uncertain: exit 0 does not mean ready") != 1 {
+		t.Errorf("want exactly one uncertain line:\n%s", got)
+	}
+	if got != render(two) {
+		t.Error("console output is not deterministic")
+	}
+	if out := render(BuildReadiness([]string{"A"}, nil, nil)); strings.Contains(out, "does not mean ready") {
+		t.Errorf("no uncertain checks must print no line:\n%s", out)
+	}
+	if strings.Contains(render(nil), "does not mean ready") {
+		t.Error("no readiness must print no line")
+	}
+}

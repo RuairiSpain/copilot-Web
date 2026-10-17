@@ -49,13 +49,15 @@ a finding) and a skipped or uncertain test (reference built from an unresolved e
 | Reference kind | Owner rule | Owner phase (PRD s20) | Property path the owner rule reads | Exit criterion: extend the scope policy when the owner rule verifies... |
 |---|---|---|---|---|
 | Connection targets | FND-RUN-003 | 3 | `properties.target` of project and account connections (`ConnectionPropertiesV2.target`, api-version 2026-09-01, read in FND-RUN-003 evidence) | the connection `target` as a resource ID or endpoint, in Phase 3 |
-| Private endpoint subnets | FND-NET-002 | 1 (offline compiled template; no live phase is allocated in s20) | `properties.subnet.id` of `Microsoft.Network/privateEndpoints` (shape shown in the FND-NET-002 fix example, not a separately verified evidence entry) | FND-NET-002 live control-plane evidence reads the private endpoint subnet; because s20 allocates no live phase to this rule, the lead decides the phase by ADR before the work starts |
-| Role-assignment scopes | FND-IDN-002 | 1/2 (Phase 2 part not in the Phase 2 functional scope, which lists DEP-001..012 only) | `properties.scope` of `Microsoft.Authorization/roleAssignments` 2022-04-01 (named in FND-IDN-002 notes) | the FND-IDN-002 live part reads and evaluates `properties.scope`; this is the nearest owner and the allocation of that live part to a phase needs a lead decision |
-| Key Vault references | FND-SEC-005 | Later (no phase) | the Key Vault resource ID referenced by Foundry (customer-managed keys, connections); the property path is not in the FND-SEC-005 evidence | FND-SEC-005 is scheduled to a phase and verifies the referencing property path |
+| Private endpoint subnets | FND-NET-002 | 1 (offline compiled template; no live phase is allocated in s20) | `properties.subnet.id` of `Microsoft.Network/privateEndpoints` (shape shown in the FND-NET-002 fix example, not a separately verified evidence entry) | FND-NET-002 live control-plane evidence reads the private endpoint subnet; because s20 allocates no live phase to this rule, the phase is allocated by ADR-022 (Phase 3) |
+| Role-assignment scopes | FND-IDN-002 | 1/2 (Phase 2 part not in the Phase 2 functional scope, which lists DEP-001..012 only) | `properties.scope` of `Microsoft.Authorization/roleAssignments` 2022-04-01 (named in FND-IDN-002 notes) | the FND-IDN-002 live part reads and evaluates `properties.scope`; this is the nearest owner and the live part is allocated to Phase 3 by ADR-022 |
+| Key Vault references | FND-SEC-005 | Later (no phase) | the Key Vault resource ID referenced by Foundry (customer-managed keys, connections); the property path is not in the FND-SEC-005 evidence | FND-SEC-005 (Phase 8, ADR-022) verifies the referencing property path |
 
-Two entries are honestly open: the s20 allocation gives FND-NET-002 and FND-SEC-005 no phase that can carry the live correlation, and gives FND-IDN-002 a
-Phase 2 slot that the Phase 2 functional scope does not use. Those need a lead decision (an ADR, because s20 phase allocation does not change without one).
-CLAUDE.md still forbids implementing a property name that the catalogue has not verified, so no kind is added to the policy ahead of its owner rule.
+The phase allocation for these owner rules was decided in ADR-022 (2026-10-17): FND-RUN-003 stays in Phase 3; the live parts of FND-IDN-002
+and FND-NET-002 are allocated to Phase 3; FND-SEC-005 to Phase 8. The "Owner phase" column above shows the PRD section 20 value at the time of
+writing; ADR-022 supersedes it for the live check. The DoD item stays partly met and is a release gate for v1 (ADR-022): it blocks the Phase 9 /
+v1 hand-off until each kind is covered with the positive and uncertain tests required above. CLAUDE.md still forbids implementing a property name
+that the catalogue has not verified, so no kind is added to the policy ahead of its owner rule.
 
 **(f) Package layout.** The PRD lists sub-packages (`internal/azure/auth`, `inventory`, `permissions`, `models`, `policy`, `whatif`, `names`). The
 implementation is one flat `internal/azure` package plus `internal/preflight`. Reason: the allow-list, retry, concurrency and redaction live in one

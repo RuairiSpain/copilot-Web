@@ -156,10 +156,12 @@ func (e *env) dep008(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 				// are not under the target resource group: the group itself,
 				// subscription-level role assignments, policy and so on. With a
 				// resource group set, a non-destructive change inside the target
-				// subscription is therefore an uncertain note, not a "blocked"
-				// finding. Destructive changes and anything outside the
-				// subscription keep the finding.
-				if o.scope == scopeSubscription && !c.Destructive() && e.inSubscription(c.ResourceID) {
+				// subscription-level Create is therefore an uncertain note, not a
+				// "blocked" finding. Only a Create of a subscription-level
+				// resource or of a resource group itself is demoted; Modify,
+				// Deploy, Delete, anything inside a different resource group
+				// and anything outside the subscription keep the finding.
+				if o.scope == scopeSubscription && c.ChangeType == azure.ChangeCreate && e.inSubscription(c.ResourceID) && subscriptionLevelID(c.ResourceID) {
 					subLevel = append(subLevel, string(c.ChangeType)+" "+c.ResourceID)
 					continue
 				}
@@ -198,6 +200,19 @@ func (e *env) dep008(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 	}
 	a.note("%s", incrementalNote)
 	return a.result(), nil
+}
+
+// subscriptionLevelID reports whether id names a subscription-level resource
+// (no resourceGroups segment, such as a subscription role assignment) or a
+// resource group itself (/subscriptions/<id>/resourceGroups/<name>).
+func subscriptionLevelID(id string) bool {
+	parts := strings.Split(strings.Trim(strings.ToLower(id), "/"), "/")
+	for i, p := range parts {
+		if p == "resourcegroups" {
+			return i == 2 && len(parts) == 4
+		}
+	}
+	return true
 }
 
 func typeFromID(id string) string {

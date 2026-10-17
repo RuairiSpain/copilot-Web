@@ -61,6 +61,39 @@ func TestWhatIfPollReplaysOpaqueLocationQuery(t *testing.T) {
 			}
 		}
 	})
+	t.Run("percent-encoded dot segments and query delimiters in the path are refused", func(t *testing.T) {
+		base := testRG + "/providers/Microsoft.Resources/deployments/foundry-doctor-whatif/operationStatuses/"
+		for _, p := range []string{base + "%2e%2e", base + "%2E%2E", base + "op1/%2e%2e/%2e%2e/locks", base + "op1%3fx=1", base + "op1%3Fx=1"} {
+			f := newFake(t).on("POST", runPath, loc("https://management.test", p, "?t=1"))
+			a, _ := newAdapter(t, f)
+			if _, err := a.Run(ctx, req); !errors.Is(err, ErrNotAllowed) || f.callCount() != 1 {
+				t.Errorf("%s: err=%v calls=%d", p, err, f.callCount())
+			}
+		}
+	})
+	t.Run("a second API-Version in different case is stripped and replaced", func(t *testing.T) {
+		q := "?API-Version=1999-01-01&t=1&api-VERSION=2000-01-01&Api%2DVersion=2001-01-01"
+		f := newFake(t).
+			on("POST", runPath, loc("https://management.test", poll, q)).
+			on("GET", poll, reply{status: 200, body: fixture(t, "whatif_done.json")})
+		a, _ := newAdapter(t, f)
+		if _, err := a.Run(ctx, req); err != nil {
+			t.Fatal(err)
+		}
+		last := strings.ToLower(f.calls[len(f.calls)-1])
+		if strings.Count(last, "api-version") != 1 || strings.Contains(last, "1999") || strings.Contains(last, "2000-01-01") || strings.Contains(last, "2001-01-01") || !strings.Contains(last, "api-version=2026-06-01") {
+			t.Errorf("api-version not replaced: %q", last)
+		}
+	})
+	t.Run("cross-origin scheme or port is refused", func(t *testing.T) {
+		for _, host := range []string{"http://management.test", "https://management.test:8443", "https://management.test.evil.example"} {
+			f := newFake(t).on("POST", runPath, loc(host, poll, "?t=1"))
+			a, _ := newAdapter(t, f)
+			if _, err := a.Run(ctx, req); !errors.Is(err, ErrNotAllowed) || f.callCount() != 1 {
+				t.Errorf("%s: err=%v calls=%d", host, err, f.callCount())
+			}
+		}
+	})
 	t.Run("another operation with extra parameters is refused", func(t *testing.T) {
 		other := testRG + "/providers/Microsoft.Authorization/locks"
 		f := newFake(t).on("POST", runPath, loc("https://management.test", other, "?t=1&c=2"))
