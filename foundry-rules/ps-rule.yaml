@@ -7,10 +7,10 @@ include:
     - .ps-rule/
     - baselines/
 
-# Detect chooses the format from the file extension: azure.yaml and *.yaml as YAML, *.json as JSON.
-# Pass -Format File for .bicep files so PSRule for Azure expands them.
+# The input format is not set here: `input.format` is not a key in the PSRule options schema (checked against
+# PSRule main, schemas/PSRule-options.schema.json). The -Format parameter defaults to detecting the format from the
+# file extension (azure.yaml and *.yaml as YAML, *.json as JSON). Pass -Format File for .bicep files.
 input:
-  format: Detect
   pathIgnore:
     - 'tools/'
     - 'docs/'

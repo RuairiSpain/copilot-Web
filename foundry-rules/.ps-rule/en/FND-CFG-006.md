@@ -6,7 +6,7 @@ Every variable has an environment or infrastructure producer
 
 ## DESCRIPTION
 
-Every ${VAR} reference in azure.yaml (service env, connection target and credentials, project network fields, policies and similar) must have a producer: a value in the selected azd environment (.azure/<env>/.env), an azd-set standard variable (AZURE_ENV_NAME, AZURE_LOCATION, AZURE_SUBSCRIPTION_ID, AZURE_RESOURCE_GROUP, AZURE_TENANT_ID, AZURE_PRINCIPAL_ID, AZURE_PRINCIPAL_TYPE; names defined in azd's environment.go), a Bicep output that provisioning writes to the environment, a value written by a previous deploy (AGENT_<SERVICE>_NAME, _VERSION, _ENDPOINT), or an inline default (${VAR:-default}). ${{...}} Foundry server-side expressions and escaped $${VAR} forms are not azd variables.
+Every ${VAR} reference in azure.yaml (service env, connection target and credentials, project network fields, policies and similar) must have a producer: a value in the selected azd environment (.azure/<env>/.env), an azd-defined variable name (AZURE_ENV_NAME, AZURE_LOCATION, AZURE_SUBSCRIPTION_ID, AZURE_RESOURCE_GROUP, AZURE_TENANT_ID, AZURE_PRINCIPAL_ID, AZURE_PRINCIPAL_TYPE; names defined in azd's environment.go) present in the .env, a Bicep output that provisioning writes to the environment, a value written by a previous deploy (AGENT_<SERVICE>_NAME, _VERSION, _ENDPOINT), or an inline default (${VAR:-default}). ${{...}} Foundry server-side expressions and escaped $${VAR} forms are not azd variables.
 
 ## RECOMMENDATION
 

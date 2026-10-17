@@ -1,13 +1,17 @@
 # Expected results for the fixtures
 
-Manual check. These expectations were derived by reading the rules, not by running PSRule
-(PSRule was not available when this was written; see `../README.md`).
+These expectations were derived by reading the rules. They have **not** yet been confirmed by a PSRule run: PSRule
+was not available when they were written (see `../README.md`, Status). `Invoke-FixtureCheck.ps1` in this folder asserts
+them, and the workflow `.github/workflows/foundry-rules.yml` runs it; until its first run the result is unknown. The
+bodies of the 8 PowerShell rules were additionally executed outside PSRule and matched these expectations for the
+resources they apply to.
 
 The ARM JSON fixtures are hand-written resource objects in the shape PSRule for Azure produces after expansion
 (one object per resource, with `type`, `name`, `kind`, `sku`, `identity`, `properties`). They were not produced by
 compiling Bicep.
 
-Run from the `foundry-rules` folder, one fixture at a time, with the prod baseline:
+Automated: `pwsh -NoProfile -File tests/Invoke-FixtureCheck.ps1` from the `foundry-rules` folder (exit 1 on any failed
+assertion). By hand, one fixture at a time, with the prod baseline:
 
 ```powershell
 Invoke-PSRule -InputPath tests/azure.bad.yaml -Baseline Foundry.Prod -Module PSRule.Rules.Azure -Outcome Fail

@@ -1,0 +1,61 @@
+name: foundry-rules
+
+# Checks the PSRule rule set in foundry-rules/: static consistency (verify.py) and the fixtures run through
+# PSRule for Azure (tests/Invoke-FixtureCheck.ps1). No other workflow depends on this one.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'foundry-rules/**'
+      - '.github/workflows/foundry-rules.yml'
+  push:
+    paths:
+      - 'foundry-rules/**'
+      - '.github/workflows/foundry-rules.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundry-rules-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Pinned. 1.47.0 is the stable version recorded in foundry-doctor/docs/tool-compatibility.md; it was not
+  # confirmed against the PowerShell Gallery from the authoring sandbox. If the install step fails with "no match
+  # was found", correct this value.
+  PSRULE_RULES_AZURE_VERSION: '1.47.0'
+
+jobs:
+  fixtures:
+    name: fixtures (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # GitHub-hosted runners ship Python; no third-party setup action is needed (none is SHA-pinned in this repo).
+      - name: Static checks (verify.py)
+        shell: bash
+        run: |
+          PY="$(command -v python3 || command -v python)"
+          "$PY" -m pip install pyyaml
+          "$PY" foundry-rules/tools/verify.py
+
+      - name: Install PSRule.Rules.Azure
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module PSRule.Rules.Azure -RequiredVersion $env:PSRULE_RULES_AZURE_VERSION -Scope CurrentUser -Force
+          Get-Module PSRule.Rules.Azure -ListAvailable | Select-Object Name, Version, Path
+
+      - name: Run fixtures through PSRule
+        shell: pwsh
+        working-directory: foundry-rules
+        run: ./tests/Invoke-FixtureCheck.ps1
