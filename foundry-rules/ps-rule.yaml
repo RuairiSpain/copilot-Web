@@ -16,6 +16,14 @@ input:
     - 'docs/'
     - 'tests/expected.md'
 
+# Objects are bound by their ARM `type` field (Microsoft.Storage/storageAccounts), which is what the YAML rules'
+# `type:` precondition matches. Without this PSRule binds by the .NET type name and ARM resources match no rule.
+binding:
+  targetType:
+    - type
+  targetName:
+    - name
+
 configuration:
   # Expand .bicep and .bicepparam files to ARM resources. PSRule for Azure calls the Bicep CLI.
   AZURE_BICEP_FILE_EXPANSION: true
