@@ -20,7 +20,7 @@ GitHub reads workflows only from the repository root, so the files are in `.gith
 
 Read-only token, no secrets, no `pull_request_target`: safe for fork pull requests. Jobs:
 
-- `test`: `go test ./...` on ubuntu, macos and windows, `go-version-file: foundry-doctor/go.mod`.
+- `test`: `go test ./...` on macos and windows (Linux removed from the test and smoke matrices at the owner's request; the lint, vet, vulncheck and boundary jobs still run on ubuntu), `go-version-file: foundry-doctor/go.mod`.
 - `quality`: `scripts/install-dev-tools.sh`, then `scripts/claude/verify-phase.sh` (gofmt, vet, test, race, staticcheck, govulncheck, build, rule-catalogue check,
   secret scan, import boundary, `bash -n scripts/ci/*.sh`). Runs with `--strict`: all gates are available on the runner, so a skipped gate fails CI (for example govulncheck when vuln.go.dev is unreachable). Tests that skip themselves inside `go test` without `BICEP_PATH` are not counted by `--strict`; the `smoke` job installs Bicep.
 - `import-boundary`: `scripts/ci/check-import-boundary.sh`.
