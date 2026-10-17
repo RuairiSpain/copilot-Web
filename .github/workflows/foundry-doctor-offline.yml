@@ -54,10 +54,6 @@ on:
         description: "Release mode: also run `gh attestation verify` on the downloaded binary."
         type: boolean
         default: true
-      runner:
-        description: "Runner label for the doctor job. Foundry Doctor is only supported on Windows, so only windows-latest is accepted."
-        type: string
-        default: "windows-latest"
       upload-sarif:
         description: "Upload the SARIF to code scanning (skipped on fork and Dependabot pull requests)."
         type: boolean
@@ -82,7 +78,7 @@ permissions:
 jobs:
   doctor:
     name: foundry-doctor doctor
-    runs-on: ${{ inputs.runner }}
+    runs-on: windows-latest # Foundry Doctor is supported on Windows only (ADR-011 decision 6); no runner input
     permissions:
       contents: read
     outputs:
@@ -103,7 +99,6 @@ jobs:
           IN_VERSION: ${{ inputs.version }}
           IN_REPO: ${{ inputs.source-repository }}
           IN_REF: ${{ inputs.source-ref }}
-          IN_RUNNER: ${{ inputs.runner }}
           IN_UPLOAD: ${{ inputs.upload-sarif }}
           EVENT_NAME: ${{ github.event_name }}
           HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
@@ -112,7 +107,6 @@ jobs:
         run: |
           # Inputs reach the shell only through env vars and are validated here, never interpolated into scripts.
           bad() { echo "::error title=foundry-doctor-offline::$1"; exit 2; }
-          case "$IN_RUNNER" in windows-latest) ;; *) bad "input runner must be windows-latest (Foundry Doctor is only supported on Windows)";; esac
           case "$IN_PATH" in ''|/*|*..*|*[!A-Za-z0-9._/-]*) bad "input path must be a relative path without '..' (letters, digits, . _ / -)";; esac
           case "$IN_PROFILE" in dev|test|prod|foundry-dev|foundry-test|foundry-prod) ;; *) bad "input profile must be dev, test, prod, foundry-dev, foundry-test or foundry-prod";; esac
           case "$IN_FAIL_ON" in info|warning|error) ;; *) bad "input fail-on must be info, warning or error";; esac
