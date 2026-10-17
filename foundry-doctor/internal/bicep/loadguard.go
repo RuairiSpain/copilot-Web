@@ -52,9 +52,10 @@ func (e *LoadGuardError) Error() string {
 // first argument is a plain single-quoted literal naming a relative path that
 // resolves, through root, to a regular file (a directory for
 // loadDirectoryFileInfo) inside the project. Anything else, including a
-// non-literal argument, an absolute or escaping path, a symlink out of the
-// root, a referenced file outside the root or a bound being exceeded, returns
-// a *LoadGuardError. It is a lexical scan, not a Bicep parser: comments and
+// non-literal argument, an absolute or escaping path, a symbolic link or a
+// Windows junction or other reparse point reported as an irregular file on the
+// path, a referenced file outside the root or a bound being exceeded, returns a
+// *LoadGuardError. It is a lexical scan, not a Bicep parser: comments and
 // string literals are skipped, and when in doubt the file is refused.
 func GuardFileLoads(root *os.Root, start string) error {
 	first := path.Clean(start)
@@ -160,11 +161,21 @@ func sensitiveDir(rel string) string {
 }
 
 // hasSymlink reports whether any component of the root-relative path is a
-// symbolic link or cannot be examined; a component that does not exist ends
-// the walk with false. It is used for load targets and for module, using,
-// extends and import references. A link inside the project could point
-// at .azure or .git, which the text check cannot see, so loads through links
-// are refused.
+// symbolic link, a Windows junction or other reparse point that Go reports as
+// an irregular file, or cannot be examined; a component that does not exist
+// ends the walk with false. It is used for load targets and for module, using,
+// extends and import references. A link inside the project could point at
+// .azure or .git, which the text check cannot see, so loads through links are
+// refused.
+//
+// Since Go 1.23 on Windows, os.Lstat (and Root.Lstat) report a symbolic link as
+// os.ModeSymlink but a junction (mount point) and most other reparse points as
+// os.ModeIrregular only (os/types_windows.go, fileStat.mode); both are refused.
+// On other systems the Go runtime does not set os.ModeIrregular for sockets,
+// devices or pipes (they have their own mode bits), so the extra bit does not
+// refuse them here; a non-regular load target is refused later anyway. Reparse
+// points that Go reports as regular (for example Data Deduplication files) are
+// not examined.
 func hasSymlink(root *os.Root, rel string) bool {
 	parts := strings.Split(rel, "/")
 	for i := range parts {
@@ -172,7 +183,7 @@ func hasSymlink(root *os.Root, rel string) bool {
 		if errors.Is(err, fs.ErrNotExist) {
 			return false // nothing further to follow; existence is checked by the caller
 		}
-		if err != nil || fi.Mode()&os.ModeSymlink != 0 {
+		if err != nil || fi.Mode()&(os.ModeSymlink|os.ModeIrregular) != 0 {
 			return true
 		}
 	}
