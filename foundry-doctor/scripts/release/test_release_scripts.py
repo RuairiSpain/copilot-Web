@@ -13,16 +13,15 @@ H = "a" * 64
 class GenTests(unittest.TestCase):
     def sums(self, v="1.2.3"):
         return {
-            f"foundry-doctor-azd-extension_{v}_{o}_{a}.{'zip' if o == 'windows' else 'tar.gz'}": H
-            for o in ("linux", "darwin", "windows")
+            f"foundry-doctor-azd-extension_{v}_windows_{a}.zip": H
             for a in ("amd64", "arm64")
-        } | {f"foundry-doctor_{v}_linux_amd64.tar.gz": H}
+        } | {f"foundry-doctor_{v}_windows_amd64.zip": H}
 
     def test_build_lists_only_extension_artifacts(self):
         m, r = gen.build("1.2.3", self.sums(), "https://x/y")
         arts = r["extensions"][0]["versions"][0]["artifacts"]
-        self.assertEqual(len(arts), 6)
-        self.assertEqual(len(m["platforms"]), 6)
+        self.assertEqual(len(arts), 2)
+        self.assertEqual(len(m["platforms"]), 2)
         self.assertTrue(all(a["checksum"]["algorithm"] == "sha256" for a in arts))
 
     def test_rejects_bad_semver_and_forbidden_id(self):

@@ -43,8 +43,8 @@ Rehearse the release pipeline in dry-run mode:
 The local dry run succeeded for the bounded, offline parts of release
 engineering:
 
-- standalone archives were built for linux/darwin/windows on amd64+arm64
-- azd extension archives were built for the same targets
+- standalone zip archives were built for windows on amd64+arm64 (the only supported platform)
+- azd extension zip archives were built for the same targets
 - `checksums.txt`, `extension.yaml`, and `registry.json` were generated under
   `dist/rehearsal/`
 - the PowerShell wrapper `scripts/release/rehearse.ps1` successfully drove the

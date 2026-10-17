@@ -13,17 +13,13 @@ mkdir -p "$dist"
 rm -rf "$dist"/*
 
 targets=(
-  "linux amd64"
-  "linux arm64"
-  "darwin amd64"
-  "darwin arm64"
   "windows amd64"
   "windows arm64"
 )
 
 build_one() {
   local goos="$1" goarch="$2" ext=""
-  [[ "$goos" == windows ]] && ext=".exe"
+  ext=".exe"
   local stage="${dist}/stage-${goos}-${goarch}"
   rm -rf "$stage"
   mkdir -p "$stage"
@@ -32,17 +28,13 @@ build_one() {
     go build -trimpath -ldflags "-s -w -X main.version=${version}" \
     -o "${stage}/foundry-doctor${ext}" ./cmd/foundry-doctor
 
-  if [[ "$goos" == windows ]]; then
-    python - "$stage" "${dist}/foundry-doctor_${version}_${goos}_${goarch}.zip" <<'PY'
+  python - "$stage" "${dist}/foundry-doctor_${version}_${goos}_${goarch}.zip" <<'PY'
 import os, sys, zipfile
 src, dst = sys.argv[1], sys.argv[2]
 with zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as zf:
     for name in sorted(os.listdir(src)):
         zf.write(os.path.join(src, name), arcname=name)
 PY
-  else
-    tar -C "$stage" -czf "${dist}/foundry-doctor_${version}_${goos}_${goarch}.tar.gz" .
-  fi
 
   if [[ -f "${root}/extension/go.mod" ]]; then
     rm -rf "$stage"
@@ -53,17 +45,13 @@ PY
         go build -trimpath -ldflags "-s -w -X main.version=${version}" \
         -o "${stage}/foundry-doctor-azd${ext}" .
     )
-    if [[ "$goos" == windows ]]; then
-      python - "$stage" "${dist}/foundry-doctor-azd-extension_${version}_${goos}_${goarch}.zip" <<'PY'
+    python - "$stage" "${dist}/foundry-doctor-azd-extension_${version}_${goos}_${goarch}.zip" <<'PY'
 import os, sys, zipfile
 src, dst = sys.argv[1], sys.argv[2]
 with zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as zf:
     for name in sorted(os.listdir(src)):
         zf.write(os.path.join(src, name), arcname=name)
 PY
-    else
-      tar -C "$stage" -czf "${dist}/foundry-doctor-azd-extension_${version}_${goos}_${goarch}.tar.gz" .
-    fi
   fi
 
   rm -rf "$stage"
@@ -76,7 +64,7 @@ done
 
 (
   cd "$dist"
-  sha256sum -- *.tar.gz *.zip | sort -k2 > checksums.txt
+  sha256sum -- *.zip | sed -E 's/^([0-9a-f]{64}) [ *]/\1  /' | sort -k2 > checksums.txt
 )
 
 python scripts/release/gen_extension_manifest.py \

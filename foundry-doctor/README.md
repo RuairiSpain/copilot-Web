@@ -56,8 +56,8 @@ Managed identity and GitHub Actions OIDC guidance are documented in
 
 Release automation and rehearsal produce:
 
-- standalone archives for `linux`, `darwin`, `windows` on `amd64` and `arm64`
-- azd extension archives for the same targets
+- standalone binaries and zip archives for `windows` on `amd64` and `arm64` (Windows is the only supported platform)
+- azd extension zip archives for the same targets
 - `checksums.txt`
 - `extension.yaml` and `registry.json`
 - SPDX SBOM

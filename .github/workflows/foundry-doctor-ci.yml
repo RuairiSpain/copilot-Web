@@ -18,18 +18,19 @@ on:
 permissions:
   contents: read
 
+# Windows runners default to PowerShell; every script here is bash (Git Bash is on windows-latest).
+defaults:
+  run:
+    shell: bash
+
 concurrency:
   group: foundry-doctor-ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
-    name: go test (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, windows-latest]
+    name: go test (windows)
+    runs-on: windows-latest
     defaults:
       run:
         shell: bash
@@ -47,7 +48,7 @@ jobs:
 
   quality:
     name: lint, vet, vulncheck, catalogue
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     defaults:
       run:
         working-directory: foundry-doctor
@@ -69,15 +70,16 @@ jobs:
         # check, the secret scan, the import-boundary check and the scripts/ci syntax check.
         # govulncheck runs here because the runner can reach vuln.go.dev; verify-phase.sh reports it as
         # skipped only where the database is unreachable.
-        # --strict: every gate is available on ubuntu-latest (staticcheck and govulncheck are installed above,
-        # cmd/foundry-doctor exists, the race detector supports linux/amd64), so a SKIPPED gate fails CI (exit 3).
+        # --strict: every gate is available on windows-latest (staticcheck and govulncheck are installed above,
+        # cmd/foundry-doctor exists, the race detector supports windows/amd64 and the runner image has gcc), so a
+        # SKIPPED gate fails CI (exit 3).
         # Not covered by the strict flag: tests that skip themselves inside go test when BICEP_PATH is unset
         # (real-Bicep tests); the smoke job installs Bicep and exercises it.
         run: bash scripts/claude/verify-phase.sh --strict
 
   import-boundary:
     name: core builds with GOWORK=off, no azure-dev import (ADR-005)
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     defaults:
       run:
         working-directory: foundry-doctor
@@ -94,7 +96,7 @@ jobs:
 
   azd-namespace:
     name: azd namespace is free (ADR-003)
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     defaults:
       run:
         working-directory: foundry-doctor
@@ -119,7 +121,7 @@ jobs:
 
   build-matrix:
     name: cross-platform build and checksums
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     defaults:
       run:
         working-directory: foundry-doctor
@@ -131,7 +133,7 @@ jobs:
         with:
           go-version-file: foundry-doctor/go.mod
           cache-dependency-path: foundry-doctor/go.sum
-      - name: Build linux, darwin, windows x amd64, arm64
+      - name: Build windows x amd64, arm64
         id: build
         run: |
           set +e
@@ -156,12 +158,8 @@ jobs:
           retention-days: 7
 
   smoke:
-    name: smoke samples (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, windows-latest]
+    name: smoke samples (windows)
+    runs-on: windows-latest
     defaults:
       run:
         shell: bash
@@ -178,29 +176,25 @@ jobs:
         # The doctor requires Bicep 0.48.1 (ContractVersion) for the prod profile; runner images carry other versions.
         run: |
           v=0.48.1
-          case "$RUNNER_OS-$RUNNER_ARCH" in
-            Linux-X64) asset=bicep-linux-x64 ;;
-            Linux-ARM64) asset=bicep-linux-arm64 ;;
-            macOS-ARM64) asset=bicep-osx-arm64 ;;
-            macOS-X64) asset=bicep-osx-x64 ;;
-            Windows-X64) asset=bicep-win-x64.exe ;;
-            *) echo "no Bicep asset for $RUNNER_OS-$RUNNER_ARCH" >&2; exit 1 ;;
+          case "$RUNNER_ARCH" in
+            X64) asset=bicep-win-x64.exe ;;
+            ARM64) asset=bicep-win-arm64.exe ;;
+            *) echo "no Bicep asset for windows-$RUNNER_ARCH" >&2; exit 1 ;;
           esac
           dest="$RUNNER_TEMP/bicep-bin"; mkdir -p "$dest"
-          exe="$dest/bicep"; [ "$RUNNER_OS" = Windows ] && exe="$dest/bicep.exe"
+          exe="$dest/bicep.exe"
           curl -fsSL -o "$exe" "https://github.com/Azure/bicep/releases/download/v$v/$asset"
-          chmod +x "$exe"
           "$exe" --version
           echo "BICEP_PATH=$exe" >> "$GITHUB_ENV"
       - name: Build the binary and run it against samples/*
         # Skips with a visible warning while cmd/foundry-doctor or samples/ are absent; a skip is not a pass.
         run: |
           if [ ! -d cmd/foundry-doctor ]; then
-            echo "::warning title=smoke SKIPPED on ${{ matrix.os }}::cmd/foundry-doctor does not exist yet. This is not a pass."
-            echo "### smoke (${{ matrix.os }}): SKIPPED, cmd/foundry-doctor absent" >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning title=smoke SKIPPED on windows::cmd/foundry-doctor does not exist yet. This is not a pass."
+            echo "### smoke (windows): SKIPPED, cmd/foundry-doctor absent" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          exe=""; [ "$RUNNER_OS" = Windows ] && exe=".exe"
+          exe=".exe"
           mkdir -p "$RUNNER_TEMP/bin"
           CGO_ENABLED=0 go build -trimpath -o "$RUNNER_TEMP/bin/foundry-doctor$exe" ./cmd/foundry-doctor
           set +e
@@ -208,8 +202,8 @@ jobs:
           rc=$?
           set -e
           if [ "$rc" -eq 5 ]; then
-            echo "::warning title=smoke SKIPPED on ${{ matrix.os }}::no samples to run. This is not a pass."
-            echo "### smoke (${{ matrix.os }}): SKIPPED, no samples" >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning title=smoke SKIPPED on windows::no samples to run. This is not a pass."
+            echo "### smoke (windows): SKIPPED, no samples" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           exit "$rc"
@@ -217,7 +211,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: foundry-doctor-smoke-${{ matrix.os }}
+          name: foundry-doctor-smoke-windows
           path: ${{ runner.temp }}/smoke/*
           if-no-files-found: ignore
           retention-days: 7

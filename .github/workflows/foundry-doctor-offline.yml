@@ -55,9 +55,9 @@ on:
         type: boolean
         default: true
       runner:
-        description: "Runner label for the doctor job (ubuntu-latest, macos-latest or windows-latest)."
+        description: "Runner label for the doctor job. Foundry Doctor is only supported on Windows, so only windows-latest is accepted."
         type: string
-        default: "ubuntu-latest"
+        default: "windows-latest"
       upload-sarif:
         description: "Upload the SARIF to code scanning (skipped on fork and Dependabot pull requests)."
         type: boolean
@@ -103,6 +103,7 @@ jobs:
           IN_VERSION: ${{ inputs.version }}
           IN_REPO: ${{ inputs.source-repository }}
           IN_REF: ${{ inputs.source-ref }}
+          IN_RUNNER: ${{ inputs.runner }}
           IN_UPLOAD: ${{ inputs.upload-sarif }}
           EVENT_NAME: ${{ github.event_name }}
           HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
@@ -111,6 +112,7 @@ jobs:
         run: |
           # Inputs reach the shell only through env vars and are validated here, never interpolated into scripts.
           bad() { echo "::error title=foundry-doctor-offline::$1"; exit 2; }
+          case "$IN_RUNNER" in windows-latest) ;; *) bad "input runner must be windows-latest (Foundry Doctor is only supported on Windows)";; esac
           case "$IN_PATH" in ''|/*|*..*|*[!A-Za-z0-9._/-]*) bad "input path must be a relative path without '..' (letters, digits, . _ / -)";; esac
           case "$IN_PROFILE" in dev|test|prod|foundry-dev|foundry-test|foundry-prod) ;; *) bad "input profile must be dev, test, prod, foundry-dev, foundry-test or foundry-prod";; esac
           case "$IN_FAIL_ON" in info|warning|error) ;; *) bad "input fail-on must be info, warning or error";; esac
@@ -155,7 +157,7 @@ jobs:
       - name: Build foundry-doctor from source
         if: inputs.install-mode == 'source'
         run: |
-          exe=""; [ "$RUNNER_OS" = Windows ] && exe=".exe"
+          exe=".exe"
           mkdir -p "$RUNNER_TEMP/fd-bin"
           cd .foundry-doctor-src/foundry-doctor
           CGO_ENABLED=0 GOWORK=off go build -trimpath -o "$RUNNER_TEMP/fd-bin/foundry-doctor$exe" ./cmd/foundry-doctor
@@ -169,15 +171,15 @@ jobs:
           IN_REPO: ${{ inputs.source-repository }}
           VERIFY_ATTESTATION: ${{ inputs.verify-attestation }}
         run: |
-          case "$RUNNER_OS" in Linux) os=linux; ext="";; macOS) os=darwin; ext="";; Windows) os=windows; ext=".exe";; *) echo "::error::unsupported runner OS $RUNNER_OS"; exit 2;; esac
+          os=windows; ext=".exe"
           case "$RUNNER_ARCH" in X64) arch=amd64;; ARM64) arch=arm64;; *) echo "::error::unsupported runner architecture $RUNNER_ARCH"; exit 2;; esac
           tag="foundry-doctor/$IN_VERSION"
           asset="foundry-doctor_${IN_VERSION}_${os}_${arch}${ext}"
           dir="$RUNNER_TEMP/fd-bin"; mkdir -p "$dir"
           gh release download "$tag" --repo "$IN_REPO" --dir "$dir" --pattern "$asset" --pattern SHA256SUMS
           # Verify the checksum from the same release. A mismatch fails the job.
-          ( cd "$dir" && awk -v a="$asset" '$2 == a' SHA256SUMS > expected.sum && [ -s expected.sum ] && { sha256sum -c expected.sum 2>/dev/null || shasum -a 256 -c expected.sum; } )
-          mv "$dir/$asset" "$dir/foundry-doctor$ext"; chmod +x "$dir/foundry-doctor$ext"
+          ( cd "$dir" && awk -v a="$asset" '{ f = $2; sub(/^\*/, "", f) } f == a { print $1 "  " a }' SHA256SUMS > expected.sum && [ -s expected.sum ] && sha256sum -c expected.sum )
+          mv "$dir/$asset" "$dir/foundry-doctor$ext"
           if [ "$VERIFY_ATTESTATION" = true ]; then
             gh attestation verify "$dir/foundry-doctor$ext" --repo "$IN_REPO"
           fi
@@ -230,7 +232,7 @@ jobs:
     needs: doctor
     # Run even when the doctor found problems (exit 1), so the alerts are visible. Never on fork or Dependabot PRs.
     if: ${{ !cancelled() && needs.doctor.outputs.sarif-produced == 'true' && needs.doctor.outputs.can-upload == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     permissions:
       contents: read          # needed by upload-sarif on private repositories, and by checkout
       actions: read           # needed by upload-sarif on private repositories
