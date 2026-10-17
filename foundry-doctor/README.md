@@ -56,9 +56,9 @@ Managed identity and GitHub Actions OIDC guidance are documented in
 
 Release automation and rehearsal produce:
 
-- standalone binaries and zip archives for `windows` on `amd64` and `arm64` (Windows is the only supported platform)
+- standalone `.exe` binaries for `windows` on `amd64` and `arm64` (Windows is the only supported platform), published by `foundry-doctor-release.yml` under the tag `foundry-doctor/<version>` with a `SHA256SUMS` file
 - azd extension zip archives for the same targets
-- `checksums.txt`
+- `SHA256SUMS` (the release rehearsal writes `checksums.txt` for its zip layout)
 - `extension.yaml` and `registry.json`
 - SPDX SBOM
 - Sigstore bundles for archives and release metadata

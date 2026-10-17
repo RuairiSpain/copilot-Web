@@ -12,7 +12,7 @@ on:
         type: environment
         required: true
       runner-label:
-        description: Runner label (windows-latest, or a self-hosted Windows VNet runner label).
+        description: Runner label (windows-latest, or a self-hosted Windows VNet runner label). A self-hosted runner needs Windows with Git Bash on PATH, because the steps use shell bash.
         type: string
         default: windows-latest
       profile:
