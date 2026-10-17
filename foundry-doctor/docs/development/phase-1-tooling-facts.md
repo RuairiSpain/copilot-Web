@@ -28,7 +28,7 @@ Source: `content/code-security/reference/code-scanning/sarif-files/sarif-support
 
 ## Bicep CLI
 
-- Newest version with release assets for linux-x64, linux-arm64, osx-arm64, osx-x64 and win-x64: **v0.47.16**. The tag v0.48.1 exists but every asset URL returns 404.
+- Newest version with release assets for linux-x64, linux-arm64, osx-arm64, osx-x64 and win-x64 (only Windows is supported by this project; the Linux and macOS assets were not tested): **v0.47.16**. The tag v0.48.1 exists but every asset URL returns 404.
 - Linter defaults with no `bicepconfig.json` (`src/Bicep.Core/Analyzers/Linter/LinterRuleBase.cs`): BestPractice, PotentialCodeIssues, Security and Style warn; Portability and
   ResourceLocationRules are off; DeploymentError is error. `no-hardcoded-env-urls` is a warning from the base config. Observed on 0.47.16: `outputs-should-not-contain-secrets` fires with
   no config. The doctor therefore does not need to rewrite the user's `bicepconfig.json`.

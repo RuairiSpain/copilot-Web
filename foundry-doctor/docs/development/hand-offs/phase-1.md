@@ -14,7 +14,7 @@ This branch holds the implementation merged from `main` (PR #18, which delivered
   - Foundry lead: CFG-004 reads `container.resources`, CFG-006 handles outputs and azd variables, CFG-005 token-aware names, CFG-009 uncertain for unknown trigger spellings, ENV rules classify values before digesting and report unusable environments, OPS-007 tokenises shell lines and reads the git root, `requiredVersions` implemented per the verified grammar (two parsers).
   - Azure black belt: conditional and looped modules, per-deployment scope qualification with caller parameter substitution, module outputs, resource-scoped role assignments, `networkInjections` expressions, parameter files (ADR-018), variable folding, SEC-014 analyses compiled outputs, file-load guard against reads outside the project.
 - **CLI additions:** `doctor --write-baseline`, `--azd-version`, `summary.hidden` and `summary.skippedByReason` in the JSON summary.
-- **Workflows:** CI for Linux, macOS and Windows (tests, smoke samples, cross-platform build), `verify-phase.sh --strict` in the quality job, pinned Bicep 0.48.1 in the smoke job. The broken in-repo starter workflow was removed; the copyable sample is `samples/github/foundry-doctor-starter.yml`.
+- **Workflows:** CI tests and smoke samples on Windows only (owner decision 2026-10-17; lint, vet, vulncheck and boundary jobs may still run on a Linux runner as tooling, which is not a supported platform; see `docs/development/ci.md` for the current workflow), `verify-phase.sh --strict` in the quality job, pinned Bicep 0.48.1 in the smoke job. The broken in-repo starter workflow was removed; the copyable sample is `samples/github/foundry-doctor-starter.yml`.
 - **Rules-only PSRule version:** a separate folder `foundry-rules/` at the repository root (not part of the Go module): 108 rule IDs, 28 evaluated in part, 80 documented as not evaluated. It has not been run by PSRule (no PowerShell in the build environment).
 
 ## Changed contracts
@@ -61,7 +61,7 @@ This branch holds the implementation merged from `main` (PR #18, which delivered
 
 `failed=0 skipped=1`. Under PRD section 22 a strict run with a skipped gate is not a pass; the skipped gate is `govulncheck`, which runs in GitHub CI (`quality` job, now `--strict`) where the database is reachable. `GOOS=windows go vet ./...` also passes locally.
 
-GitHub CI on PR #29 (workflow `foundry-doctor-ci`): the run on head 83e055e (run 53) completed successfully, including `lint, vet, vulncheck, catalogue` in `verify-phase.sh --strict` mode (so `govulncheck` passed on Go 1.26.9), `go test` on ubuntu, macOS and Windows, smoke samples on three operating systems, the cross-platform build, the ADR-005 import boundary and the ADR-003 namespace check; CodeQL and dependency review were also green on the PR. Runs that failed earlier on this branch and were fixed: `staticcheck` (unused function, fixed in d557157), Windows `TestBuildParams` and `TestFileURIPathAndSafePath` (tests assumed POSIX path spelling, fixed in 9214baf and 06ab397), the secret scan (fake secret-shaped literal in a test, fixed in af260e4). Check suites on the later heads (a02fc50, c5f3fa4, 2892fd6, 007b195, b920094, f3b8fe8) finished without failures. Coverage of the engine packages: all at or above 80% (rules 97%, findings 87%, baseline 97%, report 94%, config 99%).
+GitHub CI on PR #29 (workflow `foundry-doctor-ci`): the run on head 83e055e (run 53) completed successfully, including `lint, vet, vulncheck, catalogue` in `verify-phase.sh --strict` mode (so `govulncheck` passed on Go 1.26.9), `go test` on ubuntu, macOS and Windows and smoke samples on three operating systems (as of that run; superseded by the Windows-only decision of 2026-10-17), the cross-platform build, the ADR-005 import boundary and the ADR-003 namespace check; CodeQL and dependency review were also green on the PR. Runs that failed earlier on this branch and were fixed: `staticcheck` (unused function, fixed in d557157), Windows `TestBuildParams` and `TestFileURIPathAndSafePath` (tests assumed POSIX path spelling, fixed in 9214baf and 06ab397), the secret scan (fake secret-shaped literal in a test, fixed in af260e4). Check suites on the later heads (a02fc50, c5f3fa4, 2892fd6, 007b195, b920094, f3b8fe8) finished without failures. Coverage of the engine packages: all at or above 80% (rules 97%, findings 87%, baseline 97%, report 94%, config 99%).
 
 Not run: the Bicep-backed samples and the `spike`-tagged real-CLI tests in the audit environment (no Bicep CLI); they run in CI smoke (Bicep 0.48.1 installed in the job). `foundry-doctor-release.yml` (signing, SBOM, provenance) has never been run.
 
@@ -96,12 +96,12 @@ Reports: `reviews/phase-1-azure-black-belt.md` (archived code), `-rerun.md`, `-v
 - `rules.packs` is reserved and inert (a non-default pack prints a warning).
 - `FND-IDN-002` catalogue-only (ADR-020).
 - Go principal and security reviews until Phase 9 (ADR-019).
-- ADR-011 decision 6 (supported OS list) is still "Proposed, owner to confirm"; CI covers ubuntu, macOS and Windows.
+- Owner decision 2026-10-17 (ADR-011 decision 6 and Amendment 1): Foundry Doctor is only run and supported on Windows (amd64 and arm64). Linux and macOS are not supported and not tested.
 - The `unsupported-host` and `invalid-azure-yaml` findings of ADR-004 (documented as not implemented in ADR-004 Amendment 1).
 
 ## Compatibility matrix
 
-Go 1.26.9 (core and extension, ADR-005 Amendment 1); Bicep CLI 0.48.1 (ADR-015); azd 1.34.2 to 1.36.0 (windows per rule in the catalogue; `docs/tool-compatibility.md` section 6); Foundry extensions as listed in section 6. Local and CI operating systems: ubuntu, macOS, Windows (amd64; the audit ran on Linux, an earlier session on Windows/arm64).
+Go 1.26.9 (core and extension, ADR-005 Amendment 1); Bicep CLI 0.48.1 (ADR-015); azd 1.34.2 to 1.36.0 (windows per rule in the catalogue; `docs/tool-compatibility.md` section 6); Foundry extensions as listed in section 6. Supported operating systems: Windows on amd64 and arm64 (owner decision 2026-10-17). Tests and smoke run on Windows only. The recorded audit ran on Linux and an earlier session on Windows/arm64; the Linux run is not evidence of Linux support.
 
 ## Artefacts for next phase
 
@@ -123,13 +123,13 @@ Statuses follow the independent audit of 2026-10-16 (`implementation-coordinator
 | DoD item | Status (met / unmet / requirement changed by ADR-NNN) | Current evidence |
 |---|---|---|
 | All selected 35-40 rules implemented, sourced, versioned | met: 37 of 38 allocated; FND-IDN-002 catalogue-only (ADR-020) | Go registry; catalogue has sources, `lastVerified`, versions, all `verifiedVia` values are URLs |
-| Offline doctor completes without Azure credentials | met | `TestExitCodes` (`cmd/foundry-doctor/main_test.go`), CI smoke on three operating systems, canary run |
+| Offline doctor completes without Azure credentials | met | `TestExitCodes` (`cmd/foundry-doctor/main_test.go`), CI smoke (three operating systems when run; Windows only after 2026-10-17), canary run |
 | Baseline hides only matching old fingerprints | met | `TestApplyHidesOnlyMatching`; baseline generation added (`doctor --write-baseline`) with round-trip test; fingerprint v3 (ADR-008) |
 | Expired suppressions generate an error | met | `FND-SYS-SUPPRESSION-EXPIRED` (ADR-009 Amendment 1), `TestExpiredSuppressionFailsRun` |
 | Console, JSON, Markdown and SARIF output is deterministic | met | goldens in `internal/report/testdata`, `TestOutputFormatsAreDeterministic`, `internal/rules/stability` |
 | GitHub PR workflow uploads SARIF and enforces exit codes | met | run 38974252828 (caller `foundry-doctor-offline-check.yml`, `install-mode: source`, sample `good`, head 2892fd6): doctor job, SARIF artifact, code-scanning upload and exit-code enforcement all succeeded. The run exposed that the `profile` input accepted `foundry-*` names the CLI flag rejects; fixed in 2892fd6. Fork and Dependabot pull requests, release mode and a failing-exit run are not exercised |
 | No secrets in findings, debug logs or snapshots | partly met | `check-no-secrets.sh`, redaction fuzz tests, canary run; independent security review deferred by ADR-019; no `--debug` flag yet |
-| Cross-platform binaries produced | met for build; release signing unrun | CI job "cross-platform build and checksums" (six targets); `foundry-doctor-release.yml` never run |
+| Cross-platform binaries produced | met for build; release signing unrun | CI job "cross-platform build and checksums" (six targets when run; release targets are being reduced to Windows by the 2026-10-17 decision); `foundry-doctor-release.yml` never run |
 | Exit codes 0 to 4 | met (order 4, 2, 3, 1, 0, ADR-010 Amendment 4) | `internal/report/exit.go` and tests |
 | Skipped never equals passed; `--strict` contract | met with ADR-covered narrowing | ADR-010 decision 9 and Amendments 2 to 4; `skipclass.go`, `TestClassifySkip` |
 | Profiles dev, test, prod; platform-basis rules error in every profile | met | generated from the catalogue; catalogue test (`catalog_test.go`); default profile `foundry-prod` (ADR-010 Amendment 4) |
