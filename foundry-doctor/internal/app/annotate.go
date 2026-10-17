@@ -163,8 +163,8 @@ func emitAnnotateOutput(rootDir, out string, data []byte, stdout io.Writer) erro
 	return nil
 }
 
-// normalizeOutPath treats a backslash as a path separator, so a
-// Windows-style --out value is handled the same way as a forward-slash one.
+// normalizeOutPath treats a backslash as a path separator on every OS, so a
+// Windows-style --out value is handled the same way on Linux and macOS.
 func normalizeOutPath(out string) string {
 	return strings.ReplaceAll(out, "\\", "/")
 }

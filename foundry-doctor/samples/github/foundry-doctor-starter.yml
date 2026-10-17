@@ -26,4 +26,5 @@ jobs:
       profile: foundry-prod      # dev, test, prod, foundry-dev, foundry-test or foundry-prod
       fail-on: error             # info, warning or error
       install-mode: release      # or: source (builds from source-ref)
+      os: linux                  # linux (ubuntu-latest) or windows (windows-latest); anything else fails
       version: v0.1.0            # TODO: a published release, tag foundry-doctor/v0.1.0

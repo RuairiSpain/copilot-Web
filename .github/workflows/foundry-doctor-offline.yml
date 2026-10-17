@@ -9,7 +9,7 @@ name: foundry-doctor-offline
 #   jobs:
 #     doctor:
 #       uses: RuairiSpain/copilot-Web/.github/workflows/foundry-doctor-offline.yml@<tag-or-sha>
-#       with: { path: ".", profile: foundry-prod, fail-on: error, install-mode: release, version: v0.1.0 }
+#       with: { path: ".", profile: foundry-prod, fail-on: error, install-mode: release, version: v0.1.0, os: linux }
 #
 # The caller must grant the permissions above: a called workflow can only narrow the caller's token, and GitHub
 # rejects the run at start-up when the nested upload job asks for more than the caller allows.
@@ -54,10 +54,10 @@ on:
         description: "Release mode: also run `gh attestation verify` on the downloaded binary."
         type: boolean
         default: true
-      runner:
-        description: "Runner label for the doctor job. Foundry Doctor is only supported on Windows, so only windows-latest is accepted."
+      os:
+        description: "Runner operating system for the doctor job: linux (ubuntu-latest) or windows (windows-latest). Any other value fails the first step."
         type: string
-        default: "windows-latest"
+        default: "linux"
       upload-sarif:
         description: "Upload the SARIF to code scanning (skipped on fork and Dependabot pull requests)."
         type: boolean
@@ -82,7 +82,10 @@ permissions:
 jobs:
   doctor:
     name: foundry-doctor doctor
-    runs-on: ${{ inputs.runner }}
+    # Linux and Windows are supported (ADR-011 decision 6, Amendment 2). The ternary maps anything that is not exactly
+    # 'windows' to Linux, so an invalid value would silently select Linux; the first step therefore rejects every value
+    # other than linux or windows. A free-form runner label is deliberately not an input (it cannot be validated).
+    runs-on: ${{ inputs.os == 'windows' && 'windows-latest' || 'ubuntu-latest' }}
     permissions:
       contents: read
     outputs:
@@ -103,8 +106,8 @@ jobs:
           IN_VERSION: ${{ inputs.version }}
           IN_REPO: ${{ inputs.source-repository }}
           IN_REF: ${{ inputs.source-ref }}
-          IN_RUNNER: ${{ inputs.runner }}
           IN_UPLOAD: ${{ inputs.upload-sarif }}
+          IN_OS: ${{ inputs.os }}
           EVENT_NAME: ${{ github.event_name }}
           HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
           THIS_REPO: ${{ github.repository }}
@@ -112,7 +115,7 @@ jobs:
         run: |
           # Inputs reach the shell only through env vars and are validated here, never interpolated into scripts.
           bad() { echo "::error title=foundry-doctor-offline::$1"; exit 2; }
-          case "$IN_RUNNER" in windows-latest) ;; *) bad "input runner must be windows-latest (Foundry Doctor is only supported on Windows)";; esac
+          case "$IN_OS" in linux|windows) ;; *) bad "input os must be linux or windows (any other value would have selected Linux silently)";; esac
           case "$IN_PATH" in ''|/*|*..*|*[!A-Za-z0-9._/-]*) bad "input path must be a relative path without '..' (letters, digits, . _ / -)";; esac
           case "$IN_PROFILE" in dev|test|prod|foundry-dev|foundry-test|foundry-prod) ;; *) bad "input profile must be dev, test, prod, foundry-dev, foundry-test or foundry-prod";; esac
           case "$IN_FAIL_ON" in info|warning|error) ;; *) bad "input fail-on must be info, warning or error";; esac
@@ -157,7 +160,7 @@ jobs:
       - name: Build foundry-doctor from source
         if: inputs.install-mode == 'source'
         run: |
-          exe=".exe"
+          exe=""; [ "$RUNNER_OS" = Windows ] && exe=".exe"
           mkdir -p "$RUNNER_TEMP/fd-bin"
           cd .foundry-doctor-src/foundry-doctor
           CGO_ENABLED=0 GOWORK=off go build -trimpath -o "$RUNNER_TEMP/fd-bin/foundry-doctor$exe" ./cmd/foundry-doctor
@@ -171,7 +174,7 @@ jobs:
           IN_REPO: ${{ inputs.source-repository }}
           VERIFY_ATTESTATION: ${{ inputs.verify-attestation }}
         run: |
-          os=windows; ext=".exe"
+          case "$RUNNER_OS" in Linux) os=linux; ext="";; Windows) os=windows; ext=".exe";; *) echo "::error::unsupported runner OS $RUNNER_OS"; exit 2;; esac
           case "$RUNNER_ARCH" in X64) arch=amd64;; ARM64) arch=arm64;; *) echo "::error::unsupported runner architecture $RUNNER_ARCH"; exit 2;; esac
           tag="foundry-doctor/$IN_VERSION"
           asset="foundry-doctor_${IN_VERSION}_${os}_${arch}${ext}"
@@ -179,7 +182,7 @@ jobs:
           gh release download "$tag" --repo "$IN_REPO" --dir "$dir" --pattern "$asset" --pattern SHA256SUMS
           # Verify the checksum from the same release. A mismatch fails the job.
           ( cd "$dir" && awk -v a="$asset" '{ f = $2; sub(/^\*/, "", f) } f == a { print $1 "  " a }' SHA256SUMS > expected.sum && [ -s expected.sum ] && sha256sum -c expected.sum )
-          mv "$dir/$asset" "$dir/foundry-doctor$ext"
+          mv "$dir/$asset" "$dir/foundry-doctor$ext"; chmod +x "$dir/foundry-doctor$ext"
           if [ "$VERIFY_ATTESTATION" = true ]; then
             gh attestation verify "$dir/foundry-doctor$ext" --repo "$IN_REPO"
           fi
@@ -232,7 +235,7 @@ jobs:
     needs: doctor
     # Run even when the doctor found problems (exit 1), so the alerts are visible. Never on fork or Dependabot PRs.
     if: ${{ !cancelled() && needs.doctor.outputs.sarif-produced == 'true' && needs.doctor.outputs.can-upload == 'true' }}
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     permissions:
       contents: read          # needed by upload-sarif on private repositories, and by checkout
       actions: read           # needed by upload-sarif on private repositories

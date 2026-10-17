@@ -5,26 +5,42 @@ no azd extension, no reporter, no engine. Rule IDs, titles, severities per profi
 documentation URLs are taken from `foundry-doctor/rules/catalog/` (read only). Nothing under `foundry-doctor/` depends
 on this folder, and this folder does not depend on it at run time.
 
-## Status: untested against PSRule
+## Status: PSRule fixture check passes in CI
 
-PowerShell and PSRule were not available when this was written (no `pwsh` in the sandbox, PowerShell Gallery and
-GitHub release downloads blocked by the proxy). **No rule was run by PSRule.** What was checked instead, by
-`tools/verify.py`:
+PSRule runs this rule set in `.github/workflows/foundry-rules.yml` (Ubuntu and Windows, PowerShell Gallery install of
+`PSRule.Rules.Azure` 1.47.0, which installed from the Gallery). On 2026-10-17 the fixture check
+(`tests/Invoke-FixtureCheck.ps1`) passed on both runners for all 10 fixtures: every "Must fail" and "Must not fail"
+assertion in `tests/expected.md` held, and the not-evaluated placeholders produced no result. The first run failed
+for the ARM JSON fixtures because PSRule bound objects by .NET type name and matched no rule; `ps-rule.yaml` now sets
+`binding.targetType: [type]` and `targetName: [name]`, which fixed it.
 
-- all 108 catalogue IDs appear exactly once in the rule files (100 in `Foundry.Rule.yaml`, 8 in `Foundry.Rule.ps1`),
-  once in `docs/rule-index.md`, once in `docs/not-evaluated.md` or in the evaluated set, once in `.ps-rule/en/`,
-  and once in each of the three baselines;
-- title and dev/test/prod severity in the index and the baselines equal the catalogue; the default level in each rule
-  equals the prod severity;
-- every YAML file and every JSON fixture parses;
-- every property path in a rule appears in the evidence, description, notes or fix of the same catalogue entry (a
-  substring check on each path segment, with a short list of generic segments such as `properties` and `sku` skipped);
-- PowerShell was not parsed. The `.ps1` rules, the selector syntax (`where`, `level`, `notIn`, `hasValue`, `startsWith`
-  and the rest) and the baseline `override.level` were written from PSRule documentation read on 2026-10-15
-  (PSRule `main` branch on GitHub: expressions, selectors, options, keywords). Syntax not confirmed there is listed
-  under "PSRule facts not verified".
+What the check does not cover: Bicep input (`-Format File` with Bicep expansion), `.bicepparam`, resources PSRule for
+Azure expands from real templates (the ARM fixtures are hand-written), the `FOUNDRY_REQUIRED_TAGS` configuration path
+(FND-OPS-004 is skipped when no tags are set), and PSRule versions other than the one the workflow installs. Treat
+rules outside the 28 evaluated in part as documentation, not as checks.
 
-Run the fixtures in `tests/` (see `tests/expected.md`) before trusting any result.
+Verified so far:
+
+- `tools/verify.py` (static, Python + PyYAML; also run by the workflow): all 108 catalogue IDs appear exactly once in
+  the rule files (100 in `Foundry.Rule.yaml`, 8 in `Foundry.Rule.ps1`), in `docs/rule-index.md`, in `.ps-rule/en/` and
+  in each of the three baselines; titles and dev/test/prod severities equal the catalogue; every YAML file and JSON
+  fixture parses; every property path in a rule appears in the evidence of the same catalogue entry.
+- PowerShell parse check under PowerShell 7.5.0 on Linux (`[System.Management.Automation.Language.Parser]::ParseFile`):
+  `.ps-rule/Foundry.Rule.ps1` and `tests/Invoke-FixtureCheck.ps1` have no syntax errors.
+- The 8 PowerShell rule bodies were also executed outside PSRule (with a stub for `Rule`) against the
+  `azure.*.yaml` and `arm.*.json` fixtures. Their pass/fail values matched `tests/expected.md` for the resources they
+  apply to. This does not test PSRule's own binding, `-Type`/`-If` handling, baselines or `$Configuration`.
+- All 100 YAML rule documents and the three baselines validate against the PSRule language JSON schema
+  (`schemas/PSRule-language.schema.json` on PSRule `main`, fetched 2026-10-17), and `ps-rule.yaml` against
+  `PSRule-options.schema.json`. That check found `input.format` is not an option key; it was removed (the `-Format`
+  parameter, set to `Detect` in the fixture script, picks the format). A schema check does not prove the rules behave
+  as intended, and `main` may be newer than the PSRule version that PSRule for Azure 1.47.0 loads.
+
+Not verified: that PSRule loads these files, that any YAML selector evaluates as intended, that the baselines apply
+(`override.level`, `rule.tag`), that the `Foundry.NotEvaluated` placeholders stay silent, that Bicep expansion works,
+and every item under "PSRule facts not verified" below. The CI job runs `tests/Invoke-FixtureCheck.ps1`, which asserts
+`tests/expected.md`; a failure there means either a rule or an expectation is wrong, and neither is to be adjusted
+without checking the rule definition.
 
 ## The one dependency
 
@@ -54,14 +70,14 @@ from PSRule for Azure do not run.
 
 | Path | Content |
 |---|---|
-| `ps-rule.yaml` | PSRule options: module, input format, Bicep expansion, rule filter, `FOUNDRY_REQUIRED_TAGS` |
+| `ps-rule.yaml` | PSRule options: module, Bicep expansion, rule filter, `FOUNDRY_REQUIRED_TAGS` |
 | `.ps-rule/Foundry.Rule.yaml` | 100 YAML rules: 20 `static-yaml` selectors and 80 `not-evaluated` placeholders |
 | `.ps-rule/Foundry.Rule.ps1` | 8 PowerShell rules (`static-ps`), all single-object |
 | `.ps-rule/en/FND-*.md` | one page per rule: synopsis, description, recommendation, example, notes, links |
 | `baselines/{dev,test,prod}.Rule.yaml` | `Foundry.Dev`, `Foundry.Test`, `Foundry.Prod`: level per rule |
 | `docs/rule-index.md` | all 108 rules: ID, title, severity per profile, how evaluated, status |
 | `docs/not-evaluated.md` | the 80 rules PSRule does not evaluate, with the reason |
-| `tests/` | 10 fixtures and `expected.md` (manual check, no Pester) |
+| `tests/` | 10 fixtures, `expected.md` and `Invoke-FixtureCheck.ps1` (asserts `expected.md`; run by CI, no Pester) |
 | `tools/` | `generate.py`, `verify.py`, `rulespec.py`, `rulelogic.py`: maintainer tools |
 
 "One rule file per rule" is implemented as one rule definition per rule: PSRule loads all definitions from the files
@@ -126,7 +142,7 @@ SEC-010 and SEC-011 are informational in the catalogue (no fail state); here a F
 Written from the PSRule documentation but not confirmed against a running PSRule: the `spec.where` and `spec.level`
 keys in YAML rules (seen in PSRule for Azure rules and the testing guide, not in the expressions page); `kind: Baseline`
 with `spec.override.level` (documented in the options page; the PSRule version that introduced it was not found);
-`input.format: Detect`; the PowerShell `-If`, `-Tag` and `$Configuration` use; that functions and `$Configuration` are
+the `-Format Detect` default (the former `input.format` key was removed, see Status); the PowerShell `-If`, `-Tag` and `$Configuration` use; that functions and `$Configuration` are
 available in a `-If` precondition; how an expanded Bicep resource names child resources (`account/project`); and the
 behaviour of `notEquals`, `startsWith` and `notIn` on a missing field (the rules add explicit `exists: false` branches
 for the first). Mapping of PSRule outcomes (Fail, Pass, None) to "skipped" is by PSRule behaviour for rules whose type

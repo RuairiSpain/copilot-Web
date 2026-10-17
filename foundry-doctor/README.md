@@ -52,13 +52,26 @@ Azure access stays CLI and environment based by design:
 Managed identity and GitHub Actions OIDC guidance are documented in
 [Configuration](docs/configuration.md#authentication-and-azure-access).
 
+## Supported platforms
+
+Foundry Doctor supports and tests Windows (amd64, arm64) and Linux (amd64, arm64) (ADR-011 Amendment 2, owner decision 2026-10-17). macOS is not supported. ARM64 binaries are built but not executed on any GitHub-hosted runner.
+
+## Install
+
+Install a published release (the tag is `foundry-doctor/<version>`, for example `v0.1.0`; the script checks the binary against `SHA256SUMS` from the same release):
+
+```
+bash scripts/install.sh v0.1.0 [install-dir]      # Linux; default ~/.local/bin
+pwsh scripts/install.ps1 -Version v0.1.0           # Windows; default $HOME\bin
+```
+
 ## Release artefacts
 
 Release automation and rehearsal produce:
 
-- standalone binaries and zip archives for `windows` on `amd64` and `arm64` (Windows is the only supported platform)
-- azd extension zip archives for the same targets
-- `checksums.txt`
+- standalone binaries `foundry-doctor_<version>_<os>_<arch>` (`.exe` on Windows, no extension on Linux) for `linux` and `windows` on `amd64` and `arm64`, published by `foundry-doctor-release.yml` under the tag `foundry-doctor/<version>` with a `SHA256SUMS` file
+- azd extension archives for the same targets (`tar.gz` for Linux, `zip` for Windows)
+- `SHA256SUMS` (the release rehearsal writes `checksums.txt` for its archive layout)
 - `extension.yaml` and `registry.json`
 - SPDX SBOM
 - Sigstore bundles for archives and release metadata

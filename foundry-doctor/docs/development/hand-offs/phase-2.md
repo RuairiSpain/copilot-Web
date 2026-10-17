@@ -9,7 +9,7 @@ Status: implemented; open issues listed below. Not pushed (no write access to th
 - Go toolchain bumped to 1.25.13 (govulncheck GO-2026-6218, GO-2026-6090).
 
 ## Gates (windows/arm64, Go 1.25.13)
-gofmt, go vet, go test ./..., staticcheck 0.7.0, govulncheck, check-no-secrets, check-rule-catalog: all pass. -race not runnable locally; must run in Linux CI.
+gofmt, go vet, go test ./..., staticcheck 0.7.0, govulncheck, check-no-secrets, check-rule-catalog: all pass. -race not runnable locally; it runs on the Windows CI runner (Linux CI was removed on 2026-10-17).
 
 ## Open issues
 - DEP-009 never passes; DEP-007 skips for Cosmos DB/ACR.

@@ -43,12 +43,12 @@ Rehearse the release pipeline in dry-run mode:
 The local dry run succeeded for the bounded, offline parts of release
 engineering:
 
-- standalone zip archives were built for windows on amd64+arm64 (the only supported platform)
-- azd extension zip archives were built for the same targets
+- standalone archives were built for linux and windows on amd64+arm64 (`tar.gz` for Linux, `zip` for Windows; macOS is unsupported, ADR-011 Amendment 2)
+- azd extension archives were built for the same targets (`tar.gz` for Linux, `zip` for Windows)
 - `checksums.txt`, `extension.yaml`, and `registry.json` were generated under
   `dist/rehearsal/`
 - the PowerShell wrapper `scripts/release/rehearse.ps1` successfully drove the
-  bash rehearsal script on Windows
+  bash rehearsal script on Windows; `rehearse.sh` also runs directly on Linux (re-run 2026-10-17 on Linux: all eight archives, `checksums.txt`, `extension.yaml` and `registry.json` written; no `syft`, so no SBOM)
 
 ## What is verified anyway
 

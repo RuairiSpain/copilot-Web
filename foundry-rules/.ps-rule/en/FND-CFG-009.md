@@ -44,3 +44,4 @@ services:
 
 - [https://learn.microsoft.com/azure/foundry/agents/how-to/use-routines](https://learn.microsoft.com/azure/foundry/agents/how-to/use-routines) (last verified 2026-10-04)
 - [https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/extensions/azure.ai.routines/schemas/azure.ai.routine.json](https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/extensions/azure.ai.routines/schemas/azure.ai.routine.json) (last verified 2026-10-04)
+- [https://raw.githubusercontent.com/Azure/azure-dev/azd-ext-azure-ai-routines_1.0.0-beta.10/cli/azd/extensions/azure.ai.routines/schemas/azure.ai.routine.json](https://raw.githubusercontent.com/Azure/azure-dev/azd-ext-azure-ai-routines_1.0.0-beta.10/cli/azd/extensions/azure.ai.routines/schemas/azure.ai.routine.json) (last verified 2026-10-16)

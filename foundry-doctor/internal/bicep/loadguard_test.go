@@ -4,9 +4,20 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
+
+// skipOrFailLinks skips when links cannot be created locally, but fails on
+// GitHub Actions, where a skip would hide a gap in coverage.
+func skipOrFailLinks(t *testing.T, err error) {
+	t.Helper()
+	if os.Getenv("GITHUB_ACTIONS") == "true" {
+		t.Fatalf("links unavailable on CI: %v", err)
+	}
+	t.Skipf("links unavailable: %v", err)
+}
 
 type fileSet map[string]string
 
@@ -145,7 +156,7 @@ func TestGuardFileLoadsSymlinkOutside(t *testing.T) {
 	root, base := guardProject(t, fileSet{"infra/main.bicep": "var x = loadTextContent('link.txt')\n"})
 	link := filepath.Join(base, "proj", "infra", "link.txt")
 	if err := os.Symlink(filepath.Join(base, "outside.txt"), link); err != nil {
-		t.Skipf("symlinks unavailable: %v", err)
+		skipOrFailLinks(t, err)
 	}
 	var ge *LoadGuardError
 	if err := GuardFileLoads(root, "infra/main.bicep"); !errors.As(err, &ge) {
@@ -158,7 +169,7 @@ func TestGuardFileLoadsSymlinkOutside(t *testing.T) {
 func TestGuardFileLoadsSymlinkInsideIsRefused(t *testing.T) {
 	root, base := guardProject(t, fileSet{"infra/main.bicep": "var x = loadTextContent('link.txt')\n", "infra/real.txt": "1"})
 	if err := os.Symlink("real.txt", filepath.Join(base, "proj", "infra", "link.txt")); err != nil {
-		t.Skipf("symlinks unavailable: %v", err)
+		skipOrFailLinks(t, err)
 	}
 	var ge *LoadGuardError
 	if err := GuardFileLoads(root, "infra/main.bicep"); !errors.As(err, &ge) || !strings.Contains(err.Error(), "symbolic link") {
@@ -173,7 +184,7 @@ func TestGuardFileLoadsSymlinkToSensitiveDirIsRefused(t *testing.T) {
 				"infra/main.bicep": "var x = loadTextContent('az/dev/.env')\n",
 				dir + "/dev/.env":  "A=1"})
 			if err := os.Symlink(filepath.Join("..", dir), filepath.Join(base, "proj", "infra", "az")); err != nil {
-				t.Skipf("symlinks unavailable: %v", err)
+				skipOrFailLinks(t, err)
 			}
 			var ge *LoadGuardError
 			if err := GuardFileLoads(root, "infra/main.bicep"); !errors.As(err, &ge) {
@@ -195,7 +206,7 @@ func TestGuardFileLoadsModuleThroughOutsideDirLinkIsRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(outDir, filepath.Join(base, "proj", "infra", "ext")); err != nil {
-		t.Skipf("symlinks unavailable: %v", err)
+		skipOrFailLinks(t, err)
 	}
 	var ge *LoadGuardError
 	if err := GuardFileLoads(root, "infra/main.bicep"); !errors.As(err, &ge) || !strings.Contains(err.Error(), ReasonFileLoadOutsideProject) {
@@ -208,7 +219,7 @@ func TestGuardFileLoadsModuleThroughInsideLinkIsRefused(t *testing.T) {
 		"infra/main.bicep":   "module m './ext/m.bicep' = {\n  name: 'm'\n}\n",
 		"infra/real/m.bicep": "param a string\n"})
 	if err := os.Symlink("real", filepath.Join(base, "proj", "infra", "ext")); err != nil {
-		t.Skipf("symlinks unavailable: %v", err)
+		skipOrFailLinks(t, err)
 	}
 	var ge *LoadGuardError
 	if err := GuardFileLoads(root, "infra/main.bicep"); !errors.As(err, &ge) {
@@ -226,5 +237,44 @@ func TestGuardFileLoadsMissingModuleAllowedDirectoryModuleRefused(t *testing.T) 
 	var ge *LoadGuardError
 	if err := GuardFileLoads(root2, "infra/main.bicep"); !errors.As(err, &ge) {
 		t.Fatalf("module path that is a directory must be refused, got %v", err)
+	}
+}
+
+// A path component that is a regular file (ENOTDIR on Unix) must never let a
+// load through: the target cannot resolve, so the call is refused on every OS.
+func TestGuardFileLoadsLoadThroughRegularFileComponentIsRefused(t *testing.T) {
+	root, _ := guardProject(t, fileSet{
+		"infra/main.bicep": "var x = loadTextContent('file.txt/inner.txt')\n",
+		"infra/file.txt":   "1"})
+	var ge *LoadGuardError
+	if err := GuardFileLoads(root, "infra/main.bicep"); !errors.As(err, &ge) {
+		t.Fatalf("load through a regular-file component must be refused, got %v", err)
+	}
+}
+
+// A module path through a regular file: Unix reports ENOTDIR, which is neither
+// not-exist nor readable, so it is refused; Windows may report a path-not-found
+// error, which stays the compiler's diagnostic, so only the Unix result is asserted.
+func TestGuardFileLoadsModuleThroughRegularFileComponent(t *testing.T) {
+	root, _ := guardProject(t, fileSet{
+		"infra/main.bicep": "module m './file.txt/m.bicep' = {\n  name: 'm'\n}\n",
+		"infra/file.txt":   "1"})
+	err := GuardFileLoads(root, "infra/main.bicep")
+	if runtime.GOOS != "windows" {
+		var ge *LoadGuardError
+		if !errors.As(err, &ge) {
+			t.Fatalf("module through a regular-file component must be refused, got %v", err)
+		}
+	}
+}
+
+// The irregular-file bit must not make ordinary directories and files on a
+// load path look like links.
+func TestGuardFileLoadsPlainPathNotRefusedByIrregularCheck(t *testing.T) {
+	root, _ := guardProject(t, fileSet{
+		"infra/main.bicep": "var x = loadTextContent('a/b/c.txt')\n",
+		"infra/a/b/c.txt":  "1"})
+	if err := GuardFileLoads(root, "infra/main.bicep"); err != nil {
+		t.Fatalf("plain nested path must pass: %v", err)
 	}
 }

@@ -45,4 +45,4 @@ resource projectUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
 - [https://learn.microsoft.com/azure/foundry/concepts/rbac-foundry](https://learn.microsoft.com/azure/foundry/concepts/rbac-foundry) (last verified 2026-10-04)
 - [https://learn.microsoft.com/azure/foundry/agents/concepts/hosted-agent-permissions](https://learn.microsoft.com/azure/foundry/agents/concepts/hosted-agent-permissions) (last verified 2026-10-04)
 - [https://learn.microsoft.com/azure/foundry/agents/quickstarts/set-up-cicd-hosted-agent](https://learn.microsoft.com/azure/foundry/agents/quickstarts/set-up-cicd-hosted-agent) (last verified 2026-10-04)
-- [https://learn.microsoft.com/azure/role-based-access-control/built-in-roles](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles) (last verified 2026-10-04)
+- [https://learn.microsoft.com/azure/role-based-access-control/built-in-roles](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles) (last verified 2026-10-16)

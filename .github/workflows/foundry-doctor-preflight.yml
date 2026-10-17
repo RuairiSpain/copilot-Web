@@ -35,7 +35,7 @@ permissions:
 
 jobs:
   preflight:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: ${{ inputs.environment }}
     permissions:
@@ -57,8 +57,7 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       - name: Build foundry-doctor
         working-directory: foundry-doctor
-        shell: bash
-        run: go build -trimpath -o "$RUNNER_TEMP/foundry-doctor.exe" ./cmd/foundry-doctor
+        run: go build -trimpath -o "$RUNNER_TEMP/foundry-doctor" ./cmd/foundry-doctor
       - name: Run preflight
         shell: bash
         env:
@@ -71,7 +70,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/evidence"
           cd "$PROJECT_PATH"
-          "$RUNNER_TEMP/foundry-doctor.exe" preflight --what-if --profile "$PROFILE" --strict \
+          "$RUNNER_TEMP/foundry-doctor" preflight --what-if --profile "$PROFILE" --strict \
             --resource-group "$AZURE_RESOURCE_GROUP" --location "$AZURE_LOCATION" \
             --format json --out "$RUNNER_TEMP/evidence/preflight.json"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

@@ -7,14 +7,22 @@ include:
     - .ps-rule/
     - baselines/
 
-# Detect chooses the format from the file extension: azure.yaml and *.yaml as YAML, *.json as JSON.
-# Pass -Format File for .bicep files so PSRule for Azure expands them.
+# The input format is not set here: `input.format` is not a key in the PSRule options schema (checked against
+# PSRule main, schemas/PSRule-options.schema.json). The -Format parameter defaults to detecting the format from the
+# file extension (azure.yaml and *.yaml as YAML, *.json as JSON). Pass -Format File for .bicep files.
 input:
-  format: Detect
   pathIgnore:
     - 'tools/'
     - 'docs/'
     - 'tests/expected.md'
+
+# Objects are bound by their ARM `type` field (Microsoft.Storage/storageAccounts), which is what the YAML rules'
+# `type:` precondition matches. Without this PSRule binds by the .NET type name and ARM resources match no rule.
+binding:
+  targetType:
+    - type
+  targetName:
+    - name
 
 configuration:
   # Expand .bicep and .bicepparam files to ARM resources. PSRule for Azure calls the Bicep CLI.

@@ -157,17 +157,16 @@ func boundedCombinedOutput(cmd *exec.Cmd) ([]byte, error) {
 }
 
 func runPinnedCommand(ctx context.Context, dir, name string, args ...string) ([]byte, error) {
-	if runtime.GOOS != "windows" {
-		return nil, errors.New("pinned third-party tests are only supported on Windows")
+	if runtime.GOOS != "linux" {
+		return nil, errors.New("pinned third-party tests require Linux network-namespace isolation")
 	}
 	home, err := os.MkdirTemp("", "foundry-doctor-pinned-home-")
 	if err != nil {
 		return nil, fmt.Errorf("create isolated profile: %w", err)
 	}
 	defer os.RemoveAll(home)
-	// No OS-level network sandbox is available here. Network access is blocked by GOPROXY=off,
-	// GOSUMDB=off and unroutable proxy variables in pinnedProcessEnvironment.
-	cmd := exec.CommandContext(ctx, name, args...)
+	unshareArgs := append([]string{"--user", "--map-root-user", "--net", "--", name}, args...)
+	cmd := exec.CommandContext(ctx, "unshare", unshareArgs...)
 	cmd.Dir = dir
 	cmd.Env = pinnedProcessEnvironment(home)
 	return boundedCombinedOutput(cmd)

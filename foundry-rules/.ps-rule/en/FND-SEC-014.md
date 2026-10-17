@@ -29,7 +29,7 @@ output storageId string = stg.id // consumer calls listKeys(storageId, ...) when
 
 ## LINKS
 
-- [https://learn.microsoft.com/azure/azure-resource-manager/bicep/linter-rule-outputs-should-not-contain-secrets](https://learn.microsoft.com/azure/azure-resource-manager/bicep/linter-rule-outputs-should-not-contain-secrets) (last verified 2026-10-05)
+- [https://learn.microsoft.com/azure/azure-resource-manager/bicep/linter-rule-outputs-should-not-contain-secrets](https://learn.microsoft.com/azure/azure-resource-manager/bicep/linter-rule-outputs-should-not-contain-secrets) (last verified 2026-10-16)
 - [https://learn.microsoft.com/azure/azure-resource-manager/bicep/linter](https://learn.microsoft.com/azure/azure-resource-manager/bicep/linter) (last verified 2026-10-05)
 - [https://learn.microsoft.com/azure/developer/azure-developer-cli/azd-templates](https://learn.microsoft.com/azure/developer/azure-developer-cli/azd-templates) (last verified 2026-10-04)
 - [https://github.com/Azure/bicep/blob/4d4395e327b32da45ae3d961aa464d28e54d26f7/src/Bicep.Core/Analyzers/Linter/Rules/OutputsShouldNotContainSecretsRule.cs](https://github.com/Azure/bicep/blob/4d4395e327b32da45ae3d961aa464d28e54d26f7/src/Bicep.Core/Analyzers/Linter/Rules/OutputsShouldNotContainSecretsRule.cs) (last verified 2026-10-05)

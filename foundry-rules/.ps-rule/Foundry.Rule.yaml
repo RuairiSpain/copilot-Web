@@ -2119,7 +2119,7 @@ spec:
     field: name
     exists: true
 ---
-# FND-SEC-014 source: https://learn.microsoft.com/azure/azure-resource-manager/bicep/linter-rule-outputs-should-not-contain-secrets (verified 2026-10-05)
+# FND-SEC-014 source: https://learn.microsoft.com/azure/azure-resource-manager/bicep/linter-rule-outputs-should-not-contain-secrets (verified 2026-10-16)
 apiVersion: github.com/microsoft/PSRule/v1
 kind: Rule
 metadata:
