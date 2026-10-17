@@ -1,10 +1,9 @@
 # Expected results for the fixtures
 
-These expectations were derived by reading the rules. They have **not** yet been confirmed by a PSRule run: PSRule
-was not available when they were written (see `../README.md`, Status). `Invoke-FixtureCheck.ps1` in this folder asserts
-them, and the workflow `.github/workflows/foundry-rules.yml` runs it; until its first run the result is unknown. The
-bodies of the 8 PowerShell rules were additionally executed outside PSRule and matched these expectations for the
-resources they apply to.
+These expectations were derived by reading the rules and are asserted by `Invoke-FixtureCheck.ps1` in this folder.
+The workflow `.github/workflows/foundry-rules.yml` runs it on Ubuntu and Windows; it passed on both on 2026-10-17
+(PSRule.Rules.Azure 1.47.0) after `ps-rule.yaml` was given `binding.targetType: [type]`. The bodies of the 8 PowerShell
+rules were also executed outside PSRule and matched these expectations for the resources they apply to.
 
 The ARM JSON fixtures are hand-written resource objects in the shape PSRule for Azure produces after expansion
 (one object per resource, with `type`, `name`, `kind`, `sku`, `identity`, `properties`). They were not produced by

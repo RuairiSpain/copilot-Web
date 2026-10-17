@@ -5,12 +5,19 @@ no azd extension, no reporter, no engine. Rule IDs, titles, severities per profi
 documentation URLs are taken from `foundry-doctor/rules/catalog/` (read only). Nothing under `foundry-doctor/` depends
 on this folder, and this folder does not depend on it at run time.
 
-## Status: parse-checked, PSRule run only in CI (result unknown)
+## Status: PSRule fixture check passes in CI
 
-**PSRule has not run this rule set yet.** PSRule for Azure cannot be installed in the authoring sandbox (PowerShell
-Gallery is blocked). The first PSRule run will be the new workflow `.github/workflows/foundry-rules.yml`
-(Ubuntu and Windows); until it has run, treat every rule as unconfirmed. The workflow pins `PSRule.Rules.Azure`
-1.47.0, a version taken from `foundry-doctor/docs/tool-compatibility.md` and not confirmed against the Gallery.
+PSRule runs this rule set in `.github/workflows/foundry-rules.yml` (Ubuntu and Windows, PowerShell Gallery install of
+`PSRule.Rules.Azure` 1.47.0, which installed from the Gallery). On 2026-10-17 the fixture check
+(`tests/Invoke-FixtureCheck.ps1`) passed on both runners for all 10 fixtures: every "Must fail" and "Must not fail"
+assertion in `tests/expected.md` held, and the not-evaluated placeholders produced no result. The first run failed
+for the ARM JSON fixtures because PSRule bound objects by .NET type name and matched no rule; `ps-rule.yaml` now sets
+`binding.targetType: [type]` and `targetName: [name]`, which fixed it.
+
+What the check does not cover: Bicep input (`-Format File` with Bicep expansion), `.bicepparam`, resources PSRule for
+Azure expands from real templates (the ARM fixtures are hand-written), the `FOUNDRY_REQUIRED_TAGS` configuration path
+(FND-OPS-004 is skipped when no tags are set), and PSRule versions other than the one the workflow installs. Treat
+rules outside the 28 evaluated in part as documentation, not as checks.
 
 Verified so far:
 
