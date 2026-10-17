@@ -4,6 +4,9 @@ on:
 jobs:
   validate:
     runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - run: azd auth login --client-id "$CLIENT_ID" --federated-token "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" --tenant-id "$TENANT_ID"
