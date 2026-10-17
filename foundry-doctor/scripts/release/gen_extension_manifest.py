@@ -3,10 +3,13 @@
 
 Reads the release checksums file (sha256sum format) and emits:
   extension.yaml  - azd extension manifest
-  registry.json   - registry entry with per-platform artifacts + checksums
+  registry.json   - registry entry; Version.artifacts is an object keyed by
+                    "<os>/<arch>" per azd registry.schema.json
 
 Only Windows artifacts named foundry-doctor-azd-extension_<ver>_windows_<arch>.zip
-are listed. Standard library only.
+are listed (linux/darwin/tar.gz names are ignored). The result is for a custom
+azd extension source only; the official azd registry also requires linux and
+darwin entries. Standard library only.
 """
 from __future__ import annotations
 
@@ -19,7 +22,10 @@ from pathlib import Path
 EXTENSION_ID = "ruairispain.foundry-doctor"
 NAMESPACE = "foundry"
 REQUIRED_AZD = ">=1.34.2"
-SEMVER = re.compile(r"^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$")
+# The azd registry schema pins Version.version to ^\d+\.\d+\.\d+$, so
+# prerelease versions cannot be represented and are rejected.
+SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
+ENTRY_POINT_EXE = "foundry-doctor-azd.exe"  # executable inside the windows zip
 ARTIFACT = re.compile(
     r"^foundry-doctor-azd-extension_(?P<ver>[^_]+)_(?P<os>windows)_(?P<arch>amd64|arm64)\.zip$"
 )
@@ -41,10 +47,13 @@ def parse_checksums(text: str) -> dict[str, str]:
 
 def build(version: str, checksums: dict[str, str], base_url: str, ext_id: str = EXTENSION_ID):
     if not SEMVER.match(version):
-        raise ValueError(f"invalid semver: {version}")
+        raise ValueError(
+            f"invalid version {version!r}: the azd registry requires MAJOR.MINOR.PATCH "
+            "(pattern ^\\d+\\.\\d+\\.\\d+$); prerelease/build suffixes are not allowed"
+        )
     if not ID_PATTERN.match(ext_id) or ext_id == "microsoft.foundry":
         raise ValueError(f"invalid extension id: {ext_id}")
-    artifacts = []
+    artifacts: dict[str, dict] = {}
     platforms = []
     for name in sorted(checksums):
         m = ARTIFACT.match(name)
@@ -52,13 +61,11 @@ def build(version: str, checksums: dict[str, str], base_url: str, ext_id: str = 
             continue
         key = f"{m.group('os')}/{m.group('arch')}"
         platforms.append(key)
-        artifacts.append(
-            {
-                "platform": key,
-                "url": f"{base_url.rstrip('/')}/{name}",
-                "checksum": {"algorithm": "sha256", "value": checksums[name]},
-            }
-        )
+        artifacts[key] = {
+            "url": f"{base_url.rstrip('/')}/{name}",
+            "checksum": {"algorithm": "sha256", "value": checksums[name]},
+            "entryPoint": ENTRY_POINT_EXE,
+        }
     if not artifacts:
         raise ValueError("no azd extension artifacts found in checksums")
     manifest = {
@@ -86,6 +93,13 @@ def build(version: str, checksums: dict[str, str], base_url: str, ext_id: str = 
                         "version": version,
                         "capabilities": manifest["capabilities"],
                         "usage": manifest["usage"],
+                        "examples": [
+                            {
+                                "name": "doctor",
+                                "description": "Run read-only diagnostics on the current azd project.",
+                                "usage": "azd foundry doctor --local",
+                            }
+                        ],
                         "artifacts": artifacts,
                     }
                 ],

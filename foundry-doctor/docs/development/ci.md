@@ -54,11 +54,11 @@ Contracts other packets must honour:
 
 ## Reusable workflow (`foundry-doctor-offline.yml`)
 
-Inputs: `path`, `profile`, `fail-on`, `install-mode` (`release` or `source`), `version`, `source-repository`, `source-ref`, `verify-attestation`, `runner`, `upload-sarif`, `category`, `artifact-name`.
+Inputs: `path`, `profile`, `fail-on`, `install-mode` (`release` or `source`), `version`, `source-repository`, `source-ref`, `verify-attestation`, `upload-sarif`, `category`, `artifact-name`.
 Inputs reach the shell only through `env` and are validated first. Permissions: workflow `contents: read`; only the `upload` job has `security-events: write` (plus `contents: read`
 and `actions: read`, which `upload-sarif` needs in private repositories). `github/codeql-action/upload-sarif` is pinned to v4.38.2 (`2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2`, the commit behind the annotated tag).
 
-- Release mode downloads `foundry-doctor_<version>_<os>_<arch>` and `SHA256SUMS` from the release `foundry-doctor/<version>`, checks the checksum, and runs `gh attestation verify`. No release exists yet, so use `source` until the first release.
+- Release mode downloads `foundry-doctor_<version>_windows_<arch>.exe` and `SHA256SUMS` from the release `foundry-doctor/<version>`, checks the checksum, and runs `gh attestation verify`. No release exists yet, so use `source` until the first release.
 - Source mode checks out `source-repository` at `source-ref` and builds `./cmd/foundry-doctor`. Pin a tag or SHA.
 - **Fork behaviour.** On a `pull_request` from a fork, and on Dependabot runs, the token is read-only. The upload job is skipped with a notice; the SARIF stays available as a workflow artifact;
   the doctor job still fails on exit 1, 2, 3 or 4, so the exit code is enforced. This follows GitHub's documented read-only token for fork PRs; the exact upload failure was **not tested** (see `phase-1-tooling-facts.md`).
@@ -88,6 +88,7 @@ Not in the release workflow, and why:
 
 - **azd extension archives and registry manifest.** The extension module (`foundry-doctor/extension/`, ADR-005) does not exist and the publisher-owned extension id (ADR-003: not `microsoft.foundry`) is undecided.
   The registry entry needs per-platform artifact URLs and checksums that depend on the extension packaging. Add a job after those exist.
+  The generated `registry.json` is for a custom extension source only (`azd extension source add`); it is not eligible for the official azd registry, which requires linux and darwin entries as well.
 - **Third-party notices** (licence-inventory section on redistribution) are not generated.
 - `actions/attest-build-provenance` v4 is documented as a thin wrapper over `actions/attest`; new work should move to `actions/attest`. It was kept because the PRD packet named it.
 - `cosign-release` is pinned to v3.0.6 (the installer default). The syft version used by `anchore/sbom-action` is the action's own default.
