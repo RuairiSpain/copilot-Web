@@ -132,7 +132,7 @@ func TestEngineSkips(t *testing.T) {
 		{"invalid severity", bad, []sdk.Rule{fake{id: bad.ID}}, "foundry-prod", "", SkipInvalidMetadata, false},
 		{"missing severity key", missing, []sdk.Rule{fake{id: missing.ID}}, "foundry-test", "", sdk.SkipProfileKeyPrefix + "severity.test", false},
 		{"azd unsupported", ranged, []sdk.Rule{ok}, "foundry-prod", "3.0.0", sdk.SkipUnsupportedVersion, false},
-		{"azd unknown", ranged, []sdk.Rule{ok}, "foundry-prod", "", sdk.SkipInputUnavailable, false},
+		{"azd unknown", ranged, []sdk.Rule{ok}, "foundry-prod", "", sdk.SkipAzdVersionUnknown, false},
 		{"rule skip passthrough", cr("FND-X-006", nil, ""), []sdk.Rule{fake{id: "FND-X-006", res: sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipMissingPolicyKey("models.allowed")}}}}, "foundry-prod", "", "profile-key-missing:models.allowed", false},
 		{"rule error", cr("FND-X-007", nil, ""), []sdk.Rule{fake{id: "FND-X-007", err: errors.New("x")}}, "foundry-prod", "", SkipRuleError, false},
 		{"rule panic", cr("FND-X-008", nil, ""), []sdk.Rule{fake{id: "FND-X-008", pan: true}}, "foundry-prod", "", SkipRuleError, false},

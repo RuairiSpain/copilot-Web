@@ -1,5 +1,5 @@
 id: FND-SEC-014
-version: 1
+version: 2
 group: SEC
 title: Secrets not emitted as Bicep outputs
 description: >-
@@ -20,19 +20,33 @@ severity:
   test: error
   prod: error
 compatibility:
-  azd: '>=1.36.0-beta.1 <=1.36.0-beta.1'
+  azd: '>=1.36.0-beta.1 <=1.36.0'
   extensions: {}
   apiVersions: []
   preview: true
   notes: >-
-    azd verified at exactly 1.36.0-beta.1. Azd stores entry-point outputs as environment values per azd docs Bicep linter
-    rule outputs-should-not-contain-secrets (Learn ms.date 10/30/2025) - refs/azure-docs/articles/azure-resource-manager/bicep/linter-rule-outputs-should-not-contain-secrets.md
+    azd: the lower bound 1.36.0-beta.1 is the first version read (clone); the upper bound is azd 1.36.0 (tag azure-dev-cli_1.36.0, acebba1e388b489a91ab8e2487a676359ab516a1, released 2026-10-14), read by tag diff on 2026-10-16. Azd stores entry-point outputs as environment values per azd docs Bicep
+    linter rule outputs-should-not-contain-secrets (Learn ms.date 10/30/2025) -
+    https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/azure-resource-manager/bicep/linter-rule-outputs-should-not-contain-secrets.md
+    (branch URL, not commit-pinned) Window widened 2026-10-16: azd to 1.36.0 (tag azure-dev-cli_1.36.0, acebba1,
+    released 2026-10-14). The azd and extension changelogs and the schema and source diffs from the previously
+    verified versions were read; none touches this rule's verified facts for the widened fields (see
+    docs/tool-compatibility.md section 6).
 evidence:
   description: >-
-    Run the Bicep CLI build and collect the diagnostic with code outputs-should-not-contain-secrets (default level warning
-    in Bicep). Foundry Doctor raises or lowers it per profile and ties the output name to the azd environment values it
-    would populate. Fallback when no diagnostic is available: ARM JSON outputs whose value expression contains listKeys
-    / list*, or a reference to a securestring/secureObject parameter.
+    Analysis of the compiled ARM JSON root outputs (no Bicep parser). Per output, not declared securestring/secureObject:
+    (a) the value expression calls parameters('<name>') for a parameter declared securestring or secureObject, directly or
+    through variables(...) (followed up to 8 levels); (b) the value expression calls a list*() function (listKeys,
+    listAccountSas, listConnectionStrings, listSecrets and others, case-insensitive, at a function-call boundary, never
+    inside a string literal); (c) the output name, split into whole tokens on case, underscore, hyphen and digit
+    boundaries, contains password, passwd or pwd. (a) and (b) and a password-family name are findings with
+    Finding.Key = <output name>:<secure-param|list-function|name>. A name that only contains the token secret, token or key
+    (key as the last token, or after api, access, primary, secondary or shared) or the pair connection string is uncertain and
+    is reported as a per-output skip, not a finding. keyVaultUri, monkey and tokenizerName do not match. Outputs declared
+    securestring/secureObject (Bicep @secure()) are exempt, as in the linter. Evidence names the output and the
+    secure parameter or function, never a value. Not detected: secrets reached only through reference(...).<property>
+    (for example reference(...).primaryKey), through module outputs, or through a user-defined function; a
+    Bicep-build diagnostic wrap (bicep build output) is not implemented in Phase 1.
   confidence: certain
 recommendation: >-
   Output the resourceId of the resource that holds the secret, or store the secret in Key Vault, and read it at the consuming
@@ -41,24 +55,29 @@ fix: >-
   output storageId string = stg.id // consumer calls listKeys(storageId, ...) when it needs the key; do not output keys
 sources:
 - url: https://learn.microsoft.com/azure/azure-resource-manager/bicep/linter-rule-outputs-should-not-contain-secrets
-  lastVerified: '2026-10-05'
-  verifiedVia: refs/azure-docs/articles/azure-resource-manager/bicep/linter-rule-outputs-should-not-contain-secrets.md
-  note: Rule code and detection (secure params, list* functions, names containing password).
+  lastVerified: '2026-10-16'
+  verifiedVia: >-
+    https://raw.githubusercontent.com/MicrosoftDocs/azure-docs/main/articles/azure-resource-manager/bicep/linter-rule-outputs-should-not-contain-secrets.md
+    (ms.date 10/30/2025, fetched 2026-10-16); behaviour also observed with Bicep CLI 0.48.1 (secure parameter, a variable
+    wrapping it and listKeys() are reported; an output with @secure() is not)
+  note: >-
+    Documented failures: secure parameters of type secureString or secureObject, list* functions such as listKeys, and an
+    output name containing 'password'. The page does not mention the names secret, token or key; those name checks are
+    Foundry Doctor heuristics and are uncertain skips. Branch URL, not commit-pinned.
 - url: https://learn.microsoft.com/azure/azure-resource-manager/bicep/linter
   lastVerified: '2026-10-05'
-  verifiedVia: refs/azure-docs/articles/azure-resource-manager/bicep/linter.md
-  note: Rule table lists default level warning.
+  verifiedVia: >-
+    https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/azure-resource-manager/bicep/linter.md
+  note: Rule table lists default level warning. Branch URL, not commit-pinned.
 - url: https://learn.microsoft.com/azure/developer/azure-developer-cli/azd-templates
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azd-docs/articles/azure-developer-cli/azd-templates.md
-  note: azd stores outputs from the entry point as environment values.
+  verifiedVia: >-
+    https://github.com/MicrosoftDocs/azure-dev-docs/blob/main/articles/azure-developer-cli/azd-templates.md
+  note: azd stores outputs from the entry point as environment values. Branch URL, not commit-pinned.
 - url: https://github.com/Azure/bicep/blob/4d4395e327b32da45ae3d961aa464d28e54d26f7/src/Bicep.Core/Analyzers/Linter/Rules/OutputsShouldNotContainSecretsRule.cs
   lastVerified: '2026-10-05'
   verifiedVia: >-
-    Azure/bicep @ 4d4395e327b32da45ae3d961aa464d28e54d26f7 (2026-10-02, MIT)
-    src/Bicep.Core/Analyzers/Linter/Rules/OutputsShouldNotContainSecretsRule.cs: Code =
-    "outputs-should-not-contain-secrets", category Security; outputs with the @secure decorator are skipped; an output
-    whose name contains "password" is reported.
+    https://github.com/Azure/bicep/blob/4d4395e327b32da45ae3d961aa464d28e54d26f7/src/Bicep.Core/Analyzers/Linter/Rules/OutputsShouldNotContainSecretsRule.cs; Azure/bicep @ 4d4395e327b32da45ae3d961aa464d28e54d26f7 (2026-10-02, MIT) src/Bicep.Core/Analyzers/Linter/Rules/OutputsShouldNotContainSecretsRule.cs: Code = "outputs-should-not-contain-secrets", category Security; outputs with the @secure decorator are skipped; an output whose name contains "password" is reported.
   note: >-
     Rule ID confirmed in source. The related IDs secure-secrets-in-params and secure-parameter-default are parameter
     rules and do not replace this one.
@@ -95,13 +114,22 @@ tests:
   - output using listKeys fails
   - output of secure parameter fails
   - output named accountPassword fails
+  - output reaching a secure parameter through a variable fails
   negative:
   - output of resource id passes
+  - output keyVaultUri of a vault property passes (name token key is not the last token)
+  - '@secure() output of a secure parameter passes (exempt, as in the Bicep linter)'
+  - a string literal that contains the text listKeys( passes
   skipped:
+  - output named apiKeyName with a literal value is an uncertain per-output skip, not a finding
+  - model that exposes only output names skips with input-unavailable when no name matches
   - Bicep CLI not installed is skipped with the missing capability named
   - '#disable-next-line outputs-should-not-contain-secrets is surfaced as a suppression needing reason and expiry'
 testability: Deterministic given the Bicep CLI; Skipped when the Bicep CLI is missing.
 notes: >-
-  Bicep linter configuration (bicepconfig.json) can change or disable the level; the wrapper must read the effective level,
+  Version 2 (2026-10-16): the overlap decision stays wrap (Phase 0), so implementation.owner stays bicep; the Phase 1
+  fallback analysis of the ARM outputs lives in internal/rules/sec/sec014.go with accessors in internal/armmodel. The Go rule no longer matches name substrings. It analyses the compiled ARM outputs for secure
+  parameter use, list*() calls and whole-token password names (see evidence). A name-only match on secret, token or key
+  words is an uncertain skip because the Bicep linter documentation lists only password names. Bicep linter configuration (bicepconfig.json) can change or disable the level; the wrapper must read the effective level,
   not assume warning. The waf basis was removed after the Phase 0 Azure black belt review because no WAF pillar tag or WARA
   recommendation is cited here; the WAF mapping is added in Phase 4 when the guidance is verified.

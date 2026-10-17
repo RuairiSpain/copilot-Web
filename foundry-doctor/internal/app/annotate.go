@@ -79,6 +79,7 @@ func Annotate(ctx context.Context, svc Services, req AnnotateRequest, stdout io.
 	if err := req.Validate(); err != nil {
 		return ExitCodeForError(err), err
 	}
+	req.Out = normalizeOutPath(req.Out)
 	run, err := collectAnnotationRun(ctx, svc, req)
 	if err != nil {
 		return ExitCodeForError(err), err
@@ -162,9 +163,19 @@ func emitAnnotateOutput(rootDir, out string, data []byte, stdout io.Writer) erro
 	return nil
 }
 
+// normalizeOutPath treats a backslash as a path separator, so a
+// Windows-style --out value is handled the same way as a forward-slash one.
+func normalizeOutPath(out string) string {
+	return strings.ReplaceAll(out, "\\", "/")
+}
+
+func hasDriveLetter(p string) bool {
+	return len(p) >= 2 && p[1] == ':' && (p[0]|0x20) >= 'a' && (p[0]|0x20) <= 'z'
+}
+
 func safeRepoOutputPath(out string) (string, error) {
-	out = filepath.ToSlash(out)
-	if out == "" || strings.HasPrefix(out, "/") || filepath.IsAbs(filepath.FromSlash(out)) || !filepath.IsLocal(filepath.FromSlash(out)) {
+	out = normalizeOutPath(filepath.ToSlash(out))
+	if out == "" || hasDriveLetter(out) || strings.HasPrefix(out, "/") || filepath.IsAbs(filepath.FromSlash(out)) || !filepath.IsLocal(filepath.FromSlash(out)) {
 		return "", Usagef("--out must stay inside the project directory")
 	}
 	return path.Clean(out), nil

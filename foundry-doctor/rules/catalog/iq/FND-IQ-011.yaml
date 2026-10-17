@@ -43,19 +43,31 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/search/search-howto-schedule-indexers
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/search-howto-schedule-indexers.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/search/search-howto-schedule-indexers; source file
+      MicrosoftDocs/azure-ai-docs: articles/search/search-howto-schedule-indexers.md; retrieved 2026-10-04
     note: interval required; smallest 5 minutes, longest 1,440 minutes; pattern P(nD)(T(nH)(nM)); startTime optional UTC; change detection prerequisite.
   - url: https://learn.microsoft.com/azure/search/search-limits-quotas-capacity
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/search-limits-quotas-capacity.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/search/search-limits-quotas-capacity; source file
+      MicrosoftDocs/azure-ai-docs: articles/search/search-limits-quotas-capacity.md; retrieved 2026-10-04
     note: Maximum running time per indexer run by tier (Free 1-3 or 3-10 minutes, 2 or 24 hours otherwise) and 24-hour cumulative runtime on S3 HD and serverless.
   - url: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-blob
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/agentic-knowledge-source-how-to-blob.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-blob; source file
+      MicrosoftDocs/azure-ai-docs: articles/search/agentic-knowledge-source-how-to-blob.md; retrieved
+      2026-10-04
     note: ingestionParameters.ingestionSchedule is part of the knowledge source (null by default).
   - url: https://github.com/Azure/azure-rest-api-specs/tree/main/specification/search/data-plane/Search
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/search/data-plane/Search/models-service.tsp (IndexingSchedule has interval duration and startTime utcDateTime) and models-knowledgebase.tsp (ingestionSchedule of type IndexingSchedule)
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/data-plane/Search/models-service.tsp
+      (IndexingSchedule has interval duration and startTime utcDateTime) and
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/data-plane/Search/models-knowledgebase.tsp
+      (ingestionSchedule of type IndexingSchedule)
+    note: Branch URL, not commit-pinned.
 overlap:
   decision: native
   provisional: true

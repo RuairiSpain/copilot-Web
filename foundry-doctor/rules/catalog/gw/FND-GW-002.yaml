@@ -55,16 +55,26 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/api-management/llm-token-limit-policy
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-docs/articles/api-management/llm-token-limit-policy.md
-    note: Policy statement and attributes (counter-key, tokens-per-minute, token-quota, token-quota-period Hourly|Daily|Weekly|Monthly|Yearly, estimate-prompt-tokens required); inbound only; tiers Premium, Developer, Standard, Basic and v2 (Consumption not listed); 429 on rate limit, 403 on quota.
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/api-management/llm-token-limit-policy.md
+    note: >-
+      Policy statement and attributes (counter-key, tokens-per-minute, token-quota, token-quota-period
+      Hourly|Daily|Weekly|Monthly|Yearly, estimate-prompt-tokens required); inbound only; tiers Premium,
+      Developer, Standard, Basic and v2 (Consumption not listed); 429 on rate limit, 403 on quota. Branch URL,
+      not commit-pinned.
   - url: https://learn.microsoft.com/azure/api-management/llm-emit-token-metric-policy
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-docs/articles/api-management/llm-emit-token-metric-policy.md
-    note: namespace attribute; dimension name and value; up to five custom dimensions; inbound; all tiers; requires Application Insights integration and custom metrics with dimensions.
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/api-management/llm-emit-token-metric-policy.md
+    note: >-
+      namespace attribute; dimension name and value; up to five custom dimensions; inbound; all tiers;
+      requires Application Insights integration and custom metrics with dimensions. Branch URL, not
+      commit-pinned.
   - url: https://learn.microsoft.com/azure/api-management/genai-gateway-capabilities
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-docs/articles/api-management/genai-gateway-capabilities.md
-    note: AI gateway capability overview (token usage management, monitoring).
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/api-management/genai-gateway-capabilities.md
+    note: AI gateway capability overview (token usage management, monitoring). Branch URL, not commit-pinned.
 overlap:
   decision: native
   provisional: true

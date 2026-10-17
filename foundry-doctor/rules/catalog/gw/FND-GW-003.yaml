@@ -50,19 +50,30 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/api-management/set-backend-service-policy
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-docs/articles/api-management/set-backend-service-policy.md
-    note: backend-id is the identifier (name) of the backend entity; one of base-url or backend-id is required; linked access is not checked when referencing by backend-id.
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/api-management/set-backend-service-policy.md
+    note: >-
+      backend-id is the identifier (name) of the backend entity; one of base-url or backend-id is required;
+      linked access is not checked when referencing by backend-id. Branch URL, not commit-pinned.
   - url: https://learn.microsoft.com/azure/api-management/backends
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-docs/articles/api-management/backends.md
-    note: Backend entities, reference with set-backend-service, backend pools (up to 30 backends), circuit breaker, automatic detection of a matching backend entity by URL.
+    verifiedVia: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/api-management/backends.md
+    note: >-
+      Backend entities, reference with set-backend-service, backend pools (up to 30 backends), circuit
+      breaker, automatic detection of a matching backend entity by URL. Branch URL, not commit-pinned.
   - url: https://learn.microsoft.com/azure/api-management/azure-ai-foundry-api
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-docs/articles/api-management/azure-ai-foundry-api.md
-    note: Importing a Foundry API configures the backend with system-assigned managed identity; Foundry endpoint patterns.
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/api-management/azure-ai-foundry-api.md
+    note: >-
+      Importing a Foundry API configures the backend with system-assigned managed identity; Foundry endpoint
+      patterns. Branch URL, not commit-pinned.
   - url: https://github.com/Azure/azure-rest-api-specs/tree/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/preview/2025-09-01-preview/openapi.json (BackendContractProperties, BackendPool, BackendPoolItem, ApiContractProperties.serviceUrl)
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/preview/2025-09-01-preview/openapi.json
+      (BackendContractProperties, BackendPool, BackendPoolItem, ApiContractProperties.serviceUrl)
+    note: Branch URL, not commit-pinned.
 overlap:
   decision: native
   provisional: true

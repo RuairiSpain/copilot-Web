@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/armmodel"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/azure"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/azureyaml"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/bicep"
@@ -129,7 +130,11 @@ func Graph(ctx context.Context, svc Services, req GraphRequest, stdout io.Writer
 			arm, loadErr := svc.ARM.Load(ctx, src)
 			switch {
 			case loadErr == nil:
-				if raw, ok := arm.(interface{ RawTemplate() []byte }); ok && len(raw.RawTemplate()) > 0 {
+				if pm, ok := arm.(interface{ Placements() []armmodel.Placement }); ok && arm != nil {
+					// The flattened model has the module parameters
+					// substituted and symbols qualified per deployment.
+					coreResources = append(coreResources, graphview.ModelResources(arm.Resources(), pm.Placements())...)
+				} else if raw, ok := arm.(interface{ RawTemplate() []byte }); ok && len(raw.RawTemplate()) > 0 {
 					if p, err := bicep.ParseARM(raw.RawTemplate()); err == nil {
 						coreResources = append(coreResources, templateResources(p)...)
 					}
@@ -269,6 +274,7 @@ func templateResources(tpl *bicep.Template) []coregraph.Resource {
 		}
 		out = append(out, coregraph.Resource{
 			ID: r.Pointer, Type: r.Type, Name: r.Name, SymbolicName: r.SymbolicName, DependsOn: slices.Clone(r.DependsOn),
+			Conditional: r.Conditional, Condition: r.Condition, Looped: r.Copy != nil,
 		})
 	})
 	return out
@@ -281,7 +287,10 @@ func armResources(arm sdk.ARMModel) []coregraph.Resource {
 	res := arm.Resources()
 	out := make([]coregraph.Resource, 0, len(res))
 	for i, r := range res {
-		out = append(out, coregraph.Resource{ID: fmt.Sprintf("/resources/%d", i), Type: r.Type, Name: r.Name})
+		out = append(out, coregraph.Resource{
+			ID: fmt.Sprintf("/resources/%d", i), Type: r.Type, Name: r.Name,
+			Conditional: r.Conditional, Condition: r.Condition, Looped: r.Looped,
+		})
 	}
 	return out
 }

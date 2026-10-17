@@ -72,29 +72,40 @@ fix: |
 sources:
 - url: https://learn.microsoft.com/azure/api-management/api-management-features
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-docs/articles/api-management/api-management-features.md (ms.date 06/05/2026)
-  note: Developer tier has no SLA; availability zones and multi-region deployment feature rows by tier.
+  verifiedVia: >-
+    https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/api-management/api-management-features.md
+    (ms.date 06/05/2026)
+  note: >-
+    Developer tier has no SLA; availability zones and multi-region deployment feature rows by tier. Branch
+    URL, not commit-pinned.
 - url: https://learn.microsoft.com/azure/api-management/enable-availability-zone-support
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-docs/articles/api-management/enable-availability-zone-support.md (ms.date 09/16/2026)
-  note: Availability zone support on Premium, Standard v2 and Premium v2.
+  verifiedVia: >-
+    https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/api-management/enable-availability-zone-support.md
+    (ms.date 09/16/2026)
+  note: Availability zone support on Premium, Standard v2 and Premium v2. Branch URL, not commit-pinned.
 - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/stable/2024-05-01/apimdeployment.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/rest-api-specs/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/stable/2024-05-01/apimdeployment.json
-  note: SkuType enum, zones, AdditionalLocation.
+  verifiedVia: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/stable/2024-05-01/apimdeployment.json
+  note: SkuType enum, zones, AdditionalLocation. Branch URL, not commit-pinned.
 - url: https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/ApiManagement/service/recommendations.yaml
   lastVerified: '2026-10-04'
-  verifiedVia: refs/wara (git show HEAD:azure-resources/ApiManagement/service/recommendations.yaml)
-  note: WARA baf3bfc0-32a2-4c0c-926d-c9bf0b49808e (Premium for zones), 740f2c1c-8857-4648-80eb-47d2c56d5a50 (enable zones),
-    af4f88cb-35e8-4371-b29e-3a32b1d2f40a (multi-region), e35cf148-8eee-49d1-a1c9-956160f99e0b (stv2), all pgVerified true.
+  verifiedVia: >-
+    https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/ApiManagement/service/recommendations.yaml
+  note: >-
+    WARA baf3bfc0-32a2-4c0c-926d-c9bf0b49808e (Premium for zones), 740f2c1c-8857-4648-80eb-47d2c56d5a50
+    (enable zones), af4f88cb-35e8-4371-b29e-3a32b1d2f40a (multi-region), e35cf148-8eee-49d1-a1c9-956160f99e0b
+    (stv2), all pgVerified true. Branch URL, not commit-pinned.
 - url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.APIM.AvailabilityZone/
   lastVerified: '2026-10-04'
-  verifiedVia: refs/psrule/docs/en/rules/Azure.APIM.AvailabilityZone.md
-  note: Overlap source (PSRule for Azure rule documentation).
+  verifiedVia: >-
+    https://github.com/Azure/PSRule.Rules.Azure/blob/main/docs/en/rules/Azure.APIM.AvailabilityZone.md
+  note: Overlap source (PSRule for Azure rule documentation). Branch URL, not commit-pinned.
 - url: https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.APIM.MultiRegion/
   lastVerified: '2026-10-04'
-  verifiedVia: refs/psrule/docs/en/rules/Azure.APIM.MultiRegion.md
-  note: Overlap source (PSRule for Azure rule documentation).
+  verifiedVia: https://github.com/Azure/PSRule.Rules.Azure/blob/main/docs/en/rules/Azure.APIM.MultiRegion.md
+  note: Overlap source (PSRule for Azure rule documentation). Branch URL, not commit-pinned.
 overlap:
   decision: adapt
   provisional: true

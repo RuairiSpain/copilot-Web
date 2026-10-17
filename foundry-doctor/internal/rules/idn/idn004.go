@@ -3,8 +3,11 @@ package idn
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/armexpr"
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/foundrylink"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
 
@@ -38,46 +41,47 @@ func appIdentityResources(in *sdk.Input) []sdk.ARMResource {
 
 // classifyPrincipal correlates a role assignment principalId to an application
 // identity declared in the template. Anything it cannot prove is unknown.
+//
+// A literal principalId matches an identity.principalId literal. A compiled
+// expression such as
+// reference(resourceId('Microsoft.CognitiveServices/accounts/projects', format('ai-{0}', ...), 'proj'), '2025-06-01', 'full').identity.principalId
+// matches when the resource named in its first argument is one of the apps
+// (type and name segments compared with armexpr), or one of the apps'
+// user-assigned identities.
 func classifyPrincipal(pid string, apps []sdk.ARMResource) principalClass {
-	lp := strings.ToLower(strings.TrimSpace(pid))
-	if lp == "" {
+	pid = strings.TrimSpace(pid)
+	if pid == "" {
 		return principalUnknown
 	}
-	isExpr := strings.HasPrefix(lp, "[")
-	for _, r := range apps {
-		if !isExpr {
-			if v, ok, e := strOf(r.Identity, "principalId"); ok && !e && strings.EqualFold(v, lp) {
+	if !armexpr.IsExpression(pid) {
+		for _, r := range apps {
+			if v, ok, e := strOf(r.Identity, "principalId"); ok && !e && strings.EqualFold(v, pid) {
 				return principalApp
 			}
-			continue
 		}
-		if !strings.Contains(lp, "principalid") {
-			continue
-		}
-		if strings.Contains(lp, "'"+strings.ToLower(r.Type)+"'") && nameSegmentsIn(lp, r.Name) {
+		return principalUnknown
+	}
+	c, ok := armexpr.ParseCall(pid)
+	if !ok || c.Fn != "reference" || !strings.Contains(strings.ToLower(c.Suffix), "principalid") {
+		return principalUnknown
+	}
+	target := armexpr.ParseRef(pid)
+	if target.Opaque {
+		return principalUnknown
+	}
+	for _, r := range apps {
+		if armexpr.Compare(target, armexpr.ParseName(r.Type, r.Name)) == armexpr.Same {
 			return principalApp
 		}
 		if ua, ok := r.Identity["userAssignedIdentities"].(map[string]any); ok {
 			for k := range ua {
-				if !unresolved(k) && strings.Contains(lp, strings.ToLower(k)) {
+				if armexpr.Compare(target, armexpr.ParseRef(k)) == armexpr.Same {
 					return principalApp
 				}
 			}
 		}
 	}
 	return principalUnknown
-}
-
-func nameSegmentsIn(lexpr, name string) bool {
-	if name == "" || unresolved(name) {
-		return false
-	}
-	for _, seg := range strings.Split(name, "/") {
-		if !strings.Contains(lexpr, "'"+strings.ToLower(seg)+"'") {
-			return false
-		}
-	}
-	return true
 }
 
 type condVerdict int
@@ -132,6 +136,89 @@ func evalCondition(r sdk.ARMResource) (condVerdict, string) {
 	return condRestrictive, ""
 }
 
+// variableLookup is implemented by an ARM model that exposes the compiled
+// template's literal variables. The current armmodel does not, so a role
+// definition ID held in variables('x') is reported as unresolved with that
+// real cause; when a model offers the lookup the literal is substituted.
+type variableLookup interface {
+	Variable(name string) (any, bool)
+}
+
+var variablesCallRe = regexp.MustCompile(`(?i)variables\(\s*'([^']*)'\s*\)`)
+
+// resolveRoleDefinition returns the role definition GUID. When it cannot, why
+// names the real cause.
+func resolveRoleDefinition(in *sdk.Input, def string) (guid, why string, ok bool) {
+	if g, ok := armexpr.RoleDefinitionGUID(def); ok {
+		return g, "", true
+	}
+	if !armexpr.IsExpression(def) {
+		return "", "roleDefinitionId is not a role definition GUID", false
+	}
+	names := variablesCallRe.FindAllStringSubmatch(def, -1)
+	if len(names) == 0 {
+		return "", "roleDefinitionId is an expression that does not end in a literal role GUID", false
+	}
+	lookup, canLookup := in.ARM.(variableLookup)
+	resolved := def
+	for _, m := range names {
+		if !canLookup {
+			return "", "roleDefinitionId reads variables('" + m[1] + "') and the compiled template variables are not available to the rule", false
+		}
+		v, found := lookup.Variable(m[1])
+		lit, isStr := v.(string)
+		if !found || !isStr || armexpr.IsExpression(lit) {
+			return "", "roleDefinitionId reads variables('" + m[1] + "') which is not a literal string", false
+		}
+		resolved = strings.ReplaceAll(resolved, m[0], "'"+lit+"'")
+	}
+	if g, ok := armexpr.RoleDefinitionGUID(resolved); ok {
+		return g, "", true
+	}
+	return "", "roleDefinitionId does not resolve to a literal role GUID after substituting variables", false
+}
+
+type scopeKind int
+
+const (
+	scopeOther   scopeKind = iota // not provably a Foundry account or project
+	scopeFoundry                  // Microsoft.CognitiveServices/accounts or accounts/projects
+)
+
+// foundryScopeState classifies a single-resource role assignment scope. kind is
+// scopeFoundry only when the scope reference provably has the type accounts or
+// accounts/projects. localAuthOff is true only when the account it names (or the
+// parent account of a project) is in the model with disableLocalAuth true.
+func foundryScopeState(in *sdk.Input, scope string) (kind scopeKind, localAuthOff bool) {
+	ref := armexpr.ParseRef(scope)
+	if ref.Opaque || len(ref.Segments) == 0 {
+		return scopeOther, false
+	}
+	switch ref.Type {
+	case "microsoft.cognitiveservices/accounts", "microsoft.cognitiveservices/accounts/projects":
+	default:
+		return scopeOther, false
+	}
+	acct := armexpr.Ref{Type: "microsoft.cognitiveservices/accounts", Segments: ref.Segments[:1]}
+	for _, r := range ofType(in, typeAccounts) {
+		if armexpr.Compare(acct, armexpr.ParseName(r.Type, r.Name)) != armexpr.Same {
+			continue
+		}
+		if v, ok := r.Properties["disableLocalAuth"].(bool); ok && v {
+			return scopeFoundry, true
+		}
+		return scopeFoundry, false
+	}
+	return scopeFoundry, false
+}
+
+func scopeDescription(scope string) string {
+	if strings.TrimSpace(scope) == "" {
+		return "deployment scope"
+	}
+	return fmt.Sprintf("scope %q", armexpr.StripScope(scope))
+}
+
 func evalIDN004(in *sdk.Input) sdk.Result {
 	var a acc
 	apps := appIdentityResources(in)
@@ -139,17 +226,30 @@ func evalIDN004(in *sdk.Input) sdk.Result {
 	evaluated := false
 	excludedOnly := false
 	missingData := false
+	var reasons []string
+	why := func(r sdk.ARMResource, msg string) {
+		a.unres(r, msg)
+		reasons = append(reasons, msg)
+	}
 	for _, r := range ofType(in, typeRoleAssign) {
-		def, present, isExpr := strOf(r.Properties, "roleDefinitionId")
+		if a.maybe(r) {
+			continue
+		}
+		def, present := rawStr(r.Properties, "roleDefinitionId")
 		if !present {
 			missingData = true
 			continue
 		}
-		if isExpr {
-			a.unresolved = true
+		// Compiled Bicep writes subscriptionResourceId('...roleDefinitions',
+		// '<guid>') (or extensionResourceId / format); the last literal GUID
+		// is the role. A role that is not a literal GUID cannot be judged.
+		role, msg, ok := resolveRoleDefinition(in, def)
+		if !ok {
+			if armexpr.IsExpression(def) {
+				why(r, msg)
+			}
 			continue
 		}
-		role := roleGUID(def)
 		var name string
 		switch role {
 		case roleOwner:
@@ -163,74 +263,115 @@ func evalIDN004(in *sdk.Input) sdk.Result {
 		default:
 			continue
 		}
+		// Classify the principal first: a principalId that provably is a
+		// Foundry identity is evaluated whether or not principalType is set.
 		pt, ptPresent, ptExpr := strOf(r.Properties, "principalType")
-		if ptExpr || !ptPresent {
-			a.unresolved = true // cannot tell whether the principal is an application identity
-			continue
+		pid, pidPresent, _ := strOf(r.Properties, "principalId")
+		if v, ok := r.Properties["principalId"].(string); ok && unresolved(v) {
+			pid = v
 		}
-		switch pt {
-		case "AgentServicePrincipal", "AgentUser":
-		case "ServicePrincipal":
-			pid, pidPresent, _ := strOf(r.Properties, "principalId")
-			if v, ok := r.Properties["principalId"].(string); ok && unresolved(v) {
-				pid = v
-			}
+		provableApp := pidPresent && classifyPrincipal(pid, apps) == principalApp
+		switch {
+		case !ptExpr && (pt == "AgentServicePrincipal" || pt == "AgentUser"):
+		case !ptExpr && ptPresent && pt != "ServicePrincipal" && pt != "":
+			continue // human and group principals are out of scope
+		default: // ServicePrincipal, not set, or an unresolved expression
 			if pidPresent && excluded[strings.ToLower(strings.TrimSpace(pid))] {
 				excludedOnly = true
 				continue
 			}
-			// A principal that cannot be tied to an application identity may be a
-			// deployment identity; that is uncertain, never a failure.
-			if !pidPresent || classifyPrincipal(pid, apps) != principalApp {
-				a.unresolved = true
+			// A principal that cannot be tied to an application identity may be
+			// a deployment identity or a person; that is uncertain, never a
+			// failure.
+			if !provableApp {
+				switch {
+				case !pidPresent:
+					why(r, "principalId is not set")
+				case ptExpr:
+					why(r, "principalType is an unresolved expression and principalId is not a provable Foundry identity")
+				case !ptPresent || pt == "":
+					why(r, "principalType is not set and principalId is not a provable Foundry identity")
+				default:
+					why(r, "principalId is not a provable Foundry identity (it may be a deployment identity)")
+				}
 				continue
 			}
-		default:
-			continue // human and group principals are out of scope
 		}
-		if unresolved(r.Scope) || r.Scope == "" {
-			a.unresolved = true
+		// An empty scope is the deployment scope (resource group, subscription
+		// or management group), which is broad. Expressions are classified by
+		// armexpr (resourceGroup().id, subscription().id, format() paths,
+		// resourceId() calls).
+		lvl := armexpr.ClassifyScope(r.Scope)
+		if lvl == armexpr.ScopeUnknown {
+			why(r, "scope is an expression that cannot be classified")
 			continue
 		}
 		evaluated = true
-		lvl := classifyScope(r.Scope)
-		if lvl == scopeUnknown {
-			a.unresolved = true
-			continue
-		}
 		var condNote string
 		if role == roleUAA || role == roleRBACAdmin {
-			switch v, why := evalCondition(r); v {
+			switch v, cwhy := evalCondition(r); v {
 			case condRestrictive:
 				continue
 			case condUncertain:
-				a.unresolved = true
+				why(r, "condition cannot be evaluated: "+cwhy)
 				continue
 			case condIneffective:
-				condNote = "; condition is ineffective: " + why
+				condNote = "; condition is ineffective: " + cwhy
 			}
 		}
 		switch {
-		case lvl == scopeBroad:
-			a.add(r, fmt.Sprintf("%s granted to an application identity at broad scope %q%s", name, r.Scope, condNote))
-		case lvl == scopeResource && role != roleContributor:
-			a.add(r, fmt.Sprintf("%s granted to an application identity at resource scope %q%s", name, r.Scope, condNote))
+		case lvl == armexpr.ScopeBroad:
+			a.addKey(r, "scope:"+role, fmt.Sprintf("%s granted to an application identity at broad %s%s", name, scopeDescription(r.Scope), condNote))
+		case lvl == armexpr.ScopeResource && role != roleContributor:
+			a.addKey(r, "scope:"+role, fmt.Sprintf("%s granted to an application identity at resource %s%s", name, scopeDescription(r.Scope), condNote))
+		case lvl == armexpr.ScopeResource:
+			// Contributor at the scope of a single Foundry resource whose
+			// account provably disables key authentication is informational
+			// (catalogue product decision, see FND-IDN-004 notes; Contributor can
+			// re-enable local auth and list keys, which the finding text says). Contributor at any other
+			// resource keeps the catalogue severity, and one at a Foundry
+			// resource whose local auth is not provably disabled is a warning.
+			// The rule only lowers severity; the engine never raises it.
+			kind, localAuthOff := foundryScopeState(in, r.Scope)
+			switch {
+			case kind == scopeFoundry && localAuthOff:
+				a.addKey(r, "scope:"+role, fmt.Sprintf("Contributor granted to an application identity at resource %s; informational only because the Foundry account has disableLocalAuth true; this is a policy choice, not proof of safety, because Contributor can set disableLocalAuth back to false and list the account keys; a narrower Foundry role is preferred%s", scopeDescription(r.Scope), condNote))
+				a.fs[len(a.fs)-1].Severity = sdk.SeverityInfo
+			case kind == scopeFoundry:
+				a.addKey(r, "scope:"+role, fmt.Sprintf("Contributor granted to an application identity at resource %s; not downgraded to info because disableLocalAuth is not provably true on the Foundry account%s", scopeDescription(r.Scope), condNote))
+				a.fs[len(a.fs)-1].Severity = sdk.SeverityWarning
+			default:
+				a.addKey(r, "scope:"+role, fmt.Sprintf("Contributor granted to an application identity at resource %s; the scope is not a Foundry account or project, so the informational downgrade does not apply%s", scopeDescription(r.Scope), condNote))
+			}
 		}
 	}
 	switch {
 	case len(a.fs) > 0:
-		return sdk.Result{Findings: a.fs}
+		return withSkips(a.fs, a.notes)
 	case a.unresolved:
-		return skip(SkipUnresolved)
+		sort.Strings(reasons)
+		return skip(SkipUnresolved + ": " + strings.Join(dedupe(reasons), "; "))
+	case a.conditional:
+		return skip(foundrylink.SkipConditional)
 	case evaluated:
 		return sdk.Result{}
 	case excludedOnly:
-		return skip(sdk.SkipInputUnavailable)
+		return skip(sdk.SkipInputUnavailable + ": only excluded role assignments were found, so no assignment could be evaluated")
 	case missingData:
-		return skip(sdk.SkipInputUnavailable)
+		return skip(sdk.SkipInputUnavailable + ": role assignment data missing from the compiled ARM model")
 	default:
 		return sdk.Result{}
 	}
+}
+
+func dedupe(s []string) []string {
+	var out []string
+	for i, x := range s {
+		if i == 0 || x != s[i-1] {
+			out = append(out, x)
+		}
+	}
+	return out
 }
 
 func configuredDeploymentPrincipals(in *sdk.Input) map[string]bool {

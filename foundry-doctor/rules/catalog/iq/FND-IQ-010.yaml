@@ -52,18 +52,31 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/search/search-how-to-index-azure-data-lake-storage
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/search-how-to-index-azure-data-lake-storage.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/search/search-how-to-index-azure-data-lake-storage; source file
+      MicrosoftDocs/azure-ai-docs: articles/search/search-how-to-index-azure-data-lake-storage.md; retrieved
+      2026-10-04
     note: Prerequisite ADLS Gen2 with hierarchical namespace enabled; indexer calls Filesystem Get properties to check hierarchical namespace; use blob indexers when it is not enabled.
   - url: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-blob
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/agentic-knowledge-source-how-to-blob.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-blob; source file
+      MicrosoftDocs/azure-ai-docs: articles/search/agentic-knowledge-source-how-to-blob.md; retrieved
+      2026-10-04
     note: azureBlobParameters.isADLSGen2; Blob or ADLS Gen2 account; private mode needs blob and dfs shared private links for ADLS Gen2.
   - url: https://github.com/Azure/azure-rest-api-specs/tree/main/specification/storage/resource-manager/Microsoft.Storage
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/storage/resource-manager/Microsoft.Storage/stable/2025-01-01/storage.json (isHnsEnabled)
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/storage/resource-manager/Microsoft.Storage/Storage/stable/2025-01-01/storage.json
+      (isHnsEnabled)
+    note: Branch URL, not commit-pinned.
   - url: https://github.com/Azure/azure-rest-api-specs/tree/main/specification/search/data-plane/Search
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/search/data-plane/Search/models-service.tsp (AzureBlobKnowledgeSourceParameters.isADLSGen2, "Set to true if connecting to an ADLS Gen2 storage account")
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/data-plane/Search/models-service.tsp
+      (AzureBlobKnowledgeSourceParameters.isADLSGen2, "Set to true if connecting to an ADLS Gen2 storage
+      account")
+    note: Branch URL, not commit-pinned.
 overlap:
   decision: native
   provisional: true

@@ -53,27 +53,42 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/search/search-how-to-managed-identities
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/search-how-to-managed-identities.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/search/search-how-to-managed-identities; source file
+      MicrosoftDocs/azure-ai-docs: articles/search/search-how-to-managed-identities.md; retrieved 2026-10-04
     note: Managed identities and role assignments eliminate the need for secrets in connection strings; a ResourceId connection string indicates a system managed identity, user-assigned through the identity property.
   - url: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-blob
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/agentic-knowledge-source-how-to-blob.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-blob; source file
+      MicrosoftDocs/azure-ai-docs: articles/search/agentic-knowledge-source-how-to-blob.md; retrieved
+      2026-10-04
     note: Managed identity with Storage Blob Data Reader and Cognitive Services User, ResourceId= connection string, ingestionParameters.identity for user-assigned.
   - url: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-azure-sql
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/agentic-knowledge-source-how-to-azure-sql.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-azure-sql; source file
+      MicrosoftDocs/azure-ai-docs: articles/search/agentic-knowledge-source-how-to-azure-sql.md; retrieved
+      2026-10-04
     note: SQL authentication versus managed identity connection strings; identity only needed for user-assigned.
   - url: https://learn.microsoft.com/azure/search/vector-search-vectorizer-azure-open-ai
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/vector-search-vectorizer-azure-open-ai.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/search/vector-search-vectorizer-azure-open-ai; source file
+      MicrosoftDocs/azure-ai-docs: articles/search/vector-search-vectorizer-azure-open-ai.md; retrieved
+      2026-10-04
     note: apiKey and authIdentity semantics; leave both empty to use the system-assigned identity; Cognitive Services OpenAI User role.
   - url: https://learn.microsoft.com/azure/search/search-security-rbac
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/search/search-security-rbac.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/search/search-security-rbac; source file MicrosoftDocs/azure-ai-docs:
+      articles/search/search-security-rbac.md; retrieved 2026-10-04
     note: Role-based access is optional but recommended; key-based authentication is the default alternative.
   - url: https://learn.microsoft.com/azure/foundry/agents/how-to/foundry-iq-connect
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/foundry-iq-connect.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/how-to/foundry-iq-connect; source file
+      MicrosoftDocs/azure-ai-docs: articles/foundry/agents/how-to/foundry-iq-connect.md; retrieved 2026-10-04
     note: RemoteTool connection with authType ProjectManagedIdentity; role-based access recommended for production, key-based as fallback.
 overlap:
   decision: adapt

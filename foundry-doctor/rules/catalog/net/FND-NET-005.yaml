@@ -1,5 +1,5 @@
 id: FND-NET-005
-version: 1
+version: 4
 group: NET
 title: "Private-mode VNet/region consistency"
 description: >-
@@ -52,16 +52,26 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/includes/how-to-virtual-networks-content.md (ms.date 09/28/2026)
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks (ms.date 09/28/2026); source
+      file MicrosoftDocs/azure-ai-docs: articles/foundry/agents/includes/how-to-virtual-networks-content.md;
+      retrieved 2026-10-04
     note: "The Foundry resource must be deployed in the same region as the virtual network; Cosmos DB, Search and Storage can be in different regions; VNet and Foundry may be in different resource groups; peered VNets supported."
   - url: https://learn.microsoft.com/azure/foundry/agents/concepts/networking-options
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/networking-options.md (ms.date 06/29/2026)
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/concepts/networking-options (ms.date 06/29/2026);
+      source file MicrosoftDocs/azure-ai-docs: articles/foundry/agents/concepts/networking-options.md;
+      retrieved 2026-10-04
     note: Same region for the Foundry resource and the virtual network; other resources can be in different regions with cost implications.
   - url: https://learn.microsoft.com/azure/private-link/private-endpoint-overview
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-docs/articles/private-link/private-endpoint-overview.md (ms.date 08/11/2026)
-    note: The private endpoint must be deployed in the same region and subscription as the virtual network; the private-link resource can be in a different region.
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/private-link/private-endpoint-overview.md
+      (ms.date 08/11/2026)
+    note: >-
+      The private endpoint must be deployed in the same region and subscription as the virtual network; the
+      private-link resource can be in a different region. Branch URL, not commit-pinned.
 overlap:
   decision: native
   provisional: true
@@ -103,6 +113,7 @@ tests:
     - location-is-unresolved-parameter
     - managed-virtual-network-mode
 notes: >-
+  Review B3: an expression-valued networkInjections makes the agent-subnet region check uncertain, not not-applicable.
   The Private Link page states the endpoint-and-VNet constraint as a deployment requirement; whether
   ARM enforces it with a specific error was not read, so only the documented constraint is encoded.
   Unverified: the Foundry docs say the Foundry resource must match the VNet region but do not say

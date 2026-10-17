@@ -1,6 +1,6 @@
 # ADR-011: Engineering scope for Phase 1
 
-Status: Accepted except the OS list, which is Proposed (owner to confirm)
+Status: Accepted. Decision 6 (supported operating systems) was decided by the owner on 2026-10-17
 Date: 2026-10-05
 
 ## Context
@@ -18,11 +18,15 @@ contracts (PRD section 9) but has no third-party rule author yet. The core modul
 4. **No go-sarif dependency.** SARIF 2.1.0 output uses a small hand-written set of structs covering only the fields emitted, with golden tests.
 5. **Coverage target: 80% statement coverage on engine packages** (`internal/model`, `project`, `config`, `azureyaml`, `bicep`, `graph`, `rules`, `findings`, `baseline`, `suppress`, `report`). Rule packages are held to explicit
    positive, negative and skipped scenarios instead of a percentage (PRD section 9 testing strategy).
-6. **Supported operating systems (Proposed, owner to confirm):** linux, darwin and windows, each on amd64 and arm64. Release builds and CI smoke tests cover all six; the path handling rules (forward slashes in reports, confined file reads) are tested on windows.
+6. **Supported operating systems (decided by the owner on 2026-10-17):** windows on amd64 and arm64. Tests, CI smoke tests and release builds target these two platforms. The path handling rules (forward slashes in reports, confined file reads) are tested on windows.
 7. **Dependencies:** `github.com/spf13/cobra` v1.10.2 is approved as the only new third-party dependency in Phase 1. Its entry goes into `docs/licence-inventory.md` in the same change that adds it. Any other dependency needs a new ADR or an amendment.
 
 ## Consequences
 
 - Third parties cannot write rules in Phase 1; they can write adapters and reporters.
 - The hand-written SARIF structs and config validation are our code to maintain and test.
-- If the owner rejects the OS list, only decision 6 and the release matrix change.
+- Changing the OS list later changes only decision 6 and the release matrix.
+
+## Amendment 1 (2026-10-17): Windows only
+
+The owner decided that Foundry Doctor is only run and supported on Windows (amd64 and arm64). Linux and macOS are not supported and are not tested by this project. Code that handles paths stays platform-neutral where that costs nothing (for example forward slashes in reports and `os.Root` confinement), but no Linux or macOS behaviour is promised or verified. The earlier proposal (linux, darwin and windows on amd64 and arm64) is withdrawn.

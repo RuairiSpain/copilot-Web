@@ -19,14 +19,20 @@ severity:
   test: error
   prod: error
 compatibility:
-  azd: ">=1.34.2 <=1.36.0-beta.1"
+  azd: ">=1.34.2 <=1.36.0"
   extensions: {}
   apiVersions:
     - { plane: management, provider: Microsoft.CognitiveServices, resourceType: deletedAccounts, version: "2026-09-01" }
     - { plane: management, provider: Microsoft.ApiManagement, resourceType: deletedservices, version: "2024-05-01" }
     - { plane: management, provider: Microsoft.KeyVault, resourceType: deletedVaults, version: "2026-05-15" }
   preview: true
-  notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from a changelog and was not verified."
+  notes: >-
+    azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18,
+    projects beta.13 need >=1.34.2); the maximum is azd 1.36.0 (tag azure-dev-cli_1.36.0, acebba1e388b489a91ab8e2487a676359ab516a1, released 2026-10-14; the first clone read at 1.36.0-beta.1 is earlier evidence). The earlier >=1.27.1 lower
+    bound came from a changelog and was not verified. Window widened 2026-10-16: azd to 1.36.0 (tag
+    azure-dev-cli_1.36.0, acebba1, released 2026-10-14). The azd and extension changelogs and the schema and source
+    diffs from the previously verified versions were read; none touches this rule's verified facts for the widened
+    fields (see docs/tool-compatibility.md section 6).
 evidence:
   description: >-
     Read-only GET calls, subscription-wide lists then name match: Cognitive Services
@@ -62,20 +68,33 @@ sources:
     note: "Once deleted, you can't create another resource with the same name for 48 hours unless purged; recoverable within 48 hours; deletedAccounts list; purge needs deletedAccounts/delete at subscription level (Cognitive Services Contributor or Contributor)."
   - url: https://learn.microsoft.com/azure/api-management/soft-delete
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-docs/articles/api-management/soft-delete.md (ms.date 11/26/2025)
-    note: "Soft-deleted API Management instance can only be listed, recovered or purged; permanent deletion after 48 hours; you can't reuse the name; deletedservices list and purge APIs."
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/api-management/soft-delete.md (ms.date
+      11/26/2025)
+    note: >-
+      Soft-deleted API Management instance can only be listed, recovered or purged; permanent deletion after
+      48 hours; you can't reuse the name; deletedservices list and purge APIs. Branch URL, not commit-pinned.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
-    note: "DeletedAccounts_List (GET), DeletedAccounts_Get (GET) and DeletedAccounts_Purge (DELETE); AccountProperties.deletionDate and scheduledPurgeDate."
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    note: >-
+      DeletedAccounts_List (GET), DeletedAccounts_Get (GET) and DeletedAccounts_Purge (DELETE);
+      AccountProperties.deletionDate and scheduledPurgeDate. Branch URL, not commit-pinned.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/keyvault/resource-manager/Microsoft.KeyVault/KeyVault/stable/2026-05-15/openapi.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/keyvault/resource-manager/Microsoft.KeyVault/KeyVault/stable/2026-05-15/openapi.json
-    note: "Vaults_ListDeleted (GET) and Vaults_GetDeleted (GET); DeletedVaultProperties (vaultId, location, deletionDate, scheduledPurgeDate, purgeProtectionEnabled)."
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/keyvault/resource-manager/Microsoft.KeyVault/KeyVault/stable/2026-05-15/openapi.json
+    note: >-
+      Vaults_ListDeleted (GET) and Vaults_GetDeleted (GET); DeletedVaultProperties (vaultId, location,
+      deletionDate, scheduledPurgeDate, purgeProtectionEnabled). Branch URL, not commit-pinned.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/stable/2024-05-01/apimdeletedservices.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/stable/2024-05-01/apimdeletedservices.json
-    note: "GET /subscriptions/{subscriptionId}/providers/Microsoft.ApiManagement/deletedservices."
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/stable/2024-05-01/apimdeletedservices.json
+    note: >-
+      GET /subscriptions/{subscriptionId}/providers/Microsoft.ApiManagement/deletedservices. Branch URL, not
+      commit-pinned.
   - url: https://learn.microsoft.com/azure/role-based-access-control/permissions/ai-machine-learning
     lastVerified: "2026-10-04"
     verifiedVia: https://raw.githubusercontent.com/MicrosoftDocs/azure-docs/main/articles/role-based-access-control/permissions/ai-machine-learning.md, perm-integration and security permission pages in MicrosoftDocs/azure-docs

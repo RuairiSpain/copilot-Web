@@ -141,8 +141,10 @@ func fakeRunner(t *testing.T) commandRunner {
 		executable: os.Args[0],
 		prefixArgs: []string{"-test.run=^TestBicepFakeProcess$", "--"},
 		env:        env,
-		timeout:    time.Second,
-		maxOutput:  maxCompilerOutput,
+		// Generous: a race-instrumented or Windows test binary can take over
+		// a second to start. Tests that exercise the timeout set their own value.
+		timeout:   30 * time.Second,
+		maxOutput: maxCompilerOutput,
 	}
 }
 

@@ -6,6 +6,9 @@ All notable Foundry Doctor changes are recorded here.
 
 ### Added
 
+- deployment parameter files (`main.bicepparam`, `main.parameters.json` with azd `${VAR}` substitution from the selected environment) resolve parameter-driven
+  conditions, regions, names and properties; literal Bicep defaults are applied only when a parameter file exists and are marked default-derived (ADR-018)
+- module source files locate findings (`Location.File`) by compiled template hash; `Model.Variable`, `Model.TagsAreExpression`, `Model.FromDefault` for rules
 - standalone `foundry-doctor version`
 - `compare --fail-on-diff`
 - azd extension entrypoint module under `extension/`

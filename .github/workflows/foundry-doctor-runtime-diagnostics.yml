@@ -12,9 +12,9 @@ on:
         type: environment
         required: true
       runner-label:
-        description: Runner label (ubuntu-latest, or a self-hosted VNet runner label).
+        description: Runner label (windows-latest, or a self-hosted Windows VNet runner label).
         type: string
-        default: ubuntu-latest
+        default: windows-latest
       profile:
         type: choice
         options: [dev, test, prod]
@@ -47,14 +47,15 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       - name: Build foundry-doctor
         working-directory: foundry-doctor
-        run: go build -trimpath -o "$RUNNER_TEMP/foundry-doctor" ./cmd/foundry-doctor
+        shell: bash
+        run: go build -trimpath -o "$RUNNER_TEMP/foundry-doctor.exe" ./cmd/foundry-doctor
       - name: Run runtime diagnostics
         shell: bash
         env:
           PROFILE: ${{ inputs.profile }}
         run: |
           mkdir -p "$RUNNER_TEMP/evidence"
-          "$RUNNER_TEMP/foundry-doctor" doctor --runtime --profile "$PROFILE" --strict \
+          "$RUNNER_TEMP/foundry-doctor.exe" doctor --runtime --profile "$PROFILE" --strict \
             --format json --out "$RUNNER_TEMP/evidence/runtime.json"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()

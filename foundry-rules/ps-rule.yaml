@@ -1,0 +1,28 @@
+# PSRule options for foundry-rules. Run from this folder.
+# PSRule.Rules.Azure is the only module. It provides the Bicep expansion.
+include:
+  module:
+    - PSRule.Rules.Azure
+  path:
+    - .ps-rule/
+    - baselines/
+
+# Detect chooses the format from the file extension: azure.yaml and *.yaml as YAML, *.json as JSON.
+# Pass -Format File for .bicep files so PSRule for Azure expands them.
+input:
+  format: Detect
+  pathIgnore:
+    - 'tools/'
+    - 'docs/'
+    - 'tests/expected.md'
+
+configuration:
+  # Expand .bicep and .bicepparam files to ARM resources. PSRule for Azure calls the Bicep CLI.
+  AZURE_BICEP_FILE_EXPANSION: true
+  # Tag names required by FND-OPS-004. Empty means the rule is skipped, not passed.
+  FOUNDRY_REQUIRED_TAGS: []
+
+# Run only the Foundry rules, not the Azure.* rules from PSRule.Rules.Azure.
+rule:
+  tag:
+    ruleSet: foundry-rules

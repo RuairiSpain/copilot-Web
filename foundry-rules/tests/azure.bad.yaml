@@ -1,0 +1,30 @@
+name: bad-project
+services:
+  ai-project:
+    host: azure.ai.project
+  legacy:
+    host: microsoft.foundry
+  agent-tools:
+    host: azure.ai.toolbox
+    uses: [ai-project]
+    tools:
+      - type: mcp
+        connection: missing-conn
+        allowed_tools: []
+  triage:
+    host: azure.ai.agent
+    project: src/triage
+    uses: [ai-project]
+    kind: hosted
+    name: triage-agent
+    toolboxes: [agent-tools]
+    config:
+      anything: true
+    env:
+      FOUNDRY_ENDPOINT: https://example.invalid
+  triage-copy:
+    host: azure.ai.agent
+    project: src/triage
+    uses: [ai-project]
+    kind: hosted
+    name: triage-agent

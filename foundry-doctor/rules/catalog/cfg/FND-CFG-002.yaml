@@ -1,5 +1,5 @@
 id: FND-CFG-002
-version: 1
+version: 2
 group: CFG
 title: "Unique service names by kind"
 description: >-
@@ -18,14 +18,22 @@ severity:
   test: error
   prod: error
 compatibility:
-  azd: ">=1.34.2 <=1.36.0-beta.1"
+  azd: ">=1.34.2 <=1.36.0"
   extensions:
-    azure.ai.agents: ">=1.0.0-beta.18 <=1.0.0-beta.18"
-    azure.ai.connections: ">=1.0.0-beta.9 <=1.0.0-beta.9"
-    azure.ai.toolboxes: ">=1.0.0-beta.9 <=1.0.0-beta.9"
+    azure.ai.agents: ">=1.0.0-beta.18 <=1.0.0-beta.20"
+    azure.ai.connections: ">=1.0.0-beta.9 <=1.0.0-beta.10"
+    azure.ai.toolboxes: ">=1.0.0-beta.9 <=1.0.0-beta.11"
   apiVersions: []
   preview: true
-  notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from a changelog and was not verified. Extension ranges are exactly the versions whose schemas or source were read; widen them in Phase 1 by reading older tags."
+  notes: >-
+    azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18,
+    projects beta.13 need >=1.34.2); the maximum is azd 1.36.0 (tag azure-dev-cli_1.36.0, acebba1e388b489a91ab8e2487a676359ab516a1, released 2026-10-14; the first clone read at 1.36.0-beta.1 is earlier evidence). The earlier >=1.27.1 lower
+    bound came from a changelog and was not verified. Extension ranges are exactly the versions whose schemas or
+    source were read; widen them in Phase 1 by reading older tags. Window widened 2026-10-16: azd to 1.36.0 (tag
+    azure-dev-cli_1.36.0, acebba1, released 2026-10-14); azure.ai.agents to 1.0.0-beta.20; azure.ai.connections to
+    1.0.0-beta.10; azure.ai.toolboxes to 1.0.0-beta.11. The azd and extension changelogs and the schema and source
+    diffs from the previously verified versions were read; none touches this rule's verified facts for the widened
+    fields (see docs/tool-compatibility.md section 6).
 evidence:
   description: >-
     Group azure.ai.agent services by resolved project and the literal agent name field. Report a
@@ -57,11 +65,16 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/azure-yaml-reference.md (ms.date 09/17/2026)
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference (ms.date 09/17/2026);
+      source file MicrosoftDocs/azure-ai-docs: articles/foundry/agents/concepts/azure-yaml-reference.md;
+      retrieved 2026-10-04
     note: "Agent name: reusing a name creates a new version of the existing agent."
   - url: https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json from azure.ai.agents 1.0.0-beta.18; immutable repository revision unavailable
+    verifiedVia: >-
+      https://raw.githubusercontent.com/Azure/azure-dev/a64ca8fe04d0bc1b0375c32fed1b76573e2a91ef/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json
+      (commit of the azure.ai.agents 1.0.0-beta.18 release tag)
     note: Schema evidence for required agent project and the host/kind/name fields used by the fix.
 overlap:
   decision: native

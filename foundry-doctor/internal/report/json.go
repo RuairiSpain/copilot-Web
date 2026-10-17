@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/rules"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
 
@@ -17,6 +18,12 @@ type jsonSummary struct {
 	Suppressed int `json:"suppressed"`
 	Baselined  int `json:"baselined"`
 	Skipped    int `json:"skipped"`
+	// Hidden counts findings removed from the output by --min-severity
+	// (ADR-010 decision 1), so a filter never hides findings silently.
+	Hidden int `json:"hidden"`
+	// SkippedByReason counts skipped checks by reason head. encoding/json
+	// sorts map keys, so the output is deterministic.
+	SkippedByReason map[string]int `json:"skippedByReason"`
 }
 
 type jsonReport struct {
@@ -45,7 +52,7 @@ func JSON(w io.Writer, fs []sdk.Finding, run Run) error {
 		Profile:       run.Profile,
 		GeneratedAt:   run.GeneratedAt,
 		ExitCode:      run.ExitCode,
-		Summary:       jsonSummary{c.Error, c.Warning, c.Info, c.Suppressed, c.Baselined, len(skips)},
+		Summary:       jsonSummary{c.Error, c.Warning, c.Info, c.Suppressed, c.Baselined, len(skips), run.Hidden, rules.SkippedByReason(skips)},
 		Findings:      p,
 		Skipped:       skips,
 		Readiness:     run.Readiness,

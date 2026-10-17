@@ -86,7 +86,7 @@ class AllowTests(unittest.TestCase):
         "gh run list",
         "gh api repos/a/b",
         "gh api -X GET repos/a/b",
-        "curl -sSL -o out.bin https://github.com/Azure/bicep/releases/download/v0.47.16/bicep-linux-x64",
+        "curl -sSL -o out.bin https://github.com/Azure/bicep/releases/download/v0.47.16/bicep-win-x64.exe",
     ]
 
     def test_allowed(self):

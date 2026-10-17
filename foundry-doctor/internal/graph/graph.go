@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/armexpr"
 )
 
 // Kind is a node kind.
@@ -44,6 +46,17 @@ type Resource struct {
 	Name         string
 	SymbolicName string
 	DependsOn    []string // ARM dependsOn entries (resourceId expressions or symbolic names)
+	// DependsOnIDs are the IDs of resources this one depends on directly, such
+	// as every resource declared in a module deployment the resource's module
+	// depends on. IDs that are not deployed nodes, and the resource itself, are
+	// ignored.
+	DependsOnIDs []string
+	// Conditional, Condition and Looped carry the ARM condition and copy loop.
+	// A literal false condition removes the resource from the graph; any other
+	// condition or a loop marks the node as conditional.
+	Conditional bool
+	Condition   string
+	Looped      bool
 }
 
 // Input is everything the graph is built from.
@@ -58,6 +71,9 @@ type Node struct {
 	Kind Kind
 	Name string
 	Type string
+	// Conditional is true when the resource is deployed only under a
+	// condition or loop the template cannot resolve.
+	Conditional bool
 }
 
 // Edge is a directed edge From -> To.
@@ -72,6 +88,9 @@ type Unresolved struct {
 	From string
 	Ref  string
 	Kind EdgeKind
+	// InTemplate is true when the reference may name an in-template resource
+	// whose name could not be correlated; it must not be shown as external.
+	InTemplate bool
 }
 
 // Graph is an immutable dependency graph with deterministic ordering.
@@ -107,15 +126,23 @@ func Build(in Input) (*Graph, error) {
 	}
 	resBySym := map[string]string{}
 	resByName := map[string][]string{}
+	var deployed []Resource
+	notDeployed := map[string]bool{}
 	for _, r := range in.Resources {
 		if r.ID == "" {
 			return nil, fmt.Errorf("graph: resource with empty id")
 		}
 		id := ResourceID(r.ID)
+		pr := armexpr.PresenceOf(r.Conditional, r.Condition, r.Looped)
+		if pr == armexpr.NotDeployed {
+			notDeployed[id] = true
+			continue
+		}
 		if _, dup := g.byID[id]; dup {
 			return nil, fmt.Errorf("graph: duplicate resource %q", r.ID)
 		}
-		g.byID[id] = Node{ID: id, Kind: KindResource, Name: r.Name, Type: r.Type}
+		deployed = append(deployed, r)
+		g.byID[id] = Node{ID: id, Kind: KindResource, Name: r.Name, Type: r.Type, Conditional: pr == armexpr.MaybeDeployed}
 		if r.SymbolicName != "" {
 			resBySym[r.SymbolicName] = id
 		}
@@ -142,7 +169,7 @@ func Build(in Input) (*Graph, error) {
 			} else if ids := resByName[u]; len(ids) == 1 {
 				add(Edge{from, ids[0], EdgeUses})
 			} else {
-				g.Unresolved = append(g.Unresolved, Unresolved{from, u, EdgeUses})
+				g.Unresolved = append(g.Unresolved, Unresolved{From: from, Ref: u, Kind: EdgeUses})
 			}
 		}
 		if s.Resource != "" {
@@ -151,17 +178,28 @@ func Build(in Input) (*Graph, error) {
 			} else if to, ok := resBySym[s.Resource]; ok {
 				add(Edge{from, to, EdgeHosts})
 			} else {
-				g.Unresolved = append(g.Unresolved, Unresolved{from, s.Resource, EdgeHosts})
+				g.Unresolved = append(g.Unresolved, Unresolved{From: from, Ref: s.Resource, Kind: EdgeHosts})
 			}
 		}
 	}
-	for _, r := range in.Resources {
+	for _, r := range deployed {
 		from := ResourceID(r.ID)
+		for _, id := range r.DependsOnIDs {
+			if to := ResourceID(id); to != from {
+				if _, ok := g.byID[to]; ok {
+					add(Edge{from, to, EdgeDependsOn})
+				}
+			}
+		}
 		for _, d := range r.DependsOn {
-			if to, ok := resolveDep(d, resBySym, resByName, in.Resources); ok {
+			to, ok, inTemplate := resolveDep(d, resBySym, resByName, deployed)
+			switch {
+			case ok:
 				add(Edge{from, to, EdgeDependsOn})
-			} else {
-				g.Unresolved = append(g.Unresolved, Unresolved{from, d, EdgeDependsOn})
+			case inTemplate:
+				g.Unresolved = append(g.Unresolved, Unresolved{From: from, Ref: d, Kind: EdgeDependsOn, InTemplate: true})
+			default:
+				g.Unresolved = append(g.Unresolved, Unresolved{From: from, Ref: d, Kind: EdgeDependsOn})
 			}
 		}
 	}
@@ -198,30 +236,44 @@ func Build(in Input) (*Graph, error) {
 	return g, nil
 }
 
-// resolveDep resolves an ARM dependsOn entry: a symbolic name, or a
-// resourceId('type','name'...) expression whose literal args match a resource.
-func resolveDep(d string, sym map[string]string, byName map[string][]string, all []Resource) (string, bool) {
+// resolveDep resolves an ARM dependsOn entry: a symbolic name, a plain name,
+// or a resourceId-style expression / resource ID. Expressions are resolved by
+// resource type plus name segments (armexpr), so compiled names such as
+// format('ai-{0}', uniqueString(...)) resolve to the in-template resource that
+// carries the same expression. inTemplate is true when no resource matched
+// provably but one of the same type could not be ruled out.
+func resolveDep(d string, sym map[string]string, byName map[string][]string, all []Resource) (id string, ok, inTemplate bool) {
 	if id, ok := sym[d]; ok {
-		return id, true
+		return id, true, false
 	}
-	if !strings.Contains(d, "resourceId(") {
+	if !armexpr.IsExpression(d) && !strings.Contains(strings.ToLower(d), "/providers/") {
 		if ids := byName[d]; len(ids) == 1 {
-			return ids[0], true
+			return ids[0], true, false
 		}
-		return "", false
+		return "", false, false
+	}
+	ref := armexpr.ParseRef(d)
+	if ref.Opaque {
+		return "", false, false
 	}
 	var match string
-	n := 0
+	same := 0
 	for _, r := range all {
 		if r.Type == "" || r.Name == "" {
 			continue
 		}
-		if strings.Contains(d, "'"+r.Type+"'") && strings.Contains(d, "'"+r.Name+"'") {
+		switch armexpr.Compare(ref, armexpr.ParseName(r.Type, r.Name)) {
+		case armexpr.Same:
 			match = ResourceID(r.ID)
-			n++
+			same++
+		case armexpr.Unknown:
+			inTemplate = true
 		}
 	}
-	return match, n == 1
+	if same == 1 {
+		return match, true, false
+	}
+	return "", false, inTemplate || same > 1
 }
 
 // Node returns a node by id.

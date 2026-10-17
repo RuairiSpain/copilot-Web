@@ -1,5 +1,5 @@
 id: FND-REL-004
-version: 1
+version: 2
 group: REL
 title: Delete locks on stateful services
 description: The Foundry account and the customer-managed state stores it depends on (Cosmos DB, AI Search, Storage) should
@@ -30,7 +30,9 @@ compatibility:
   notes: "No azd dependency: reads compiled ARM JSON or ARM control plane Microsoft.Authorization/locks 2020-05-01 / 2020-05-01: stable) - resources/resource-manager/Microsoft.Authorization/locks/stable//locks.json."
 evidence:
   description: 'Compiled ARM: a Microsoft.Authorization/locks resource with properties.level ''CanNotDelete'' (or ''ReadOnly'',
-    which is stricter) whose scope or parent is the resource or an enclosing resource group. Live: list locks at the resource,
+    which is stricter) whose scope is the resource, or the deployment resource group (a lock without a scope, or scope resourceGroup().id,
+    in the same template). The input carries no deployment resource-group name, so a lock on a literally named or
+    otherwise computed resource group is uncertain. Live: list locks at the resource,
     resource group and subscription (requires Microsoft.Authorization/locks/read). Locks inherit down from parent scopes and
     the most restrictive applies. Finding: none of Microsoft.CognitiveServices/accounts, Microsoft.DocumentDB/databaseAccounts,
     Microsoft.Search/searchServices, Microsoft.Storage/storageAccounts used by the project is covered. A lock created outside
@@ -46,22 +48,32 @@ fix: "resource lock 'Microsoft.Authorization/locks@2020-05-01' = {\n  name: 'pro
 sources:
 - url: https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/how-to/high-availability-resiliency.md and includes/how-to-high-availability-resiliency-1.md
-    (ms.date 09/21/2026)
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency and
+    includes/how-to-high-availability-resiliency-1.md (ms.date 09/21/2026); source file
+    MicrosoftDocs/azure-ai-docs: articles/foundry/how-to/high-availability-resiliency.md; retrieved 2026-10-04
   note: Foundry guidance on shared responsibility, delete locks, zone redundancy, recovery configuration and multi-region
     deployment.
 - url: https://learn.microsoft.com/azure/azure-resource-manager/management/lock-resources
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-docs/articles/azure-resource-manager/management/lock-resources.md
-  note: Lock inheritance, control-plane-only scope, and permissions required (Microsoft.Authorization/locks/*).
+  verifiedVia: >-
+    https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/azure-resource-manager/management/lock-resources.md
+  note: >-
+    Lock inheritance, control-plane-only scope, and permissions required (Microsoft.Authorization/locks/*).
+    Branch URL, not commit-pinned.
 - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Authorization/locks/stable/2020-05-01/locks.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/rest-api-specs/specification/resources/resource-manager/Microsoft.Authorization/locks/stable/2020-05-01/locks.json
-  note: 'ManagementLockProperties.level enum: NotSpecified, CanNotDelete, ReadOnly.'
+  verifiedVia: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Authorization/locks/stable/2020-05-01/locks.json
+  note: >-
+    ManagementLockProperties.level enum: NotSpecified, CanNotDelete, ReadOnly. Branch URL, not commit-pinned.
 - url: https://github.com/Azure/azure-policy/blob/master/built-in-policies/policyDefinitions/General/ResourceType_denyActionDelete.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-policy/built-in-policies/policyDefinitions/General/ResourceType_denyActionDelete.json
-  note: Built-in policy 78460a36-508a-49a4-b2b2-2f5ec564f4bb (denyAction delete); complementary, not equivalent.
+  verifiedVia: >-
+    https://github.com/Azure/azure-policy/blob/master/built-in-policies/policyDefinitions/General/ResourceType_denyActionDelete.json
+  note: >-
+    Built-in policy 78460a36-508a-49a4-b2b2-2f5ec564f4bb (denyAction delete); complementary, not equivalent.
+    Branch URL, not commit-pinned.
 overlap:
   decision: native
   provisional: true

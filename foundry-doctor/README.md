@@ -56,8 +56,8 @@ Managed identity and GitHub Actions OIDC guidance are documented in
 
 Release automation and rehearsal produce:
 
-- standalone archives for `linux`, `darwin`, `windows` on `amd64` and `arm64`
-- azd extension archives for the same targets
+- standalone binaries and zip archives for `windows` on `amd64` and `arm64` (Windows is the only supported platform)
+- azd extension zip archives for the same targets
 - `checksums.txt`
 - `extension.yaml` and `registry.json`
 - SPDX SBOM
@@ -66,3 +66,20 @@ Release automation and rehearsal produce:
 
 See [release rehearsal notes](docs/development/release-rehearsal.md) and
 [CHANGELOG](CHANGELOG.md).
+
+## Exit codes
+
+`doctor` (and `preflight` and `runtime`, which match it) exit with one code, chosen in this order:
+
+| Code | Meaning |
+|---|---|
+| 4 | Internal error. |
+| 2 | The requested validation could not run (invalid input or configuration, unavailable dependency, or a required skip, see below). This wins over findings. |
+| 3 | `--strict` was set and a skip hid a check (missing input, capability or version). `not-implemented`, `not-applicable`, `profile-key-missing` and `synthetic-infrastructure` skips do not count. |
+| 1 | At least one finding at or above `--fail-on` (default `error`) that is not suppressed or baselined. |
+| 0 | None of the above. |
+
+`--rules` with an exact rule ID (for example `--rules FND-CFG-001`) marks that rule as requested. Any skip from a requested rule, including a
+`not-implemented`, `not-applicable` or uncertain skip, counts as a required skip and gives exit 2, with or without `--strict`. Globs (`FND-CFG-*`),
+groups (`CFG`), pillars and categories do not mark rules as requested. Source: `internal/app/wire.go` `BuildSelector`, `internal/rules/rules.go`
+(`Required`) and `internal/report/exit.go`.

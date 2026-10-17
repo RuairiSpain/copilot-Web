@@ -10,7 +10,12 @@
     "info": 0,
     "suppressed": 1,
     "baselined": 1,
-    "skipped": 2
+    "skipped": 2,
+    "hidden": 2,
+    "skippedByReason": {
+      "az not signed in": 1,
+      "optional scanner missing": 1
+    }
   },
   "findings": [
     {
@@ -23,7 +28,7 @@
         "reason": "accepted",
         "owner": "team"
       },
-      "fingerprint": "6aab330d4fb02ae4bf6ebbc08bcae4e2"
+      "fingerprint": "1181c0263db77e2a46e30a562fb94600"
     },
     {
       "ruleId": "FND-001",
@@ -35,7 +40,7 @@
         "line": 1
       },
       "evidence": "line1\nline2\u001b[31m",
-      "fingerprint": "1fa9e96a455ab38b3800ef8810a379ae"
+      "fingerprint": "7f790d679a92d3b4f4f48a9efaa6a85b"
     },
     {
       "ruleId": "FND-002",
@@ -51,7 +56,7 @@
       "evidence": "note=plain | `x` \u003cscript\u003e",
       "recommendation": "Use *managed* identity",
       "docsUrl": "https://learn.microsoft.com/azure/foundry",
-      "fingerprint": "ae02222094d6c45ef5986f980f956b72"
+      "fingerprint": "8fcedc9e6f68e31b296584e5ef92db84"
     },
     {
       "ruleId": "FND-003",
@@ -62,7 +67,7 @@
         "file": "passwd"
       },
       "baselined": true,
-      "fingerprint": "ac388dbaaf160a88f681d7825febf8e1"
+      "fingerprint": "973d28a81f8a19f03f96b9bb8c48be21"
     }
   ],
   "skipped": [

@@ -1,6 +1,6 @@
 module github.com/ruairispain/copilot-web/foundry-doctor/extension
 
-go 1.25.13
+go 1.26.9
 
 require (
 	github.com/ruairispain/copilot-web/foundry-doctor v0.0.0

@@ -1,5 +1,5 @@
 id: FND-ENV-003
-version: 1
+version: 4
 group: ENV
 title: "Prod does not reference non-prod resource IDs"
 description: >-
@@ -17,19 +17,29 @@ severity:
   test: warning
   prod: error
 compatibility:
-  azd: ">=1.34.2 <=1.36.0-beta.1"
+  azd: ">=1.34.2 <=1.36.0"
   extensions:
-    azure.ai.projects: ">=1.0.0-beta.13 <=1.0.0-beta.13"
+    azure.ai.projects: ">=1.0.0-beta.13 <=1.0.0-beta.14"
   apiVersions: []
   preview: true
-  notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from a changelog and was not verified. Extension ranges are exactly the versions whose schemas or source were read; widen them in Phase 1 by reading older tags."
+  notes: >-
+    azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18,
+    projects beta.13 need >=1.34.2); the maximum is azd 1.36.0 (tag azure-dev-cli_1.36.0, acebba1e388b489a91ab8e2487a676359ab516a1, released 2026-10-14; the first clone read at 1.36.0-beta.1 is earlier evidence). The earlier >=1.27.1 lower
+    bound came from a changelog and was not verified. Extension ranges are exactly the versions whose schemas or
+    source were read; widen them in Phase 1 by reading older tags. Window widened 2026-10-16: azure.ai.projects to
+    1.0.0-beta.14. The azd and extension changelogs and the schema and source diffs from the previously verified
+    versions were read; none touches this rule's verified facts for the widened fields (see docs/tool-compatibility.md
+    section 6). Window widened 2026-10-16 (azd 1.36.0 = azure-dev-cli_1.36.0, acebba1e388b489a91ab8e2487a676359ab516a1, released 2026-10-14). Checked by git diff of the Azure/azure-dev tags azure-dev-cli_1.35.0 (170ebb858071da353cc9bf8657a377bff268ba36) and azure-dev-cli_1.36.0 (blobless clone https://github.com/Azure/azure-dev) over cli/azd/pkg/environment (azdcontext, local_file_data_store.go, environment.go), cli/azd/go.mod, cli/azd/pkg/project and cli/azd/pkg/infra/provisioning/bicep: unchanged are the godotenv version and .env read (godotenv.Read), the .azure/<env>/.env and .azure/config.json layout and constants, defaultEnvironment, the AZURE_* key constants, the environment name regexp ^[a-zA-Z0-9-\(\)_\.]{1,64}$ and the resourceGroup resolution code. Tightened in 1.36.0 and recorded in docs/tool-compatibility.md section 6: dot-only names, trailing-dot names on Windows, symbolic-link state paths and an invalid defaultEnvironment now error. Example URL: https://github.com/Azure/azure-dev/compare/azure-dev-cli_1.35.0...azure-dev-cli_1.36.0
 evidence:
   description: >-
     Take the environment marked prod in Foundry Doctor configuration (the azd environment name is not assumed to indicate
     tier). Extract ARM resource IDs, endpoint host names and resource group names from its .env values, azure.yaml
     after substitution for that environment, and parameter files. Report any that reference the resource group, subscription
     and resource name, or endpoint host of an environment configured as non-prod. Matching is exact on normalised IDs;
-    no naming heuristics are applied.
+    no naming heuristics are applied. Values under secret-looking key names (for example AZURE_KEYVAULT_ID) are digested
+    before the rule runs; the value shape (resource ID or bare endpoint URL) is classified first and carried next to the
+    digest, so a shared Key Vault resource ID is reported whatever the key is called. Actual secret shapes stay
+    digested and never appear in evidence. With fewer than two environments the rule is not applicable.
   confidence: certain
 recommendation: >-
   Point the production environment at production resources, or provision the dependency in production. Re-run provisioning
@@ -40,21 +50,22 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview
     lastVerified: "2026-10-05"
-    verifiedVia: refs/azd-docs/articles/azure-developer-cli/environments-overview.md
-    note: Environments are isolated configurations for development, testing and production (context only).
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/azure-dev-docs/blob/main/articles/azure-developer-cli/environments-overview.md
+    note: >-
+      Environments are isolated configurations for development, testing and production (context only). Branch
+      URL, not commit-pinned.
   - url: https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/extensions/azure.ai.projects/schemas/azure.ai.project.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.projects/schemas/azure.ai.project.json
-    note: azure.ai.project endpoint connects to an existing project; may contain ${VAR}.
+    verifiedVia: >-
+      https://github.com/Azure/azure-dev/blob/main/cli/azd/extensions/azure.ai.projects/schemas/azure.ai.project.json
+    note: >-
+      azure.ai.project endpoint connects to an existing project; may contain ${VAR}. Branch URL, not
+      commit-pinned.
   - url: https://github.com/Azure/azure-dev/blob/azure-dev-cli_1.35.0/cli/azd/pkg/environment/local_file_data_store.go
     lastVerified: '2026-10-05'
     verifiedVia: >-
-      Azure/azure-dev azure-dev-cli_1.35.0 (170ebb8) cli/azd/pkg/environment/local_file_data_store.go (godotenv.Read
-      of <env root>/.env, godotenv.Marshal on save), environment.go (marshallDotEnv, fixupUnquotedDotenv,
-      AZURE_ENV_NAME and AZURE_RESOURCE_GROUP constants) and azdcontext/azdcontext.go (EnvironmentDirectoryName
-      .azure, DotEnvFileName .env, ConfigFileName config.json, configFile.DefaultEnvironment); git diff to main
-      afe4b2b is empty for pkg/environment. github.com/joho/godotenv v1.5.1 (Go proxy zip, tag commit 3fc4292, MIT)
-      parser.go.
+      https://github.com/Azure/azure-dev/blob/azure-dev-cli_1.35.0/cli/azd/pkg/environment/local_file_data_store.go; Azure/azure-dev azure-dev-cli_1.35.0 (170ebb8) cli/azd/pkg/environment/local_file_data_store.go (godotenv.Read of <env root>/.env, godotenv.Marshal on save), environment.go (marshallDotEnv, fixupUnquotedDotenv, AZURE_ENV_NAME and AZURE_RESOURCE_GROUP constants) and azdcontext/azdcontext.go (EnvironmentDirectoryName .azure, DotEnvFileName .env, ConfigFileName config.json, configFile.DefaultEnvironment); git diff to main afe4b2b is empty for pkg/environment. github.com/joho/godotenv v1.5.1 (Go proxy zip, tag commit 3fc4292, MIT) parser.go.
     note: >-
       Verified .env grammar (godotenv v1.5.1 as used by azd): KEY=VALUE or KEY: VALUE with an optional leading `export
       `; key characters letters, digits, `_` and `.` (anything else is a parse error); a line whose first non-space
@@ -102,7 +113,12 @@ tests:
   skipped:
     - environment-tiers-not-configured
     - sibling-environments-not-visible
+    - env-file-unparseable-uncertain
+    - environment-without-tier-or-targets-uncertain
 notes: >-
   Product opinion: no source states a prohibition. Tier mapping is Foundry Doctor configuration (profiles), which does not
   exist in azd. Resources that a prod environment legitimately shares with non-prod (central registries, shared search)
-  need an allow entry with a reason and expiry.
+  need an allow entry with a reason and expiry. Version 2 (2026-10-15): with no finding, an unusable .env, an
+  environment with no tier, no visible prod or non-prod environment, or an environment with no resource group or
+  resource identifier value gives an uncertain skip naming it, not a pass.
+  Version 4: uncertain notes (an unusable environment, an environment with a missing value) are returned as uncertain skips next to findings, not dropped. Findings carry a Key: the check kind, the variable name when there is one, and the sorted environment pair, never a value or a value fingerprint, so a rotated value does not resurface a baselined finding.

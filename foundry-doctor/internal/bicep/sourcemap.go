@@ -1,6 +1,11 @@
 package bicep
 
-import "strings"
+import (
+	"encoding/json"
+	"sort"
+	"strconv"
+	"strings"
+)
 
 // Confidence of a source location.
 type Confidence string
@@ -57,6 +62,97 @@ func (m Mapper) Locate(r Resource, ancestors []Resource) Location {
 	loc.File, loc.Confidence = m.Entry, ConfidenceUncertain
 	loc.Description = "inside unresolved module deployment"
 	return loc
+}
+
+// LookupModule returns the source file of the module deployment with the given
+// ARM name (a literal, or an expression holding a known literal).
+func (m Mapper) LookupModule(name string) (string, bool) { return m.lookup(name) }
+
+// TemplateHash returns metadata._generator.templateHash of the nested template
+// of a module deployment resource node (the decoded JSON object of the
+// Microsoft.Resources/deployments resource), or "" when absent. A module file
+// compiled on its own has the same hash as the template nested in the caller,
+// which maps a nested template to its source file without reading Bicep.
+func TemplateHash(deployment map[string]any) string {
+	props, _ := deployment["properties"].(map[string]any)
+	tpl, _ := props["template"].(map[string]any)
+	meta, _ := tpl["metadata"].(map[string]any)
+	gen, _ := meta["_generator"].(map[string]any)
+	h, _ := gen["templateHash"].(string)
+	return h
+}
+
+// RootTemplateHash returns metadata._generator.templateHash of a compiled ARM
+// template, or "" when absent or the document is not JSON. A module file
+// compiled alone has the hash that TemplateHash reads from the template nested
+// in its caller.
+func RootTemplateHash(arm []byte) string {
+	var doc struct {
+		Metadata struct {
+			Generator struct {
+				Hash string `json:"templateHash"`
+			} `json:"_generator"`
+		} `json:"metadata"`
+	}
+	if json.Unmarshal(arm, &doc) != nil {
+		return ""
+	}
+	return doc.Metadata.Generator.Hash
+}
+
+// NestedTemplateHashes returns the templateHash of every module deployment
+// (a Microsoft.Resources/deployments resource with an inlined template) in a
+// compiled ARM document, at any depth, sorted and without duplicates. At most
+// limit hashes are returned.
+func NestedTemplateHashes(arm []byte, limit int) []string {
+	t, err := ParseARM(arm)
+	if err != nil {
+		return nil
+	}
+	var doc any
+	if json.Unmarshal(arm, &doc) != nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	t.Walk(func(r Resource, _ int) {
+		if r.Nested == nil || len(seen) >= limit {
+			return
+		}
+		if h := TemplateHash(pointerNode(doc, r.Pointer)); h != "" {
+			seen[h] = true
+		}
+	})
+	out := make([]string, 0, len(seen))
+	for h := range seen {
+		out = append(out, h)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// pointerNode follows an RFC 6901 pointer to a JSON object, nil if absent.
+func pointerNode(doc any, ptr string) map[string]any {
+	cur := doc
+	for _, seg := range strings.Split(strings.TrimPrefix(ptr, "/"), "/") {
+		if seg == "" {
+			continue
+		}
+		seg = strings.ReplaceAll(strings.ReplaceAll(seg, "~1", "/"), "~0", "~")
+		switch c := cur.(type) {
+		case map[string]any:
+			cur = c[seg]
+		case []any:
+			i, err := strconv.Atoi(seg)
+			if err != nil || i < 0 || i >= len(c) {
+				return nil
+			}
+			cur = c[i]
+		default:
+			return nil
+		}
+	}
+	m, _ := cur.(map[string]any)
+	return m
 }
 
 func (m Mapper) lookup(name string) (string, bool) {

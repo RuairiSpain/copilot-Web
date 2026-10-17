@@ -106,6 +106,6 @@ adapter parser contract or pinned structured-output fixture set for those tools.
 This work does not manufacture the evidence that PRD section 22 still requires:
 
 - a successful strict gate on a supported host,
-- a successful current Linux CI run,
+- a successful current CI run (Phase 0 wording said Linux; since 2026-10-17 the supported platform is Windows only, ADR-011 Amendment 1),
 - successful pinned spike evidence for the azd isolation path,
 - and release-artefact licence / NOTICE evidence.

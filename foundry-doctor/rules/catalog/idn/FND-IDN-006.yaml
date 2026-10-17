@@ -68,31 +68,38 @@ fix: |
 sources:
   - url: https://openid.net/specs/openid-connect-discovery-1_0.html#IssuerDiscovery
     lastVerified: "2026-10-04"
-    verifiedVia: OpenID Connect Discovery 1.0, Issuer Discovery
+    verifiedVia: >-
+      https://openid.net/specs/openid-connect-discovery-1_0.html#IssuerDiscovery; OpenID Connect Discovery 1.0, Issuer Discovery
     note: The issuer identifier is an HTTPS URL with no query or fragment component, providing the normative basis for rejecting HTTP issuers.
   - url: https://learn.microsoft.com/entra/workload-id/workload-identity-federation-create-trust-user-assigned-managed-identity
     lastVerified: "2026-10-04"
-    verifiedVia: github.com/MicrosoftDocs/entra-docs docs/workload-id/workload-identity-federation-create-trust-user-assigned-managed-identity.md (ms.date 05/12/2025)
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/entra-docs/blob/main/docs/workload-id/workload-identity-federation-create-trust-user-assigned-managed-identity.md (ms.date 05/12/2025); branch URL, not commit-pinned
     note: Issuer must match the iss claim and be a URL that complies with OIDC Discovery; subject must match the sub claim; GitHub values must exactly match and pattern matching is not supported for branches and tags; name limits.
   - url: https://learn.microsoft.com/entra/workload-id/workload-identity-federation-considerations
     lastVerified: "2026-10-04"
-    verifiedVia: github.com/MicrosoftDocs/entra-docs docs/workload-id/workload-identity-federation-considerations.md (ms.date 02/28/2024; error table with single audience api://AzureADTokenExchange, duplicate issuer and subject, serial creation)
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/entra-docs/blob/main/docs/workload-id/workload-identity-federation-considerations.md (ms.date 02/28/2024; error table with single audience api://AzureADTokenExchange, duplicate issuer and subject, serial creation); branch URL, not commit-pinned
     note: Documented constraints on audience and uniqueness; concurrent updates under one identity return 409.
   - url: https://learn.microsoft.com/entra/workload-id/workload-identities-federated-credential-mutable-subjects
     lastVerified: "2026-10-04"
-    verifiedVia: github.com/MicrosoftDocs/entra-docs docs/workload-id/workload-identities-federated-credential-mutable-subjects.md (ms.date 07/28/2026)
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/entra-docs/blob/main/docs/workload-id/workload-identities-federated-credential-mutable-subjects.md (ms.date 07/28/2026); branch URL, not commit-pinned
     note: Mutable name-based subjects, subject recycling, dangling credentials; prefer immutable subjects; a standard credential matches the sub value exactly.
   - url: https://learn.microsoft.com/entra/workload-id/workload-identities-github-immutable-subjects
     lastVerified: "2026-10-04"
-    verifiedVia: github.com/MicrosoftDocs/entra-docs docs/workload-id/workload-identities-github-immutable-subjects.md (ms.date 07/28/2026)
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/entra-docs/blob/main/docs/workload-id/workload-identities-github-immutable-subjects.md (ms.date 07/28/2026); branch URL, not commit-pinned
     note: Immutable GitHub subject format with owner and repository IDs; GitHub.com only.
   - url: https://learn.microsoft.com/entra/workload-id/workload-identities-flexible-federated-identity-credentials
     lastVerified: "2026-10-04"
-    verifiedVia: github.com/MicrosoftDocs/entra-docs docs/workload-id/workload-identities-flexible-federated-identity-credentials.md (ms.date 09/18/2026; preview)
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/entra-docs/blob/main/docs/workload-id/workload-identities-flexible-federated-identity-credentials.md (ms.date 09/18/2026; preview); branch URL, not commit-pinned
     note: Wildcards are available only through flexible federated identity credentials (preview) and GitHub expressions must include an immutable claim; limit of 20 credentials per identity.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/msi/resource-manager/Microsoft.ManagedIdentity/ManagedIdentity/stable/2024-11-30/ManagedIdentity.json
     lastVerified: "2026-10-04"
-    verifiedVia: github.com/Azure/azure-rest-api-specs specification/msi/resource-manager/Microsoft.ManagedIdentity/ManagedIdentity/stable/2024-11-30/ManagedIdentity.json
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/msi/resource-manager/Microsoft.ManagedIdentity/ManagedIdentity/stable/2024-11-30/ManagedIdentity.json; branch URL, not commit-pinned
     note: FederatedIdentityCredentialProperties issuer (format uri), subject, audiences, all required. The stable schema has no claims matching expression property.
 overlap:
   decision: adapt

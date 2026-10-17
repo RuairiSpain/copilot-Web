@@ -1,5 +1,5 @@
 id: FND-SEC-009
-version: 1
+version: 2
 group: SEC
 title: Policy coverage and compliance evidence
 description: Evidence report on whether Azure Policy assignments at the subscription or resource group scope cover
@@ -44,8 +44,11 @@ fix: "resource assign 'Microsoft.Authorization/policyAssignments@2025-01-01' = {
 sources:
 - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Authorization/policy/stable/2025-01-01/policyAssignments.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/rest-api-specs/specification/resources/resource-manager/Microsoft.Authorization/policy/stable/2025-01-01/policyAssignments.json
-  note: policyAssignments properties.enforcementMode enum (Default, DoNotEnforce, Enroll).
+  verifiedVia: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Authorization/policy/stable/2025-01-01/policyAssignments.json
+  note: >-
+    policyAssignments properties.enforcementMode enum (Default, DoNotEnforce, Enroll). Branch URL, not
+    commit-pinned.
 - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/policyinsights/resource-manager/Microsoft.PolicyInsights/PolicyInsights/stable/2024-10-01/openapi.json
   lastVerified: '2026-10-04'
   verifiedVia: https://raw.githubusercontent.com/Azure/azure-rest-api-specs/main/specification/policyinsights/resource-manager/Microsoft.PolicyInsights/PolicyInsights/stable/2024-10-01/openapi.json

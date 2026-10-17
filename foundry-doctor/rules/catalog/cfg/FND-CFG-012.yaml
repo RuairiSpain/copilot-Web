@@ -1,5 +1,5 @@
 id: FND-CFG-012
-version: 1
+version: 4
 group: CFG
 title: "Azure region values are valid"
 description: >-
@@ -18,16 +18,22 @@ severity:
   test: error
   prod: error
 compatibility:
-  azd: ">=1.34.2 <=1.36.0-beta.1"
+  azd: ">=1.34.2 <=1.36.0"
   extensions: {}
   apiVersions:
     - { plane: management, provider: Microsoft.Resources, resourceType: subscriptions, version: "2022-12-01" }
   preview: true
-  notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from a changelog and was not verified."
+  notes: >-
+    azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18,
+    projects beta.13 need >=1.34.2); the maximum is azd 1.36.0 (tag azure-dev-cli_1.36.0, acebba1e388b489a91ab8e2487a676359ab516a1, released 2026-10-14; the first clone read at 1.36.0-beta.1 is earlier evidence). The earlier >=1.27.1 lower
+    bound came from a changelog and was not verified. Window widened 2026-10-16: azd to 1.36.0 (tag
+    azure-dev-cli_1.36.0, acebba1, released 2026-10-14). The azd and extension changelogs and the schema and source
+    diffs from the previously verified versions were read; none touches this rule's verified facts for the widened
+    fields (see docs/tool-compatibility.md section 6).
 evidence:
   description: >-
-    Offline, check that the value is a non-empty, lower-case, space-free location name in the form azd stores
-    (for example eastus2) and that it is consistent across AZURE_LOCATION and parameter files. When a
+    Offline, check that the value is non-empty (an empty value is a finding) and report a value that is not a lower-case,
+    space-free location name in the form azd stores (for example eastus2) as uncertain, never as an error and that it is consistent across AZURE_LOCATION and parameter files. When a
     control-plane capability is available, compare it to the Subscriptions_ListLocations result (API
     2022-12-01) for the subscription and report values not in the list. Without that capability the
     list membership check is skipped, never passed. Values with ${VAR} are not evaluated.
@@ -41,12 +47,18 @@ fix: |
 sources:
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/subscriptions/stable/2022-12-01/subscriptions.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/resources/resource-manager/Microsoft.Resources/subscriptions/stable/2022-12-01/subscriptions.json
-    note: Subscriptions_ListLocations - all locations available for resource providers; each provider may support a subset.
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/subscriptions/stable/2022-12-01/subscriptions.json
+    note: >-
+      Subscriptions_ListLocations - all locations available for resource providers; each provider may support
+      a subset. Branch URL, not commit-pinned.
   - url: https://learn.microsoft.com/azure/developer/azure-developer-cli/manage-environment-variables
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azd-docs/articles/azure-developer-cli/manage-environment-variables.md
-    note: AZURE_LOCATION is the Azure region where resources are deployed, set during first provisioning.
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/azure-dev-docs/blob/main/articles/azure-developer-cli/manage-environment-variables.md
+    note: >-
+      AZURE_LOCATION is the Azure region where resources are deployed, set during first provisioning. Branch
+      URL, not commit-pinned.
 overlap:
   decision: adapt
   provisional: true
@@ -87,7 +99,7 @@ testability: >-
   Format and consistency checks are offline. List membership needs a control-plane capability and is skipped without it.
 tests:
   positive:
-    - location-with-space-and-capitals
+    - empty-azure-location
     - location-not-in-subscription-list
     - azure-location-differs-from-parameter-file
   negative:
@@ -95,8 +107,17 @@ tests:
   skipped:
     - control-plane-unavailable
     - location-is-env-reference
+    - location-with-space-and-capitals-is-uncertain
 notes: >-
   Product opinion: no source read states that a malformed or unlisted location fails deployment, so no platform basis
   is claimed. Unverified: that the azd environment stores the short name form (the docs example shows eastus); the
-  rule does not accept display names such as East US as an inferred error and reports them as warnings.
+  rule does not treat display names such as East US as an error and reports them as uncertain.
   Region availability of specific models or Foundry features is not covered and is not inferred.
+  Severity: no source says that a display name such as East US, or a mixed-case value, is rejected, so the rule reports
+  it as uncertain in every profile (never an error). Only an empty AZURE_LOCATION is a finding. Without a usable
+  environment the rule skips with input-unavailable and a named reason (no-environment-selected, env-file-missing,
+  default-environment-not-found).
+  Version 3: a value built by variable expansion in the .env file (for example AZURE_LOCATION=${X}) is uncertain, not
+  empty: the .env parser (godotenv grammar) expands an undefined variable to an empty string, so the parsed value does not
+  show the intent.
+  Version 4: uncertain notes are no longer dropped when the rule also has findings. They are returned as uncertain skips next to the findings (one per distinct note), and the rule-level skip is kept only when there are no findings. An AZURE_LOCATION value that contains ${ (for example a single-quoted literal in the .env file) is uncertain, not input-unavailable: the value is set but it is not judged. A named environment that does not exist skips with input-unavailable: environment-not-found: <name>.

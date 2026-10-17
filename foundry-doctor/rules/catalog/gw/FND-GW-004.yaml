@@ -52,15 +52,22 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/api-management/import-and-publish
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-docs/articles/api-management/import-and-publish.md
-    note: API Management distinguishes and routes APIs by their suffix, so the suffix must be unique for every API.
+    verifiedVia: >-
+      https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/api-management/import-and-publish.md
+    note: >-
+      API Management distinguishes and routes APIs by their suffix, so the suffix must be unique for every
+      API. Branch URL, not commit-pinned.
   - url: https://learn.microsoft.com/azure/api-management/graphql-api
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-docs/articles/api-management/graphql-api.md
-    note: API URL suffix has to be unique in the API Management instance.
+    verifiedVia: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/api-management/graphql-api.md
+    note: API URL suffix has to be unique in the API Management instance. Branch URL, not commit-pinned.
   - url: https://github.com/Azure/azure-rest-api-specs/tree/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/preview/2025-09-01-preview/openapi.json (ApiContractProperties.path "Relative URL uniquely identifying this API and all of its resource paths within the API Management service instance", maxLength 400)
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/preview/2025-09-01-preview/openapi.json
+      (ApiContractProperties.path "Relative URL uniquely identifying this API and all of its resource paths
+      within the API Management service instance", maxLength 400)
+    note: Branch URL, not commit-pinned.
 overlap:
   decision: native
   provisional: true

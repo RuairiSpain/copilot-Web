@@ -38,3 +38,14 @@ Giving them catalogue IDs would mean rules with no sources, tests or overlap dec
 - Expired suppressions meet the Definition of Done without adding a fake rule to the catalogue.
 - Adding a `FND-SYS-*` ID is an ADR amendment; a test fails when code emits an unlisted `FND-SYS-*` ID.
 - Fixed severities mean a `--fail-on warning` run also fails on `FND-SYS-UNSUPPORTED-HOST`; that is intended.
+
+## Amendment 1 (2026-10-16): implementation
+
+1. **Expired suppression ID.** The code emitted `FND-SUPPRESS-001`; the PRD does not name that ID (it says only "Expired suppressions generate an error"), so ADR-009 stands and the code, tests and hand-off text now use
+   `FND-SYS-SUPPRESSION-EXPIRED` (`suppress.ExpiredRuleID`). The finding has no category or basis, per decision 4.
+2. **Compiler diagnostics are findings.** Diagnostics from `bicep build --diagnostics-format sarif` (warnings and errors, on success and on failure) become findings with rule ID `bicep/<code>`, `Adapter: bicep`, the SARIF
+   file, line and column as a repo-relative slash path, redacted message as evidence, and `Key` = `<code>:<12 hex of sha256(message)>` with a `:<n>` suffix for repeated identical diagnostics in one file. The engine hook is an
+   adapter-findings hand-off from the ARM loader to the engine adapter (`internal/app/wire_bicep.go`); the findings are appended to the rule findings before baseline and suppression, so baselines and `bicep/<code>`
+   suppressions apply. Explicit rule selectors leave them out. They are not catalogue rules and bypass catalogue enrichment. See `docs/development/bicep-adapter.md`.
+3. **Suppression selectors.** `ruleId` in a suppression file accepts `FND-<GROUP>-<NNN>` and `bicep/<code>`; `FND-SYS-*` IDs remain unsuppressible (decision 4).
+4. **Known gap.** The SARIF reporter maps a rule ID through `report.SafeRuleID`, which replaces `/` with `_`, so SARIF output shows `bicep_<code>` instead of `bicep/<code>` (decision 5). The fix belongs to `internal/report`.

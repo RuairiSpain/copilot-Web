@@ -1,5 +1,5 @@
 id: FND-NET-007
-version: 1
+version: 2
 group: NET
 title: Restricted mode has allowed IP range
 description: >-
@@ -59,7 +59,9 @@ fix: |
 sources:
 - url: https://learn.microsoft.com/azure/foundry/how-to/configure-private-link
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/how-to/configure-private-link.md (ms.date 09/29/2026)
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/how-to/configure-private-link (ms.date 09/29/2026); source file
+    MicrosoftDocs/azure-ai-docs: articles/foundry/how-to/configure-private-link.md; retrieved 2026-10-04
   note: >-
     PNA flag plus the additional setting Enabled from selected IP addresses; Selected networks grants specific IP addresses
     and virtual networks.
@@ -67,13 +69,16 @@ sources:
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
   note: >-
-    NetworkRuleSet.defaultAction is used when no ipRules or virtualNetworkRules entry matches (Allow/Deny); IpRule.value
-    IPv4 address or CIDR; bypass None/AzureServices.
+    NetworkRuleSet.defaultAction is used when no ipRules or virtualNetworkRules entry matches (Allow/Deny);
+    IpRule.value IPv4 address or CIDR; bypass None/AzureServices. Branch URL, not commit-pinned.
 - url: https://learn.microsoft.com/azure/foundry/agents/concepts/networking-options
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/networking-options.md (ms.date 06/29/2026)
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/agents/concepts/networking-options (ms.date 06/29/2026); source
+    file MicrosoftDocs/azure-ai-docs: articles/foundry/agents/concepts/networking-options.md; retrieved
+    2026-10-04
   note: Inbound public can be optionally restricted to selected IP addresses.
 overlap:
   decision: adapt

@@ -6,9 +6,9 @@
 
 ## Summary
 
-| Errors | Warnings | Info | Suppressed | Baselined | Skipped |
-|---|---|---|---|---|---|
-| 1 | 1 | 0 | 1 | 1 | 2 |
+| Errors | Warnings | Info | Suppressed | Baselined | Hidden by --min-severity | Skipped |
+|---|---|---|---|---|---|---|
+| 1 | 1 | 0 | 1 | 1 | 2 | 2 |
 
 ## Findings
 

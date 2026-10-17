@@ -1,124 +1,129 @@
-# Bicep adapter (`internal/bicep`)
+# Bicep adapter (`internal/bicep`, `internal/armmodel`, `internal/app/wire.go`)
 
-Owner: Bicep package. Decision record: ADR-002. Tested CLI: **Bicep CLI 0.47.16 (3f73e1a234)**, linux-x64; floor
-check also run on **0.24.24** (fixture compile, diagnostics, `.bicepparam` env handling). No Bicep parsing exists in
-this repository: the adapter runs the compiler and reads ARM JSON.
+Decision records: ADR-002 (analyse the compiled ARM JSON), ADR-009 (compiler diagnostics become `bicep/<code>`
+findings), ADR-012 (synthetic infrastructure), ADR-015 (version contract), ADR-018 (parameter files).
+No Bicep parser exists in this repository: the adapter runs the Bicep CLI and reads its output.
+
+**Contract version: Bicep CLI 0.48.1** (`bicep.ContractVersion`, ADR-015). A CLI older than 0.48.1 is refused
+(`KindVersionTooOld`); a newer one is accepted and marked `Tool.Newer`.
 
 ## Pipeline
 
-1. `Discover(ctx, opts)` returns a `Discovery` holding an `sdk.ToolStatus`. It never fails. Order: explicit path
-   (must be absolute), else `bicep` on PATH (a relative PATH entry is refused). `az bicep` is not used. Version
-   from `bicep --version`; floor `MinVersion()` = 0.24.24. States: `available`, `missing`, `unsupported-version`,
-   `failed` (unparseable or crashing). A required tool that is not `available` becomes exit 2 in the app layer
-   (`NewCompiler` returns `ErrCLIUnavailable` to make that mapping trivial).
-2. `NewCompiler(d, CompilerOptions{ProjectDir})` then `Compile(ctx, file)` / `CompileParams(ctx, file)`.
-   Commands: `bicep build <abs file> --stdout --no-restore` and `bicep build-params <abs file> --stdout --no-restore`.
-   Inputs must have the right extension and stay inside the project after symlink resolution (`ErrBadInput`).
-3. `Normalise(arm, Options)` turns the ARM JSON into `model.ARMTemplate` plus a parallel `[]ResourceInfo`.
-4. `ToFinding` / `Adapter.Run` turn diagnostics into `sdk.Finding` (`bicep/<code>`, ADR-009).
+1. `bicep.Discover(ctx, DiscoverOptions)` locates the CLI: explicit `Path` option, then `BICEP_PATH`, then `bicep`
+   on `PATH` (`az bicep` is never used). It runs `bicep --version`, parses the version and compares it with the
+   contract. Failures are `*ToolError` values (`missing`, `not-executable`, `version-too-old`, `version-unknown`,
+   `timeout`, `adapter`); `IsDependencyError` is true for them. The app layer maps them to a warning, or to exit 2
+   when `validation.bicep` is `required` for the profile (ADR-010 decision 11).
+2. `armLoader.Load` (`internal/app/wire.go`) picks the entry file `<infra.path>/main.bicep` (or the path
+   resolved from azure.yaml), compiles it, loads parameters, locates module files and builds the model.
+   With no `main.bicep` it falls back to `main.json`; with neither the project is synthetic (ADR-004, ADR-012).
+3. `armmodel.FromARM(raw, options)` turns the compiled ARM JSON into the `sdk.ARMModel` that rules read.
+   The raw template is kept next to the model (`RawTemplate()`) for the preflight what-if.
+4. Compiler diagnostics become findings (below).
 
-### Execution safety
+## Compilation and offline guarantees
 
-Environment is an allow-list (`MinimalEnv`): `HOME`, `DOTNET_CLI_HOME`, `TMPDIR` (a fresh temp dir per run unless
-`CompilerOptions.Home` is set), `DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1`, `DOTNET_CLI_TELEMETRY_OPTOUT=1`,
-`DOTNET_NOLOGO=1`, `PATH=/usr/bin:/bin` (Windows: `USERPROFILE`, `TEMP`, `TMP`, `SystemRoot`). No `AZURE_*`, token
-or user variable is forwarded (tested with a fake CLI that dumps its environment). Working directory is the
-project. Limits: 60 s timeout, 32 MiB stdout, 4 MiB stderr (overflow kills the process, `ErrOutputTooLarge`).
-stdout and stderr are captured separately. `--no-restore` keeps the run offline; a `br:` module that is not in the
-cache then fails as a compile error.
+`Compiler.Compile` runs, with the file's directory as working directory:
 
-### Exit semantics
+```
+bicep build <file name> --stdout --no-restore --diagnostics-format sarif
+```
 
-- exit 0 and JSON on stdout: `Result.OK`, diagnostics (warnings) attached.
-- exit non-zero with at least one parsed error: `OK=false`, `Skipped=[bicep-compile-failed]`, not a Go error.
-- non-zero without a parsable diagnostic, or exit 0 with non-JSON stdout: `ErrNoDiagnostics` (adapter error, exit 4).
+`--no-restore` keeps every run offline: a registry (`br:`) module that is not in the local cache fails as a compile
+diagnostic and never triggers a download. The doctor makes no network call and needs no Azure credential.
+`ExecRunner` passes an allow-listed environment only (`PATH`, `HOME`, `USERPROFILE`, `TMP`, `TEMP`, `TMPDIR`,
+`SystemRoot` on Windows, `DOTNET_BUNDLE_EXTRACT_BASE_DIR`, telemetry opt-outs); no `AZURE_*`, token or user
+variable is forwarded. Bounds: 60 s timeout, 32 MiB per stream (overflow sets `Truncated` and is an adapter error).
 
-## Diagnostics
+Exit semantics (`Compiler.interpret`):
 
-The text format on stderr is used (verified, carries line, column and level):
-`<path>(<line>,<col>) : <Error|Warning|Info> <code>: <message> [<docs url>]`. The compiler's SARIF is not used: it
-has no start column and no level for warnings (facts doc). Unmatched stderr lines are ignored. Paths are made relative
-to the project with forward slashes (a path outside the project keeps only its base name); messages are stripped of
-control characters, absolute project prefixes and capped at 1000 bytes. Position is exact (`certain`) for the
-diagnostic itself. Linter default levels need no `bicepconfig.json` rewrite. No end position is available
-(deferred to a `bicep jsonrpc` transport).
+- exit 0 with valid ARM JSON on stdout: `Result.OK`; warnings are diagnostics.
+- non-zero exit with at least one error diagnostic: `OK=false`, a normal result and not a Go error.
+- non-zero exit without a parsable diagnostic, or exit 0 without ARM JSON: adapter error.
 
-`#disable-next-line`: the compiler drops the suppressed diagnostics, so `Compile` adds one informational diagnostic
-`disable-next-line` (ID `bicep/disable-next-line`) per directive in the **entry file**, with the codes listed.
-`ScanDisableDirectives(root, file)` is exported for module files. This is a one-directive line scan, not a parser.
+## Diagnostics as SARIF
 
-### `.bicepparam` and environment variables
+With `--diagnostics-format sarif` the CLI writes a SARIF 2.1.0 log to **stderr** (stdout carries the ARM JSON).
+Recorded with 0.48.1: each result has `ruleId` (`BCP057`, `no-unused-params`, `no-hardcoded-env-urls`,
+`secure-secrets-in-params`, ...), `message.text` ending in ` [<docs url>]`, a `physicalLocation` with a `file://`
+URI and a region with `startLine` and `charOffset` (the 1-based column). `level` is `error` for errors and **absent
+for warnings**, which `ParseSARIF` treats as warnings.
 
-The environment is never forwarded, so `readEnvironmentVariable('X')` fails offline. Observed:
-0.47.16 reports `BCP427`; 0.24.24 reports `BCP338` ("Failed to evaluate parameter ... Environment variable does not
-exist"). Both map to the diagnostic plus `Skip{Reason: "bicepparam-env-var-unavailable"}`, so checks that need the
-parameters or template are reported as skipped. `readEnvironmentVariable('X','default')` compiles and yields the
-default. `getSecret` is not touched. Secret values reaching `parametersJson` is impossible by construction.
-`ParamsResult.Values` holds literal values (Key Vault references are dropped) and may be sensitive: do not print.
+`ParseSARIF` is bounded and strict: at most 8 runs, 4096 results, 8 locations per result; a malformed document, an
+invalid rule id or a negative position is an adapter error. It strips the trailing docs URL into `Diagnostic.DocsURL`,
+sanitises the message (control characters, secret-looking assignments, 1024 bytes), converts the `file://` URI to a
+path and makes it relative to the project root with forward slashes. A path outside the project keeps only its base
+name, so an absolute path never reaches a report. If no SARIF document is present, text lines of the form
+`file(line,col) : Level code: message` are parsed instead (`ParseTextDiagnostics`).
 
-## ARM forms proven by fixtures
+### Diagnostics become findings (ADR-009)
 
-| Construct | Array form (no `languageVersion`) | `languageVersion` 2.0 |
-|---|---|---|
-| Resources | `resources: [...]`, pointer `/resources/3` | `resources: {symbolic: {...}}`, pointer `/resources/acct` |
-| Child resource | separate entry, name `format('{0}/{1}', ...)`, `dependsOn` has `resourceId(...)` | key `parent::child`, `dependsOn` has the symbolic name |
-| `for` | `copy: {name, count}`; `copy.name` is the symbolic name (`acct::child` for children) | same `copy` |
-| `if` | `condition: "[parameters('p')]"` | same |
-| module | `Microsoft.Resources/deployments`, name = module `name:`, inline `properties.template`, `expressionEvaluationOptions.scope: inner` | same; nested template may be in either form independently |
-| `existing` | not emitted | `existing: true` entries |
+`internal/app/wire_bicep.go` converts the diagnostics of the **entry compile** (modules referenced by the entry are
+reported in the same SARIF) into `sdk.Finding` values:
 
-What triggers 2.0: the azd template uses user-defined types; the foundry-v2 fixture uses the experimental
-`symbolicNameCodegen` flag in its `bicepconfig.json`. Both nested forms occur in one compile (synthetic main.arm.json).
-The normaliser decides per template by looking at the type of `resources`, never at `languageVersion`.
+| Field | Value |
+|---|---|
+| `RuleID` | `bicep/<code>` (`bicep/BCP057`, `bicep/no-hardcoded-env-urls`) |
+| `Severity` | compiler error -> error, warning -> warning, info -> info |
+| `Adapter` | `bicep`; `Category`, `Basis`, `Pillar` and `Profile` are empty (no catalogue entry) |
+| `Location` | repo-relative file, line, column from the SARIF region |
+| `Evidence` | the message with the docs URL removed and secrets redacted |
+| `Key` | `<code>:<first 12 hex of sha256(message)>`, plus `:<n>` for the n-th identical diagnostic in a file |
+| `Confidence` | high (the compiler reports the position exactly) |
 
-## Normaliser rules
+The key excludes the line, so moving code does not change a fingerprint or break a baseline entry; two diagnostics
+with the same code but different messages, or the same message in two files, differ.
 
-- Flattens resources depth-first, parent before module children, children of 2.0 maps sorted by key. Module
-  `Microsoft.Resources/deployments` entries stay in the list (`Module=true`) and their inline template is expanded;
-  the template is removed from the deployment's `Body` to avoid duplication. `templateLink` modules are not
-  followed (warning). Legacy nested `resources` arrays are expanded. `existing` resources are listed in
-  `Normalised.Existing` and are not part of `Template.Resources`.
-- `Body` is the resource object, including `condition` and `copy`, with parameter references substituted.
-  `Resource.Name` is the name as written unless it is exactly a parameter reference with a known value.
-- Flags in `ResourceInfo`: `Looped`/`CopyName`, `Conditional`/`Condition`/`ConditionValue`, `Module`, `Parent`,
-  `ModuleChain` (each step carries its own `Looped`/`Conditional`), helpers `MayNotDeploy()` and `MultiInstance()`.
-- **Only literals are resolved.** A string that is exactly `[parameters('x')]` is replaced when `x` has a value
-  supplied by the caller (`Options.ParameterValues`, from a `.bicepparam`) or by the calling module, or a literal
-  `defaultValue`. Secure parameters (including `$ref` to a secure type) are never substituted. Every exact reference
-  is recorded in `ResourceInfo.ParamRefs` with source `supplied`, `default` or `unresolved` and a reason
-  (`no-default`, `default-is-expression`, `secure-parameter`, `key-vault-reference`, `arm-expression`,
-  `unknown-parameter`). Anything else (`concat`, ternaries, `variables()`) stays an ARM expression and
-  `Resource.Get` reports `Unresolved`. A default is only a fallback: rules must treat `source=default` as "likely",
-  because a parameters file or azd may override it.
-- Module scope: `expressionEvaluationOptions.scope: inner` builds the child scope from the deployment's
-  `properties.parameters` (evaluated in the parent scope); `outer` or absent evaluates in the caller's scope.
-- Limits: depth 16, 20000 resources, with warnings and `Truncated`.
+Hand-off to the engine without changing the loader interface: `armLoader` stores the findings in an `adapterStore`
+keyed by project directory, whether the compile succeeded or not; `engineAdapter.Run` takes them once and appends
+them to the rule findings before baseline and suppression. They therefore honour `--baseline` and `--suppressions`
+(`ruleId: bicep/<code>` is a valid suppression selector) and `--fail-on`. A compile warning never fails a run at the
+default `--fail-on error`; an error diagnostic is an error finding and makes the run exit 1 like any error finding,
+except that `validation.bicep: required` still maps a failed compile to exit 2. Explicit rule selection (`--rules`
+naming a rule, group or pillar) leaves compiler findings out; `rules.exclude` entries matching `bicep/<code>` (exact
+or glob) remove them. Compiler findings are not counted as catalogue rules and have no `explain` page.
+
+## Parameter files (`build-params`, ADR-018)
+
+For `<entry>.bicepparam`, `Compiler.BuildParams` runs `bicep build-params <file> --stdout --no-restore`, reads
+`parametersJson` from the output (bounded: 1 MiB, 2000 parameters) and parses literal values; Key Vault references and
+secure values are never substituted. `readEnvironmentVariable()` reads the process environment of the runner, so the
+loader passes only the non-secret-looking values of the selected azd environment (`.azure/<env>/.env`, at most 256
+variables). When it cannot compute a parameter file the reason is one of the named `Param*` constants and the
+loader writes a `warning:` note to stderr; parameters stay `unresolved`, never guessed. A plain `parameters.json`
+is read directly. Default values are fallbacks: rules treat a default-derived value as lower confidence.
+
+## Module file locations (template hashing)
+
+ARM JSON has no source map, so the loader maps a module deployment to its file by hash: the template nested in the
+caller carries `metadata._generator.templateHash`, and a module file compiled alone has the same hash. For the
+`.bicep` files under the infra directory (at most `MaxModuleFiles` = 64, each at most 512 KiB, 3 minutes in total)
+the loader compiles each with `bicep build --no-restore` and matches `RootTemplateHash` against
+`NestedTemplateHashes` of the entry template, stopping when all are matched. Two files with the same hash are
+ambiguous and not mapped; unmatched modules keep the entry file as location. A skipped file or an exceeded bound is
+named in a stderr note (`module file locations ...`), never silent.
+
+## `armmodel`
+
+`armmodel.FromARM` handles both ARM resource forms (array and `languageVersion` 2.0 symbolic maps), module
+deployments (inline `properties.template`, inner/outer expression scope), conditions and `copy` loops. Only
+literals are resolved: a value that is exactly `[parameters('x')]` is replaced by a supplied or literal default
+value; anything else stays an ARM expression and reads as unresolved, so a rule skips rather than passes. Bounds
+(`armmodel.Max*`): 20000 resources, 64 KiB per expression, 8 MiB substituted text, 32 MiB expression text overall.
+A model that hit a bound reports `Truncated()`; the loader writes `model-truncated` to stderr and rules treat an
+absent resource as unknown.
 
 ## Source locations
 
-Not provable from ARM (no source map, ADR-002 Q2). Resources declared in the entry file get `File` = entry file,
-`Pos` zero, `Confidence` `likely`; resources inside a module get `uncertain` because the module file cannot be
-proven (the deployment name is the module's `name:` property, not its path). Use `Pointer` for ARM-level location.
-Compiler diagnostics keep their exact line and column. No line is ever derived for an ARM resource.
-
-## Fixtures (`test/fixtures/bicep`)
-
-`spike/` (array form, loops, conditions, modules, error and lint files), `foundry/` (array) and `foundry-v2/`
-(symbolic) with four accounts (`disableLocalAuth` literal, parameter with default, parameter without default,
-absent), a looped deployment, project child, conditional private endpoint and DNS module, `synthetic/` (copy of
-Azure/azure-dev synthesis templates at afe4b2b4d262, MIT, `LICENSE-azure-dev`), `params/` (BCP427 case and default
-case), `diagnostics/` (captured stderr, `{{DIR}}` placeholder). Regenerate with
-`BICEP_PATH=/abs/bicep scripts/ci/regen-bicep-fixtures.sh`.
+A resource location is the entry file or the matched module file with confidence `likely`, and the ARM pointer;
+no line number is derived for an ARM resource. Only compiler diagnostics carry exact lines and columns.
 
 ## Tests
 
-Always run: `TestNormaliseARM_*`, discovery, compile (fake runner and fake CLI script), diagnostics from captured
-output, fuzz seeds. `go test -tags bicep` needs an absolute `BICEP_PATH`: `TestCompileFixtures`,
-`TestCompileDiagnosticFixtures`, `TestCompileParamsEnvVars`, `TestFixtureARMFresh` (committed ARM equals compiler
-output after normalisation; byte equality is not required because the generator version and hash change).
-
-## Needed elsewhere
-
-- `model.Resource` has no Pointer, Looped or Conditional; rules needing them read `Normalised.Info[i]` (parallel
-  slice). Proposal: add `Info` or those fields to `model.ARMTemplate`.
-- ADR-002 should record that 0.24.24 reports `BCP338` instead of `BCP427`, and that text diagnostics replaced SARIF.
+- `internal/bicep`: discovery with a fake runner, `ParseSARIF` and text diagnostics (golden files under
+  `testdata/golden`), URI handling, `interpret` exit semantics, parameter parsing, template hashing.
+- `internal/app/wire_bicep_test.go`: finding mapping, key stability, redaction, selection filters, and the whole
+  `Doctor` pipeline with a scripted runner serving a recorded 0.48.1 SARIF (`testdata/bicepdiag`), covering
+  warnings (exit 0), error (exit 1), suppression and rule selection. These run in CI without a Bicep CLI.
+- Real CLI, skipped without `BICEP_PATH` (the `spike` build tag; `REQUIRE_SPIKE_DEPS=1` turns the skip into a
+  failure): `go test -tags spike ./internal/bicep/... ./internal/app/...` with `BICEP_PATH=<absolute bicep>`.

@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/armexpr"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/azure"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/azureyaml"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/findings"
@@ -51,6 +52,9 @@ type Node struct {
 	Severity  sdk.Severity `json:"severity,omitempty"`
 	Unhealthy bool         `json:"unhealthy,omitempty"`
 	Health    string       `json:"health,omitempty"`
+	// Conditional marks a template resource deployed only under a condition or
+	// loop the template cannot resolve.
+	Conditional bool `json:"conditional,omitempty"`
 }
 
 type Edge struct {
@@ -116,22 +120,23 @@ type rawEdge struct {
 }
 
 type nodeRec struct {
-	key        string
-	label      string
-	kind       string
-	origin     Origin
-	typ        string
-	name       string
-	resourceID string
-	source     sdk.Location
-	external   bool
-	missing    bool
-	collapsed  bool
-	findings   int
-	baselined  int
-	severity   sdk.Severity
-	unhealthy  bool
-	health     string
+	key         string
+	label       string
+	kind        string
+	origin      Origin
+	typ         string
+	name        string
+	resourceID  string
+	source      sdk.Location
+	external    bool
+	missing     bool
+	collapsed   bool
+	findings    int
+	baselined   int
+	severity    sdk.Severity
+	unhealthy   bool
+	health      string
+	conditional bool
 }
 
 func Build(in Input, opt Options) (Graph, error) {
@@ -165,6 +170,7 @@ func Build(in Input, opt Options) (Graph, error) {
 			cur.missing = cur.missing || n.missing
 			cur.collapsed = cur.collapsed || n.collapsed
 			cur.unhealthy = cur.unhealthy || n.unhealthy
+			cur.conditional = cur.conditional || n.conditional
 			if cur.health == "" {
 				cur.health = n.health
 			}
@@ -206,10 +212,13 @@ func Build(in Input, opt Options) (Graph, error) {
 			default:
 				r.key = "arm:" + n.Type + ":" + n.Name
 				r.kind = classifyResource(n.Type)
-				r.label = firstNonEmpty(n.Name, n.Type)
+				// The node key keeps the scope token that tells two module
+				// instances apart; labels and names never show it.
+				r.label = firstNonEmpty(armexpr.StripScope(n.Name), n.Type)
 				r.typ = n.Type
-				r.name = n.Name
+				r.name = armexpr.StripScope(n.Name)
 				r.resourceID = n.ID
+				r.conditional = n.Conditional
 			}
 			sourceNodes[n.ID] = r.key
 			addNode(r)
@@ -219,12 +228,12 @@ func Build(in Input, opt Options) (Graph, error) {
 		}
 		for _, u := range g.Unresolved {
 			from := sourceNodes[u.From]
-			key := unresolvedKey(u.Ref)
-			external := looksExternal(u.Ref)
+			key := unresolvedKeyFor(u.Ref, u.InTemplate)
+			external := looksExternal(u.Ref) && !u.InTemplate
 			if external {
-				addNode(nodeRec{key: key, label: externalLabel(u.Ref), kind: "external", origin: OriginExternal, name: u.Ref, external: true})
+				addNode(nodeRec{key: key, label: externalLabel(armexpr.StripScope(u.Ref)), kind: "external", origin: OriginExternal, name: armexpr.StripScope(u.Ref), external: true})
 			} else {
-				addNode(nodeRec{key: key, label: findings.Redact(u.Ref), kind: "missing", origin: OriginMissing, name: u.Ref, missing: true})
+				addNode(nodeRec{key: key, label: findings.Redact(armexpr.StripScope(u.Ref)), kind: "missing", origin: OriginMissing, name: armexpr.StripScope(u.Ref), missing: true})
 			}
 			addEdge(from, key, string(u.Kind), !external, external, false)
 		}
@@ -616,6 +625,7 @@ func materialise(nodes map[string]*nodeRec, edgeMap map[string]rawEdge, opt Opti
 			Type: n.typ, Name: name, Resource: findings.Redact(n.resourceID), Source: n.source,
 			External: n.external, Missing: n.missing, Collapsed: n.collapsed, Findings: n.findings,
 			Baselined: n.baselined, Severity: n.severity, Unhealthy: n.unhealthy, Health: findings.Redact(n.health),
+			Conditional: n.conditional,
 		})
 	}
 	dedup := map[string]bool{}
@@ -729,7 +739,11 @@ func classifyResource(typ string) string {
 }
 
 func unresolvedKey(ref string) string {
-	if looksExternal(ref) {
+	return unresolvedKeyFor(ref, false)
+}
+
+func unresolvedKeyFor(ref string, inTemplate bool) string {
+	if looksExternal(ref) && !inTemplate {
 		return "external:" + ref
 	}
 	return "missing:" + ref

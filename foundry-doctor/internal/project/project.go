@@ -30,6 +30,18 @@ const (
 	MaxAzureYAMLSize = 1 << 20
 	DefaultMaxFiles  = 5000
 	maxDepth         = 10
+	// MaxEnvironments bounds the environment directories listed under .azure.
+	MaxEnvironments = 100
+	// MaxAzureConfigSize bounds .azure/config.json.
+	MaxAzureConfigSize = 64 << 10
+	// AzureConfigFile is azd's project-level configuration file in .azure.
+	AzureConfigFile = "config.json"
+)
+
+// Values of Project.EnvironmentSource.
+const (
+	EnvSourceRequested = "requested"
+	EnvSourceDefault   = "default"
 )
 
 // Errors returned by Discover. Use errors.Is.
@@ -63,8 +75,15 @@ type Project struct {
 	InfraFiles []string
 	// Environments lists directory names under .azure, sorted.
 	Environments []string
-	// Environment is the selected environment ("" when none was requested).
+	// Environment is the selected environment: the requested one, otherwise
+	// the defaultEnvironment of .azure/config.json when that names an existing
+	// environment directory, otherwise "".
 	Environment string
+	// EnvironmentSource is EnvSourceRequested, EnvSourceDefault or "".
+	EnvironmentSource string
+	// DefaultEnvironment is the defaultEnvironment value read from
+	// .azure/config.json ("" when the file is absent, unusable or has none).
+	DefaultEnvironment string
 	// EnvDirExists reports whether .azure/<Environment> exists.
 	EnvDirExists bool
 	// EnvFilePresent reports whether .azure/<Environment>/.env exists (never read).
@@ -264,7 +283,22 @@ func (p *Project) scanEnvs(r *os.Root, warn map[string]bool) error {
 			warn["skipped environment with invalid name: "+path.Join(AzureDir, e.Name())] = true
 			continue
 		}
+		if len(p.Environments) >= MaxEnvironments {
+			warn[fmt.Sprintf("environment limit %d reached; remaining %s directories not listed", MaxEnvironments, AzureDir)] = true
+			break
+		}
 		p.Environments = append(p.Environments, e.Name())
+	}
+	if p.Environment != "" {
+		p.EnvironmentSource = EnvSourceRequested
+	}
+	p.DefaultEnvironment = readDefaultEnvironment(r, warn)
+	if p.Environment == "" && p.DefaultEnvironment != "" {
+		if slices.Contains(p.Environments, p.DefaultEnvironment) {
+			p.Environment, p.EnvironmentSource = p.DefaultEnvironment, EnvSourceDefault
+		} else {
+			warn[path.Join(AzureDir, AzureConfigFile)+": defaultEnvironment names no listed environment directory; no environment selected"] = true
+		}
 	}
 	if p.Environment != "" && slices.Contains(p.Environments, p.Environment) {
 		p.EnvDirExists = true

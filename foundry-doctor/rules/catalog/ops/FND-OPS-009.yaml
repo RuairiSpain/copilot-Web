@@ -1,5 +1,5 @@
 id: FND-OPS-009
-version: 1
+version: 2
 group: OPS
 title: "Data-residency regions and deployment SKU"
 description: >-
@@ -19,12 +19,18 @@ severity:
   test: error
   prod: error
 compatibility:
-  azd: ">=1.34.2 <=1.36.0-beta.1"
+  azd: ">=1.34.2 <=1.36.0"
   extensions: {}
   apiVersions:
     - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts/deployments, version: "2026-09-01" }
   preview: true
-  notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from a changelog and was not verified."
+  notes: >-
+    azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18,
+    projects beta.13 need >=1.34.2); the maximum is azd 1.36.0 (tag azure-dev-cli_1.36.0, acebba1e388b489a91ab8e2487a676359ab516a1, released 2026-10-14; the first clone read at 1.36.0-beta.1 is earlier evidence). The earlier >=1.27.1 lower
+    bound came from a changelog and was not verified. Window widened 2026-10-16: azd to 1.36.0 (tag
+    azure-dev-cli_1.36.0, acebba1, released 2026-10-14). The azd and extension changelogs and the schema and source
+    diffs from the previously verified versions were read; none touches this rule's verified facts for the widened
+    fields (see docs/tool-compatibility.md section 6).
 evidence:
   description: >-
     Evaluated only when the active profile declares a residency requirement; otherwise skipped, never passed. Phase 1,
@@ -33,8 +39,8 @@ evidence:
     documented scope - GlobalStandard, GlobalProvisionedManaged and GlobalBatch are global; DataZoneStandard,
     DataZoneProvisionedManaged and DataZoneBatch are data zone; Standard and ProvisionedManaged are regional (geography);
     DeveloperTier has no data residency guarantee. Report a deployment whose scope is broader than the declared
-    requirement (for example GlobalStandard when a data zone or geography is required), a DeveloperTier deployment in an
-    environment that declares any requirement, and a deployment account, Search, Storage or Cosmos location (AZURE_LOCATION
+    requirement (for example GlobalStandard when a data zone or geography is required), a DeveloperTier deployment when the declared
+    scope (dataResidency.scope) is not global, and a deployment account, Search, Storage or Cosmos location (AZURE_LOCATION
     or resource location) outside the declared allowed regions. A SKU name outside the table is reported as uncertain and
     not as a violation, because the specification types sku.name as a free string. Phase 2, control plane - confirm the
     deployed SKU and account location with the deployments API. Foundry Doctor does not hard-code which regions belong to
@@ -57,27 +63,44 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/foundry-models/includes/concepts-deployment-types-content-6.md and concepts-deployment-types-content-2.md and concepts-deployment-types-content-4.md (included by the Learn page)
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types and
+      concepts-deployment-types-content-2.md and concepts-deployment-types-content-4.md (included by the Learn
+      page); source file MicrosoftDocs/azure-ai-docs:
+      articles/foundry/foundry-models/includes/concepts-deployment-types-content-6.md; retrieved 2026-10-04
     note: SKU names in code GlobalStandard, GlobalProvisionedManaged, GlobalBatch, DataZoneStandard, DataZoneProvisionedManaged, DataZoneBatch, Standard, ProvisionedManaged, DeveloperTier; processing scope per type; data zones US, EU (Azure EU Data Boundary) and APAC; Microsoft can add regions to a data zone without notice. Page ms.date 08/06/2026.
   - url: https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/azure-yaml-reference.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference; source file
+      MicrosoftDocs/azure-ai-docs: articles/foundry/agents/concepts/azure-yaml-reference.md; retrieved
+      2026-10-04
     note: azure.ai.project deployments[] with model.format, model.name, model.version, sku.name and sku.capacity (tokens-per-minute units). Page ms.date 09/17/2026.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/Deployment.tsp and models.tsp (Sku.name is a string; no enumeration)
-    note: Deployment envelope has sku of type Sku with a free-string name; the SKU value set is documented in Learn, not enumerated in the specification.
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/Deployment.tsp
+      and
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/models.tsp
+      (Sku.name is a string; no enumeration)
+    note: >-
+      Deployment envelope has sku of type Sku with a free-string name; the SKU value set is documented in
+      Learn, not enumerated in the specification. Branch URL, not commit-pinned.
   - url: https://learn.microsoft.com/azure/foundry/concepts/deployments-overview
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/concepts/deployments-overview.md
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/concepts/deployments-overview; source file
+      MicrosoftDocs/azure-ai-docs: articles/foundry/concepts/deployments-overview.md; retrieved 2026-10-04
     note: Managed compute deployments (preview) are global only; serverless API supports regional, data zone and global processing.
   - url: https://github.com/MicrosoftDocs/azure-ai-docs/blob/e8d0ac6f7ebd7fd000e287657ab9beda5bccc1fa/articles/foundry/foundry-models/includes/concepts-deployment-types-content-6.md
     lastVerified: '2026-10-05'
     verifiedVia: >-
-      refs/azure-ai-docs @ e8d0ac6f7ebd7fd000e287657ab9beda5bccc1fa
-      articles/foundry/foundry-models/includes/concepts-deployment-types-content-6.md (Data Zone deployments section),
-      concepts-deployment-types-content-4.md, articles/foundry/openai/includes/model-matrix/datazone-standard.md and
-      datazone-provisioned-managed.md.
+      https://raw.githubusercontent.com/MicrosoftDocs/azure-ai-docs/e8d0ac6f7ebd7fd000e287657ab9beda5bccc1fa/articles/foundry/foundry-models/includes/concepts-deployment-types-content-6.md
+      (Data Zone deployments section),
+      https://raw.githubusercontent.com/MicrosoftDocs/azure-ai-docs/e8d0ac6f7ebd7fd000e287657ab9beda5bccc1fa/articles/foundry/foundry-models/includes/concepts-deployment-types-content-4.md,
+      https://raw.githubusercontent.com/MicrosoftDocs/azure-ai-docs/e8d0ac6f7ebd7fd000e287657ab9beda5bccc1fa/articles/foundry/openai/includes/model-matrix/datazone-standard.md
+      and
+      https://raw.githubusercontent.com/MicrosoftDocs/azure-ai-docs/e8d0ac6f7ebd7fd000e287657ab9beda5bccc1fa/articles/foundry/openai/includes/model-matrix/datazone-provisioned-managed.md.
     note: >-
       Region membership of data zones is not published as a list: the article says the US zone is "anywhere within the
       US", the EU zone follows the Azure EU Data Boundary (may include EFTA countries such as Norway and Switzerland),

@@ -1,5 +1,5 @@
 id: FND-IDN-003
-version: 1
+version: 5
 group: IDN
 title: "Role assignments use object IDs and principalType"
 description: >-
@@ -37,7 +37,7 @@ evidence:
     identity's properties.principalId, an Azure resource's system-assigned identity), principalType
     must be ServicePrincipal; a missing or different value is an error. For other principals a
     missing principalType is a warning. (2) principalId must be an object ID: fail when the
-    expression reads clientId or applicationId of an identity, or a literal that equals a clientId
+    expression reads clientId or applicationId of an identity (a parameter or variable whose name only suggests a client ID is a warning with likely confidence, because the name is not proof), or a literal that equals a clientId
     known in the template, or a string that is not a GUID and not a parameter or reference; skip
     parameters and report them as uncertain with the parameter name. (3) apiVersion must be
     2022-04-01 or later when principalType is set; the RBAC article states 2018-09-01-preview is the
@@ -64,23 +64,29 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/role-based-access-control/role-assignments-template
     lastVerified: "2026-10-04"
-    verifiedVia: github.com/MicrosoftDocs/azure-docs articles/role-based-access-control/role-assignments-template.md (ms.date 03/30/2025, sections Get object IDs and New service principal)
+    verifiedVia: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/role-based-access-control/role-assignments-template.md (branch URL, not commit-pinned); (ms.date 03/30/2025, sections Get object IDs and New service principal)
     note: Role assignment needs the object ID; new service principal replication delay; set principalType to ServicePrincipal with apiVersion 2018-09-01-preview or later, 2022-04-01 first stable.
   - url: https://learn.microsoft.com/azure/role-based-access-control/troubleshooting
     lastVerified: "2026-10-04"
-    verifiedVia: github.com/MicrosoftDocs/azure-docs articles/role-based-access-control/troubleshooting.md (ms.date 05/06/2026; "Principal does not exist in the directory" and "Identity not found" entries)
+    verifiedVia: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/role-based-access-control/troubleshooting.md (branch URL, not commit-pinned); (ms.date 05/06/2026; "Principal does not exist in the directory" and "Identity not found" entries)
     note: The error text recommends principalType after replication delay; unknown principals appear as Identity not found.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/authorization/resource-manager/Microsoft.Authorization/Authorization/stable/2022-04-01/authorization-RoleAssignmentsCalls.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/authorization/resource-manager/Microsoft.Authorization/Authorization/stable/2022-04-01/authorization-RoleAssignmentsCalls.json
-    note: RoleAssignmentProperties requires roleDefinitionId and principalId; principalType enum includes AgentUser and AgentServicePrincipal.
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/authorization/resource-manager/Microsoft.Authorization/Authorization/stable/2022-04-01/authorization-RoleAssignmentsCalls.json
+    note: >-
+      RoleAssignmentProperties requires roleDefinitionId and principalId; principalType enum includes
+      AgentUser and AgentServicePrincipal. Branch URL, not commit-pinned.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/msi/resource-manager/Microsoft.ManagedIdentity/ManagedIdentity/stable/2024-11-30/ManagedIdentity.json
     lastVerified: "2026-10-04"
-    verifiedVia: github.com/Azure/azure-rest-api-specs specification/msi/resource-manager/Microsoft.ManagedIdentity/ManagedIdentity/stable/2024-11-30/ManagedIdentity.json
+    verifiedVia: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/msi/resource-manager/Microsoft.ManagedIdentity/ManagedIdentity/stable/2024-11-30/ManagedIdentity.json (branch URL, not commit-pinned);
     note: UserAssignedIdentity properties.principalId and clientId are distinct fields.
   - url: https://learn.microsoft.com/azure/foundry/agents/how-to/ai-gateway
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/how-to/ai-gateway.md (lines near 152; managed identity object ID versus application client ID)
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/how-to/ai-gateway (lines near 152; managed identity
+      object ID versus application client ID); source file MicrosoftDocs/azure-ai-docs:
+      articles/foundry/agents/how-to/ai-gateway.md; retrieved 2026-10-04
     note: Documents that the project managed identity object ID must be looked up to obtain the client ID, showing that the two are different values.
 overlap:
   decision: native
@@ -126,6 +132,7 @@ tests:
   uncertain:
     - agent-identity-principal-type-choice
 notes: >-
+  Review M8: a client ID read through a .clientId, .appId or .applicationId property access is reported with the full wording; a parameter or variable that only has a client-ID-like name is reported as a name match that needs verification and its finding carries confidence likely (medium) through the per-finding override (ADR-008 amendment 3; version 4). Property access stays certain. Version 5 (review P6): a name-only client-ID match also lowers the finding severity to warning through the per-finding override; the engine only lowers, so dev (warning) is unchanged.
   Unverified: whether omitting principalType always fails; the sources say the assignment "can fail
   in some cases" because of replication delay, so the omission is flagged as a reliability risk, not
   a certain failure. The 2022-04-01 spec shows a default of User for principalType; the rule does not

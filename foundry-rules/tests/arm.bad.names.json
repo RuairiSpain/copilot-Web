@@ -1,0 +1,65 @@
+[
+  {
+    "type": "Microsoft.CognitiveServices/accounts",
+    "apiVersion": "2026-09-01",
+    "name": "x",
+    "location": "westeurope",
+    "kind": "AIServices",
+    "sku": {
+      "name": "S0"
+    },
+    "properties": {}
+  },
+  {
+    "type": "Microsoft.Storage/storageAccounts",
+    "apiVersion": "2026-06-01",
+    "name": "My-Storage",
+    "location": "westeurope",
+    "kind": "StorageV2",
+    "sku": {
+      "name": "Standard_ZRS"
+    },
+    "properties": {}
+  },
+  {
+    "type": "Microsoft.KeyVault/vaults",
+    "apiVersion": "2026-05-15",
+    "name": "kv--bad",
+    "location": "westeurope",
+    "properties": {}
+  },
+  {
+    "type": "Microsoft.Search/searchServices",
+    "apiVersion": "2025-05-01",
+    "name": "Search_Bad",
+    "location": "westeurope",
+    "sku": {
+      "name": "standard"
+    },
+    "properties": {}
+  },
+  {
+    "type": "Microsoft.DocumentDB/databaseAccounts",
+    "apiVersion": "2025-10-15",
+    "name": "Cosmos_Bad",
+    "location": "westeurope",
+    "properties": {}
+  },
+  {
+    "type": "Microsoft.ContainerRegistry/registries",
+    "apiVersion": "2025-11-01",
+    "name": "ab",
+    "location": "westeurope",
+    "sku": {
+      "name": "Basic"
+    },
+    "properties": {}
+  },
+  {
+    "type": "Microsoft.OperationalInsights/workspaces",
+    "apiVersion": "2023-09-01",
+    "name": "a",
+    "location": "westeurope",
+    "properties": {}
+  }
+]

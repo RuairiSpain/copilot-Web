@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/armexpr"
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/foundrylink"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
 
@@ -35,35 +37,35 @@ type yamlAny interface {
 func evalSEC005(in *sdk.Input) sdk.Result {
 	vaults := ofType(in, typeKeyVault)
 	if len(vaults) == 0 {
-		return unavailable()
+		return notApplicable()
 	}
-	refs, anyRef := foundryRefs(in)
+	set := foundrylink.Collect(in.ARM)
 	var a acc
 	seen := false
 	for _, r := range vaults {
-		if anyRef && !inFoundryScope(r, refs, anyRef) {
+		if !linkOf(&a, set, r) {
 			continue
 		}
 		seen = true
 		if st := boolState(r.Properties, "enableSoftDelete"); st == isFalse {
-			a.add(r, "enableSoftDelete is false")
+			a.addKey(r, "enableSoftDelete", "enableSoftDelete is false")
 		}
 		if st := boolState(r.Properties, "enablePurgeProtection"); st != isTrue {
 			if st == expr {
 				a.unresolved = true
 			} else {
-				a.add(r, "enablePurgeProtection is not true")
+				a.addKey(r, "enablePurgeProtection", "enablePurgeProtection is not true")
 			}
 		}
 		if st := boolState(r.Properties, "enableRbacAuthorization"); st != isTrue {
 			if st == expr {
 				a.unresolved = true
 			} else {
-				a.add(r, "enableRbacAuthorization is not true")
+				a.addKey(r, "enableRbacAuthorization", "enableRbacAuthorization is not true")
 			}
 		}
 	}
-	if !seen {
+	if !seen && len(a.fs) == 0 && !a.scopeUncertain && !a.conditional {
 		return skip(SkipOutOfScope)
 	}
 	return a.result()
@@ -75,6 +77,9 @@ func evalSEC007(in *sdk.Input) sdk.Result {
 	declared := declaredRaiPolicies(in)
 	for _, r := range ofType(in, typeAcctDeploy) {
 		seen = true
+		if a.maybe(r) {
+			continue
+		}
 		name, st := str(r.Properties, "raiPolicyName")
 		present, isExpr := st != absent, st == expr
 		switch {
@@ -145,7 +150,7 @@ func evalSEC007(in *sdk.Input) sdk.Result {
 		return skip("uncertain: custom RAI policy exists only outside the scanned template or uses an unresolved name")
 	}
 	if !seen {
-		return unavailable()
+		return notApplicable()
 	}
 	return sdk.Result{}
 }
@@ -153,10 +158,13 @@ func evalSEC007(in *sdk.Input) sdk.Result {
 func evalSEC008(in *sdk.Input) sdk.Result {
 	relevant := relevantDefenderPlans(in)
 	if len(relevant) == 0 {
-		return unavailable()
+		return notApplicable()
 	}
 	pricings := map[string]sdk.ARMResource{}
 	for _, r := range ofType(in, typePricing) {
+		if presence(r) != armexpr.Deployed {
+			continue
+		}
 		pricings[strings.ToLower(lastSegment(r.Name))] = r
 	}
 	var a acc
@@ -168,7 +176,7 @@ func evalSEC008(in *sdk.Input) sdk.Result {
 		}
 		tier, _ := str(r.Properties, "pricingTier")
 		if !strings.EqualFold(strings.TrimSpace(tier), "Standard") {
-			a.add(r, fmt.Sprintf("Defender plan %s pricingTier is %q", name, tier))
+			a.addKey(r, "pricingTier", fmt.Sprintf("Defender plan %s pricingTier is %q", name, tier))
 		}
 	}
 	if len(a.fs) > 0 {
@@ -188,13 +196,16 @@ func evalSEC009(in *sdk.Input) sdk.Result {
 	mapped := mappedSecurityPolicies()
 	var a acc
 	for _, r := range assignments {
+		if a.maybe(r) {
+			continue
+		}
 		id, _ := str(r.Properties, "policyDefinitionId")
 		if !mapped[strings.ToLower(lastSegment(id))] {
 			continue
 		}
 		mode, _ := str(r.Properties, "enforcementMode")
 		if strings.EqualFold(mode, "DoNotEnforce") {
-			a.add(r, "mapped policy assignment uses enforcementMode DoNotEnforce")
+			a.addKey(r, "enforcementMode", "mapped policy assignment uses enforcementMode DoNotEnforce")
 		}
 	}
 	if len(a.fs) > 0 {
@@ -205,19 +216,22 @@ func evalSEC009(in *sdk.Input) sdk.Result {
 
 func evalSEC010(in *sdk.Input) sdk.Result {
 	var fs []sdk.Finding
-	for _, r := range foundryAccountsSec(in.ARM) {
+	var a acc
+	accounts, uncertain := foundryAccountsSec(in.ARM)
+	a.conditional = uncertain
+	for _, r := range accounts {
 		state := "platform-managed"
 		if src, _ := str(r.Properties, "encryption", "keySource"); strings.EqualFold(src, "Microsoft.KeyVault") {
 			if _, ok := get(r.Properties, "encryption", "keyVaultProperties"); ok {
 				state = "cmk"
 			}
 		}
-		fs = append(fs, sdk.Finding{Resource: sdk.ResourceRef{Type: r.Type, Name: r.Name}, Location: r.Location, Evidence: "CMK posture: " + state})
+		fs = append(fs, sdk.Finding{Resource: sdk.ResourceRef{Type: r.Type, Name: armexpr.StripScope(r.Name)}, Location: r.Location, Evidence: "CMK posture: " + state})
 	}
-	refs, anyRef := foundryRefs(in)
+	set := foundrylink.Collect(in.ARM)
 	for _, typ := range []string{typeSearch, typeCosmos, typeStorage} {
 		for _, r := range ofType(in, typ) {
-			if anyRef && !inFoundryScope(r, refs, anyRef) {
+			if !linkOf(&a, set, r) {
 				continue
 			}
 			state := "platform-managed"
@@ -235,11 +249,14 @@ func evalSEC010(in *sdk.Input) sdk.Result {
 					state = "cmk"
 				}
 			}
-			fs = append(fs, sdk.Finding{Resource: sdk.ResourceRef{Type: r.Type, Name: r.Name}, Location: r.Location, Evidence: "CMK posture: " + state})
+			fs = append(fs, sdk.Finding{Resource: sdk.ResourceRef{Type: r.Type, Name: armexpr.StripScope(r.Name)}, Location: r.Location, Evidence: "CMK posture: " + state})
 		}
 	}
 	if len(fs) == 0 {
-		return unavailable()
+		if a.scopeUncertain || a.conditional {
+			return a.result()
+		}
+		return notApplicable()
 	}
 	return sdk.Result{Findings: fs}
 }
@@ -266,20 +283,24 @@ func evalSEC011(in *sdk.Input) sdk.Result {
 			}
 		}
 	}
-	for _, r := range foundryAccountsSec(in.ARM) {
+	accounts, uncertain := foundryAccountsSec(in.ARM)
+	for _, r := range accounts {
 		mode, _ := str(r.Properties, "managedNetworkSettings", "isolationMode")
 		restrict := boolState(r.Properties, "restrictOutboundNetworkAccess") == isTrue
 		if strings.EqualFold(mode, "AllowOnlyApprovedOutbound") || restrict {
 			continue
 		}
 		fs = append(fs, sdk.Finding{
-			Resource: sdk.ResourceRef{Type: r.Type, Name: r.Name},
+			Resource: sdk.ResourceRef{Type: r.Type, Name: armexpr.StripScope(r.Name)},
 			Location: r.Location,
 			Evidence: "outbound network posture does not show an approved-only egress configuration",
 		})
 	}
 	if len(fs) == 0 {
-		return unavailable()
+		if uncertain {
+			return skip(foundrylink.SkipConditional)
+		}
+		return notApplicable()
 	}
 	return sdk.Result{Findings: fs}
 }
@@ -290,13 +311,13 @@ func evalSEC012(in *sdk.Input) sdk.Result {
 	policies := append(ofType(in, typeAPIMServiceDiag), ofType(in, typeAPIMAPIDiag)...)
 	for _, r := range policies {
 		if hasLLMMessageLogging(r) {
-			a.add(r, "APIM diagnostic enables raw LLM request or response message logging")
+			a.addKey(r, "messageLogging", "APIM diagnostic enables raw LLM request or response message logging")
 			continue
 		}
 		if strings.EqualFold(r.Type, typeAPIMAPIDiag) && diagnosticBodyLogging(r) {
 			apiName := apiNameFromDiag(r.Name)
 			if llmAPIs[strings.ToLower(apiName)] {
-				a.add(r, "APIM diagnostic enables request or response body logging for an LLM API")
+				a.addKey(r, "bodyLogging", "APIM diagnostic enables request or response body logging for an LLM API")
 			} else {
 				a.unresolved = true
 			}
@@ -316,7 +337,7 @@ func evalSEC013(in *sdk.Input) sdk.Result {
 	policies := append(append(ofType(in, typeAPIMServicePolicy), ofType(in, typeAPIMAPIPolicy)...), ofType(in, typeAPIMOperationPolicy)...)
 	if len(policies) == 0 {
 		if len(llmAPIs) == 0 {
-			return unavailable()
+			return notApplicable()
 		}
 		return skip("uncertain: APIM policy XML is not available in the scanned template")
 	}
@@ -337,7 +358,7 @@ func evalSEC013(in *sdk.Input) sdk.Result {
 		}
 		finding := validateTenantPolicy(r, xmlText)
 		if finding != "" {
-			a.add(r, finding)
+			a.addKey(r, "tenantPolicy", finding)
 		}
 	}
 	for apiName, ok := range llmAPIs {
@@ -357,27 +378,6 @@ func evalSEC013(in *sdk.Input) sdk.Result {
 	return a.result()
 }
 
-func evalSEC014(in *sdk.Input) sdk.Result {
-	outs, ok := in.ARM.(sdk.ARMOutputs)
-	if !ok {
-		return skip(sdk.SkipInputUnavailable + ": compiled ARM outputs are not available")
-	}
-	var fs []sdk.Finding
-	for _, out := range outs.Outputs() {
-		name := strings.ToLower(strings.TrimSpace(out.Name))
-		if strings.Contains(name, "password") || strings.Contains(name, "secret") || strings.Contains(name, "key") || strings.Contains(name, "token") {
-			fs = append(fs, sdk.Finding{
-				Resource: sdk.ResourceRef{Type: "ARM/output", Name: out.Name},
-				Evidence: "output name is secret-shaped and should not emit secret material",
-			})
-		}
-	}
-	if len(fs) > 0 {
-		return sdk.Result{Findings: fs}
-	}
-	return skip(sdk.SkipInputUnavailable + ": Bicep output value diagnostics are not available in this build")
-}
-
 func declaredRaiPolicies(in *sdk.Input) map[string]bool {
 	out := map[string]bool{}
 	if in == nil || in.ARM == nil {
@@ -394,7 +394,7 @@ func relevantDefenderPlans(in *sdk.Input) []string {
 		return nil
 	}
 	set := map[string]bool{}
-	if len(foundryAccountsSec(in.ARM)) > 0 {
+	if accounts, _ := foundryAccountsSec(in.ARM); len(accounts) > 0 {
 		set["AI"] = true
 	}
 	if len(ofType(in, typeStorage)) > 0 {
@@ -569,16 +569,25 @@ func lastSegment(s string) string {
 	return s
 }
 
-func foundryAccountsSec(m sdk.ARMModel) []sdk.ARMResource {
-	accounts := ofType(&sdk.Input{ARM: m}, typeAccounts)
-	var out []sdk.ARMResource
-	for _, r := range accounts {
-		if ownsChild(&sdk.Input{ARM: m}, r, len(accounts), typeAcctProject, typeAcctDeploy) {
-			out = append(out, r)
+// foundryAccountsSec returns the deployed accounts that own projects or
+// deployments, or all deployed accounts when none does. uncertain is true when
+// a conditional account was left out.
+func foundryAccountsSec(m sdk.ARMModel) (accounts []sdk.ARMResource, uncertain bool) {
+	in := &sdk.Input{ARM: m}
+	all := ofType(in, typeAccounts)
+	var deployed, owning []sdk.ARMResource
+	for _, r := range all {
+		if presence(r) != armexpr.Deployed {
+			uncertain = true
+			continue
+		}
+		deployed = append(deployed, r)
+		if owns(in, r, len(all), typeAcctProject, typeAcctDeploy) == ownsYes {
+			owning = append(owning, r)
 		}
 	}
-	if len(out) == 0 {
-		return accounts
+	if len(owning) > 0 {
+		return owning, uncertain
 	}
-	return out
+	return deployed, uncertain
 }

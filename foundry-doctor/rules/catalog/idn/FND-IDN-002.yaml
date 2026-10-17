@@ -78,28 +78,42 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/includes/concepts-standard-agent-setup-content.md (concept ms.date 07/09/2026; Phase 3 and Phase 4 role assignments and the troubleshooting table)
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup (concept ms.date
+      07/09/2026; Phase 3 and Phase 4 role assignments and the troubleshooting table); source file
+      MicrosoftDocs/azure-ai-docs: articles/foundry/agents/includes/concepts-standard-agent-setup-content.md;
+      retrieved 2026-10-04
     note: Project managed identity roles per resource; Cosmos DB Built-in Data Contributor at database level on enterprise_memory; 403 symptoms for missing roles.
   - url: https://learn.microsoft.com/azure/foundry/concepts/administrator-guide
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/concepts/administrator-guide.md (ms.date 09/11/2026)
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/concepts/administrator-guide (ms.date 09/11/2026); source file
+      MicrosoftDocs/azure-ai-docs: articles/foundry/concepts/administrator-guide.md; retrieved 2026-10-04
     note: Per-resource role table for the project managed identity; Cosmos built-in data contributor is a data-plane role assigned through az cosmosdb sql role assignment or Bicep, not the IAM blade.
   - url: https://learn.microsoft.com/azure/foundry/how-to/configure-capability-settings
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/how-to/configure-capability-settings.md (ms.date 09/22/2026)
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/how-to/configure-capability-settings (ms.date 09/22/2026);
+      source file MicrosoftDocs/azure-ai-docs: articles/foundry/how-to/configure-capability-settings.md;
+      retrieved 2026-10-04
     note: Capability settings documentStore, vectorStore, blobStore; caller roles (Storage Blob Data Contributor, Cosmos DB Operator) differ from the project identity runtime roles.
   - url: https://learn.microsoft.com/azure/foundry/agents/concepts/hosted-agent-permissions
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/hosted-agent-permissions.md (ms.date 04/21/2026)
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/concepts/hosted-agent-permissions (ms.date 04/21/2026);
+      source file MicrosoftDocs/azure-ai-docs: articles/foundry/agents/concepts/hosted-agent-permissions.md;
+      retrieved 2026-10-04
     note: Foundry User for the project identity on the account, Container Registry Repository Reader or AcrPull on the registry, Log Analytics Data Reader for evaluations.
   - url: https://learn.microsoft.com/azure/role-based-access-control/built-in-roles
     lastVerified: "2026-10-04"
-    verifiedVia: github.com/MicrosoftDocs/azure-docs articles/role-based-access-control/built-in-roles/{ai-machine-learning,storage,databases,containers,monitor}.md (ms.date 07/01/2026; role id fields)
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/role-based-access-control/built-in-roles; github.com/MicrosoftDocs/azure-docs articles/role-based-access-control/built-in-roles/{ai-machine-learning,storage,databases,containers,monitor}.md (ms.date 07/01/2026; role id fields)
     note: Role definition GUIDs listed in the evidence.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2025-10-15/rbac.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2025-10-15/rbac.json
-    note: SqlRoleAssignmentResource has roleDefinitionId, scope and principalId.
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2025-10-15/rbac.json
+    note: SqlRoleAssignmentResource has roleDefinitionId, scope and principalId. Branch URL, not commit-pinned.
 overlap:
   decision: native
   provisional: true

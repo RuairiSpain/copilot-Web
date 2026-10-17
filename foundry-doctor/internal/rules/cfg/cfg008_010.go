@@ -8,13 +8,14 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/armexpr"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
 
 func evalCFG008(in *sdk.Input) sdk.Result {
 	d, okd := loadDoc(in)
 	if !okd {
-		return skip(sdk.SkipInputUnavailable)
+		return skip(sdk.SkipInputUnavailable + ": azure.yaml unavailable")
 	}
 	var (
 		fs        []sdk.Finding
@@ -28,7 +29,7 @@ func evalCFG008(in *sdk.Input) sdk.Result {
 			}
 			continue
 		}
-		for _, t := range items(s.get("tools")) {
+		for ti, t := range items(s.get("tools")) {
 			if child(t, "$ref") != nil {
 				skips = append(skips, s.Name+": tool definition comes from $ref")
 				continue
@@ -49,7 +50,7 @@ func evalCFG008(in *sdk.Input) sdk.Result {
 			}
 			names := refNames(allowed)
 			if len(names) == 0 {
-				fs = append(fs, finding(d, s, allowed, "direct inline MCP tool has an empty allowed_tools list"))
+				fs = append(fs, finding(d, s, allowed, fmt.Sprintf("mcp-allowed-tools-empty:tools[%d]", ti), "direct inline MCP tool has an empty allowed_tools list"))
 				continue
 			}
 			nonEmpty := false
@@ -68,7 +69,7 @@ func evalCFG008(in *sdk.Input) sdk.Result {
 	}
 	if !evaluated {
 		if len(skips) == 0 {
-			return skip(sdk.SkipInputUnavailable)
+			return skip(sdk.SkipNotApplicable + ": project has no direct inline MCP tools")
 		}
 		return skip(strings.Join(skips, "; "))
 	}
@@ -81,46 +82,62 @@ func evalCFG008(in *sdk.Input) sdk.Result {
 func evalCFG009(in *sdk.Input) sdk.Result {
 	d, okd := loadDoc(in)
 	if !okd {
-		return skip(sdk.SkipInputUnavailable)
+		return skip(sdk.SkipInputUnavailable + ": azure.yaml unavailable")
 	}
 	st := cfgState{}
+	declared := false
 	for _, s := range serviceList(d) {
 		if strings.ToLower(s.Host) != "azure.ai.routine" {
 			continue
 		}
+		// Only a mapping of named triggers under "triggers" is understood
+		// (the shape in the catalogue examples). The shape azd accepts is not
+		// verified, so a list, a scalar or a singular "trigger" key is an
+		// uncertain note, never not-applicable.
+		if tn := s.get("triggers"); tn != nil && tn.Tag != "!!null" && tn.Kind != yaml.MappingNode {
+			declared = true
+			st.skips = append(st.skips, s.Name+": triggers is not a mapping of named triggers; that shape is not verified and was not evaluated")
+		}
+		if tn := s.get("trigger"); tn != nil && tn.Tag != "!!null" {
+			declared = true
+			st.skips = append(st.skips, s.Name+": uses a trigger key instead of triggers; that shape is not verified and was not evaluated")
+		}
 		for _, trig := range pairs(s.get("triggers")) {
+			declared = true
 			checkRoutineTrigger(d, s, trig.Key, trig.Val, &st)
 		}
 	}
-	if len(st.fs) > 0 {
-		return ok(st.fs)
+	if !declared {
+		return skip(sdk.SkipNotApplicable + ": no azure.ai.routine service declares triggers")
 	}
-	if !st.evaluated {
-		if len(st.skips) == 0 {
-			return skip(sdk.SkipInputUnavailable)
-		}
-		return skip(strings.Join(st.skips, "; "))
-	}
-	if len(st.skips) > 0 {
-		return skip(strings.Join(st.skips, "; "))
-	}
-	return sdk.Result{}
+	return withNotes(st.fs, st.skips)
 }
 
+// checkRoutineTrigger evaluates one trigger. The rule knows the beta.8
+// spelling only (type recurring, cron_expression, time_zone; compatibility
+// window azure.ai.routines beta.8). Routines beta.9 renamed authored keys to
+// camelCase and rejects the snake_case spellings, and the beta.10 schema names
+// the trigger type schedule with cronExpression and timeZone. No source states
+// that the beta.8 cadence facts carry over to those spellings, so every trigger
+// the rule does not understand is an uncertain note, never not-applicable.
 func checkRoutineTrigger(d document, s service, key, trig *yaml.Node, st *cfgState) {
 	typNode := child(trig, "type")
 	typ := strings.ToLower(strings.TrimSpace(scalar(typNode)))
 	if typ == "" || containsRef(typ) {
-		st.skips = append(st.skips, s.Name+": trigger "+key.Value+" type is unresolved")
+		st.skips = append(st.skips, s.Name+": trigger "+key.Value+" type is missing or unresolved")
 		return
 	}
 	switch typ {
 	case "recurring":
 		cronNode := child(trig, "cron_expression")
 		if cronNode == nil {
-			if child(trig, "cron") != nil {
-				st.skips = append(st.skips, s.Name+": uncertain: recurring trigger "+key.Value+" uses cron instead of cron_expression")
-				return
+			switch {
+			case child(trig, "cronExpression") != nil:
+				st.skips = append(st.skips, s.Name+": recurring trigger "+key.Value+" uses cronExpression (azure.ai.routines beta.9 and later spelling); only the beta.8 spelling cron_expression is evaluated")
+			case child(trig, "cron") != nil:
+				st.skips = append(st.skips, s.Name+": recurring trigger "+key.Value+" uses cron instead of cron_expression")
+			default:
+				st.skips = append(st.skips, s.Name+": recurring trigger "+key.Value+" has no cron_expression key the rule understands")
 			}
 			return
 		}
@@ -131,44 +148,47 @@ func checkRoutineTrigger(d document, s service, key, trig *yaml.Node, st *cfgSta
 		}
 		tzNode := child(trig, "time_zone")
 		if tzNode == nil || strings.TrimSpace(scalar(tzNode)) == "" {
-			st.skips = append(st.skips, s.Name+": uncertain: recurring trigger "+key.Value+" has no time_zone")
+			st.skips = append(st.skips, s.Name+": recurring trigger "+key.Value+" has no time_zone")
 			return
 		}
 		if !validRoutineTimeZone(strings.TrimSpace(scalar(tzNode))) {
-			st.skips = append(st.skips, s.Name+": uncertain: recurring trigger "+key.Value+" time_zone is not in bundled identifier data")
+			st.skips = append(st.skips, s.Name+": recurring trigger "+key.Value+" time_zone is not in bundled identifier data")
 			return
 		}
 		expr, minGap, uncertain := parseRoutineCron(cron)
 		if uncertain != "" {
-			st.skips = append(st.skips, s.Name+": uncertain: trigger "+key.Value+" "+uncertain)
+			st.skips = append(st.skips, s.Name+": trigger "+key.Value+" "+uncertain)
 			return
 		}
 		st.evaluated = true
 		if expr == nil {
-			st.fs = append(st.fs, finding(d, s, cronNode, fmt.Sprintf("trigger %q cron_expression %q is not a valid 5-field cron expression", key.Value, cron)))
+			st.fs = append(st.fs, finding(d, s, cronNode, "cron-invalid:"+key.Value, fmt.Sprintf("trigger %q cron_expression %q is not a valid 5-field cron expression", key.Value, cron)))
 			return
 		}
 		if minGap < 5 {
-			st.fs = append(st.fs, finding(d, s, cronNode, fmt.Sprintf("trigger %q cron_expression %q fires more often than every five minutes", key.Value, cron)))
+			st.fs = append(st.fs, finding(d, s, cronNode, "cron-too-frequent:"+key.Value, fmt.Sprintf("trigger %q cron_expression %q fires more often than every five minutes", key.Value, cron)))
 		}
 	case "schedule":
-		if child(trig, "cron_expression") != nil {
-			st.skips = append(st.skips, s.Name+": uncertain: trigger "+key.Value+" uses schedule with cron_expression")
-		}
+		st.skips = append(st.skips, s.Name+": trigger "+key.Value+" has type schedule (azure.ai.routines beta.10 schema, cronExpression and timeZone); the rule evaluates only the beta.8 recurring spelling")
 	default:
-		st.skips = append(st.skips, s.Name+": trigger "+key.Value+" type "+typ+" is out of scope")
+		st.skips = append(st.skips, s.Name+": trigger "+key.Value+" type "+clip(typ)+" is not evaluated by this rule")
 	}
 }
 
 func evalCFG010(in *sdk.Input) sdk.Result {
 	var fs []sdk.Finding
 	evaluated := false
-	if d, okd := loadDoc(in); okd {
+	d, loaded := loadDoc(in)
+	if loaded {
 		for _, s := range serviceList(d) {
 			if s.Host != hostProject {
 				continue
 			}
-			for _, dep := range items(s.get("deployments")) {
+			for di, dep := range items(s.get("deployments")) {
+				depKey := str(dep, "name")
+				if depKey == "" || containsRef(depKey) {
+					depKey = fmt.Sprintf("deployments[%d]", di)
+				}
 				model := child(dep, "model")
 				name := strings.ToLower(strings.TrimSpace(str(model, "name")))
 				if strings.Contains(name, "router") {
@@ -181,7 +201,7 @@ func evalCFG010(in *sdk.Input) sdk.Result {
 				}
 				evaluated = true
 				if version == "" || looksUnpinnedVersion(version) {
-					fs = append(fs, finding(d, s, versionNode, "deployment model.version is empty or unpinned"))
+					fs = append(fs, finding(d, s, versionNode, "deployment-version-unpinned:"+depKey, "deployment model.version is empty or unpinned"))
 				}
 			}
 		}
@@ -199,7 +219,8 @@ func evalCFG010(in *sdk.Input) sdk.Result {
 			v, vok := armGetString(r.Properties, "model", "version")
 			if !vok || strings.TrimSpace(v) == "" || looksUnpinnedVersion(v) {
 				fs = append(fs, sdk.Finding{
-					Resource: sdk.ResourceRef{Type: r.Type, Name: r.Name},
+					Key:      "deployment-version-unpinned",
+					Resource: sdk.ResourceRef{Type: r.Type, Name: armexpr.StripScope(r.Name)},
 					Location: r.Location,
 					Evidence: "deployment model.version is empty or unpinned",
 				})
@@ -207,14 +228,16 @@ func evalCFG010(in *sdk.Input) sdk.Result {
 			if opt, ok := armGetString(r.Properties, "versionUpgradeOption"); ok {
 				if !strings.HasPrefix(strings.TrimSpace(opt), "[") && strings.EqualFold(strings.TrimSpace(opt), "OnceNewDefaultVersionAvailable") {
 					fs = append(fs, sdk.Finding{
-						Resource: sdk.ResourceRef{Type: r.Type, Name: r.Name},
+						Key:      "upgrade-option-once-new-default",
+						Resource: sdk.ResourceRef{Type: r.Type, Name: armexpr.StripScope(r.Name)},
 						Location: r.Location,
 						Evidence: "deployment versionUpgradeOption is OnceNewDefaultVersionAvailable",
 					})
 				}
 			} else {
 				fs = append(fs, sdk.Finding{
-					Resource: sdk.ResourceRef{Type: r.Type, Name: r.Name},
+					Key:      "upgrade-option-absent",
+					Resource: sdk.ResourceRef{Type: r.Type, Name: armexpr.StripScope(r.Name)},
 					Location: r.Location,
 					Evidence: "deployment versionUpgradeOption is absent",
 				})
@@ -225,7 +248,12 @@ func evalCFG010(in *sdk.Input) sdk.Result {
 		return ok(fs)
 	}
 	if !evaluated {
-		return skip(sdk.SkipInputUnavailable)
+		// Without the ARM model the deployments may be declared in Bicep that
+		// could not be read, so "declares no deployments" is not known.
+		if in == nil || in.ARM == nil {
+			return skip(sdk.SkipInputUnavailable + ": compiled ARM model unavailable")
+		}
+		return skip(sdk.SkipNotApplicable + ": project declares no model deployments")
 	}
 	return sdk.Result{}
 }

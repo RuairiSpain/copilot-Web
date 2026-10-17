@@ -1,5 +1,5 @@
 id: FND-NET-004
-version: 1
+version: 3
 group: NET
 title: "Agent subnet delegation and sizing"
 description: >-
@@ -60,23 +60,36 @@ fix: |
 sources:
   - url: https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/includes/how-to-virtual-networks-content.md (ms.date 09/28/2026)
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks (ms.date 09/28/2026); source
+      file MicrosoftDocs/azure-ai-docs: articles/foundry/agents/includes/how-to-virtual-networks-content.md;
+      retrieved 2026-10-04
     note: Delegation to Microsoft.App/environments and /27 or larger required; recommended /24; subnet not shareable; 63 byte name limit; same-region requirement; cannot add injection to an existing hosted-agent account.
   - url: https://learn.microsoft.com/azure/foundry/agents/concepts/networking-options
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/networking-options.md (ms.date 06/29/2026)
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/concepts/networking-options (ms.date 06/29/2026);
+      source file MicrosoftDocs/azure-ai-docs: articles/foundry/agents/concepts/networking-options.md;
+      retrieved 2026-10-04
     note: Plan your subnet size - at least /27, size cannot change after assignment, five addresses reserved per subnet; network injection cannot be changed after the first hosted agent.
   - url: https://learn.microsoft.com/azure/foundry/agents/concepts/agents-networking-deep-dive
     lastVerified: "2026-10-04"
-    verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/agents-networking-deep-dive.md (ms.date 09/07/2026)
+    verifiedVia: >-
+      https://learn.microsoft.com/azure/foundry/agents/concepts/agents-networking-deep-dive (ms.date
+      09/07/2026); source file MicrosoftDocs/azure-ai-docs:
+      articles/foundry/agents/concepts/agents-networking-deep-dive.md; retrieved 2026-10-04
     note: Recommended /24 for production; /27 supports small development or evaluation only; subnet configuration applies at account level.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
     lastVerified: "2026-10-04"
-    verifiedVia: refs/rest-api-specs/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
-    note: NetworkInjection definition - scenario (none, agent), subnetArmId, useMicrosoftManagedNetwork; AccountProperties.networkInjections array.
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    note: >-
+      NetworkInjection definition - scenario (none, agent), subnetArmId, useMicrosoftManagedNetwork;
+      AccountProperties.networkInjections array. Branch URL, not commit-pinned.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/network/resource-manager/Microsoft.Network/Network/stable/2024-05-01/virtualNetwork.json
     lastVerified: "2026-10-04"
-    verifiedVia: raw.githubusercontent.com/Azure/azure-rest-api-specs/main/specification/network/resource-manager/Microsoft.Network/Network/stable/2024-05-01/virtualNetwork.json
+    verifiedVia: >-
+      https://raw.githubusercontent.com/Azure/azure-rest-api-specs/main/specification/network/resource-manager/Microsoft.Network/Network/stable/2024-05-01/virtualNetwork.json; branch URL, not commit-pinned
     note: SubnetPropertiesFormat delegations (serviceName), addressPrefix, addressPrefixes.
 overlap:
   decision: native
@@ -120,6 +133,7 @@ tests:
     - use-microsoft-managed-network
     - subnet-id-is-parameter
 notes: >-
+  Review B3: an expression-valued networkInjections makes the rule uncertain, not not-applicable.
   Docs disagree on one point that does not affect this rule: the troubleshooting text still names a
   172/192-only range error while the limitations name 10.0.0.0/8 as supported (see FND-NET-006). The
   /27 minimum is stated in networking-options and the virtual-networks article; the deep dive warns

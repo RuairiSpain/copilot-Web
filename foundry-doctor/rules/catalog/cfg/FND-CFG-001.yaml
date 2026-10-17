@@ -1,16 +1,29 @@
 id: FND-CFG-001
-version: 1
+version: 7
 group: CFG
 title: Valid YAML, duplicate-key detection and compatible azure.ai.* schema
 description: >-
   azure.yaml must parse as YAML with unique mapping keys and conform to the published azd schema (v1.0) for the azure.ai.*
   service hosts: azure.ai.project, azure.ai.agent, azure.ai.connection, azure.ai.toolbox, azure.ai.skill, azure.ai.routine
   (and azure.ai.eval). Constraints checked are those the schema states as required, const, enum, type or "not": top-level
-  name pattern, services with at least one entry, host required on every service, project required on azure.ai.agent, prompt
+  name (required, minimum length 2, pattern ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$), services (optional; at least one entry when present), host required on every service, project required on azure.ai.agent, prompt
   agents requiring model and instructions, azure.ai.project forbidding project/runtime/docker/image/config, and the unsupported
   voice authoring shapes (modelType hosted_agent, targetAgent). Unknown properties are not errors because the schema allows
-  additional properties. Also reports when the declared requiredVersions are older than the extension versions the schema
-  was verified against.
+  additional properties. requiredVersions.azd is parsed with the grammar of blang/semver/v4 ParseRange (operators < <= > >= = == ! !=,
+  space-separated AND, || OR, lowercase x wildcards; comma, ~, ^, =>, =<, X, latest, the empty string and a
+  leading or trailing || are not accepted; one-character tokens, x outside the exact N.x and N.M.x forms and "!" followed by
+  a space behave unexpectedly in the library, as do a dangling operator, an operator and a version separated by a space that does not parse, and repeated ||, which the library accepts but panics on when matching; all of these are reported as uncertain, not as errors): a value that is not a valid range is an error because azd fails to load the
+  project, and so is a known azd version (flag, environment variable or probe) outside the range; a local dev build
+  (0.0.0-dev.0) is exempt from the range comparison, as in azd, but not from range validity: azd parses the range
+  (project.go:64) before it skips a dev build (:70), so an invalid range is reported for a dev build too. The exemption is
+  unit-level only: outside the CFG-001 azd window the whole rule is skipped (unsupported-version). An unknown azd version makes
+  the result uncertain (azd-version-unknown).
+  requiredVersions.extensions values are parsed with the grammar of Masterminds/semver/v3 NewConstraint (= != > < >= => <= =<
+  ~ ~> ^, a bare version, space or comma as AND, || as OR, hyphen ranges, x X * wildcards, latest or empty for any). A
+  value that is not valid is uncertain, never an error, because azd falls back to an exact tag match. A constraint that allows
+  versions below the tested range, excludes the tested range, requires versions above it, or lacks a pre-release (so azd
+  rejects the pre-release tested versions) makes the result uncertain or informational; it is never an error because the
+  tested range is a verification window, not a platform requirement.
 status: verified
 phases:
 - '1'
@@ -25,17 +38,22 @@ severity:
   test: error
   prod: error
 compatibility:
-  azd: '>=1.34.2 <=1.36.0-beta.1'
+  azd: '>=1.34.2 <=1.36.0'
   extensions:
     azure.ai.agents: '>=1.0.0-beta.18 <=1.0.0-beta.18'
-    azure.ai.projects: '>=1.0.0-beta.13 <=1.0.0-beta.13'
+    azure.ai.projects: '>=1.0.0-beta.13 <=1.0.0-beta.14'
   apiVersions: []
   preview: true
   notes: >-
-    azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects
-    beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from
-    a changelog and was not verified. Extension ranges are exactly the versions whose schemas or source were read; widen
-    them in Phase 1 by reading older tags.
+    azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18,
+    projects beta.13 need >=1.34.2); the maximum is azd 1.36.0 (tag azure-dev-cli_1.36.0; the first clone read was 1.36.0-beta.1). The earlier >=1.27.1 lower
+    bound came from a changelog and was not verified. Extension ranges are exactly the versions whose schemas or
+    source were read; widen them in Phase 1 by reading older tags. Window widened 2026-10-16: azd to 1.36.0 (tag
+    azure-dev-cli_1.36.0, acebba1, released 2026-10-14); azure.ai.projects to 1.0.0-beta.14. The azd and extension
+    changelogs and the schema and source diffs from the previously verified versions were read; none touches this
+    rule's verified facts for the widened fields (see docs/tool-compatibility.md section 6). azure.ai.agents stays at
+    beta.18: the agent schema changed (prompt-memory and GitHub Copilot toolset keys renamed to camelCase in beta.19,
+    metadata.tags, selector patterns) and this rule validates against that schema.
 evidence:
   description: >-
     Parse azure.yaml with a YAML parser that surfaces duplicate keys (reports key and line of each duplicate), then validate
@@ -61,17 +79,37 @@ fix: |
 sources:
 - url: https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference
   lastVerified: '2026-10-05'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/concepts/azure-yaml-reference.md (ms.date 09/17/2026)
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference (ms.date 09/17/2026);
+    source file MicrosoftDocs/azure-ai-docs: articles/foundry/agents/concepts/azure-yaml-reference.md;
+    retrieved 2026-10-05
   note: Host list, extension compatibility, JSON schema validation section.
 - url: https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-dev/schemas/v1.0/azure.yaml.json
+  verifiedVia: >-
+    https://raw.githubusercontent.com/Azure/azure-dev/170ebb858071da353cc9bf8657a377bff268ba36/schemas/v1.0/azure.yaml.json
   note: Per-host if/then constraints for azure.ai.agent, azure.ai.project and the other azure.ai.* hosts.
 - url: >-
     https://raw.githubusercontent.com/Azure/azure-dev/main/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-dev/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json
+  verifiedVia: >-
+    https://raw.githubusercontent.com/Azure/azure-dev/a64ca8fe04d0bc1b0375c32fed1b76573e2a91ef/cli/azd/extensions/azure.ai.agents/schemas/azure.ai.agent.json
   note: Prompt-agent required fields, unsupported modelType hosted_agent and targetAgent.
+- url: https://raw.githubusercontent.com/blang/semver/v4.0.0/v4/range.go
+  lastVerified: '2026-10-16'
+  verifiedVia: >-
+    https://raw.githubusercontent.com/blang/semver/v4.0.0/v4/range.go (tag v4.0.0; grammar summary in docs/spikes/azd-required-versions.md)
+  note: requiredVersions.azd range grammar (ParseRange), used by azd.
+- url: https://raw.githubusercontent.com/Masterminds/semver/v3.4.0/constraints.go
+  lastVerified: '2026-10-16'
+  verifiedVia: >-
+    https://raw.githubusercontent.com/Masterminds/semver/v3.4.0/constraints.go (tag v3.4.0; grammar summary in docs/spikes/azd-required-versions.md)
+  note: requiredVersions.extensions constraint grammar (NewConstraint) and the pre-release rule.
+- url: https://github.com/Azure/azure-dev/blob/1bd2ca4699c7b1f371db85dd867f18aa4fbc4730/cli/azd/pkg/project/project.go
+  lastVerified: '2026-10-16'
+  verifiedVia: >-
+    https://raw.githubusercontent.com/Azure/azure-dev/1bd2ca4699c7b1f371db85dd867f18aa4fbc4730/cli/azd/pkg/project/project.go (commit 1bd2ca4699c7b1f371db85dd867f18aa4fbc4730, lines 63-77; grammar summary in docs/spikes/azd-required-versions.md)
+  note: azd fails to load the project when the range is malformed or does not contain the azd version; skipped for a local dev build.
 overlap:
   decision: adapt
   provisional: true
@@ -104,17 +142,66 @@ tests:
   - unknown-host-missing-host-field
   - agent-without-project
   - prompt-agent-missing-model-and-instructions
+  - missing-or-invalid-name
+  - empty-services-mapping
   - project-service-with-project-path
   - voice-modeltype-hosted-agent
+  - requiredversions-azd-invalid-range
+  - requiredversions-azd-invalid-range-dev-build
+  - finding-with-multi-document-note
+  - requiredversions-azd-out-of-range
   negative:
   - minimal-hosted-agent-project
   - full-example-from-reference
   - unknown-extra-property-allowed
+  - services-absent
+  - requiredversions-range-containing-tested-version
+  - requiredversions-azd-in-range
+  - requiredversions-azd-dev-build-exempt
   skipped:
   - schema-version-not-vendored-for-declared-extension
   - azure-yaml-uses-ref-file-missing
+  uncertain:
+  - required-version-floor-below-tested-range
+  - required-version-ceiling-below-tested-range
+  - required-version-constraint-unparseable
+  - required-version-azd-version-unknown
+  - required-version-extension-constraint-invalid-tag-fallback
 notes: >-
   Unverified: how azd core handles duplicate YAML keys (azd core parser source is not in the local clone), so duplicate-key
   detection is a Foundry Doctor addition based on YAML mapping semantics, reported at the same severity. The azure.ai.*
   schemas are preview and change between extension betas (azure.ai.agents 1.0.0-beta.18, azure.ai.projects 1.0.0-beta.13
   in the clone).
+  requiredVersions.extensions: comma- and space-separated constraints are accepted (Masterminds grammar). A floor above the
+  highest tested version is reported as uncertain (not verified). A floor below the tested minimum is informational and
+  does not make the rule inconclusive. Extension constraints are never decided offline: the installed extension versions
+  live in azd's user config and registry and cannot be read, so only validity and the tested window are checked.
+  Version 5: requiredVersions.azd is checked with the blang grammar (the previous parser accepted commas for both keys,
+  which azd rejects for azd); extension constraints use the Masterminds grammar, including || and ^ and the rule that
+  pre-release candidates are rejected unless the constraint has a pre-release. Finding keys: required-versions-azd-invalid,
+  required-versions-azd-out-of-range. Not verified: azd and the libraries were not executed (comma rejection and the
+  empty-string error are inferred from source), and range shapes the research note does not cover (an operator on a
+  wildcard, a bare x, || without spaces) are reported as uncertain, not as errors. Older azd releases may use another range
+  parser.
+  Version 4: the Key of a duplicate-key finding includes the dotted path of the mapping, so a duplicate added under
+  another mapping does not renumber existing ones. Multiple YAML documents: azd decodes only the first document
+  (project.Parse calls yaml.Unmarshal from github.com/braydonk/yaml v0.9.0, whose unmarshal parses one document; source
+  read 2026-10-16), so a second document is reported as an uncertain note, not as an input error. Unverified: whether
+  azd warns about the ignored documents.
+  Version 6: uncertain notes are returned as uncertain skips next to findings, not dropped. The dev-build exemption is
+  unit-level only (the rule is skipped outside the azd window) and covers the range comparison, not validity: azd runs
+  ParseRange (project.go:64) before the IsDevVersion skip (:70), so an invalid range errors for a dev build and is reported.
+  The two parsers are held to the real libraries (blang/semver/v4 v4.0.0 ParseRange, Masterminds/semver/v3 v3.4.0
+  NewConstraint) by a differential test over a committed fixture generated from a one-off run of both; forms where the
+  differential run disagreed (one-character tokens such as "*" and the hyphen of "1.0.0 - 2.0.0", which blang accepts;
+  x outside N.x and N.M.x; "! " with a space; wildcard with pre-release; "<x", "^*"; "~0.0.0") are reported as uncertain. The
+  required-versions-azd-* findings cite the azd project.go source (the Learn page documents the azure.yaml schema, not
+  requiredVersions).
+  Version 7: the azd range parser reports "invalid" (an error finding) only for failures proven against blang/semver/v4
+  v4.0.0 ParseRange by the differential fixture. A dangling operator (">=1.0.0 <", ">1.0.0 <"), an operator and a
+  non-version separated by a space ("> = 1.0.0"), "! 1.35.0" and repeated "||" (">=1.0.0 || || <2.0.0", accepted by
+  ParseRange, panics when the range is matched) are uncertain. The fixture now holds these strings and about 1650
+  generated token combinations with verdicts produced by running the real library, and a test asserts that every string the
+  parser calls invalid is also rejected by the library. The required-versions-azd-* findings carry their own
+  remediation and fix text (change the range, or upgrade azd) instead of the generic text above. requiredVersions.extensions
+  problems are uncertain skips, not findings, and carry no remediation field.

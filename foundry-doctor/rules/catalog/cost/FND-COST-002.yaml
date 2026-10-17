@@ -1,5 +1,5 @@
 id: FND-COST-002
-version: 1
+version: 3
 group: COST
 title: Dev avoids production-sized fixed SKUs
 description: >-
@@ -23,28 +23,37 @@ severity:
   test: info
   prod: info
 compatibility:
-  azd: '>=1.34.2 <=1.36.0-beta.1'
+  azd: '>=1.34.2 <=1.36.0'
   extensions: {}
   apiVersions:
   - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts/deployments, version: '2026-09-01' }
   - { plane: management, provider: Microsoft.Search, resourceType: searchServices, version: '2025-05-01' }
   - { plane: management, provider: Microsoft.ApiManagement, resourceType: service, version: '2024-05-01' }
   - { plane: management, provider: Microsoft.DocumentDB, resourceType: databaseAccounts/throughputSettings, version: '2026-03-15' }
+  - { plane: management, provider: Microsoft.DocumentDB, resourceType: databaseAccounts/sqlDatabases, version: '2025-04-15' }
+  - { plane: management, provider: Microsoft.DocumentDB, resourceType: databaseAccounts/sqlDatabases/containers, version: '2025-04-15' }
   preview: true
   notes: >-
-    azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects
-    beta.13 need >=1.34.2); the maximum is the azd clone read (1.36.0-beta.1). The earlier >=1.27.1 lower bound came from
-    a changelog and was not verified.
+    azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18,
+    projects beta.13 need >=1.34.2); the maximum is azd 1.36.0 (tag azure-dev-cli_1.36.0, acebba1e388b489a91ab8e2487a676359ab516a1, released 2026-10-14; the first clone read at 1.36.0-beta.1 is earlier evidence). The earlier >=1.27.1 lower
+    bound came from a changelog and was not verified. Window widened 2026-10-16: azd to 1.36.0 (tag
+    azure-dev-cli_1.36.0, acebba1, released 2026-10-14). The azd and extension changelogs and the schema and source
+    diffs from the previously verified versions were read; none touches this rule's verified facts for the widened
+    fields (see docs/tool-compatibility.md section 6).
 evidence:
   description: >-
     Evaluated only for environments the profile classifies as dev; test and prod environments are not evaluated. Offline,
     in azure.yaml and the compiled template - Foundry model deployments with sku.name GlobalProvisionedManaged, DataZoneProvisionedManaged
     or ProvisionedManaged (reserved PTU capacity); Microsoft.Search/searchServices with sku.name standard2, standard3, storage_optimized_l1
     or storage_optimized_l2, or replicaCount or partitionCount greater than 1; Microsoft.ApiManagement/service with sku.name
-    Premium or Isolated, or sku.capacity greater than 1; Microsoft.DocumentDB throughputSettings with throughput or autoscale
-    maximum above the profile limit (no default limit is shipped). An exemption list in the profile silences intentional
+    Premium or Isolated, or sku.capacity greater than 1; Microsoft.DocumentDB throughputSettings (properties.resource) and SQL databases and containers
+    (properties.options.throughput and properties.options.autoscaleSettings.maxThroughput, CreateUpdateOptions in the
+    2025-04-15 specification) with throughput or autoscale maximum above the profile limit (no default limit is shipped).
+    Resources whose Bicep condition is the literal false are ignored; a non-literal condition or a copy loop makes the
+    result uncertain. An exemption list in the profile silences intentional
     uses. A Cosmos DB account configured for the Foundry Agent Service standard setup needs at least 3000 RU/s in total
-    (both provisioned and serverless modes are supported), so throughput at or below that platform minimum is never reported.
+    (both provisioned and serverless modes are supported). The profile limit is applied exactly as configured; set it
+    at or above 3000 for projects that use the standard agent setup.
     A dev environment is identified by the profile or the azd environment name mapping, never guessed.
   confidence: likely
 recommendation: >-
@@ -60,7 +69,10 @@ fix: |
 sources:
 - url: https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/foundry-models/includes/concepts-deployment-types-content-6.md
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types; source file
+    MicrosoftDocs/azure-ai-docs:
+    articles/foundry/foundry-models/includes/concepts-deployment-types-content-6.md; retrieved 2026-10-04
   note: >-
     Provisioned types (GlobalProvisionedManaged, DataZoneProvisionedManaged, ProvisionedManaged) purchase a fixed number
     of PTUs for reserved capacity; Standard types are pay-per-token; minimum PTUs vary by model.
@@ -68,14 +80,16 @@ sources:
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/rest-api-specs/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
   note: >-
-    SkuName enumeration free, basic, standard, standard2, standard3, storage_optimized_l1, storage_optimized_l2; replicaCount
-    and partitionCount ranges. The serverless value appears in the sku description and in preview 2026-03-01-preview and
-    2026-09-01-preview files.
+    SkuName enumeration free, basic, standard, standard2, standard3, storage_optimized_l1,
+    storage_optimized_l2; replicaCount and partitionCount ranges. The serverless value appears in the sku
+    description and in preview 2026-03-01-preview and 2026-09-01-preview files. Branch URL, not commit-pinned.
 - url: https://learn.microsoft.com/azure/search/search-sku-tier
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/search/search-sku-tier.md
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/search/search-sku-tier; source file MicrosoftDocs/azure-ai-docs:
+    articles/search/search-sku-tier.md; retrieved 2026-10-04
   note: >-
     Search units (replicas x partitions) are the billing unit for Dedicated services, billed at a fixed hourly rate per
     unit and tier.
@@ -83,19 +97,31 @@ sources:
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/stable/2024-05-01/apimdeployment.json
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/rest-api-specs/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/stable/2024-05-01/apimdeployment.json
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/apimanagement/resource-manager/Microsoft.ApiManagement/ApiManagement/stable/2024-05-01/apimdeployment.json
   note: >-
-    ApiManagementServiceSkuProperties name enumeration Developer, Standard, Premium, Basic, Consumption, Isolated, BasicV2,
-    StandardV2; capacity is the number of deployed units (0 for Consumption).
+    ApiManagementServiceSkuProperties name enumeration Developer, Standard, Premium, Basic, Consumption,
+    Isolated, BasicV2, StandardV2; capacity is the number of deployed units (0 for Consumption). Branch URL,
+    not commit-pinned.
 - url: >-
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
   lastVerified: '2026-10-04'
   verifiedVia: >-
-    refs/rest-api-specs/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
-  note: ThroughputSettingsResource has throughput or autoscaleSettings, not both.
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json
+  note: ThroughputSettingsResource has throughput or autoscaleSettings, not both. Branch URL, not commit-pinned.
+- url: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2025-04-15/cosmos-db.json
+  lastVerified: '2026-10-15'
+  verifiedVia: >-
+    https://raw.githubusercontent.com/Azure/azure-rest-api-specs/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2025-04-15/cosmos-db.json (definitions CreateUpdateOptions, AutoscaleSettings, SqlDatabaseCreateUpdateProperties, SqlContainerCreateUpdateProperties); branch URL, not commit-pinned
+  note: >-
+    CreateUpdateOptions has integer throughput and autoscaleSettings.maxThroughput ("either throughput or autoscaleSettings,
+    but not both") and is the options property of SQL database and container create-update properties. Fetched 2026-10-15.
 - url: https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup
   lastVerified: '2026-10-04'
-  verifiedVia: refs/azure-ai-docs/articles/foundry/agents/includes/concepts-standard-agent-setup-content.md
+  verifiedVia: >-
+    https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup; source file
+    MicrosoftDocs/azure-ai-docs: articles/foundry/agents/includes/concepts-standard-agent-setup-content.md;
+    retrieved 2026-10-04
   note: >-
     Standard setup needs a Cosmos DB for NoSQL account with at least 3000 RU/s total; provisioned throughput and serverless
     are both supported.
@@ -137,15 +163,18 @@ tests:
   - dev-global-standard-deployment
   - dev-search-basic-single-unit
   - prod-environment-with-provisioned-managed
-  - dev-cosmos-at-foundry-minimum-3000-ru
+  - dev-cosmos-at-configured-limit
   skipped:
   - environment-not-classified-as-dev
   - sku-value-is-unresolved-parameter
   - no-cosmos-limit-in-profile
 notes: >-
+  Findings carry a Finding.Key per sub-check so fingerprints are stable.
   Product opinion: no source defines production-sized. Unverified - minimum PTU quantities per model (documented as varying
   by model and not read); whether Standard, StandardV2 or BasicV2 APIM tiers are appropriate for dev (only Premium and Isolated
   are flagged); Cosmos DB account-level versus container-level throughput resources in Bicep (only the throughputSettings
-  definition was read); Foundry hosted-agent container CPU and memory sizing is out of scope. SKU string comparison is case-sensitive
-  as typed in the sources. The waf basis was removed after the Phase 0 Azure black belt review because no WAF pillar tag
+  definition was read); Foundry hosted-agent container CPU and memory sizing is out of scope. SKU string comparison is case-insensitive (deployment, Search and API Management SKU names), because the
+  specifications type sku.name as a free string. Cosmos options.throughput on SQL databases and containers was read in
+  cosmos-db.json 2025-04-15 (CreateUpdateOptions); the other Cosmos APIs (MongoDB, Gremlin, Cassandra, Table) are not
+  evaluated. The waf basis was removed after the Phase 0 Azure black belt review because no WAF pillar tag
   or WARA recommendation is cited here; the WAF mapping is added in Phase 4 when the guidance is verified.

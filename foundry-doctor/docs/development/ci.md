@@ -20,13 +20,13 @@ GitHub reads workflows only from the repository root, so the files are in `.gith
 
 Read-only token, no secrets, no `pull_request_target`: safe for fork pull requests. Jobs:
 
-- `test`: `go test ./...` on ubuntu, macos and windows, `go-version-file: foundry-doctor/go.mod`.
+- `test`: `go test ./...` on `windows-latest`, `go-version-file: foundry-doctor/go.mod`. Foundry Doctor is only run and supported on Windows, so every job in every Foundry Doctor workflow runs on `windows-latest`, with `shell: bash` (Git Bash) for the bash scripts.
 - `quality`: `scripts/install-dev-tools.sh`, then `scripts/claude/verify-phase.sh` (gofmt, vet, test, race, staticcheck, govulncheck, build, rule-catalogue check,
-  secret scan, import boundary, `bash -n scripts/ci/*.sh`). Not yet `--strict`: switch it on when `cmd/foundry-doctor` exists, otherwise the skipped build gate would fail CI.
+  secret scan, import boundary, `bash -n scripts/ci/*.sh`). Runs with `--strict`: all gates are available on the runner, so a skipped gate fails CI (for example govulncheck when vuln.go.dev is unreachable). Tests that skip themselves inside `go test` without `BICEP_PATH` are not counted by `--strict`; the `smoke` job installs Bicep.
 - `import-boundary`: `scripts/ci/check-import-boundary.sh`.
 - `azd-namespace`: `scripts/ci/check-azd-namespace.sh`; exit 5 becomes a warning annotation and a "SKIPPED (not a pass)" summary line.
 - `build-matrix`: `scripts/ci/build-matrix.sh`; uploads the binaries. Warns "SKIPPED" while `cmd/foundry-doctor` is absent.
-- `smoke`: builds the binary on each OS and runs `scripts/ci/smoke-samples.sh`. Warns "SKIPPED" while `cmd/foundry-doctor` or `samples/<project>` is absent.
+- `smoke`: builds the binary on `windows-latest` and runs `scripts/ci/smoke-samples.sh`. Warns "SKIPPED" while `cmd/foundry-doctor` or `samples/<project>` is absent.
 
 A skip is always visible (annotation plus step summary). Nothing passes silently, but a skipped job still shows a green check; read the annotations.
 
@@ -38,7 +38,7 @@ Exit codes follow `verify-phase.sh`: 0 pass, 1 failure, 5 SKIPPED (the check cou
 |---|---|---|
 | `check-import-boundary.sh` | ADR-005: `go.mod` has no `github.com/azure/azure-dev`; `GOWORK=off go build ./...`; `go list -deps -test ./...` has no azure-dev package | PASS |
 | `check-azd-namespace.sh` | ADR-003: `registry.json` and `registry.dev.json` of Azure/azure-dev at the verified commit `afe4b2b4d262` and at `main`, plus the azd command reference (MicrosoftDocs/azure-dev-docs `main`), have no `foundry` / `foundry.*` namespace and no `azd foundry` command; our own `extension.yaml` (when it exists) must not use id `microsoft.foundry` | PASS (live), exit 5 offline, exit 1 against a fake registry |
-| `build-matrix.sh` | `CGO_ENABLED=0 -trimpath -ldflags "-s -w -X ..."` for linux, darwin, windows x amd64, arm64; `SHA256SUMS` | PASS with `BUILD_PKG=./cmd/rulecatalog`; exit 5 for the default package (absent) |
+| `build-matrix.sh` | `CGO_ENABLED=0 -trimpath -ldflags "-s -w -X ..."` for windows x amd64, arm64; `SHA256SUMS` | PASS with `BUILD_PKG=./cmd/rulecatalog`; exit 5 for the default package (absent) |
 | `smoke-samples.sh` | runs `doctor --format sarif --out` inside each `samples/<project>`, accepts exit 0 or 1 (or the code in `smoke.expected-exit`), validates SARIF 2.1.0 | exit 5 (no binary, no samples) |
 
 The registry check treats `microsoft.foundry` in the registry as expected (ADR-003 finding 3: a pack without commands). It does not use the pinned commit as the only
@@ -65,7 +65,7 @@ and `actions: read`, which `upload-sarif` needs in private repositories). `githu
 - The caller must grant `contents: read`, `actions: read`, `security-events: write`; otherwise GitHub rejects the run at start-up. Private repositories need GitHub Code Security for SARIF upload.
 - The workflow has no Azure login and no secrets. Do not call it from `pull_request_target`.
 
-`foundry-doctor/samples/github/foundry-doctor-starter.yml` and its README are a copy-paste sample. A real starter-workflow listing needs `workflow-templates/` plus a `.properties.json` in an organisation `.github` repository.
+`foundry-doctor/samples/github/foundry-doctor-starter.yml` and its README are a copy-paste sample. It is deliberately not kept in `.github/workflows/`: it would run on this repository's pull requests, and an earlier in-repo copy ended in `startup_failure` (inputs the reusable workflow does not declare, `fail-on: high`, no `version`, no `actions: read`). A real starter-workflow listing needs `workflow-templates/` plus a `.properties.json` in an organisation `.github` repository.
 
 ## Release (`foundry-doctor-release.yml`) - authored, never run
 
@@ -78,10 +78,10 @@ Verification commands for a consumer (unrun; replace `vX.Y.Z` and the repository
 ```
 gh release download foundry-doctor/vX.Y.Z --repo RuairiSpain/copilot-Web
 sha256sum -c SHA256SUMS --ignore-missing
-gh attestation verify foundry-doctor_vX.Y.Z_linux_amd64 --repo RuairiSpain/copilot-Web
-cosign verify-blob --bundle foundry-doctor_vX.Y.Z_linux_amd64.sigstore.json \
+gh attestation verify foundry-doctor_vX.Y.Z_windows_amd64.exe --repo RuairiSpain/copilot-Web
+cosign verify-blob --bundle foundry-doctor_vX.Y.Z_windows_amd64.exe.sigstore.json \
   --certificate-identity "https://github.com/RuairiSpain/copilot-Web/.github/workflows/foundry-doctor-release.yml@refs/tags/foundry-doctor/vX.Y.Z" \
-  --certificate-oidc-issuer https://token.actions.githubusercontent.com foundry-doctor_vX.Y.Z_linux_amd64
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com foundry-doctor_vX.Y.Z_windows_amd64.exe
 ```
 
 Not in the release workflow, and why:

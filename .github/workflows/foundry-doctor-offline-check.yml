@@ -1,0 +1,33 @@
+name: foundry-doctor-offline-check
+
+# Calls the reusable workflow foundry-doctor-offline.yml on the good sample, building the tool from the commit under
+# test. It proves the reusable workflow end to end: input validation, source build, doctor run, SARIF artifact,
+# code scanning upload and exit-code enforcement. No Azure login and no secrets.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/foundry-doctor-offline.yml"
+      - ".github/workflows/foundry-doctor-offline-check.yml"
+
+# The caller must grant what the nested upload job asks for.
+permissions:
+  contents: read
+  actions: read
+  security-events: write
+
+concurrency:
+  group: foundry-doctor-offline-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  doctor:
+    uses: ./.github/workflows/foundry-doctor-offline.yml
+    with:
+      path: foundry-doctor/samples/good
+      profile: foundry-prod
+      fail-on: error
+      install-mode: source
+      source-repository: ${{ github.repository }}
+      source-ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      category: foundry-doctor-offline-check

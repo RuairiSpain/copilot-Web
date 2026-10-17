@@ -5,7 +5,7 @@ Reads the release checksums file (sha256sum format) and emits:
   extension.yaml  - azd extension manifest
   registry.json   - registry entry with per-platform artifacts + checksums
 
-Only artifacts named foundry-doctor-azd-extension_<ver>_<os>_<arch>.(tar.gz|zip)
+Only Windows artifacts named foundry-doctor-azd-extension_<ver>_windows_<arch>.zip
 are listed. Standard library only.
 """
 from __future__ import annotations
@@ -21,7 +21,7 @@ NAMESPACE = "foundry"
 REQUIRED_AZD = ">=1.34.2"
 SEMVER = re.compile(r"^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$")
 ARTIFACT = re.compile(
-    r"^foundry-doctor-azd-extension_(?P<ver>[^_]+)_(?P<os>linux|darwin|windows)_(?P<arch>amd64|arm64)\.(?:tar\.gz|zip)$"
+    r"^foundry-doctor-azd-extension_(?P<ver>[^_]+)_(?P<os>windows)_(?P<arch>amd64|arm64)\.zip$"
 )
 ID_PATTERN = re.compile(r"^[a-z0-9-.]+$")
 
