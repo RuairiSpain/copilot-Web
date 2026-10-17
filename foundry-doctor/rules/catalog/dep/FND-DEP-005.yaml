@@ -1,5 +1,5 @@
 id: FND-DEP-005
-version: 1
+version: 2
 group: DEP
 title: "Quota covers requested capacity"
 description: >-
@@ -58,7 +58,7 @@ evidence:
     subscription scope is the documented least-privilege role; Reader also includes usages/read (*/read).
     The role must be assigned at subscription scope; resource group or resource scope does not authorize the
     Usages API. Reader suffices. The answer is definitive for the comparison when the unit mapping is known
-    and no existing deployment is being updated, otherwise uncertain.
+    and no existing deployment is being updated, otherwise uncertain. Implementation (version 2): the requested capacity of each planned deployment is summed per region and usage line and compared with limit minus currentValue. The existing-deployment add-back uses the account deployments list (GET .../accounts/{account}/deployments), only for the same account, name and SKU. When an apparent shortfall cannot be offset (no capability, unreadable account, non-literal name, different or unreported SKU) the result is uncertain, not a finding. A usage line without a unit is uncertain. The modelCapacities availability call is not implemented.
   confidence: likely
 recommendation: >-
   Reduce sku.capacity, move the deployment to a region or deployment type with remaining quota, free quota

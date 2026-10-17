@@ -1,5 +1,5 @@
 id: FND-DEP-007
-version: 1
+version: 2
 group: DEP
 title: "Globally unique names available"
 description: >-
@@ -58,7 +58,7 @@ evidence:
     (Microsoft.Search/checkNameAvailability/action) are actions, which Reader (*/read) does not grant: those
     two checks need a role that includes the action, which built-in role provides it was not verified, and
     without it they are reported skipped with the missing permission, never passed. The answer is definitive
-    when the call returns.
+    when the call returns. Implementation (version 2): the Foundry check uses properties.customSubDomainName (not the ARM resource name); an account that sets none is skipped with the reason. A name that fails the local format check is a finding without a call. The Cosmos DB check is not implemented (HEAD is outside the GET and POST allow-list) and is reported skipped. A name reported unavailable is not a finding when a resource of the same type and name already exists in the target group. A failed call is skipped with the reason, never a pass.
   confidence: certain
 recommendation: >-
   Add a deterministic unique suffix to globally unique names (for example with the Bicep uniqueString function), keep the

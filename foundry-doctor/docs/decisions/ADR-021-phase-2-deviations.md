@@ -37,7 +37,12 @@ replay suite and the live scenarios (provider, quota, lock, policy, soft-delete)
 
 **(e) Cross-resource-group scope policy coverage.** The PRD DoD item "cross-resource-group references follow explicit scope policy" is scoped to
 what-if change IDs, the agent subnet, and the other literal resource-ID references the Go agent reports covering.
-Covered references: <fill after Go agent report>
+Covered references: the scope policy covers exactly (1) the resource IDs that a what-if predicts a change for
+(FND-DEP-008; a change other than Ignore or NoChange outside the target resource group and outside `--approved-scope` is a finding) and (2) the agent
+network-injection subnet (FND-DEP-011). NOT covered: connection targets, private endpoint subnets, role-assignment scopes and Key Vault references, because
+their property names and paths have no verified catalogue entry (CLAUDE.md forbids implementing an unverified property name). The DoD item is therefore narrowed
+to those two references and waived-by-ADR for the rest. Exit criterion: add each remaining reference kind to the scope policy in the phase in which the
+catalogue verifies its property path.
 References assembled from template expressions the doctor cannot evaluate are reported uncertain, not covered.
 
 **(f) Package layout.** The PRD lists sub-packages (`internal/azure/auth`, `inventory`, `permissions`, `models`, `policy`, `whatif`, `names`). The
@@ -46,7 +51,12 @@ transport, the adapters share unexported helpers, and sub-packages would force e
 consumed (`internal/preflight`). Splitting later is a mechanical move.
 
 **(g) Phase 3 `runtime.go` `logQuery` exception.** The Phase 3 runtime adapters live in the same flat package (`internal/azure/runtime.go`) and include a Log
-Analytics count-only query (`logQuery`) that ADR-006 item 7 constrains to fixed aggregate templates. Details of the exception: <fill after Go agent report>.
+Analytics count-only query (`logQuery`) that ADR-006 item 7 constrains to fixed aggregate templates. Exception: `logQuery` is Phase 3 code that the Phase 2 preflight does not call. It does not go through the transport allow-list (`internal/azure/transport.go`): it builds its
+own request to `https://api.loganalytics.io/v1/workspaces/{id}/query` (an origin that is not the ARM endpoint) and requests its own token scope
+(`https://api.loganalytics.io/.default`). Mitigations: the account name must match `^[A-Za-z0-9._-]{1,64}$` before it is placed in the fixed count-only KQL
+(`summarize count() by Category`), the workspace ID is path-escaped, the call is a read-only query, and no result rows other than aggregate counts are kept. The
+mitigations are weaker than ADR-006 item 7 asks for (the item also requires a shipped template and a client-side rejection list). Exit criterion: in the Phase 3
+remediation, route the call through the allow-list (operation, origin and token scope declared there, with a hostile-name replay test), then delete this exception.
 This is recorded here because it shares the package and allow-list; Phase 3 owns its review.
 
 ## Consequences

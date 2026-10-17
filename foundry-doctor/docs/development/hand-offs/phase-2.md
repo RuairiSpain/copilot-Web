@@ -14,17 +14,31 @@ Status: **gate round 1 on 2026-10-17: Foundry lead REJECT, Azure black belt REJE
 - New ADR-021 records the Phase 2 deviations.
 
 ## Gate round 1 (2026-10-17) and remediation
-The reviewers' finding identifiers are in the gate reports held by the parent session; they were not available to the author of this section, so findings are listed by remediation item. The parent session adds the reviewer finding ids and updates each status after re-review.
+Both reviewers rejected round 1. The reports are summarised in `docs/development/reviews/phase-2-foundry-lead.md` and `docs/development/reviews/phase-2-azure-black-belt.md`. Every item below is **fixed in round 1, pending re-review** unless the status says otherwise; nothing is claimed closed until a reviewer confirms it.
 
-| Remediation item | Blocking finding (summary) | Fix status |
+| Reviewer finding | Blocking finding (summary) | Status |
 |---|---|---|
-| D1 | Preflight workflow was `workflow_dispatch` only; PRD requires a reusable workflow | in remediation (workflow_call added, os input, Bicep install, PR guard; YAML parses; unrun on GitHub) |
-| D2 | Sample role missing verified actions; what-if permission contradiction between docs and role | in remediation (read-only role and separate what-if role) |
-| D3 | Permissions matrix statuses wrong or unverified (inventory api-version refuted, subnet-link action names, role/deny verification, assignedTo filter, unused policyExemptions row) | in remediation |
-| D4 | PRD and ADR-006 deviations undocumented | in remediation (ADR-021; placeholders for (e) and (g) await the Go agent report) |
-| D5 | Hand-off status overstated | in remediation (this rewrite) |
-| D6 | Limitations undocumented | in remediation (`docs/preflight.md` Limitations section) |
-| Go code findings (inventory api-version, capability strings, scope policy coverage) | owned by the Go agent | in remediation |
+| Foundry lead B1 | What-if parameters (template parameters sent to what-if; unresolved required parameters) | fixed in round 1, pending re-review (unresolved required parameter skips; FND-DEP-008 v2) |
+| Foundry lead B2 | What-if and permission scope (what-if action versus the read-only role and docs) | fixed in round 1, pending re-review (separate optional what-if role; FND-DEP-003 v2) |
+| Foundry lead B3 | FND-DEP-002 treated Registering as passed | fixed in round 1, pending re-review (Registering is uncertain; FND-DEP-002 v2) |
+| Foundry lead B4 | Cross-resource-group scope coverage | fixed in round 1, pending re-review (scope policy for what-if IDs and the agent subnet; narrowed by ADR-021 e) |
+| Foundry lead B5 | Reusable workflow missing | fixed in round 1, pending re-review (`workflow_call`, `os` input, Bicep install, PR guard; unrun on GitHub) |
+| Foundry lead B6 | ADR and process gaps | fixed in round 1, pending re-review (ADR-021, ADR-006 item 8, this hand-off) |
+| Foundry lead N1-N9 | Non-blocking findings | fixed in round 1, pending re-review |
+| Azure black belt B1 | Locks (lists return locks at and below the scope; relevance and resource-level reads) | fixed in round 1, pending re-review (FND-DEP-010 v2, `locks.list.resource`) |
+| Azure black belt B2 | FND-DEP-002 namespace set (template-defined namespaces are not a finding) | fixed in round 1, pending re-review (FND-DEP-002 v2) |
+| Azure black belt B3 | FND-DEP-009 content sent to checkPolicyRestrictions | fixed in round 1, pending re-review (unresolved expressions and secrets omitted; uncertain when anything is dropped; FND-DEP-009 v2) |
+| Azure black belt B4 | API versions (inventory 2022-12-01 refuted) | fixed in round 1, pending re-review (2025-04-01; `docs/permissions-matrix.md`) |
+| Azure black belt B5 | RBAC strings and sample role | fixed in round 1, pending re-review (corrected capability strings, `samples/preflight`) |
+| Azure black belt B6 | Missing rule tests | fixed in round 1, pending re-review (`gate_test.go`, `gate_contract_test.go`) |
+| Azure black belt B7 | What-if status, Incremental mode, Replace | fixed in round 1, pending re-review (`ResourceIdOnly`; Incremental cannot report deletions so a clean result is uncertain; no Replace claim; FND-DEP-008 v2) |
+| Azure black belt N1-N12 | Non-blocking findings | fixed in round 1, pending re-review |
+| `logQuery` bypasses the transport allow-list (Phase 3 code) | Reviewer observation | documented exception, not fixed: ADR-021 (g); exit criterion in Phase 3 remediation |
+| Live disposable-subscription test and Reader-only replay | No Azure environment | waived-by-ADR, ADR-021 (d) |
+| FND-DEP-009 never passes | Reviewer observation | by design (the catalogue: a clean policy check is uncertain, never a pass) |
+| Cross-resource-group references other than what-if IDs and the agent subnet | Connection targets, private endpoint subnets, role-assignment scopes, Key Vault references | waived-by-ADR, ADR-021 (e); exit criterion: add when the catalogue verifies the property paths |
+
+Rules whose behaviour changed in round 1 and whose catalogue `version` is now 2: FND-DEP-002, 003, 005, 006, 007, 008, 009, 010, 011.
 
 ## Commands implemented
 `foundry-doctor preflight` (flags in `docs/preflight.md`).
@@ -36,10 +50,10 @@ Last full run before the gate (windows/arm64, Go 1.25.13): gofmt, go vet, go tes
 Deferred by ADR-019 to Phase 9. Not met. Evidence meanwhile: allow-list tests, token held in memory only, no secrets in reports (implementers' tests, not an independent review).
 
 ## Foundry lead review
-Round 1: REJECT (2026-10-17). Re-review pending.
+Round 1: REJECT (2026-10-17), see `docs/development/reviews/phase-2-foundry-lead.md`. Re-review pending.
 
 ## Azure black belt review
-Round 1: REJECT (2026-10-17). Re-review pending.
+Round 1: REJECT (2026-10-17), see `docs/development/reviews/phase-2-azure-black-belt.md`. Re-review pending.
 
 ## Known limitations
 See `docs/preflight.md` (Limitations): DEP-009 always uncertain; DEP-007 skips Cosmos DB and ACR gaps; DEP-008 cannot see deletions; required parameters must be resolvable; subscription-scope deployments; scope policy coverage; Reader sufficiency is a hypothesis. DEP-012 matrix covers Agents, Responses and Private VNet only; the 365-day staleness and the DEP-010 margin of 80 are product decisions. DEP-011 link ownership is untested against real tenants.
@@ -57,7 +71,6 @@ Linux and Windows, amd64 and arm64 (ADR-011 Amendment 2). The preflight workflow
 
 ## Exact next-phase prerequisites
 - Re-review of Phase 2 by the Foundry lead and Azure black belt, both ACCEPT.
-- Fill the placeholders in ADR-021 (e) and (g).
 - Run the preflight workflow once on a protected environment when an Azure test subscription exists.
 
 ## Definition of Done audit

@@ -1,5 +1,5 @@
 id: FND-DEP-008
-version: 1
+version: 2
 group: DEP
 title: What-if has no unexpected delete
 description: >-
@@ -41,8 +41,7 @@ evidence:
     deployments spec): resource group POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Resources/deployments/{deploymentName}/whatIf
     (Deployments_WhatIf), subscription scope POST /subscriptions/{subscriptionId}/providers/Microsoft.Resources/deployments/{deploymentName}/whatIf,
     plus management-group and tenant variants. Responses are 200 or 202 (asynchronous, poll the operation). The body is
-    DeploymentWhatIf {location, properties} with properties.whatIfSettings.resultFormat (ResourceIdOnly or FullResourcePayloads;
-    use FullResourcePayloads, the documented default, because ResourceIdOnly can only return Deploy). The result is WhatIfOperationResult
+    DeploymentWhatIf {location, properties} with properties.whatIfSettings.resultFormat (ResourceIdOnly or FullResourcePayloads). Foundry Doctor sends ResourceIdOnly (ADR-021): FullResourcePayloads would return before and after payloads of resources, which can contain secrets and content that the doctor must never emit or retain, and the rule needs only the resource id and change type. Learn states that ResourceIdOnly returns only the resource ids; a resource that exists is then reported with change type Deploy, so property-level Modify detail is not available (it was never asserted). The result is WhatIfOperationResult
     {status, properties.changes[], error}; each WhatIfChange has resourceId, resourceType, changeType, before, after, delta
     and unsupportedReason. changeType enum: Create, Delete, Ignore, Deploy, NoChange, Modify, Unsupported (there is no Replace
     value; see notes). Violations: (a) changeType Delete on any resource, which occurs for resources absent from the template
@@ -58,7 +57,7 @@ evidence:
     resolve it). Role family: Microsoft.Resources/deployments/whatIf/action, documented to have the same permission requirements
     as the deployment (write access on the resources being deployed and Microsoft.Resources/deployments/*). Reader does
     NOT suffice. The answer is definitive for a returned Delete and uncertain for Ignore, Unsupported, Deploy and reference()
-    deltas.
+    deltas. Implementation (version 2): the deployment mode is Incremental (azd deploys incrementally), in which what-if essentially never reports Delete and cannot report a recreation caused by an immutable-property change, so a clean result is uncertain, never a pass, and the note says so. Deploy results are counted and noted, as are Ignore, Unsupported, potentialChanges and diagnostic codes. Any change type other than Ignore and NoChange whose resource id lies outside the target resource group and outside an approved scope (--approved-scope) is a finding. A Delete is a finding unless its id is on the allow-list of approved deletes. what-if is skipped, with a distinct reason, when it was not requested, when the capability is missing, for management-group and tenant scope, for an unknown scope, when the target group does not exist, and when a required template parameter has no non-secret value in the parameter file or a template default (what-if is then not run, because a guessed value would describe a different deployment).
   confidence: likely
 recommendation: >-
   Review each predicted Delete. If it is intended, record it in the baseline with a reason and expiry; if not, switch the
@@ -139,19 +138,26 @@ testability: >-
   cases and a reference() delta. Live what-if is an opt-in integration test.
 tests:
   positive:
-  - delete-in-complete-mode-of-resource-not-in-baseline
+  - what-if-predicts-delete-of-resource-not-on-allow-list
+  - what-if-change-outside-target-resource-group-and-approved-scope
+
   negative:
   - create-and-modify-only
   - delete-listed-in-baseline-with-reason-and-expiry
   - incremental-redeploy-shows-modify-on-stateful-resource-no-finding
   skipped:
   - what-if-not-enabled-by-user
+  - required-template-parameter-unresolved
+  - target-resource-group-does-not-exist
+
   - caller-lacks-deployments-whatif-action
   - bicep-cli-missing-cannot-build-template
   uncertain:
+  - clean-result-in-incremental-mode-cannot-report-deletions
   - change-type-ignore-expansion-limit-reached
+
   - change-type-unsupported
-  - result-format-resource-id-only-returns-deploy
+  - result-format-resource-id-only-returns-deploy-for-existing-resources
   - delta-involves-reference-function
   - noeffect-or-readonly-property-modify-noise
 notes: >-

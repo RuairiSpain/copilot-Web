@@ -1,5 +1,5 @@
 id: FND-DEP-006
-version: 1
+version: 2
 group: DEP
 title: "No blocking soft-deleted resource/name"
 description: >-
@@ -53,7 +53,7 @@ evidence:
     a PUT. Role family: Microsoft.CognitiveServices/deletedAccounts/read, Microsoft.ApiManagement/deletedservices/read,
     Microsoft.KeyVault/deletedVaults/read, each included in Reader (*/read). Reader suffices for the
     check. Purging needs delete rights, which the docs say must be assigned at subscription scope.
-    The answer is definitive for list membership.
+    The answer is definitive for list membership. Implementation (version 2): a match whose deleted resource group or location differs from the planned resource is reported with low confidence and the finding says the documentation does not state whether it blocks the name there; a Key Vault match is medium confidence (likely conflict); Cognitive Services and API Management matches in the same group and location are high. The finding names the deleted entry's resource ID, location and scheduled purge date, and whether purge protection is on.
   confidence: certain
 recommendation: >-
   Recover the soft-deleted resource if you still need it, or purge it (needs the delete permission at

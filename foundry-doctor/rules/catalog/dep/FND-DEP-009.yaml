@@ -1,5 +1,5 @@
 id: FND-DEP-009
-version: 1
+version: 2
 group: DEP
 title: Likely policy denials identified
 description: >-
@@ -56,7 +56,7 @@ evidence:
     depend on other resources, and deny-with-exemptions are not settled by this call (the spec describes ifNotExistsDetails
     only for evaluated resources). Role family: Microsoft.PolicyInsights/checkPolicyRestrictions/read and Microsoft.Authorization/policyAssignments/read
     are listed in the Azure RBAC permission tables and are covered by Reader (*/read). Reader suffices. The answer is likely,
-    never certain: a clean result is uncertain (not a pass) and a Deny hit is likely.
+    never certain: a clean result is uncertain (not a pass) and a Deny hit is likely. Implementation (version 2, ADR-006 item 8): resourceContent is built from non-secret template content only. A property whose value is or contains an unresolved ARM expression, a secret-looking property and a credential-shaped value are omitted before the request and reported by name. Anything omitted makes a clean answer uncertain and is noted. A resource whose API version is not a literal is not checked (noted). The rule therefore never produces a pass: a clean answer is uncertain by design. When no resource could be checked, only the number of policy assignments at the group is reported, as a note.
   confidence: likely
 recommendation: >-
   Change the planned value to one the policy allows, request a policy exemption, or ask the policy owner for a compliant

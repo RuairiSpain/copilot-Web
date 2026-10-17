@@ -44,7 +44,7 @@ The DEP agent could not verify whether a what-if leaves a deployment record or a
    allow-list. A replay test with a hostile resource name must fail closed.
 8. **Response payloads that can carry secrets or content are discarded at the client boundary, never logged or persisted:**
    `properties.outputs` and `properties.parameters` of deployments (FND-DEP-010), the `before` and `after` bodies of what-if
-   results (FND-DEP-008, requested as `FullResourcePayloads` only to read `changeType`), the `resourceContent` we send to
+   results (FND-DEP-008; amended in Phase 2: what-if is requested as `ResourceIdOnly`, so no `before` or `after` body is returned at all, see ADR-021 c), the `resourceContent` we send to
    `checkPolicyRestrictions` (built from non-secret template content only, FND-DEP-009), and the free-text error strings of
    Search indexers (FND-RUN-006, reduced to an error code and counts before storage).
 9. **"Reader suffices" is a hypothesis until tested.** The rows marked Reader in the DEP tables rest on RBAC action names alone.
