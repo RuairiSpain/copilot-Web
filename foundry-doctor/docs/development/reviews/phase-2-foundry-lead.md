@@ -17,3 +17,15 @@ This file is a concise summary kept in the repository; the full report was deliv
 ## Non-blocking findings
 
 N1-N9: recorded in the reviewer report held by the parent session; each is tracked as "fixed in round 1, pending re-review" in the hand-off.
+
+## Round 2 (2026-10-17)
+
+Reviewer: `foundry-lead`. Verdict: **ACCEPT with conditions**. This is a summary recorded by the catalogue owner from the verdict relayed by the parent session; the full report is held by the parent session.
+
+New blocking finding:
+
+1. **N-B1 FND-DEP-002 false pass.** The rule could report a pass although supporting-provider set (a) and Microsoft.Bing are not evaluated.
+
+The conditions relayed to the catalogue owner were: a concrete ADR-021 (e) exit criterion (raised by both reviewers), documentation of the known limitations, catalogue wording for FND-DEP-002, 008, 009 and 010, matrix corrections, and the hand-off update.
+
+Status: **fixed in round 2, pending re-review.** FND-DEP-002 is `version: 3` and never passes in Phase 2 (uncertain notes); `docs/preflight.md` Limitations and the hand-off list it; ADR-021 (e) now names an owner rule, PRD phase and exit criterion per uncovered reference kind. Nothing is closed until the reviewer confirms it. The hand-off is `docs/development/hand-offs/phase-2.md`.

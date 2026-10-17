@@ -52,6 +52,7 @@ var verifiedCapabilities = map[string]bool{
 	"Microsoft.PolicyInsights/checkPolicyRestrictions/read":                  true,
 	"Microsoft.Resources/deployments/read":                                   true,
 	"Microsoft.Resources/deployments/whatIf/action":                          true,
+	"Microsoft.Resources/deployments/operationstatuses/read":                 true,
 	"Microsoft.Resources/subscriptions/locations/read":                       true,
 	"Microsoft.Resources/subscriptions/providers/read":                       true,
 	"Microsoft.Resources/subscriptions/read":                                 true,

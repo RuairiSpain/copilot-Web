@@ -1,5 +1,5 @@
 id: FND-DEP-002
-version: 2
+version: 3
 group: DEP
 title: Required providers registered
 description: >-
@@ -44,7 +44,7 @@ evidence:
     Microsoft.Storage, Microsoft.MachineLearningServices, Microsoft.Search, Microsoft.Network, Microsoft.App, Microsoft.ContainerService,
     and Microsoft.Bing only when the Bing grounding tool is configured. A finding is raised when a required namespace's registrationState is neither Registered nor Registering. A provider in the Registering state is not blocked by the catalogue guidance, but it is not proven registered either, so it is reported as uncertain, never as a pass. A required namespace that the response does not return is also uncertain. Namespaces defined in the template and unregistered are never a finding here (ARM registers them); whether the deployer may register them is reported by FND-DEP-003. Without a network-injected Foundry account the required set is empty and the rule reports nothing. Role family: Microsoft.Resources/subscriptions/providers/read is included
     in Reader (*/read). Reader suffices. Registering is a POST needing the /register/action permission (Contributor or Owner)
-    and is never called by Foundry Doctor. The answer is definitive for Unregistered or NotRegistered and uncertain for Registering or a missing state.
+    and is never called by Foundry Doctor. The answer is definitive for Unregistered or NotRegistered and uncertain for Registering or a missing state. Implementation (version 3): this rule can never pass in Phase 2. Supporting-provider set (a) is not evaluated and Microsoft.Bing is not evaluated, so the absence of a finding does not prove that every required provider is registered; the result is then uncertain, with a note that names the unevaluated set. The rule reports a finding for a non-registered provider of set (b), and otherwise uncertain.
   confidence: certain
 recommendation: >-
   Register the missing providers once per subscription with a principal that has the <provider>/register/action permission
@@ -117,17 +117,18 @@ tests:
   positive:
   - network-secured-agent-microsoft-containerservice-missing
   negative:
-  - all-required-providers-registered
+  - all-set-b-providers-registered-no-finding-result-uncertain-not-pass
   - provider-registering-state-not-a-finding
   - template-defined-provider-unregistered-not-reported-here
   - project-not-network-secured-microsoft-app-not-required
   uncertain:
+  - supporting-provider-set-and-bing-not-evaluated-never-passes
   - provider-registering-state-not-proven-registered
   - required-provider-state-not-returned
   skipped:
   - no-azure-credential-available
   - bicep-cli-missing-cannot-derive-template-providers
 notes: >-
-  The registrationState value set is not enumerated in the spec; only Registered and Registering appear in the Learn article,
+  Version 3 (Phase 2 gate round 2, Foundry lead N-B1): the rule reported a pass when set (b) was all Registered although set (a) and Microsoft.Bing were not evaluated; it now never passes and reports uncertain notes. The registrationState value set is not enumerated in the spec; only Registered and Registering appear in the Learn article,
   so any other value is treated as "not usable" without naming it. Registration is per subscription and per region progress;
   this rule does not check regional registration progress. Version 2 (Phase 2 gate round 1): the supporting-provider positive case (a) has no test because part (a) is empty in the implementation; template-defined namespaces are no longer a finding, Registering is uncertain, and part (a) is empty in the implementation. The Microsoft.Bing namespace is not implemented because no Bing tool property path has a verified catalogue entry, so the Bing positive test is not exercised.

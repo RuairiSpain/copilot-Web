@@ -115,9 +115,7 @@ func (a *Adapter) Run(ctx context.Context, req WhatIfRequest) (WhatIfResult, err
 		if serr := a.c.sleep(ctx, retryDelay(http.Header{"Retry-After": r.header.Values("Retry-After")}, 0)); serr != nil {
 			return WhatIfResult{}, serr
 		}
-		q := loc.Query()
-		q.Del("api-version")
-		if r, err = a.c.do(ctx, http.MethodGet, loc.Path, q, nil); err != nil {
+		if r, err = a.c.pollWhatIf(ctx, loc.Path, loc.RawQuery); err != nil {
 			return WhatIfResult{}, err
 		}
 	}

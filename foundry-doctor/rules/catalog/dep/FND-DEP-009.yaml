@@ -1,5 +1,5 @@
 id: FND-DEP-009
-version: 2
+version: 3
 group: DEP
 title: Likely policy denials identified
 description: >-
@@ -56,7 +56,7 @@ evidence:
     depend on other resources, and deny-with-exemptions are not settled by this call (the spec describes ifNotExistsDetails
     only for evaluated resources). Role family: Microsoft.PolicyInsights/checkPolicyRestrictions/read and Microsoft.Authorization/policyAssignments/read
     are listed in the Azure RBAC permission tables and are covered by Reader (*/read). Reader suffices. The answer is likely,
-    never certain: a clean result is uncertain (not a pass) and a Deny hit is likely. Implementation (version 2, ADR-006 item 8): resourceContent is built from non-secret template content only. A property whose value is or contains an unresolved ARM expression, a secret-looking property and a credential-shaped value are omitted before the request and reported by name. Anything omitted makes a clean answer uncertain and is noted. A resource whose API version is not a literal is not checked (noted). The rule therefore never produces a pass: a clean answer is uncertain by design. When no resource could be checked, only the number of policy assignments at the group is reported, as a note.
+    never certain: a clean result is uncertain (not a pass) and a Deny hit is likely. Implementation (version 2, ADR-006 item 8): resourceContent is built from non-secret template content only. A property whose value is or contains an unresolved ARM expression, a secret-looking property and a credential-shaped value are omitted before the request and reported by name. Anything omitted makes a clean answer uncertain and is noted. A resource whose API version is not a literal is not checked (noted). The rule therefore never produces a pass: a clean answer is uncertain by design. When no resource could be checked, only the number of policy assignments at the group is reported, as a note. Version 3 (Phase 2 gate round 2, Azure black belt N1): the request content (name, tags, sku, kind, identity, zones and the literal properties) passes through the sanitizer. If the sanitizer dropped any field of a resource, a deny answer for that resource is not a finding, because Azure Policy evaluated partial content and the denied field may be one that was dropped; it becomes an uncertain note that names the resource and the dropped fields. A deny on fully sent content is still a likely finding. The number of resources checked per run is capped at 50 checkPolicyRestrictions calls (a Foundry Doctor limit, not a platform limit); resources beyond the cap are not checked and the run reports an uncertain note with the count.
   confidence: likely
 recommendation: >-
   Change the planned value to one the policy allows, request a policy exemption, or ask the policy owner for a compliant
@@ -137,6 +137,7 @@ tests:
   - allowed-locations-policy-assigned-and-location-not-allowed
   negative:
   - no-policy-evaluations-or-restrictions
+  - tags-sku-kind-identity-zones-sent-through-sanitizer
   - audit-effect-excluded-by-default
   skipped:
   - no-azure-credential-available
@@ -144,6 +145,8 @@ tests:
   - bicep-cli-missing-cannot-build-resource-content
   uncertain:
   - resource-content-contains-unresolved-expressions
+  - deny-on-partial-content-because-a-field-was-dropped
+  - resource-count-above-cap-not-all-checked
   - effect-is-deployifnotexists-or-modify
   - fallback-assignment-list-only
 notes: >-
@@ -152,4 +155,4 @@ notes: >-
   state change. Whether the evaluation honours exemptions and initiative parameters is not stated in the spec text read.
   The implementation owner is the azure-policy adapter because decision is wrap (the brief maps wrap to a tool owner). Prod
   severity lowered to warning: the check is confidence likely and category nice-to-have, and an unverified preflight must
-  not fail a production gate.
+  not fail a production gate. Version 3: a deny on partial content is an uncertain note (a false fail on a dropped field was the round 2 finding), and the number of resources checked is capped. The cap (50) is an implementation constant, not a platform limit.

@@ -24,6 +24,7 @@
     "Microsoft.CognitiveServices/locations/models/read",
     "Microsoft.CognitiveServices/locations/usages/read",
     "Microsoft.CognitiveServices/deletedAccounts/read",
+    "Microsoft.CognitiveServices/accounts/deployments/read",
     "Microsoft.CognitiveServices/checkDomainAvailability/action",
     "Microsoft.KeyVault/deletedVaults/read",
     "Microsoft.KeyVault/checkNameAvailability/read",

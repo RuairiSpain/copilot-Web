@@ -63,7 +63,8 @@ func (e *env) dep001(ctx context.Context, _ *sdk.Input) (sdk.Result, error) {
 // declares an agent network injection. Part (a) cannot be derived from the
 // compiled resource list: an `existing` resource is not a deployed resource and
 // is compiled into an expression the model does not expose, so (a) is empty
-// here (UNVERIFIED completeness; recorded in the report and the tests). A
+// here (UNVERIFIED completeness), and Microsoft.Bing is not evaluated. Because
+// of that DEP-002 can never pass: it reports findings or uncertain. A
 // provider in the Registering state is not blocked by the catalogue, but it is
 // not proven registered either, so it is reported as uncertain, never a pass.
 func (e *env) dep002(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
@@ -83,8 +84,11 @@ func (e *env) dep002(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 			injected = true
 		}
 	}
+	const partA = "supporting-provider set (a) (providers referenced but not defined by the template) cannot be derived from the compiled model, and Microsoft.Bing is not evaluated; "
 	if !injected {
-		return sdk.Result{}, nil
+		var na acc
+		na.note("%sno network injection is declared, so the network-secured set (b) does not apply: registration was not proven (DEP-002 never passes)", partA)
+		return na.result(), nil
 	}
 	names := append([]string(nil), networkSecuredNamespaces...)
 	sort.Strings(names)
@@ -97,6 +101,7 @@ func (e *env) dep002(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 		got[strings.ToLower(s.Namespace)] = s.State
 	}
 	var a acc
+	a.note("%sonly the network-secured set (b) is evaluated (DEP-002 never passes)", partA)
 	for _, n := range names {
 		st, ok := got[strings.ToLower(n)]
 		switch {

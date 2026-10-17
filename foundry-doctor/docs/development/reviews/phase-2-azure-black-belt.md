@@ -18,3 +18,22 @@ This file is a concise summary kept in the repository; the full report was deliv
 ## Non-blocking findings
 
 N1-N12: recorded in the reviewer report held by the parent session; each is tracked as "fixed in round 1, pending re-review" in the hand-off.
+
+## Round 2 (2026-10-17)
+
+Reviewer: `azure-black-belt`. Verdict: **REJECT**. This is a summary recorded by the catalogue owner from the verdict relayed by the parent session; the full report is held by the parent session.
+
+Blocking findings:
+
+1. **N1 FND-DEP-009 partial content, false fail.** A deny on content from which fields were dropped could fail a resource for a field that was never sent; tags, sku, kind, identity and zones were also not part of the content.
+2. **N2 Workflow `--strict` and `--what-if`.** The reusable workflow ran `--strict`, which always exits 3 because FND-DEP-008 and FND-DEP-009 are uncertain by design, and it had no way to request `--what-if`.
+3. **N3 What-if poll query allow-list.** The allow-list for the long-running what-if poll request and its query parameters.
+4. **N4 ADR-021 (e) exit criterion.** "In the phase in which the catalogue verifies the property path" is vague.
+
+Status: **fixed in round 2, pending re-review.**
+- N1: FND-DEP-009 `version: 3`; the content passes through the sanitizer including tags, sku, kind, identity and zones; a deny after any dropped field is an uncertain note; at most 50 checks per run.
+- N2: the workflow does not use `--strict` and has a `what-if` input (default false) (not yet run on GitHub).
+- N3: owned by the Go agent; the matrix keeps the poll path and Location query parameters UNVERIFIED (ARM Location URLs are opaque); the capability name `Microsoft.Resources/deployments/operationstatuses/read` is VERIFIED.
+- N4: ADR-021 (e) now has one owner rule, PRD phase and exit criterion per reference kind (FND-RUN-003, FND-NET-002, FND-IDN-002, FND-SEC-005) and states the covered set exactly (what-if predicted change IDs and the agent network-injection subnet).
+
+Open for the lead: the PRD section 20 allocation leaves FND-NET-002 and FND-SEC-005 without a phase that can carry the live check, and FND-IDN-002 has a Phase 2 slot that the Phase 2 scope does not use. An ADR is needed. Nothing is closed until the reviewer confirms it.

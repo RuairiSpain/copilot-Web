@@ -370,6 +370,13 @@ func (e *env) regionOf(r sdk.ARMResource) string {
 	return e.d.Target.Location
 }
 
+// inSubscription reports whether id is the target subscription or lies under it.
+func (e *env) inSubscription(id string) bool {
+	s := strings.ToLower(e.subScope())
+	id = strings.ToLower(strings.TrimRight(id, "/"))
+	return e.d.Target.SubscriptionID != "" && (id == s || strings.HasPrefix(id, s+"/"))
+}
+
 // scopeAllowed implements the cross-resource-group scope policy: an ID is in
 // scope when it lies under the target resource group or an approved scope.
 func (e *env) scopeAllowed(id string) bool {

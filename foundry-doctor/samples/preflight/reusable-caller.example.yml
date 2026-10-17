@@ -21,3 +21,8 @@ jobs:
       resource-group: <resource-group>
       location: <location>
       os: linux
+      # Optional. Default false. true adds `preflight --what-if` (FND-DEP-008) and needs the separate what-if role,
+      # see README.md in this directory. --strict is not used by the workflow (some checks are uncertain by design).
+      what-if: false
+      # Only when source-repository is set to a repository other than the caller: pass a tag (vX.Y.Z) or full 40-hex SHA.
+      # source-ref: <tag-or-40-hex-sha>

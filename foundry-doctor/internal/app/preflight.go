@@ -160,8 +160,13 @@ func preflightRun(ctx context.Context, svc Services, req PreflightRequest, stdou
 		}
 		return strings.Compare(a.Reason, b.Reason)
 	})
+	// A check that could not run (missing permission, unresolved input) is a
+	// required skip: exit 2. An "uncertain" outcome ran and could not reach a
+	// verdict; it is reported, counts against readiness, and exits 3 only under
+	// --strict, like a doctor skip that hides a check. FND-DEP-002, -008 and
+	// -009 are uncertain by design, so exit 2 for them would make every run fail.
 	for i := range skips {
-		skips[i].Required = true
+		skips[i].Required = rules.ReasonHead(skips[i].Reason) != "uncertain"
 	}
 	code := ExitCode(Outcome{Findings: shown, Skips: skips, FailOn: req.FailOn, Strict: req.Strict})
 	var buf bytes.Buffer

@@ -1,5 +1,5 @@
 id: FND-DEP-010
-version: 2
+version: 3
 group: DEP
 title: "Locks do not block change"
 description: >-
@@ -52,7 +52,7 @@ evidence:
     enumerated per Foundry resource type; the sources read do not list Foundry resource types, so none is
     claimed. Role family: Microsoft.Authorization/locks/read is covered by Reader (*/read). Reader
     suffices. Creating or deleting locks is never done. The answer is definitive for the existence, scope
-    and level of a lock and likely for its effect on a given operation. Implementation (version 2): a list returns locks at and below its scope, so a lock is relevant only when its scope is the target resource group, an ancestor of it, or a planned resource or an ancestor of one (a lock on an unrelated resource or group is ignored). Resource-level locks are read per planned resource (ManagementLocks_ListAtResourceLevel, at most 50 per run, noted when truncated); a template resource whose name, type or scope is not literal is noted and not evaluated. A ReadOnly lock that is relevant is a finding. A CanNotDelete lock matters only for a resource that what-if predicts to Delete; because what-if uses Incremental mode and cannot report deletions, the existence of a relevant CanNotDelete lock is always reported as uncertain. Case (c) is evaluated only for a CanNotDelete lock exactly on the resource group.
+    and level of a lock and likely for its effect on a given operation. Implementation (version 2): a list returns locks at and below its scope, so a lock is relevant only when its scope is the target resource group, an ancestor of it, or a planned resource or an ancestor of one (a lock on an unrelated resource or group is ignored). Resource-level locks are read per planned resource (ManagementLocks_ListAtResourceLevel, at most 50 per run, noted when truncated); a template resource whose name, type or scope is not literal is noted and not evaluated. A ReadOnly lock that is relevant is a finding. A CanNotDelete lock matters only for a resource that what-if predicts to Delete; because what-if uses Incremental mode and cannot report deletions, the existence of a relevant CanNotDelete lock is always reported as uncertain. Case (c) is evaluated only for a CanNotDelete lock exactly on the resource group. Version 3 (Phase 2 gate round 2): a CanNotDelete lock inherited from the subscription (a lock whose scope is the subscription, listed at subscription level) is treated like any relevant ancestor lock: it is an uncertain note, never a pass, because a lock above the group is inherited by child resources and the deletes that would trigger it cannot be seen in Incremental mode. Nested deployments (Microsoft.Resources/deployments in the template) are not expanded: resources inside them are not evaluated for locks, and each nested deployment is reported as an uncertain note.
   confidence: likely
 recommendation: >-
   Remove or relax the lock for the duration of the deployment through your change process, deploy to a
@@ -125,6 +125,8 @@ tests:
     - bicep-cli-missing-cannot-derive-target-scope
   uncertain:
     - create-beneath-readonly-lock-effect-not-documented-per-resource-type
+    - cannotdelete-lock-inherited-from-subscription
+    - nested-deployment-resources-not-evaluated
 notes: >-
   The Learn page was last updated 02/06/2025, older than most sources here; no newer version was found in the
   clone. Locks do not apply to data-plane operations (Learn), so this rule says nothing about data-plane writes.

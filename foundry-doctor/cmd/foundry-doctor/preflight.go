@@ -25,6 +25,7 @@ func preflightCmd(_ context.Context, svc app.Services, exit *int) *cobra.Command
 			"A check that lacks a permission is skipped and names the missing capability.\n" +
 			"The ARM what-if operation (FND-DEP-008) runs only with --what-if (alias --preflight). It sends the template and\n" +
 			"the non-secret values of the project's parameter file; a required parameter without a value skips the check.\n" +
+			"FND-DEP-002, FND-DEP-008 and FND-DEP-009 are uncertain by design (they can never pass); an uncertain result is reported and exits 0 unless --strict is set, which exits 3. A check that could not run (for example a missing permission) exits 2.\n" +
 			"Nothing is created, changed or deleted. Exit codes match `doctor`.",
 		Example: "  foundry-doctor preflight --subscription <id> --resource-group rg-app --location swedencentral\n" +
 			"  foundry-doctor preflight --what-if --profile prod --strict --format json --out preflight.json",

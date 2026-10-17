@@ -112,7 +112,8 @@ func (e *env) runWhatIf(ctx context.Context, in *sdk.Input) {
 	values, unresolved := resolveParameters(tf.params, e.d.Parameters)
 	if len(unresolved) > 0 {
 		e.wi.skip = sdk.SkipInputUnavailable + ": template parameters unresolved: " + capNames(unresolved, 10) +
-			" (no non-secret value is available from the parameter file or a template default; what-if was not run)"
+			" (no non-secret value is available from the parameter file or a template default; what-if was not run)" +
+			unsupportedTypeNote(tf.params, unresolved)
 		return
 	}
 	res, err := e.d.WhatIf.Run(ctx, azure.WhatIfRequest{OptIn: true, Scope: scope, Location: location, Template: tpl, Parameters: values})
@@ -122,4 +123,26 @@ func (e *env) runWhatIf(ctx context.Context, in *sdk.Input) {
 		return
 	}
 	e.wi.res = res
+}
+
+// unsupportedTypeNote names the unresolved parameters that are declared object
+// or array: coerceParam does not convert them (only string, bool and int), so
+// they stay unresolved even when the parameter file has a literal value.
+func unsupportedTypeNote(params []tmplParam, unresolved []string) string {
+	bad := map[string]bool{}
+	for _, p := range params {
+		if p.typ == "object" || p.typ == "array" {
+			bad[p.name] = true
+		}
+	}
+	var names []string
+	for _, n := range unresolved {
+		if bad[n] {
+			names = append(names, n)
+		}
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	return "; object/array parameters are not supported: " + capNames(names, 10)
 }

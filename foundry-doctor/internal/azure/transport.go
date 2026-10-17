@@ -133,7 +133,7 @@ func allowList() []operation {
 		newOp("policy.checkrestrictions", p, "{scope}/providers/Microsoft.PolicyInsights/checkPolicyRestrictions", "2024-10-01", "Microsoft.PolicyInsights/checkPolicyRestrictions/read"),
 		// catalogue: deployments whatIf 2026-06-01 (explicit opt-in only)
 		newOp("whatif.run", p, "{scope}/providers/Microsoft.Resources/deployments/{seg}/whatIf", "2026-06-01", "Microsoft.Resources/deployments/whatIf/action"),
-		newOp("whatif.poll", g, "{scope}/providers/Microsoft.Resources/deployments/{seg}/operationStatuses/{seg}", "2026-06-01", "Microsoft.Resources/deployments/read"),
+		newOp("whatif.poll", g, "{scope}/providers/Microsoft.Resources/deployments/{seg}/operationStatuses/{seg}", "2026-06-01", "Microsoft.Resources/deployments/operationstatuses/read"),
 		// provider-level name-availability POSTs (ADR-006 allows these POSTs)
 		newOp("name.keyvault", p, "/subscriptions/{sub}/providers/Microsoft.KeyVault/checkNameAvailability", "2026-05-15", "Microsoft.KeyVault/checkNameAvailability/read"),
 		newOp("name.storage", p, "/subscriptions/{sub}/providers/Microsoft.Storage/checkNameAvailability", "2026-09-01", "Microsoft.Storage/checknameavailability/read"),
@@ -263,6 +263,58 @@ func sleepCtx(ctx context.Context, d time.Duration) error {
 
 // do performs one allow-listed request with bounded concurrency and retry.
 func (c *armClient) do(ctx context.Context, method, path string, query url.Values, body any) (response, error) {
+	return c.doQuery(ctx, method, path, query, "", body)
+}
+
+// whatIfPollOp is the only operation whose status URL (the opaque Location of
+// a 202) is replayed with its query string verbatim.
+const whatIfPollOp = "whatif.poll"
+
+// pollWhatIf GETs a what-if operation-status URL taken from a Location header.
+// The caller has already checked the origin. The path must match the whatif.poll
+// pattern without dot segments, and the query is replayed verbatim (ARM puts
+// opaque parameters such as t, c, s and h on it) except api-version, which is
+// always the allow-listed one. No other operation can use this path: every
+// other call keeps the strict query allow-list in do.
+func (c *armClient) pollWhatIf(ctx context.Context, path, rawQuery string) (response, error) {
+	if rawQuery == "" {
+		return c.doQuery(ctx, http.MethodGet, path, nil, "", nil)
+	}
+	return c.doQuery(ctx, http.MethodGet, path, nil, rawQuery, nil)
+}
+
+// verbatimQuery validates and returns the replayed query with api-version
+// removed. It refuses control characters and whitespace.
+func verbatimQuery(raw string) (string, error) {
+	for i := 0; i < len(raw); i++ {
+		if raw[i] <= ' ' || raw[i] == 0x7f || raw[i] == '#' {
+			return "", fmt.Errorf("%w: status location query", ErrNotAllowed)
+		}
+	}
+	var keep []string
+	for _, kv := range strings.Split(raw, "&") {
+		if kv == "" {
+			continue
+		}
+		k, _, _ := strings.Cut(kv, "=")
+		if dk, err := url.QueryUnescape(k); err != nil || strings.EqualFold(dk, "api-version") {
+			if err != nil {
+				return "", fmt.Errorf("%w: status location query", ErrNotAllowed)
+			}
+			continue
+		}
+		keep = append(keep, kv)
+	}
+	return strings.Join(keep, "&"), nil
+}
+
+// doQuery is do with an optional verbatim query (whatif.poll only).
+func (c *armClient) doQuery(ctx context.Context, method, path string, query url.Values, rawQuery string, body any) (response, error) {
+	for _, seg := range strings.Split(path, "/") {
+		if seg == ".." || seg == "." {
+			return response{}, fmt.Errorf("%w: %s %s", ErrNotAllowed, method, path)
+		}
+	}
 	o, ok := c.match(method, path)
 	if !ok {
 		return response{}, fmt.Errorf("%w: %s %s", ErrNotAllowed, method, path)
@@ -275,7 +327,20 @@ func (c *armClient) do(ctx context.Context, method, path string, query url.Value
 		vals[k] = vs
 	}
 	vals.Set("api-version", o.APIVersion)
-	full := c.base + path + "?" + strings.ReplaceAll(vals.Encode(), "+", "%20")
+	enc := strings.ReplaceAll(vals.Encode(), "+", "%20")
+	if rawQuery != "" {
+		if o.Name != whatIfPollOp {
+			return response{}, fmt.Errorf("%w: query parameters outside the allow-list", ErrNotAllowed)
+		}
+		kept, err := verbatimQuery(rawQuery)
+		if err != nil {
+			return response{}, err
+		}
+		if kept != "" {
+			enc = kept + "&" + enc
+		}
+	}
+	full := c.base + path + "?" + enc
 	var payload []byte
 	if body != nil {
 		if method != http.MethodPost {

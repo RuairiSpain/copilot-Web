@@ -316,14 +316,16 @@ func TestDEP002(t *testing.T) {
 		want      outcome
 		text      string
 	}{
-		{"network-secured: all required providers registered", []sdk.ARMResource{agentAccount(sid)}, all("Registered"), nil, oPass, ""},
+		{"network-secured: all required providers registered", []sdk.ARMResource{agentAccount(sid)}, all("Registered"), nil, oUncertain, "only the network-secured set (b) is evaluated"},
 		{"network-secured: Microsoft.App not registered", []sdk.ARMResource{agentAccount(sid)}, with(all("Registered"), "Microsoft.App", "NotRegistered"), nil, oFail, "Microsoft.App is NotRegistered"},
 		{"network-secured: Microsoft.ContainerService missing", []sdk.ARMResource{agentAccount(sid)}, with(all("Registered"), "Microsoft.ContainerService", "NotFound"), nil, oFail, "Microsoft.ContainerService"},
 		{"network-secured: Registering is not a pass", []sdk.ARMResource{agentAccount(sid)}, with(all("Registered"), "Microsoft.App", "Registering"), nil, oUncertain, "Microsoft.App is Registering"},
 		{"network-secured: a finding wins over a Registering note", []sdk.ARMResource{agentAccount(sid)}, with(with(all("Registered"), "Microsoft.App", "Registering"), "Microsoft.Search", "NotRegistered"), nil, oFail, "Microsoft.Search"},
 		{"network-secured: state not returned is uncertain", []sdk.ARMResource{agentAccount(sid)}, all("Registered")[1:], nil, oUncertain, "was not returned"},
-		{"not network-secured: Microsoft.App is not required", []sdk.ARMResource{res(typeAccount, "acct"), storage}, with(all("Registered"), "Microsoft.App", "NotRegistered"), nil, oPass, ""},
-		{"template-defined provider that is unregistered is not reported here", []sdk.ARMResource{storage}, []azure.ProviderState{{Namespace: "Microsoft.Storage", State: "NotRegistered"}}, nil, oPass, ""},
+		{"not network-secured: Microsoft.App is not required", []sdk.ARMResource{res(typeAccount, "acct"), storage}, with(all("Registered"), "Microsoft.App", "NotRegistered"), nil, oUncertain, "cannot be derived from the compiled model"},
+		{"template-defined provider that is unregistered is not reported here", []sdk.ARMResource{storage}, []azure.ProviderState{{Namespace: "Microsoft.Storage", State: "NotRegistered"}}, nil, oUncertain, "Microsoft.Bing is not evaluated"},
+		{"never a pass: no injection and nothing to evaluate", []sdk.ARMResource{storage}, nil, nil, oUncertain, "DEP-002 never passes"},
+		{"never a pass: injected, all registered, still names part (a) and Bing", []sdk.ARMResource{agentAccount(sid)}, all("Registered"), nil, oUncertain, "Microsoft.Bing"},
 		{"no Azure context is skipped naming the capability", []sdk.ARMResource{agentAccount(sid)}, nil, func(d *Deps) { d.Context = nil }, oSkipped, "Microsoft.Resources/subscriptions/providers/read"},
 		{"no subscription is skipped", []sdk.ARMResource{agentAccount(sid)}, nil, func(d *Deps) { d.Target.SubscriptionID = "" }, oSkipped, "subscription"},
 	}

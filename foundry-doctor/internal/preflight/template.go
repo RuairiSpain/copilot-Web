@@ -153,7 +153,9 @@ func resolveParameters(params []tmplParam, file map[string]any) (values map[stri
 	return values, unresolved
 }
 
-// coerceParam converts a parameter-file scalar to the declared ARM type.
+// coerceParam converts a parameter-file scalar to the declared ARM type. Only
+// string, bool and int are supported; object and array parameters are always
+// unresolved (the skip reason says "object/array parameters are not supported").
 func coerceParam(p tmplParam, v any) (any, bool) {
 	if v == nil {
 		return nil, false

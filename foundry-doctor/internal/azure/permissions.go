@@ -68,14 +68,21 @@ func (a *Adapter) EffectiveActions(ctx context.Context, req PermissionRequest) (
 	}
 	oid := cl.ObjectID
 
-	// UNVERIFIED: the $filter value assignedTo('<oid>') is not defined in the
-	// 2022-04-01 Authorization spec (authorization-RoleAssignmentsCalls.json
-	// documents only "atScope()" and "principalId eq {id}" for $filter; the
-	// latter excludes group-inherited assignments, which is why assignedTo is
-	// kept). This fallback path is used
-	// only when the Permissions API evidence (CheckReportedActions) is not
-	// wired, and its result is always capped at "unknown/uncertain" by the
-	// caller. Do not rely on it without verifying the filter against a live API.
+	// The $filter value assignedTo('{objectId}') IS documented for
+	// api-version=2022-04-01 (MicrosoftDocs/azure-docs
+	// role-based-access-control/role-assignments-list-rest.md, filter table:
+	// assignedTo('{objectId}') lists the user's or service principal's
+	// assignments including group-inherited ones, transitively; the combined form
+	// atScope()+and+assignedTo('{objectId}') is also documented). The swagger
+	// authorization-RoleAssignmentsCalls.json describes only atScope() and
+	// "principalId eq {id}" in its $filter text, so the Learn article is the
+	// source. The combined form is deliberately NOT used: that article describes
+	// atScope() as the specified scope only, which would drop assignments
+	// inherited from a parent scope that scopeCovers below needs; assignedTo()
+	// alone returns them and the result is narrowed client-side. This fallback
+	// path is used only when the Permissions API evidence (CheckReportedActions)
+	// is not wired, and its result is always capped at "unknown/uncertain" by the
+	// caller.
 	items, _, err := a.c.list(ctx, scope+"/providers/Microsoft.Authorization/roleAssignments",
 		url.Values{"$filter": {"assignedTo('" + oid + "')"}}, 0)
 	if err != nil {

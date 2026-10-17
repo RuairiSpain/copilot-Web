@@ -26,7 +26,14 @@ failing check look ready.
 - **FND-DEP-010** fails on ReadOnly locks, on CanNotDelete locks covering a
   predicted delete (needs `--what-if`), and on a CanNotDelete lock on the
   resource group when the deployment history is within 80 of the documented
-  limit of 800 (the 80 margin is a Foundry Doctor product decision).
+  limit of 800 (the 80 margin is a Foundry Doctor product decision). A
+  CanNotDelete lock inherited from the subscription is an `uncertain` note, and
+  resources inside nested deployments are not evaluated (uncertain note).
+- **FND-DEP-009** sends the planned name, properties, tags, sku, kind, identity
+  and zones through a sanitizer first. If a field was dropped (unresolved
+  expression or secret-like value), a policy deny for that resource is an
+  `uncertain` note, not a failure; a deny on fully sent content is a likely
+  denial. At most 50 resources are checked per run; the rest are noted.
 - **FND-DEP-011** fails when the agent subnet carries a service association
   link or resource navigation link owned by another resource (reported as
   likely, not certain).
@@ -56,7 +63,7 @@ failing check look ready.
 | `--what-if` (alias `--preflight`) | Opt in to ARM what-if (FND-DEP-008). Off by default. |
 | `--approved-scope <id>` | Extra scope that cross-resource-group references may target. Repeatable. |
 | `--allow-delete <id>` | Accept a predicted deletion of this resource. Repeatable. |
-| `--strict` | Exit 3 when any check was skipped. |
+| `--strict` | Exit 3 when a skip or an uncertain result hid a check (by-design skips do not count). Not used by the reusable workflow, see Limitations. |
 
 ## Cross-resource-group scope policy
 
@@ -101,6 +108,7 @@ Two sample custom roles are provided; review them against the matrix before assi
 |---|---|
 | [`samples/preflight/preflight-role.json`](../samples/preflight/preflight-role.json) | Default. Read actions plus the POST evaluation actions. No write actions, no what-if. Scope to the subscription. |
 | [`samples/preflight/preflight-whatif-role.json`](../samples/preflight/preflight-whatif-role.json) | Optional addendum for `--what-if`. Grants deployment-level rights; scope it to the target resource group and add the write actions of your template's resource types. |
+| [`samples/preflight/preflight-whatif-subscription-role.json`](../samples/preflight/preflight-whatif-subscription-role.json) | Optional addendum for a subscription-scope template with `--what-if`: the what-if right must be granted at the subscription. See [`samples/preflight/README.md`](../samples/preflight/README.md). |
 
 A restricted identity is supported: each missing action skips only the rule
 that needs it, and the skip reason names the capability and permission.
@@ -143,8 +151,51 @@ secret.
 - **Subscription-scope deployments** (`targetScope = 'subscription'`) are not
   analysed against a target resource group; target-bound checks skip and name
   the missing scope.
-- **Cross-resource-group scope policy coverage** is limited to what-if change
-  IDs, the agent subnet and the other literal resource-ID references listed in
-  ADR-021 (e). References built from unresolved expressions are not covered.
+- **Cross-resource-group scope policy coverage** is exactly two reference
+  kinds: the resource IDs of what-if predicted changes (FND-DEP-008) and the
+  agent network-injection subnet (FND-DEP-011). Nothing else is covered:
+  connection targets (owner FND-RUN-003, Phase 3), private endpoint subnets
+  (FND-NET-002), role-assignment scopes (FND-IDN-002) and Key Vault references
+  (FND-SEC-005) are waived by ADR-021 (e), which gives each an owner rule and an
+  exit criterion. References built from unresolved expressions are reported
+  uncertain, not covered.
+- **FND-DEP-002 can never pass in Phase 2.** The supporting-provider set (a)
+  (providers the template references but does not define) cannot be derived
+  from the compiled model, and `Microsoft.Bing` is not evaluated, so the result
+  is a finding or `uncertain`, never `pass`, even when every evaluated provider
+  is Registered.
+- **Object and array deployment parameters are unsupported.** What-if sends
+  only scalar (string, int, bool) parameter values. A required parameter of
+  type object or array (or secureObject/secureArray) makes FND-DEP-008 skip and
+  name the parameter; the doctor does not guess or serialise structured values.
+- **Secret-named-parameter heuristic, residual risk.** Secure-typed
+  parameters and string parameters whose name looks secret are never sent or
+  logged: with a file value they make what-if skip, without one the template
+  default applies. The test is on
+  the name, so a secret supplied under an innocuous parameter name would be sent
+  to the ARM what-if endpoint over TLS as the deployment parameter value. It is
+  never logged or written to a report, but it does leave the machine. Name
+  secret parameters accordingly or keep them out of the parameter file used for
+  preflight.
+- **FND-DEP-008 and FND-DEP-009 are uncertain by design**, so `--strict` exits 3
+  whenever they run: an uncertain outcome is a skip whose reason starts with
+  `uncertain:`, and that head is not on the by-design list in
+  `internal/rules/skipclass.go`, so it counts as a skip that hid a check. The
+  reusable workflow therefore does not use `--strict`, and it exposes a
+  `what-if` input (boolean, default false) that adds `--what-if`; without it
+  FND-DEP-008 is skipped.
+- **Subscription-scope what-if without `--approved-scope`.** A Create outside
+  the target resource group but under the target subscription is expected for a
+  subscription-scope template, so it is an `uncertain` note, not a finding.
+  Anything outside the target subscription is still a finding. A
+  subscription-scope template needs the what-if right
+  (`Microsoft.Resources/deployments/whatIf/action`) at the subscription scope;
+  a role assigned only at the resource group does not suffice and the check
+  skips naming the capability.
+- **The what-if poll URL shape is inferred and UNVERIFIED.** What-if is a
+  long-running operation; ARM returns an opaque Location URL to poll, and the
+  doctor's allow-list matching of that URL (path shape and query parameters)
+  rests on observed behaviour, not on a documented contract. Treat it as
+  UNVERIFIED until a live run confirms it (ADR-021 d).
 - **Reader sufficiency is a hypothesis.** The Reader-only replay and live
   disposable-subscription tests are deferred (ADR-021 (d)).

@@ -146,11 +146,23 @@ func (e *env) dep008(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 	}
 	var a acc
 	deploy := 0
+	var subLevel []string
 	for _, c := range o.res.Changes {
 		if c.ChangeType != azure.ChangeIgnore && c.ChangeType != azure.ChangeNoChange && c.ResourceID != "" {
 			if e.rgScope() == "" {
 				a.skip(sdk.SkipInputUnavailable + ": capability cross-resource-group scope policy cannot evaluate " + c.ResourceID + " because the target subscription or resource group is not set")
 			} else if !e.scopeAllowed(c.ResourceID) {
+				// A subscription-scope template legitimately creates things that
+				// are not under the target resource group: the group itself,
+				// subscription-level role assignments, policy and so on. With a
+				// resource group set, a non-destructive change inside the target
+				// subscription is therefore an uncertain note, not a "blocked"
+				// finding. Destructive changes and anything outside the
+				// subscription keep the finding.
+				if o.scope == scopeSubscription && !c.Destructive() && e.inSubscription(c.ResourceID) {
+					subLevel = append(subLevel, string(c.ChangeType)+" "+c.ResourceID)
+					continue
+				}
 				a.add(idFinding(typeFromID(c.ResourceID), c.ResourceID,
 					fmt.Sprintf("what-if predicts %s of %s outside the target resource group %s and not in an approved scope; pass --approved-scope to allow it", c.ChangeType, c.ResourceID, e.rgScope())))
 				continue
@@ -167,6 +179,10 @@ func (e *env) dep008(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 		case c.ChangeType == azure.ChangeIgnore, c.ChangeType == azure.ChangeUnknown, c.ChangeType == azure.ChangeUnsupported:
 			a.note("what-if reported %s for %s, which cannot be classified", c.ChangeType, c.ResourceID)
 		}
+	}
+	if len(subLevel) > 0 {
+		sort.Strings(subLevel)
+		a.note("the subscription-scope template changes %d resource(s) outside the target resource group but inside the subscription (%s); this is expected for subscription-level resources and was not treated as a violation, so confirm it is intended or pass --approved-scope", len(subLevel), capNames(subLevel, 5))
 	}
 	if deploy > 0 {
 		a.note("what-if reported Deploy (properties may or may not change) for %d resource(s); the ResourceIdOnly result format carries no detail", deploy)
@@ -198,6 +214,37 @@ func typeFromID(id string) string {
 	return "Microsoft.Resources/resourceGroups"
 }
 
+// maxPolicyChecks bounds the checkPolicyRestrictions POSTs of one run; the
+// remaining resources are reported as not checked (uncertain).
+const maxPolicyChecks = 50
+
+// policyContent builds the candidate resource content for the policy service
+// from every template field that deny policies commonly target: name,
+// properties, tags, sku, kind, identity and zones. The caller sanitises it.
+func policyContent(r sdk.ARMResource) map[string]any {
+	c := map[string]any{"name": r.Name, "properties": r.Properties}
+	if len(r.Tags) > 0 {
+		c["tags"] = r.Tags
+	}
+	if len(r.SKU) > 0 {
+		c["sku"] = r.SKU
+	}
+	if r.Kind != "" {
+		c["kind"] = r.Kind
+	}
+	if len(r.Identity) > 0 {
+		c["identity"] = r.Identity
+	}
+	if len(r.Zones) > 0 {
+		z := make([]any, len(r.Zones))
+		for i, v := range r.Zones {
+			z[i] = v
+		}
+		c["zones"] = z
+	}
+	return c
+}
+
 // DEP-009: policy restrictions.
 //
 // ADR-006 point 8: the resource content sent to checkPolicyRestrictions is
@@ -205,6 +252,8 @@ func typeFromID(id string) string {
 // contains an unresolved ARM expression, secret-looking properties and
 // credential-shaped values are omitted (azure.SanitizePolicyContent) and
 // reported, and a clean answer for partial content is uncertain, never a pass.
+// A deny reported for a resource whose content was partial is a note, never a
+// failing finding. At most maxPolicyChecks resources are posted.
 func (e *env) dep009(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 	rs, ok := resourcesOf(in)
 	if !ok {
@@ -217,7 +266,7 @@ func (e *env) dep009(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 		return skipRes("", m), nil
 	}
 	var a acc
-	checked := 0
+	checked, notChecked, posts := 0, 0, 0
 	var omitted []string
 	for _, r := range rs {
 		if strings.EqualFold(namespaceOf(r.Type), "Microsoft.Authorization") || isExpr(r.Type) {
@@ -228,10 +277,16 @@ func (e *env) dep009(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 			continue
 		}
 		loc := e.regionOf(r)
-		content, dropped := azure.SanitizePolicyContent(map[string]any{"name": r.Name, "properties": r.Properties})
+		if posts >= maxPolicyChecks {
+			notChecked++
+			continue
+		}
+		content, dropped := azure.SanitizePolicyContent(policyContent(r))
 		for _, d := range dropped {
 			omitted = append(omitted, r.Type+" "+d)
 		}
+		partial := len(dropped) > 0
+		posts++
 		rst, err := e.d.Policy.CheckRestrictions(ctx, azure.PolicyRestrictionRequest{
 			Scope: e.rgScope(), ResourceType: r.Type, APIVersion: r.APIVersion, Location: loc,
 			Content: content,
@@ -249,11 +304,19 @@ func (e *env) dep009(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 		checked++
 		for _, x := range rst {
 			if strings.EqualFold(x.Effect, "deny") || x.Kind == azure.RestrictionObservedDenial {
+				if partial {
+					// Never a failing finding on knowingly partial content.
+					a.note("policy %s reported a possible denial (%s) of %s, but the content sent was partial (%s), so it is not asserted as a failure", x.AssignmentID, x.Kind, r.Type, capNames(dropped, 5))
+					continue
+				}
 				a.add(tmplFinding(r, fmt.Sprintf("policy %s likely denies this resource (%s): %s", x.AssignmentID, x.Kind, oneLine(x.Message))))
 			} else {
 				a.note("policy %s has effect %s on %s (informational)", x.AssignmentID, x.Effect, r.Type)
 			}
 		}
+	}
+	if notChecked > 0 {
+		a.note("policy restrictions were not checked for %d resource(s): at most %d checkPolicyRestrictions calls are made per run", notChecked, maxPolicyChecks)
 	}
 	if len(omitted) > 0 {
 		sort.Strings(omitted)
@@ -338,6 +401,15 @@ func (e *env) dep010(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 	planned, unresolved := plannedIDs(rg, rs)
 	if unresolved > 0 {
 		a.note("%d template resource(s) have an unresolved name or type, so locks on them were not evaluated", unresolved)
+	}
+	nested := 0
+	for _, r := range rs {
+		if strings.EqualFold(r.Type, "Microsoft.Resources/deployments") {
+			nested++
+		}
+	}
+	if nested > 0 {
+		a.note("%d nested Microsoft.Resources/deployments resource(s) are not expanded, so locks on the resources they deploy were not evaluated", nested)
 	}
 	var locks []azure.Lock
 	seen := map[string]bool{}
@@ -461,14 +533,20 @@ const historyMargin = 80
 
 // historyNearLimit implements FND-DEP-010 case (c): a CanNotDelete lock on the
 // resource group stops automatic deletion of deployment history, and at 800
-// deployments new deployments fail.
+// deployments new deployments fail. A CanNotDelete lock on the subscription is
+// inherited by the group (Learn lock-resources.md: a lock applied at a parent
+// scope is inherited by all resources within it), so any lock whose scope
+// covers the group counts, not only one exactly at the group. A lock on a
+// resource inside the group does not.
 func (e *env) historyNearLimit(ctx context.Context, in *sdk.Input, a *acc, cnd []azure.Lock) {
-	rg := strings.ToLower(strings.TrimRight(e.rgScope(), "/"))
+	rg := strings.TrimRight(e.rgScope(), "/")
 	var lock *azure.Lock
 	for i := range cnd {
-		if strings.ToLower(strings.TrimRight(cnd[i].Scope, "/")) == rg {
-			lock = &cnd[i]
-			break
+		if azure.LockCovers(cnd[i].Scope, rg) {
+			// Prefer the lock exactly at the group when both exist.
+			if lock == nil || strings.EqualFold(strings.TrimRight(cnd[i].Scope, "/"), rg) {
+				lock = &cnd[i]
+			}
 		}
 	}
 	if lock == nil {
@@ -493,7 +571,7 @@ func (e *env) historyNearLimit(ctx context.Context, in *sdk.Input, a *acc, cnd [
 		if c.Truncated {
 			qual = " (at least)"
 		}
-		a.add(idFinding("Microsoft.Authorization/locks", lock.ID, fmt.Sprintf("CanNotDelete lock %s on the resource group prevents deployment-history cleanup and the history holds%s %d of %d deployments; new deployments fail at %d", lock.Name, qual, c.Count, limit, limit)))
+		a.add(idFinding("Microsoft.Authorization/locks", lock.ID, fmt.Sprintf("CanNotDelete lock %s (scope %s, covering the resource group) prevents deployment-history cleanup and the history holds%s %d of %d deployments; new deployments fail at %d", lock.Name, lock.Scope, qual, c.Count, limit, limit)))
 	case c.Truncated:
 		a.note("deployment history count was truncated below the configured deployment-history margin")
 	}
