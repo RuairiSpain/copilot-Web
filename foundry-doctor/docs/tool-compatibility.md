@@ -129,7 +129,7 @@ parsing, external exit-code translation, redaction and missing-tool behaviour.
   pipeline doc). SARIF and JSON are the supported machine formats; the rule IDs (`Azure.*`) are the stable key. Rule
   names are mostly stable but the changelog shows deprecations (for example `Azure.ACR.GeoReplica`), so IDs must be
   mapped by version in the overlap matrix.
-- **Prerequisites**: PowerShell 7.4 or newer on Windows, macOS, Linux (upstream statement; this project only supports Windows and has not tested the others); Windows PowerShell 5.1 with .NET Framework
+- **Prerequisites**: PowerShell 7.4 or newer on Windows, macOS, Linux (upstream statement; this project supports Windows and Linux and does not support macOS; PSRule on Linux has not been run here); Windows PowerShell 5.1 with .NET Framework
   4.7.2+ also supported (`docs/install.md`). The module manifest sets `PowerShellVersion = '5.1'`. Needs the PSRule
   module installed (`Install-Module PSRule.Rules.Azure`). Bicep CLI for `.bicep` input.
 - **Missing-tool behaviour**: `advanced.psrule.enabled: auto` (PRD config): if `pwsh` or the module is absent, emit an

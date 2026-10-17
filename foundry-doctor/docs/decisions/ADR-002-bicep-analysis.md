@@ -5,7 +5,7 @@
 - Owner: `internal/bicep`
 - Current compatibility contract: **Bicep CLI 0.48.1**, pinned by the tagged-spike CI job. A
   successful tagged CI run is not yet evidenced.
-- Supported host for Foundry Doctor: Windows only (ADR-011 Amendment 1). The Linux facts below record a historical spike and were not tested by this project on any supported host.
+- Supported hosts for Foundry Doctor: Windows and Linux (ADR-011 Amendment 2, which superseded Amendment 1's Windows-only scope on 2026-10-17); macOS is not supported. The Linux facts below record a historical spike on linux-x64.
 - Historical spike CLI: **Bicep CLI version 0.47.16 (3f73e1a234)**, `linux-x64` standalone binary
   (`https://github.com/Azure/bicep/releases/download/v0.47.16/bicep-linux-x64`), generator version in ARM
   metadata `0.47.16.16243`. At the time of that historical run, the `v0.48.1` standalone
@@ -227,7 +227,7 @@ A secondary `JSONRPC` implementation can satisfy the same interface later.
 
 ## Not verified
 
-Registry (`br:`) and template-spec modules (network), `az bicep build` equivalence, Windows output differences from the Linux spike (macOS is out of scope, ADR-011 Amendment 1), `bicep build --pattern` behaviour, `.bicepparam` with `readEnvironmentVariable`/`getSecret`,
+Registry (`br:`) and template-spec modules (network), `az bicep build` equivalence, Windows output differences from the Linux spike (macOS is out of scope, ADR-011 Amendment 2), `bicep build --pattern` behaviour, `.bicepparam` with `readEnvironmentVariable`/`getSecret`,
 UTF-16 vs rune column differences for non-ASCII source, and the `bicep jsonrpc` protocol beyond one probe.
 
 ## Reproduce

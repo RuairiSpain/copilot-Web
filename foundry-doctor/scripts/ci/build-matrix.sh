@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Cross-platform build of the standalone binary (Windows only: windows x amd64, arm64; run from Git Bash on windows-latest).
+# Cross-platform build of the standalone binary (ADR-011 decision 6, Amendment 2: linux, windows x amd64, arm64; macOS is
+# not supported). Works on Linux and in Git Bash.
 # CGO_ENABLED=0, -trimpath, stripped (-s -w), version injected with -ldflags -X, SHA-256 checksums file.
 #
 # Usage: build-matrix.sh [--out DIR] [--version VERSION] [--targets "os/arch ..."]
@@ -15,7 +16,7 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT" || exit 1
 
-OUT="$ROOT/dist"; VERSION=""; TARGETS="windows/amd64 windows/arm64"
+OUT="$ROOT/dist"; VERSION=""; TARGETS="linux/amd64 linux/arm64 windows/amd64 windows/arm64"
 while [ $# -gt 0 ]; do
   case "$1" in
     --out) OUT="${2:?--out needs a directory}"; shift 2 ;;
@@ -56,7 +57,7 @@ for t in $TARGETS; do
   built+=("$file")
 done
 
-# Git Bash ships sha256sum. It may print "hash *name" (binary marker); normalise to the two-space form.
+# sha256sum is on Linux and in Git Bash. Git Bash may print "hash *name" (binary marker); normalise to the two-space form.
 ( cd "$OUT" && sha256sum "${built[@]}" | sed -E 's/^([0-9a-f]{64}) [ *]/\1  /' > SHA256SUMS ) || { echo "FAIL: could not write checksums" >&2; exit 1; }
 echo "wrote $OUT/SHA256SUMS:"; cat "$OUT/SHA256SUMS"
 echo "RESULT: PASS (${#built[@]} binaries, version $VERSION)"

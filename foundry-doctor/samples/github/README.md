@@ -12,6 +12,7 @@ that repository, so copy the file by hand.
 1. Copy `foundry-doctor-starter.yml` to `.github/workflows/foundry-doctor.yml` in your repository.
 2. Replace `<tag-or-sha>` with a release tag or a full commit SHA. Pin a SHA if you want an immutable reference.
 3. Set `path`, `profile`, `fail-on`, and a `version` that exists as a release (`foundry-doctor/v<version>`), or use `install-mode: source`.
+   Set `os` to `linux` (default, ubuntu-latest) or `windows` (windows-latest). Any other value fails the first step instead of silently running on Linux.
 4. Keep the three `permissions` entries. A called workflow cannot ask for more than its caller grants, and GitHub rejects the run at start-up if it does.
 
 ## What it does

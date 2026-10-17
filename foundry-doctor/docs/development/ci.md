@@ -20,13 +20,14 @@ GitHub reads workflows only from the repository root, so the files are in `.gith
 
 Read-only token, no secrets, no `pull_request_target`: safe for fork pull requests. Jobs:
 
-- `test`: `go test ./...` on `windows-latest`, `go-version-file: foundry-doctor/go.mod`. Foundry Doctor is only run and supported on Windows, so every job in every Foundry Doctor workflow runs on `windows-latest`, with `shell: bash` (Git Bash) for the bash scripts.
-- `quality`: `scripts/install-dev-tools.sh`, then `scripts/claude/verify-phase.sh` (gofmt, vet, test, race, staticcheck, govulncheck, build, rule-catalogue check,
+- `test`: `go test ./...` on `ubuntu-latest` and `windows-latest` (job names `go test (linux)` and `go test (windows)`), `go-version-file: foundry-doctor/go.mod`. Foundry Doctor supports Windows and Linux (ADR-011 Amendment 2, 2026-10-17); macOS is not supported and not tested. The Windows job and the scripts use `shell: bash` (Git Bash on `windows-latest`, the default on Linux). ARM64 is built by `build-matrix` but not executed on any hosted runner.
+- `race-windows`: `go test -race ./...` on `windows-latest` (windows/amd64). The race detector on linux/amd64 runs inside `quality` (`verify-phase.sh`).
+- `quality` (`ubuntu-latest`): `scripts/install-dev-tools.sh`, then `scripts/claude/verify-phase.sh` (gofmt, vet, test, race, staticcheck, govulncheck, build, rule-catalogue check,
   secret scan, import boundary, `bash -n scripts/ci/*.sh`). Runs with `--strict`: all gates are available on the runner, so a skipped gate fails CI (for example govulncheck when vuln.go.dev is unreachable). Tests that skip themselves inside `go test` without `BICEP_PATH` are not counted by `--strict`; the `smoke` job installs Bicep.
 - `import-boundary`: `scripts/ci/check-import-boundary.sh`.
 - `azd-namespace`: `scripts/ci/check-azd-namespace.sh`; exit 5 becomes a warning annotation and a "SKIPPED (not a pass)" summary line.
 - `build-matrix`: `scripts/ci/build-matrix.sh`; uploads the binaries. Warns "SKIPPED" while `cmd/foundry-doctor` is absent.
-- `smoke`: builds the binary on `windows-latest` and runs `scripts/ci/smoke-samples.sh`. Warns "SKIPPED" while `cmd/foundry-doctor` or `samples/<project>` is absent.
+- `smoke` (`smoke samples (linux)` and `smoke samples (windows)`): installs the pinned Bicep CLI for the runner (`bicep-linux-x64`, `bicep-linux-arm64`, `bicep-win-x64.exe` or `bicep-win-arm64.exe`, chosen from `RUNNER_OS` and `RUNNER_ARCH`), builds the binary and runs `scripts/ci/smoke-samples.sh`. Warns "SKIPPED" while `cmd/foundry-doctor` or `samples/<project>` is absent.
 
 A skip is always visible (annotation plus step summary). Nothing passes silently, but a skipped job still shows a green check; read the annotations.
 
@@ -38,7 +39,7 @@ Exit codes follow `verify-phase.sh`: 0 pass, 1 failure, 5 SKIPPED (the check cou
 |---|---|---|
 | `check-import-boundary.sh` | ADR-005: `go.mod` has no `github.com/azure/azure-dev`; `GOWORK=off go build ./...`; `go list -deps -test ./...` has no azure-dev package | PASS |
 | `check-azd-namespace.sh` | ADR-003: `registry.json` and `registry.dev.json` of Azure/azure-dev at the verified commit `afe4b2b4d262` and at `main`, plus the azd command reference (MicrosoftDocs/azure-dev-docs `main`), have no `foundry` / `foundry.*` namespace and no `azd foundry` command; our own `extension.yaml` (when it exists) must not use id `microsoft.foundry` | PASS (live), exit 5 offline, exit 1 against a fake registry |
-| `build-matrix.sh` | `CGO_ENABLED=0 -trimpath -ldflags "-s -w -X ..."` for windows x amd64, arm64; `SHA256SUMS` | PASS with `BUILD_PKG=./cmd/rulecatalog`; exit 5 for the default package (absent) |
+| `build-matrix.sh` | `CGO_ENABLED=0 -trimpath -ldflags "-s -w -X ..."` for linux and windows x amd64, arm64; `SHA256SUMS` | PASS with `BUILD_PKG=./cmd/rulecatalog`; exit 5 for the default package (absent) |
 | `smoke-samples.sh` | runs `doctor --format sarif --out` inside each `samples/<project>`, accepts exit 0 or 1 (or the code in `smoke.expected-exit`), validates SARIF 2.1.0 | exit 5 (no binary, no samples) |
 
 The registry check treats `microsoft.foundry` in the registry as expected (ADR-003 finding 3: a pack without commands). It does not use the pinned commit as the only
@@ -54,11 +55,12 @@ Contracts other packets must honour:
 
 ## Reusable workflow (`foundry-doctor-offline.yml`)
 
-Inputs: `path`, `profile`, `fail-on`, `install-mode` (`release` or `source`), `version`, `source-repository`, `source-ref`, `verify-attestation`, `upload-sarif`, `category`, `artifact-name`.
+Inputs: `path`, `profile`, `fail-on`, `install-mode` (`release` or `source`), `version`, `source-repository`, `source-ref`, `verify-attestation`, `os`, `upload-sarif`, `category`, `artifact-name`.
+`os` is `linux` (default, `ubuntu-latest`) or `windows` (`windows-latest`). The `runs-on` expression maps anything other than exactly `windows` to Linux, so the first step rejects every other value; without that check a typo would silently run on Linux. There is deliberately no free-form runner label input, because a label cannot be validated. `foundry-doctor-offline-check.yml` runs both values.
 Inputs reach the shell only through `env` and are validated first. Permissions: workflow `contents: read`; only the `upload` job has `security-events: write` (plus `contents: read`
 and `actions: read`, which `upload-sarif` needs in private repositories). `github/codeql-action/upload-sarif` is pinned to v4.38.2 (`2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2`, the commit behind the annotated tag).
 
-- Release mode downloads `foundry-doctor_<version>_windows_<arch>.exe` and `SHA256SUMS` from the release `foundry-doctor/<version>`, checks the checksum, and runs `gh attestation verify`. No release exists yet, so use `source` until the first release.
+- Release mode downloads `foundry-doctor_<version>_<os>_<arch>` (`.exe` on Windows, no extension on Linux) and `SHA256SUMS` from the release `foundry-doctor/<version>`, checks the checksum, and runs `gh attestation verify`. No release exists yet, so use `source` until the first release.
 - Source mode checks out `source-repository` at `source-ref` and builds `./cmd/foundry-doctor`. Pin a tag or SHA.
 - **Fork behaviour.** On a `pull_request` from a fork, and on Dependabot runs, the token is read-only. The upload job is skipped with a notice; the SARIF stays available as a workflow artifact;
   the doctor job still fails on exit 1, 2, 3 or 4, so the exit code is enforced. This follows GitHub's documented read-only token for fork PRs; the exact upload failure was **not tested** (see `phase-1-tooling-facts.md`).
@@ -69,7 +71,7 @@ and `actions: read`, which `upload-sarif` needs in private repositories). `githu
 
 ## Release (`foundry-doctor-release.yml`) - authored, never run
 
-Tag `foundry-doctor/vX.Y.Z[-pre]` on a commit reachable from `main`. Jobs: `verify` (tag format, `verify-phase.sh --strict`, azd namespace check with no tolerance for SKIPPED) -> `build` (matrix, `SHA256SUMS`) ->
+Tag `foundry-doctor/vX.Y.Z[-pre]` on a commit reachable from `main`. All jobs run on `ubuntu-latest`; the Windows binaries are cross-compiled (`CGO_ENABLED=0`). Targets: linux and windows on amd64 and arm64 (bare binaries; `.exe` on Windows). Jobs: `verify` (tag format, `verify-phase.sh --strict`, azd namespace check with no tolerance for SKIPPED) -> `build` (matrix, `SHA256SUMS`) ->
 `sbom` (`anchore/sbom-action`, CycloneDX JSON, generated from the built binaries so the Go build info lists the exact modules) -> `sign` (cosign keyless `sign-blob` bundles for `SHA256SUMS`, the SBOM and each binary; `actions/attest-build-provenance`
 for every file in `SHA256SUMS`) -> `publish` (`gh release create`, environment `release`). `id-token: write` and `attestations: write` exist only on `sign`; `contents: write` only on `publish`.
 
@@ -78,17 +80,17 @@ Verification commands for a consumer (unrun; replace `vX.Y.Z` and the repository
 ```
 gh release download foundry-doctor/vX.Y.Z --repo RuairiSpain/copilot-Web
 sha256sum -c SHA256SUMS --ignore-missing
-gh attestation verify foundry-doctor_vX.Y.Z_windows_amd64.exe --repo RuairiSpain/copilot-Web
-cosign verify-blob --bundle foundry-doctor_vX.Y.Z_windows_amd64.exe.sigstore.json \
+gh attestation verify foundry-doctor_vX.Y.Z_linux_amd64 --repo RuairiSpain/copilot-Web
+cosign verify-blob --bundle foundry-doctor_vX.Y.Z_linux_amd64.sigstore.json \
   --certificate-identity "https://github.com/RuairiSpain/copilot-Web/.github/workflows/foundry-doctor-release.yml@refs/tags/foundry-doctor/vX.Y.Z" \
-  --certificate-oidc-issuer https://token.actions.githubusercontent.com foundry-doctor_vX.Y.Z_windows_amd64.exe
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com foundry-doctor_vX.Y.Z_linux_amd64
 ```
 
 Not in the release workflow, and why:
 
 - **azd extension archives and registry manifest.** The extension module (`foundry-doctor/extension/`, ADR-005) does not exist and the publisher-owned extension id (ADR-003: not `microsoft.foundry`) is undecided.
   The registry entry needs per-platform artifact URLs and checksums that depend on the extension packaging. Add a job after those exist.
-  The generated `registry.json` is for a custom extension source only (`azd extension source add`); it is not eligible for the official azd registry, which requires linux and darwin entries as well.
+  The generated `registry.json` is for a custom extension source only (`azd extension source add`); it is not eligible for the official azd registry, which still requires darwin entries (macOS is unsupported, ADR-011 Amendment 2). Extension archives are `tar.gz` for Linux and `zip` for Windows (`rehearse.sh`); `registry.json` keys are `linux/amd64`, `linux/arm64`, `windows/amd64`, `windows/arm64`.
 - **Third-party notices** (licence-inventory section on redistribution) are not generated.
 - `actions/attest-build-provenance` v4 is documented as a thin wrapper over `actions/attest`; new work should move to `actions/attest`. It was kept because the PRD packet named it.
 - `cosign-release` is pinned to v3.0.6 (the installer default). The syft version used by `anchore/sbom-action` is the action's own default.

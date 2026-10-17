@@ -22,6 +22,10 @@ concurrency:
 
 jobs:
   doctor:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [linux, windows]
     uses: ./.github/workflows/foundry-doctor-offline.yml
     with:
       path: foundry-doctor/samples/good
@@ -30,4 +34,6 @@ jobs:
       install-mode: source
       source-repository: ${{ github.repository }}
       source-ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      category: foundry-doctor-offline-check
+      os: ${{ matrix.os }}
+      category: foundry-doctor-offline-check-${{ matrix.os }}
+      artifact-name: foundry-doctor-sarif-${{ matrix.os }}

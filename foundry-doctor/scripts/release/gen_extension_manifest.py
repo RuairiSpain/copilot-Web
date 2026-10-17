@@ -6,10 +6,13 @@ Reads the release checksums file (sha256sum format) and emits:
   registry.json   - registry entry; Version.artifacts is an object keyed by
                     "<os>/<arch>" per azd registry.schema.json
 
-Only Windows artifacts named foundry-doctor-azd-extension_<ver>_windows_<arch>.zip
-are listed (linux/darwin/tar.gz names are ignored). The result is for a custom
-azd extension source only; the official azd registry also requires linux and
-darwin entries. Standard library only.
+Only artifacts named foundry-doctor-azd-extension_<ver>_<os>_<arch>.<ext> are listed,
+where <os>/<arch> is linux or windows on amd64 or arm64, and <ext> is tar.gz for
+linux and zip for windows (the azd convention). Other names (darwin, a zip for
+linux, a tar.gz for windows) are ignored. macOS is not supported (ADR-011
+Amendment 2), so the generated registry.json is for a custom azd extension
+source only; the official azd registry also requires darwin entries.
+Standard library only.
 """
 from __future__ import annotations
 
@@ -25,9 +28,11 @@ REQUIRED_AZD = ">=1.34.2"
 # The azd registry schema pins Version.version to ^\d+\.\d+\.\d+$, so
 # prerelease versions cannot be represented and are rejected.
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
-ENTRY_POINT_EXE = "foundry-doctor-azd.exe"  # executable inside the windows zip
+# Executable inside each archive, and the archive extension, per OS.
+ENTRY_POINTS = {"linux": "foundry-doctor-azd", "windows": "foundry-doctor-azd.exe"}
+ARCHIVE_EXT = {"linux": "tar.gz", "windows": "zip"}
 ARTIFACT = re.compile(
-    r"^foundry-doctor-azd-extension_(?P<ver>[^_]+)_(?P<os>windows)_(?P<arch>amd64|arm64)\.zip$"
+    r"^foundry-doctor-azd-extension_(?P<ver>[^_]+)_(?P<os>linux|windows)_(?P<arch>amd64|arm64)\.(?P<ext>tar\.gz|zip)$"
 )
 ID_PATTERN = re.compile(r"^[a-z0-9-.]+$")
 
@@ -57,14 +62,14 @@ def build(version: str, checksums: dict[str, str], base_url: str, ext_id: str = 
     platforms = []
     for name in sorted(checksums):
         m = ARTIFACT.match(name)
-        if not m or m.group("ver") != version:
+        if not m or m.group("ver") != version or m.group("ext") != ARCHIVE_EXT[m.group("os")]:
             continue
         key = f"{m.group('os')}/{m.group('arch')}"
         platforms.append(key)
         artifacts[key] = {
             "url": f"{base_url.rstrip('/')}/{name}",
             "checksum": {"algorithm": "sha256", "value": checksums[name]},
-            "entryPoint": ENTRY_POINT_EXE,
+            "entryPoint": ENTRY_POINTS[m.group("os")],
         }
     if not artifacts:
         raise ValueError("no azd extension artifacts found in checksums")
