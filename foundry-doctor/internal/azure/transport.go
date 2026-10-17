@@ -79,11 +79,20 @@ func allowList() []operation {
 		newOp("subscription.get", g, "/subscriptions/{sub}", "2022-12-01", "Microsoft.Resources/subscriptions/read"),
 		// catalogue: FND-DEP-002
 		newOp("provider.get", g, "/subscriptions/{sub}/providers/{seg}", "2025-04-01", "Microsoft.Resources/subscriptions/providers/read"),
-		// unverified: resource groups and resource listing use the Microsoft.Resources 2022-12-01 spec
-		newOp("resourcegroup.get", g, "/subscriptions/{sub}/resourcegroups/{seg}", "2022-12-01", "Microsoft.Resources/subscriptions/resourceGroups/read"),
-		newOp("resources.list", g, "{scope}/resources", "2022-12-01", "Microsoft.Resources/subscriptions/resources/read"),
-		// catalogue: locks 2020-05-01
+		// Verified against Microsoft.Resources/resources/stable/2025-04-01/resources.json (Resources_List,
+		// Resources_ListByResourceGroup, ResourceGroups_Get). 2022-12-01 is NOT published for
+		// Microsoft.Resources/resources (refuted in the Phase 2 gate review) and must not be used here.
+		newOp("resourcegroup.get", g, "/subscriptions/{sub}/resourcegroups/{seg}", "2025-04-01", "Microsoft.Resources/subscriptions/resourceGroups/read"),
+		newOp("resources.list.subscription", g, "/subscriptions/{sub}/resources", "2025-04-01", "Microsoft.Resources/subscriptions/resources/read"),
+		newOp("resources.list.resourcegroup", g, "/subscriptions/{sub}/resourcegroups/{seg}/resources", "2025-04-01", "Microsoft.Resources/subscriptions/resourcegroups/resources/read"),
+		// catalogue: locks 2020-05-01 (ListAtSubscriptionLevel, ListAtResourceGroupLevel, ListAtResourceLevel).
+		// The list returns locks at AND BELOW the scope; callers filter by lock scope. The $filter value
+		// atScope() is NOT documented in the 2020-05-01 spec ("The filter to apply on the operation."), so it
+		// is not used. locks.list takes a subscription or resource group scope only.
 		newOp("locks.list", g, "{scope}/providers/Microsoft.Authorization/locks", "2020-05-01", "Microsoft.Authorization/locks/read"),
+		newOp("locks.list.resource", g, "{resource}/providers/Microsoft.Authorization/locks", "2020-05-01", "Microsoft.Authorization/locks/read"),
+		// catalogue FND-DEP-011: VirtualNetworks_Get, Microsoft.Network/Network/stable/2025-05-01/virtualNetwork.json
+		newOp("vnet.get", g, "/subscriptions/{sub}/resourceGroups/{seg}/providers/Microsoft.Network/virtualNetworks/{seg}", "2025-05-01", "Microsoft.Network/virtualNetworks/read"),
 		// catalogue: virtualNetworks/subnets 2025-05-01
 		newOp("subnet.get", g, "/subscriptions/{sub}/resourceGroups/{seg}/providers/Microsoft.Network/virtualNetworks/{seg}/subnets/{seg}", "2025-05-01", "Microsoft.Network/virtualNetworks/subnets/read"),
 		// catalogue: roleAssignments 2022-04-01
@@ -91,9 +100,10 @@ func allowList() []operation {
 		newOp("locations.list", g, "/subscriptions/{sub}/locations", "2022-12-01", "Microsoft.Resources/subscriptions/locations/read"),
 		// catalogue FND-DEP-010 (deployments 2026-06-01); only the count is used
 		newOp("deployments.list", g, "/subscriptions/{sub}/resourcegroups/{seg}/providers/Microsoft.Resources/deployments", "2026-06-01", "Microsoft.Resources/deployments/read"),
-		// catalogue FND-DEP-011 (2025-05-01); exact RBAC action for link reads UNVERIFIED
-		newOp("subnet.associationlinks", g, "/subscriptions/{sub}/resourceGroups/{seg}/providers/Microsoft.Network/virtualNetworks/{seg}/subnets/{seg}/ServiceAssociationLinks", "2025-05-01", "Microsoft.Network/virtualNetworks/subnets/read"),
-		newOp("subnet.navigationlinks", g, "/subscriptions/{sub}/resourceGroups/{seg}/providers/Microsoft.Network/virtualNetworks/{seg}/subnets/{seg}/ResourceNavigationLinks", "2025-05-01", "Microsoft.Network/virtualNetworks/subnets/read"),
+		// catalogue FND-DEP-011 (2025-05-01). RBAC actions verified in MicrosoftDocs/azure-docs
+		// role-based-access-control/permissions/networking.md.
+		newOp("subnet.associationlinks", g, "/subscriptions/{sub}/resourceGroups/{seg}/providers/Microsoft.Network/virtualNetworks/{seg}/subnets/{seg}/ServiceAssociationLinks", "2025-05-01", "Microsoft.Network/virtualNetworks/subnets/serviceAssociationLinks/read"),
+		newOp("subnet.navigationlinks", g, "/subscriptions/{sub}/resourceGroups/{seg}/providers/Microsoft.Network/virtualNetworks/{seg}/subnets/{seg}/ResourceNavigationLinks", "2025-05-01", "Microsoft.Network/virtualNetworks/subnets/resourceNavigationLinks/read"),
 		// catalogue FND-DEP-003 (permissions 2022-04-01; RG and resource scope only)
 		newOp("permissions.list", g, "{scope}/providers/Microsoft.Authorization/permissions", "2022-04-01", "Microsoft.Authorization/permissions/read"),
 		newOp("roleassignments.list", g, "{scope}/providers/Microsoft.Authorization/roleAssignments", "2022-04-01", "Microsoft.Authorization/roleAssignments/read"),
@@ -117,9 +127,9 @@ func allowList() []operation {
 		newOp("deletedaccounts.list", g, "/subscriptions/{sub}/providers/Microsoft.CognitiveServices/deletedAccounts", "2026-09-01", "Microsoft.CognitiveServices/deletedAccounts/read"),
 		newOp("deletedvaults.list", g, "/subscriptions/{sub}/providers/Microsoft.KeyVault/deletedVaults", "2026-05-15", "Microsoft.KeyVault/deletedVaults/read"),
 		newOp("deletedservices.list", g, "/subscriptions/{sub}/providers/Microsoft.ApiManagement/deletedservices", "2024-05-01", "Microsoft.ApiManagement/deletedservices/read"),
-		// catalogue: policyAssignments 2026-07-01; exemptions/restrictions unverified
+		// catalogue: policyAssignments 2026-07-01. Policy exemptions are not read (the unused
+		// 2022-07-01-preview entry was removed in the Phase 2 gate fixes).
 		newOp("policyassignments.list", g, "{scope}/providers/Microsoft.Authorization/policyAssignments", "2026-07-01", "Microsoft.Authorization/policyAssignments/read"),
-		newOp("policyexemptions.list", g, "{scope}/providers/Microsoft.Authorization/policyExemptions", "2022-07-01-preview", "Microsoft.Authorization/policyExemptions/read"),
 		newOp("policy.checkrestrictions", p, "{scope}/providers/Microsoft.PolicyInsights/checkPolicyRestrictions", "2024-10-01", "Microsoft.PolicyInsights/checkPolicyRestrictions/read"),
 		// catalogue: deployments whatIf 2026-06-01 (explicit opt-in only)
 		newOp("whatif.run", p, "{scope}/providers/Microsoft.Resources/deployments/{seg}/whatIf", "2026-06-01", "Microsoft.Resources/deployments/whatIf/action"),

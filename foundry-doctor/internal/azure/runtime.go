@@ -201,7 +201,8 @@ func (a *Adapter) ListAccountDeployments(ctx context.Context, subscriptionID, re
 			Type string `json:"type"`
 			Name string `json:"name"`
 			SKU  struct {
-				Capacity int `json:"capacity"`
+				Name     string `json:"name"`
+				Capacity int    `json:"capacity"`
 			} `json:"sku"`
 			Properties struct {
 				DeploymentState   string `json:"deploymentState"`
@@ -225,7 +226,7 @@ func (a *Adapter) ListAccountDeployments(ctx context.Context, subscriptionID, re
 			capacity = d.SKU.Capacity
 		}
 		out = append(out, AccountDeployment{
-			ID: d.ID, Type: d.Type, Name: d.Name, DeploymentState: d.Properties.DeploymentState, ProvisioningState: d.Properties.ProvisioningState,
+			ID: d.ID, Type: d.Type, Name: d.Name, DeploymentState: d.Properties.DeploymentState, ProvisioningState: d.Properties.ProvisioningState, SKUName: d.SKU.Name,
 			DynamicThrottling: d.Properties.DynamicThrottling, CurrentCapacity: capacity, ProvisionedRateLimit: limit,
 		})
 	}

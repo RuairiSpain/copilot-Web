@@ -1,3 +1,9 @@
 
 # Build outputs
 *.exe
+
+# Coverage and scratch output
+/*cover
+/runcover.out
+/runout
+/run

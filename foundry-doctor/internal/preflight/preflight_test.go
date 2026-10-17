@@ -45,6 +45,19 @@ type fake struct {
 	err         error // returned by every call when set
 	whatIfRan   int
 	asked       []string // actions requested from EffectiveActions
+
+	vnet        azure.VNet                // GetVNet answer; empty Location means 404
+	vnetCalls   int                       // GetVNet calls
+	resLocks    map[string][]azure.Lock   // ListResourceLocks by resource ID
+	resLockAsks []string                  // resource IDs asked for locks
+	acctDeps    []azure.AccountDeployment // ListAccountDeployments answer
+	acctDepsErr error
+	rgMissing   bool                // ResourceGroup reports Exists=false
+	lastWhatIf  azure.WhatIfRequest // last WhatIfRequest seen
+	restrReqs   []azure.PolicyRestrictionRequest
+	modelCalls  int      // ListModels calls
+	scopes      []string // scopes passed to ListLocks
+	permScopes  []string // scopes passed to EffectiveActions
 }
 
 func (f *fake) Context(context.Context, azure.ContextRequest) (azure.Context, error) {
@@ -57,9 +70,32 @@ func (f *fake) ListResources(context.Context, azure.InventoryQuery) (azure.Resou
 	return azure.ResourceList{Resources: f.resources}, f.err
 }
 func (f *fake) ResourceGroup(context.Context, string, string) (azure.ResourceGroupInfo, error) {
-	return azure.ResourceGroupInfo{Exists: true}, f.err
+	return azure.ResourceGroupInfo{Exists: !f.rgMissing}, f.err
 }
-func (f *fake) ListLocks(context.Context, string) ([]azure.Lock, error) { return f.locks, f.err }
+func (f *fake) ListLocks(_ context.Context, scope string) ([]azure.Lock, error) {
+	f.scopes = append(f.scopes, scope)
+	return f.locks, f.err
+}
+func (f *fake) GetVNet(context.Context, string) (azure.VNet, error) {
+	f.vnetCalls++
+	if f.err != nil {
+		return azure.VNet{}, f.err
+	}
+	if f.vnet.Location == "" {
+		return azure.VNet{}, &azure.APIError{Operation: "vnet.get", Status: 404}
+	}
+	return f.vnet, nil
+}
+func (f *fake) ListResourceLocks(_ context.Context, id string) ([]azure.Lock, error) {
+	f.resLockAsks = append(f.resLockAsks, id)
+	return f.resLocks[id], f.err
+}
+func (f *fake) ListAccountDeployments(context.Context, string, string, string) ([]azure.AccountDeployment, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.acctDeps, f.acctDepsErr
+}
 func (f *fake) GetSubnet(context.Context, string) (azure.Subnet, error) { return f.subnet, f.err }
 func (f *fake) EffectiveActions(_ context.Context, r azure.PermissionRequest) ([]azure.ActionDecision, error) {
 	if f.err != nil {
@@ -67,6 +103,7 @@ func (f *fake) EffectiveActions(_ context.Context, r azure.PermissionRequest) ([
 	}
 	var out []azure.ActionDecision
 	f.asked = append(f.asked, r.Actions...)
+	f.permScopes = append(f.permScopes, r.Scope)
 	for _, a := range r.Actions {
 		d := f.decisions[a]
 		if d == "" {
@@ -77,6 +114,7 @@ func (f *fake) EffectiveActions(_ context.Context, r azure.PermissionRequest) ([
 	return out, nil
 }
 func (f *fake) ListModels(context.Context, azure.ModelQuery) ([]azure.ModelAvailability, error) {
+	f.modelCalls++
 	return f.models, f.err
 }
 func (f *fake) ListUsages(context.Context, string, string) ([]azure.QuotaUsage, error) {
@@ -85,14 +123,13 @@ func (f *fake) ListUsages(context.Context, string, string) ([]azure.QuotaUsage, 
 func (f *fake) ListAssignments(context.Context, string) ([]azure.PolicyAssignment, error) {
 	return nil, f.err
 }
-func (f *fake) ListExemptions(context.Context, string) ([]azure.PolicyExemption, error) {
-	return nil, f.err
-}
-func (f *fake) CheckRestrictions(context.Context, azure.PolicyRestrictionRequest) ([]azure.PolicyRestriction, error) {
+func (f *fake) CheckRestrictions(_ context.Context, r azure.PolicyRestrictionRequest) ([]azure.PolicyRestriction, error) {
+	f.restrReqs = append(f.restrReqs, r)
 	return f.restr, f.err
 }
 func (f *fake) Run(_ context.Context, r azure.WhatIfRequest) (azure.WhatIfResult, error) {
 	f.whatIfRan++
+	f.lastWhatIf = r
 	if !r.OptIn {
 		return azure.WhatIfResult{}, errors.New("what-if without opt-in")
 	}
@@ -131,12 +168,20 @@ func (f *fake) CheckReportedActions(ctx context.Context, r azure.PermissionReque
 	return f.EffectiveActions(ctx, r)
 }
 
+const (
+	rgSchema  = "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#"
+	subSchema = "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#"
+)
+
+// rgTemplate is a minimal resource-group-scope compiled template.
+var rgTemplate = []byte(`{"$schema":"` + rgSchema + `","resources":[]}`)
+
 func deps(f *fake) Deps {
 	return Deps{
 		Context: f, Inventory: f, Permissions: f, Models: f, Policy: f, WhatIf: f, Names: f,
-		Regions: f, Deployments: f, SubnetLinks: f, Evidence: f,
+		Regions: f, Deployments: f, SubnetLinks: f, Evidence: f, Extras: f, Foundry: f,
 		Target:      Target{TenantID: "t", SubscriptionID: "s", ResourceGroup: "rg", Location: "eastus"},
-		WhatIfOptIn: true, Template: []byte(`{"resources":[]}`),
+		WhatIfOptIn: true, Template: rgTemplate,
 	}
 }
 
@@ -274,29 +319,56 @@ func TestDEP008(t *testing.T) {
 	cases := []struct {
 		name    string
 		changes []azure.WhatIfChange
+		pot     []azure.WhatIfChange
+		codes   []string
 		allowed []string
 		want    outcome
+		text    string
 	}{
-		{"delete", []azure.WhatIfChange{{ResourceID: id, ChangeType: azure.ChangeDelete}}, nil, oFail},
-		{"replace", []azure.WhatIfChange{{ResourceID: id, ChangeType: azure.ChangeReplace}}, nil, oFail},
-		{"allowed delete", []azure.WhatIfChange{{ResourceID: id, ChangeType: azure.ChangeDelete}}, []string{strings.ToUpper(id)}, oPass},
-		{"modify", []azure.WhatIfChange{{ResourceID: id, ChangeType: azure.ChangeModify}}, nil, oPass},
-		{"unknown is uncertain", []azure.WhatIfChange{{ResourceID: id, ChangeType: azure.ChangeUnknown}}, nil, oUncertain},
+		{"delete", []azure.WhatIfChange{{ResourceID: id, ChangeType: azure.ChangeDelete}}, nil, nil, nil, oFail, id},
+		{"allowed delete is never a pass in incremental mode", []azure.WhatIfChange{{ResourceID: id, ChangeType: azure.ChangeDelete}}, nil, nil, []string{strings.ToUpper(id)}, oUncertain, "Incremental mode cannot report deletions"},
+		{"modify is not a violation but the clean result is uncertain", []azure.WhatIfChange{{ResourceID: id, ChangeType: azure.ChangeModify}}, nil, nil, nil, oUncertain, "recreation from immutable-property changes is not detected"},
+		{"empty result is uncertain, never a pass", nil, nil, nil, nil, oUncertain, "Incremental mode cannot report deletions; recreation from immutable-property changes is not detected"},
+		{"create only is uncertain", []azure.WhatIfChange{{ResourceID: id, ChangeType: azure.ChangeCreate}}, nil, nil, nil, oUncertain, ""},
+		{"deploy is aggregated and uncertain", []azure.WhatIfChange{{ResourceID: id, ChangeType: azure.ChangeDeploy}}, nil, nil, nil, oUncertain, "Deploy"},
+		{"unknown is uncertain", []azure.WhatIfChange{{ResourceID: id, ChangeType: azure.ChangeUnknown}}, nil, nil, nil, oUncertain, "cannot be classified"},
+		{"unsupported is uncertain", []azure.WhatIfChange{{ResourceID: id, ChangeType: azure.ChangeUnsupported}}, nil, nil, nil, oUncertain, "Unsupported"},
+		{"ignore is uncertain", []azure.WhatIfChange{{ResourceID: id, ChangeType: azure.ChangeIgnore}}, nil, nil, nil, oUncertain, "Ignore"},
+		{"potential delete is uncertain evidence, not a finding", nil, []azure.WhatIfChange{{ResourceID: id, ChangeType: azure.ChangeDelete}}, nil, nil, oUncertain, "potentialChanges"},
+		{"diagnostics are noted", nil, nil, []string{"InvalidTemplate"}, nil, oUncertain, "InvalidTemplate"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			f := &fake{whatif: azure.WhatIfResult{Changes: c.changes}}
+			f := &fake{whatif: azure.WhatIfResult{Changes: c.changes, PotentialChanges: c.pot, DiagnosticCodes: c.codes}}
 			d := deps(f)
 			d.AllowedDeletes = c.allowed
-			d.Template = []byte(`{"resources":[]}`)
 			out := run(t, d, "FND-DEP-008", res("Microsoft.Storage/storageAccounts", "stfoo"))
 			if got := classify(out); got != c.want {
 				t.Fatalf("got %s want %s: %+v", got, c.want, out)
 			}
-			if c.want == oFail && !strings.Contains(out.Findings[0].Evidence, id) {
-				t.Fatalf("evidence lacks resource id: %q", out.Findings[0].Evidence)
+			text := ""
+			if out.Skipped != nil {
+				text = out.Skipped.Reason
+			}
+			for _, fd := range out.Findings {
+				text += fd.Evidence
+			}
+			if c.text != "" && !strings.Contains(text, c.text) {
+				t.Fatalf("output lacks %q: %q", c.text, text)
 			}
 		})
+	}
+}
+
+// TestDEP008NoReplaceChangeType: ARM has no Replace change type, so a Delete
+// and a Create of one ID are two separate predictions and only the Delete fails.
+func TestDEP008NoReplaceChangeType(t *testing.T) {
+	id := "/subscriptions/s/resourceGroups/rg/providers/Microsoft.Storage/storageAccounts/old"
+	f := &fake{whatif: azure.WhatIfResult{Changes: []azure.WhatIfChange{
+		{ResourceID: id, ChangeType: azure.ChangeCreate}, {ResourceID: id, ChangeType: azure.ChangeDelete}}}}
+	out := run(t, deps(f), "FND-DEP-008", res("Microsoft.Storage/storageAccounts", "stfoo"))
+	if classify(out) != oFail || len(out.Findings) != 1 || strings.Contains(out.Findings[0].Evidence, "Replace") {
+		t.Fatalf("got %+v", out)
 	}
 }
 
@@ -385,8 +457,8 @@ func TestDEP010PolicyMarginOverride(t *testing.T) {
 		Policy: policyMap{"preflight.deploymentHistoryMargin": 40},
 	}
 	out := runInput(t, deps(f), "FND-DEP-010", in)
-	if got := classify(out); got != oPass {
-		t.Fatalf("got %s want pass: %+v", got, out)
+	if got := classify(out); got != oUncertain {
+		t.Fatalf("got %s want uncertain (CanNotDelete + clean incremental what-if): %+v", got, out)
 	}
 }
 
@@ -417,7 +489,7 @@ func TestDEP011(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			sn := ok
 			c.mutate(&sn)
-			f := &fake{subnet: sn, resources: []azure.Resource{{ID: sn.VNetID, Location: "eastus"}}}
+			f := &fake{subnet: sn, vnet: azure.VNet{ID: sn.VNetID, Location: "eastus"}}
 			out := run(t, deps(f), "FND-DEP-011", agentAccount(c.sub))
 			if got := classify(out); got != c.want {
 				t.Fatalf("got %s want %s: %+v", got, c.want, out)
@@ -435,8 +507,8 @@ func TestDEP011ExpressionNamedAccountDoesNotSelfFlag(t *testing.T) {
 	sn := azure.Subnet{ID: sid, Name: "agents", VNetID: "/subscriptions/s/resourceGroups/rg/providers/Microsoft.Network/virtualNetworks/v",
 		AddressPrefixes: []string{"10.0.1.0/24"}, DelegationServices: []string{"Microsoft.App/environments"}}
 	f := &fake{
-		subnet:    sn,
-		resources: []azure.Resource{{ID: sn.VNetID, Location: "eastus"}},
+		subnet: sn,
+		vnet:   azure.VNet{ID: sn.VNetID, Location: "eastus"},
 		links: azure.SubnetLinkSet{
 			ServiceAssociationLinks: []azure.NetworkLink{{
 				Name: "sal", Link: "/subscriptions/s/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/acct-existing/projects/p1", LinkedResourceType: "Microsoft.CognitiveServices/accounts/projects",
@@ -610,9 +682,10 @@ func TestDEP010DeploymentHistory(t *testing.T) {
 		{"near limit with CanNotDelete on the group", &fake{locks: []azure.Lock{cnd}, deploys: azure.DeploymentCount{Count: 790}}, nil, oFail, "790 of 800"},
 		{"at limit", &fake{locks: []azure.Lock{cnd}, deploys: azure.DeploymentCount{Count: 800}}, nil, oFail, "800 of 800"},
 		{"truncated count is reported as a lower bound", &fake{locks: []azure.Lock{cnd}, deploys: azure.DeploymentCount{Count: 800, Truncated: true}}, nil, oFail, "at least"},
-		{"history well under the limit", &fake{locks: []azure.Lock{cnd}, deploys: azure.DeploymentCount{Count: 100}}, nil, oPass, ""},
+		// A CanNotDelete lock plus a clean Incremental-mode what-if is uncertain: it cannot report deletions.
+		{"history well under the limit", &fake{locks: []azure.Lock{cnd}, deploys: azure.DeploymentCount{Count: 100}}, nil, oUncertain, "Incremental mode cannot report deletions"},
 		{"no lock, large history is not this rule's failure", &fake{deploys: azure.DeploymentCount{Count: 799}}, nil, oPass, ""},
-		{"CanNotDelete on another scope", &fake{locks: []azure.Lock{{ID: "/l/x", Name: "x", Scope: rg + "/providers/Microsoft.Storage/storageAccounts/other", Level: "CanNotDelete"}}, deploys: azure.DeploymentCount{Count: 799}}, nil, oPass, ""},
+		{"CanNotDelete on another scope", &fake{locks: []azure.Lock{{ID: "/l/x", Name: "x", Scope: rg + "/providers/Microsoft.Storage/storageAccounts/other", Level: "CanNotDelete"}}, deploys: azure.DeploymentCount{Count: 799}}, nil, oUncertain, "Incremental mode cannot report deletions"},
 		{"history capability missing", &fake{locks: []azure.Lock{cnd}}, func(d *Deps) { d.Deployments = nil }, oSkipped, "Microsoft.Resources/deployments/read"},
 		{"CanNotDelete without what-if is uncertain", &fake{locks: []azure.Lock{cnd}, deploys: azure.DeploymentCount{Count: 1}}, func(d *Deps) { d.WhatIfOptIn = false }, oUncertain, ""},
 	}
@@ -661,7 +734,7 @@ func TestDEP011SubnetLinks(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			f := &fake{subnet: sn, links: c.links, resources: []azure.Resource{{ID: vnet, Location: "eastus"}}}
+			f := &fake{subnet: sn, links: c.links, vnet: azure.VNet{ID: vnet, Location: "eastus"}}
 			d := deps(f)
 			if c.mutate != nil {
 				c.mutate(&d)
@@ -683,7 +756,7 @@ func TestDEP011SubnetLinks(t *testing.T) {
 		})
 	}
 	// Restricted identity on the links read names the capability.
-	f := &fake{subnet: sn, resources: []azure.Resource{{ID: vnet, Location: "eastus"}}}
+	f := &fake{subnet: sn, vnet: azure.VNet{ID: vnet, Location: "eastus"}}
 	d := deps(f)
 	d.SubnetLinks = unavailableLinks{}
 	out := run(t, d, "FND-DEP-011", agentAccount(sid))
@@ -705,9 +778,11 @@ func TestCancelledContext(t *testing.T) {
 	// Rules that call Azure must surface cancellation, never a skip or pass.
 	callsAzure := map[string]bool{
 		"FND-DEP-001": true, "FND-DEP-002": true, "FND-DEP-003": true, "FND-DEP-006": true,
-		"FND-DEP-007": true, "FND-DEP-008": true, "FND-DEP-009": true, "FND-DEP-010": true, "FND-DEP-012": true,
+		"FND-DEP-007": true, "FND-DEP-008": true, "FND-DEP-009": true, "FND-DEP-010": true, "FND-DEP-011": true, "FND-DEP-012": true,
 	}
-	in := &sdk.Input{ARM: fakeARM{[]sdk.ARMResource{res("Microsoft.Storage/storageAccounts", "stfoo123"), res(typeAccount, "acct")}}}
+	// The account declares an agent network injection so that DEP-002 and DEP-011 call Azure.
+	in := &sdk.Input{ARM: fakeARM{[]sdk.ARMResource{res("Microsoft.Storage/storageAccounts", "stfoo123"),
+		agentAccount("/subscriptions/s/resourceGroups/rg/providers/Microsoft.Network/virtualNetworks/v/subnets/agents")}}}
 	for _, r := range Rules(deps(f)) {
 		out, err := r.Evaluate(ctx, in)
 		if callsAzure[r.ID()] {
@@ -744,7 +819,7 @@ func TestScopePolicyDEP011(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			f := &fake{subnet: sn, resources: []azure.Resource{{ID: vnet, Location: "eastus"}}}
+			f := &fake{subnet: sn, vnet: azure.VNet{ID: vnet, Location: "eastus"}}
 			d := deps(f)
 			d.ApprovedScopes = c.approved
 			if c.mutate != nil {
@@ -781,11 +856,12 @@ func TestScopePolicyDEP008(t *testing.T) {
 		noRG     bool
 		want     outcome
 	}{
-		{"in scope", in, azure.ChangeCreate, nil, false, oPass},
-		{"approved", out, azure.ChangeCreate, []string{"/subscriptions/s/resourceGroups/other"}, false, oPass},
+		// A clean what-if is uncertain, never a pass (Incremental mode cannot report deletions).
+		{"in scope", in, azure.ChangeCreate, nil, false, oUncertain},
+		{"approved", out, azure.ChangeCreate, []string{"/subscriptions/s/resourceGroups/other"}, false, oUncertain},
 		{"unapproved create", out, azure.ChangeCreate, nil, false, oFail},
 		{"unapproved modify", out, azure.ChangeModify, nil, false, oFail},
-		{"unapproved no-change is ignored", out, azure.ChangeNoChange, nil, false, oPass},
+		{"unapproved no-change is ignored", out, azure.ChangeNoChange, nil, false, oUncertain},
 		{"unresolved target", out, azure.ChangeCreate, nil, true, oSkipped},
 	}
 	for _, c := range cases {

@@ -12,8 +12,11 @@ import (
 
 // Options configures the read-only Azure adapters. All fields are optional.
 type Options struct {
-	// Credential defaults to NewDefaultCredential(nil) (azd, then az CLI).
+	// Credential defaults to NewDefaultCredentialForTenant(nil, TenantID) (azd, then az CLI).
 	Credential TokenCredential
+	// TenantID is the target tenant passed to the default credential's CLI
+	// calls; ignored when Credential is set.
+	TenantID string
 	// Endpoint is the ARM endpoint; defaults to DefaultEndpoint.
 	Endpoint string
 	// HTTPClient defaults to a client with a 60s timeout and no redirects.
@@ -40,6 +43,7 @@ var (
 	_ Policy          = (*Adapter)(nil)
 	_ WhatIf          = (*Adapter)(nil)
 	_ Names           = (*Adapter)(nil)
+	_ InventoryExtras = (*Adapter)(nil)
 	_ RuntimeFoundry  = (*Adapter)(nil)
 	_ RuntimeRBAC     = (*Adapter)(nil)
 	_ RuntimeDNS      = (*Adapter)(nil)
@@ -58,7 +62,7 @@ func New(o Options) (*Adapter, error) {
 	}
 	cred := o.Credential
 	if cred == nil {
-		cred = NewDefaultCredential(nil)
+		cred = NewDefaultCredentialForTenant(nil, o.TenantID)
 	}
 	hc := o.HTTPClient
 	if hc == nil {
@@ -89,7 +93,7 @@ func New(o Options) (*Adapter, error) {
 // Client returns the aggregate wired to this adapter.
 func (a *Adapter) Client() Client {
 	return Client{Context: a, Inventory: a, Permissions: a, Models: a, Policy: a, WhatIf: a, Names: a,
-		Regions: a, Deployments: a, SubnetLinks: a, Evidence: a,
+		Regions: a, Deployments: a, SubnetLinks: a, Evidence: a, Extras: a,
 		Foundry: a, RBAC: a, DNS: a, Monitor: a}
 }
 

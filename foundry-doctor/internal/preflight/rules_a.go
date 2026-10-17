@@ -2,7 +2,9 @@ package preflight
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"sort"
 	"strings"
 	"time"
@@ -51,7 +53,19 @@ func (e *env) dep001(ctx context.Context, _ *sdk.Input) (sdk.Result, error) {
 	return a.result(), nil
 }
 
-// DEP-002: resource provider registration.
+// DEP-002: resource provider registration (rules/catalog/dep/FND-DEP-002.yaml).
+//
+// ARM registers the providers of resources the template DEFINES by itself, so a
+// template-defined namespace that is not registered is not a DEP-002 finding
+// (DEP-003 reports whether the deployer may register it). The required set is
+// (a) supporting providers that the template references without defining them
+// and (b) the network-secured Agent Service list when a Foundry account
+// declares an agent network injection. Part (a) cannot be derived from the
+// compiled resource list: an `existing` resource is not a deployed resource and
+// is compiled into an expression the model does not expose, so (a) is empty
+// here (UNVERIFIED completeness; recorded in the report and the tests). A
+// provider in the Registering state is not blocked by the catalogue, but it is
+// not proven registered either, so it is reported as uncertain, never a pass.
 func (e *env) dep002(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 	rs, ok := resourcesOf(in)
 	if !ok {
@@ -63,33 +77,16 @@ func (e *env) dep002(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 	if m := needTarget(false, e.d.Target); m != "" {
 		return skipRes("", m), nil
 	}
-	need := map[string]bool{}
 	injected := false
 	for _, r := range rs {
-		if ns := namespaceOf(r.Type); ns != "" && !strings.EqualFold(ns, "Microsoft.Resources") {
-			need[strings.ToLower(ns)] = true
-		}
 		if strings.EqualFold(r.Type, typeAccount) && len(injections(r)) > 0 {
 			injected = true
 		}
 	}
-	display := map[string]string{}
-	for _, r := range rs {
-		display[strings.ToLower(namespaceOf(r.Type))] = namespaceOf(r.Type)
-	}
-	if injected {
-		for _, ns := range networkSecuredNamespaces {
-			need[strings.ToLower(ns)] = true
-			display[strings.ToLower(ns)] = ns
-		}
-	}
-	if len(need) == 0 {
+	if !injected {
 		return sdk.Result{}, nil
 	}
-	var names []string
-	for k := range need {
-		names = append(names, display[k])
-	}
+	names := append([]string(nil), networkSecuredNamespaces...)
 	sort.Strings(names)
 	states, err := e.d.Context.ProviderStates(ctx, e.sub(), names)
 	if err != nil {
@@ -105,15 +102,24 @@ func (e *env) dep002(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 		switch {
 		case !ok:
 			a.note("registration state of %s was not returned", n)
-		case strings.EqualFold(st, "Registered"), strings.EqualFold(st, "Registering"):
+		case strings.EqualFold(st, "Registered"):
+		case strings.EqualFold(st, "Registering"):
+			a.note("resource provider %s is Registering: not blocked, but not yet proven Registered", n)
 		default:
-			a.add(idFinding("Microsoft.Resources/providers", e.subScope()+"/providers/"+n, fmt.Sprintf("resource provider %s is %s; registration is required (this tool never registers providers)", n, st)))
+			a.add(idFinding("Microsoft.Resources/providers", e.subScope()+"/providers/"+n, fmt.Sprintf("resource provider %s is %s; the network-secured Agent Service setup needs it registered (this tool never registers providers)", n, st)))
 		}
 	}
 	return a.result(), nil
 }
 
-// DEP-003: effective write permissions at the target scope.
+// DEP-003: effective write permissions at the deployment scope.
+//
+// Resource-group templates are checked with the Permissions API at the target
+// resource group (the evidence the catalogue prefers). A subscription-scope
+// template is checked at the subscription: the Permissions API has no
+// subscription variant, so the role-assignment evaluation
+// (Permissions.EffectiveActions) is the only evidence there and it is
+// non-conclusive. Management-group and tenant scopes are skipped.
 func (e *env) dep003(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 	rs, ok := resourcesOf(in)
 	if !ok {
@@ -122,7 +128,17 @@ func (e *env) dep003(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 	if e.d.Permissions == nil && e.d.Evidence == nil {
 		return skipRes("", missingCap("Microsoft.Authorization/permissions read", "Microsoft.Authorization/permissions/read")), nil
 	}
-	if m := needTarget(true, e.d.Target); m != "" {
+	var a acc
+	ds, why := e.deploymentScope(in)
+	switch ds {
+	case scopeManagementGroup, scopeTenant:
+		return skipRes("", sdk.SkipInputUnavailable+": deployer permissions for a "+ds.String()+"-scope template are not evaluated (resource-group and subscription scope only)"), nil
+	case scopeUnknown:
+		a.note("the deployment scope is unknown (%s), so the resource group scope is assumed", why)
+		ds = scopeResourceGroup
+	}
+	subScoped := ds == scopeSubscription
+	if m := needTarget(!subScoped, e.d.Target); m != "" {
 		return skipRes("", m), nil
 	}
 	actions := map[string]bool{"Microsoft.Resources/deployments/write": true}
@@ -136,7 +152,6 @@ func (e *env) dep003(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 		}
 		actions[r.Type+"/write"] = true
 	}
-	var a acc
 	// <provider>/register/action is required for each template namespace
 	// whose registration state (DEP-002 evidence) is not Registered.
 	registerFor := e.unregisteredNamespaces(ctx, rs, &a)
@@ -144,37 +159,47 @@ func (e *env) dep003(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 		actions[ns+"/register/action"] = true
 	}
 	var list []string
-	for a := range actions {
-		list = append(list, a)
+	for act := range actions {
+		list = append(list, act)
 	}
 	sort.Strings(list)
-	scope := e.rgScope()
-	var ds []azure.ActionDecision
+	scope, label := e.rgScope(), "the resource group"
+	if subScoped {
+		scope, label = e.subScope(), "the subscription"
+	}
+	var decisions []azure.ActionDecision
 	var err error
-	if e.d.Evidence != nil {
+	switch {
+	case subScoped:
+		if e.d.Permissions == nil {
+			return skipRes("", missingCap("Microsoft.Authorization/roleAssignments read at subscription scope (the Permissions API has no subscription-scope variant)", "Microsoft.Authorization/roleAssignments/read")), nil
+		}
+		decisions, err = e.d.Permissions.EffectiveActions(ctx, azure.PermissionRequest{Scope: scope, Actions: list})
+		a.note("a subscription-scope deployment cannot use the Permissions API; permissions were derived from role assignments, which is non-conclusive")
+	case e.d.Evidence != nil:
 		// Primary evidence per FND-DEP-003: GET .../providers/Microsoft.Authorization/permissions.
-		ds, err = e.d.Evidence.CheckReportedActions(ctx, azure.PermissionRequest{Scope: scope, Actions: list})
-	} else {
-		ds, err = e.d.Permissions.EffectiveActions(ctx, azure.PermissionRequest{Scope: scope, Actions: list})
+		decisions, err = e.d.Evidence.CheckReportedActions(ctx, azure.PermissionRequest{Scope: scope, Actions: list})
+	default:
+		decisions, err = e.d.Permissions.EffectiveActions(ctx, azure.PermissionRequest{Scope: scope, Actions: list})
 		a.note("the Microsoft.Authorization/permissions read capability is unavailable; permissions were derived from role assignments instead")
 	}
 	if err != nil {
 		return sdk.Result{}, err
 	}
-	for _, d := range ds {
+	for _, d := range decisions {
 		switch d.Decision {
 		case azure.DecisionDenied:
 			why := d.Reason
 			if why == "" {
 				why = azure.ReasonNoGrantingRole
 			}
-			a.add(idFinding("Microsoft.Authorization/permissions", scope, fmt.Sprintf("action %s is not granted at the resource group (%s); deployment is likely to be denied", d.Action, why)))
+			a.add(idFinding("Microsoft.Authorization/permissions", scope, fmt.Sprintf("action %s is not granted at %s (%s); deployment is likely to be denied", d.Action, label, why)))
 		case azure.DecisionUnknown:
 			a.note("could not evaluate %s (%s)", d.Action, d.Reason)
 		}
 	}
-	if len(ds) < len(list) {
-		a.note("permission decisions were returned for %d of %d required actions", len(ds), len(list))
+	if len(decisions) < len(list) {
+		a.note("permission decisions were returned for %d of %d required actions", len(decisions), len(list))
 	}
 	a.note("permissions are reported evidence, not proof: deny assignments, ABAC conditions, locks, policy and PIM activation are not reflected")
 	return a.result(), nil
@@ -329,7 +354,48 @@ func capacityOf(r sdk.ARMResource) (float64, bool) {
 	return 0, false
 }
 
+// splitDeploymentName splits the compiled name of an account deployment
+// ("<account>/<deployment>") when both parts are literal.
+func splitDeploymentName(name string) (account, deployment string, ok bool) {
+	parts := strings.Split(name, "/")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" || isExpr(parts[0]) || isExpr(parts[1]) || isExpr(name) {
+		return "", "", false
+	}
+	return parts[0], parts[1], true
+}
+
+// existingDeployments lists the deployments of an account once per run
+// (Foundry.ListAccountDeployments, GET .../accounts/{a}/deployments). An account
+// that does not exist yet has none. Any other failure is returned.
+func (e *env) existingDeployments(ctx context.Context, account string) ([]azure.AccountDeployment, error) {
+	key := strings.ToLower(account)
+	e.mu.Lock()
+	c, ok := e.acctDeps[key]
+	e.mu.Unlock()
+	if ok {
+		return c.list, c.err
+	}
+	l, err := e.d.Foundry.ListAccountDeployments(ctx, e.sub(), e.d.Target.ResourceGroup, account)
+	var ae *azure.APIError
+	if errors.As(err, &ae) && ae.Status == http.StatusNotFound {
+		l, err = nil, nil
+	}
+	e.mu.Lock()
+	e.acctDeps[key] = acctDepsEntry{l, err}
+	e.mu.Unlock()
+	return l, err
+}
+
 // DEP-005: quota headroom.
+//
+// The requested capacity of each planned deployment is summed per region and
+// quota line (usage name) and compared with limit minus current value. A
+// planned deployment that already exists with the same account, name and SKU is
+// an update, so its current capacity is added back before the comparison. The
+// capacity unit is taken as the usages API reports it; a line without a unit is
+// uncertain. When the offset cannot be computed (no Foundry capability, an
+// unreadable account, a name that is not literal) an apparent shortfall is
+// uncertain, not a finding.
 func (e *env) dep005(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 	rs, ok := resourcesOf(in)
 	if !ok {
@@ -345,14 +411,17 @@ func (e *env) dep005(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 	if m := needTarget(false, e.d.Target); m != "" {
 		return skipRes("", m), nil
 	}
-	type req struct {
-		total float64
-		first sdk.ARMResource
-		names []string
-		loc   string
+	type planned struct {
+		r        sdk.ARMResource
+		capacity float64
+		sku      string
+	}
+	type group struct {
+		loc, usage string
+		items      []planned
 	}
 	var a acc
-	reqs := map[string]*req{}
+	groups := map[string]*group{}
 	for _, r := range deps {
 		capy, ok := capacityOf(r)
 		if !ok {
@@ -372,9 +441,6 @@ func (e *env) dep005(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 		}
 		usage := ""
 		for _, m := range list {
-			if !strings.EqualFold(m.Name, name) {
-				continue
-			}
 			for _, s := range m.SKUs {
 				if strings.EqualFold(s.Name, r.SKUName) {
 					usage = s.UsageName
@@ -386,72 +452,106 @@ func (e *env) dep005(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 			continue
 		}
 		k := strings.ToLower(loc + "|" + usage)
-		q := reqs[k]
-		if q == nil {
-			q = &req{first: r, loc: loc}
-			reqs[k] = q
+		g := groups[k]
+		if g == nil {
+			g = &group{loc: loc, usage: usage}
+			groups[k] = g
 		}
-		q.total += capy
-		q.names = append(q.names, r.Name)
+		g.items = append(g.items, planned{r: r, capacity: capy, sku: r.SKUName})
 	}
-	keys := make([]string, 0, len(reqs))
-	for k := range reqs {
+	keys := make([]string, 0, len(groups))
+	for k := range groups {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
 	usages := map[string][]azure.QuotaUsage{}
 	for _, k := range keys {
-		q := reqs[k]
-		usage := k[strings.Index(k, "|")+1:]
-		us, ok := usages[strings.ToLower(q.loc)]
+		g := groups[k]
+		us, ok := usages[strings.ToLower(g.loc)]
 		if !ok {
 			var err error
-			us, err = e.d.Models.ListUsages(ctx, e.sub(), q.loc)
+			us, err = e.d.Models.ListUsages(ctx, e.sub(), g.loc)
 			if err != nil {
 				return sdk.Result{}, err
 			}
-			usages[strings.ToLower(q.loc)] = us
+			usages[strings.ToLower(g.loc)] = us
 		}
 		var u *azure.QuotaUsage
 		for i := range us {
-			if strings.EqualFold(us[i].Name, usage) {
+			if strings.EqualFold(us[i].Name, g.usage) {
 				u = &us[i]
 			}
 		}
 		if u == nil || u.Unit == "" {
-			a.note("quota line %s in %s has an unknown unit mapping", usage, q.loc)
+			a.note("quota line %s in %s has an unknown unit mapping", g.usage, g.loc)
 			continue
+		}
+		var total float64
+		for _, it := range g.items {
+			total += it.capacity
 		}
 		avail := u.Limit - u.Current
-		if q.total <= avail {
+		if total <= avail {
 			continue
 		}
-		if e.existingDeployment(ctx, q.names) {
-			a.note("quota %s in %s looks insufficient (%.0f requested, %.0f free) but a deployment of the same name already exists, so its capacity cannot be offset", usage, q.loc, q.total, avail)
+		// Apparent shortfall: add back the capacity of deployments that already exist.
+		offset, unknown := 0.0, false
+		for _, it := range g.items {
+			off, known, why := e.existingCapacity(ctx, it.r, it.sku)
+			if !known {
+				unknown = true
+				a.note("quota %s in %s looks insufficient but the capacity already held by %s cannot be offset (%s)", g.usage, g.loc, it.r.Name, why)
+				continue
+			}
+			offset += off
+		}
+		if unknown {
 			continue
 		}
-		a.add(tmplFinding(q.first, fmt.Sprintf("requested %.0f of quota %s in %s but only %.0f of %.0f is free", q.total, usage, q.loc, avail, u.Limit)))
+		if total-offset <= avail {
+			continue
+		}
+		first := g.items[0].r
+		ev := fmt.Sprintf("requested %.0f of quota %s in %s but only %.0f of %.0f is free", total, g.usage, g.loc, avail, u.Limit)
+		if offset > 0 {
+			ev += fmt.Sprintf(" (after adding back %.0f already held by existing deployments of the same name and SKU)", offset)
+		}
+		a.add(tmplFinding(first, ev))
 	}
 	return a.result(), nil
 }
 
-// existingDeployment reports whether any named deployment exists (best effort).
-func (e *env) existingDeployment(ctx context.Context, names []string) bool {
-	if e.d.Inventory == nil || e.rgScope() == "" {
-		return false
+// existingCapacity returns the capacity an existing deployment of the same
+// account, name and SKU already holds (an update replaces it). known is false,
+// with the reason, when existence could not be established.
+func (e *env) existingCapacity(ctx context.Context, r sdk.ARMResource, sku string) (capacity float64, known bool, why string) {
+	account, dep, ok := splitDeploymentName(r.Name)
+	if !ok {
+		return 0, false, "the deployment name is not a literal <account>/<deployment>"
 	}
-	l, err := e.listExisting(ctx, typeDeployment)
+	if e.d.Foundry == nil {
+		return 0, false, "the Microsoft.CognitiveServices/accounts/deployments/read capability is not available"
+	}
+	if e.d.Target.ResourceGroup == "" {
+		return 0, false, "the target resource group is not set"
+	}
+	list, err := e.existingDeployments(ctx, account)
 	if err != nil {
-		return false
+		return 0, false, oneLine(azureReason(err))
 	}
-	for _, n := range names {
-		for _, r := range l.Resources {
-			if strings.EqualFold(lastSegment(r.Name), lastSegment(n)) {
-				return true
-			}
+	for _, d := range list {
+		if !strings.EqualFold(lastSegment(d.Name), dep) {
+			continue
 		}
+		if d.SKUName != "" && !strings.EqualFold(d.SKUName, sku) {
+			return 0, false, "the existing deployment uses SKU " + d.SKUName + ", a different quota line"
+		}
+		if d.SKUName == "" {
+			return 0, false, "the SKU of the existing deployment was not reported"
+		}
+		return float64(d.CurrentCapacity), true, ""
 	}
-	return false
+	return 0, true, ""
 }
 
 var softDeleteKinds = map[string]azure.NameKind{
@@ -460,7 +560,25 @@ var softDeleteKinds = map[string]azure.NameKind{
 	"microsoft.apimanagement/service":      azure.NameAPIM,
 }
 
+// rgOfID returns the resource group segment of an ARM ID, "" when absent.
+func rgOfID(id string) string {
+	parts := strings.Split(id, "/")
+	for i := 0; i+1 < len(parts); i++ {
+		if strings.EqualFold(parts[i], "resourceGroups") {
+			return parts[i+1]
+		}
+	}
+	return ""
+}
+
 // DEP-006: soft-deleted name collisions.
+//
+// The catalogue matches a planned name against the subscription-wide list of
+// deleted entries. Whether a deleted entry blocks the name in another resource
+// group or region is not documented, so a match whose deleted resource group
+// or location differs from the planned resource is reported with a lower
+// confidence and says so. The evidence names the deleted entry's ID and
+// location (the purge path is keyed by location, resource group and name).
 func (e *env) dep006(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 	rs, ok := resourcesOf(in)
 	if !ok {
@@ -497,16 +615,34 @@ func (e *env) dep006(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 				continue
 			}
 			ev := fmt.Sprintf("name %s is held by soft-deleted %s %s", r.Name, kind, s.ID)
+			if s.Location != "" {
+				ev += " in " + s.Location
+			}
 			if s.ScheduledPurgeDate != "" {
 				ev += " (scheduled purge " + s.ScheduledPurgeDate + ")"
 			}
 			if s.PurgeProtection {
 				ev += "; purge protection is on, so it cannot be purged early"
 			}
+			f := tmplFinding(r, ev)
+			conf := sdk.ConfidenceHigh
 			if kind == azure.NameKeyVault {
-				ev += " (likely conflict)"
+				f.Evidence += " (likely conflict)"
+				conf = sdk.ConfidenceMedium
 			}
-			a.add(tmplFinding(r, ev))
+			var differs []string
+			if drg := rgOfID(s.ID); drg != "" && e.d.Target.ResourceGroup != "" && !strings.EqualFold(drg, e.d.Target.ResourceGroup) {
+				differs = append(differs, "resource group "+drg+" is not the target group "+e.d.Target.ResourceGroup)
+			}
+			if want := e.regionOf(r); s.Location != "" && want != "" && !isExpr(want) && normLoc(s.Location) != normLoc(want) {
+				differs = append(differs, "location "+s.Location+" is not the planned location "+want)
+			}
+			if len(differs) > 0 {
+				f.Evidence += "; the deleted entry's " + strings.Join(differs, " and ") + ", and the documentation does not say whether it blocks this name there"
+				conf = sdk.ConfidenceLow
+			}
+			f.Confidence = conf
+			a.add(f)
 		}
 	}
 	return a.result(), nil

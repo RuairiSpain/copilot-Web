@@ -68,6 +68,14 @@ func (a *Adapter) EffectiveActions(ctx context.Context, req PermissionRequest) (
 	}
 	oid := cl.ObjectID
 
+	// UNVERIFIED: the $filter value assignedTo('<oid>') is not defined in the
+	// 2022-04-01 Authorization spec (authorization-RoleAssignmentsCalls.json
+	// documents only "atScope()" and "principalId eq {id}" for $filter; the
+	// latter excludes group-inherited assignments, which is why assignedTo is
+	// kept). This fallback path is used
+	// only when the Permissions API evidence (CheckReportedActions) is not
+	// wired, and its result is always capped at "unknown/uncertain" by the
+	// caller. Do not rely on it without verifying the filter against a live API.
 	items, _, err := a.c.list(ctx, scope+"/providers/Microsoft.Authorization/roleAssignments",
 		url.Values{"$filter": {"assignedTo('" + oid + "')"}}, 0)
 	if err != nil {

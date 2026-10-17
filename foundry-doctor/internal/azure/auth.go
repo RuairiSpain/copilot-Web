@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -57,6 +58,7 @@ type cliSource struct {
 type chainCredential struct {
 	run     CommandRunner
 	now     func() time.Time
+	tenant  string
 	sources []cliSource
 	mu      sync.Mutex
 	cache   map[string]AccessToken
@@ -68,14 +70,39 @@ type chainCredential struct {
 // signed in with. No secret is stored or written; tokens live in memory until
 // shortly before expiry. A nil run uses ExecRunner.
 func NewDefaultCredential(run CommandRunner) TokenCredential {
-	return newChain(run, time.Now)
+	return newChainTenant(run, time.Now, "")
 }
 
+// NewDefaultCredentialForTenant is NewDefaultCredential for a target tenant:
+// the tenant is passed to `azd auth token --tenant-id` (azd cmd/auth_token.go
+// flag "tenant-id") and `az account get-access-token --tenant` (Azure CLI
+// profile module, flag "--tenant"), so a multi-tenant sign-in returns a token
+// for the tenant that owns the target subscription. An empty tenant keeps the
+// CLI default. A tenant that is neither a GUID nor a domain name is refused
+// (no token is requested), so it can never be read as a command-line option.
+// AZURE_ACCESS_TOKEN, when set, is used as is: its tenant is the caller's.
+func NewDefaultCredentialForTenant(run CommandRunner, tenant string) TokenCredential {
+	return newChainTenant(run, time.Now, tenant)
+}
+
+var tenantRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.-]{0,253}$`)
+
 func newChain(run CommandRunner, now func() time.Time) *chainCredential {
+	return newChainTenant(run, now, "")
+}
+
+func newChainTenant(run CommandRunner, now func() time.Time, tenant string) *chainCredential {
 	if run == nil {
 		run = ExecRunner
 	}
-	return &chainCredential{run: run, now: now, cache: map[string]AccessToken{}, sources: []cliSource{
+	tenant = strings.TrimSpace(tenant)
+	tenantArgs := func(flag string) []string {
+		if tenant == "" {
+			return nil
+		}
+		return []string{flag, tenant}
+	}
+	return &chainCredential{run: run, now: now, tenant: tenant, cache: map[string]AccessToken{}, sources: []cliSource{
 		{
 			name: "env",
 			args: func(string) []string { return nil },
@@ -89,7 +116,7 @@ func newChain(run CommandRunner, now func() time.Time) *chainCredential {
 		{
 			name: "azd",
 			args: func(scope string) []string {
-				return []string{"auth", "token", "--output", "json", "--scope", scope}
+				return append([]string{"auth", "token", "--output", "json", "--scope", scope}, tenantArgs("--tenant-id")...)
 			},
 			parse: func(out []byte) (AccessToken, error) {
 				var v struct {
@@ -105,7 +132,7 @@ func newChain(run CommandRunner, now func() time.Time) *chainCredential {
 		{
 			name: "az",
 			args: func(scope string) []string {
-				return []string{"account", "get-access-token", "--output", "json", "--resource", strings.TrimSuffix(scope, "/.default")}
+				return append([]string{"account", "get-access-token", "--output", "json", "--resource", strings.TrimSuffix(scope, "/.default")}, tenantArgs("--tenant")...)
 			},
 			parse: func(out []byte) (AccessToken, error) {
 				var v struct {
@@ -143,6 +170,10 @@ func (c *chainCredential) Token(ctx context.Context, scope string) (AccessToken,
 	c.mu.Unlock()
 	var failures []string
 	for _, s := range c.sources {
+		if s.name != "env" && c.tenant != "" && !tenantRe.MatchString(c.tenant) {
+			failures = append(failures, s.name+": target tenant is not a GUID or domain name")
+			continue
+		}
 		var (
 			out []byte
 			err error

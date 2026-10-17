@@ -39,6 +39,12 @@ type Target struct {
 	Location       string
 }
 
+// AccountDeployments lists the existing deployments of a Foundry account
+// (azure.RuntimeFoundry satisfies it).
+type AccountDeployments interface {
+	ListAccountDeployments(ctx context.Context, subscriptionID, resourceGroup, account string) ([]azure.AccountDeployment, error)
+}
+
 // Deps carries the Azure capabilities and run options. Any nil capability makes
 // the rules that need it skip, naming that capability.
 type Deps struct {
@@ -54,8 +60,17 @@ type Deps struct {
 	Deployments azure.DeploymentHistory
 	SubnetLinks azure.SubnetLinks
 	Evidence    azure.PermissionEvidence
+	// Extras reads one virtual network (DEP-011) and resource-level locks (DEP-010).
+	Extras azure.InventoryExtras
+	// Foundry lists the existing deployments of an account (DEP-005 offset).
+	Foundry AccountDeployments
 
 	Target Target
+	// Parameters are the deployment parameter values of the ROOT template
+	// resolved from the parameter file (ADR-018): a nil value means set but
+	// unresolved. They feed the what-if request after the rules remove secure
+	// and secret-looking parameters; secrets are never sent.
+	Parameters map[string]any
 	// WhatIfOptIn records the explicit --what-if / --preflight flag.
 	WhatIfOptIn bool
 	// ApprovedScopes are extra scopes (resource IDs) that cross-resource-group
@@ -95,7 +110,7 @@ func Rules(d Deps) []sdk.Rule {
 	if d.Now == nil {
 		d.Now = time.Now
 	}
-	e := &env{d: d, models: map[string]modelEntry{}, existing: map[string]existingEntry{}, soft: map[azure.NameKind]softEntry{}}
+	e := &env{d: d, models: map[string]modelEntry{}, acctDeps: map[string]acctDepsEntry{}, existing: map[string]existingEntry{}, soft: map[azure.NameKind]softEntry{}}
 	fns := []func(context.Context, *sdk.Input) (sdk.Result, error){
 		e.dep001, e.dep002, e.dep003, e.dep004, e.dep005, e.dep006,
 		e.dep007, e.dep008, e.dep009, e.dep010, e.dep011, e.dep012,
@@ -139,15 +154,23 @@ type env struct {
 
 	mu       sync.Mutex
 	models   map[string]modelEntry
+	acctDeps map[string]acctDepsEntry
 	existing map[string]existingEntry
 	soft     map[azure.NameKind]softEntry
 
 	wiOnce sync.Once
 	wi     whatIfOutcome
+
+	tfOnce sync.Once
+	tf     templateFacts
 }
 
 type modelEntry struct {
 	list []azure.ModelAvailability
+	err  error
+}
+type acctDepsEntry struct {
+	list []azure.AccountDeployment
 	err  error
 }
 type existingEntry struct {
@@ -156,11 +179,6 @@ type existingEntry struct {
 }
 type softEntry struct {
 	list []azure.SoftDeleted
-	err  error
-}
-type whatIfOutcome struct {
-	res  azure.WhatIfResult
-	skip string
 	err  error
 }
 
@@ -380,19 +398,31 @@ func needTarget(needRG bool, t Target) string {
 	return ""
 }
 
+// modelsFor returns the models offered in loc matching format and name. The
+// catalogue is read once per location and filtered here, so a template with
+// many deployments costs one ListModels call per region.
 func (e *env) modelsFor(ctx context.Context, loc, format, name string) ([]azure.ModelAvailability, error) {
-	key := strings.ToLower(loc + "|" + format + "|" + name)
+	key := strings.ToLower(loc)
 	e.mu.Lock()
 	m, ok := e.models[key]
 	e.mu.Unlock()
-	if ok {
-		return m.list, m.err
+	if !ok {
+		l, err := e.d.Models.ListModels(ctx, azure.ModelQuery{SubscriptionID: e.sub(), Location: loc})
+		m = modelEntry{l, err}
+		e.mu.Lock()
+		e.models[key] = m
+		e.mu.Unlock()
 	}
-	l, err := e.d.Models.ListModels(ctx, azure.ModelQuery{SubscriptionID: e.sub(), Location: loc, Format: format, Name: name})
-	e.mu.Lock()
-	e.models[key] = modelEntry{l, err}
-	e.mu.Unlock()
-	return l, err
+	if m.err != nil {
+		return nil, m.err
+	}
+	var out []azure.ModelAvailability
+	for _, x := range m.list {
+		if (format == "" || strings.EqualFold(x.Format, format)) && (name == "" || strings.EqualFold(x.Name, name)) {
+			out = append(out, x)
+		}
+	}
+	return out, nil
 }
 
 func (e *env) listExisting(ctx context.Context, typ string) (azure.ResourceList, error) {
@@ -432,38 +462,4 @@ func (e *env) rawTemplate(in *sdk.Input) []byte {
 		}
 	}
 	return e.d.Template
-}
-
-// whatIf runs the single shared what-if (once) and returns its outcome.
-func (e *env) whatIf(ctx context.Context, in *sdk.Input) whatIfOutcome {
-	e.wiOnce.Do(func() {
-		switch {
-		case !e.d.WhatIfOptIn:
-			e.wi.skip = sdk.SkipInputUnavailable + ": what-if was not requested; re-run with --what-if (or --preflight)"
-		case e.d.WhatIf == nil:
-			e.wi.skip = missingCap("Microsoft.Resources/deployments/whatIf", "Microsoft.Resources/deployments/whatIf/action")
-		default:
-			if m := needTarget(true, e.d.Target); m != "" {
-				e.wi.skip = m
-				return
-			}
-			if e.d.Target.Location == "" {
-				e.wi.skip = sdk.SkipInputUnavailable + ": target location is not set (use --location or AZURE_LOCATION)"
-				return
-			}
-			tpl := e.rawTemplate(in)
-			if len(tpl) == 0 {
-				e.wi.skip = sdk.SkipInputUnavailable + ": compiled ARM template is not available for what-if"
-				return
-			}
-			res, err := e.d.WhatIf.Run(ctx, azure.WhatIfRequest{OptIn: true, Scope: e.rgScope(), Location: e.d.Target.Location, Template: tpl})
-			if err != nil {
-				e.wi.err = err
-				e.wi.skip = azureReason(err)
-				return
-			}
-			e.wi.res = res
-		}
-	})
-	return e.wi
 }

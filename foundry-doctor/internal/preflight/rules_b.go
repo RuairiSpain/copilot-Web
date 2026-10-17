@@ -2,7 +2,9 @@ package preflight
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"net/netip"
 	"regexp"
 	"sort"
@@ -47,6 +49,21 @@ func (e *env) dep007(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 	var a acc
 	for _, r := range cands {
 		spec := nameSpecs[strings.ToLower(r.Type)]
+		// The Foundry domain-availability check (checkDomainAvailability) is
+		// about properties.customSubDomainName, not the ARM resource name.
+		name, what := r.Name, "name"
+		if spec.kind == azure.NameFoundry {
+			sub, present := r.Properties["customSubDomainName"].(string)
+			switch {
+			case !present || sub == "":
+				a.skip(sdk.SkipInputUnavailable + ": " + r.Type + " " + r.Name + " sets no customSubDomainName, so there is no subdomain to check")
+				continue
+			case isExpr(sub):
+				a.skip(sdk.SkipInputUnavailable + ": customSubDomainName of a " + r.Type + " is an unresolved expression")
+				continue
+			}
+			name, what = sub, "customSubDomainName"
+		}
 		if isExpr(r.Name) {
 			a.skip(sdk.SkipInputUnavailable + ": name of a " + r.Type + " is an unresolved expression")
 			continue
@@ -55,8 +72,8 @@ func (e *env) dep007(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 			a.skip(sdk.SkipInputUnavailable + ": " + spec.noCheck + " (" + r.Type + ")")
 			continue
 		}
-		if !spec.re.MatchString(r.Name) {
-			a.add(tmplFinding(r, fmt.Sprintf("name %q is invalid for %s (%s)", r.Name, r.Type, spec.rule)))
+		if !spec.re.MatchString(name) {
+			a.add(tmplFinding(r, fmt.Sprintf("%s %q is invalid for %s (%s)", what, name, r.Type, spec.rule)))
 			continue
 		}
 		if e.d.Names == nil {
@@ -71,7 +88,7 @@ func (e *env) dep007(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 			a.skip(sdk.SkipInputUnavailable + ": location for the Foundry name check is not set (use --location)")
 			continue
 		}
-		res, err := e.d.Names.CheckName(ctx, azure.NameCheck{Kind: spec.kind, Name: r.Name, SubscriptionID: e.sub(), Location: e.regionOf(r)})
+		res, err := e.d.Names.CheckName(ctx, azure.NameCheck{Kind: spec.kind, Name: name, SubscriptionID: e.sub(), Location: e.regionOf(r)})
 		if err != nil {
 			if ctx.Err() != nil {
 				return sdk.Result{}, ctx.Err()
@@ -85,7 +102,7 @@ func (e *env) dep007(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 		if e.isExisting(ctx, r) {
 			continue // a redeploy of our own resource is not a conflict
 		}
-		a.add(tmplFinding(r, fmt.Sprintf("name %q is not available (%s)", r.Name, res.Reason)))
+		a.add(tmplFinding(r, fmt.Sprintf("%s %q is not available (%s)", what, name, res.Reason)))
 	}
 	return a.result(), nil
 }
@@ -108,6 +125,12 @@ func (e *env) isExisting(ctx context.Context, r sdk.ARMResource) bool {
 	return false
 }
 
+// incrementalNote is added to every what-if based result. The request uses
+// deployment mode Incremental, in which what-if essentially never reports
+// Delete, and ARM has no change type for a recreation caused by an
+// immutable-property change, so a clean result is never a pass.
+const incrementalNote = "Incremental mode cannot report deletions; recreation from immutable-property changes is not detected"
+
 // DEP-008: what-if destructive changes.
 func (e *env) dep008(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 	o := e.whatIf(ctx, in)
@@ -122,6 +145,7 @@ func (e *env) dep008(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 		allowed[strings.ToLower(id)] = true
 	}
 	var a acc
+	deploy := 0
 	for _, c := range o.res.Changes {
 		if c.ChangeType != azure.ChangeIgnore && c.ChangeType != azure.ChangeNoChange && c.ResourceID != "" {
 			if e.rgScope() == "" {
@@ -138,15 +162,25 @@ func (e *env) dep008(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 				continue
 			}
 			a.add(idFinding(typeFromID(c.ResourceID), c.ResourceID, fmt.Sprintf("what-if predicts %s of %s", c.ChangeType, c.ResourceID)))
-		case c.ChangeType == azure.ChangeIgnore, c.ChangeType == azure.ChangeUnknown, c.ChangeType == azure.ChangeDeploy:
+		case c.ChangeType == azure.ChangeDeploy:
+			deploy++
+		case c.ChangeType == azure.ChangeIgnore, c.ChangeType == azure.ChangeUnknown, c.ChangeType == azure.ChangeUnsupported:
 			a.note("what-if reported %s for %s, which cannot be classified", c.ChangeType, c.ResourceID)
 		}
+	}
+	if deploy > 0 {
+		a.note("what-if reported Deploy (properties may or may not change) for %d resource(s); the ResourceIdOnly result format carries no detail", deploy)
+	}
+	// potentialChanges are changes ARM could not decide: uncertain evidence only.
+	for _, c := range o.res.PotentialChanges {
+		a.note("what-if reported a potential %s of %s (potentialChanges: uncertain, not asserted)", c.ChangeType, c.ResourceID)
 	}
 	if len(o.res.DiagnosticCodes) > 0 {
 		codes := append([]string(nil), o.res.DiagnosticCodes...)
 		sort.Strings(codes)
 		a.note("what-if returned diagnostics: %s", strings.Join(codes, ","))
 	}
+	a.note("%s", incrementalNote)
 	return a.result(), nil
 }
 
@@ -165,27 +199,42 @@ func typeFromID(id string) string {
 }
 
 // DEP-009: policy restrictions.
+//
+// ADR-006 point 8: the resource content sent to checkPolicyRestrictions is
+// built from non-secret template content only. Properties whose value is or
+// contains an unresolved ARM expression, secret-looking properties and
+// credential-shaped values are omitted (azure.SanitizePolicyContent) and
+// reported, and a clean answer for partial content is uncertain, never a pass.
 func (e *env) dep009(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 	rs, ok := resourcesOf(in)
 	if !ok {
 		return skipRes("", sdk.SkipInputUnavailable+": compiled ARM template is not available"), nil
 	}
 	if e.d.Policy == nil {
-		return skipRes("", missingCap("Azure Policy restrictions", "Microsoft.PolicyInsights/policyStates/queryResults/action (Reader)")), nil
+		return skipRes("", missingCap("Azure Policy restrictions", "Microsoft.PolicyInsights/checkPolicyRestrictions/read")), nil
 	}
 	if m := needTarget(true, e.d.Target); m != "" {
 		return skipRes("", m), nil
 	}
 	var a acc
 	checked := 0
+	var omitted []string
 	for _, r := range rs {
 		if strings.EqualFold(namespaceOf(r.Type), "Microsoft.Authorization") || isExpr(r.Type) {
 			continue
 		}
+		if r.APIVersion == "" || isExpr(r.APIVersion) {
+			a.note("the API version of a %s resource is not a literal value, so its policy restrictions were not checked", r.Type)
+			continue
+		}
 		loc := e.regionOf(r)
+		content, dropped := azure.SanitizePolicyContent(map[string]any{"name": r.Name, "properties": r.Properties})
+		for _, d := range dropped {
+			omitted = append(omitted, r.Type+" "+d)
+		}
 		rst, err := e.d.Policy.CheckRestrictions(ctx, azure.PolicyRestrictionRequest{
 			Scope: e.rgScope(), ResourceType: r.Type, APIVersion: r.APIVersion, Location: loc,
-			Content: map[string]any{"name": r.Name, "location": loc, "properties": r.Properties},
+			Content: content,
 		})
 		if err != nil {
 			if ctx.Err() != nil {
@@ -199,12 +248,16 @@ func (e *env) dep009(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 		}
 		checked++
 		for _, x := range rst {
-			if strings.EqualFold(x.Effect, "deny") {
+			if strings.EqualFold(x.Effect, "deny") || x.Kind == azure.RestrictionObservedDenial {
 				a.add(tmplFinding(r, fmt.Sprintf("policy %s likely denies this resource (%s): %s", x.AssignmentID, x.Kind, oneLine(x.Message))))
 			} else {
 				a.note("policy %s has effect %s on %s (informational)", x.AssignmentID, x.Effect, r.Type)
 			}
 		}
+	}
+	if len(omitted) > 0 {
+		sort.Strings(omitted)
+		a.note("the policy check ran on partial content: unresolved-expression or secret-like properties were not sent (%s)", capNames(omitted, 5))
 	}
 	if len(a.findings) == 0 && len(a.skips) == 0 && checked > 0 {
 		a.note("no restriction was reported, but policy evaluation cannot prove the deployment will not be denied")
@@ -219,7 +272,56 @@ func (e *env) dep009(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 	return a.result(), nil
 }
 
+// plannedResource is a template resource with a computable ID in the target group.
+type plannedResource struct {
+	typ, id string
+}
+
+// plannedIDs computes the resource ID each template resource will have in the
+// target resource group from its literal type and name ("<namespace>/<type>"
+// with "name" or "parent/child" segments). unresolved counts resources whose ID
+// cannot be computed (expression name or type, mismatched segments).
+func plannedIDs(rg string, rs []sdk.ARMResource) (out []plannedResource, unresolved int) {
+	seen := map[string]bool{}
+	for _, r := range rs {
+		if strings.EqualFold(r.Type, "Microsoft.Authorization/roleAssignments") || strings.EqualFold(r.Type, "Microsoft.Resources/deployments") ||
+			strings.EqualFold(r.Type, "Microsoft.Resources/resourceGroups") {
+			continue
+		}
+		if isExpr(r.Name) || isExpr(r.Type) || r.Name == "" || r.Scope != "" {
+			unresolved++
+			continue
+		}
+		ns, rest, ok := strings.Cut(r.Type, "/")
+		types, names := strings.Split(rest, "/"), strings.Split(r.Name, "/")
+		if !ok || len(types) != len(names) {
+			unresolved++
+			continue
+		}
+		id := rg + "/providers/" + ns
+		for i := range types {
+			id += "/" + types[i] + "/" + names[i]
+		}
+		if !seen[strings.ToLower(id)] {
+			seen[strings.ToLower(id)] = true
+			out = append(out, plannedResource{typ: r.Type, id: id})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].id < out[j].id })
+	return out, unresolved
+}
+
+// maxResourceLockLookups bounds the resource-level lock reads of one run.
+const maxResourceLockLookups = 50
+
 // DEP-010: management locks.
+//
+// A lock list returns locks at AND BELOW its scope, so a lock is relevant only
+// when its scope is the target resource group, one of its ancestors, or a
+// planned resource (or an ancestor of one). Locks on unrelated resources or
+// groups are ignored. Resource-level locks are read per planned resource
+// (ManagementLocks_ListAtResourceLevel) so that a lock on a resource does not
+// depend on how the group listing treats resources below it.
 func (e *env) dep010(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 	rs, ok := resourcesOf(in)
 	if !ok {
@@ -232,27 +334,23 @@ func (e *env) dep010(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 		return skipRes("", m), nil
 	}
 	var a acc
-	scopes := []string{e.subScope(), e.rgScope()}
+	rg := e.rgScope()
+	planned, unresolved := plannedIDs(rg, rs)
+	if unresolved > 0 {
+		a.note("%d template resource(s) have an unresolved name or type, so locks on them were not evaluated", unresolved)
+	}
+	var locks []azure.Lock
 	seen := map[string]bool{}
-	for _, r := range rs {
-		if isExpr(r.Name) || isExpr(r.Type) || strings.EqualFold(r.Type, typeDeployment) {
-			continue
-		}
-		l, err := e.listExisting(ctx, r.Type)
-		if err != nil {
-			a.skipErr(err)
-			continue
-		}
-		for _, x := range l.Resources {
-			if strings.EqualFold(lastSegment(x.Name), lastSegment(r.Name)) && !seen[strings.ToLower(x.ID)] {
-				seen[strings.ToLower(x.ID)] = true
-				scopes = append(scopes, x.ID)
+	add := func(ls []azure.Lock) {
+		for _, l := range ls {
+			if k := strings.ToLower(l.ID); !seen[k] {
+				seen[k] = true
+				locks = append(locks, l)
 			}
 		}
 	}
-	var locks []azure.Lock
-	for _, s := range scopes {
-		ls, err := e.d.Inventory.ListLocks(ctx, s)
+	for _, scope := range []string{e.subScope(), rg} {
+		ls, err := e.d.Inventory.ListLocks(ctx, scope)
 		if err != nil {
 			if ctx.Err() != nil {
 				return sdk.Result{}, ctx.Err()
@@ -260,22 +358,62 @@ func (e *env) dep010(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 			a.skipErr(err)
 			continue
 		}
-		locks = append(locks, ls...)
+		add(ls)
 	}
-	ro := map[string]bool{}
-	for _, l := range locks {
-		if strings.EqualFold(l.Level, "ReadOnly") && !ro[strings.ToLower(l.ID)] {
-			ro[strings.ToLower(l.ID)] = true
-			a.add(idFinding("Microsoft.Authorization/locks", l.ID, fmt.Sprintf("ReadOnly lock %s on %s blocks writes", l.Name, l.Scope)))
+	if e.d.Extras == nil {
+		a.note("resource-level lock reads are unavailable; locks on individual resources come from the resource group listing only")
+	} else {
+		n := len(planned)
+		if n > maxResourceLockLookups {
+			a.note("only the first %d of %d planned resources were checked for resource-level locks", maxResourceLockLookups, n)
+			n = maxResourceLockLookups
 		}
+		for _, p := range planned[:n] {
+			ls, err := e.d.Extras.ListResourceLocks(ctx, p.id)
+			if err != nil {
+				if ctx.Err() != nil {
+					return sdk.Result{}, ctx.Err()
+				}
+				a.skipErr(err)
+				continue
+			}
+			add(ls)
+		}
+	}
+	relevant := func(l azure.Lock) bool {
+		if azure.LockCovers(l.Scope, rg) {
+			return true
+		}
+		for _, p := range planned {
+			if azure.LockCovers(l.Scope, p.id) {
+				return true
+			}
+		}
+		return false
 	}
 	var cnd []azure.Lock
 	for _, l := range locks {
-		if strings.EqualFold(l.Level, "CanNotDelete") {
+		if l.Scope == "" {
+			a.note("lock %s has no readable scope, so it was not evaluated", l.Name)
+			continue
+		}
+		switch {
+		case strings.EqualFold(l.Level, "ReadOnly"):
+			if relevant(l) {
+				a.add(idFinding("Microsoft.Authorization/locks", l.ID, fmt.Sprintf("ReadOnly lock %s on %s blocks writes", l.Name, l.Scope)))
+			}
+		case strings.EqualFold(l.Level, "CanNotDelete"):
 			cnd = append(cnd, l)
 		}
 	}
-	if len(cnd) > 0 {
+	// A CanNotDelete lock matters only for a resource ARM predicts to delete.
+	hasCnd := false
+	for _, l := range cnd {
+		if relevantToRG(l, rg) {
+			hasCnd = true
+		}
+	}
+	if hasCnd {
 		o := e.whatIf(ctx, in)
 		if o.skip == "" {
 			for _, c := range o.res.Changes {
@@ -283,21 +421,37 @@ func (e *env) dep010(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 					continue
 				}
 				for _, l := range cnd {
-					if strings.HasPrefix(strings.ToLower(c.ResourceID)+"/", strings.ToLower(strings.TrimRight(l.Scope, "/"))+"/") {
+					if azure.LockCovers(l.Scope, c.ResourceID) {
 						a.add(idFinding(typeFromID(c.ResourceID), c.ResourceID, fmt.Sprintf("what-if predicts %s of %s, covered by CanNotDelete lock %s", c.ChangeType, c.ResourceID, l.Name)))
 						break
 					}
 				}
 			}
+			// Incremental-mode what-if cannot report deletions or the recreation of a
+			// resource, so a lock that blocks deletes is not proven irrelevant.
+			a.note("a CanNotDelete lock exists and %s", incrementalNote)
 		} else {
 			a.note("a CanNotDelete lock exists but deletions could not be predicted without what-if")
 		}
 	}
-	e.historyNearLimit(ctx, in, &a, cnd)
+	var group []azure.Lock
+	for _, l := range cnd {
+		if relevantToRG(l, rg) {
+			group = append(group, l)
+		}
+	}
+	e.historyNearLimit(ctx, in, &a, group)
 	if ctx.Err() != nil {
 		return sdk.Result{}, ctx.Err()
 	}
 	return a.result(), nil
+}
+
+// relevantToRG reports whether a lock is at, above or below the resource group
+// (everything the group and subscription listings return and that can matter
+// to a delete inside the group).
+func relevantToRG(l azure.Lock, rg string) bool {
+	return azure.LockCovers(l.Scope, rg) || azure.LockCovers(rg, l.Scope)
 }
 
 // historyMargin is a Foundry Doctor product decision (not a documented
@@ -431,8 +585,13 @@ func (e *env) dep011(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 				continue
 			}
 			p = p.Masked()
-			if p.Bits() > 27 {
+			switch {
+			case p.Bits() > 27:
 				fail(fmt.Sprintf("subnet prefix %s is smaller than /27", s))
+			case p.Bits() >= 25:
+				// FND-DEP-011 (b): the portal step requires /27 or larger, the
+				// limitations section recommends /24; /25-/27 is a warning only.
+				a.note("warning: subnet prefix %s is smaller than the recommended /24 (the minimum documented is /27)", s)
 			}
 			if netip.MustParsePrefix("100.64.0.0/10").Contains(p.Addr()) {
 				a.skip(sdk.SkipInputUnavailable + ": 100.64.0.0/10 is not evaluated because the documentation conflicts")
@@ -461,7 +620,7 @@ func (e *env) dep011(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 // evidence but the format is not documented as the marker.
 func (e *env) checkSubnetLinks(ctx context.Context, a *acc, acct sdk.ARMResource, subnetID string, fail func(string)) error {
 	if e.d.SubnetLinks == nil {
-		a.skip(missingCap("subnet serviceAssociationLinks and resourceNavigationLinks read", "Microsoft.Network/virtualNetworks/subnets/read"))
+		a.skip(missingCap("subnet serviceAssociationLinks and resourceNavigationLinks read", "Microsoft.Network/virtualNetworks/subnets/serviceAssociationLinks/read and Microsoft.Network/virtualNetworks/subnets/resourceNavigationLinks/read"))
 		return nil
 	}
 	ls, err := e.d.SubnetLinks.SubnetLinks(ctx, subnetID)
@@ -494,31 +653,32 @@ func (e *env) checkSubnetLinks(ctx context.Context, a *acc, acct sdk.ARMResource
 	return nil
 }
 
+// checkVNetLocation compares the location of the subnet's virtual network with
+// the Foundry account (FND-DEP-011 (f)) using one VirtualNetworks_Get, never a
+// list of every network in the subscription.
 func (e *env) checkVNetLocation(ctx context.Context, a *acc, acct sdk.ARMResource, sn azure.Subnet, fail func(string)) {
 	want := normLoc(e.regionOf(acct))
 	if want == "" || sn.VNetID == "" {
 		a.note("virtual network location could not be compared with the Foundry location")
 		return
 	}
-	parts := strings.Split(strings.Trim(sn.VNetID, "/"), "/")
-	if len(parts) < 2 {
-		a.note("virtual network ID is malformed")
+	if e.d.Extras == nil {
+		a.skip(missingCap("virtual network read (VirtualNetworks_Get)", "Microsoft.Network/virtualNetworks/read"))
 		return
 	}
-	l, err := e.d.Inventory.ListResources(ctx, azure.InventoryQuery{Scope: "/subscriptions/" + parts[1], Types: []string{"Microsoft.Network/virtualNetworks"}})
+	v, err := e.d.Extras.GetVNet(ctx, sn.VNetID)
 	if err != nil {
+		var ae *azure.APIError
+		if errors.As(err, &ae) && ae.Status == http.StatusNotFound {
+			a.note("virtual network %s was not found", lastSegment(sn.VNetID))
+			return
+		}
 		a.skipErr(err)
 		return
 	}
-	for _, v := range l.Resources {
-		if strings.EqualFold(v.ID, sn.VNetID) {
-			if normLoc(v.Location) != want {
-				fail(fmt.Sprintf("virtual network is in %s but the Foundry account is in %s", v.Location, e.regionOf(acct)))
-			}
-			return
-		}
+	if normLoc(v.Location) != want {
+		fail(fmt.Sprintf("virtual network is in %s but the Foundry account is in %s", v.Location, e.regionOf(acct)))
 	}
-	a.note("virtual network %s was not found in the inventory", lastSegment(sn.VNetID))
 }
 
 func normLoc(s string) string { return strings.ToLower(strings.ReplaceAll(s, " ", "")) }

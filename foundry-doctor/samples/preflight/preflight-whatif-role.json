@@ -1,0 +1,14 @@
+{
+  "Name": "Foundry Doctor Preflight What-If (optional addendum, sample)",
+  "IsCustom": true,
+  "Description": "OPTIONAL, assign only to identities that run foundry-doctor preflight --what-if (FND-DEP-008). Microsoft Learn says what-if needs the same permissions as deploying the template, so this is NOT read-only access: it grants deployment-level rights. The doctor still only sends the what-if POST and never deploys. Resource write actions depend on the template (for example Microsoft.CognitiveServices/accounts/write) and cannot be listed generically: add the write actions of the resource types in your template, or scope the assignment to the target resource group. Assign together with preflight-role.json. Review before assigning.",
+  "Actions": [
+    "Microsoft.Resources/deployments/*"
+  ],
+  "NotActions": [],
+  "DataActions": [],
+  "NotDataActions": [],
+  "AssignableScopes": [
+    "/subscriptions/<subscription-id>/resourceGroups/<resource-group>"
+  ]
+}

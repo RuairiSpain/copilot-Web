@@ -23,7 +23,8 @@ func preflightCmd(_ context.Context, svc app.Services, exit *int) *cobra.Command
 			"The report ends with a readiness summary (ready / blocked / uncertain / skipped).\n" +
 			"Readiness is advisory and never guarantees that a deployment will succeed.\n" +
 			"A check that lacks a permission is skipped and names the missing capability.\n" +
-			"The ARM what-if operation (FND-DEP-008) runs only with --what-if (alias --preflight).\n" +
+			"The ARM what-if operation (FND-DEP-008) runs only with --what-if (alias --preflight). It sends the template and\n" +
+			"the non-secret values of the project's parameter file; a required parameter without a value skips the check.\n" +
 			"Nothing is created, changed or deleted. Exit codes match `doctor`.",
 		Example: "  foundry-doctor preflight --subscription <id> --resource-group rg-app --location swedencentral\n" +
 			"  foundry-doctor preflight --what-if --profile prod --strict --format json --out preflight.json",

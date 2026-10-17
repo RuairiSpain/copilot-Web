@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // ---------------------------------------------------------------------------
@@ -181,6 +182,12 @@ type ResourceList struct {
 type Inventory interface {
 	ListResources(ctx context.Context, q InventoryQuery) (ResourceList, error)
 	ResourceGroup(ctx context.Context, subscriptionID, name string) (ResourceGroupInfo, error)
+	// ListLocks lists the management locks at a subscription or resource group
+	// scope. The Microsoft.Authorization locks list returns locks at AND BELOW
+	// the scope (spec 2020-05-01), so callers must filter by Lock.Scope
+	// (see LockCovers) before treating a lock as relevant. A scope other than a
+	// subscription or resource group is rejected with ErrInvalidInput; use
+	// InventoryExtras.ListResourceLocks for one resource.
 	ListLocks(ctx context.Context, scope string) ([]Lock, error)
 	GetSubnet(ctx context.Context, subnetID string) (Subnet, error)
 }
@@ -304,16 +311,6 @@ type PolicyAssignment struct {
 	Effects []string
 }
 
-// PolicyExemption is an exemption summary.
-type PolicyExemption struct {
-	ID           string
-	Name         string
-	Scope        string
-	AssignmentID string
-	Category     string // "Waiver" or "Mitigated"
-	ExpiresOn    string // RFC3339 or empty
-}
-
 // PolicyRestrictionRequest describes a planned resource, built from non-secret template content only.
 type PolicyRestrictionRequest struct {
 	Scope        string // resource group ID (subscription ID also accepted)
@@ -350,7 +347,6 @@ type PolicyRestriction struct {
 // Policy reads policy evidence.
 type Policy interface {
 	ListAssignments(ctx context.Context, scope string) ([]PolicyAssignment, error)
-	ListExemptions(ctx context.Context, scope string) ([]PolicyExemption, error)
 	CheckRestrictions(ctx context.Context, req PolicyRestrictionRequest) ([]PolicyRestriction, error)
 }
 
@@ -360,17 +356,20 @@ type Policy interface {
 // ChangeType is the ARM what-if change type.
 type ChangeType string
 
-// ARM what-if change types; ChangeReplace is set only when the adapter can
-// establish a delete-and-create of the same resource and is always destructive.
+// ARM what-if change types (Microsoft.Resources deployments spec 2026-06-01,
+// ChangeType enum: Create, Delete, Ignore, Deploy, NoChange, Modify,
+// Unsupported). There is no Replace value: a recreation caused by an immutable
+// property change is NOT reported by ARM and is never inferred here.
+// ChangeUnknown is Foundry Doctor's own value for a string outside the enum.
 const (
-	ChangeCreate   ChangeType = "Create"
-	ChangeModify   ChangeType = "Modify"
-	ChangeDelete   ChangeType = "Delete"
-	ChangeDeploy   ChangeType = "Deploy"
-	ChangeIgnore   ChangeType = "Ignore"
-	ChangeNoChange ChangeType = "NoChange"
-	ChangeReplace  ChangeType = "Replace"
-	ChangeUnknown  ChangeType = "Unknown"
+	ChangeCreate      ChangeType = "Create"
+	ChangeModify      ChangeType = "Modify"
+	ChangeDelete      ChangeType = "Delete"
+	ChangeDeploy      ChangeType = "Deploy"
+	ChangeIgnore      ChangeType = "Ignore"
+	ChangeNoChange    ChangeType = "NoChange"
+	ChangeUnsupported ChangeType = "Unsupported"
+	ChangeUnknown     ChangeType = "Unknown"
 )
 
 // WhatIfChange is a single predicted change. No before/after bodies are retained.
@@ -379,10 +378,10 @@ type WhatIfChange struct {
 	ChangeType ChangeType
 }
 
-// Destructive reports whether the change deletes or replaces a resource.
-func (c WhatIfChange) Destructive() bool {
-	return c.ChangeType == ChangeDelete || c.ChangeType == ChangeReplace
-}
+// Destructive reports whether ARM predicts a delete. The adapter requests
+// deployment mode Incremental, in which what-if essentially never reports
+// Delete, and ARM has no change type for recreation.
+func (c WhatIfChange) Destructive() bool { return c.ChangeType == ChangeDelete }
 
 // WhatIfRequest runs a what-if. OptIn must be true or Run fails without calling Azure.
 type WhatIfRequest struct {
@@ -391,14 +390,21 @@ type WhatIfRequest struct {
 	// Scope is "/subscriptions/<id>/resourceGroups/<rg>" or "/subscriptions/<id>" with Location.
 	Scope    string
 	Location string
-	// Template is the compiled ARM JSON; Parameters are non-secret values by name.
+	// Template is the compiled ARM JSON; Parameters are non-secret values by
+	// name (the caller must never put a secure-parameter value here).
 	Template   []byte
 	Parameters map[string]any
 }
 
 // WhatIfResult lists predicted changes sorted by resource ID.
 type WhatIfResult struct {
+	// Status is the final operation status; Run returns a result only for "Succeeded".
+	Status  string
 	Changes []WhatIfChange
+	// PotentialChanges are the properties.potentialChanges entries of the
+	// spec. ARM does not say how they differ from changes; they are uncertain
+	// evidence and never a pass or a fail by themselves.
+	PotentialChanges []WhatIfChange
 	// DiagnosticCodes are error codes only (no free text from response bodies).
 	DiagnosticCodes []string
 }
@@ -476,6 +482,7 @@ type Client struct {
 	Deployments DeploymentHistory
 	SubnetLinks SubnetLinks
 	Evidence    PermissionEvidence
+	Extras      InventoryExtras
 	Foundry     RuntimeFoundry
 	RBAC        RuntimeRBAC
 	DNS         RuntimeDNS
@@ -549,6 +556,38 @@ type SubnetLinks interface {
 }
 
 // ---------------------------------------------------------------------------
+// Inventory extras (FND-DEP-010, FND-DEP-011)
+
+// VNet is the minimal virtual network projection used for the location check.
+type VNet struct {
+	ID       string
+	Name     string
+	Location string
+}
+
+// InventoryExtras are single-resource reads kept apart from Inventory so older
+// Inventory implementations keep compiling.
+type InventoryExtras interface {
+	// GetVNet reads one virtual network by resource ID (VirtualNetworks_Get,
+	// api-version 2025-05-01); it never lists the networks of a subscription.
+	GetVNet(ctx context.Context, vnetID string) (VNet, error)
+	// ListResourceLocks lists the locks of one resource and any level below it
+	// (ManagementLocks_ListAtResourceLevel, api-version 2020-05-01). A resource
+	// that does not exist has no locks (empty list, no error).
+	ListResourceLocks(ctx context.Context, resourceID string) ([]Lock, error)
+}
+
+// LockCovers reports whether a lock at lockScope applies to the resource or
+// scope id: the lock scope is id itself or one of its ancestors (locks are
+// inherited by child resources, and a lock never applies upward or sideways).
+// Comparison is case-insensitive on whole path segments.
+func LockCovers(lockScope, id string) bool {
+	l := strings.ToLower(strings.TrimRight(lockScope, "/"))
+	t := strings.ToLower(strings.TrimRight(id, "/"))
+	return l != "" && (t == l || strings.HasPrefix(t, l+"/"))
+}
+
+// ---------------------------------------------------------------------------
 // Permissions API evidence (FND-DEP-003)
 
 // PermissionSet is one entry of the Microsoft.Authorization/permissions result.
@@ -618,11 +657,13 @@ type FoundryConnection struct {
 
 // AccountDeployment is the management-plane summary of one account deployment.
 type AccountDeployment struct {
-	ID                   string
-	Type                 string
-	Name                 string
-	DeploymentState      string
-	ProvisioningState    string
+	ID                string
+	Type              string
+	Name              string
+	DeploymentState   string
+	ProvisioningState string
+	// SKUName is sku.name of the deployment (for example "GlobalStandard"); empty when absent.
+	SKUName              string
 	DynamicThrottling    bool
 	CurrentCapacity      int
 	ProvisionedRateLimit int

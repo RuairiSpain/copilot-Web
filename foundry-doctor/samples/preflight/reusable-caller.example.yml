@@ -1,0 +1,23 @@
+# Sample caller for the foundry-doctor preflight reusable workflow. OIDC only, no secrets.
+# Store AZURE_CLIENT_ID, AZURE_TENANT_ID and AZURE_SUBSCRIPTION_ID as variables (not secrets) on the protected
+# environment named below. Never trigger this from pull_request or pull_request_target: the reusable workflow refuses.
+name: preflight
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write   # the called workflow can only narrow this
+
+jobs:
+  preflight:
+    # Pin to a tag or full commit SHA in real use.
+    uses: RuairiSpain/copilot-Web/.github/workflows/foundry-doctor-preflight.yml@main
+    with:
+      environment: <environment-name>
+      profile: test
+      project-path: .
+      resource-group: <resource-group>
+      location: <location>
+      os: linux
