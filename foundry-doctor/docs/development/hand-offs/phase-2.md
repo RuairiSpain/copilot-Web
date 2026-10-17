@@ -68,7 +68,7 @@ Both reviewers: **ACCEPT with conditions**, no blocking findings. Summaries are 
 | ADR-006 item 8: content sent to checkPolicyRestrictions, 50-resource cap | fixed in loop 3, pending confirmation |
 | Pinned Bicep digest re-derivation note; full-SHA recommendation for `source-ref` | fixed in loop 3, pending confirmation (`samples/preflight/README.md`, reusable caller sample) |
 
-Rules raised to `version: 4` in loop 3: FND-DEP-008 (narrowed subscription-scope demotion). The Go code must match the narrowed wording (`internal/preflight/rules_b.go` currently demotes any non-destructive change inside the subscription): code owner action.
+Rules raised to `version: 4` in loop 3: FND-DEP-008 (narrowed subscription-scope demotion). The Go code matches the narrowed wording (`subscriptionLevelID` in `internal/preflight/rules_b.go`).
 
 ## Commands implemented
 `foundry-doctor preflight` (flags in `docs/preflight.md`).
@@ -133,3 +133,14 @@ Statuses are conservative while the re-review is pending.
 ## Round 2 decision: exit codes for uncertain results
 
 `preflight` previously marked every skip as required, so any uncertain result exited 2 with or without `--strict`. Because FND-DEP-002, FND-DEP-008 and FND-DEP-009 are uncertain by design, every run would have exited 2 and the reusable workflow could never succeed. Now a skip is required (exit 2) only when a check could not run (missing permission, unresolved input); an uncertain result is reported, counts against readiness, exits 0, and exits 3 under `--strict`. Pinned by `TestPreflightUncertainRulesExitZeroOrThreeUnderStrict`.
+
+## Gate decision (2026-10-17)
+
+Phase 2 gate: PASSED WITH CONDITIONS after three fix loops. Final verdicts at ab07dd0: Foundry lead ACCEPT with conditions, Azure black belt ACCEPT with conditions; neither lists a blocking finding. The gate treats 'no blocking finding' as a pass; the conditions below stay open and tracked.
+
+Open conditions (all non-blocking for the gate):
+1. OIDC reusable workflow has never run on GitHub: run it once in a test repository with `what-if` false and true and record the evidence before Phase 2 is declared complete.
+2. Cross-resource-group scope policy covers what-if change IDs and the agent subnet only (PARTLY MET); the other four kinds are a v1 release gate under ADR-022 (Phase 3: FND-RUN-003, FND-IDN-002, FND-NET-002; Phase 8: FND-SEC-005). The Phase 3 and Phase 8 hand-offs must list them.
+3. Do not implement an FND-SEC-005 or FND-NET-002 property path until the catalogue verifies it.
+4. `Microsoft.Resources/subscriptions/resourcegroups/deployments/operationstatuses/read` for the what-if poll is unverified for that purpose; the what-if poll URL shape is inferred.
+5. Reader sufficiency, live replay and the live disposable-subscription test remain deferred by ADR-021 (d).

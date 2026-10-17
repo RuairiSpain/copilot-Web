@@ -112,3 +112,22 @@ func TestDEP008SubscriptionScopeWithResourceGroup(t *testing.T) {
 		t.Errorf("resource-group-scope template must keep the finding: %+v", out)
 	}
 }
+
+func TestSubscriptionLevelID(t *testing.T) {
+	for _, tc := range []struct {
+		id   string
+		want bool
+	}{
+		{"/subscriptions/s/providers/Microsoft.Authorization/roleAssignments/ra", true},
+		{"/subscriptions/s/resourceGroups/rg", true},
+		{"/subscriptions/S/RESOURCEGROUPS/Rg", true},
+		{"/subscriptions/s/resourceGroups/rg/", true},
+		{"/subscriptions/s/resourceGroups/rg/providers/Microsoft.Storage/storageAccounts/a", false},
+		{"/subscriptions/s/resourceGroups/rg/providers/Microsoft.Resources/resourceGroups/nested", false},
+		{"/subscriptions/s", true},
+	} {
+		if got := subscriptionLevelID(tc.id); got != tc.want {
+			t.Errorf("subscriptionLevelID(%q) = %v, want %v", tc.id, got, tc.want)
+		}
+	}
+}
