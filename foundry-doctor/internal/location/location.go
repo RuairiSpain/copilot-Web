@@ -45,15 +45,16 @@ func (r Region) Precise() bool {
 
 // SanitizePath turns an untrusted path into a safe repo-relative,
 // slash-separated path. Absolute paths, drive letters, UNC paths and
-// traversal are reduced to their final element; control characters are
-// removed. The result is never absolute and never contains "..".
+// traversal are reduced to their final element; control characters,
+// format characters (including bidirectional overrides) and line or paragraph
+// separators are removed. The result is never absolute and never contains "..".
 func SanitizePath(p string) string {
 	return strings.ReplaceAll(sanitizePath(p), ":", "_")
 }
 
 func sanitizePath(p string) string {
 	p = strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) || r == utf8.RuneError {
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) || unicode.In(r, unicode.Zl, unicode.Zp) || r == utf8.RuneError {
 			return -1
 		}
 		return r

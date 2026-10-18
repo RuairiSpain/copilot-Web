@@ -1,3 +1,7 @@
+// ILLUSTRATIVE SAMPLE for `foundry-doctor cost`. It is not a deployable reference:
+// model names, model versions and the PTU count below are placeholders that were not
+// verified against model availability or the per-model minimum PTU (minimums vary by
+// model; see https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types).
 targetScope = 'resourceGroup'
 
 param location string = resourceGroup().location
@@ -27,11 +31,31 @@ resource apim 'Microsoft.ApiManagement/service@2024-05-01' = {
   }
 }
 
-resource cosmosDb 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/throughputSettings@2026-03-15' = {
-  name: 'fd-cost-cosmos/default/default'
+resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2025-04-15' = {
+  name: 'fd-cost-cosmos'
   location: location
   properties: {
+    databaseAccountOfferType: 'Standard'
+    locations: [
+      {
+        locationName: location
+        failoverPriority: 0
+        isZoneRedundant: false
+      }
+    ]
+  }
+}
+
+// Dedicated database throughput set through options.throughput; the estimator
+// takes the region from the parent account's locations.
+resource cosmosDb 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2025-04-15' = {
+  parent: cosmosAccount
+  name: 'default'
+  properties: {
     resource: {
+      id: 'default'
+    }
+    options: {
       throughput: 4000
     }
   }

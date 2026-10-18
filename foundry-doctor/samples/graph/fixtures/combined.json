@@ -1,0 +1,162 @@
+{
+  "description": "Combined mode: Bicep-compiled template resources (recorded as the flattened ARM model produces them), a recorded Resources - List inventory and a recorded Foundry runtime overlay. Shows both/local/azure/unobserved/external origins, an identity edge, a connection target correlated by ARM ID, an unhealthy azure-only resource and a baselined finding.",
+  "mode": "combined",
+  "scope": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sample",
+  "azureYaml": "name: combined-sample\nservices:\n  ai-project:\n    host: azure.ai.project\n    deployments:\n      - name: gpt-4o-mini\n        model:\n          format: OpenAI\n          name: gpt-4o-mini\n          version: \"2024-07-18\"\n  assistant:\n    host: azure.ai.agent\n    uses: [ai-project]\n",
+  "resources": [
+    {
+      "ID": "/resources/0",
+      "Type": "Microsoft.CognitiveServices/accounts",
+      "Name": "aif-sample",
+      "SymbolicName": "account"
+    },
+    {
+      "ID": "/resources/1",
+      "Type": "Microsoft.Storage/storageAccounts",
+      "Name": "stsample",
+      "SymbolicName": "storage"
+    },
+    {
+      "ID": "/resources/2",
+      "Type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+      "Name": "id-sample",
+      "SymbolicName": "identity"
+    },
+    {
+      "ID": "/resources/3",
+      "Type": "Microsoft.Authorization/roleAssignments",
+      "Name": "ra-storage-blob",
+      "SymbolicName": "storageRole",
+      "DependsOn": [
+        "storage",
+        "identity"
+      ]
+    },
+    {
+      "ID": "/resources/4",
+      "Type": "Microsoft.Search/searchServices",
+      "Name": "srch-sample",
+      "SymbolicName": "search"
+    }
+  ],
+  "inventory": [
+    {
+      "ID": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sample/providers/Microsoft.CognitiveServices/accounts/aif-sample",
+      "Name": "aif-sample",
+      "Type": "Microsoft.CognitiveServices/accounts",
+      "Properties": {
+        "properties.provisioningState": "Succeeded"
+      },
+      "UserAssignedIdentities": [
+        "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sample/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-sample"
+      ]
+    },
+    {
+      "ID": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sample/providers/Microsoft.Insights/components/appi-sample",
+      "Name": "appi-sample",
+      "Type": "Microsoft.Insights/components",
+      "Properties": {
+        "properties.provisioningState": "Failed"
+      }
+    },
+    {
+      "ID": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sample/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-sample",
+      "Name": "id-sample",
+      "Type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+      "Properties": {
+        "properties.provisioningState": "Succeeded"
+      }
+    },
+    {
+      "ID": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sample/providers/Microsoft.Storage/storageAccounts/stsample",
+      "Name": "stsample",
+      "Type": "Microsoft.Storage/storageAccounts",
+      "Properties": {
+        "properties.provisioningState": "Succeeded"
+      }
+    }
+  ],
+  "runtime": {
+    "Account": {
+      "ID": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sample/providers/Microsoft.CognitiveServices/accounts/aif-sample",
+      "Name": "aif-sample",
+      "Type": "Microsoft.CognitiveServices/accounts",
+      "Properties": {
+        "properties.provisioningState": "Succeeded"
+      },
+      "UserAssignedIdentities": [
+        "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sample/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-sample"
+      ]
+    },
+    "Project": {
+      "ID": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sample/providers/Microsoft.CognitiveServices/accounts/aif-sample/projects/ai-project",
+      "Name": "ai-project",
+      "ProvisioningState": "Succeeded"
+    },
+    "Deployments": [
+      {
+        "ID": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sample/providers/Microsoft.CognitiveServices/accounts/aif-sample/deployments/gpt-4o-mini",
+        "Type": "Microsoft.CognitiveServices/accounts/deployments",
+        "Name": "gpt-4o-mini",
+        "ProvisioningState": "Succeeded",
+        "DeploymentState": "Running"
+      }
+    ],
+    "Connections": [
+      {
+        "ID": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sample/providers/Microsoft.CognitiveServices/accounts/aif-sample/projects/ai-project/connections/storage-conn",
+        "Type": "Microsoft.CognitiveServices/accounts/projects/connections",
+        "Name": "storage-conn",
+        "Target": {
+          "ResourceID": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sample/providers/Microsoft.Storage/storageAccounts/stsample"
+        }
+      },
+      {
+        "ID": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sample/providers/Microsoft.CognitiveServices/accounts/aif-sample/connections/search-conn",
+        "Type": "Microsoft.CognitiveServices/accounts/connections",
+        "Name": "search-conn",
+        "Target": {
+          "ResourceID": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-shared/providers/Microsoft.Search/searchServices/srch-shared"
+        }
+      }
+    ],
+    "Hosts": [
+      {
+        "ID": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sample/providers/Microsoft.CognitiveServices/accounts/aif-sample/projects/ai-project/capabilityHosts/default",
+        "Type": "Microsoft.CognitiveServices/accounts/projects/capabilityHosts",
+        "Name": "default",
+        "ProvisioningState": "Succeeded",
+        "StorageConnections": [
+          "storage-conn"
+        ]
+      }
+    ],
+    "ObservedTypes": [
+      "Microsoft.CognitiveServices/accounts/deployments",
+      "Microsoft.CognitiveServices/accounts/projects",
+      "Microsoft.CognitiveServices/accounts/projects/connections",
+      "Microsoft.CognitiveServices/accounts/connections",
+      "Microsoft.CognitiveServices/accounts/projects/capabilityHosts"
+    ]
+  },
+  "findings": [
+    {
+      "ruleId": "FND-SAMPLE-001",
+      "severity": "warning",
+      "resource": {
+        "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sample/providers/Microsoft.Storage/storageAccounts/stsample"
+      },
+      "fingerprint": "sample-1"
+    },
+    {
+      "ruleId": "FND-SAMPLE-002",
+      "severity": "error",
+      "resource": {
+        "type": "Microsoft.Authorization/roleAssignments",
+        "name": "ra-storage-blob"
+      },
+      "baselined": true,
+      "fingerprint": "sample-2"
+    }
+  ]
+}

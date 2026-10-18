@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/armexpr"
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/cost/armcost"
 	runtimegw "github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/gateway"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
@@ -157,10 +158,16 @@ func eval001(in *sdk.Input) sdk.Result {
 		if len(notifications) > 5 {
 			o.addKey(b, "budget-has-more-than-five-notifications", "budget has more than five notifications")
 		}
-		var enabled, forecasted, unresolved bool
+		var enabled, forecasted, unresolved, badThreshold bool
 		for _, raw := range notifications {
 			n, _ := raw.(map[string]any)
 			if n == nil {
+				continue
+			}
+			// threshold is a percentage between 0 and 1000 (Notification,
+			// Microsoft.Consumption 2023-11-01).
+			if t, ok := number(n["threshold"]); ok && (t < 0 || t > 1000) {
+				badThreshold = true
 				continue
 			}
 			if isExpr(str(n["enabled"])) || isExpr(str(n["thresholdType"])) || isExpr(str(n["operator"])) {
@@ -180,6 +187,9 @@ func eval001(in *sdk.Input) sdk.Result {
 					forecasted = true
 				}
 			}
+		}
+		if badThreshold {
+			o.addKey(b, "budget-threshold-out-of-range", "budget notification threshold is outside 0 to 1000 percent")
 		}
 		if !enabled {
 			if unresolved {
@@ -224,13 +234,13 @@ func eval002(in *sdk.Input) sdk.Result {
 		}
 		switch {
 		case strings.EqualFold(r.Type, typeDeployment):
-			switch strings.ToLower(strings.TrimSpace(r.SKUName)) {
-			case "globalprovisionedmanaged", "datazoneprovisionedmanaged", "provisionedmanaged":
+			// Documented deployment types, matched case-insensitively
+			// (armcost.ClassifyDeploymentSKU).
+			sku, unresolved := armcost.SKUName(r)
+			if unresolved {
+				o.unresolved = true
+			} else if d, ok := armcost.ClassifyDeploymentSKU(sku); ok && d.Class == armcost.DeploymentProvisioned {
 				o.addKey(r, "dev:provisioned-throughput", "development environment uses provisioned throughput model capacity")
-			case "":
-				if skuUnresolved(r) {
-					o.unresolved = true
-				}
 			}
 		case strings.EqualFold(r.Type, typeSearch):
 			switch strings.ToLower(r.SKUName) {
@@ -301,18 +311,12 @@ func costRelevant(typ string) bool {
 		strings.EqualFold(typ, typeAPIM) || cosmosThroughputType(typ)
 }
 
-const (
-	cosmosSQLDatabase  = "microsoft.documentdb/databaseaccounts/sqldatabases"
-	cosmosSQLContainer = "microsoft.documentdb/databaseaccounts/sqldatabases/containers"
-)
-
 // cosmosThroughputType matches throughputSettings resources and the Cosmos DB
 // SQL databases and containers, whose properties.options.throughput and
 // properties.options.autoscaleSettings.maxThroughput set throughput at creation
 // (CreateUpdateOptions in the Microsoft.DocumentDB 2025-04-15 specification).
 func cosmosThroughputType(typ string) bool {
-	t := strings.ToLower(typ)
-	return strings.HasSuffix(t, "/throughputsettings") || t == cosmosSQLDatabase || t == cosmosSQLContainer
+	return armcost.IsCosmosThroughputType(typ)
 }
 
 func eval003(in *sdk.Input) sdk.Result {
@@ -362,12 +366,17 @@ func eval003(in *sdk.Input) sdk.Result {
 	return o.result()
 }
 
+// eval004 reports what makes the fixed-capacity estimate incomplete. It reads
+// the plan through the same armcost extraction as the cost engine, so
+// `check` and `cost` agree on deployment SKUs, Cosmos DB throughput and the
+// parent-account region.
 func eval004(in *sdk.Input) sdk.Result {
 	if in == nil || in.ARM == nil {
 		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable + ": compiled ARM model unavailable"}}
 	}
 	o := &outcome{}
 	supported := 0
+	all := in.ARM.Resources()
 	live, unc := liveResources(in.ARM)
 	for _, r := range unc {
 		if costRelevant(r.Type) {
@@ -382,13 +391,17 @@ func eval004(in *sdk.Input) sdk.Result {
 			}
 			supported++
 			if _, ok := intAt(r.Properties, "replicaCount"); !ok {
-				o.addKey(r, "incomplete:search-replicas", "fixed-capacity estimate is incomplete because Search replicaCount is unresolved")
+				o.addKey(r, "incomplete:search-replicas", "fixed-capacity estimate is incomplete because Search replicaCount is unresolved or not set")
 			}
 			if _, ok := intAt(r.Properties, "partitionCount"); !ok {
-				o.addKey(r, "incomplete:search-partitions", "fixed-capacity estimate is incomplete because Search partitionCount is unresolved")
+				o.addKey(r, "incomplete:search-partitions", "fixed-capacity estimate is incomplete because Search partitionCount is unresolved or not set")
 			}
 			if _, ok := literalRegion(r.Region); !ok {
 				o.addKey(r, "incomplete:search-region", "fixed-capacity estimate is incomplete because Search region is unresolved")
+			}
+			ct, hm := str(r.Properties["computeType"]), str(r.Properties["hostingMode"])
+			if isExpr(ct) || isExpr(hm) || strings.EqualFold(ct, "Confidential") || strings.EqualFold(hm, "HighDensity") {
+				o.addKey(r, "incomplete:search-meter", "fixed-capacity estimate is incomplete because Search confidential compute or HighDensity hosting is not mapped to a retail meter")
 			}
 		case strings.EqualFold(r.Type, typeAPIM):
 			if strings.EqualFold(r.SKUName, "Consumption") {
@@ -401,34 +414,73 @@ func eval004(in *sdk.Input) sdk.Result {
 			if _, ok := literalRegion(r.Region); !ok {
 				o.addKey(r, "incomplete:apim-region", "fixed-capacity estimate is incomplete because API Management region is unresolved")
 			}
-		case strings.HasSuffix(strings.ToLower(r.Type), "/throughputsettings"):
+			if v, ok := r.Properties["additionalLocations"]; ok && v != nil {
+				if list, isList := v.([]any); !isList || len(list) > 0 {
+					o.addKey(r, "incomplete:apim-additional-locations", "fixed-capacity estimate is incomplete because API Management units in additionalLocations are not priced")
+				}
+			}
+		case armcost.IsCosmosThroughputType(r.Type):
+			t := armcost.CosmosThroughput(r)
+			if t.None() {
+				continue
+			}
 			supported++
-			if _, ok := cosmosThroughput(r); ok {
+			if t.Unresolved {
+				o.addKey(r, "incomplete:cosmos-throughput", "fixed-capacity estimate is incomplete because Cosmos throughput is unresolved")
 				continue
 			}
-			if max, ok := cosmosAutoscale(r); ok {
-				o.addKey(r, "incomplete:cosmos-autoscale-meter", "fixed-capacity estimate is incomplete because Cosmos autoscale retail meter mapping is UNVERIFIED (maxThroughput="+strconv.Itoa(max)+")")
+			if t.HasAutoscale {
+				o.addKey(r, "incomplete:cosmos-autoscale-meter", "fixed-capacity estimate is incomplete because Cosmos autoscale retail meter mapping is UNVERIFIED (maxThroughput="+strconv.FormatFloat(t.AutoscaleMax, 'f', -1, 64)+")")
+			}
+			acct, ok := armcost.FindParent(all, r, armcost.TypeCosmosAccount)
+			if !ok {
+				o.addKey(r, "incomplete:cosmos-region", "fixed-capacity estimate is incomplete because the parent Cosmos DB account, and so the region, is not resolved")
 				continue
 			}
-			o.addKey(r, "incomplete:cosmos-throughput", "fixed-capacity estimate is incomplete because Cosmos throughput is unresolved")
+			a := armcost.ReadCosmosAccount(acct)
+			switch {
+			case a.UnresolvedReason != "":
+				o.addKey(r, "incomplete:cosmos-region", "fixed-capacity estimate is incomplete because the parent Cosmos DB account regions are not resolved")
+			case a.MultiRegionWrite || a.FreeTier || zoneRedundant(a):
+				o.addKey(r, "incomplete:cosmos-account-billing", "fixed-capacity estimate is incomplete because multi-region write, free tier or zone redundancy pricing is not modelled")
+			}
+		case armcost.IsCosmosChildWithOptions(r):
+			supported++
+			o.addKey(r, "incomplete:cosmos-api-type", "fixed-capacity estimate is incomplete because this Cosmos DB API type is not modelled")
 		case strings.EqualFold(r.Type, typeDeployment):
-			switch strings.ToLower(strings.TrimSpace(r.SKUName)) {
-			case "globalprovisionedmanaged", "datazoneprovisionedmanaged", "provisionedmanaged":
+			sku, unresolved := armcost.SKUName(r)
+			d, known := armcost.ClassifyDeploymentSKU(sku)
+			switch {
+			case unresolved:
+				o.unresolved = true
+			case !known:
+				supported++
+				o.addKey(r, "incomplete:deployment-sku", "fixed-capacity estimate is incomplete because the deployment sku.name is missing or not a documented deployment type")
+			case d.Class == armcost.DeploymentProvisioned:
 				supported++
 				o.addKey(r, "incomplete:ptu-meter", "fixed-capacity estimate is incomplete because PTU retail meter mapping remains UNVERIFIED for generic deployment SKUs")
 			}
 		}
 	}
 	if supported == 0 {
-		if o.cond {
+		if o.cond || o.unresolved {
 			return o.result()
 		}
 		return sdk.Result{Skipped: &sdk.Skip{Reason: "no-supported-fixed-capacity-resources"}}
 	}
-	if len(o.findings) == 0 {
+	if len(o.findings) == 0 && !o.unresolved && !o.cond {
 		return sdk.Result{}
 	}
 	return o.result()
+}
+
+func zoneRedundant(a armcost.CosmosAccount) bool {
+	for _, r := range a.Regions {
+		if r.ZoneRedundant {
+			return true
+		}
+	}
+	return false
 }
 
 func isDev(in *sdk.Input) bool {
@@ -600,11 +652,7 @@ func skuCapacity(r sdk.ARMResource) (float64, bool) {
 // throughputBag returns the object that holds throughput: properties.resource
 // for throughputSettings, properties.options for SQL databases and containers.
 func throughputBag(r sdk.ARMResource) map[string]any {
-	t := strings.ToLower(r.Type)
-	if t == cosmosSQLDatabase || t == cosmosSQLContainer {
-		return mapAt(r.Properties, "options")
-	}
-	return mapAt(r.Properties, "resource")
+	return armcost.ThroughputBag(r)
 }
 
 func cosmosThroughput(r sdk.ARMResource) (float64, bool) {

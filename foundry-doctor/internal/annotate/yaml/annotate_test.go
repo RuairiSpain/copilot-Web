@@ -30,3 +30,17 @@ func TestApplyRejectsOutOfRange(t *testing.T) {
 		t.Fatal("want error")
 	}
 }
+
+func TestApplyBannerWithoutCommentsKeepsBOMFirst(t *testing.T) {
+	got, err := Apply([]byte("\uFEFFname: demo\n"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "\uFEFF" + Banner + "\nname: demo\n"; string(got) != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+	var v map[string]any
+	if err := goyaml.Unmarshal(got, &v); err != nil || v["name"] != "demo" {
+		t.Fatalf("annotated yaml must keep its meaning: %v %v", v, err)
+	}
+}

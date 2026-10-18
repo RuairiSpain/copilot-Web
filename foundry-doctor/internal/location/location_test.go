@@ -20,6 +20,7 @@ func TestSanitizePath(t *testing.T) {
 		"~/.ssh/id":              "id",
 		"a\x00b/c\n":             "ab/c",
 		"..":                     "",
+		"infra/\u202emain.bicep": "infra/main.bicep",
 	}
 	for in, want := range cases {
 		got := SanitizePath(in)

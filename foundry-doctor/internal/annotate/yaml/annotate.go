@@ -16,12 +16,16 @@ type Comment struct {
 	Text string
 }
 
-// Apply inserts deterministic YAML comment lines ahead of the target lines.
+const bom = "\uFEFF"
+
+// Apply writes the review banner and inserts deterministic YAML comment lines
+// ahead of the target lines. The banner is written even when comments is
+// empty. A leading UTF-8 byte order mark stays first.
 func Apply(src []byte, comments []Comment) ([]byte, error) {
-	if len(comments) == 0 {
-		return src, nil
-	}
-	lines, ends := split(src)
+	text := string(src)
+	hasBOM := strings.HasPrefix(text, bom)
+	text = strings.TrimPrefix(text, bom)
+	lines, ends := split([]byte(text))
 	for _, c := range comments {
 		if c.Line <= 0 || c.Line > len(lines) {
 			return nil, fmt.Errorf("yaml comment line %d out of range", c.Line)
@@ -46,6 +50,9 @@ func Apply(src []byte, comments []Comment) ([]byte, error) {
 		grouped[c.Line] = append(grouped[c.Line], prefix+" "+strings.TrimSpace(c.Text))
 	}
 	var b strings.Builder
+	if hasBOM {
+		b.WriteString(bom)
+	}
 	b.WriteString(Banner)
 	b.WriteByte('\n')
 	for i, line := range lines {

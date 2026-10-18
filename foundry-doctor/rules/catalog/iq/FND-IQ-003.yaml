@@ -1,5 +1,5 @@
 id: FND-IQ-003
-version: 1
+version: 2
 group: IQ
 title: "Vector field type, dimensions and profile"
 description: >-
@@ -82,6 +82,11 @@ sources:
       MicrosoftDocs/azure-ai-docs: articles/search/vector-search-vectorizer-azure-open-ai.md; retrieved
       2026-10-04
     note: Expected field dimensions by modelName (min and max).
+  - url: https://learn.microsoft.com/rest/api/searchservice/supported-data-types
+    lastVerified: '2026-10-18'
+    verifiedVia: https://learn.microsoft.com/rest/api/searchservice/supported-data-types (web fetch, Phase 8 fix loop 1)
+    note: >-
+      Vector EDM types are Collection(Edm.Single|Half|Int16|SByte|Byte); Collection(Edm.String) and the other collections are non-vector types.
 overlap:
   decision: native
   provisional: true
@@ -123,3 +128,4 @@ tests:
 notes: >-
   Dimension ranges are only asserted for the azureOpenAI vectorizer where a table exists. Limits for
   quantization or truncationDimension (preview-era MRL) are not asserted here.
+  Round-1 fix (2026-10-18): vector-field classification limited to the documented vector types (or dimensions / vectorSearchProfile present). Unknown API versions are uncertain; no data plane read means skipped.

@@ -27,6 +27,9 @@ import (
 
 var graphClient = defaultAzureClient
 
+// graphvizRenderer is the optional SVG/PNG adapter; tests replace it.
+var graphvizRenderer = graphviz.Binary{}
+
 type GraphTarget struct {
 	SubscriptionID string
 	ResourceGroup  string
@@ -45,14 +48,21 @@ type GraphRequest struct {
 	CollapseAfter  int
 	FindingsReport []string
 	Target         GraphTarget
+	// DiffBase and DiffTarget are graph JSON files (from --format json) for
+	// the environment-difference graph (Mode diff).
+	DiffBase   string
+	DiffTarget string
 }
 
 func (r *GraphRequest) Validate() error {
+	if r.Mode == "" && (r.DiffBase != "" || r.DiffTarget != "") {
+		r.Mode = graphview.ModeDiff
+	}
 	if r.Mode == "" {
 		r.Mode = graphview.ModeSource
 	}
 	switch r.Mode {
-	case graphview.ModeSource, graphview.ModeDeployed, graphview.ModeCombined:
+	case graphview.ModeSource, graphview.ModeDeployed, graphview.ModeCombined, graphview.ModeDiff:
 	default:
 		return Usagef("invalid graph mode %q", r.Mode)
 	}
@@ -60,9 +70,21 @@ func (r *GraphRequest) Validate() error {
 		r.Format = "mermaid"
 	}
 	switch r.Format {
-	case "mermaid", "json", "markdown", "dot", "html":
+	case "mermaid", "json", "markdown", "dot", "html", "svg", "png":
 	default:
-		return Usagef("invalid --format %q for graph (want mermaid, json, markdown, dot or html)", r.Format)
+		return Usagef("invalid --format %q for graph (want mermaid, json, markdown, dot, html, svg or png)", r.Format)
+	}
+	if r.Mode == graphview.ModeDiff {
+		if r.DiffBase == "" || r.DiffTarget == "" {
+			return Usagef("--diff-base and --diff-target are both required for an environment-difference graph")
+		}
+		if r.Target != (GraphTarget{}) || len(r.FindingsReport) > 0 {
+			return Usagef("--diff-base/--diff-target compare two rendered graph JSON files; Azure target and --findings-report flags do not apply")
+		}
+		return nil
+	}
+	if r.DiffBase != "" || r.DiffTarget != "" {
+		return Usagef("--diff-base/--diff-target cannot be combined with --%s", r.Mode)
 	}
 	if r.CollapseAfter < 0 || r.MaxNodes < 0 || r.MaxEdges < 0 {
 		return Usagef("graph limits must be non-negative")
@@ -98,12 +120,17 @@ func Graph(ctx context.Context, svc Services, req GraphRequest, stdout io.Writer
 	if req.Dir == "" {
 		req.Dir = "."
 	}
+	if req.Mode == graphview.ModeDiff {
+		return graphDiff(ctx, svc, req, stdout)
+	}
 	var (
 		doc           *azureyaml.Document
 		coreServices  []coregraph.Service
 		coreResources []coregraph.Resource
 		inventory     []azure.Resource
 		runtimeIn     graphview.RuntimeInput
+		scope         string
+		notes         []string
 	)
 	if req.Mode != graphview.ModeDeployed {
 		set, err := svc.Config.Resolve(ctx, ConfigRequest{Dir: req.Dir})
@@ -157,7 +184,7 @@ func Graph(ctx context.Context, svc Services, req GraphRequest, stdout io.Writer
 		if err != nil {
 			return ExitCodeForError(ErrUnavailable), fmt.Errorf("%w: azure adapter: %w", ErrUnavailable, err)
 		}
-		scope := "/subscriptions/" + req.Target.SubscriptionID
+		scope = "/subscriptions/" + req.Target.SubscriptionID
 		if req.Target.ResourceGroup != "" {
 			scope += "/resourceGroups/" + req.Target.ResourceGroup
 		}
@@ -176,40 +203,90 @@ func Graph(ctx context.Context, svc Services, req GraphRequest, stdout io.Writer
 		if req.Target.Account != "" {
 			if acct := findAccount(inventory, req.Target.Account); acct != nil {
 				runtimeIn.Account = acct
+			} else if svc.Stderr != nil {
+				_, _ = fmt.Fprintf(svc.Stderr, "warning: Foundry account %q is not in the Azure inventory for %s; runtime overlay nodes are drawn without an account node\n", req.Target.Account, scope)
 			}
-			runtimeIn.Deployments, err = client.Foundry.ListAccountDeployments(ctx, req.Target.SubscriptionID, req.Target.ResourceGroup, req.Target.Account)
-			if err != nil {
-				return graphOverlayError("list account deployments", err)
+			sub, rg, acct, proj := req.Target.SubscriptionID, req.Target.ResourceGroup, req.Target.Account, req.Target.Project
+			// overlay runs one read-only overlay call. A permission or
+			// availability failure skips that overlay with a note instead of
+			// failing the graph; any other failure stops the command.
+			overlay := func(op, typ string, call func() error) error {
+				err := call()
+				if err == nil {
+					runtimeIn.ObservedTypes = append(runtimeIn.ObservedTypes, typ)
+					return nil
+				}
+				if errors.Is(err, azure.ErrUnavailable) {
+					notes = append(notes, op+" overlay skipped: not readable with the current permissions or unavailable")
+					if svc.Stderr != nil {
+						_, _ = fmt.Fprintf(svc.Stderr, "warning: %s overlay skipped: %v\n", op, err)
+					}
+					return nil
+				}
+				return err
 			}
-			if req.Target.Project != "" {
-				proj, err := client.Foundry.GetProject(ctx, req.Target.SubscriptionID, req.Target.ResourceGroup, req.Target.Account, req.Target.Project)
-				if err != nil {
-					return graphOverlayError("get project runtime", err)
+			type overlayStep struct {
+				op, typ string
+				call    func() error
+			}
+			steps := []overlayStep{{"account deployments", "Microsoft.CognitiveServices/accounts/deployments", func() error {
+				v, err := client.Foundry.ListAccountDeployments(ctx, sub, rg, acct)
+				if err == nil {
+					runtimeIn.Deployments = v
 				}
-				runtimeIn.Project = &proj
-				projectConns, err := client.Foundry.ListProjectConnections(ctx, req.Target.SubscriptionID, req.Target.ResourceGroup, req.Target.Account, req.Target.Project)
-				if err != nil {
-					return graphOverlayError("list project connections", err)
+				return err
+			}}}
+			var projectConns, accountConns []azure.FoundryConnection
+			listAccountConns := overlayStep{"account connections", "Microsoft.CognitiveServices/accounts/connections", func() error {
+				v, err := client.Foundry.ListAccountConnections(ctx, sub, rg, acct)
+				if err == nil {
+					accountConns = v
 				}
-				accountConns, err := client.Foundry.ListAccountConnections(ctx, req.Target.SubscriptionID, req.Target.ResourceGroup, req.Target.Account)
-				if err != nil {
-					return graphOverlayError("list account connections", err)
-				}
-				runtimeIn.Connections = mergeFoundryConnections(projectConns, accountConns)
-				runtimeIn.Hosts, err = client.Foundry.ListProjectCapabilityHosts(ctx, req.Target.SubscriptionID, req.Target.ResourceGroup, req.Target.Account, req.Target.Project)
-				if err != nil {
-					return graphOverlayError("list project capability hosts", err)
-				}
+				return err
+			}}
+			if proj != "" {
+				steps = append(steps,
+					overlayStep{"project", "Microsoft.CognitiveServices/accounts/projects", func() error {
+						p, err := client.Foundry.GetProject(ctx, sub, rg, acct, proj)
+						if err == nil {
+							runtimeIn.Project = &p
+						}
+						return err
+					}},
+					overlayStep{"project connections", "Microsoft.CognitiveServices/accounts/projects/connections", func() error {
+						v, err := client.Foundry.ListProjectConnections(ctx, sub, rg, acct, proj)
+						if err == nil {
+							projectConns = v
+						}
+						return err
+					}},
+					listAccountConns,
+					overlayStep{"project capability hosts", "Microsoft.CognitiveServices/accounts/projects/capabilityHosts", func() error {
+						v, err := client.Foundry.ListProjectCapabilityHosts(ctx, sub, rg, acct, proj)
+						if err == nil {
+							runtimeIn.Hosts = v
+						}
+						return err
+					}},
+				)
 			} else {
-				runtimeIn.Connections, err = client.Foundry.ListAccountConnections(ctx, req.Target.SubscriptionID, req.Target.ResourceGroup, req.Target.Account)
-				if err != nil {
-					return graphOverlayError("list account connections", err)
-				}
-				runtimeIn.Hosts, err = client.Foundry.ListAccountCapabilityHosts(ctx, req.Target.SubscriptionID, req.Target.ResourceGroup, req.Target.Account)
-				if err != nil {
-					return graphOverlayError("list account capability hosts", err)
+				steps = append(steps,
+					listAccountConns,
+					overlayStep{"account capability hosts", "Microsoft.CognitiveServices/accounts/capabilityHosts", func() error {
+						v, err := client.Foundry.ListAccountCapabilityHosts(ctx, sub, rg, acct)
+						if err == nil {
+							runtimeIn.Hosts = v
+						}
+						return err
+					}},
+				)
+			}
+			for _, st := range steps {
+				if err := overlay(st.op, st.typ, st.call); err != nil {
+					return graphOverlayError("read "+st.op, err)
 				}
 			}
+			runtimeIn.Connections = mergeFoundryConnections(projectConns, accountConns)
 		}
 	}
 
@@ -233,18 +310,57 @@ func Graph(ctx context.Context, svc Services, req GraphRequest, stdout io.Writer
 		MaxNodes:      req.MaxNodes,
 		MaxEdges:      req.MaxEdges,
 		CollapseAfter: req.CollapseAfter,
+		Scope:         scope,
 	})
 	if err != nil {
 		return ExitInternal, fmt.Errorf("build graph: %w", err)
 	}
-	data, err := renderGraph(g, req.Format)
+	g.Summary.Notes = notes
+	return emitGraph(ctx, svc, req, g, stdout)
+}
+
+func emitGraph(ctx context.Context, svc Services, req GraphRequest, g graphview.Graph, stdout io.Writer) (int, error) {
+	data, err := renderGraph(ctx, g, req.Format)
 	if err != nil {
-		return ExitInternal, err
+		return ExitCodeForError(err), err
 	}
 	if err := svc.emit(req.Out, data, stdout); err != nil {
 		return ExitInternal, err
 	}
 	return ExitOK, nil
+}
+
+// graphDiff renders the environment-difference graph of two graph JSON files.
+func graphDiff(ctx context.Context, svc Services, req GraphRequest, stdout io.Writer) (int, error) {
+	base, err := loadGraphJSON(req.DiffBase)
+	if err != nil {
+		return ExitCodeForError(err), err
+	}
+	target, err := loadGraphJSON(req.DiffTarget)
+	if err != nil {
+		return ExitCodeForError(err), err
+	}
+	g, err := graphview.Diff(base, target, graphview.Options{Mode: graphview.ModeDiff, RedactIDs: req.RedactIDs})
+	if err != nil {
+		err = Usagef("graph diff: %v", err)
+		return ExitCodeForError(err), err
+	}
+	return emitGraph(ctx, svc, req, g, stdout)
+}
+
+func loadGraphJSON(path string) (graphview.Graph, error) {
+	data, err := os.ReadFile(filepath.Clean(path))
+	if err != nil {
+		return graphview.Graph{}, fmt.Errorf("%w: read graph %q: %w", ErrUnavailable, path, err)
+	}
+	var g graphview.Graph
+	if err := json.Unmarshal(data, &g); err != nil {
+		return graphview.Graph{}, Usagef("graph %q is not graph JSON (render it with --format json): %v", path, err)
+	}
+	if g.SchemaVersion == "" {
+		return graphview.Graph{}, Usagef("graph %q has no schemaVersion; render it with `graph --format json`", path)
+	}
+	return g, nil
 }
 
 func sourceServices(doc *azureyaml.Document) []coregraph.Service {
@@ -335,7 +451,7 @@ func graphOverlayError(op string, err error) (int, error) {
 	return ExitCodeForError(wrapped), wrapped
 }
 
-func renderGraph(g graphview.Graph, format string) ([]byte, error) {
+func renderGraph(ctx context.Context, g graphview.Graph, format string) ([]byte, error) {
 	switch format {
 	case "mermaid":
 		return mermaid.Render(g), nil
@@ -351,6 +467,15 @@ func renderGraph(g graphview.Graph, format string) ([]byte, error) {
 		return graphviz.RenderDOT(g), nil
 	case "html":
 		return graphreport.HTML(g), nil
+	case "svg", "png":
+		out, err := graphvizRenderer.Render(ctx, graphviz.RenderDOT(g), format)
+		if errors.Is(err, graphviz.ErrNotFound) {
+			return nil, fmt.Errorf("%w: optional Graphviz renderer not installed (`dot` not on PATH); use --format mermaid, markdown or dot", ErrUnavailable)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("render graph %s: %w", format, err)
+		}
+		return out, nil
 	default:
 		return nil, Usagef("invalid graph format %q", format)
 	}

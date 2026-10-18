@@ -1,0 +1,2187 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Foundry Doctor WAF developer detail</title>
+  <style>
+    :root { color-scheme: light dark; --bg: #ffffff; --fg: #1b1b1b; --muted: #4b5563; --border: #d1d5db; --pass: #0b6a0b; --fail: #9f1239; --warn: #92400e; --other: #374151; --link: #0645ad; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #111827; --fg: #f3f4f6; --muted: #d1d5db; --border: #4b5563; --pass: #86efac; --fail: #fda4af; --warn: #fcd34d; --other: #e5e7eb; --link: #93c5fd; }
+    }
+    body { font-family: Segoe UI, Arial, sans-serif; margin: 2rem; background: var(--bg); color: var(--fg); line-height: 1.5; }
+    a { color: var(--link); }
+    h1,h2,h3 { line-height: 1.2; }
+    table { border-collapse: collapse; width: 100%; margin-bottom: 1rem; }
+    caption { text-align: left; font-weight: 600; padding-bottom: .25rem; }
+    th, td { border: 1px solid var(--border); padding: .5rem; text-align: left; vertical-align: top; }
+    pre { overflow-x: auto; border: 1px solid var(--border); padding: .5rem; }
+    .muted { color: var(--muted); }
+    .state-PASS { color: var(--pass); } .state-FAIL { color: var(--fail); } .state-WARNING { color: var(--warn); }
+    .state-UNKNOWN, .state-QUESTION, .state-SKIPPED, .state-INFO, .state-ATTESTED, .state-NOT_APPLICABLE { color: var(--other); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Foundry Doctor WAF developer detail</h1>
+    <p class="muted">Static HTML report. No script is embedded. This report does not claim complete WAF compliance and is not a certification.</p>
+  </header>
+  <main>
+    <section aria-labelledby="summary">
+      <h2 id="summary">Summary</h2>
+      <p><strong>Profile:</strong> foundry-test</p>
+      <p><strong>Decision:</strong> Proceed with conditions: mandatory controls need remediation or manual review.</p>
+      <p><strong>Assessed scope:</strong> azure.yaml and compiled infrastructure evidence where available</p>
+      <table>
+        <caption>Controls by state</caption>
+        <thead><tr><th scope="col">State</th><th scope="col">Count</th></tr></thead>
+        <tbody>
+          <tr><th scope="row" class="state-FAIL">FAIL</th><td>0</td></tr>
+          <tr><th scope="row" class="state-WARNING">WARNING</th><td>1</td></tr>
+          <tr><th scope="row" class="state-UNKNOWN">UNKNOWN</th><td>6</td></tr>
+          <tr><th scope="row" class="state-QUESTION">QUESTION</th><td>2</td></tr>
+          <tr><th scope="row" class="state-SKIPPED">SKIPPED</th><td>65</td></tr>
+          <tr><th scope="row" class="state-ATTESTED">ATTESTED</th><td>0</td></tr>
+          <tr><th scope="row" class="state-INFO">INFO</th><td>0</td></tr>
+          <tr><th scope="row" class="state-NOT_APPLICABLE">NOT_APPLICABLE</th><td>4</td></tr>
+          <tr><th scope="row" class="state-PASS">PASS</th><td>0</td></tr>
+          
+        </tbody>
+      </table>
+    </section>
+
+    <section aria-labelledby="pillar-security">
+      <h2 id="pillar-security">Security</h2>
+      <article aria-labelledby="control-FND-CFG-005">
+        <h3 id="control-FND-CFG-005">No raw secrets in YAML/Bicep/environment blocks — <span class="state-UNKNOWN">UNKNOWN</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-CFG-005 (version 4)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>No evidence was recorded for this control.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference">https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference</a> (verified 2026-10-05)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Store the secret in the azd environment as a secret (azd env set-secret) or in Key Vault, and reference it with ${VAR} in azure.yaml. In Bicep, mark secret parameters @secure() with no default and never output them. Prefer Entra ID or managed identity authentication where the target supports it.</dd>
+          <dt>Fix</dt><dd><pre><code>services:
+  github-conn:
+    host: azure.ai.connection
+    uses: [ai-project]
+    category: RemoteTool
+    target: https://api.githubcopilot.com/mcp
+    authType: CustomKeys
+    credentials:
+      Authorization: ${GITHUB_PAT}   # set with: azd env set-secret GITHUB_PAT</code></pre></dd>
+          <dt>Evidence</dt><dd>No finding or skip record was present.</dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-CFG-007">
+        <h3 id="control-FND-CFG-007">Outbound endpoints use HTTPS and reject unsafe local/metadata targets — <span class="state-UNKNOWN">UNKNOWN</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-CFG-007 (version 2)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>No evidence was recorded for this control.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://learn.microsoft.com/azure/foundry/agents/how-to/tools/model-context-protocol">https://learn.microsoft.com/azure/foundry/agents/how-to/tools/model-context-protocol</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Use https endpoints reachable from the service that calls them. For internal servers, publish them on a private endpoint or an internal Container Apps ingress and use their private DNS name over https instead of an IP literal. Remove localhost and metadata addresses from deployed configuration.</dd>
+          <dt>Fix</dt><dd><pre><code>services:
+  github-conn:
+    host: azure.ai.connection
+    category: RemoteTool
+    target: https://api.githubcopilot.com/mcp</code></pre></dd>
+          <dt>Evidence</dt><dd>No finding or skip record was present.</dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-DEP-003">
+        <h3 id="control-FND-DEP-003">Deployer can create resources and role assignments — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-DEP-003 (version 2)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: not-implemented.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/authorization/resource-manager/Microsoft.Authorization/Authorization/stable/2022-04-01/authorization-RoleDefinitionsCalls.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/authorization/resource-manager/Microsoft.Authorization/Authorization/stable/2022-04-01/authorization-RoleDefinitionsCalls.json</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Assign the deployer a role that includes the missing write actions at the narrowest sufficient scope. For templates that create role assignments, Owner or User Access Administrator (or a custom role with Microsoft.Authorization/roleAssignments/write) is needed in addition to a resource-write role.</dd>
+          <dt>Fix</dt><dd><pre><code>az role assignment create --assignee &lt;deployer-object-id&gt; --role &#34;Contributor&#34; --scope /subscriptions/&lt;sub-id&gt;/resourceGroups/&lt;rg&gt;
+az role assignment create --assignee &lt;deployer-object-id&gt; --role &#34;Role Based Access Control Administrator&#34; --scope /subscriptions/&lt;sub-id&gt;/resourceGroups/&lt;rg&gt;</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: not-implemented</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-IDN-001">
+        <h3 id="control-FND-IDN-001">Managed identities used for Foundry and workloads — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-IDN-001 (version 3)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup">https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Enable a system-assigned or user-assigned managed identity on the Foundry account, on each project and on every workload that calls Foundry, then grant that identity data-plane roles on the dependent resources (see FND-IDN-002). Choose the user-assigned option at project creation if you need it, because the project identity type cannot be changed later.</dd>
+          <dt>Fix</dt><dd><pre><code>resource account &#39;Microsoft.CognitiveServices/accounts@2026-09-01&#39; = {
+  name: accountName
+  location: location
+  kind: &#39;AIServices&#39;
+  sku: { name: &#39;S0&#39; }
+  identity: { type: &#39;SystemAssigned&#39; }
+  properties: { /* ... */ }
+}
+resource project &#39;Microsoft.CognitiveServices/accounts/projects@2026-09-01&#39; = {
+  parent: account
+  name: projectName
+  location: location
+  identity: { type: &#39;SystemAssigned&#39; }
+  properties: {}
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-IDN-002">
+        <h3 id="control-FND-IDN-002">Project identity has required data roles — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-IDN-002 (version 1)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: not-implemented.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup">https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Assign the project managed identity the documented data roles on each store before agents run: Search Index Data Contributor and Search Service Contributor on Search, Storage Blob Data Contributor and Storage Blob Data Owner on the storage containers, Cosmos DB Operator on the account plus the Cosmos DB Built-in Data Contributor SQL role on the database. Assign them at the narrowest scope that works. These roles are separate from the roles the deploying identity needs.</dd>
+          <dt>Fix</dt><dd><pre><code>resource searchIndexData &#39;Microsoft.Authorization/roleAssignments@2022-04-01&#39; = {
+  scope: search
+  name: guid(search.id, project.id, &#39;8ebe5a00-799e-43f5-93ac-243d3dce84a7&#39;)
+  properties: {
+    roleDefinitionId: subscriptionResourceId(&#39;Microsoft.Authorization/roleDefinitions&#39;, &#39;8ebe5a00-799e-43f5-93ac-243d3dce84a7&#39;) // Search Index Data Contributor
+    principalId: project.identity.principalId
+    principalType: &#39;ServicePrincipal&#39;
+  }
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: not-implemented</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-IDN-004">
+        <h3 id="control-FND-IDN-004">No broad Owner/Contributor for application identities — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-IDN-004 (version 6)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/role-based-access-control/role-assignments-steps">https://learn.microsoft.com/azure/role-based-access-control/role-assignments-steps</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Replace Owner, Contributor, User Access Administrator and Role Based Access Control Administrator on application identities with the narrow roles the workload needs, such as Foundry User on the project, Foundry Agent Consumer for callers, and the data-plane roles in FND-IDN-002. Keep any unavoidable privileged role at the narrowest scope and add an ABAC condition when the role can assign roles. Give pipelines a separate deployment identity.</dd>
+          <dt>Fix</dt><dd><pre><code>// Instead of Contributor on the resource group, grant the project identity only what the agent needs:
+resource projectUser &#39;Microsoft.Authorization/roleAssignments@2022-04-01&#39; = {
+  scope: account
+  name: guid(account.id, project.id, &#39;53ca6127-db72-4b80-b1b0-d745d6d5456d&#39;)
+  properties: {
+    roleDefinitionId: subscriptionResourceId(&#39;Microsoft.Authorization/roleDefinitions&#39;, &#39;53ca6127-db72-4b80-b1b0-d745d6d5456d&#39;) // Foundry User
+    principalId: project.identity.principalId
+    principalType: &#39;ServicePrincipal&#39;
+  }
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-IDN-005">
+        <h3 id="control-FND-IDN-005">Standing human admin access reviewed — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-IDN-005 (version 2)</dd>
+          <dt>Mandatory</dt><dd>false</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/role-based-access-control/best-practices">https://learn.microsoft.com/azure/role-based-access-control/best-practices</a> (verified 2026-10-04)</dd>
+          <dt>Review question</dt><dd>Has the team reviewed standing human admin access with current business and support context?</dd>
+          
+          
+          
+          <dt>Recommendation</dt><dd>Review each listed assignment. Prefer a job function role over a privileged administrator role, assign roles to groups, use the narrowest scope, and make human admin access eligible or time-bound through PIM where licensed. Keep between two and three subscription owners.</dd>
+          <dt>Fix</dt><dd><pre><code>// Make an admin group eligible through PIM instead of a permanent assignment (portal, CLI or REST):
+// Access control (IAM) &gt; Add role assignment &gt; Assignment type: Eligible
+// Time-bound active assignment through a role assignment schedule request is also acceptable.</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-IDN-006">
+        <h3 id="control-FND-IDN-006">Federated credentials use HTTPS issuer and specific subject — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-IDN-006 (version 1)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://openid.net/specs/openid-connect-discovery-1_0.html#IssuerDiscovery">https://openid.net/specs/openid-connect-discovery-1_0.html#IssuerDiscovery</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Use the exact https issuer of the provider and a subject that names one workload: for GitHub Actions an environment, branch, pull request or tag of one repository, preferably in the immutable subject form; for AKS the exact namespace and service account. Do not put wildcards in a standard credential; if one credential must cover several branches, use a flexible federated identity credential (preview) with an immutable claim, and remove credentials whose workload no longer exists.</dd>
+          <dt>Fix</dt><dd><pre><code>resource fic &#39;Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials@2024-11-30&#39; = {
+  parent: deployIdentity
+  name: &#39;github-prod&#39;
+  properties: {
+    issuer: &#39;https://token.actions.githubusercontent.com&#39;
+    subject: &#39;repo:contoso/payments-api:environment:prod&#39; // one repository and one environment
+    audiences: [ &#39;api://AzureADTokenExchange&#39; ]
+  }
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-NET-001">
+        <h3 id="control-FND-NET-001">Foundry public access/private endpoint posture — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-NET-001 (version 4)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/concepts/networking-options">https://learn.microsoft.com/azure/foundry/agents/concepts/networking-options</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>For test and production set publicNetworkAccess to Disabled and add a private endpoint with group ID account in the VNet that hosts your clients and agents, with its private DNS zones (see FND-NET-003). If you need limited public access, use restricted mode (defaultAction Deny plus an explicit allow list). Public access is acceptable for dev prototyping.</dd>
+          <dt>Fix</dt><dd><pre><code>resource account &#39;Microsoft.CognitiveServices/accounts@2026-09-01&#39; = {
+  name: accountName
+  location: location
+  kind: &#39;AIServices&#39;
+  sku: { name: &#39;S0&#39; }
+  identity: { type: &#39;SystemAssigned&#39; }
+  properties: {
+    customSubDomainName: accountName
+    publicNetworkAccess: &#39;Disabled&#39;
+    networkAcls: { defaultAction: &#39;Deny&#39; }
+  }
+}
+resource pe &#39;Microsoft.Network/privateEndpoints@2024-05-01&#39; = {
+  name: &#39;${accountName}-pe&#39;
+  location: location
+  properties: {
+    subnet: { id: peSubnetId }
+    privateLinkServiceConnections: [{
+      name: &#39;account&#39;
+      properties: { privateLinkServiceId: account.id, groupIds: [&#39;account&#39;] }
+    }]
+  }
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-NET-002">
+        <h3 id="control-FND-NET-002">Dependent services public access/default-deny/private endpoints — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-NET-002 (version 3)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks">https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Disable public network access on the Storage, Cosmos DB and AI Search resources that back the agents and give each a private endpoint in the private endpoint subnet, with its private DNS zone (FND-NET-003). Do not rely on the Foundry template to create them; the Foundry documentation states it does not.</dd>
+          <dt>Fix</dt><dd><pre><code>resource search &#39;Microsoft.Search/searchServices@2025-05-01&#39; = {
+  name: searchName
+  location: location
+  sku: { name: &#39;standard&#39; }
+  properties: { publicNetworkAccess: &#39;Disabled&#39; }
+}
+resource searchPe &#39;Microsoft.Network/privateEndpoints@2024-05-01&#39; = {
+  name: &#39;${searchName}-pe&#39;
+  location: location
+  properties: {
+    subnet: { id: peSubnetId }
+    privateLinkServiceConnections: [{
+      name: &#39;search&#39;
+      properties: { privateLinkServiceId: search.id, groupIds: [&#39;searchService&#39;] }
+    }]
+  }
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-NET-007">
+        <h3 id="control-FND-NET-007">Restricted mode has allowed IP range — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-NET-007 (version 2)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/how-to/configure-private-link">https://learn.microsoft.com/azure/foundry/how-to/configure-private-link</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>If you want restricted mode, list the egress IPs of your build agents and developer networks as ipRules (or subnets as virtualNetworkRules). If you want fully private access, set publicNetworkAccess to Disabled and use a private endpoint instead.</dd>
+          <dt>Fix</dt><dd><pre><code>properties: {
+  publicNetworkAccess: &#39;Enabled&#39;
+  networkAcls: {
+    defaultAction: &#39;Deny&#39;
+    bypass: &#39;AzureServices&#39;
+    ipRules: [{ value: &#39;203.0.113.0/24&#39; }]
+  }
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-NET-010">
+        <h3 id="control-FND-NET-010">Azure Monitor private-link choice is explicit — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-NET-010 (version 3)</dd>
+          <dt>Mandatory</dt><dd>false</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>An Azure Monitor Private Link Scope is reached through a private endpoint, and Azure Monitor refers its cost to Azure Private Link pricing. (<a href="https://learn.microsoft.com/azure/azure-monitor/fundamentals/private-link-security">https://learn.microsoft.com/azure/azure-monitor/fundamentals/private-link-security</a>, verified 2026-10-18)</dd>
+          <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://learn.microsoft.com/azure/azure-monitor/fundamentals/private-link-design">https://learn.microsoft.com/azure/azure-monitor/fundamentals/private-link-design</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Decide the telemetry path. For private telemetry, create one AMPLS per DNS boundary, add the Application Insights component and its workspace as scoped resources, create the private endpoint with group ID azuremonitor and link the Azure Monitor private DNS zones, and set both access modes explicitly. Use Open while resources are still being added and switch to Private Only only when all Azure Monitor resources are in the scope. If you accept public telemetry, record that decision in the Foundry Doctor config so the finding is suppressed with a reason.</dd>
+          <dt>Fix</dt><dd><pre><code>resource ampls &#39;Microsoft.Insights/privateLinkScopes@2021-09-01&#39; = {
+  name: &#39;ampls-${name}&#39;
+  location: &#39;global&#39;
+  properties: {
+    accessModeSettings: { ingestionAccessMode: &#39;Open&#39;, queryAccessMode: &#39;Open&#39; } // explicit; move to PrivateOnly once every resource is scoped
+  }
+}
+resource scoped &#39;Microsoft.Insights/privateLinkScopes/scopedResources@2021-09-01&#39; = {
+  parent: ampls
+  name: &#39;appi&#39;
+  properties: { linkedResourceId: appInsights.id }
+}
+// private endpoint with groupIds: [&#39;azuremonitor&#39;] and privateLinkServiceId: ampls.id</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-NET-011">
+        <h3 id="control-FND-NET-011">NSG/DDoS recommendations — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-NET-011 (version 3)</dd>
+          <dt>Mandatory</dt><dd>false</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>DDoS Network Protection and DDoS IP Protection are priced per protected IP or per 100 protected IPs; only DDoS infrastructure protection is at no additional cost. (<a href="https://learn.microsoft.com/azure/ddos-protection/ddos-protection-sku-comparison">https://learn.microsoft.com/azure/ddos-protection/ddos-protection-sku-comparison</a>, verified 2026-10-18)</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.VNET.UseNSGs/">https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.VNET.UseNSGs/</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Associate an NSG with each subnet that supports one and review inbound allow rules. If the design exposes public IP addresses, enable Azure DDoS Protection (IP Protection on the public IP, or Network Protection on the VNet with a plan). For a fully private design, rely on the default infrastructure protection and do not buy a plan for it.</dd>
+          <dt>Fix</dt><dd><pre><code>resource nsg &#39;Microsoft.Network/networkSecurityGroups@2024-05-01&#39; = { name: &#39;nsg-pe&#39;, location: location, properties: { securityRules: [] } }
+resource vnet &#39;Microsoft.Network/virtualNetworks@2024-05-01&#39; = {
+  name: vnetName
+  location: location
+  properties: {
+    addressSpace: { addressPrefixes: [&#39;10.0.0.0/16&#39;] }
+    subnets: [ { name: &#39;pe&#39;, properties: { addressPrefix: &#39;10.0.1.0/24&#39;, networkSecurityGroup: { id: nsg.id } } } ]
+  }
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-OPS-009">
+        <h3 id="control-FND-OPS-009">Data-residency regions and deployment SKU — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-OPS-009 (version 2)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: profile-key-missing:dataResidency.scope.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types">https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Choose a deployment SKU that matches the residency requirement - Data Zone Standard or Data Zone Provisioned for a data zone, Standard or Regional Provisioned for a geography - in a region that belongs to that zone or geography, and keep the region list in the profile current.</dd>
+          <dt>Fix</dt><dd><pre><code># azure.yaml
+services:
+  ai-project:
+    host: azure.ai.project
+    deployments:
+      - name: chat
+        model: { format: OpenAI, name: gpt-5.4-mini, version: &#34;2026-03-17&#34; }
+        sku: { name: DataZoneStandard, capacity: 10 }</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: profile-key-missing:dataResidency.scope</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-OPS-010">
+        <h3 id="control-FND-OPS-010">Model allow/deny lists remain consistent — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-OPS-010 (version 2)</dd>
+          <dt>Mandatory</dt><dd>false</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: profile-key-missing:models.allow.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://learn.microsoft.com/azure/foundry/how-to/model-deployment-policy">https://learn.microsoft.com/azure/foundry/how-to/model-deployment-policy</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Keep one source of truth for approved models, mirror it in the policy assignment parameters allowedPublishers and allowedAssetIds, and remove any model from azure.yaml that the lists exclude. Assign the policy with Audit first and move to Deny after the compliance dashboard is clean.</dd>
+          <dt>Fix</dt><dd><pre><code># profile excerpt (allow list) - mirror the same values in the policy assignment parameters
+models:
+  allow:
+    publishers: [&#34;OpenAI&#34;]
+  deny: []</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: profile-key-missing:models.allow</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-RUN-001">
+        <h3 id="control-FND-RUN-001">Effective project identity access — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-RUN-001 (version 4)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: not-implemented.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup">https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Assign the project managed identity the roles the Foundry standard agent setup lists on each bound resource, at the narrowest scope that contains the resources. Assign Cosmos DB Built-in Data Contributor with a Cosmos SQL role assignment, not the Access control (IAM) blade.</dd>
+          <dt>Fix</dt><dd><pre><code>resource searchIndexData &#39;Microsoft.Authorization/roleAssignments@2022-04-01&#39; = {
+  name: guid(search.id, project.id, &#39;8ebe5a00-799e-43f5-93ac-243d3dce84a7&#39;)
+  scope: search
+  properties: {
+    principalId: project.identity.principalId
+    principalType: &#39;ServicePrincipal&#39;
+    roleDefinitionId: subscriptionResourceId(&#39;Microsoft.Authorization/roleDefinitions&#39;, &#39;8ebe5a00-799e-43f5-93ac-243d3dce84a7&#39;) // Search Index Data Contributor
+  }
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: not-implemented</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-SEC-001">
+        <h3 id="control-FND-SEC-001">Foundry local authentication disabled — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-SEC-001 (version 3)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Set properties.disableLocalAuth to true on the Foundry account and grant callers Entra ID roles instead of distributing keys. Keep keys enabled only in dev with a recorded suppression (reason and expiry).</dd>
+          <dt>Fix</dt><dd><pre><code>resource account &#39;Microsoft.CognitiveServices/accounts@2026-09-01&#39; = {
+  name: accountName
+  location: location
+  kind: &#39;AIServices&#39;
+  sku: { name: &#39;S0&#39; }
+  properties: {
+    customSubDomainName: accountName
+    disableLocalAuth: true
+  }
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-SEC-002">
+        <h3 id="control-FND-SEC-002">AI Search key authentication disabled or RBAC-only — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-SEC-002 (version 3)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Set disableLocalAuth to true and remove authOptions, then assign Entra roles (for example index data roles) to the Foundry project identity. If a migration needs keys temporarily, use authOptions.aadOrApiKey with aadAuthFailureMode and track removal with a suppression expiry.</dd>
+          <dt>Fix</dt><dd><pre><code>resource search &#39;Microsoft.Search/searchServices@2025-05-01&#39; = {
+  name: searchName
+  location: location
+  sku: { name: &#39;standard&#39; }
+  properties: {
+    disableLocalAuth: true
+  }
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-SEC-003">
+        <h3 id="control-FND-SEC-003">Cosmos DB local authentication disabled — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-SEC-003 (version 3)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Set properties.disableLocalAuth to true and grant the Foundry project managed identity a Cosmos DB data-plane role assignment. Check that clients use Entra ID before enforcing in an existing environment.</dd>
+          <dt>Fix</dt><dd><pre><code>resource cosmos &#39;Microsoft.DocumentDB/databaseAccounts@2026-03-15&#39; = {
+  name: cosmosName
+  location: location
+  kind: &#39;GlobalDocumentDB&#39;
+  properties: {
+    databaseAccountOfferType: &#39;Standard&#39;
+    locations: [ { locationName: location, failoverPriority: 0 } ]
+    disableLocalAuth: true
+  }
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-SEC-004">
+        <h3 id="control-FND-SEC-004">Storage shared key/anonymous access disabled; HTTPS/TLS required — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-SEC-004 (version 2)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/storage/resource-manager/Microsoft.Storage/stable/2026-06-01/openapi.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/storage/resource-manager/Microsoft.Storage/stable/2026-06-01/openapi.json</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Set allowSharedKeyAccess false, allowBlobPublicAccess false, supportsHttpsTrafficOnly true and minimumTlsVersion TLS1_2 on the account, and give the Foundry identity Storage data roles. Verify no client still uses account keys or SAS signed with the account key before disabling Shared Key.</dd>
+          <dt>Fix</dt><dd><pre><code>resource st &#39;Microsoft.Storage/storageAccounts@2026-06-01&#39; = {
+  name: storageName
+  location: location
+  sku: { name: &#39;Standard_LRS&#39; }
+  kind: &#39;StorageV2&#39;
+  properties: {
+    allowSharedKeyAccess: false
+    allowBlobPublicAccess: false
+    supportsHttpsTrafficOnly: true
+    minimumTlsVersion: &#39;TLS1_2&#39;
+  }
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-SEC-006">
+        <h3 id="control-FND-SEC-006">Firewall rules reject private/open ranges — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-SEC-006 (version 3)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/storage/common/storage-network-security-limitations">https://learn.microsoft.com/azure/storage/common/storage-network-security-limitations</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Remove open or private ranges from IP rules. Use private endpoints, virtual network rules or service endpoints for private traffic, and list only the specific public egress addresses that need access.</dd>
+          <dt>Fix</dt><dd><pre><code>networkAcls: {
+  defaultAction: &#39;Deny&#39;
+  ipRules: [
+    { value: &#39;203.0.113.10&#39; } // specific public address, not 0.0.0.0/0 or 10.0.0.0/8
+  ]
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-SEC-008">
+        <h3 id="control-FND-SEC-008">Relevant Defender plans enabled — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-SEC-008 (version 2)</dd>
+          <dt>Mandatory</dt><dd>false</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>Defender for Cloud plans beyond foundational CSPM are paid plans; charges begin after the 30-day trial or usage limit. (<a href="https://learn.microsoft.com/azure/defender-for-cloud/connect-azure-subscription">https://learn.microsoft.com/azure/defender-for-cloud/connect-azure-subscription</a>, verified 2026-10-18)</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/security/resource-manager/Microsoft.Security/Security/stable/2026-07-01/pricings.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/security/resource-manager/Microsoft.Security/Security/stable/2026-07-01/pricings.json</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Enable the Defender plan for each resource type in use on the subscription (Standard tier), or confirm it is enforced at a parent scope. Enabling Defender plans has a cost; review pricing before enabling in non-production.</dd>
+          <dt>Fix</dt><dd><pre><code>resource defenderAi &#39;Microsoft.Security/pricings@2026-07-01&#39; = {
+  name: &#39;AI&#39;
+  properties: { pricingTier: &#39;Standard&#39; }
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-SEC-009">
+        <h3 id="control-FND-SEC-009">Policy coverage and compliance evidence — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-SEC-009 (version 2)</dd>
+          <dt>Mandatory</dt><dd>false</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Authorization/policy/stable/2025-01-01/policyAssignments.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Authorization/policy/stable/2025-01-01/policyAssignments.json</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Assign the built-in policies that correspond to the Foundry Doctor security rules (for example local-auth, public network access, CMK) at subscription or management-group scope, in Default enforcement mode once existing resources are compliant.</dd>
+          <dt>Fix</dt><dd><pre><code>resource assign &#39;Microsoft.Authorization/policyAssignments@2025-01-01&#39; = {
+  name: &#39;foundry-no-local-auth&#39;
+  properties: {
+    policyDefinitionId: tenantResourceId(&#39;Microsoft.Authorization/policyDefinitions&#39;, &#39;71ef260a-8f18-47b7-abcb-62d0673d94dc&#39;)
+    enforcementMode: &#39;Default&#39;
+  }
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-SEC-010">
+        <h3 id="control-FND-SEC-010">Customer-managed keys informational — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-SEC-010 (version 2)</dd>
+          <dt>Mandatory</dt><dd>false</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>Customer-managed keys require a billable Azure Key Vault (stated for Azure AI Search; the same Key Vault dependency applies to each service listed). (<a href="https://learn.microsoft.com/azure/search/search-sku-manage-costs">https://learn.microsoft.com/azure/search/search-sku-manage-costs</a>, verified 2026-10-18)</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>If your compliance regime requires customer-managed keys, configure them on each resource listed and use a Key Vault with soft delete and purge protection (see FND-SEC-005). Otherwise no action is needed.</dd>
+          <dt>Fix</dt><dd><pre><code>// Informational. Example for a Search service that enforces CMK compliance reporting:
+properties: {
+  encryptionWithCmk: { enforcement: &#39;Enabled&#39; }
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-SEC-011">
+        <h3 id="control-FND-SEC-011">Controlled outbound egress informational — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-SEC-011 (version 1)</dd>
+          <dt>Mandatory</dt><dd>false</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: unsupported-version.</dd>
+          <dt>Costly recommendation</dt><dd>FQDN outbound rules in Allow Only Approved Outbound mode create a managed Azure Firewall, which adds Azure Firewall charges. (<a href="https://learn.microsoft.com/azure/foundry/how-to/managed-virtual-network">https://learn.microsoft.com/azure/foundry/how-to/managed-virtual-network</a>, verified 2026-10-18)</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>If you need to control data exfiltration, set the managed network to AllowOnlyApprovedOutbound or restrict outbound access with an allowed FQDN list, and confirm required dependencies are reachable. Otherwise record the decision.</dd>
+          <dt>Fix</dt><dd><pre><code># azure.yaml (azure.ai.project service)
+network:
+  peSubnet:
+    vnet: ${VNET_RESOURCE_ID}
+    name: private-endpoint-subnet
+  isolationMode: AllowOnlyApprovedOutbound</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: unsupported-version</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-SEC-014">
+        <h3 id="control-FND-SEC-014">Secrets not emitted as Bicep outputs — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-SEC-014 (version 2)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: unsupported-version.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/azure-resource-manager/bicep/linter-rule-outputs-should-not-contain-secrets">https://learn.microsoft.com/azure/azure-resource-manager/bicep/linter-rule-outputs-should-not-contain-secrets</a> (verified 2026-10-16)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Output the resourceId of the resource that holds the secret, or store the secret in Key Vault, and read it at the consuming resource. Do not output keys, connection strings or passwords.</dd>
+          <dt>Fix</dt><dd><pre><code>output storageId string = stg.id // consumer calls listKeys(storageId, ...) when it needs the key; do not output keys</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: unsupported-version</li>
+            </ul></dd>
+        </dl>
+      </article>
+      
+    </section>
+    <section aria-labelledby="pillar-reliability">
+      <h2 id="pillar-reliability">Reliability</h2>
+      <article aria-labelledby="control-FND-CFG-003">
+        <h3 id="control-FND-CFG-003">All inter-service references resolve — <span class="state-UNKNOWN">UNKNOWN</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-CFG-003 (version 4)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>No evidence was recorded for this control.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/how-to/author-azure-yaml">https://learn.microsoft.com/azure/foundry/agents/how-to/author-azure-yaml</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Make each referenced name match a service key defined under services, and add toolbox and connection services to the consuming agent uses list as well as its toolboxes or connections list.</dd>
+          <dt>Fix</dt><dd><pre><code># Partial fragment: category, target and authentication fields for the
+# connection, plus toolbox-specific required fields, depend on the selected
+# documented tool. Merge this graph into a schema-valid manifest.
+services:
+  ai-project:
+    host: azure.ai.project
+  github-conn:
+    host: azure.ai.connection
+    uses: [ai-project]
+  agent-tools:
+    host: azure.ai.toolbox
+    uses: [ai-project, github-conn]
+    tools:
+      - type: mcp
+        connection: github-conn
+  my-agent:
+    host: azure.ai.agent
+    project: src/my-agent
+    uses: [ai-project, github-conn, agent-tools]
+    kind: hosted
+    toolboxes: [agent-tools]</code></pre></dd>
+          <dt>Evidence</dt><dd>No finding or skip record was present.</dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-CFG-004">
+        <h3 id="control-FND-CFG-004">Prompt model or hosted source/image is valid — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-CFG-004 (version 4)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: uncertain: assistant: no Dockerfile under &#34;./agents/assistant&#34; and no image, codeConfiguration, runtime, startupCommand or skill; the agent source is unclear.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference">https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference</a> (verified 2026-10-05)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Set model to the name of a deployment declared on the project, provide instructions for prompt agents, and for hosted agents provide either source with a Dockerfile, a codeConfiguration, or a prebuilt image.</dd>
+          <dt>Fix</dt><dd><pre><code>services:
+  ai-project:
+    host: azure.ai.project
+    deployments:
+      - name: gpt-5.4-mini
+        model: {format: OpenAI, name: gpt-5.4-mini, version: &#34;2026-03-17&#34;}
+        sku: {name: GlobalStandard, capacity: 10}
+  helper:
+    host: azure.ai.agent
+    project: src/helper
+    uses: [ai-project]
+    kind: prompt
+    name: helper
+    model: gpt-5.4-mini
+    instructions: Answer briefly.</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: uncertain: assistant: no Dockerfile under &#34;./agents/assistant&#34; and no image, codeConfiguration, runtime, startupCommand or skill; the agent source is unclear</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-CFG-012">
+        <h3 id="control-FND-CFG-012">Azure region values are valid — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-CFG-012 (version 4)</dd>
+          <dt>Mandatory</dt><dd>false</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: no-environment-selected.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/subscriptions/stable/2022-12-01/subscriptions.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/subscriptions/stable/2022-12-01/subscriptions.json</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Use a location name returned by az account list-locations for your subscription (the name field, such as eastus2), and set it with azd env set AZURE_LOCATION. Check model and resource availability for the region before provisioning.</dd>
+          <dt>Fix</dt><dd><pre><code>azd env set AZURE_LOCATION eastus2</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: no-environment-selected</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-DEP-004">
+        <h3 id="control-FND-DEP-004">Model/version/SKU offered in target region — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-DEP-004 (version 1)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: not-implemented.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Choose a model, version and SKU that the target region lists, or move the Foundry resource to a region that offers it. To list what a region offers, query the models API for that location. If the model is deprecating, plan the move to the replacement version.</dd>
+          <dt>Fix</dt><dd><pre><code>az cognitiveservices model list --location &lt;region&gt; --query &#34;[?model.name==&#39;gpt-4o&#39;].{version:model.version,sku:model.skus[].name}&#34;</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: not-implemented</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-DEP-005">
+        <h3 id="control-FND-DEP-005">Quota covers requested capacity — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-DEP-005 (version 2)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: not-implemented.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/openai/how-to/quota">https://learn.microsoft.com/azure/foundry/openai/how-to/quota</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Reduce sku.capacity, move the deployment to a region or deployment type with remaining quota, free quota from unused deployments, or request a quota increase before provisioning.</dd>
+          <dt>Fix</dt><dd><pre><code># lower the requested capacity in the model deployment or choose another location
+deployments:
+  - name: chat
+    model: { format: OpenAI, name: gpt-4o, version: &#34;2024-08-06&#34; }
+    sku: { name: GlobalStandard, capacity: 50 }</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: not-implemented</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-DEP-006">
+        <h3 id="control-FND-DEP-006">No blocking soft-deleted resource/name — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-DEP-006 (version 2)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: not-implemented.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/ai-services/recover-purge-resources">https://learn.microsoft.com/azure/ai-services/recover-purge-resources</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Recover the soft-deleted resource if you still need it, or purge it (needs the delete permission at subscription scope) before provisioning, or choose a different name. Purging permanently deletes data.</dd>
+          <dt>Fix</dt><dd><pre><code># purge a soft-deleted Foundry account so the name can be reused (permanently deletes the account)
+az resource delete --ids /subscriptions/&lt;sub-id&gt;/providers/Microsoft.CognitiveServices/locations/&lt;region&gt;/resourceGroups/&lt;rg&gt;/deletedAccounts/&lt;name&gt;</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: not-implemented</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-DEP-007">
+        <h3 id="control-FND-DEP-007">Globally unique names available — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-DEP-007 (version 2)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: not-implemented.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Add a deterministic unique suffix to globally unique names (for example with the Bicep uniqueString function), keep the Foundry custom subdomain and account naming rules, and avoid reusing a name whose resource was recently deleted (see FND-DEP-006).</dd>
+          <dt>Fix</dt><dd><pre><code>var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
+var foundryName = &#39;aif-${resourceToken}&#39;</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: not-implemented</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-DEP-008">
+        <h3 id="control-FND-DEP-008">What-if has no unexpected delete — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-DEP-008 (version 4)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: not-implemented.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/deployments/stable/2026-06-01/deployments.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/deployments/stable/2026-06-01/deployments.json</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Review each predicted Delete. If it is intended, record it in the baseline with a reason and expiry; if not, switch the deployment to incremental mode, add the missing resource to the template, or remove the conflicting change. Re-run what-if after fixing.</dd>
+          <dt>Fix</dt><dd><pre><code># preview at resource group scope; nothing is deployed
+az deployment group what-if --resource-group &lt;rg&gt; --template-file main.bicep --parameters main.bicepparam</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: not-implemented</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-DEP-010">
+        <h3 id="control-FND-DEP-010">Locks do not block change — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-DEP-010 (version 3)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: not-implemented.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/azure-resource-manager/management/lock-resources">https://learn.microsoft.com/azure/azure-resource-manager/management/lock-resources</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Remove or relax the lock for the duration of the deployment through your change process, deploy to a scope without a ReadOnly lock, or scope locks to the specific resources that need protection and reapply them after the deployment.</dd>
+          <dt>Fix</dt><dd><pre><code>az lock list --resource-group &lt;rg&gt; --output table
+az lock delete --name &lt;lock-name&gt; --resource-group &lt;rg&gt;   # then redeploy and re-create the lock</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: not-implemented</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-DEP-011">
+        <h3 id="control-FND-DEP-011">Subnet delegation/capacity/use is compatible — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-DEP-011 (version 2)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: not-implemented.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks">https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Use a dedicated subnet of /24 (at least /27) in an allowed private range, delegate it to Microsoft.App/environments, keep it in the same region as the Foundry resource, and give each Foundry resource its own agent subnet.</dd>
+          <dt>Fix</dt><dd><pre><code>resource agentSubnet &#39;Microsoft.Network/virtualNetworks/subnets@2025-05-01&#39; = {
+  parent: vnet
+  name: &#39;agent-subnet&#39;
+  properties: {
+    addressPrefix: &#39;192.168.0.0/24&#39;
+    delegations: [
+      { name: &#39;Microsoft.App/environments&#39;, properties: { serviceName: &#39;Microsoft.App/environments&#39; } }
+    ]
+  }
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: not-implemented</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-DEP-012">
+        <h3 id="control-FND-DEP-012">Target region supports selected setup — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-DEP-012 (version 2)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: not-implemented.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/concepts/limits-quotas-regions">https://learn.microsoft.com/azure/foundry/agents/concepts/limits-quotas-regions</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Choose a region that offers every selected resource type and feature, or change the feature selection (for example a different tool). Use the Learn supported-regions table to compare candidate regions.</dd>
+          <dt>Fix</dt><dd><pre><code>azd env set AZURE_LOCATION eastus2</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: not-implemented</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-ENV-003">
+        <h3 id="control-FND-ENV-003">Prod does not reference non-prod resource IDs — <span class="state-NOT_APPLICABLE">NOT_APPLICABLE</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-ENV-003 (version 4)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>deterministic</dd>
+          <dt>Why this state</dt><dd>Not applicable: not-applicable: fewer than two azd environments.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview">https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview</a> (verified 2026-10-05)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Point the production environment at production resources, or provision the dependency in production. Re-run provisioning for the production environment so its outputs are written to its own .env.</dd>
+          <dt>Fix</dt><dd><pre><code># .azure/prod/.env
+AZURE_AI_PROJECT_ENDPOINT=https://prod-account.services.ai.azure.com/api/projects/prod-project</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: not-applicable: fewer than two azd environments</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-IDN-003">
+        <h3 id="control-FND-IDN-003">Role assignments use object IDs and principalType — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-IDN-003 (version 5)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/role-based-access-control/role-assignments-template">https://learn.microsoft.com/azure/role-based-access-control/role-assignments-template</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Pass the object ID of the identity (identity.principalId or the user-assigned identity&#39;s properties.principalId), never the client ID, and set principalType explicitly. Use ServicePrincipal for managed identities and service principals created in the same deployment, and use API version 2022-04-01 or later.</dd>
+          <dt>Fix</dt><dd><pre><code>resource blobRole &#39;Microsoft.Authorization/roleAssignments@2022-04-01&#39; = {
+  scope: storage
+  name: guid(storage.id, uami.id, &#39;ba92f5b4-2d11-453d-a403-e96b0029c9fe&#39;)
+  properties: {
+    roleDefinitionId: subscriptionResourceId(&#39;Microsoft.Authorization/roleDefinitions&#39;, &#39;ba92f5b4-2d11-453d-a403-e96b0029c9fe&#39;)
+    principalId: uami.properties.principalId // object ID, not uami.properties.clientId
+    principalType: &#39;ServicePrincipal&#39;
+  }
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-NET-003">
+        <h3 id="control-FND-NET-003">Private endpoint DNS zone groups and VNet links — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-NET-003 (version 3)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/private-link/private-endpoint-dns">https://learn.microsoft.com/azure/private-link/private-endpoint-dns</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Add a privateDnsZoneGroup to each private endpoint with the documented zones (three for a Foundry account) and link every zone to the VNet that resolves the names. If DNS is centralised in a hub or a private resolver, declare that in the Foundry Doctor configuration so the check is skipped with a reason instead of failing.</dd>
+          <dt>Fix</dt><dd><pre><code>resource zoneGroup &#39;Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2024-05-01&#39; = {
+  parent: pe
+  name: &#39;default&#39;
+  properties: {
+    privateDnsZoneConfigs: [
+      { name: &#39;cognitiveservices&#39;, properties: { privateDnsZoneId: zoneCognitive.id } }
+      { name: &#39;openai&#39;,            properties: { privateDnsZoneId: zoneOpenAi.id } }
+      { name: &#39;servicesai&#39;,        properties: { privateDnsZoneId: zoneServicesAi.id } }
+    ]
+  }
+}
+resource link &#39;Microsoft.Network/privateDnsZones/virtualNetworkLinks@2024-06-01&#39; = {
+  parent: zoneCognitive
+  name: &#39;vnet-link&#39;
+  location: &#39;global&#39;
+  properties: { virtualNetwork: { id: vnetId }, registrationEnabled: false }
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-NET-004">
+        <h3 id="control-FND-NET-004">Agent subnet delegation and sizing — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-NET-004 (version 3)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks">https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Create a dedicated subnet for each Foundry account, delegate it to Microsoft.App/environments, size it /27 or larger (the Foundry docs recommend /24 for production hosted agents), keep the name at 63 bytes or fewer, and do not reuse it for another Foundry resource or other services. Set the network injection when you create the account; it cannot be added to an existing account for hosted agents.</dd>
+          <dt>Fix</dt><dd><pre><code>resource agentSubnet &#39;Microsoft.Network/virtualNetworks/subnets@2024-05-01&#39; = {
+  parent: vnet
+  name: &#39;agent-subnet&#39;
+  properties: {
+    addressPrefix: &#39;10.0.0.0/24&#39;
+    delegations: [{
+      name: &#39;Microsoft.App.environments&#39;
+      properties: { serviceName: &#39;Microsoft.App/environments&#39; }
+    }]
+  }
+}
+// on the account:
+//   networkInjections: [{ scenario: &#39;agent&#39;, subnetArmId: agentSubnet.id, useMicrosoftManagedNetwork: false }]</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-NET-005">
+        <h3 id="control-FND-NET-005">Private-mode VNet/region consistency — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-NET-005 (version 4)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks">https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Create the VNet, agent subnet and Foundry account in the same region, and create each private endpoint in the region and subscription of the VNet that hosts it. Cross-region data resources are allowed but cost more in data transfer; keep them in the Foundry region unless you have a reason.</dd>
+          <dt>Fix</dt><dd><pre><code>param location string = &#39;swedencentral&#39;
+resource vnet &#39;Microsoft.Network/virtualNetworks@2024-05-01&#39; = { name: vnetName, location: location, properties: { addressSpace: { addressPrefixes: [&#39;10.0.0.0/16&#39;] } } }
+resource account &#39;Microsoft.CognitiveServices/accounts@2026-09-01&#39; = { name: accountName, location: location, kind: &#39;AIServices&#39;, sku: { name: &#39;S0&#39; }, properties: { /* networkInjections -&gt; subnet in vnet */ } }
+resource pe &#39;Microsoft.Network/privateEndpoints@2024-05-01&#39; = { name: &#39;${accountName}-pe&#39;, location: location /* same region as the VNet */, properties: { subnet: { id: peSubnetId } } }</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-NET-006">
+        <h3 id="control-FND-NET-006">Private address space and overlap — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-NET-006 (version 3)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks">https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Put the agent subnet in 10.0.0.0/8, 172.16.0.0/12 (avoiding 172.30.0.0/16 and 172.31.0.0/16) or 192.168.0.0/16 and keep the VNet and its peers disjoint from each other and from the reserved ranges. If your IP plan overlaps or you cannot manage ranges, use a Microsoft managed virtual network instead.</dd>
+          <dt>Fix</dt><dd><pre><code>resource vnet &#39;Microsoft.Network/virtualNetworks@2024-05-01&#39; = {
+  name: vnetName
+  location: location
+  properties: {
+    // avoid 169.254/16, 172.30/16, 172.31/16, 192.0.2/24, 0/8, 127/8 and 100.100.* reserved ranges
+    addressSpace: { addressPrefixes: [&#39;10.20.0.0/16&#39;] }
+  }
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-NET-008">
+        <h3 id="control-FND-NET-008">Search SKU supports private endpoints — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-NET-008 (version 3)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/search/service-create-private-endpoint">https://learn.microsoft.com/azure/search/service-create-private-endpoint</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>If private access is required, choose Basic or higher and account for the additional fixed cost; otherwise keep Free public rather than creating a false expectation that Free supports Private Link. Plan the tier against indexer needs using the Search limits article.</dd>
+          <dt>Fix</dt><dd><pre><code>resource search &#39;Microsoft.Search/searchServices@2025-05-01&#39; = {
+  name: searchName
+  location: location
+  sku: { name: &#39;standard&#39; } // &#39;free&#39; does not support private endpoints
+  properties: { publicNetworkAccess: &#39;Disabled&#39; }
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-REL-001">
+        <h3 id="control-FND-REL-001">Search replica/SLA posture — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-REL-001 (version 1)</dd>
+          <dt>Mandatory</dt><dd>false</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>Dedicated Azure AI Search bills per search unit (replicas x partitions); adding replicas raises cost. (<a href="https://learn.microsoft.com/azure/search/search-sku-manage-costs">https://learn.microsoft.com/azure/search/search-sku-manage-costs</a>, verified 2026-10-18)</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/search/search-limits-quotas-capacity">https://learn.microsoft.com/azure/search/search-limits-quotas-capacity</a> (verified 2026-10-04)</dd>
+          
+          
+          <dt>WARA references (recommendations, not platform facts)</dt><dd><ul><li><a href="https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/Search/searchServices/recommendations.yaml">b376281d-bfec-4695-8f90-9a44544fdfa4</a> AI Search replicas for availability zone support (pgVerified: false)</li><li><a href="https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/Search/searchServices/recommendations.yaml">dff62efe-c3a3-4621-98b3-c877c65cb195</a> AI Search multi-region (pgVerified: false)</li></ul></dd>
+          
+          <dt>Recommendation</dt><dd>Set properties.replicaCount to at least 2 if the application only queries, or at least 3 if it also updates indexes online. Each replica adds search units and cost, so keep dev and test at 1 unless you are testing failover behaviour.</dd>
+          <dt>Fix</dt><dd><pre><code>resource search &#39;Microsoft.Search/searchServices@2025-05-01&#39; = {
+  name: searchName
+  location: location
+  sku: { name: &#39;standard&#39; }
+  properties: {
+    replicaCount: 3
+    partitionCount: 1
+  }
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-REL-002">
+        <h3 id="control-FND-REL-002">Storage redundancy posture — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-REL-002 (version 1)</dd>
+          <dt>Mandatory</dt><dd>false</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>LRS is the lowest-cost redundancy option; ZRS and GZRS trade higher cost for availability. (<a href="https://learn.microsoft.com/azure/storage/common/storage-redundancy">https://learn.microsoft.com/azure/storage/common/storage-redundancy</a>, verified 2026-10-18)</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency">https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency</a> (verified 2026-10-04)</dd>
+          
+          
+          <dt>WARA references (recommendations, not platform facts)</dt><dd><ul><li><a href="https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/Storage/storageAccounts/recommendations.yaml">e6c7e1cc-2f47-264d-aa50-1da421314472</a> Zone or region redundant storage (pgVerified: true)</li></ul></dd>
+          
+          <dt>Recommendation</dt><dd>Use Standard_ZRS at minimum for storage that holds project or agent data, and Standard_GZRS for Agent Service standard-mode storage as recommended by the Foundry resiliency guidance. SKU changes on an existing account are a migration, so decide at design time. Note the Foundry multi-region section says default storage failover with GRS/GZRS is not supported for Foundry projects, so geo-redundancy there protects data recovery, not automatic project failover.</dd>
+          <dt>Fix</dt><dd><pre><code>resource st &#39;Microsoft.Storage/storageAccounts@2026-09-01&#39; = {
+  name: storageName
+  location: location
+  kind: &#39;StorageV2&#39;
+  sku: { name: &#39;Standard_GZRS&#39; }
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-REL-003">
+        <h3 id="control-FND-REL-003">Cosmos zone redundancy and continuous backup — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-REL-003 (version 1)</dd>
+          <dt>Mandatory</dt><dd>false</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>Continuous backup at the 30-day or 35-day tier carries a monthly backup storage charge and every restore is charged; the 7-day tier has no backup storage charge. The cost of zone redundancy is not cited here. (<a href="https://learn.microsoft.com/azure/cosmos-db/continuous-backup-restore-introduction">https://learn.microsoft.com/azure/cosmos-db/continuous-backup-restore-introduction</a>, verified 2026-10-18)</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency">https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency</a> (verified 2026-10-04)</dd>
+          
+          
+          <dt>WARA references (recommendations, not platform facts)</dt><dd><ul><li><a href="https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/DocumentDB/databaseAccounts/recommendations.yaml">921631f6-ed59-49a5-94c1-f0f3ececa580</a> Cosmos DB availability zones (pgVerified: false)</li><li><a href="https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/DocumentDB/databaseAccounts/recommendations.yaml">e544520b-8505-7841-9e77-1f1974ee86ec</a> Cosmos DB continuous backup (pgVerified: true)</li></ul></dd>
+          
+          <dt>Recommendation</dt><dd>Set isZoneRedundant true on each location in regions that support availability zones, and set backupPolicy.type Continuous (7-day or 30-day tier, per the Foundry guidance) before an incident occurs. Continuous backup adds cost. Also consider a second location with automatic failover enabled (see FND-REL-007).</dd>
+          <dt>Fix</dt><dd><pre><code>resource cosmos &#39;Microsoft.DocumentDB/databaseAccounts@2025-10-15&#39; = {
+  name: cosmosName
+  location: location
+  properties: {
+    databaseAccountOfferType: &#39;Standard&#39;
+    locations: [
+      { locationName: location, failoverPriority: 0, isZoneRedundant: true }
+    ]
+    backupPolicy: {
+      type: &#39;Continuous&#39;
+      continuousModeProperties: { tier: &#39;Continuous7Days&#39; }
+    }
+  }
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-REL-004">
+        <h3 id="control-FND-REL-004">Delete locks on stateful services — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-REL-004 (version 2)</dd>
+          <dt>Mandatory</dt><dd>false</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency">https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Add a CanNotDelete lock on the Foundry account and on each stateful dependency, or on the resource group that contains only that workload. Creating locks needs Microsoft.Authorization/locks/write (Owner or User Access Administrator, not Contributor). Locks do not protect data-plane content such as individual blobs, indexes or threads; combine with least-privilege RBAC and, optionally, the Azure Policy denyAction effect.</dd>
+          <dt>Fix</dt><dd><pre><code>resource lock &#39;Microsoft.Authorization/locks@2020-05-01&#39; = {
+  name: &#39;protect-foundry&#39;
+  scope: foundryAccount
+  properties: {
+    level: &#39;CanNotDelete&#39;
+    notes: &#39;Foundry account holds projects and connections&#39;
+  }
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-REL-005">
+        <h3 id="control-FND-REL-005">Search sizing within platform limits — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-REL-005 (version 1)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Choose a partitionCount from 1, 2, 3, 4, 6 or 12 and a replicaCount of 12 or fewer (3 or fewer on basic), keep replicas x partitions at or below 36 search units, and use hostingMode HighDensity only with standard3 and at most 3 partitions. See the partition and replica combinations table in the capacity planning article.</dd>
+          <dt>Fix</dt><dd><pre><code>resource search &#39;Microsoft.Search/searchServices@2025-05-01&#39; = {
+  name: searchName
+  location: location
+  sku: { name: &#39;standard&#39; }
+  properties: {
+    replicaCount: 3
+    partitionCount: 2   // 6 search units, within the 36 SU limit
+  }
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-REL-007">
+        <h3 id="control-FND-REL-007">Multi-region/DR plan question — <span class="state-QUESTION">QUESTION</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-REL-007 (version 1)</dd>
+          <dt>Mandatory</dt><dd>false</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>No answer recorded (disasterRecovery.declared).</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency">https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency</a> (verified 2026-10-04)</dd>
+          <dt>Review question</dt><dd>Has the team recorded its disaster recovery strategy and a reference to the supporting plan?</dd>
+          
+          <dt>WARA references (recommendations, not platform facts)</dt><dd><ul><li><a href="https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/Search/searchServices/recommendations.yaml">dff62efe-c3a3-4621-98b3-c877c65cb195</a> AI Search multi-region (pgVerified: false)</li><li><a href="https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/DocumentDB/databaseAccounts/recommendations.yaml">43663217-a1d3-844b-80ea-571a2ce37c6c</a> Cosmos DB in at least two regions (pgVerified: unrecorded)</li><li><a href="https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/DocumentDB/databaseAccounts/recommendations.yaml">9cabded7-a1fc-6e4a-944b-d7dd98ea31a2</a> Cosmos DB service-managed failover (pgVerified: unrecorded)</li><li><a href="https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/CognitiveServices/accounts/recommendations.yaml">61187af4-7d36-4b48-b16e-de78bef143a0</a> Azure OpenAI in multiple regions (pgVerified: false)</li></ul></dd>
+          
+          <dt>Recommendation</dt><dd>Decide and record the intended strategy: single region with backup and restore, or multi-region (hot/hot, hot/warm, hot/cold) with the RTO/RPO and cost it implies. For multi-region Foundry the article says you create separate Foundry resources and dependencies in each region, deploy to both from CI/CD, and replicate or rebuild state (Cosmos DB read regions with service-managed failover, a second AI Search service, storage redundancy).</dd>
+          <dt>Fix</dt><dd><pre><code># foundry-doctor configuration (key name as in ADR-007; the schema is defined by the configuration spec)
+reliability:
+  disasterRecovery:
+    strategy: single-region   # or hot-hot | hot-warm | hot-cold
+    recoveryRegion: northeurope
+    notes: Recover from Cosmos point-in-time backup; rebuild Search index from source</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: not-implemented</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-REL-008">
+        <h3 id="control-FND-REL-008">Provisioned throughput spillover recommendation — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-REL-008 (version 1)</dd>
+          <dt>Mandatory</dt><dd>false</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/openai/how-to/spillover-traffic-management">https://learn.microsoft.com/azure/foundry/openai/how-to/spillover-traffic-management</a> (verified 2026-10-04)</dd>
+          
+          
+          <dt>WARA references (recommendations, not platform facts)</dt><dd><ul><li><a href="https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/CognitiveServices/accounts/recommendations.yaml">0c193899-da60-4a52-b4a0-77d75ac8c5c5</a> Pay-as-you-go instance to manage provisioned overflow (pgVerified: true)</li></ul></dd>
+          
+          <dt>Recommendation</dt><dd>Create a standard (pay-as-you-go) deployment of the same model and version in the same account, then set spilloverDeploymentName on the provisioned deployment to its name. Spillover initiates on 429, 500 and 503 (and on 400 for long-context requests) and is billed at standard rates for the overflow; monitor with the IsSpillover split in Azure Monitor.</dd>
+          <dt>Fix</dt><dd><pre><code>resource ptu &#39;Microsoft.CognitiveServices/accounts/deployments@2026-05-01&#39; = {
+  parent: foundry
+  name: &#39;gpt-4o-mini-ptu&#39;
+  sku: { name: &#39;GlobalProvisionedManaged&#39;, capacity: 100 }
+  properties: {
+    model: { format: &#39;OpenAI&#39;, name: &#39;gpt-4o-mini&#39;, version: &#39;2024-07-18&#39; }
+    spilloverDeploymentName: &#39;gpt-4o-mini-standard&#39;
+  }
+  dependsOn: [ standard ]
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-REL-009">
+        <h3 id="control-FND-REL-009">APIM availability tier recommendation — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-REL-009 (version 1)</dd>
+          <dt>Mandatory</dt><dd>false</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://learn.microsoft.com/azure/api-management/api-management-features">https://learn.microsoft.com/azure/api-management/api-management-features</a> (verified 2026-10-04)</dd>
+          <dt>Review question</dt><dd>Which API Management SLA, zone-redundancy or multi-region objective does the workload need? (The rule reads reliability.apimSlaRequired, apimZoneRequired and apimRegionalRequired, which the configuration schema does not define yet; ADR-026.)</dd>
+          
+          <dt>WARA references (recommendations, not platform facts)</dt><dd><ul><li><a href="https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/ApiManagement/service/recommendations.yaml">baf3bfc0-32a2-4c0c-926d-c9bf0b49808e</a> API Management Premium for availability zones (pgVerified: true)</li><li><a href="https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/ApiManagement/service/recommendations.yaml">740f2c1c-8857-4648-80eb-47d2c56d5a50</a> API Management availability zones (pgVerified: true)</li><li><a href="https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/ApiManagement/service/recommendations.yaml">af4f88cb-35e8-4371-b29e-3a32b1d2f40a</a> API Management multi-region (pgVerified: true)</li><li><a href="https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/ApiManagement/service/recommendations.yaml">e35cf148-8eee-49d1-a1c9-956160f99e0b</a> API Management stv2 platform (platform migration, context only) (pgVerified: true)</li></ul></dd>
+          
+          <dt>Recommendation</dt><dd>Select the least APIM tier and capacity that satisfy the workload&#39;s declared SLA, throughput, zone-resilience and multi-region objectives; do not default to Premium or two units. For production traffic that requires an SLA, do not use Developer. If zone resilience is declared, select the least documented zone-capable tier and capacity that satisfy the objective in a region where APIM zone support has been verified. Select Premium and add another region only when regional resilience is declared (see FND-REL-007). Record the cost-versus-resilience tradeoff and accept a lower tier or capacity when it satisfies the declared objective.</dd>
+          <dt>Fix</dt><dd><pre><code>// Values are selected from the declared SLA, throughput, zone and region objectives.
+// Do not hard-code Premium/2 as a universal baseline. Verify current tier SLA,
+// regional feature availability and required capacity before setting these parameters.
+param apimTier string
+param apimCapacity int
+resource apim &#39;Microsoft.ApiManagement/service@2024-05-01&#39; = {
+  name: apimName
+  location: location
+  sku: {
+    name: apimTier
+    capacity: apimCapacity
+  }
+  properties: {
+    publisherEmail: publisherEmail
+    publisherName: publisherName
+  }
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-RUN-002">
+        <h3 id="control-FND-RUN-002">Private DNS resolves from an appropriate vantage point — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-RUN-002 (version 4)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: not-implemented.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks">https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Link each required privatelink zone to the VNet that hosts the agent client and private endpoint subnets, configure conditional forwarders to 168.63.129.16 where custom DNS is used, and re-run the doctor from a machine inside the VNet.</dd>
+          <dt>Fix</dt><dd><pre><code>resource searchDnsLink &#39;Microsoft.Network/privateDnsZones/virtualNetworkLinks@2018-09-01&#39; = {
+  parent: searchPrivateDnsZone // privatelink.search.windows.net
+  name: &#39;link-to-agent-vnet&#39;
+  location: &#39;global&#39;
+  properties: {
+    virtualNetwork: { id: agentVnet.id }
+    registrationEnabled: false
+  }
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: not-implemented</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-RUN-003">
+        <h3 id="control-FND-RUN-003">Capability host and project connections healthy — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-RUN-003 (version 3)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: not-implemented.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json</a> (verified 2026-10-17)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Inspect the failing capability host or project in the Foundry portal or with az rest, correct the underlying cause (for example a missing role or a deleted bound resource), and redeploy the capability host. Recreate any missing connection with the same name the capability host references.</dd>
+          <dt>Fix</dt><dd><pre><code>resource capHost &#39;Microsoft.CognitiveServices/accounts/projects/capabilityHosts@2026-09-01&#39; = {
+  parent: project
+  name: &#39;default&#39;
+  properties: {
+    capabilityHostKind: &#39;Agents&#39;
+    storageConnections: [ storageConnection.name ]
+    threadStorageConnections: [ cosmosConnection.name ]
+    vectorStoreConnections: [ searchConnection.name ]
+  }
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: not-implemented</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-RUN-004">
+        <h3 id="control-FND-RUN-004">Model deployment state and throttling signal — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-RUN-004 (version 4)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: not-implemented.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://learn.microsoft.com/azure/azure-monitor/reference/supported-metrics/microsoft-cognitiveservices-accounts-metrics">https://learn.microsoft.com/azure/azure-monitor/reference/supported-metrics/microsoft-cognitiveservices-accounts-metrics</a> (verified 2026-10-18)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>For a failed or disabled deployment, review the deployment error in the Foundry portal and recreate it. For 429 signals, raise the deployment capacity or quota, spread load across deployments or regions, or add client back-off and retry.</dd>
+          <dt>Fix</dt><dd><pre><code>resource gpt &#39;Microsoft.CognitiveServices/accounts/deployments@2026-09-01&#39; = {
+  parent: account
+  name: &#39;gpt-4o&#39;
+  sku: { name: &#39;GlobalStandard&#39;, capacity: 100 }
+  properties: {
+    model: { format: &#39;OpenAI&#39;, name: &#39;gpt-4o&#39;, version: &#39;2024-11-20&#39; }
+  }
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: not-implemented</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-RUN-005">
+        <h3 id="control-FND-RUN-005">Agent tools/connections respond — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-RUN-005 (version 4)</dd>
+          <dt>Mandatory</dt><dd>false</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: not-implemented.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://github.com/Azure/azure-dev/blob/main/cli/azd/extensions/azure.ai.agents/internal/project/service_target_agent.go">https://github.com/Azure/azure-dev/blob/main/cli/azd/extensions/azure.ai.agents/internal/project/service_target_agent.go</a> (verified 2026-10-18)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Open the failing agent version or connection in the Foundry portal, read its error, and redeploy the agent or recreate the connection. Test tool calls with an explicit, operator-run test; the doctor does not call tools.</dd>
+          <dt>Fix</dt><dd><pre><code># azure.yaml: keep the agent service and the connection names it uses aligned with the project
+services:
+  support-agent:
+    host: azure.ai.agent</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: not-implemented</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-RUN-006">
+        <h3 id="control-FND-RUN-006">Search index/documents/vector/indexer health — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-RUN-006 (version 5)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: not-implemented.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/data-plane/Search/stable/2026-04-01/search.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/data-plane/Search/stable/2026-04-01/search.json</a> (verified 2026-10-17)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Create or repair the index with the expected schema, run the indexer and review its execution errors, and confirm the agent&#39;s search connection and index name match. Grant the doctor identity Search Service Contributor only if you want schema and indexer checks.</dd>
+          <dt>Fix</dt><dd><pre><code>// Expected vector field shape in the index definition (REST, api-version 2026-04-01)
+{
+  &#34;name&#34;: &#34;contentVector&#34;,
+  &#34;type&#34;: &#34;Collection(Edm.Single)&#34;,
+  &#34;dimensions&#34;: 1536,
+  &#34;vectorSearchProfile&#34;: &#34;default-profile&#34;
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: not-implemented</li>
+            </ul></dd>
+        </dl>
+      </article>
+      
+    </section>
+    <section aria-labelledby="pillar-operations">
+      <h2 id="pillar-operations">Operational Excellence</h2>
+      <article aria-labelledby="control-FND-CFG-001">
+        <h3 id="control-FND-CFG-001">Valid YAML, duplicate-key detection and compatible azure.ai.* schema — <span class="state-UNKNOWN">UNKNOWN</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-CFG-001 (version 7)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>No evidence was recorded for this control.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference">https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference</a> (verified 2026-10-05)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Fix the YAML syntax or the reported schema violation. Add the yaml-language-server schema comment to azure.yaml so the editor flags the same errors, and install azure.ai.agents and azure.ai.projects at the versions declared in requiredVersions.</dd>
+          <dt>Fix</dt><dd><pre><code># yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+name: my-agent-project
+services:
+  ai-project:
+    host: azure.ai.project
+  my-agent:
+    host: azure.ai.agent
+    project: src/my-agent
+    uses: [ai-project]
+    kind: hosted</code></pre></dd>
+          <dt>Evidence</dt><dd>No finding or skip record was present.</dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-CFG-002">
+        <h3 id="control-FND-CFG-002">Unique service names by kind — <span class="state-UNKNOWN">UNKNOWN</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-CFG-002 (version 2)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>No evidence was recorded for this control.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference">https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Give separate logical agents distinct names. If the services intentionally represent versions of one agent, keep one service definition and deploy the intended version through that service.</dd>
+          <dt>Fix</dt><dd><pre><code>services:
+  ai-project:
+    host: azure.ai.project
+  triage:
+    host: azure.ai.agent
+    project: src/triage
+    uses: [ai-project]
+    kind: hosted
+    name: triage-agent
+  summarizer:
+    host: azure.ai.agent
+    project: src/summarizer
+    uses: [ai-project]
+    kind: hosted
+    name: summarizer-agent</code></pre></dd>
+          <dt>Evidence</dt><dd>No finding or skip record was present.</dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-CFG-006">
+        <h3 id="control-FND-CFG-006">Every variable has an environment or infrastructure producer — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-CFG-006 (version 5)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: no-environment-selected.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference">https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Set the variable in the active azd environment (azd env set), emit it from a Bicep output, give it an inline default, or remove the reference. Do not declare FOUNDRY_ or AGENT_ prefixed names in the azure.yaml service env (FND-CFG-011).</dd>
+          <dt>Fix</dt><dd><pre><code># Produce the value
+#   azd env set MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME gpt-5.4-mini
+services:
+  ai-project:
+    host: azure.ai.project
+  my-agent:
+    host: azure.ai.agent
+    project: src/my-agent
+    uses: [ai-project]
+    kind: hosted
+    env:
+      MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME: ${MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME}
+      LOG_LEVEL: ${LOG_LEVEL:-info}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: no-environment-selected</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-CFG-011">
+        <h3 id="control-FND-CFG-011">Preview/retired fields are version-aware — <span class="state-UNKNOWN">UNKNOWN</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-CFG-011 (version 5)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>No evidence was recorded for this control.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference">https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Move to the unified service-level shape: put env on the agent service, use kind voice, use host azure.ai.project instead of microsoft.foundry, drop fields the hosted-agent create request ignores, and declare requiredVersions for extension versions verified by this catalogue. Do not infer a field&#39;s introduction version from the current schema.</dd>
+          <dt>Fix</dt><dd><pre><code>requiredVersions:
+  extensions:
+    azure.ai.agents: &#34;&gt;=1.0.0-beta.18&#34;
+    azure.ai.projects: &#34;&gt;=1.0.0-beta.13&#34;
+services:
+  ai-project:
+    host: azure.ai.project
+  my-agent:
+    host: azure.ai.agent
+    project: src/my-agent
+    uses: [ai-project]
+    kind: hosted
+    env:
+      MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME: ${MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME}</code></pre></dd>
+          <dt>Evidence</dt><dd>No finding or skip record was present.</dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-DEP-001">
+        <h3 id="control-FND-DEP-001">Signed into matching tenant/subscription — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-DEP-001 (version 1)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: not-implemented.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/subscriptions/stable/2022-12-01/subscriptions.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/subscriptions/stable/2022-12-01/subscriptions.json</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Sign in to the tenant that owns the subscription (azd auth login --tenant-id &lt;tenant-id&gt;), then confirm AZURE_SUBSCRIPTION_ID and AZURE_TENANT_ID in the selected azd environment (azd env get-values). If the subscription is in another tenant, create a separate azd environment for that tenant.</dd>
+          <dt>Fix</dt><dd><pre><code>azd auth login --tenant-id &lt;tenant-id&gt;
+azd env set AZURE_TENANT_ID &lt;tenant-id&gt;
+azd env set AZURE_SUBSCRIPTION_ID &lt;subscription-id&gt;</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: not-implemented</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-DEP-002">
+        <h3 id="control-FND-DEP-002">Required providers registered — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-DEP-002 (version 3)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: not-implemented.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/resources/stable/2025-04-01/resources.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/resources/stable/2025-04-01/resources.json</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Register the missing providers once per subscription with a principal that has the &lt;provider&gt;/register/action permission (Contributor or Owner), and wait until the state is Registered, or at least Registering for the regions in use.</dd>
+          <dt>Fix</dt><dd><pre><code>az provider register --namespace Microsoft.App
+az provider register --namespace Microsoft.ContainerService
+az provider show --namespace Microsoft.App --query registrationState</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: not-implemented</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-DEP-009">
+        <h3 id="control-FND-DEP-009">Likely policy denials identified — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-DEP-009 (version 3)</dd>
+          <dt>Mandatory</dt><dd>false</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: not-implemented.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/policyinsights/resource-manager/Microsoft.PolicyInsights/PolicyInsights/stable/2024-10-01/openapi.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/policyinsights/resource-manager/Microsoft.PolicyInsights/PolicyInsights/stable/2024-10-01/openapi.json</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Change the planned value to one the policy allows, request a policy exemption, or ask the policy owner for a compliant pattern. Do not disable the policy to make a deployment pass.</dd>
+          <dt>Fix</dt><dd><pre><code># example: a policy restricts locations; pick an allowed one
+azd env set AZURE_LOCATION &lt;allowed-region&gt;</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: not-implemented</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-ENV-001">
+        <h3 id="control-FND-ENV-001">Environments do not unintentionally share resource groups — <span class="state-NOT_APPLICABLE">NOT_APPLICABLE</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-ENV-001 (version 5)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>deterministic</dd>
+          <dt>Why this state</dt><dd>Not applicable: not-applicable: fewer than two azd environments.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview">https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview</a> (verified 2026-10-05)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Give each environment its own resource group, for example by including the environment name in the group name (resourceGroup: rg-${AZURE_ENV_NAME}), or record an explicit suppression with a reason and expiry when sharing is intentional.</dd>
+          <dt>Fix</dt><dd><pre><code>name: my-agent-project
+resourceGroup: rg-${AZURE_ENV_NAME}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: not-applicable: fewer than two azd environments</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-ENV-002">
+        <h3 id="control-FND-ENV-002">Environment-bound names/IDs/rules were not copied unchanged — <span class="state-NOT_APPLICABLE">NOT_APPLICABLE</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-ENV-002 (version 4)</dd>
+          <dt>Mandatory</dt><dd>false</dd>
+          <dt>Evidence basis</dt><dd>deterministic</dd>
+          <dt>Why this state</dt><dd>Not applicable: not-applicable: fewer than two azd environments.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview">https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview</a> (verified 2026-10-05)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Review each reported key and give the environment its own value, or suppress the finding with a reason and an expiry where the shared value is intentional. Prefer deriving names from AZURE_ENV_NAME.</dd>
+          <dt>Fix</dt><dd><pre><code># .azure/prod/.env
+AZURE_RESOURCE_GROUP=rg-myapp-prod
+AZURE_AI_PROJECT_ENDPOINT=https://prod-account.services.ai.azure.com/api/projects/prod-project</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: not-applicable: fewer than two azd environments</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-ENV-004">
+        <h3 id="control-FND-ENV-004">Informational difference summary — <span class="state-NOT_APPLICABLE">NOT_APPLICABLE</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-ENV-004 (version 3)</dd>
+          <dt>Mandatory</dt><dd>false</dd>
+          <dt>Evidence basis</dt><dd>deterministic</dd>
+          <dt>Why this state</dt><dd>Not applicable: not-applicable: fewer than two azd environments.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview">https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview</a> (verified 2026-10-05)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Review the summary before promoting a release; use azd env get-values per environment for the details you are entitled to see.</dd>
+          <dt>Fix</dt><dd><pre><code>foundry-doctor compare --env dev --env prod</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: not-applicable: fewer than two azd environments</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-OPS-001">
+        <h3 id="control-FND-OPS-001">Diagnostic settings to Log Analytics — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-OPS-001 (version 2)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-cognitiveservices-accounts-logs">https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-cognitiveservices-accounts-logs</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Add a Microsoft.Insights/diagnosticSettings resource per resource, scoped to the resource, that sends the audit category group (or allLogs when you need request and response diagnostics) to your Log Analytics workspace. Use audit as a low-cost start because several categories (for example AzureOpenAIRequestUsage and ManagedNetworkEvent on accounts, and all project categories) are marked as having a cost to export in the Azure Monitor reference.</dd>
+          <dt>Fix</dt><dd><pre><code>resource diag &#39;Microsoft.Insights/diagnosticSettings@2021-05-01-preview&#39; = {
+  name: &#39;to-law&#39;
+  scope: foundryAccount
+  properties: {
+    workspaceId: logAnalytics.id
+    logs: [
+      { categoryGroup: &#39;audit&#39;, enabled: true }
+    ]
+  }
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-OPS-002">
+        <h3 id="control-FND-OPS-002">Application Insights connected — <span class="state-QUESTION">QUESTION</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-OPS-002 (version 1)</dd>
+          <dt>Mandatory</dt><dd>false</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>No requirement or objective is declared (no-explicit-observability-or-server-tracing-requirement); the control needs a team decision.</dd>
+          <dt>Costly recommendation</dt><dd>Workspace-based Application Insights data is billed for ingestion and retention by the Log Analytics workspace that stores it. (<a href="https://learn.microsoft.com/azure/azure-monitor/logs/cost-logs">https://learn.microsoft.com/azure/azure-monitor/logs/cost-logs</a>, verified 2026-10-18)</dd>
+          <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://learn.microsoft.com/azure/foundry/observability/how-to/trace-agent-setup">https://learn.microsoft.com/azure/foundry/observability/how-to/trace-agent-setup</a> (verified 2026-10-04)</dd>
+          <dt>Review question</dt><dd>Is server-side tracing or hosted-agent telemetry a declared requirement for this project? (No configuration key exists yet; ADR-026.)</dd>
+          
+          
+          
+          <dt>Recommendation</dt><dd>If server-side tracing or hosted-agent telemetry is a declared requirement, connect an Application Insights resource to the Foundry project (a connection with category AppInsights) and link the component to a Log Analytics workspace. Keep exactly one AppInsights connection per scope. Choose sampling, retention and daily-cap settings deliberately: telemetry ingestion and retention incur cost, so a project that does not require this observability path should not be forced to enable it.</dd>
+          <dt>Fix</dt><dd><pre><code># Safe remediation (no unverified ARM wiring):
+# In the Foundry portal, open the project, Monitoring, and connect the intended
+# workspace-based Application Insights resource. Re-run the live inventory and
+# verify exactly one project connection whose category is AppInsights.</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: no-explicit-observability-or-server-tracing-requirement</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-OPS-003">
+        <h3 id="control-FND-OPS-003">Baseline alerts exist — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-OPS-003 (version 2)</dd>
+          <dt>Mandatory</dt><dd>false</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://learn.microsoft.com/azure/foundry/how-to/stay-informed-service-health">https://learn.microsoft.com/azure/foundry/how-to/stay-informed-service-health</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Add a Service Health alert and metric alerts on ModelAvailabilityRate, ModelRequests filtered by StatusCode (429 and 5xx) and TimeToResponse for the Foundry account, each with an action group. Choose thresholds from your own traffic and latency targets.</dd>
+          <dt>Fix</dt><dd><pre><code>resource availabilityAlert &#39;Microsoft.Insights/metricAlerts@2026-01-01&#39; = {
+  name: &#39;foundry-model-availability&#39;
+  location: &#39;global&#39;
+  properties: {
+    severity: 2
+    enabled: true
+    scopes: [ foundryAccount.id ]
+    evaluationFrequency: &#39;PT5M&#39;
+    windowSize: &#39;PT15M&#39;
+    criteria: {
+      &#39;odata.type&#39;: &#39;Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria&#39;
+      allOf: [ { name: &#39;avail&#39;, metricName: &#39;ModelAvailabilityRate&#39;, operator: &#39;LessThan&#39;, threshold: 99, timeAggregation: &#39;Average&#39;, criterionType: &#39;StaticThresholdCriterion&#39; } ]
+    }
+    actions: [ { actionGroupId: actionGroup.id } ]
+  }
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-OPS-004">
+        <h3 id="control-FND-OPS-004">Required tags exist — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-OPS-004 (version 2)</dd>
+          <dt>Mandatory</dt><dd>false</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://learn.microsoft.com/azure/azure-resource-manager/management/tag-resources">https://learn.microsoft.com/azure/azure-resource-manager/management/tag-resources</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Define the required tags once (for example in a Bicep user-defined type), pass them to every resource, and enforce them at runtime with Azure Policy (Require a tag on resources). Foundry Doctor reports where the template omits them.</dd>
+          <dt>Fix</dt><dd><pre><code>@description(&#39;Tags required by the organisation.&#39;)
+param tags requiredTags
+type requiredTags = { Env: string, CostCode: string }
+
+resource account &#39;Microsoft.CognitiveServices/accounts@2026-09-01&#39; = {
+  name: accountName
+  location: location
+  kind: &#39;AIServices&#39;
+  sku: { name: &#39;S0&#39; }
+  tags: tags
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-OPS-005">
+        <h3 id="control-FND-OPS-005">Resource-name provider constraints — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-OPS-005 (version 2)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/azure-resource-manager/management/resource-name-rules">https://learn.microsoft.com/azure/azure-resource-manager/management/resource-name-rules</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Choose names that satisfy the provider limits for every environment name azd can produce, constrain name parameters with @minLength and @maxLength, and keep a short resource token for globally scoped resources (Storage 24, Key Vault 24, Cosmos DB 44, APIM 50, Search 60).</dd>
+          <dt>Fix</dt><dd><pre><code>@minLength(3)
+@maxLength(24)
+param storageName string
+
+resource sa &#39;Microsoft.Storage/storageAccounts@2024-01-01&#39; = {
+  name: toLower(replace(storageName, &#39;-&#39;, &#39;&#39;))
+  location: location
+  sku: { name: &#39;Standard_LRS&#39; }
+  kind: &#39;StorageV2&#39;
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-OPS-006">
+        <h3 id="control-FND-OPS-006">Log retention meets policy — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-OPS-006 (version 2)</dd>
+          <dt>Mandatory</dt><dd>false</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>Log Analytics charges for data retention in addition to ingestion; longer retention adds cost. (<a href="https://learn.microsoft.com/azure/azure-monitor/logs/cost-logs">https://learn.microsoft.com/azure/azure-monitor/logs/cost-logs</a>, verified 2026-10-18)</dd>
+          <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://learn.microsoft.com/azure/azure-monitor/logs/data-retention-configure">https://learn.microsoft.com/azure/azure-monitor/logs/data-retention-configure</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Set workspace retentionInDays to at least the value your policy requires, or set totalRetentionInDays on the tables that hold Foundry diagnostics and traces to keep older data in low-cost long-term retention. Retention beyond the free period is billed.</dd>
+          <dt>Fix</dt><dd><pre><code>resource law &#39;Microsoft.OperationalInsights/workspaces@2025-07-01&#39; = {
+  name: lawName
+  location: location
+  properties: {
+    retentionInDays: 90
+  }
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-OPS-007">
+        <h3 id="control-FND-OPS-007">CI/CD pipeline exists — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-OPS-007 (version 3)</dd>
+          <dt>Mandatory</dt><dd>false</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: uncertain: a pipeline run step uses shell constructs that were not followed (heredoc, function, eval or sh -c, computed azd arguments), so it may invoke azd provision, deploy or up.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://learn.microsoft.com/azure/developer/azure-developer-cli/configure-devops-pipeline">https://learn.microsoft.com/azure/developer/azure-developer-cli/configure-devops-pipeline</a> (verified 2026-10-05)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Run azd pipeline config to generate azure-dev.yml and the federated credential for GitHub Actions or Azure Pipelines, and use one pipeline per azd environment.</dd>
+          <dt>Fix</dt><dd><pre><code>azd pipeline config --provider github</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: uncertain: a pipeline run step uses shell constructs that were not followed (heredoc, function, eval or sh -c, computed azd arguments), so it may invoke azd provision, deploy or up</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-OPS-008">
+        <h3 id="control-FND-OPS-008">Evaluations run before promotion — <span class="state-WARNING">WARNING</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-OPS-008 (version 3)</dd>
+          <dt>Mandatory</dt><dd>false</dd>
+          <dt>Evidence basis</dt><dd>deterministic</dd>
+          <dt>Why this state</dt><dd>An active warning-severity finding remains for the selected profile.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://learn.microsoft.com/azure/foundry/agents/how-to/set-up-ci-cd-cli">https://learn.microsoft.com/azure/foundry/agents/how-to/set-up-ci-cd-cli</a> (verified 2026-10-04)</dd>
+          <dt>Review question</dt><dd>Is promotion gated by evaluations that reflect the project&#39;s release decision?</dd>
+          
+          
+          
+          <dt>Recommendation</dt><dd>Generate the evaluation recipe with azd ai agent eval generate, commit eval.yaml, and run azd ai agent eval run in the pipeline against the candidate version; promote to production only after the evaluation passes your thresholds.</dd>
+          <dt>Fix</dt><dd><pre><code># in .github/workflows/azure-dev.yml, before the production promotion job
+- run: azd ai agent eval run --no-prompt</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>warning: no pipeline run step runs azd ai agent eval run in .github/workflows, .azdo/pipelines and .azuredevops/pipelines (.yml and .yaml) at <code>azure.yaml</code></li>
+            <li>warning: eval.yaml is missing from the project directory at <code>eval.yaml</code></li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-RUN-007">
+        <h3 id="control-FND-RUN-007">Diagnostic logs are arriving — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-RUN-007 (version 4)</dd>
+          <dt>Mandatory</dt><dd>false</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: not-implemented.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/how-to/diagnostic-logging">https://learn.microsoft.com/azure/foundry/how-to/diagnostic-logging</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Enable a diagnostic setting for the Foundry account that sends Audit and Request and Response logs to a Log Analytics workspace, wait up to two hours, and confirm rows with a count query. Check workspace access and ingestion errors if rows stay at zero while the account has traffic.</dd>
+          <dt>Fix</dt><dd><pre><code>resource diag &#39;Microsoft.Insights/diagnosticSettings@2021-05-01-preview&#39; = {
+  name: &#39;to-law&#39;
+  scope: account
+  properties: {
+    workspaceId: law.id
+    logs: [
+      { category: &#39;Audit&#39;, enabled: true }
+      { category: &#39;RequestResponse&#39;, enabled: true }
+    ]
+  }
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: not-implemented</li>
+            </ul></dd>
+        </dl>
+      </article>
+      
+    </section>
+    <section aria-labelledby="pillar-cost">
+      <h2 id="pillar-cost">Cost Optimization</h2>
+      <article aria-labelledby="control-FND-COST-001">
+        <h3 id="control-FND-COST-001">Budget and alerts exist — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-COST-001 (version 4)</dd>
+          <dt>Mandatory</dt><dd>false</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://github.com/Azure/azure-rest-api-specs/tree/main/specification/consumption/resource-manager/Microsoft.Consumption/Consumption/stable/2023-11-01">https://github.com/Azure/azure-rest-api-specs/tree/main/specification/consumption/resource-manager/Microsoft.Consumption/Consumption/stable/2023-11-01</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Add a Microsoft.Consumption/budgets resource for the subscription or resource group with an actual-cost notification (for example 80 percent) and a forecasted-cost notification, sent to a mailbox or an action group that someone monitors.</dd>
+          <dt>Fix</dt><dd><pre><code>targetScope = &#39;subscription&#39;
+
+resource budget &#39;Microsoft.Consumption/budgets@2023-11-01&#39; = {
+  name: &#39;foundry-monthly&#39;
+  properties: {
+    category: &#39;Cost&#39;
+    amount: 500
+    timeGrain: &#39;Monthly&#39;
+    timePeriod: { startDate: &#39;2026-11-01T00:00:00Z&#39; }
+    notifications: {
+      actual80: {
+        enabled: true
+        operator: &#39;GreaterThan&#39;
+        threshold: 80
+        thresholdType: &#39;Actual&#39;
+        contactEmails: [ &#39;finops@contoso.example&#39; ]
+      }
+    }
+  }
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      <article aria-labelledby="control-FND-COST-002">
+        <h3 id="control-FND-COST-002">Dev avoids production-sized fixed SKUs — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-COST-002 (version 4)</dd>
+          <dt>Mandatory</dt><dd>false</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types">https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types</a> (verified 2026-10-18)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>In dev use pay-per-token deployments (GlobalStandard or Standard), the Search free or basic tier with one replica and one partition, an API Management Developer or consumption-style tier, and the lowest Cosmos DB throughput that the Foundry Agent Service setup allows. Reserve production-sized capacity for test and production environments.</dd>
+          <dt>Fix</dt><dd><pre><code>// Bicep - dev environment: a pay-per-token deployment type instead of a provisioned one.
+// Model name and version are placeholders; use a model available in your region.
+resource chat &#39;Microsoft.CognitiveServices/accounts/deployments@2026-09-01&#39; = {
+  parent: account
+  name: &#39;chat&#39;
+  sku: { name: &#39;GlobalStandard&#39;, capacity: 10 }
+  properties: {
+    model: { format: &#39;OpenAI&#39;, name: &#39;&lt;model&gt;&#39;, version: &#39;&lt;version&gt;&#39; }
+  }
+}</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
+      
+    </section>
+    
+
+    <section aria-labelledby="limitations">
+      <h2 id="limitations">Limitations</h2>
+      <ul>
+        <li>This report maps available Foundry Doctor evidence to selected Azure Well-Architected aligned controls. It is not a certification and does not claim complete WAF compliance.</li>
+        <li>Controls without complete deterministic evidence remain visible as UNKNOWN, QUESTION or SKIPPED rather than being treated as passing; a partly skipped evaluation is UNKNOWN, never PASS.</li>
+        <li>ATTESTED controls rest on an answer the team recorded in Foundry Doctor configuration. Foundry Doctor did not verify the answer.</li>
+        <li>Control IDs are Foundry Doctor rule IDs. They are not mapped to WAF checklist codes in this release, and pillar assignments come from the rule catalogue.</li>
+        <li>The decision wording and the top-action ranking are project opinion, not Microsoft guidance.</li>
+        <li>PSRule for Azure, Azure Advisor and Microsoft Defender for Cloud recommendations were not imported. Overlapping external check IDs are listed for reference only (ADR-020, ADR-026).</li>
+        <li>Deployed Azure state was not queried: assess waf runs offline. Controls that need deployment or runtime evidence and were not evaluated: FND-COST-001, FND-DEP-001, FND-DEP-002, FND-DEP-003, FND-DEP-004, FND-DEP-005, FND-DEP-006, FND-DEP-007, FND-DEP-008, FND-DEP-009, FND-DEP-010, FND-DEP-011, FND-DEP-012, FND-IDN-002, FND-IDN-005, FND-NET-006, FND-OPS-009, FND-RUN-001, FND-RUN-002, FND-RUN-003, FND-RUN-004, FND-RUN-005, FND-RUN-006, FND-RUN-007, FND-SEC-008, FND-SEC-009.</li>
+        <li>Compiled infrastructure (Bicep to ARM) was not available, so template-dependent controls are SKIPPED.</li>
+        <li>30 catalogue rules are excluded from the WAF view with a recorded reason (internal/assess/waf/mapping.yaml).</li>
+        
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,5 +1,5 @@
 id: FND-IQ-006
-version: 1
+version: 2
 group: IQ
 title: Chunk overlap and hybrid weights valid
 description: >-
@@ -74,6 +74,11 @@ sources:
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/data-plane/Search/models-service.tsp
     (SplitSkill)
   note: Branch URL, not commit-pinned.
+- url: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-blob
+  lastVerified: '2026-10-18'
+  verifiedVia: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-blob (web fetch, Phase 8 fix loop 1)
+  note: >-
+    GET response shape: azureBlobParameters.{connectionString, isADLSGen2, ingestionParameters.{ingestionPermissionOptions, embeddingModel, chatCompletionModel, aiServices, assetStore, ingestionSchedule}, createdResources.{datasource, indexer, skillset, index}}; ingestionPermissionOptions need 2026-08-01-preview and are not supported by 2026-04-01.
 overlap:
   decision: native
   provisional: true
@@ -102,12 +107,9 @@ tests:
   - overlap-larger-than-page-length
   - page-length-below-300
   - page-length-above-50000
-  - vector-weight-zero
-  - vector-weight-negative
   negative:
   - overlap-10-percent
   - no-overlap-configured
-  - weight-2
   skipped:
   - no-split-skill-in-project
   - no-explicit-query-definitions
@@ -119,3 +121,4 @@ notes: >-
   Downgraded after the Phase 0 Foundry lead review: the split-size and weight bounds are API constraints, but "overlap must
   be less than half the maximum page length" appears only in the chunking article, so it is guidance (warning), and the
   preview unit parameter is not asserted under the stable 2026-04-01 API.
+  Round-1 fix (2026-10-18): the knowledge-base vectorQueries[].weight member was invented and is no longer read; hybrid weights are not evaluated (skipped as no-explicit-query-definitions). Generated skillsets are read from createdResources.skillset. Unknown API versions are uncertain.

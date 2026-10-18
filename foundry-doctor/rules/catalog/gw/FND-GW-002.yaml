@@ -1,5 +1,5 @@
 id: FND-GW-002
-version: 1
+version: 2
 group: GW
 title: "Verified token-limit/metric policies are present"
 description: >-
@@ -75,6 +75,21 @@ sources:
     verifiedVia: >-
       https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/api-management/genai-gateway-capabilities.md
     note: AI gateway capability overview (token usage management, monitoring). Branch URL, not commit-pinned.
+  - url: https://learn.microsoft.com/azure/api-management/set-edit-policies
+    lastVerified: '2026-10-18'
+    verifiedVia: https://learn.microsoft.com/azure/api-management/set-edit-policies (web fetch, Phase 8 fix loop 1)
+    note: >-
+      <base/> inherits the parent scope; removing it prevents inheritance (global, product, API, operation).
+  - url: https://learn.microsoft.com/azure/api-management/include-fragment-policy
+    lastVerified: '2026-10-18'
+    verifiedVia: https://learn.microsoft.com/azure/api-management/include-fragment-policy (web fetch, Phase 8 fix loop 1)
+    note: >-
+      include-fragment fragment-id names a Microsoft.ApiManagement/service/policyFragments resource (format xml or rawxml, value with a <fragment> root, 2024-05-01 template reference).
+  - url: https://learn.microsoft.com/azure/templates/microsoft.apimanagement/service/apis/policies
+    lastVerified: '2026-10-18'
+    verifiedVia: https://learn.microsoft.com/azure/templates/microsoft.apimanagement/service/apis/policies (web fetch, Phase 8 fix loop 1)
+    note: >-
+      Policy format values rawxml, rawxml-link, xml, xml-link; Learn's own xml sample is not well-formed XML, so unparsable policy text is reported uncertain.
 overlap:
   decision: native
   provisional: true
@@ -122,3 +137,4 @@ notes: >-
   in the Application Insights dependency list). Whether they are still accepted by the service is not stated, so
   they are not matched. Prompt-token estimation and streaming behaviour are documented in the policy article and
   are not evaluated. Requiring the policies is a governance preference.
+  Round-1 fix (2026-10-18): per-operation and per-product effective policy as in FND-GW-001; policy fragments in the template are resolved, others are uncertain; legacy azure-openai-* names present without the llm-* policy are uncertain. APIM resources outside the verified api-versions are uncertain.

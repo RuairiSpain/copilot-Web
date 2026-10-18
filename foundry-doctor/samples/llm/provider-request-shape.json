@@ -1,0 +1,16 @@
+{
+  "model": "<FOUNDRY_DOCTOR_LLM_DEPLOYMENT>",
+  "messages": [
+    { "role": "system", "content": "<versioned system prompt, internal/llm/prompts>" },
+    { "role": "user", "content": "<audience line + projected-request.json inside a fenced untrusted-data block>" }
+  ],
+  "response_format": {
+    "type": "json_schema",
+    "json_schema": {
+      "name": "foundry_doctor_phase9",
+      "strict": true,
+      "schema": "<repository-owned narrative schema>"
+    }
+  },
+  "max_completion_tokens": 4096
+}

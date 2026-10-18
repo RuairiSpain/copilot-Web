@@ -1,6 +1,8 @@
 package annotate
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"path"
 	"sort"
@@ -71,7 +73,18 @@ type ManifestFile struct {
 // stream of annotation entries.
 func Collect(findingsIn []sdk.Finding, diagnostics []bicep.Diagnostic) []Entry {
 	out := make([]Entry, 0, len(findingsIn)+len(diagnostics))
+	// A Bicep compiler diagnostic also reaches the engine as an adapter
+	// finding (ADR-009); the diagnostic entry is kept and the duplicate
+	// finding dropped.
+	diagKeys := make(map[string]bool, len(diagnostics))
+	for _, d := range diagnostics {
+		diagKeys[bicepKey(d.Code, d.File, d.Line)] = true
+	}
 	for _, f := range findingsIn {
+		if f.Adapter == "bicep" && strings.HasPrefix(f.RuleID, "bicep/") &&
+			diagKeys[bicepKey(strings.TrimPrefix(f.RuleID, "bicep/"), f.Location.File, f.Location.Line)] {
+			continue
+		}
 		rawFile := f.Location.File
 		r := location.FromFinding(f)
 		if !isProjectRelativePath(rawFile) {
@@ -119,6 +132,7 @@ func Collect(findingsIn []sdk.Finding, diagnostics []bicep.Diagnostic) []Entry {
 			Line:         r.Line,
 			Column:       r.Column,
 			Message:      summarise(d.Message),
+			Fingerprint:  bicepFingerprint(d.Code, r.File, d.Message),
 			Adapter:      "bicep",
 			InlineReason: "",
 		}
@@ -145,6 +159,17 @@ func Collect(findingsIn []sdk.Finding, diagnostics []bicep.Diagnostic) []Entry {
 		return a.Message < b.Message
 	})
 	return out
+}
+
+func bicepKey(code, file string, line int) string {
+	return fmt.Sprintf("%s|%s|%d", code, location.SanitizePath(file), line)
+}
+
+// bicepFingerprint is stable across unrelated edits: it hashes the code, file
+// and message, not the line and column.
+func bicepFingerprint(code, file, message string) string {
+	sum := sha256.Sum256([]byte(code + "\x00" + file + "\x00" + message))
+	return "bicep-" + hex.EncodeToString(sum[:8])
 }
 
 func inlineEligibility(rawFile string, e Entry) (bool, string) {
@@ -182,39 +207,29 @@ func isProjectRelativePath(p string) bool {
 	return cleaned != "." && cleaned != ".." && !strings.HasPrefix(cleaned, "../") && !strings.Contains(cleaned, "/../")
 }
 
+// summarise returns redacted, bounded, single-line canonical text. It does no
+// sink-specific escaping: GitHub workflow-command escaping is applied only by
+// GitHubWorkflowCommands, so the manifest, SARIF and review comments carry
+// plain text.
 func summarise(s string) string {
 	s = findings.Redact(s)
 	s = strings.ToValidUTF8(s, "\uFFFD")
 	var b strings.Builder
 	space := false
-	prevColon := false
 	for _, r := range s {
 		switch {
-		case r == '%':
-			b.WriteString("%25")
-			space = false
-			prevColon = false
-		case r == ':':
-			if prevColon {
-				b.WriteRune('∷')
-				prevColon = false
-			} else {
-				b.WriteRune(':')
-				prevColon = true
-			}
-			space = false
-		case r == '\r' || r == '\n' || unicode.IsControl(r):
+		case isFormatRune(r):
+			continue
+		case isBreakRune(r):
 			if !space {
 				b.WriteByte(' ')
 			}
 			space = true
-			prevColon = false
 		default:
 			b.WriteRune(r)
 			space = false
-			prevColon = false
 		}
-		if b.Len() >= maxMessageBytes {
+		if b.Len() > maxMessageBytes {
 			break
 		}
 	}
@@ -226,6 +241,19 @@ func summarise(s string) string {
 		return trimToMaxBytes(out, maxMessageBytes-len("…")) + "…"
 	}
 	return out
+}
+
+// isBreakRune reports control characters and line or paragraph separators
+// (Cc, Zl, Zp); they become a single space.
+func isBreakRune(r rune) bool {
+	return r == '\r' || r == '\n' || unicode.IsControl(r) || unicode.In(r, unicode.Zl, unicode.Zp)
+}
+
+// isFormatRune reports invisible format characters (Cf), including the
+// bidirectional overrides and isolates U+202A-U+202E and U+2066-U+2069 used in
+// Trojan Source attacks; they are dropped.
+func isFormatRune(r rune) bool {
+	return unicode.Is(unicode.Cf, r)
 }
 
 func trimToMaxBytes(s string, max int) string {

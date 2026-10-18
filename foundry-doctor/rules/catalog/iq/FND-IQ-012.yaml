@@ -1,5 +1,5 @@
 id: FND-IQ-012
-version: 1
+version: 2
 group: IQ
 title: "Semantic ranking enabled when used"
 description: >-
@@ -81,6 +81,11 @@ sources:
       https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/models.tsp
       (SearchSemanticSearch disabled|free|standard; KnowledgeRetrieval free|standard added 2026-03-01-preview)
     note: Branch URL, not commit-pinned.
+  - url: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-blob
+    lastVerified: '2026-10-18'
+    verifiedVia: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-blob (web fetch, Phase 8 fix loop 1)
+    note: >-
+      GET response shape: azureBlobParameters.{connectionString, isADLSGen2, ingestionParameters.{ingestionPermissionOptions, embeddingModel, chatCompletionModel, aiServices, assetStore, ingestionSchedule}, createdResources.{datasource, indexer, skillset, index}}; ingestionPermissionOptions need 2026-08-01-preview and are not supported by 2026-04-01.
 overlap:
   decision: native
   provisional: true
@@ -124,3 +129,4 @@ notes: >-
   enable-disable.md line 118). The rule therefore fails disabled only below 2026-03-01-preview, and its basis
   is reliability (not platform) with confidence likely until the documentation and the spec agree. Billing mode
   is not asserted as required for dev.
+  Round-1 fix (2026-10-18): the semantic leg needs the knowledge-source plane and skips (no-index-backed-knowledge-source, or data plane not read) instead of passing; an absent semanticSearch is uncertain (management-api-version-without-property). Management version 2024-07-01 was removed from the accepted set (it is the data-plane GA version).

@@ -16,12 +16,18 @@ type Comment struct {
 	Text string
 }
 
-// Apply inserts deterministic Bicep comments ahead of the target lines.
+const bom = "\uFEFF"
+
+// Apply writes the review banner and inserts deterministic Bicep comments
+// ahead of the target lines. The banner is written even when comments is
+// empty. A comment for a line that follows #disable-next-line directives is
+// placed above the directives, so they still apply to the original line. A
+// leading UTF-8 byte order mark stays first.
 func Apply(src []byte, comments []Comment) ([]byte, error) {
-	if len(comments) == 0 {
-		return src, nil
-	}
-	lines := strings.Split(strings.ReplaceAll(string(src), "\r\n", "\n"), "\n")
+	text := strings.ReplaceAll(string(src), "\r\n", "\n")
+	hasBOM := strings.HasPrefix(text, bom)
+	text = strings.TrimPrefix(text, bom)
+	lines := strings.Split(text, "\n")
 	if len(lines) > 0 && lines[len(lines)-1] == "" {
 		lines = lines[:len(lines)-1]
 	}
@@ -46,9 +52,16 @@ func Apply(src []byte, comments []Comment) ([]byte, error) {
 	})
 	grouped := map[int][]string{}
 	for _, c := range comments {
-		grouped[c.Line] = append(grouped[c.Line], prefix+" "+strings.TrimSpace(c.Text))
+		at := c.Line
+		for at > 1 && isDisableNextLine(lines[at-2]) {
+			at--
+		}
+		grouped[at] = append(grouped[at], prefix+" "+strings.TrimSpace(c.Text))
 	}
 	var b strings.Builder
+	if hasBOM {
+		b.WriteString(bom)
+	}
 	b.WriteString(Banner)
 	b.WriteByte('\n')
 	for i, line := range lines {
@@ -65,6 +78,10 @@ func Apply(src []byte, comments []Comment) ([]byte, error) {
 		b.WriteByte('\n')
 	}
 	return []byte(b.String()), nil
+}
+
+func isDisableNextLine(line string) bool {
+	return strings.HasPrefix(strings.TrimSpace(line), "#disable-next-line")
 }
 
 func indentation(line string) string {

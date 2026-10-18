@@ -84,8 +84,8 @@ Rules whose phases include 1, including those shared with a later phase. The PRD
 
 | Rule | Title | Phase | Status | Decision | dev/test/prod | Source |
 |---|---|---|---|---|---|---|
-| FND-COST-001 | Budget and alerts exist | 2/7 | product-opinion | native | info/info/warning | [link](<https://github.com/Azure/azure-rest-api-specs/tree/main/specification/consumption/resource-manager/Microsoft.Consumption/Consumption/stable/2023-11-01>) (2026-10-04) |
-| FND-COST-002 | Dev avoids production-sized fixed SKUs | 1 | product-opinion | native | warning/info/info | [link](<https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types>) (2026-10-04) |
+| FND-COST-001 | Budget and alerts exist | 2 | product-opinion | native | info/info/warning | [link](<https://github.com/Azure/azure-rest-api-specs/tree/main/specification/consumption/resource-manager/Microsoft.Consumption/Consumption/stable/2023-11-01>) (2026-10-04) |
+| FND-COST-002 | Dev avoids production-sized fixed SKUs | 1 | product-opinion | native | warning/info/info | [link](<https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types>) (2026-10-18) |
 | FND-COST-003 | Gateway token limits exist | 8 | product-opinion | native | info/warning/warning | [link](<https://learn.microsoft.com/azure/api-management/llm-token-limit-policy>) (2026-10-04) |
 | FND-COST-004 | Informational monthly fixed-capacity estimate | 7 | product-opinion | native | info/info/info | [link](<https://learn.microsoft.com/azure/search/search-sku-tier>) (2026-10-04) |
 

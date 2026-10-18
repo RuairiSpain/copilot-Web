@@ -1,0 +1,5 @@
+{
+  "description": "Source mode, external and missing references: an agent that uses an ARM resource in another resource group (external), an unknown name (missing), and a connection whose target is an external URL.",
+  "mode": "source",
+  "azureYaml": "name: external-references-sample\nservices:\n  ai-project:\n    host: azure.ai.project\n  assistant:\n    host: azure.ai.agent\n    uses:\n      - ai-project\n      - shared-search\n      - /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-shared/providers/Microsoft.Storage/storageAccounts/stshared\n  docs-conn:\n    host: azure.ai.connection\n    target: https://contoso.example.com/docs\n"
+}

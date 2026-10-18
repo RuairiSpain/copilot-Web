@@ -113,7 +113,14 @@ func assessWAF(ctx context.Context, svc Services, req AssessRequest, stdout io.W
 	if err != nil {
 		return 0, fmt.Errorf("load rule catalogue: %w", err)
 	}
-	defs := waf.Definitions(catalogRules)
+	defs, err := waf.Definitions(catalogRules)
+	if err != nil {
+		return 0, fmt.Errorf("load WAF mapping: %w", err)
+	}
+	excluded, err := waf.ExcludedRules()
+	if err != nil {
+		return 0, fmt.Errorf("load WAF mapping: %w", err)
+	}
 	selectors := make([]string, len(defs))
 	for i, d := range defs {
 		selectors[i] = d.RuleID
@@ -177,6 +184,13 @@ func assessWAF(ctx context.Context, svc Services, req AssessRequest, stdout io.W
 	}
 	findings.Sort(fs)
 	skips := slices.Clone(rep.Skipped)
+	// The selectors above name every WAF rule, which the engine treats as an
+	// explicit request and marks each skip Required. An assessment reports a
+	// skipped control as unassessed instead of failing the run, so the flag is
+	// cleared; --strict still counts the skips that hid a check.
+	for i := range skips {
+		skips[i].Required = false
+	}
 	slices.SortFunc(skips, func(a, b sdk.Skip) int {
 		if a.RuleID != b.RuleID {
 			if a.RuleID < b.RuleID {
@@ -200,7 +214,9 @@ func assessWAF(ctx context.Context, svc Services, req AssessRequest, stdout io.W
 		Evaluated:   rep.Evaluated,
 		Policy:      set.Policy,
 		ToolVersion: ToolVersion,
+		GeneratedAt: svc.now().UTC().Format(time.RFC3339),
 		ScopeNote:   scope,
+		Limitations: assessLimitations(catalogRules, defs, rep.Evaluated, arm != nil, len(excluded)),
 		WARALookups: wara.Map(),
 	})
 	if err != nil {
@@ -250,12 +266,12 @@ func renderAssessment(w io.Writer, a assess.Assessment, req AssessRequest) error
 	switch req.Audience {
 	case AssessAudienceOwner:
 		if req.Format == "html" {
-			return htmlreport.Render(w, a)
+			return htmlreport.RenderOwner(w, a)
 		}
 		return ownerreport.Markdown(w, a)
 	case AssessAudienceDeveloper:
 		if req.Format == "html" {
-			return htmlreport.Render(w, a)
+			return htmlreport.RenderDeveloper(w, a)
 		}
 		return developerreport.Markdown(w, a)
 	case AssessAudienceEvidence:
@@ -266,4 +282,36 @@ func renderAssessment(w io.Writer, a assess.Assessment, req AssessRequest) error
 	default:
 		return Usagef("unsupported audience %q", req.Audience)
 	}
+}
+
+// assessLimitations states what this offline run did not consider. PSRule,
+// Azure Advisor and Defender for Cloud evidence is never imported in this
+// release (ADR-020, ADR-026).
+func assessLimitations(catalogRules []catalog.Rule, defs []assess.Definition, evaluated []string, armAvailable bool, excluded int) []string {
+	out := []string{
+		"PSRule for Azure, Azure Advisor and Microsoft Defender for Cloud recommendations were not imported. Overlapping external check IDs are listed for reference only (ADR-020, ADR-026).",
+	}
+	phases := make(map[string][]string, len(catalogRules))
+	for _, r := range catalogRules {
+		phases[r.ID] = r.Phases
+	}
+	var deployed []string
+	for _, d := range defs {
+		if slices.Contains(evaluated, d.RuleID) {
+			continue
+		}
+		if slices.Contains(phases[d.RuleID], "2") || slices.Contains(phases[d.RuleID], "3") {
+			deployed = append(deployed, d.RuleID)
+		}
+	}
+	if len(deployed) != 0 {
+		out = append(out, "Deployed Azure state was not queried: assess waf runs offline. Controls that need deployment or runtime evidence and were not evaluated: "+strings.Join(deployed, ", ")+".")
+	}
+	if !armAvailable {
+		out = append(out, "Compiled infrastructure (Bicep to ARM) was not available, so template-dependent controls are SKIPPED.")
+	}
+	if excluded > 0 {
+		out = append(out, fmt.Sprintf("%d catalogue rules are excluded from the WAF view with a recorded reason (internal/assess/waf/mapping.yaml).", excluded))
+	}
+	return out
 }

@@ -24,20 +24,28 @@ func fixture() assess.Assessment {
 				RuleID:         "FND-IDN-001",
 				Pillar:         "security",
 				State:          assess.StateFail,
+				RuleVersion:    2,
 				Mandatory:      true,
+				Basis:          assess.BasisDeterministic,
+				StateReason:    "An active error-severity finding remains for the selected profile.",
 				SourceURL:      "https://learn.microsoft.com/example",
 				LastVerified:   "2026-10-05",
 				Recommendation: "Use managed identity.",
-				Fix:            "identity: { type: 'SystemAssigned' }",
-				Findings:       []sdk.Finding{{Evidence: "identity is missing", Location: sdk.Location{File: "infra/main.bicep", Line: 10, Column: 2}}},
+				Fix:            "identity:\n  type: 'SystemAssigned'",
+				Findings:       []sdk.Finding{{Severity: sdk.SeverityError, Evidence: "identity is missing", Location: sdk.Location{File: "infra/main.bicep", Line: 10, Column: 2}}},
 			},
 			{
 				Title:          "DR strategy question",
 				RuleID:         "FND-REL-007",
 				Pillar:         "reliability",
 				State:          assess.StateQuestion,
+				Basis:          assess.BasisNone,
+				ProjectOpinion: true,
+				Costly:         true,
+				CostBasis:      "Multi-region adds resources.",
+				CostSourceURL:  "https://learn.microsoft.com/cost",
 				QuestionPrompt: "Has the team recorded a disaster recovery strategy?",
-				WARAReferences: []string{"dff62efe"},
+				WARAReferences: []assess.WARARef{{ID: "dff62efe-c3a3-4621-98b3-c877c65cb195", Label: "AI Search multi-region", PGVerified: "false"}},
 			},
 			{
 				Title:          "Telemetry sink exists",
@@ -64,8 +72,14 @@ func TestOutputsAreMateriallyDifferent(t *testing.T) {
 	if err := Markdown(&b, fixture()); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(b.String(), "Top five actions") {
+	s := b.String()
+	if strings.Contains(s, "Top five actions") {
 		t.Fatal("developer report should differ from owner summary")
+	}
+	for _, want := range []string{"## Operational Excellence", "  ```\n  identity:\n    type: 'SystemAssigned'\n  ```\n", "pgVerified: false", "Project opinion, not Microsoft guidance", "## Limitations"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("missing %q", want)
+		}
 	}
 }
 

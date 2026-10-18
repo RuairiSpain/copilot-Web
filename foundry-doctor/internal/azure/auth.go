@@ -93,6 +93,24 @@ func NewDefaultCredentialForTenant(run CommandRunner, tenant string) TokenCreden
 	return newChainTenant(run, time.Now, tenant)
 }
 
+// NewCLICredentialForTenant is NewDefaultCredentialForTenant without the
+// AZURE_ACCESS_TOKEN source. That variable carries a token of unknown audience
+// (normally ARM), so callers that need a token for a specific non-ARM audience
+// and must never forward a cross-audience bearer token (the Phase 9 LLM
+// provider) use this chain: every token is minted by azd or az for the
+// requested scope.
+func NewCLICredentialForTenant(run CommandRunner, tenant string) TokenCredential {
+	c := newChainTenant(run, time.Now, tenant)
+	sources := make([]cliSource, 0, len(c.sources))
+	for _, s := range c.sources {
+		if s.name != "env" {
+			sources = append(sources, s)
+		}
+	}
+	c.sources = sources
+	return c
+}
+
 var tenantRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.-]{0,253}$`)
 
 func newChain(run CommandRunner, now func() time.Time) *chainCredential {

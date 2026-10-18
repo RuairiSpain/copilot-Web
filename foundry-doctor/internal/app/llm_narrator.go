@@ -4,11 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"strings"
 
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/assess"
-	"github.com/ruairispain/copilot-web/foundry-doctor/internal/azure"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/catalog"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/llm"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/llm/prompts"
@@ -27,7 +25,9 @@ func newNarrator(cat *lazyCatalog, getenv func(string) string) Narrator {
 		cat:    cat,
 		getenv: getenv,
 		providers: map[string]llm.Provider{
-			llm.DefaultProvider: llm.NewAzureOpenAIProvider(http.DefaultClient, azure.NewDefaultCredential(nil)),
+			// nil client/credential: redirect-refusing client and the azd/az
+			// chain without AZURE_ACCESS_TOKEN (see llm.NewAzureOpenAIProvider).
+			llm.DefaultProvider: llm.NewAzureOpenAIProvider(nil, nil),
 		},
 	}
 }

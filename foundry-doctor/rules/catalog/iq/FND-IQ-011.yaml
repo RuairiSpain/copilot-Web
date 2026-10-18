@@ -1,5 +1,5 @@
 id: FND-IQ-011
-version: 1
+version: 2
 group: IQ
 title: "Refresh schedule valid and supportable"
 description: >-
@@ -110,3 +110,4 @@ notes: >-
   documented bounds are read from the indexer scheduling article. Whether the knowledge source API enforces
   the same bounds on its generated indexer is therefore inferred from the shared type and stated here;
   confidence stays certain for the type and bounds, likely for enforcement location.
+  Round-1 fix (2026-10-18): the request format of ingestionSchedule.interval is UNVERIFIED (the status API reports synchronizationInterval 1d), so an empty or unrecognised interval is uncertain; only a recognised XSD duration outside PT5M..P1D and a non-UTC startTime are findings.

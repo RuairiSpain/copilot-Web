@@ -1,0 +1,46 @@
+{
+  "name": "my-blob-ks",
+  "kind": "azureBlob",
+  "description": "Shape from Learn agentic-knowledge-source-how-to-blob (read 2026-10-18). Values are fake.",
+  "encryptionKey": null,
+  "azureBlobParameters": {
+    "connectionString": "ResourceId=/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.Storage/storageAccounts/docs",
+    "containerName": "blobcontainer",
+    "folderPath": null,
+    "isADLSGen2": true,
+    "ingestionParameters": {
+      "disableImageVerbalization": false,
+      "ingestionPermissionOptions": ["userIds", "groupIds"],
+      "contentExtractionMode": "standard",
+      "identity": null,
+      "embeddingModel": {
+        "kind": "azureOpenAI",
+        "azureOpenAIParameters": {
+          "resourceUri": "https://acct.openai.azure.com",
+          "deploymentId": "text-embedding-3-large",
+          "modelName": "text-embedding-3-large",
+          "authIdentity": null
+        }
+      },
+      "chatCompletionModel": {
+        "kind": "azureOpenAI",
+        "azureOpenAIParameters": {
+          "resourceUri": "https://acct.openai.azure.com",
+          "deploymentId": "gpt-5-mini",
+          "modelName": "gpt-5-mini",
+          "apiKey": "<redacted>",
+          "authIdentity": null
+        }
+      },
+      "ingestionSchedule": null,
+      "assetStore": null,
+      "aiServices": { "uri": "https://acct.services.ai.azure.com" }
+    },
+    "createdResources": {
+      "datasource": "my-blob-ks-datasource",
+      "indexer": "my-blob-ks-indexer",
+      "skillset": "my-blob-ks-skillset",
+      "index": "my-blob-ks-index"
+    }
+  }
+}

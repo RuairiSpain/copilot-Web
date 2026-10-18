@@ -1,11 +1,65 @@
 {
   "framework": "azure-waf",
   "profile": "foundry-prod",
+  "toolVersion": "0.4.0-test",
+  "generatedAt": "2026-10-18T00:00:00Z",
+  "scopeNote": "azure.yaml only",
   "decision": "Proceed with conditions.",
   "limitations": [
     "Not a certification."
   ],
+  "summary": {
+    "states": {
+      "ATTESTED": 1,
+      "FAIL": 1,
+      "NOT_APPLICABLE": 1,
+      "PASS": 1,
+      "QUESTION": 1,
+      "SKIPPED": 1,
+      "WARNING": 2
+    },
+    "pillars": null
+  },
+  "unassessed": [
+    {
+      "controlId": "FND-OPS-002",
+      "ruleId": "FND-OPS-002",
+      "title": "Skipped control",
+      "pillar": "operations",
+      "state": "SKIPPED"
+    }
+  ],
+  "costlyRecommendations": [
+    {
+      "controlId": "FND-REL-001",
+      "ruleId": "FND-REL-001",
+      "title": "Search replicas",
+      "pillar": "reliability",
+      "state": "WARNING",
+      "mandatory": false,
+      "projectOpinion": false,
+      "costly": true,
+      "costBasis": "Replicas are billed.",
+      "costSourceUrl": "https://learn.microsoft.com/azure/search/search-sku-manage-costs",
+      "costLastVerified": "2026-10-18"
+    }
+  ],
   "controls": {
+    "attested": [
+      {
+        "controlId": "",
+        "ruleId": "FND-REL-008",
+        "title": "Attested control",
+        "pillar": "reliability",
+        "state": "ATTESTED",
+        "basis": "attested",
+        "mandatory": false,
+        "costly": false,
+        "projectOpinion": false,
+        "questionAnswer": "true",
+        "evaluated": false
+      }
+    ],
     "fail": [
       {
         "controlId": "",
@@ -13,18 +67,37 @@
         "title": "Failed control",
         "pillar": "security",
         "state": "FAIL",
-        "mandatory": false,
+        "mandatory": true,
         "costly": false,
         "projectOpinion": false,
         "findings": [
           {
             "ruleId": "",
             "ruleVersion": 0,
-            "severity": "",
+            "severity": "error",
             "resource": {},
             "location": {},
             "evidence": "identity missing",
-            "fingerprint": ""
+            "fingerprint": "fp1"
+          }
+        ],
+        "evaluated": false
+      }
+    ],
+    "not_applicable": [
+      {
+        "controlId": "",
+        "ruleId": "FND-SEC-003",
+        "title": "Not applicable control",
+        "pillar": "security",
+        "state": "NOT_APPLICABLE",
+        "mandatory": false,
+        "costly": false,
+        "projectOpinion": false,
+        "skipped": [
+          {
+            "ruleId": "",
+            "reason": "not-applicable: no Cosmos DB"
           }
         ],
         "evaluated": false
@@ -34,13 +107,17 @@
       {
         "controlId": "",
         "ruleId": "FND-OPS-001",
+        "ruleVersion": 1,
         "title": "Passed control",
         "pillar": "operations",
         "state": "PASS",
+        "basis": "deterministic",
         "mandatory": false,
         "costly": false,
         "projectOpinion": false,
-        "evaluated": false
+        "sourceUrl": "https://learn.microsoft.com/ops",
+        "lastVerified": "2026-10-04",
+        "evaluated": true
       }
     ],
     "question": [
@@ -52,7 +129,7 @@
         "state": "QUESTION",
         "mandatory": false,
         "costly": false,
-        "projectOpinion": false,
+        "projectOpinion": true,
         "evaluated": false
       }
     ],
@@ -69,7 +146,8 @@
         "skipped": [
           {
             "ruleId": "",
-            "reason": "input-unavailable"
+            "reason": "input-unavailable",
+            "missingCapability": "control plane"
           }
         ],
         "evaluated": false
@@ -95,7 +173,8 @@
             "evidence": "accepted",
             "suppressed": {
               "reason": "tracked",
-              "owner": "team"
+              "owner": "team",
+              "expires": "2027-01-01"
             },
             "fingerprint": ""
           }

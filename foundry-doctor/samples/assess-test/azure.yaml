@@ -1,5 +1,4 @@
 name: assess-test-sample
-name: assess-test-duplicate
 requiredVersions:
   azd: ">= 1.34.2"
 infra:

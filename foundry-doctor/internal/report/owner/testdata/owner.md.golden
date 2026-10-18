@@ -15,16 +15,31 @@
 | UNKNOWN | 1 |
 | QUESTION | 1 |
 | SKIPPED | 1 |
+| ATTESTED | 1 |
+| INFO | 0 |
+| NOT_APPLICABLE | 1 |
 | PASS | 2 |
 
 ## Top five actions
 
-- **Managed identities used** (FAIL, security): Use managed identity\. Source: <https://learn.microsoft.com/example> (`2026-10-05`)
-- **DR strategy question** (QUESTION, reliability): Record the DR decision\.
+- **Managed identities used** (FAIL, Security, mandatory): Use managed identity\. Source: <https://learn.microsoft.com/example> (verified `2026-10-05`).
+- **Telemetry connected** (WARNING, Operational Excellence, optional): Connect Application Insights\. Project opinion, not Microsoft guidance; context source: <https://learn.microsoft.com/example2> (verified `2026-10-05`).
+
+## Costly recommendations (optional)
+
+These optional controls add Azure cost. They are kept out of the top actions; decide them against your requirements.
+
+- **Search replica posture** (WARNING, Reliability): Add replicas\. Cost basis: Replicas are billed per search unit\. (<https://learn.microsoft.com/azure/search/search-sku-manage-costs>, verified `2026-10-18`). Source: <https://learn.microsoft.com/search> (verified `2026-10-04`).
+
+## Team-attested answers
+
+Recorded by the team in Foundry Doctor configuration, including settings delegated to Azure Policy. Foundry Doctor did not verify them. A mandatory control that rests on an attestation keeps the decision at "Proceed with conditions".
+
+- DR plan recorded (ATTESTED, optional): `true; reference: https://contoso.example/dr`
 
 ## Unassessed scope
 
-- Telemetry sink exists (UNKNOWN, operations)
+- Telemetry sink exists (SKIPPED, Operational Excellence): Skipped\: input\-unavailable\.
 
 ## Limitations
 

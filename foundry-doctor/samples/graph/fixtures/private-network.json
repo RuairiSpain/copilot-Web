@@ -1,0 +1,56 @@
+{
+  "description": "Source mode, private networking: a Foundry account behind a private endpoint in a subnet, with a private DNS zone linked to the virtual network under a parameter condition. Template resources are recorded as the flattened ARM model produces them.",
+  "mode": "source",
+  "azureYaml": "name: private-network-sample\nservices:\n  ai-project:\n    host: azure.ai.project\n  assistant:\n    host: azure.ai.agent\n    uses: [ai-project]\n",
+  "resources": [
+    {
+      "ID": "/resources/0",
+      "Type": "Microsoft.Network/virtualNetworks",
+      "Name": "vnet-sample",
+      "SymbolicName": "vnet"
+    },
+    {
+      "ID": "/resources/1",
+      "Type": "Microsoft.Network/virtualNetworks/subnets",
+      "Name": "vnet-sample/snet-pe",
+      "SymbolicName": "subnet",
+      "DependsOn": [
+        "vnet"
+      ]
+    },
+    {
+      "ID": "/resources/2",
+      "Type": "Microsoft.CognitiveServices/accounts",
+      "Name": "aif-sample",
+      "SymbolicName": "account"
+    },
+    {
+      "ID": "/resources/3",
+      "Type": "Microsoft.Network/privateEndpoints",
+      "Name": "pe-aif-sample",
+      "SymbolicName": "pe",
+      "DependsOn": [
+        "subnet",
+        "account"
+      ]
+    },
+    {
+      "ID": "/resources/4",
+      "Type": "Microsoft.Network/privateDnsZones",
+      "Name": "privatelink.cognitiveservices.azure.com",
+      "SymbolicName": "dnsZone"
+    },
+    {
+      "ID": "/resources/5",
+      "Type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "Name": "privatelink.cognitiveservices.azure.com/link-vnet",
+      "SymbolicName": "dnsLink",
+      "DependsOn": [
+        "dnsZone",
+        "vnet"
+      ],
+      "Conditional": true,
+      "Condition": "[parameters('linkDns')]"
+    }
+  ]
+}

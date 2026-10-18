@@ -1,0 +1,11 @@
+{
+  "name": "my-index-ks",
+  "kind": "searchIndex",
+  "description": "Shape from Learn agentic-knowledge-source-how-to-search-index (read 2026-10-18). Values are fake.",
+  "searchIndexParameters": {
+    "searchIndexName": "hotels",
+    "semanticConfigurationName": "default",
+    "baseFilter": "isPublished eq true and accessScope eq 'public'",
+    "queryHints": { "filters": [ { "field": "category" } ] }
+  }
+}

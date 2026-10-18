@@ -9,14 +9,22 @@
 
 ### Managed identities used — FAIL
 
-- Rule: `FND-IDN-001`
+- Rule: `FND-IDN-001` (version 2)
 - Mandatory: true
+- Evidence basis: deterministic
+- Why this state: An active error\-severity finding remains for the selected profile\.
 - Costly recommendation: false
-- Source: <https://learn.microsoft.com/example> (`2026-10-05`)
+- Source: <https://learn.microsoft.com/example> (verified `2026-10-05`)
 - Recommendation: Use managed identity\.
-- Fix: `identity: { type: 'SystemAssigned' }`
+- Fix:
+
+  ```
+  identity:
+    type: 'SystemAssigned'
+  ```
+
 - Evidence:
-  - identity is missing at `infra/main.bicep:10:2`
+  - error: identity is missing at `infra/main.bicep:10:2`
 
 ## Reliability
 
@@ -24,12 +32,16 @@
 
 - Rule: `FND-REL-007`
 - Mandatory: false
-- Costly recommendation: false
+- Evidence basis: none
+- Costly recommendation: Multi\-region adds resources\. (<https://learn.microsoft.com/cost>)
+- Recommendation basis: project opinion
+- Project opinion, not Microsoft guidance; no source recorded
 - Review question: Has the team recorded a disaster recovery strategy?
-- WARA references: `dff62efe`
+- WARA references (recommendations, not platform facts):
+  - `dff62efe-c3a3-4621-98b3-c877c65cb195` AI Search multi\-region (pgVerified: false)
 - Evidence: no finding or skip record was present.
 
-## Operations
+## Operational Excellence
 
 ### Telemetry sink exists — UNKNOWN
 
@@ -37,6 +49,9 @@
 - Mandatory: false
 - Costly recommendation: false
 - Recommendation basis: project opinion
+- Project opinion, not Microsoft guidance; no source recorded
 - Evidence:
   - skipped: input\-unavailable
+
+## Limitations
 

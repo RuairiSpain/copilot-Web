@@ -22,7 +22,13 @@ const (
 	ModeSource   Mode = "source"
 	ModeDeployed Mode = "deployed"
 	ModeCombined Mode = "combined"
+	// ModeDiff is the environment-difference graph built by Diff from two
+	// previously rendered JSON graphs.
+	ModeDiff Mode = "diff"
 )
+
+// SchemaVersion is the graph JSON schemaVersion (schemas/graph.schema.json).
+const SchemaVersion = "1"
 
 type Origin string
 
@@ -33,6 +39,18 @@ const (
 	OriginExternal  Origin = "external"
 	OriginMissing   Origin = "missing"
 	OriginCollapsed Origin = "collapsed"
+	// OriginUnobserved marks a combined-mode node declared in source whose
+	// type the deployed inventory cannot observe (child and extension
+	// resources, azure.yaml services), so neither "local" nor "both" is
+	// supported by evidence.
+	OriginUnobserved Origin = "unobserved"
+)
+
+// Diff states of a node or edge in a ModeDiff graph.
+const (
+	DiffAdded   = "added"
+	DiffRemoved = "removed"
+	DiffChanged = "changed"
 )
 
 type Node struct {
@@ -55,6 +73,8 @@ type Node struct {
 	// Conditional marks a template resource deployed only under a condition or
 	// loop the template cannot resolve.
 	Conditional bool `json:"conditional,omitempty"`
+	// Diff is set only in ModeDiff graphs: added, removed or changed.
+	Diff string `json:"diff,omitempty"`
 }
 
 type Edge struct {
@@ -64,6 +84,8 @@ type Edge struct {
 	External  bool   `json:"external,omitempty"`
 	Missing   bool   `json:"missing,omitempty"`
 	Collapsed bool   `json:"collapsed,omitempty"`
+	// Diff is set only in ModeDiff graphs: added or removed.
+	Diff string `json:"diff,omitempty"`
 }
 
 type Summary struct {
@@ -73,6 +95,12 @@ type Summary struct {
 	CollapsedNodes    int  `json:"collapsedNodes,omitempty"`
 	CollapsedEdges    int  `json:"collapsedEdges,omitempty"`
 	UnmatchedFindings int  `json:"unmatchedFindings,omitempty"`
+	AddedNodes        int  `json:"addedNodes,omitempty"`
+	RemovedNodes      int  `json:"removedNodes,omitempty"`
+	ChangedNodes      int  `json:"changedNodes,omitempty"`
+	// Notes are secret-free statements about overlays that were skipped, for
+	// example because the caller lacked permission to read them.
+	Notes []string `json:"notes,omitempty"`
 }
 
 type Graph struct {
@@ -89,6 +117,10 @@ type Options struct {
 	MaxNodes      int
 	MaxEdges      int
 	CollapseAfter int
+	// Scope is the subscription or resource group ID the deployed inventory
+	// covers. An ARM ID inside it that matches no node is drawn as missing,
+	// not external. Empty treats every ARM ID reference as external.
+	Scope string
 }
 
 type SourceInput struct {
@@ -103,6 +135,10 @@ type RuntimeInput struct {
 	Connections []azure.FoundryConnection
 	Hosts       []azure.CapabilityHost
 	Deployments []azure.AccountDeployment
+	// ObservedTypes are the ARM resource types the runtime overlay read
+	// successfully (for example Microsoft.CognitiveServices/accounts/deployments),
+	// so source nodes of those types are not marked unobserved.
+	ObservedTypes []string
 }
 
 type Input struct {
@@ -188,7 +224,9 @@ func Build(in Input, opt Options) (Graph, error) {
 		edges[k] = rawEdge{from: from, to: to, kind: kind, external: external, missing: missing, collapsed: collapsed}
 	}
 
+	listed, observed := observedTypes(in)
 	sourceNodes := map[string]string{}
+	var unresolved []coregraph.Unresolved
 	sourceInput := coregraph.Input{Services: in.Source.Services, Resources: in.Source.Resources}
 	if opt.Mode != ModeDeployed && (len(sourceInput.Services) > 0 || len(sourceInput.Resources) > 0) {
 		g, err := coregraph.Build(sourceInput)
@@ -217,7 +255,8 @@ func Build(in Input, opt Options) (Graph, error) {
 				r.label = firstNonEmpty(armexpr.StripScope(n.Name), n.Type)
 				r.typ = n.Type
 				r.name = armexpr.StripScope(n.Name)
-				r.resourceID = n.ID
+				// The template pointer (n.ID) is not an ARM ID; resourceID is
+				// reserved for ARM IDs, set when inventory correlates the node.
 				r.conditional = n.Conditional
 			}
 			sourceNodes[n.ID] = r.key
@@ -226,17 +265,9 @@ func Build(in Input, opt Options) (Graph, error) {
 		for _, e := range g.Edges {
 			addEdge(sourceNodes[e.From], sourceNodes[e.To], string(e.Kind), false, false, false)
 		}
-		for _, u := range g.Unresolved {
-			from := sourceNodes[u.From]
-			key := unresolvedKeyFor(u.Ref, u.InTemplate)
-			external := looksExternal(u.Ref) && !u.InTemplate
-			if external {
-				addNode(nodeRec{key: key, label: externalLabel(armexpr.StripScope(u.Ref)), kind: "external", origin: OriginExternal, name: armexpr.StripScope(u.Ref), external: true})
-			} else {
-				addNode(nodeRec{key: key, label: findings.Redact(armexpr.StripScope(u.Ref)), kind: "missing", origin: OriginMissing, name: armexpr.StripScope(u.Ref), missing: true})
-			}
-			addEdge(from, key, string(u.Kind), !external, external, false)
-		}
+		// Unresolved references are classified after the inventory merge, so an
+		// ARM ID of a deployed resource resolves to its node.
+		unresolved = g.Unresolved
 		addDeploymentNodes(in.Source.Document, addNode, addEdge)
 	}
 
@@ -244,10 +275,12 @@ func Build(in Input, opt Options) (Graph, error) {
 	for _, r := range in.Inventory {
 		inventoryCounts[strings.ToLower(r.Type)+"\x00"+strings.ToLower(r.Name)]++
 	}
+	inventoryKeys := map[string]string{}
 	for _, r := range in.Inventory {
 		key := azureResourceKey(r)
 		state := strings.ToLower(strings.TrimSpace(r.Properties["properties.provisioningState"]))
-		unhealthy := state != "" && state != "succeeded" && state != "successful" && state != "ready"
+		unhealthy := unhealthyState(state)
+		inventoryKeys[strings.ToLower(strings.TrimSpace(r.ID))] = key
 		n := addNode(nodeRec{
 			key:        key,
 			label:      r.Name,
@@ -263,20 +296,35 @@ func Build(in Input, opt Options) (Graph, error) {
 			if matched := matchSource(nodes, r.Type, r.Name); matched != nil {
 				n.origin = mergedOrigin(n.origin, matched.origin)
 				matched.origin = mergedOrigin(matched.origin, OriginAzure)
-				if matched.resourceID == "" {
-					matched.resourceID = r.ID
+				// The deployed ARM ID always wins: it is what runtime
+				// connection targets and live findings refer to.
+				matched.resourceID = r.ID
+				if state != "" {
+					matched.health = state
 				}
 				if unhealthy {
 					matched.unhealthy = true
-					matched.health = state
 				}
+				inventoryKeys[strings.ToLower(strings.TrimSpace(r.ID))] = matched.key
 				delete(nodes, key)
 			}
 		}
 	}
-	addConnectionTargets(in.Source.Document, addNode, addEdge, nodes)
+	for _, u := range unresolved {
+		if to := inventoryKeys[strings.ToLower(strings.TrimSpace(u.Ref))]; to != "" && !u.InTemplate {
+			addEdge(sourceNodes[u.From], to, string(u.Kind), false, false, false)
+			continue
+		}
+		key, missing, external := addRefNode(addNode, u.Ref, u.InTemplate, opt.Scope, listed)
+		addEdge(sourceNodes[u.From], key, string(u.Kind), missing, external, false)
+	}
+	addIdentityEdges(in.Inventory, inventoryKeys, opt.Scope, listed, addNode, addEdge, nodes)
+	addConnectionTargets(in.Source.Document, opt.Scope, listed, addNode, addEdge, nodes)
 
-	addRuntimeNodes(in.Runtime, addNode, addEdge, nodes)
+	addRuntimeNodes(in.Runtime, opt.Scope, listed, addNode, addEdge, nodes)
+	if opt.Mode == ModeCombined {
+		markUnobserved(nodes, observed)
+	}
 	unmatched := applyFindings(nodes, in.Findings)
 	filterRaw(nodes, edges, opt.Mode)
 	graph := materialise(nodes, edges, opt)
@@ -331,7 +379,7 @@ func addDeploymentNodes(doc *azureyaml.Document, addNode func(nodeRec) *nodeRec,
 	}
 }
 
-func addConnectionTargets(doc *azureyaml.Document, addNode func(nodeRec) *nodeRec, addEdge func(string, string, string, bool, bool, bool), nodes map[string]*nodeRec) {
+func addConnectionTargets(doc *azureyaml.Document, scope string, observed map[string]bool, addNode func(nodeRec) *nodeRec, addEdge func(string, string, string, bool, bool, bool), nodes map[string]*nodeRec) {
 	if doc == nil {
 		return
 	}
@@ -362,37 +410,57 @@ func addConnectionTargets(doc *azureyaml.Document, addNode func(nodeRec) *nodeRe
 				continue
 			}
 		}
-		key := unresolvedKey(target)
-		if looksExternal(target) {
-			addNode(nodeRec{key: key, label: externalLabel(target), kind: "external", origin: OriginExternal, name: target, external: true})
-			addEdge("svc:"+svc, key, "targets", false, true, false)
-			continue
-		}
-		addNode(nodeRec{key: key, label: findings.Redact(target), kind: "missing", origin: OriginMissing, name: target, missing: true})
-		addEdge("svc:"+svc, key, "targets", true, false, false)
+		key, missing, external := addRefNode(addNode, target, false, scope, observed)
+		addEdge("svc:"+svc, key, "targets", missing, external, false)
 	}
 }
 
-func addRuntimeNodes(rt RuntimeInput, addNode func(nodeRec) *nodeRec, addEdge func(string, string, string, bool, bool, bool), nodes map[string]*nodeRec) {
+// addIdentityEdges draws resource -> user-assigned identity edges from the
+// identity.userAssignedIdentities keys of the inventory list response. An
+// identity that matches no node is drawn by addRefNode.
+func addIdentityEdges(inv []azure.Resource, inventoryKeys map[string]string, scope string, observed map[string]bool, addNode func(nodeRec) *nodeRec, addEdge func(string, string, string, bool, bool, bool), nodes map[string]*nodeRec) {
+	for _, r := range inv {
+		from := inventoryKeys[strings.ToLower(strings.TrimSpace(r.ID))]
+		if from == "" {
+			continue
+		}
+		for _, ua := range r.UserAssignedIdentities {
+			if to := inventoryKeys[strings.ToLower(strings.TrimSpace(ua))]; to != "" {
+				addEdge(from, to, "usesIdentity", false, false, false)
+				continue
+			}
+			if to := matchTargetNode(nodes, ua); to != "" {
+				addEdge(from, to, "usesIdentity", false, false, false)
+				continue
+			}
+			key, missing, external := addRefNode(addNode, ua, false, scope, observed)
+			addEdge(from, key, "usesIdentity", missing, external, false)
+		}
+	}
+}
+
+func addRuntimeNodes(rt RuntimeInput, scope string, observed map[string]bool, addNode func(nodeRec) *nodeRec, addEdge func(string, string, string, bool, bool, bool), nodes map[string]*nodeRec) {
 	accountNodeKey := ""
 	projectKey := ""
 	if rt.Account != nil {
-		accountNodeKey = azureResourceKey(*rt.Account)
-		if _, ok := nodes[accountNodeKey]; !ok {
-			addNode(nodeRec{
-				key:        accountNodeKey,
-				label:      rt.Account.Name,
-				kind:       "foundry-account",
-				origin:     OriginAzure,
-				typ:        rt.Account.Type,
-				name:       rt.Account.Name,
-				resourceID: rt.Account.ID,
-			})
-		}
+		// Resolve the account like the project: a source-declared account
+		// already correlated with inventory carries the ARM ID, so the
+		// runtime edges hang off that one node instead of a duplicate.
+		accountNodeKey = mergeExistingNode(nodes, "foundry-account", rt.Account.ID, rt.Account.Type, rt.Account.Name, azureResourceKey(*rt.Account))
+		n := addNode(nodeRec{
+			key:        accountNodeKey,
+			label:      rt.Account.Name,
+			kind:       "foundry-account",
+			origin:     OriginAzure,
+			typ:        rt.Account.Type,
+			name:       rt.Account.Name,
+			resourceID: rt.Account.ID,
+		})
+		n.origin = mergedOrigin(n.origin, OriginAzure)
 	}
 	if rt.Project != nil {
 		key := mergeExistingNode(nodes, "project", rt.Project.ID, "", rt.Project.Name, "project:"+strings.ToLower(rt.Project.Name))
-		state := strings.ToLower(rt.Project.ProvisioningState)
+		state := strings.ToLower(strings.TrimSpace(rt.Project.ProvisioningState))
 		n := addNode(nodeRec{
 			key:        key,
 			label:      rt.Project.Name,
@@ -400,7 +468,7 @@ func addRuntimeNodes(rt RuntimeInput, addNode func(nodeRec) *nodeRec, addEdge fu
 			origin:     OriginAzure,
 			name:       rt.Project.Name,
 			resourceID: rt.Project.ID,
-			unhealthy:  state != "" && state != "succeeded" && state != "successful" && state != "ready",
+			unhealthy:  unhealthyState(state),
 			health:     state,
 		})
 		n.origin = mergedOrigin(n.origin, OriginAzure)
@@ -410,12 +478,11 @@ func addRuntimeNodes(rt RuntimeInput, addNode func(nodeRec) *nodeRec, addEdge fu
 		}
 	}
 	for _, d := range rt.Deployments {
-		key := mergeExistingNode(nodes, "model", "", "Microsoft.CognitiveServices/accounts/deployments", d.Name, "deployment:"+strings.ToLower(d.Name))
+		key := mergeExistingNode(nodes, "model", d.ID, deploymentType, d.Name, "deployment:"+strings.ToLower(d.Name))
 		state := strings.ToLower(strings.TrimSpace(d.ProvisioningState))
 		deploymentState := strings.ToLower(strings.TrimSpace(d.DeploymentState))
-		health := firstNonEmpty(deploymentState, state)
-		unhealthy := (state != "" && state != "succeeded" && state != "successful" && state != "ready") ||
-			(deploymentState != "" && deploymentState != "running" && deploymentState != "ready")
+		// deploymentState Paused is an operator choice, not a failure; only a
+		// Failed or Canceled provisioning state marks the node unhealthy.
 		n := addNode(nodeRec{
 			key:        key,
 			label:      d.Name,
@@ -424,8 +491,8 @@ func addRuntimeNodes(rt RuntimeInput, addNode func(nodeRec) *nodeRec, addEdge fu
 			typ:        d.Type,
 			name:       d.Name,
 			resourceID: d.ID,
-			unhealthy:  unhealthy,
-			health:     health,
+			unhealthy:  unhealthyState(state),
+			health:     firstNonEmpty(deploymentState, state),
 		})
 		n.origin = mergedOrigin(n.origin, OriginAzure)
 		if accountNodeKey != "" {
@@ -433,9 +500,16 @@ func addRuntimeNodes(rt RuntimeInput, addNode func(nodeRec) *nodeRec, addEdge fu
 		}
 	}
 	connByName := map[string]string{}
+	connAccountScoped := map[string]bool{}
 	for _, c := range rt.Connections {
-		key := mergeExistingNode(nodes, "connection", c.ID, "", c.Name, "conn:"+strings.ToLower(c.Name))
-		connByName[c.Name] = key
+		accountScoped := c.ID != "" && !strings.Contains(strings.ToLower(c.ID), "/projects/")
+		key := mergeExistingNode(nodes, "connection", c.ID, "", c.Name, "conn:"+strings.ToLower(firstNonEmpty(strings.TrimSpace(c.ID), c.Name)))
+		// Capability hosts name connections; a project connection wins over
+		// an account connection of the same name.
+		if cur, ok := connByName[c.Name]; !ok || (!accountScoped && connAccountScoped[cur]) {
+			connByName[c.Name] = key
+		}
+		connAccountScoped[key] = accountScoped
 		n := addNode(nodeRec{
 			key:        key,
 			label:      c.Name,
@@ -448,26 +522,29 @@ func addRuntimeNodes(rt RuntimeInput, addNode func(nodeRec) *nodeRec, addEdge fu
 			health:     cleanHealth(c.Error),
 		})
 		n.origin = mergedOrigin(n.origin, OriginAzure)
-		if projectKey != "" {
-			addEdge(projectKey, key, "uses", false, false, false)
-		} else if accountNodeKey != "" {
-			addEdge(accountNodeKey, key, "uses", false, false, false)
+		owner := projectKey
+		if owner == "" || (accountScoped && accountNodeKey != "") {
+			owner = accountNodeKey
 		}
-		if target := matchTargetNode(nodes, c.Target.ResourceID); target != "" {
+		addEdge(owner, key, "uses", false, false, false)
+		// The backing ARM ID is the stronger evidence, so it is classified
+		// before the endpoint URL.
+		target := matchTargetNode(nodes, c.Target.ResourceID)
+		switch {
+		case target != "":
 			addEdge(key, target, "targets", false, false, false)
-		} else if looksExternal(c.Target.Endpoint) {
-			targetKey := unresolvedKey(c.Target.Endpoint)
+		case looksExternal(c.Target.ResourceID):
+			targetKey, missing, external := addRefNode(addNode, c.Target.ResourceID, false, scope, observed)
+			addEdge(key, targetKey, "targets", missing, external, false)
+		case looksExternal(c.Target.Endpoint):
+			targetKey := unresolvedKeyFor(c.Target.Endpoint, true)
 			addNode(nodeRec{key: targetKey, label: externalLabel(c.Target.Endpoint), kind: "external", origin: OriginExternal, name: c.Target.Endpoint, external: true})
-			addEdge(key, targetKey, "targets", false, true, false)
-		} else if looksExternal(c.Target.ResourceID) {
-			targetKey := unresolvedKey(c.Target.ResourceID)
-			addNode(nodeRec{key: targetKey, label: externalLabel(c.Target.ResourceID), kind: "external", origin: OriginExternal, name: c.Target.ResourceID, external: true})
 			addEdge(key, targetKey, "targets", false, true, false)
 		}
 	}
 	for _, h := range rt.Hosts {
 		key := mergeExistingNode(nodes, "capability-host", h.ID, "", h.Name, "host:"+strings.ToLower(h.Name))
-		state := strings.ToLower(h.ProvisioningState)
+		state := strings.ToLower(strings.TrimSpace(h.ProvisioningState))
 		addNode(nodeRec{
 			key:        key,
 			label:      h.Name,
@@ -476,7 +553,7 @@ func addRuntimeNodes(rt RuntimeInput, addNode func(nodeRec) *nodeRec, addEdge fu
 			typ:        h.Type,
 			name:       h.Name,
 			resourceID: h.ID,
-			unhealthy:  state != "" && state != "succeeded" && state != "successful" && state != "ready",
+			unhealthy:  unhealthyState(state),
 			health:     state,
 		})
 		if projectKey != "" {
@@ -490,6 +567,130 @@ func addRuntimeNodes(rt RuntimeInput, addNode func(nodeRec) *nodeRec, addEdge fu
 			}
 		}
 	}
+}
+
+// deploymentType is the ARM type of a Foundry account model deployment.
+const deploymentType = "Microsoft.CognitiveServices/accounts/deployments"
+
+// unhealthyState reports whether a provisioning state is a terminal failure.
+// Succeeded, Failed and Canceled are the ARM terminal provisioning states;
+// transient states (Creating, Updating, Accepted, ...) are shown as health
+// text but are not failures.
+func unhealthyState(state string) bool {
+	switch strings.ToLower(strings.TrimSpace(state)) {
+	case "failed", "canceled", "cancelled":
+		return true
+	default:
+		return false
+	}
+}
+
+// observedTypes returns the lower-cased ARM types the deployed inventory
+// returned (listed) and those plus the types a successful runtime overlay
+// call returned (observed). Unresolved references use listed: they are
+// classified before the runtime overlay adds its nodes, so a reference to a
+// runtime-only type stays unobserved and the runtime node later merges into
+// it by ARM ID. Declared source nodes use observed, after the overlay.
+func observedTypes(in Input) (listed, observed map[string]bool) {
+	listed, observed = map[string]bool{}, map[string]bool{}
+	for _, r := range in.Inventory {
+		listed[strings.ToLower(r.Type)] = true
+		observed[strings.ToLower(r.Type)] = true
+	}
+	for _, t := range in.Runtime.ObservedTypes {
+		observed[strings.ToLower(t)] = true
+	}
+	return listed, observed
+}
+
+// markUnobserved re-labels combined-mode source nodes that are still local
+// but whose type the deployed inventory cannot observe. The ARM Resources -
+// List API returns top-level resources; extension resources (for example
+// Microsoft.Authorization/roleAssignments) and proxy child resources (subnets,
+// account deployments, connections, capability hosts) are read through other
+// APIs, so their absence from the list is not evidence that they are not
+// deployed. A type the inventory or runtime overlay did return is observable.
+func markUnobserved(nodes map[string]*nodeRec, observed map[string]bool) {
+	for _, n := range nodes {
+		if n.origin != OriginLocal || inventoryObservable(n, observed) {
+			continue
+		}
+		n.origin = OriginUnobserved
+	}
+}
+
+func inventoryObservable(n *nodeRec, observed map[string]bool) bool {
+	switch {
+	case strings.HasPrefix(n.key, "arm:"):
+		return typeObservable(n.typ, observed)
+	case strings.HasPrefix(n.key, "model:"):
+		return observed[strings.ToLower(deploymentType)]
+	default:
+		// azure.yaml services (agents, toolboxes, connections, ...) are not
+		// ARM resources the inventory lists.
+		return false
+	}
+}
+
+// typeObservable reports whether the absence of an ARM type from the
+// inventory is evidence that no such resource exists in the scope.
+func typeObservable(typ string, observed map[string]bool) bool {
+	t := strings.ToLower(strings.TrimSpace(typ))
+	if observed[t] {
+		return true
+	}
+	return strings.Count(t, "/") == 1 && !notInResourceList(t)
+}
+
+// refOrigin classifies a reference that matched no node: external when it
+// is outside the inventory scope (or no scope is known), unobserved when it is
+// an in-scope ARM ID of a type the inventory cannot observe (child and
+// extension resources such as subnets or role assignments, or an
+// unparseable type), and missing otherwise (a name that resolved to nothing,
+// an in-template reference, or an in-scope ARM ID of an observable type the
+// complete inventory did not return).
+func refOrigin(ref string, inTemplate bool, scope string, observed map[string]bool) Origin {
+	if inTemplate || !looksExternal(ref) {
+		return OriginMissing
+	}
+	if isExternalRef(ref, scope) {
+		return OriginExternal
+	}
+	typ, _, ok := armResourceTypeName(ref)
+	if !ok || !typeObservable(typ, observed) {
+		return OriginUnobserved
+	}
+	return OriginMissing
+}
+
+// addRefNode adds the placeholder node of an unresolved reference and returns
+// its key and the missing and external flags for the edge to it.
+func addRefNode(addNode func(nodeRec) *nodeRec, ref string, inTemplate bool, scope string, observed map[string]bool) (key string, missing, external bool) {
+	display := armexpr.StripScope(ref)
+	switch refOrigin(ref, inTemplate, scope, observed) {
+	case OriginExternal:
+		key = unresolvedKeyFor(ref, true)
+		addNode(nodeRec{key: key, label: externalLabel(display), kind: "external", origin: OriginExternal, name: display, external: true})
+		return key, false, true
+	case OriginUnobserved:
+		typ, name, _ := armResourceTypeName(ref)
+		key = "unobserved:" + ref
+		addNode(nodeRec{key: key, label: findings.Redact(firstNonEmpty(name, display)), kind: classifyResource(typ), origin: OriginUnobserved, typ: typ, name: name, resourceID: ref})
+		return key, false, false
+	default:
+		key = unresolvedKeyFor(ref, false)
+		addNode(nodeRec{key: key, label: findings.Redact(display), kind: "missing", origin: OriginMissing, name: display, missing: true})
+		return key, true, false
+	}
+}
+
+// notInResourceList lists top-level types Foundry Doctor does not treat as
+// observable through Resources - List: extension resources that have their
+// own list APIs. Conservative: a type missing here is assumed observable.
+func notInResourceList(t string) bool {
+	return strings.HasPrefix(t, "microsoft.authorization/") ||
+		t == "microsoft.insights/diagnosticsettings" ||
+		t == "microsoft.resources/deployments"
 }
 
 func applyFindings(nodes map[string]*nodeRec, fs []sdk.Finding) int {
@@ -516,22 +717,32 @@ func applyFindings(nodes map[string]*nodeRec, fs []sdk.Finding) int {
 }
 
 func matchFinding(nodes map[string]*nodeRec, f sdk.Finding) *nodeRec {
-	if f.Resource.ID != "" {
+	typ, name := f.Resource.Type, f.Resource.Name
+	if id := strings.TrimSpace(f.Resource.ID); id != "" {
 		var matches []*nodeRec
 		for _, n := range nodes {
-			if strings.EqualFold(n.resourceID, f.Resource.ID) {
+			if strings.EqualFold(n.resourceID, id) {
 				matches = append(matches, n)
 			}
 		}
-		if len(matches) == 1 {
+		switch len(matches) {
+		case 1:
 			return matches[0]
+		case 0:
+			// Fall back to type and name: a live finding's ARM ID can name a
+			// resource that is drawn from source without a correlated ID.
+			if t, nm, ok := armResourceTypeName(id); ok {
+				typ = firstNonEmpty(typ, t)
+				name = firstNonEmpty(name, nm)
+			}
+		default:
+			return nil
 		}
-		return nil
 	}
-	if f.Resource.Type != "" || f.Resource.Name != "" {
+	if typ != "" || name != "" {
 		var matches []*nodeRec
 		for _, n := range nodes {
-			if strings.EqualFold(n.typ, f.Resource.Type) && strings.EqualFold(n.name, f.Resource.Name) {
+			if strings.EqualFold(n.typ, typ) && strings.EqualFold(n.name, name) {
 				matches = append(matches, n)
 			}
 		}
@@ -568,14 +779,19 @@ func materialise(nodes map[string]*nodeRec, edgeMap map[string]rawEdge, opt Opti
 	if opt.CollapseAfter > 0 && opt.CollapseAfter < maxNodes {
 		maxNodes = opt.CollapseAfter
 	}
-	for i, k := range keys {
+	// Foundry nodes are kept first; leaf infrastructure is collapsed first.
+	keepOrder := append([]string(nil), keys...)
+	sort.SliceStable(keepOrder, func(i, j int) bool {
+		return collapsePriority(nodes[keepOrder[i]].kind) < collapsePriority(nodes[keepOrder[j]].kind)
+	})
+	for i, k := range keepOrder {
 		if i < maxNodes {
 			kept[k] = true
 		}
 	}
 	if len(kept) != len(keys) {
 		buckets := map[string]string{}
-		for _, k := range keys[maxNodes:] {
+		for _, k := range keepOrder[maxNodes:] {
 			n := nodes[k]
 			b := "collapsed:" + string(n.origin) + ":" + n.kind
 			if _, ok := buckets[b]; !ok {
@@ -650,7 +866,7 @@ func materialise(nodes map[string]*nodeRec, edgeMap map[string]rawEdge, opt Opti
 	collapsedEdges := len(outEdges) - maxEdges
 	outEdges = append([]Edge(nil), outEdges[:maxEdges]...)
 	return Graph{
-		SchemaVersion: "1",
+		SchemaVersion: SchemaVersion,
 		Mode:          opt.Mode,
 		Nodes:         outNodes,
 		Edges:         outEdges,
@@ -738,12 +954,8 @@ func classifyResource(typ string) string {
 	}
 }
 
-func unresolvedKey(ref string) string {
-	return unresolvedKeyFor(ref, false)
-}
-
-func unresolvedKeyFor(ref string, inTemplate bool) string {
-	if looksExternal(ref) && !inTemplate {
+func unresolvedKeyFor(ref string, external bool) string {
+	if external {
 		return "external:" + ref
 	}
 	return "missing:" + ref
@@ -752,6 +964,34 @@ func unresolvedKeyFor(ref string, inTemplate bool) string {
 func looksExternal(ref string) bool {
 	u := strings.ToLower(strings.TrimSpace(ref))
 	return strings.HasPrefix(u, "/subscriptions/") || strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://") || strings.Contains(u, "resourceid(")
+}
+
+// isExternalRef is looksExternal, except that an ARM ID inside the graphed
+// inventory scope is not external. refOrigin decides whether such an ID is
+// missing (observable type) or unobserved (child or extension type the
+// inventory cannot list).
+func isExternalRef(ref, scope string) bool {
+	if !looksExternal(ref) {
+		return false
+	}
+	scope = strings.TrimRight(strings.ToLower(strings.TrimSpace(scope)), "/")
+	if scope == "" {
+		return true
+	}
+	return !strings.HasPrefix(strings.ToLower(strings.TrimSpace(ref)), scope+"/")
+}
+
+// collapsePriority orders nodes for --collapse-after and --max-nodes: lower
+// values are kept first.
+func collapsePriority(kind string) int {
+	switch kind {
+	case "foundry-account", "project", "agent", "model", "connection", "capability-host", "toolbox":
+		return 0
+	case "external", "missing":
+		return 2
+	default:
+		return 1
+	}
 }
 
 func cleanHealth(s string) string {
@@ -864,9 +1104,18 @@ func mergedOrigin(current, incoming Origin) Origin {
 }
 
 func mergeExistingNode(nodes map[string]*nodeRec, kind, resourceID, typ, name, fallback string) string {
-	if strings.TrimSpace(resourceID) != "" {
+	resourceID = strings.TrimSpace(resourceID)
+	// A node already bound to a different ARM ID is a different resource, so
+	// name matching never merges, for example, a project connection with an
+	// account connection of the same name.
+	otherResource := func(n *nodeRec) bool {
+		return resourceID != "" && n.resourceID != "" && !strings.EqualFold(n.resourceID, resourceID)
+	}
+	if resourceID != "" {
 		for _, n := range nodes {
-			if !mergeableOrigin(n.origin) {
+			// An unobserved reference node carries the ARM ID it names, so
+			// the runtime resource it turns out to be merges into it.
+			if !mergeableOrigin(n.origin) && n.origin != OriginUnobserved {
 				continue
 			}
 			if kind != "" && n.kind != kind {
@@ -887,6 +1136,9 @@ func mergeExistingNode(nodes map[string]*nodeRec, kind, resourceID, typ, name, f
 			continue
 		}
 		if typ != "" && n.typ != "" && !strings.EqualFold(n.typ, typ) {
+			continue
+		}
+		if otherResource(n) {
 			continue
 		}
 		if strings.EqualFold(n.name, name) {
@@ -911,6 +1163,9 @@ func mergeExistingNode(nodes map[string]*nodeRec, kind, resourceID, typ, name, f
 		if typ != "" && n.typ != "" && !strings.EqualFold(n.typ, typ) {
 			continue
 		}
+		if otherResource(n) {
+			continue
+		}
 		if strings.EqualFold(lastSegment(n.name), lastSegment(name)) {
 			count++
 			if candidate == nil || n.key < candidate.key {
@@ -926,7 +1181,7 @@ func mergeExistingNode(nodes map[string]*nodeRec, kind, resourceID, typ, name, f
 
 func mergeableOrigin(origin Origin) bool {
 	switch origin {
-	case OriginExternal, OriginMissing, OriginCollapsed:
+	case OriginExternal, OriginMissing, OriginCollapsed, OriginUnobserved:
 		return false
 	default:
 		return true
@@ -997,7 +1252,12 @@ func filterRaw(nodes map[string]*nodeRec, edges map[string]rawEdge, mode Mode) {
 		case ModeSource:
 			return n.origin == OriginLocal || n.origin == OriginExternal || n.origin == OriginMissing || n.origin == OriginCollapsed
 		case ModeDeployed:
-			return n.origin == OriginAzure || n.origin == OriginBoth || n.origin == OriginExternal || n.origin == OriginCollapsed
+			// Source is never built in deployed mode, so missing and
+			// unobserved nodes here are Azure-side references (a deleted
+			// identity or connection target, or a child resource the
+			// inventory cannot list) and are kept.
+			return n.origin == OriginAzure || n.origin == OriginBoth || n.origin == OriginExternal || n.origin == OriginCollapsed ||
+				n.origin == OriginMissing || n.origin == OriginUnobserved
 		default:
 			return true
 		}

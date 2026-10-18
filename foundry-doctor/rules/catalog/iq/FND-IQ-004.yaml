@@ -1,5 +1,5 @@
 id: FND-IQ-004
-version: 1
+version: 2
 group: IQ
 title: "Vector dimensions match embedding deployment metadata"
 description: >-
@@ -75,6 +75,11 @@ sources:
       https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/models.tsp
       (DeploymentModel name, version)
     note: Branch URL, not commit-pinned.
+  - url: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-blob
+    lastVerified: '2026-10-18'
+    verifiedVia: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-blob (web fetch, Phase 8 fix loop 1)
+    note: >-
+      GET response shape: azureBlobParameters.{connectionString, isADLSGen2, ingestionParameters.{ingestionPermissionOptions, embeddingModel, chatCompletionModel, aiServices, assetStore, ingestionSchedule}, createdResources.{datasource, indexer, skillset, index}}; ingestionPermissionOptions need 2026-08-01-preview and are not supported by 2026-04-01.
 overlap:
   decision: native
   provisional: true
@@ -118,3 +123,4 @@ notes: >-
   Deployment property name properties.model.name was read in the Cognitive Services ARM spec; the data-plane
   retrieval of the deployment through an API Management endpoint is intentionally skipped. Foundry model
   catalogue embeddings from other providers have no documented dimension table and are not asserted.
+  Round-1 fix (2026-10-18): generated skillsets and indexes are read from <kind>Parameters.createdResources. The deployment correlation uses the first host label of resourceUri, which is the account name only for <account>.openai.azure.com style hosts; other hosts do not correlate and give no finding. Unknown API versions are uncertain.

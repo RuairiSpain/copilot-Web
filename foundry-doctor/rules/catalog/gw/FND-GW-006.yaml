@@ -1,5 +1,5 @@
 id: FND-GW-006
-version: 1
+version: 2
 group: GW
 title: "Telemetry sink exists for token tracking"
 description: >-
@@ -83,6 +83,16 @@ sources:
       (LoggerContractProperties.loggerType azureEventHub|applicationInsights|azureMonitor;
       DiagnosticContractProperties.loggerId, metrics, largeLanguageModel)
     note: Branch URL, not commit-pinned.
+  - url: https://learn.microsoft.com/azure/templates/microsoft.apimanagement/2025-09-01-preview/service/diagnostics
+    lastVerified: '2026-10-18'
+    verifiedVia: https://learn.microsoft.com/azure/templates/microsoft.apimanagement/2025-09-01-preview/service/diagnostics (web fetch, Phase 8 fix loop 1)
+    note: >-
+      LLMDiagnosticSettings: largeLanguageModel.logs is the string enabled or disabled; metrics is a bool applicable only to Application Insights.
+  - url: https://learn.microsoft.com/azure/templates/microsoft.apimanagement/service/apis/policies
+    lastVerified: '2026-10-18'
+    verifiedVia: https://learn.microsoft.com/azure/templates/microsoft.apimanagement/service/apis/policies (web fetch, Phase 8 fix loop 1)
+    note: >-
+      Policy format values rawxml, rawxml-link, xml, xml-link; Learn's own xml sample is not well-formed XML, so unparsable policy text is reported uncertain.
 overlap:
   decision: native
   provisional: true
@@ -124,3 +134,4 @@ notes: >-
   in the sources read, so the Azure Monitor alternative is matched through DiagnosticContractProperties
   largeLanguageModel or an unspecified Microsoft.Insights setting and is reported at likely confidence.
   Unverified: the diagnostic scope precedence between service-level and API-level diagnostics for metrics.
+  Round-1 fix (2026-10-18): the LLM log sink is properties.largeLanguageModel.logs equal to enabled (the previous largeLanguageModel.enabled boolean does not exist). APIM resources outside the verified api-versions are uncertain.

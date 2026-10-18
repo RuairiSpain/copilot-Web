@@ -386,24 +386,38 @@ func TestRuntimeConnectionHealthSanitized(t *testing.T) {
 	}
 }
 
-func TestDeploymentStateMarksPausedDeploymentUnhealthy(t *testing.T) {
+// Paused is an operator choice (deploymentState Running or Paused), not a
+// failure: it is shown as health text but does not mark the node unhealthy.
+func TestDeploymentStatePausedIsNotUnhealthy(t *testing.T) {
 	g, err := Build(Input{
 		Runtime: RuntimeInput{
-			Deployments: []azure.AccountDeployment{{Name: "dep1", ProvisioningState: "Succeeded", DeploymentState: "Paused"}},
+			Deployments: []azure.AccountDeployment{
+				{Name: "dep1", ProvisioningState: "Succeeded", DeploymentState: "Paused"},
+				{Name: "dep2", ProvisioningState: "Failed", DeploymentState: "Running"},
+				{Name: "dep3", ProvisioningState: "Updating"},
+			},
 		},
 	}, Options{Mode: ModeCombined})
 	if err != nil {
 		t.Fatal(err)
 	}
+	want := map[string]struct {
+		unhealthy bool
+		health    string
+	}{"dep1": {false, "paused"}, "dep2": {true, "running"}, "dep3": {false, "updating"}}
 	for _, n := range g.Nodes {
-		if n.Kind == "model" && n.Label == "dep1" {
-			if !n.Unhealthy || n.Health != "paused" {
-				t.Fatalf("expected paused deployment to be unhealthy: %+v", n)
-			}
-			return
+		w, ok := want[n.Label]
+		if !ok {
+			continue
 		}
+		if n.Unhealthy != w.unhealthy || n.Health != w.health {
+			t.Errorf("%s: unhealthy=%v health=%q, want %v %q", n.Label, n.Unhealthy, n.Health, w.unhealthy, w.health)
+		}
+		delete(want, n.Label)
 	}
-	t.Fatalf("deployment node not found: %+v", g.Nodes)
+	if len(want) != 0 {
+		t.Fatalf("deployment nodes not found: %v in %+v", want, g.Nodes)
+	}
 }
 
 func TestBuildCombinedDoesNotCorrelateDuplicateAzureNames(t *testing.T) {

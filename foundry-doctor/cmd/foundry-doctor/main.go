@@ -86,7 +86,7 @@ func finish(exit *int, code int, err error) error {
 func doctorCmd(ctx context.Context, svc app.Services, exit *int) *cobra.Command {
 	var (
 		profile, minSev, failOn, baselineFile, suppress, format, out, dir, azdVersion, writeBaseline string
-		local, strict, force                                                                         bool
+		local, strict, force, iqMetadata                                                             bool
 		rules                                                                                        []string
 	)
 	cmd := &cobra.Command{
@@ -112,6 +112,7 @@ func doctorCmd(ctx context.Context, svc app.Services, exit *int) *cobra.Command 
 				Dir: dir, Profile: profile, Local: local, Rules: rules,
 				Baseline: baselineFile, Suppress: suppress, Strict: strict, Format: format, Out: out,
 				AzdVersion: azdVersion, WriteBaseline: writeBaseline, Force: force,
+				IQMetadata: iqMetadata,
 			}
 			var err error
 			if req.MinSeverity, err = optSeverity("--min-severity", minSev); err != nil {
@@ -127,6 +128,7 @@ func doctorCmd(ctx context.Context, svc app.Services, exit *int) *cobra.Command 
 	f := cmd.Flags()
 	f.StringVar(&profile, "profile", "", "curated profile: dev, test or prod (default "+config.DefaultProfile+"; overridden by "+config.EnvProfile+" or the config file)")
 	f.BoolVar(&local, "local", false, "offline mode: validate local files only, no Azure access")
+	f.BoolVar(&iqMetadata, "iq-metadata", false, "opt in: read Foundry IQ / AI Search object definitions (metadata only) for the Phase 8 IQ rules; ignored with --local")
 	f.StringSliceVar(&rules, "rules", nil, "rule selectors: IDs or globs such as FND-CFG-*; repeatable or comma-separated; any skip from an exact rule ID gives exit 2")
 	f.StringVar(&minSev, "min-severity", "", "lowest severity to report: info, warning or error (default info)")
 	f.StringVar(&failOn, "fail-on", "", "lowest severity that fails the run: info, warning or error (default error)")

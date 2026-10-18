@@ -12,7 +12,11 @@ import (
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/llm"
 )
 
-var prohibitedClaim = regexp.MustCompile(`(?i)\b(no findings|zero findings|all controls pass|all rules pass|exit code|suppressed|baselined|severity|priority|priorit(?:y|ize|ized|isation|ization)|reprioriti[sz]e|urgent|criticality|downgrad(?:e|ed)|upgrad(?:e|ed)|escalat(?:e|ed|ion))\b`)
+var prohibitedClaim = regexp.MustCompile(`(?i)\b(no findings|zero findings|all controls pass|all rules pass|exit code|suppressed|baselined|severity|priority|priorit(?:y|ize|ized|isation|ization)|reprioriti[sz]e|urgent|criticality|downgrad(?:e|ed)|escalat(?:e|ed|ion))\b`)
+
+// ruleIDToken matches anything shaped like a Foundry Doctor rule ID
+// (FND-<AREA>-<NNN>) so free text cannot introduce findings outside the input.
+var ruleIDToken = regexp.MustCompile(`(?i)\bFND-[A-Z0-9]+-[A-Z0-9]+\b`)
 
 // Options scopes response validation to the deterministic data shared with the
 // provider.
@@ -36,6 +40,9 @@ func Narrative(raw string, opt Options) (llm.Narrative, error) {
 	if prohibitedClaim.MatchString(out.Summary) {
 		return llm.Narrative{}, fmt.Errorf("%w: summary made a prohibited claim", llm.ErrRejected)
 	}
+	if err := checkMentionedRules(out.Summary, opt.AllowedRuleIDs); err != nil {
+		return llm.Narrative{}, err
+	}
 	if len(out.Sections) == 0 || len(out.Sections) > 6 {
 		return llm.Narrative{}, fmt.Errorf("%w: response must contain 1-6 sections", llm.ErrRejected)
 	}
@@ -51,6 +58,11 @@ func Narrative(raw string, opt Options) (llm.Narrative, error) {
 		if prohibitedClaim.MatchString(out.Sections[i].Summary) {
 			return llm.Narrative{}, fmt.Errorf("%w: section summary made a prohibited claim", llm.ErrRejected)
 		}
+		for _, text := range append([]string{out.Sections[i].Heading, out.Sections[i].Summary}, out.Sections[i].Actions...) {
+			if err := checkMentionedRules(text, opt.AllowedRuleIDs); err != nil {
+				return llm.Narrative{}, err
+			}
+		}
 		if len(out.Sections[i].Actions) > 5 || len(out.Sections[i].RuleIDs) > 5 {
 			return llm.Narrative{}, fmt.Errorf("%w: sections may contain at most five actions and five rule ids", llm.ErrRejected)
 		}
@@ -58,7 +70,11 @@ func Narrative(raw string, opt Options) (llm.Narrative, error) {
 		if err := validateActions(out.Sections[i].Actions, opt.AllowedActions); err != nil {
 			return llm.Narrative{}, err
 		}
-		out.Sections[i].RuleIDs = cleanRules(out.Sections[i].RuleIDs, opt.AllowedRuleIDs)
+		ids, err := cleanRules(out.Sections[i].RuleIDs, opt.AllowedRuleIDs)
+		if err != nil {
+			return llm.Narrative{}, err
+		}
+		out.Sections[i].RuleIDs = ids
 		if len(out.Sections[i].RuleIDs) == 0 {
 			return llm.Narrative{}, fmt.Errorf("%w: every section must reference at least one known rule id", llm.ErrRejected)
 		}
@@ -82,9 +98,43 @@ func Narrative(raw string, opt Options) (llm.Narrative, error) {
 func sanitize(s string) string {
 	s = cleanText(s)
 	if len(s) > 600 {
-		s = strings.TrimSpace(s[:597]) + "..."
+		cut := 597
+		for cut > 0 && !utf8.RuneStart(s[cut]) {
+			cut--
+		}
+		s = strings.TrimSpace(s[:cut]) + "..."
 	}
 	return s
+}
+
+// checkMentionedRules rejects free text that names a rule ID which was not
+// part of the deterministic input.
+func checkMentionedRules(text string, allowed map[string]struct{}) error {
+	for _, id := range ruleIDToken.FindAllString(text, -1) {
+		if !ruleAllowed(id, allowed) {
+			return fmt.Errorf("%w: response text referenced rule %s which is not in the deterministic input", llm.ErrRejected, sanitizeID(id))
+		}
+	}
+	return nil
+}
+
+func ruleAllowed(id string, allowed map[string]struct{}) bool {
+	if _, ok := allowed[id]; ok {
+		return true
+	}
+	for a := range allowed {
+		if strings.EqualFold(a, id) {
+			return true
+		}
+	}
+	return false
+}
+
+func sanitizeID(id string) string {
+	if len(id) > 32 {
+		return id[:32]
+	}
+	return id
 }
 
 func cleanText(s string) string {
@@ -127,18 +177,26 @@ func cleanList(in []string) []string {
 	return out
 }
 
-func cleanRules(in []string, allowed map[string]struct{}) []string {
+// cleanRules de-duplicates section rule IDs and rejects the whole response
+// when any ID was not part of the deterministic input.
+func cleanRules(in []string, allowed map[string]struct{}) ([]string, error) {
 	out := make([]string, 0, len(in))
 	seen := map[string]bool{}
 	for _, id := range in {
 		id = strings.TrimSpace(id)
-		if _, ok := allowed[id]; !ok || seen[id] {
+		if id == "" {
+			continue
+		}
+		if _, ok := allowed[id]; !ok {
+			return nil, fmt.Errorf("%w: response referenced rule %s which is not in the deterministic input", llm.ErrRejected, sanitizeID(cleanText(id)))
+		}
+		if seen[id] {
 			continue
 		}
 		seen[id] = true
 		out = append(out, id)
 	}
-	return out
+	return out, nil
 }
 
 func validateActions(actions []string, allowed map[string]struct{}) error {

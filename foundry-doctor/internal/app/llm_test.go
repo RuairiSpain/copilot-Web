@@ -49,7 +49,7 @@ func TestExplainRuleAppendsNarrativeAndFallback(t *testing.T) {
 	svc := Services{Explainer: fakeExplainer{}}
 	n := &fakeNarrator{narrative: llm.Narrative{
 		Summary:  "Advisory summary.",
-		Sections: []llm.Section{{Heading: "Priority", Summary: "Do the fix.", Actions: []string{"Rotate config"}, RuleIDs: []string{"FND-CFG-001"}}},
+		Sections: []llm.Section{{Heading: "Recommended remediation", Summary: "Do the fix.", Actions: []string{"Rotate config"}, RuleIDs: []string{"FND-CFG-001"}}},
 		Metadata: llm.Metadata{Provider: "fake", PromptVersion: "v1"},
 	}}
 	svc.Narrator = n

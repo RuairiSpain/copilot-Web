@@ -1,5 +1,5 @@
 id: FND-COST-002
-version: 3
+version: 4
 group: COST
 title: Dev avoids production-sized fixed SKUs
 description: >-
@@ -11,7 +11,6 @@ status: product-opinion
 phases:
 - '1'
 inputs:
-- azure.yaml
 - bicep-arm
 basis:
 - cost
@@ -43,8 +42,9 @@ compatibility:
 evidence:
   description: >-
     Evaluated only for environments the profile classifies as dev; test and prod environments are not evaluated. Offline,
-    in azure.yaml and the compiled template - Foundry model deployments with sku.name GlobalProvisionedManaged, DataZoneProvisionedManaged
-    or ProvisionedManaged (reserved PTU capacity); Microsoft.Search/searchServices with sku.name standard2, standard3, storage_optimized_l1
+    in the compiled template (sku.name after parameter-file and module-parameter substitution) - Foundry model deployments with
+    sku.name GlobalProvisionedManaged, DataZoneProvisionedManaged or ProvisionedManaged, compared case-insensitively (reserved PTU
+    capacity); a sku.name that is an unresolved expression makes the result uncertain; azure.yaml deployments are not read (ADR-025); Microsoft.Search/searchServices with sku.name standard2, standard3, storage_optimized_l1
     or storage_optimized_l2, or replicaCount or partitionCount greater than 1; Microsoft.ApiManagement/service with sku.name
     Premium or Isolated, or sku.capacity greater than 1; Microsoft.DocumentDB throughputSettings (properties.resource) and SQL databases and containers
     (properties.options.throughput and properties.options.autoscaleSettings.maxThroughput, CreateUpdateOptions in the
@@ -61,21 +61,27 @@ recommendation: >-
   one partition, an API Management Developer or consumption-style tier, and the lowest Cosmos DB throughput that the Foundry
   Agent Service setup allows. Reserve production-sized capacity for test and production environments.
 fix: |
-  # azure.yaml - dev environment values
-  deployments:
-    - name: chat
-      model: { format: OpenAI, name: gpt-5.4-mini, version: "2026-03-17" }
-      sku: { name: GlobalStandard, capacity: 10 }
+  // Bicep - dev environment: a pay-per-token deployment type instead of a provisioned one.
+  // Model name and version are placeholders; use a model available in your region.
+  resource chat 'Microsoft.CognitiveServices/accounts/deployments@2026-09-01' = {
+    parent: account
+    name: 'chat'
+    sku: { name: 'GlobalStandard', capacity: 10 }
+    properties: {
+      model: { format: 'OpenAI', name: '<model>', version: '<version>' }
+    }
+  }
 sources:
 - url: https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types
-  lastVerified: '2026-10-04'
+  lastVerified: '2026-10-18'
   verifiedVia: >-
-    https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types; source file
-    MicrosoftDocs/azure-ai-docs:
-    articles/foundry/foundry-models/includes/concepts-deployment-types-content-6.md; retrieved 2026-10-04
+    https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types (page last updated 08/12/2026),
+    section "Deployment type comparison"; first read 2026-10-04 from MicrosoftDocs/azure-ai-docs
+    articles/foundry/foundry-models/includes/concepts-deployment-types-content-6.md
   note: >-
-    Provisioned types (GlobalProvisionedManaged, DataZoneProvisionedManaged, ProvisionedManaged) purchase a fixed number
-    of PTUs for reserved capacity; Standard types are pay-per-token; minimum PTUs vary by model.
+    SKU codes and billing - GlobalStandard, DataZoneStandard, Standard (pay-per-token); GlobalProvisionedManaged,
+    DataZoneProvisionedManaged, ProvisionedManaged (reserved PTU); GlobalBatch, DataZoneBatch (50% discount);
+    DeveloperTier (pay-per-token, fine-tuned model evaluation). Minimum PTUs vary by model.
 - url: >-
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json
   lastVerified: '2026-10-04'
@@ -133,7 +139,7 @@ overlap:
     No PSRule, Azure Policy, Checkov or Bicep linter rule was found that flags oversized SKUs in non-production environments.
     PSRule Azure.Search.SKU points the other way (it warns against the Free tier for demanding workloads) and is a performance
     rule, so it is not mapped as equivalent. The value is the environment-aware correlation between the azd environment
-    classification and the SKUs in azure.yaml and Bicep.
+    classification and the SKUs in the compiled Bicep template.
   research:
     psrule:
       state: unresearched
@@ -151,7 +157,8 @@ implementation:
   owner: native
   package: internal/rules/cost
 testability: >-
-  Offline against fixture azure.yaml and ARM JSON per environment; each SKU family has one positive and one negative case.
+  Offline against fixture ARM JSON per environment (including a parameter-file-resolved PTU sku.name); each SKU family has one
+  positive and one negative case.
 tests:
   positive:
   - dev-environment-with-global-provisioned-managed-deployment

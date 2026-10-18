@@ -197,6 +197,9 @@ type RunInput struct {
 	AzureYAML sdk.AzureYAMLView
 	ARM       sdk.ARMModel
 	Policy    sdk.Policy
+	// IQMetadataProbe opts in to the Phase 8 Foundry IQ / AI Search
+	// data-plane metadata reads (ADR-028). It has no effect with Local.
+	IQMetadataProbe bool
 }
 
 // RunOutput is the rule engine output. Skips are never converted to passes.
@@ -299,6 +302,9 @@ type DoctorRequest struct {
 	WriteBaseline string
 	// Force allows WriteBaseline to replace an existing file.
 	Force bool
+	// IQMetadata opts in to the Foundry IQ data-plane metadata probe
+	// (doctor --iq-metadata, ADR-028).
+	IQMetadata bool
 }
 
 // CostInput is the advisory estimator input.
@@ -419,6 +425,7 @@ func doctor(ctx context.Context, svc Services, req DoctorRequest, stdout io.Writ
 		Profile: set.Profile, Environment: set.Environment, AzdVersion: set.AzdVersion,
 		Selectors: set.Rules, Exclude: set.Exclude, Local: req.Local, Source: src, Synthetic: synthetic,
 		AzureYAML: doc, ARM: arm, Policy: MapPolicy(set.Policy),
+		IQMetadataProbe: req.IQMetadata,
 	})
 	if err != nil {
 		return 0, fmt.Errorf("run rules: %w", err)
