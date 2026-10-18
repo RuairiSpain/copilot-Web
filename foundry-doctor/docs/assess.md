@@ -107,6 +107,6 @@ references show the full APRL GUID, a label and the `pgVerified` flag; WARA is a
 - `samples/assess-test/` (unresolved `uses:` reference and missing variable producer)
 - `samples/assess-prod/` (Bicep infrastructure and a DR declaration with a reference)
 
-Each has `reports/` with owner, developer and evidence output in every format. **These reports are hand-derived
-(no Go toolchain in fix loops 1 and 2; each Markdown/HTML file carries a banner) and must be regenerated** with
+Each has `reports/` with owner, developer and evidence output in every format. **These reports are engine output**
+(generated without the Bicep CLI, so template-dependent controls are SKIPPED). Regenerate them with
 `go test ./cmd/foundry-doctor -run TestAssessSampleReports -update-assess-samples` (ADR-026).

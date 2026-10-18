@@ -80,11 +80,10 @@ This ADR records the decisions taken in fix loop 1, and the items that are defer
    deployed part) are mapped but are `SKIPPED` unless their rules evaluate offline; the limitations list names each one that was
    not evaluated. Adding subscription/environment flags to run the deployed adapters from `assess waf` is deferred.
 8. **Sample reports.** (Loop 2: each Markdown and HTML sample carries an in-file banner; JSON cannot carry one
-   without changing the pack schema, so `evidence.json` relies on the directory marker and README.) `samples/assess-{dev,test,prod}/reports/` hold owner, developer and evidence reports in every format. In
-   fix loop 1 no Go toolchain was available, so they were **hand-derived** (a port of the assess and renderer code over an
-   *estimated* engine outcome). `samples/assess-*/reports/HAND-DERIVED` marks this. `TestAssessSampleReports`
-   (`cmd/foundry-doctor/assess_samples_test.go`) renders the samples with the real catalogue and engine and **fails** while the
-   marker exists, until the maintainer regenerates with `-update-assess-samples`, reviews and commits.
+   without changing the pack schema, so `evidence.json` relies on the directory marker and README.) `samples/assess-{dev,test,prod}/reports/` hold owner, developer and evidence reports in every format. They were first
+   hand-derived (no Go toolchain in fix loops 1 and 2) and were regenerated from the real engine in gate loop 1.
+   `TestAssessSampleReports` (`cmd/foundry-doctor/assess_samples_test.go`) now compares the engine output with them and
+   fails if the real engine yields no PASS control.
 9. **Decision wording and ranking** (`No-go`, `Proceed with conditions`, rank weights) are project opinion and say so in every
    report's limitations.
 
