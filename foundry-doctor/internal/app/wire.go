@@ -637,7 +637,7 @@ func (e engineAdapter) Run(ctx context.Context, in RunInput) (RunOutput, error) 
 	if azdv == "" {
 		notes = append(notes, VersionsNotDetectedNote(in.AzureYAML))
 	}
-	return RunOutput{Findings: fs, Skipped: rep.Skipped, Notes: notes, Diagnostics: rep.Diagnostics}, nil
+	return RunOutput{Findings: fs, Skipped: rep.Skipped, Evaluated: rep.Evaluated, Notes: notes, Diagnostics: rep.Diagnostics}, nil
 }
 
 // EnvAzdVersion names the environment variable that supplies the azd version

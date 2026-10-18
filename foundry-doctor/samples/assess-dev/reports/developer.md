@@ -8,12 +8,12 @@
 
 ## Security
 
-### No raw secrets in YAML/Bicep/environment blocks — UNKNOWN
+### No raw secrets in YAML/Bicep/environment blocks — PASS
 
 - Rule: `FND-CFG-005` (version 4)
 - Mandatory: true
-- Evidence basis: none
-- Why this state: No evidence was recorded for this control\.
+- Evidence basis: deterministic
+- Why this state: Evaluated with no remaining finding and no skipped check\.
 - Costly recommendation: false
 - Source: <https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference> (verified `2026-10-05`)
 - Recommendation: Store the secret in the azd environment as a secret \(azd env set\-secret\) or in Key Vault, and reference it with \$\{VAR\} in azure\.yaml\. In Bicep, mark secret parameters \@secure\(\) with no default and never output them\. Prefer Entra ID or managed identity authentication where the target supports it\.
@@ -33,12 +33,12 @@
 
 - Evidence: no finding or skip record was present.
 
-### Outbound endpoints use HTTPS and reject unsafe local/metadata targets — UNKNOWN
+### Outbound endpoints use HTTPS and reject unsafe local/metadata targets — PASS
 
 - Rule: `FND-CFG-007` (version 2)
 - Mandatory: true
-- Evidence basis: none
-- Why this state: No evidence was recorded for this control\.
+- Evidence basis: deterministic
+- Why this state: Evaluated with no remaining finding and no skipped check\.
 - Costly recommendation: false
 - Recommendation basis: project opinion
 - Project opinion, not Microsoft guidance; context source: <https://learn.microsoft.com/azure/foundry/agents/how-to/tools/model-context-protocol> (verified `2026-10-04`)
@@ -677,12 +677,12 @@
 
 ## Reliability
 
-### All inter\-service references resolve — UNKNOWN
+### All inter\-service references resolve — PASS
 
 - Rule: `FND-CFG-003` (version 4)
 - Mandatory: true
-- Evidence basis: none
-- Why this state: No evidence was recorded for this control\.
+- Evidence basis: deterministic
+- Why this state: Evaluated with no remaining finding and no skipped check\.
 - Costly recommendation: false
 - Source: <https://learn.microsoft.com/azure/foundry/agents/how-to/author-azure-yaml> (verified `2026-10-04`)
 - Recommendation: Make each referenced name match a service key defined under services, and add toolbox and connection services to the consuming agent uses list as well as its toolboxes or connections list\.
@@ -1165,7 +1165,7 @@
 - Mandatory: false
 - Evidence basis: none
 - Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
-- Costly recommendation: Continuous backup at the 30\-day or 35\-day tier carries a monthly backup storage charge and every restore is charged; the 7\-day tier has no backup storage charge\. The cost of zone redundancy is not cited here\. (<https://learn.microsoft.com/azure/cosmos-db/continuous-backup-restore-introduction>, verified `2026-10-18`)
+- Costly recommendation: Continuous backup beyond the 7\-day tier carries a monthly backup storage charge and every restore is charged; the 7\-day tier has no backup storage charge\. The cost of zone redundancy is not cited here\. (<https://learn.microsoft.com/azure/cosmos-db/continuous-backup-restore-introduction>, verified `2026-10-18`)
 - Source: <https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency> (verified `2026-10-04`)
 - WARA references (recommendations, not platform facts):
   - `921631f6-ed59-49a5-94c1-f0f3ececa580` Cosmos DB availability zones (pgVerified: false)
@@ -1471,12 +1471,12 @@
 
 ## Operational Excellence
 
-### Valid YAML, duplicate\-key detection and compatible azure\.ai\.\* schema — UNKNOWN
+### Valid YAML, duplicate\-key detection and compatible azure\.ai\.\* schema — PASS
 
 - Rule: `FND-CFG-001` (version 7)
 - Mandatory: true
-- Evidence basis: none
-- Why this state: No evidence was recorded for this control\.
+- Evidence basis: deterministic
+- Why this state: Evaluated with no remaining finding and no skipped check\.
 - Costly recommendation: false
 - Source: <https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference> (verified `2026-10-05`)
 - Recommendation: Fix the YAML syntax or the reported schema violation\. Add the yaml\-language\-server schema comment to azure\.yaml so the editor flags the same errors, and install azure\.ai\.agents and azure\.ai\.projects at the versions declared in requiredVersions\.
@@ -1497,12 +1497,12 @@
 
 - Evidence: no finding or skip record was present.
 
-### Unique service names by kind — UNKNOWN
+### Unique service names by kind — PASS
 
 - Rule: `FND-CFG-002` (version 2)
 - Mandatory: true
-- Evidence basis: none
-- Why this state: No evidence was recorded for this control\.
+- Evidence basis: deterministic
+- Why this state: Evaluated with no remaining finding and no skipped check\.
 - Costly recommendation: false
 - Source: <https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference> (verified `2026-10-04`)
 - Recommendation: Give separate logical agents distinct names\. If the services intentionally represent versions of one agent, keep one service definition and deploy the intended version through that service\.
@@ -1558,12 +1558,12 @@
 - Evidence:
   - skipped: input\-unavailable\: no\-environment\-selected
 
-### Preview/retired fields are version\-aware — UNKNOWN
+### Preview/retired fields are version\-aware — PASS
 
 - Rule: `FND-CFG-011` (version 5)
 - Mandatory: true
-- Evidence basis: none
-- Why this state: No evidence was recorded for this control\.
+- Evidence basis: deterministic
+- Why this state: Evaluated with no remaining finding and no skipped check\.
 - Costly recommendation: false
 - Source: <https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference> (verified `2026-10-04`)
 - Recommendation: Move to the unified service\-level shape\: put env on the agent service, use kind voice, use host azure\.ai\.project instead of microsoft\.foundry, drop fields the hosted\-agent create request ignores, and declare requiredVersions for extension versions verified by this catalogue\. Do not infer a field\'s introduction version from the current schema\.
@@ -2012,7 +2012,8 @@
 - This report maps available Foundry Doctor evidence to selected Azure Well\-Architected aligned controls\. It is not a certification and does not claim complete WAF compliance\.
 - Controls without complete deterministic evidence remain visible as UNKNOWN, QUESTION or SKIPPED rather than being treated as passing; a partly skipped evaluation is UNKNOWN, never PASS\.
 - ATTESTED controls rest on an answer the team recorded in Foundry Doctor configuration\. Foundry Doctor did not verify the answer\.
-- Control IDs are Foundry Doctor rule IDs\. They are not mapped to WAF checklist codes in this release, and pillar assignments come from the rule catalogue\.
+- Control IDs are Foundry Doctor rule IDs\. They are not mapped to WAF checklist codes in this release\. Pillar assignments come from the rule catalogue and are project judgement, not Microsoft guidance\.
+- A suppressed or baselined finding is shown as WARNING and stays visible in the evidence pack\. It does not by itself produce a No\-go decision, so the decision can be Proceed with conditions while accepted failures remain\.
 - The decision wording and the top\-action ranking are project opinion, not Microsoft guidance\.
 - PSRule for Azure, Azure Advisor and Microsoft Defender for Cloud recommendations were not imported\. Overlapping external check IDs are listed for reference only \(ADR\-020, ADR\-026\)\.
 - Deployed Azure state was not queried\: assess waf runs offline\. Controls that need deployment or runtime evidence and were not evaluated\: FND\-COST\-001, FND\-DEP\-001, FND\-DEP\-002, FND\-DEP\-003, FND\-DEP\-004, FND\-DEP\-005, FND\-DEP\-006, FND\-DEP\-007, FND\-DEP\-008, FND\-DEP\-009, FND\-DEP\-010, FND\-DEP\-011, FND\-DEP\-012, FND\-IDN\-002, FND\-IDN\-005, FND\-NET\-006, FND\-OPS\-009, FND\-RUN\-001, FND\-RUN\-002, FND\-RUN\-003, FND\-RUN\-004, FND\-RUN\-005, FND\-RUN\-006, FND\-RUN\-007, FND\-SEC\-008, FND\-SEC\-009\.

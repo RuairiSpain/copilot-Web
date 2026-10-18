@@ -196,7 +196,8 @@ var BaseLimitations = []string{
 	"This report maps available Foundry Doctor evidence to selected Azure Well-Architected aligned controls. It is not a certification and does not claim complete WAF compliance.",
 	"Controls without complete deterministic evidence remain visible as UNKNOWN, QUESTION or SKIPPED rather than being treated as passing; a partly skipped evaluation is UNKNOWN, never PASS.",
 	"ATTESTED controls rest on an answer the team recorded in Foundry Doctor configuration. Foundry Doctor did not verify the answer.",
-	"Control IDs are Foundry Doctor rule IDs. They are not mapped to WAF checklist codes in this release, and pillar assignments come from the rule catalogue.",
+	"Control IDs are Foundry Doctor rule IDs. They are not mapped to WAF checklist codes in this release. Pillar assignments come from the rule catalogue and are project judgement, not Microsoft guidance.",
+	"A suppressed or baselined finding is shown as WARNING and stays visible in the evidence pack. It does not by itself produce a No-go decision, so the decision can be Proceed with conditions while accepted failures remain.",
 	"The decision wording and the top-action ranking are project opinion, not Microsoft guidance.",
 }
 
@@ -545,6 +546,15 @@ func decisionFor(controls []Control) string {
 	case has(func(c Control) bool { return Outstanding(c.State) }):
 		return "Proceed with recommendations: no mandatory failures, but outstanding improvements remain."
 	default:
+		unassessed := 0
+		for _, c := range controls {
+			if Unassessed(c.State) {
+				unassessed++
+			}
+		}
+		if unassessed > 0 {
+			return fmt.Sprintf("Proceed within assessed scope: no outstanding control failures were found, but %d controls were not assessed.", unassessed)
+		}
 		return "Proceed within assessed scope: no outstanding control failures were found in the assessed set."
 	}
 }
@@ -586,6 +596,15 @@ func toRef(c Control) ControlRef {
 }
 
 func toAction(c Control) Action {
+	recommendation := c.Recommendation
+	if c.State == StateUnknown || c.State == StateQuestion || c.State == StateSkipped {
+		// No defect was detected for these controls, so the rule's fix text
+		// would tell an owner to repair something that may be fine.
+		recommendation = "Obtain evidence for this control before relying on it."
+		if c.StateReason != "" {
+			recommendation += " " + c.StateReason
+		}
+	}
 	return Action{
 		ControlID:      c.ControlID,
 		RuleID:         c.RuleID,
@@ -593,7 +612,7 @@ func toAction(c Control) Action {
 		Pillar:         c.Pillar,
 		State:          c.State,
 		Mandatory:      c.Mandatory,
-		Recommendation: c.Recommendation,
+		Recommendation: recommendation,
 		SourceURL:      c.SourceURL,
 		LastVerified:   c.LastVerified,
 		ProjectOpinion: c.ProjectOpinion,

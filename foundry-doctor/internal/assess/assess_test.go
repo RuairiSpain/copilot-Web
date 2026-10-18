@@ -316,3 +316,44 @@ func checkState(t *testing.T, got Assessment, ruleID string, want State) {
 	}
 	t.Fatalf("rule %s not found", ruleID)
 }
+
+// Phase 4 loop 1 (lead B2, black belt N8): a control with no detected defect
+// must not carry the rule's fix text in the actions list.
+func TestUnassessedActionHasNoFixText(t *testing.T) {
+	got, err := Build(Input{
+		Profile:     "foundry-prod",
+		Catalogue:   []catalog.Rule{rule("FND-SEC-001", "security", "must-have")},
+		Definitions: []Definition{{RuleID: "FND-SEC-001", NoEvidenceState: StateUnknown}},
+		Policy:      map[string]any{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkState(t, got, "FND-SEC-001", StateUnknown)
+	if len(got.TopActions) != 1 {
+		t.Fatalf("top actions=%+v", got.TopActions)
+	}
+	rec := got.TopActions[0].Recommendation
+	if strings.Contains(rec, "Fix it.") || !strings.HasPrefix(rec, "Obtain evidence") {
+		t.Fatalf("recommendation=%q", rec)
+	}
+}
+
+// Phase 4 loop 1 (lead N3): a clean decision must say how much was not assessed.
+func TestDecisionStatesUnassessedCount(t *testing.T) {
+	got, err := Build(Input{
+		Profile:   "foundry-prod",
+		Catalogue: []catalog.Rule{rule("FND-OPS-002", "operations", "nice-to-have"), rule("FND-OPS-003", "operations", "nice-to-have")},
+		Definitions: []Definition{
+			{RuleID: "FND-OPS-002", NoEvidenceState: StateSkipped},
+			{RuleID: "FND-OPS-003", NoEvidenceState: StateSkipped},
+		},
+		Policy: map[string]any{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(got.Decision, "Proceed within assessed scope") || !strings.Contains(got.Decision, "2 controls were not assessed") {
+		t.Fatalf("decision=%q", got.Decision)
+	}
+}
