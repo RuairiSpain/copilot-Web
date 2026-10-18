@@ -140,3 +140,7 @@ Statuses are conservative while the re-review is pending.
 | Security and Go principal reviews | waived-by-ADR-019 | Deferred to Phase 9 |
 | `-race` run | met | Passes on linux/amd64 go1.26.9 (parent session report) |
 | Hand-off written, DoD audited | met | This file |
+
+## Gate decision (2026-10-18)
+
+Phase 3 gate, round 3 (final confirmation): Azure black belt not yet reported at the time of the merge request; Foundry lead ACCEPT with conditions. The one blocking condition (N1: RUN-005 treated a prompt-kind service with a `$ref` definition as authoritative, a possible false FAIL) is fixed in the merge commit with two new test cases in `TestRun005AgentNameResolution`; it was not re-reviewed. Non-blocking items carried: RUN-001 uncertain (not by-design skip) when the capability host lists bound names that resolve to no connection; the 'FND-RUN-001..007 report correctly' DoD row is marked met by the Foundry lead's round-3 review, subject to the open items; the RUN-002 vantage point is asserted by the user; live integration and recorded fixtures are deferred by ADR-021 (d); FND-IDN-002 and FND-NET-002 live checks and FND-SEC-005 remain the v1 release gate (ADR-022, ADR-023).

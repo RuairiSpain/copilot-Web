@@ -62,7 +62,7 @@ a finding) and a skipped or uncertain test (reference built from an unresolved e
 
 The phase allocation for these owner rules was decided in ADR-022 (2026-10-17): FND-RUN-003 stays in Phase 3; the live parts of FND-IDN-002
 and FND-NET-002 are allocated to Phase 3; FND-SEC-005 to Phase 8. The "Owner phase" column above shows the PRD section 20 value at the time of
-writing; ADR-022 supersedes it for the live check. The DoD item stays partly met and is a release gate for v1 (ADR-022): it blocks the Phase 9 /
+writing; ADR-022 supersedes it for the live check, and ADR-023 supersedes ADR-022 for FND-IDN-002 and FND-NET-002 (their live checks move to Phase 8). The DoD item stays partly met and is a release gate for v1 (ADR-022): it blocks the Phase 9 /
 v1 hand-off until each kind is covered with the positive and uncertain tests required above. CLAUDE.md still forbids implementing a property name
 that the catalogue has not verified, so no kind is added to the policy ahead of its owner rule.
 

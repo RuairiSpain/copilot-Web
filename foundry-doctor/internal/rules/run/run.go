@@ -405,7 +405,11 @@ func (e *env) agentRefs(in *sdk.Input) []agentRef {
 			continue
 		}
 		kind, _, _ := in.AzureYAML.Lookup("services", svc, "kind")
-		refs = append(refs, agentRef{Name: svc, Assumed: !strings.EqualFold(strings.TrimSpace(kind), "prompt")})
+		// A definition reference (a $ref on the service, or a root $ref) points at a
+		// definition file this model does not read: its name may differ from the key.
+		_, _, svcRef := in.AzureYAML.Lookup("services", svc, "$ref")
+		_, _, rootRef := in.AzureYAML.Lookup("$ref")
+		refs = append(refs, agentRef{Name: svc, Assumed: !strings.EqualFold(strings.TrimSpace(kind), "prompt") || svcRef || rootRef})
 	}
 	sort.SliceStable(refs, func(i, j int) bool { return refs[i].Name < refs[j].Name })
 	return refs

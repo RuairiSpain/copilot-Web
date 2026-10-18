@@ -420,6 +420,10 @@ func TestRun005AgentNameResolution(t *testing.T) {
 			mapYAML{"support": {"host": "azure.ai.agent", "kind": "prompt"}}, []string{"other"}, "agent support is not listed", ""},
 		{"assumed key that is listed passes",
 			mapYAML{"support": {"host": "azure.ai.agent"}}, []string{"support"}, "", ""},
+		{"prompt agent with a $ref definition is only an assumption: the definition file may name it differently",
+			mapYAML{"support": {"host": "azure.ai.agent", "kind": "prompt", "$ref": "./agent.yaml"}}, []string{"other"}, "", "assumed to be the azure.yaml service key"},
+		{"hosted agent with a $ref definition and no inline name is an assumption",
+			mapYAML{"support": {"host": "azure.ai.agent", "$ref": "./agent.yaml"}}, []string{"other"}, "", "assumed to be the azure.yaml service key"},
 		{"a service with another host is ignored",
 			mapYAML{"web": {"host": "containerapp"}}, nil, "", ""},
 	}
