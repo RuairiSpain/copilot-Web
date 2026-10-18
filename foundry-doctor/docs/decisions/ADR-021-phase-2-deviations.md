@@ -35,6 +35,13 @@ Reader sufficiency. Exit criterion: the first phase hand-off written after an Az
 replay suite and the live scenarios (provider, quota, lock, policy, soft-delete), then change the matrix wording. Until then no document may say that Reader suffices without
 "hypothesis".
 
+**(d) Phase 3 clause (2026-10-18).** The waiver extends to Phase 3. Integration tests in public and private sample environments, and live or
+recorded data-plane evidence, are deferred because no test tenant exists. Every Phase 3 data-plane fixture (Foundry agents and connections, Search
+index and indexer status, Azure Monitor metrics, Log Analytics query results) is synthetic, derived from the specification and labelled as such; none was recorded
+from a live tenant. Exit criterion: the first hand-off written after a test tenant exists records and scrubs real data-plane responses (Foundry agents
+and connections, Search index and indexer status, Metrics, Log Analytics) and diffs them against the synthetic fixtures; each difference becomes a
+catalogue correction before the rule's `UNVERIFIED` labels are removed.
+
 **(e) Cross-resource-group scope policy coverage.** The PRD DoD item "cross-resource-group references follow explicit scope policy" is met only for
 the two reference kinds below. The covered set is exactly: (1) the resource IDs that a what-if predicts a change for (FND-DEP-008; a change other
 than Ignore or NoChange outside the target resource group and outside `--approved-scope` is a finding) and (2) the agent network-injection subnet
@@ -85,6 +92,13 @@ checked 2026-10-18 against azure-monitor-docs `logs/api/access-api.md` (tokens u
 origin, `logs/api/request-format.md`); the earlier text above names the `.io` origin for requests, which the docs now replace with `.azure.com` (the `.io` host is documented as
 being replaced and still supported). This status line was written by the catalogue owner from the code on disk and the tests listed; it has not been run or re-reviewed
 by this agent, and closure is final only when the Foundry lead and Azure black belt accept the re-review.
+
+**(g) deviation from ADR-006 item 7 (2026-10-18, Phase 3 loop 2).** ADR-006 item 7 asks that the resource name is passed "as a parameter, never by string
+concatenation". The Log Analytics query API takes the query text and a timespan in the request body and has no verified parameter mechanism for the
+shipped template, so the implementation substitutes the account name into a fixed template after a strict regex check
+(`^[A-Za-z0-9._-]{1,64}$`); the body validator then accepts only that template shape. This is a recorded deviation, with the hostile-name replay test
+(`TestQueryDiagnosticCountsHostileNameReplayFailsClosed`) as the mitigation. ADR-006 item 7 is amended to say so. Known limit: the resulting KQL
+compares `ResourceId` with `endswith '/ACCOUNTS/<NAME>'` and is not scoped by subscription or resource group (FND-RUN-007).
 
 ## Consequences
 

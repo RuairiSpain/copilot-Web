@@ -1,5 +1,5 @@
 id: FND-RUN-002
-version: 3
+version: 4
 group: RUN
 title: Private DNS resolves from an appropriate vantage point
 description: >-
@@ -45,24 +45,37 @@ evidence:
     with reason "private DNS resolves only from inside the VNet".
     Pass requires the asserted in-VNet vantage point AND every answer is a private IP.
     Fail requires the asserted in-VNet vantage point AND the dependency proven private-endpoint-backed by control-plane
-    evidence that the finding names (account publicNetworkAccess Disabled or an existing private endpoint connection on
-    the Foundry account, or connection peStatus Active for the other dependencies; see below) AND either a public-IP answer or an NXDOMAIN answer. A public-IP or NXDOMAIN answer for a dependency that is
-    not proven private-endpoint-backed is Uncertain (it may be a public endpoint by design), never Fail.
-    NXDOMAIN (the resolver answered that the name does not exist) is a different outcome from a timeout, SERVFAIL or no
-    resolver: those are Skipped as 'resolver unavailable' with the error class named, never Fail and never Pass.
+    evidence that the finding names (publicNetworkAccess Disabled or an Approved private endpoint connection on the Foundry account, or connection
+    peStatus Active for the other dependencies; see below) AND either a clearly public address or an NXDOMAIN answer. An address that
+    is neither private nor clearly public (the classification lives in the Go code; the Foundry docs say only 'private IP',
+    so the exact private address definition is UNVERIFIED) is Uncertain, never Fail. A public or NXDOMAIN answer for a
+    dependency that is not proven private-endpoint-backed is Uncertain (it may be a public endpoint by design), never Fail.
+    NXDOMAIN (the resolver answered authoritatively that the name does not exist) is a different outcome from a timeout,
+    SERVFAIL or no resolver: those are Skipped as 'resolver unavailable' with the error class named, never Fail and never
+    Pass. The mapping is: NXDOMAIN with proof is Fail, NXDOMAIN without proof is Uncertain, timeout, SERVFAIL or a
+    missing resolver is Skipped. FQDN construction: the Foundry account and project endpoint FQDNs are built from
+    properties.customSubDomainName of the account (VERIFIED as a property of AccountProperties in the 2026-09-01 spec,
+    read 2026-10-18; described there as the optional subdomain used for token-based authentication), not from the ARM
+    resource name; when customSubDomainName is absent the account FQDNs are not guessed and the result is Uncertain.
     Proof of private-endpoint backing (control plane, read only): for the Foundry account, GET the account (Accounts_Get,
-    api-version 2026-09-01, allow-list operation runtime.account.get): publicNetworkAccess Disabled, or at least one entry
-    in properties.privateEndpointConnections, is the proof. For the Search, Cosmos DB and Storage resources bound to the
+    api-version 2026-09-01, allow-list operation runtime.account.get): the proof is publicNetworkAccess Disabled (the
+    account is then reachable only through a private endpoint) or at least one entry in
+    properties.privateEndpointConnections whose properties.privateLinkServiceConnectionState.status is Approved
+    (PrivateEndpointServiceConnectionStatus is Pending, Approved or Rejected; VERIFIED in ARM common-types v3
+    privatelinks.json on 2026-10-18). Only Approved connections count as proof among the connections: a Pending, Rejected or otherwise
+    non-Approved connection does not. If the account reports neither publicNetworkAccess nor an Approved connection
+    the result is uncertain. For the Search, Cosmos DB and Storage resources bound to the
     capability host, the proof is the connection's peStatus (ManagedPEStatus) equal to Active on the project or account
     connection that points at the resource; the target's own private endpoint connections are not read. A dependency
-    without such proof is not probed and is Uncertain ("private-endpoint backing is not proven"). A failure to read the account is
-    Uncertain, not a Fail. The proof is named in each finding. The runtime does not read private DNS zones or virtual
+    without such proof is not probed and is Uncertain ("private-endpoint backing is not proven"). An unreadable account network
+    read (the account GET failed, was forbidden or returned no network properties) is Uncertain, or Skipped when the
+    permission is missing; it hides the check, and is never reported as the by-design 'nothing in scope' (loop 2). The proof is named in each finding. The runtime does not read private DNS zones or virtual
     network links: whether a zone is linked to the VNet is not evidence of this rule. Resolution runs per dependency under
     the per-probe --timeout through the injected resolver; a resolver timeout or error is Skipped (resolver
     unavailable), never Fail and never Pass. Required permission: ARM read on the Foundry account and on the project and
     account connections. Probe 1 needs none. Metadata read: DNS answers, publicNetworkAccess, connection peStatus. No
     request is sent to the data plane, so no content is touched.
-  confidence: certain
+  confidence: likely
 recommendation: >-
   Link each required privatelink zone to the VNet that hosts the agent client and private endpoint subnets, configure conditional
   forwarders to 168.63.129.16 where custom DNS is used, and re-run the doctor from a machine inside the VNet.
@@ -101,6 +114,16 @@ sources:
     MicrosoftDocs/azure-ai-docs: articles/foundry/agents/concepts/agents-networking-deep-dive.md; retrieved
     2026-10-04
   note: Private DNS zones keep name resolution inside the VNet for storage, database and Key Vault private endpoints.
+- url: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/common-types/resource-management/v3/privatelinks.json
+  lastVerified: '2026-10-18'
+  verifiedVia: >-
+    https://raw.githubusercontent.com/Azure/azure-rest-api-specs/main/specification/common-types/resource-management/v3/privatelinks.json
+  note: >-
+    PrivateLinkServiceConnectionState.status and PrivateEndpointServiceConnectionStatus enum Pending, Approved, Rejected;
+    the 2026-09-01 cognitiveservices spec (read 2026-10-18, local clone at c415ef0) references it for
+    PrivateEndpointConnectionProperties.privateLinkServiceConnectionState and defines AccountProperties.customSubDomainName.
+    Branch URL, not commit-pinned.
 overlap:
   decision: native
   provisional: true
@@ -134,8 +157,9 @@ implementation:
   package: internal/rules/run
 tests:
   positive:
-  - asserted in-VNet vantage point, the Search service is proven private-endpoint-backed, and its FQDN resolves to a public IP
+  - asserted in-VNet vantage point, the Search service is proven private-endpoint-backed, and its FQDN resolves to a clearly public IP
   - asserted in-VNet vantage point, the dependency is proven private-endpoint-backed, and its FQDN returns NXDOMAIN
+  - asserted in-VNet vantage point, the Foundry account has an Approved private endpoint connection and its FQDN (from customSubDomainName) resolves to a public IP
   negative:
   - asserted in-VNet vantage point and every FQDN resolves to a private IP
   - public-IP answer for a dependency with no private endpoint is not a Fail (Uncertain)
@@ -146,10 +170,19 @@ tests:
   uncertain:
   - public-IP or NXDOMAIN answer for a dependency not proven private-endpoint-backed
   - dependency's connection does not report peStatus Active (private-endpoint backing not proven, so not probed)
-  - the Foundry account's network exposure could not be read
+  - the Foundry account's network exposure could not be read (hides the check; not the by-design 'nothing in scope')
+  - the Foundry account has only Pending, Rejected or Disconnected private endpoint connections (no Approved proof)
+  - the account has no customSubDomainName (FQDN cannot be built)
+  - an answer that is neither private nor clearly public
   - split-horizon custom DNS returns different answers on repeated lookups
 testability: Resolver is an injected interface so tests use fake answers; real validation needs a host inside the VNet.
 notes: >-
+  Loop 2 (2026-10-18): confidence lowered from certain to likely because the vantage is asserted; only Approved private
+  endpoint connections are proof; a clearly public address is a Fail only when private-endpoint-backed, other non-private
+  answers are Uncertain; an unreadable account network read is Uncertain or Skipped and never the by-design 'nothing in
+  scope'; FQDNs use customSubDomainName; NXDOMAIN versus timeout mapping stated. Azure black belt round 2 NB1: the
+  resolver wiring left the NXDOMAIN branch dead, fixed in the Go patch (pending re-review). NB2 and NB3 above. The private
+  address definition remains UNVERIFIED.
   Loop 1 (2026-10-17; synced to the Go code 2026-10-18; the private DNS VNet-link probe was removed): Fail gated on private-endpoint evidence; NXDOMAIN distinct from timeout; vantage stated as user
   asserted. Unverified: what counts as a private address (RFC 1918 versus any VNet range) is not stated in the Foundry docs; the docs
   say the name must resolve to a private IP address. The full Policy GUID was read from the definition file; it should be

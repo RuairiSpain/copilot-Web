@@ -115,18 +115,65 @@ func (r rule) Evaluate(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 }
 
 type env struct {
-	d          Deps
-	mu         sync.Mutex
-	project    *azure.FoundryProject
-	projectErr error
-	hosts      []azure.CapabilityHost
-	hostsErr   error
-	pconns     []azure.FoundryConnection
-	pconnsErr  error
-	aconns     []azure.FoundryConnection
-	aconnsErr  error
-	deploys    []azure.AccountDeployment
-	deployErr  error
+	d Deps
+
+	project memo[azure.FoundryProject]
+	hosts   memo[[]azure.CapabilityHost]
+	pconns  memo[[]azure.FoundryConnection]
+	aconns  memo[[]azure.FoundryConnection]
+	deploys memo[[]azure.AccountDeployment]
+	network memo[azure.AccountNetwork]
+}
+
+// memo caches one fetch for the lifetime of a run. It is single-flight (a
+// second caller waits for the first instead of repeating the request) and it
+// never caches a context error: a deadline or cancellation belongs to the
+// probe that hit it, not to every later rule.
+type memo[T any] struct {
+	mu       sync.Mutex
+	done     bool
+	val      T
+	err      error
+	inflight chan struct{}
+}
+
+func isContextErr(err error) bool {
+	return errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)
+}
+
+func (m *memo[T]) get(ctx context.Context, fetch func(context.Context) (T, error)) (T, error) {
+	for {
+		m.mu.Lock()
+		if m.done {
+			v, err := m.val, m.err
+			m.mu.Unlock()
+			return v, err
+		}
+		if ch := m.inflight; ch != nil {
+			m.mu.Unlock()
+			select {
+			case <-ch:
+				continue // re-check: the flight may have ended in an uncached context error
+			case <-ctx.Done():
+				var zero T
+				return zero, ctx.Err()
+			}
+		}
+		ch := make(chan struct{})
+		m.inflight = ch
+		m.mu.Unlock()
+
+		v, err := fetch(ctx)
+
+		m.mu.Lock()
+		m.inflight = nil
+		if !isContextErr(err) {
+			m.done, m.val, m.err = true, v, err
+		}
+		m.mu.Unlock()
+		close(ch)
+		return v, err
+	}
 }
 
 type acc struct {
@@ -208,6 +255,8 @@ func azureReason(err error) string {
 	switch {
 	case errors.Is(err, azure.ErrNotAllowed):
 		return runtime.UncertainPrefix + "internal error: a request was refused by the read-only allow-list (" + findings.Redact(err.Error()) + ")"
+	case errors.Is(err, runtime.ErrRequestRejected):
+		return runtime.UncertainPrefix + "internal error: a data-plane request was refused before it was sent (" + findings.Redact(err.Error()) + ")"
 	case errors.Is(err, azure.ErrInvalidInput):
 		return runtime.UncertainPrefix + "internal error: an input was rejected before any request (" + findings.Redact(err.Error()) + ")"
 	case errors.Is(err, azure.ErrDecode):
@@ -227,86 +276,68 @@ func azureReason(err error) string {
 }
 
 func (e *env) projectInfo(ctx context.Context) (azure.FoundryProject, error) {
-	e.mu.Lock()
-	if e.project != nil || e.projectErr != nil {
-		defer e.mu.Unlock()
-		if e.project == nil {
-			return azure.FoundryProject{}, e.projectErr
-		}
-		return *e.project, nil
-	}
-	e.mu.Unlock()
-	p, err := e.d.FoundryMgmt.GetProject(ctx, e.d.Target.SubscriptionID, e.d.Target.ResourceGroup, e.d.Target.Account, e.d.Target.Project)
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if err != nil {
-		e.projectErr = err
-		return azure.FoundryProject{}, err
-	}
-	e.project = &p
-	return p, nil
+	t := e.d.Target
+	return e.project.get(ctx, func(ctx context.Context) (azure.FoundryProject, error) {
+		return e.d.FoundryMgmt.GetProject(ctx, t.SubscriptionID, t.ResourceGroup, t.Account, t.Project)
+	})
+}
+
+// accountNetwork reads the account (Accounts_Get): network exposure and the
+// customSubDomainName that names its data-plane hosts.
+func (e *env) accountNetwork(ctx context.Context) (azure.AccountNetwork, error) {
+	t := e.d.Target
+	return e.network.get(ctx, func(ctx context.Context) (azure.AccountNetwork, error) {
+		return e.d.FoundryMgmt.GetAccountNetwork(ctx, t.SubscriptionID, t.ResourceGroup, t.Account)
+	})
 }
 
 func (e *env) capabilityHosts(ctx context.Context) ([]azure.CapabilityHost, error) {
-	e.mu.Lock()
-	if e.hosts != nil || e.hostsErr != nil {
-		defer e.mu.Unlock()
-		return append([]azure.CapabilityHost(nil), e.hosts...), e.hostsErr
-	}
-	e.mu.Unlock()
-	hosts, err := e.d.FoundryMgmt.ListProjectCapabilityHosts(ctx, e.d.Target.SubscriptionID, e.d.Target.ResourceGroup, e.d.Target.Account, e.d.Target.Project)
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.hosts, e.hostsErr = append([]azure.CapabilityHost(nil), hosts...), err
-	return append([]azure.CapabilityHost(nil), hosts...), err
+	t := e.d.Target
+	v, err := e.hosts.get(ctx, func(ctx context.Context) ([]azure.CapabilityHost, error) {
+		return e.d.FoundryMgmt.ListProjectCapabilityHosts(ctx, t.SubscriptionID, t.ResourceGroup, t.Account, t.Project)
+	})
+	return append([]azure.CapabilityHost(nil), v...), err
 }
 
 func (e *env) projectConnections(ctx context.Context) ([]azure.FoundryConnection, error) {
-	e.mu.Lock()
-	if e.pconns != nil || e.pconnsErr != nil {
-		defer e.mu.Unlock()
-		return append([]azure.FoundryConnection(nil), e.pconns...), e.pconnsErr
-	}
-	e.mu.Unlock()
-	conns, err := e.d.FoundryMgmt.ListProjectConnections(ctx, e.d.Target.SubscriptionID, e.d.Target.ResourceGroup, e.d.Target.Account, e.d.Target.Project)
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.pconns, e.pconnsErr = append([]azure.FoundryConnection(nil), conns...), err
-	return append([]azure.FoundryConnection(nil), conns...), err
+	t := e.d.Target
+	v, err := e.pconns.get(ctx, func(ctx context.Context) ([]azure.FoundryConnection, error) {
+		return e.d.FoundryMgmt.ListProjectConnections(ctx, t.SubscriptionID, t.ResourceGroup, t.Account, t.Project)
+	})
+	return append([]azure.FoundryConnection(nil), v...), err
 }
 
 func (e *env) accountConnections(ctx context.Context) ([]azure.FoundryConnection, error) {
-	e.mu.Lock()
-	if e.aconns != nil || e.aconnsErr != nil {
-		defer e.mu.Unlock()
-		return append([]azure.FoundryConnection(nil), e.aconns...), e.aconnsErr
-	}
-	e.mu.Unlock()
-	conns, err := e.d.FoundryMgmt.ListAccountConnections(ctx, e.d.Target.SubscriptionID, e.d.Target.ResourceGroup, e.d.Target.Account)
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.aconns, e.aconnsErr = append([]azure.FoundryConnection(nil), conns...), err
-	return append([]azure.FoundryConnection(nil), conns...), err
+	t := e.d.Target
+	v, err := e.aconns.get(ctx, func(ctx context.Context) ([]azure.FoundryConnection, error) {
+		return e.d.FoundryMgmt.ListAccountConnections(ctx, t.SubscriptionID, t.ResourceGroup, t.Account)
+	})
+	return append([]azure.FoundryConnection(nil), v...), err
 }
 
 func (e *env) deployments(ctx context.Context) ([]azure.AccountDeployment, error) {
-	e.mu.Lock()
-	if e.deploys != nil || e.deployErr != nil {
-		defer e.mu.Unlock()
-		return append([]azure.AccountDeployment(nil), e.deploys...), e.deployErr
-	}
-	e.mu.Unlock()
-	ds, err := e.d.FoundryMgmt.ListAccountDeployments(ctx, e.d.Target.SubscriptionID, e.d.Target.ResourceGroup, e.d.Target.Account)
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.deploys, e.deployErr = append([]azure.AccountDeployment(nil), ds...), err
-	return append([]azure.AccountDeployment(nil), ds...), err
+	t := e.d.Target
+	v, err := e.deploys.get(ctx, func(ctx context.Context) ([]azure.AccountDeployment, error) {
+		return e.d.FoundryMgmt.ListAccountDeployments(ctx, t.SubscriptionID, t.ResourceGroup, t.Account)
+	})
+	return append([]azure.AccountDeployment(nil), v...), err
 }
 
 func (e *env) correlator(in *sdk.Input) runtime.Correlator { return runtime.NewCorrelator(in) }
 
-func (e *env) projectEndpoint() (string, error) {
-	return foundrydp.Endpoint(e.d.Target.Account, e.d.Target.Project)
+// projectEndpoint derives the project endpoint from the account's
+// properties.customSubDomainName, not from the ARM account name: the two can
+// differ. The empty string with a nil error means the account does not report
+// a subdomain (the caller reports uncertain).
+func (e *env) projectEndpoint(ctx context.Context) (string, error) {
+	net, err := e.accountNetwork(ctx)
+	if err != nil {
+		return "", err
+	}
+	if net.CustomSubDomainName == "" {
+		return "", nil
+	}
+	return foundrydp.Endpoint(net.CustomSubDomainName, e.d.Target.Project)
 }
 
 func (e *env) boundConnections(ctx context.Context) ([]azure.FoundryConnection, []string, error) {
@@ -342,24 +373,42 @@ func (e *env) boundConnections(ctx context.Context) ([]azure.FoundryConnection, 
 	return out, unique(names), nil
 }
 
-func (e *env) agentNames(in *sdk.Input) []string {
+// agentRef is the Foundry agent name a azure.ai.agent service deploys as.
+type agentRef struct {
+	Name string
+	// Assumed is true when the name is the azure.yaml service key because
+	// nothing in azure.yaml names the agent. The azd ai-agents extension deploys
+	// with the name in the agent definition (agentDef.Name,
+	// service_target_agent.go), which can differ from the service key; a
+	// prompt agent without a name falls back to the service key
+	// (applyPromptAgentServiceName), a hosted agent's fallback is not verified.
+	Assumed bool
+}
+
+// agentRefs resolves the agent names from the repository model. The model reads
+// azure.yaml only: an inline definition's name (services.<svc>.name) is
+// authoritative; a prompt agent (kind: prompt) without one is named after the
+// service key; anything else (a root $ref to a definition file that is not
+// read, a hosted agent without an inline name) is an assumption.
+func (e *env) agentRefs(in *sdk.Input) []agentRef {
 	if in == nil || in.AzureYAML == nil {
 		return nil
 	}
-	names := []string{}
+	refs := []agentRef{}
 	for _, svc := range in.AzureYAML.ServiceNames() {
 		host, _, ok := in.AzureYAML.Lookup("services", svc, "host")
 		if !ok || !strings.EqualFold(host, "azure.ai.agent") {
 			continue
 		}
-		agentName, _, ok := in.AzureYAML.Lookup("services", svc, "name")
-		if !ok || strings.TrimSpace(agentName) == "" {
-			agentName = svc
+		if n, _, ok := in.AzureYAML.Lookup("services", svc, "name"); ok && strings.TrimSpace(n) != "" {
+			refs = append(refs, agentRef{Name: strings.TrimSpace(n)})
+			continue
 		}
-		names = append(names, agentName)
+		kind, _, _ := in.AzureYAML.Lookup("services", svc, "kind")
+		refs = append(refs, agentRef{Name: svc, Assumed: !strings.EqualFold(strings.TrimSpace(kind), "prompt")})
 	}
-	sort.Strings(names)
-	return names
+	sort.SliceStable(refs, func(i, j int) bool { return refs[i].Name < refs[j].Name })
+	return refs
 }
 
 func isSkipAuth(auth string) bool {
@@ -421,6 +470,7 @@ func (e *env) run001(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 	}
 	corr := e.correlator(in)
 	a := &acc{}
+	checked := 0
 	reader := rbac.ReaderAdapter{Roles: e.d.RBAC}
 	report := func(typ string, c azure.FoundryConnection, evs []rbac.Evaluation) {
 		for _, ev := range evs {
@@ -448,12 +498,23 @@ func (e *env) run001(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 		case strings.Contains(target, "/providers/microsoft.documentdb/databaseaccounts/"):
 			kind = "cosmos"
 		default:
+			// A resource-backed connection without a resolvable Search, Storage or
+			// Cosmos DB resource ID was not checked. Saying nothing would let the
+			// rule pass with nothing checked.
+			if rbacBacked(c.Category) {
+				if strings.TrimSpace(c.Target.ResourceID) == "" {
+					a.note("connection " + c.Name + " exposes no target resource ID; effective access was not checked")
+				} else {
+					a.note("connection " + c.Name + " (category " + c.Category + ") has a target that is not a Search, Storage or Cosmos DB resource ID; effective access was not checked")
+				}
+			}
 			continue
 		}
 		if !validResourceID(c.Target.ResourceID) {
 			a.note("connection " + c.Name + " has a malformed or unresolved target resource ID; effective access cannot be checked")
 			continue
 		}
+		checked++
 		id := strings.TrimSpace(c.Target.ResourceID)
 		c.Target.ResourceID = id
 		switch kind {
@@ -486,7 +547,20 @@ func (e *env) run001(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 			report("Microsoft.DocumentDB/databaseAccounts", c, evs)
 		}
 	}
+	if checked == 0 && len(a.findings) == 0 && len(a.skips) == 0 && len(a.notes) == 0 {
+		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable + ": no bound connection targets a search, storage or cosmos db resource, so no effective access was checked"}}, nil
+	}
 	return a.result(), nil
+}
+
+// rbacBacked reports whether a connection category names a resource FND-RUN-001
+// checks roles on (Search, Storage, Cosmos DB).
+func rbacBacked(category string) bool {
+	switch strings.ToLower(category) {
+	case "cognitivesearch", "cosmosdb", "azurestorageaccount", "azureblob", "adlsgen2":
+		return true
+	}
+	return false
 }
 
 // dependency is one DNS name the project relies on and the proof, if any, that
@@ -513,7 +587,7 @@ func (e *env) run002(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 	var deps []dependency
 	// The Foundry account: proven private-endpoint backed when public network
 	// access is Disabled or private endpoint connections exist (Accounts_Get).
-	net, err := e.d.FoundryMgmt.GetAccountNetwork(ctx, e.d.Target.SubscriptionID, e.d.Target.ResourceGroup, e.d.Target.Account)
+	net, err := e.accountNetwork(ctx)
 	switch {
 	case err != nil && (errors.Is(err, azure.ErrNotAllowed) || errors.Is(err, azure.ErrInvalidInput) || errors.Is(err, azure.ErrDecode)):
 		return sdk.Result{}, err
@@ -527,12 +601,23 @@ func (e *env) run002(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 		switch {
 		case strings.EqualFold(net.PublicNetworkAccess, "Disabled"):
 			proof = "publicNetworkAccess is Disabled on the account"
+		case net.ApprovedPrivateEndpointConnections > 0:
+			proof = "the account has " + strconv.Itoa(net.ApprovedPrivateEndpointConnections) + " approved private endpoint connection(s)"
 		case net.PrivateEndpointConnections > 0:
-			proof = "the account has " + strconv.Itoa(net.PrivateEndpointConnections) + " private endpoint connection(s)"
+			// Pending, Rejected and Disconnected connections do not carry traffic.
+			a.note("the account has " + strconv.Itoa(net.PrivateEndpointConnections) + " private endpoint connection(s) but none is Approved, so private-endpoint backing is not proven")
+		case strings.TrimSpace(net.PublicNetworkAccess) == "":
+			a.note("the account does not report publicNetworkAccess, so its private-endpoint backing is not proven")
 		}
-		if proof != "" {
+		switch {
+		case proof == "":
+		case net.CustomSubDomainName == "":
+			// The real host names use properties.customSubDomainName; the ARM
+			// account name is not assumed to be the subdomain.
+			a.note("the account is private-endpoint backed but reports no customSubDomainName, so its DNS names cannot be derived and were not probed")
+		default:
 			for _, suffix := range []string{".cognitiveservices.azure.com", ".openai.azure.com", ".services.ai.azure.com"} {
-				deps = append(deps, dependency{"Microsoft.CognitiveServices/accounts", e.d.Target.Account, accountID(e.d.Target), e.d.Target.Account + suffix, proof})
+				deps = append(deps, dependency{"Microsoft.CognitiveServices/accounts", e.d.Target.Account, accountID(e.d.Target), net.CustomSubDomainName + suffix, proof})
 			}
 		}
 	}
@@ -570,7 +655,13 @@ func (e *env) run002(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 		}
 	}
 	if len(deps) == 0 {
-		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable + ": no private-endpoint-backed dependencies are in scope"}}, nil
+		// The by-design "nothing in scope" skip is only honest when nothing was
+		// unreadable and nothing was left unproven. Otherwise a check was hidden
+		// and the result is uncertain (or skipped), never silent.
+		if len(a.notes) > 0 || len(a.skips) > 0 || len(a.findings) > 0 {
+			return a.result(), nil
+		}
+		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable + ": no dependency is proven private-endpoint backed; private-endpoint backing was not proven for any dependency, so no DNS name was probed"}}, nil
 	}
 	corr := e.correlator(in)
 	resolver := netprobe.TimeoutResolver{Inner: e.d.Resolver, Timeout: e.d.Options.Timeout}
@@ -579,7 +670,9 @@ func (e *env) run002(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 		switch r.State {
 		case runtime.StatePass:
 		case runtime.StateFail:
-			a.add(corr.Resource(d.typ, d.name, d.id), d.fqdn+": "+r.Reason+" ("+d.proof+")")
+			// The vantage is asserted by the user and not verified, so the
+			// confidence is capped at "likely" (medium).
+			a.addLikely(corr.Resource(d.typ, d.name, d.id), d.fqdn+": "+r.Reason+" ("+d.proof+")")
 		case runtime.StateSkipped:
 			a.skip(r.Reason)
 		default:
@@ -812,9 +905,18 @@ func (e *env) run005(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 	if e.d.ProjectData == nil {
 		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable + ": Foundry project data plane is not available"}}, nil
 	}
-	endpoint, err := e.projectEndpoint()
+	if e.d.FoundryMgmt == nil {
+		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable + ": account metadata is not available, so the project endpoint host (customSubDomainName) cannot be derived"}}, nil
+	}
+	endpoint, err := e.projectEndpoint(ctx)
 	if err != nil {
+		if cerr := ctx.Err(); cerr != nil {
+			return sdk.Result{}, err
+		}
 		return sdk.Result{Skipped: &sdk.Skip{Reason: azureReason(err)}}, nil
+	}
+	if endpoint == "" {
+		return sdk.Result{Skipped: &sdk.Skip{Reason: runtime.UncertainPrefix + "the account does not report properties.customSubDomainName, so the project endpoint host cannot be derived (the ARM account name is not assumed to be the subdomain)"}}, nil
 	}
 	if err := e.d.ProjectData.Ping(ctx, endpoint); err != nil {
 		return sdk.Result{Skipped: &sdk.Skip{Reason: azureReason(err)}}, nil
@@ -829,13 +931,20 @@ func (e *env) run005(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 	for _, ag := range list.Agents {
 		index[strings.ToLower(ag.Name)] = ag
 	}
-	for _, agent := range e.agentNames(in) {
+	for _, ref := range e.agentRefs(in) {
+		agent := ref.Name
 		ac := corr.Agent(agent)
 		ag, ok := index[strings.ToLower(agent)]
 		if !ok {
-			if list.Truncated {
+			switch {
+			case list.Truncated:
 				a.note("agent " + agent + " was not found in the first " + strconv.Itoa(len(list.Agents)) + " agents; the listing was capped")
-			} else {
+			case ref.Assumed:
+				// azure.yaml does not name the agent, so the service key is only an
+				// assumption: the azd ai-agents extension deploys under the name in
+				// the agent definition, which may differ from the service key.
+				a.note("no agent named " + agent + " is listed on the project endpoint; the name is assumed to be the azure.yaml service key because azure.yaml carries no agent name (the deployed name comes from the agent definition and may differ)")
+			default:
 				a.add(ac, "agent "+agent+" is not listed on the project endpoint")
 			}
 			continue
@@ -875,7 +984,10 @@ func (e *env) run005(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 			a.note("bound connection " + name + " was not found in the first " + strconv.Itoa(len(dpConns.Connections)) + " connections; the listing was capped")
 			continue
 		}
-		a.add(corr.Resource("", name, ""), "project endpoint does not list bound connection "+name)
+		// UNVERIFIED: whether a connection bound at account level appears in the
+		// project's /connections listing. A missing entry is therefore uncertain,
+		// not a failure.
+		a.note("bound connection " + name + " is not listed by the project endpoint; an account-level connection may not appear in the project listing (unverified), so this is not treated as a failure")
 	}
 	return a.result(), nil
 }
@@ -922,7 +1034,9 @@ func (e *env) run006(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 				return sdk.Result{}, err
 			}
 			if !searchprobe.HasUsableVectorField(idx) {
-				a.add(rc, searchprobe.MissingSchema(idx))
+				// A keyword-only index is legitimate; whether this project needs
+				// vectors is not known to the doctor, so this is never a failure.
+				a.note(searchprobe.MissingSchema(idx) + "; a keyword-only index is valid, and whether the project relies on vector search is not known")
 			} else if missing := searchprobe.UnresolvedProfiles(idx); len(missing) > 0 {
 				a.add(rc, "index "+indexName+" has vector field(s) whose vectorSearchProfile is not defined in vectorSearch.profiles: "+strings.Join(missing, ", "))
 			}
@@ -933,6 +1047,7 @@ func (e *env) run006(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 			zeroDocs := stats.DocumentCount == 0
 			zeroDocsUncertain := false
 			neverSucceeded := false
+			indexerEvidence := 0
 			for _, indexer := range c.Target.IndexerNames {
 				if !searchprobe.ValidObjectName(indexer) {
 					a.note("search connection " + c.Name + " has an indexer hint that is not a valid indexer name; it was not queried")
@@ -942,6 +1057,7 @@ func (e *env) run006(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 				if err != nil {
 					return sdk.Result{}, err
 				}
+				indexerEvidence++
 				switch st.LastResultStatus {
 				case searchprobe.ResultTransientFailure:
 					a.note("search indexer " + indexer + " last run ended in a transient failure" + itemsFailed(st))
@@ -969,6 +1085,10 @@ func (e *env) run006(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 				switch {
 				case zeroDocsUncertain:
 					a.note("search index " + indexName + " has documentCount 0 but an indexer succeeded within the last " + strconv.Itoa(searchprobe.FreshSuccessMinutes) + " minutes or is running; statistics lag, so this is not treated as a failure")
+				case indexerEvidence == 0:
+					// Index statistics are collected periodically (Search spec), so
+					// a zero count alone does not prove an empty index.
+					a.note("search index " + indexName + " has documentCount 0 but no indexer status was read; statistics are collected periodically, so an empty index is not proven")
 				case neverSucceeded:
 					a.add(rc, "search index "+indexName+" has documentCount 0 and no indexer has a successful run in its visible history")
 				default:

@@ -1,5 +1,5 @@
 id: FND-RUN-001
-version: 3
+version: 4
 group: RUN
 title: Effective project identity access
 description: >-
@@ -80,7 +80,9 @@ evidence:
     data role. Storage Blob Data Owner satisfies Storage Blob Data Contributor. Group-based assignments, deny assignments
     and ABAC conditions are not evaluated by this rule: the principalId filter returns assignments to the principal itself,
     so a role granted through a group is not seen and a deny assignment is not applied; the finding evidence says so. Key,
-    SAS and service-principal connections are Skipped. Required permission of the doctor:
+    SAS and service-principal connections are Skipped. A resource-backed connection (one that stands for a Search, Storage or Cosmos DB resource) whose
+    ARM resource ID cannot be resolved from the connection (no ARM ID in metadata.ResourceId or properties.target) is Uncertain
+    with the reason 'effective access was not checked'; it is never Pass and never omitted (loop 2, 2026-10-18). Required permission of the doctor:
     Microsoft.Authorization/roleAssignments/read at the bound resource scopes, and ARM read on the
     project and Cosmos account. Vantage point: control plane only, any network. Metadata read: IDs, role definition IDs,
     principal IDs. Never keys, documents, threads or vectors.
@@ -198,8 +200,13 @@ tests:
     - Cosmos assignment of the data contributor role on another database or a collection, or of a different (custom) role
     - Owner or Contributor covers a management-plane role (Search Service Contributor, Storage Account Contributor, Cosmos DB Operator)
     - assignment listing truncated or unreadable
+    - resource-backed connection with no resolvable ARM resource ID (reported as effective access was not checked; never a pass)
 testability: Deterministic against recorded ARM JSON fixtures; live mode needs read access to role assignments.
 notes: >-
+  Loop 2 (2026-10-18): a resource-backed connection whose ARM ID cannot be resolved is Uncertain ('effective access was not
+  checked'), closing a false pass (Foundry lead round 2 C1). Group-based assignments are not evaluated; the principalId filter
+  does not return them, so group-granted roles are not seen (Azure black belt round 2 NB6: the Cosmos container-scope case stays
+  Uncertain, by design).
   Loop 1 (2026-10-17; synced to the Go code 2026-10-18): scope-aware, GUID-based role matching (role definitions are not
   fetched); user-assigned principal; Cosmos matching by roleDefinitionId GUID and scope; group and deny assignments are not
   evaluated (confidence capped at medium). Verified 2026-10-18: the built-in role names and GUIDs in built-in-roles.md.

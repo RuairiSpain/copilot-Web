@@ -235,7 +235,8 @@ func TestRun001SkipsAndInputs(t *testing.T) {
 }
 
 func TestRun002ProofVantageAndDNSOutcomes(t *testing.T) {
-	disabled := azure.AccountNetwork{PublicNetworkAccess: "Disabled"}
+	disabled := azure.AccountNetwork{PublicNetworkAccess: "Disabled", CustomSubDomainName: "acct"}
+	approvedPE := azure.AccountNetwork{PublicNetworkAccess: "Enabled", CustomSubDomainName: "acct", PrivateEndpointConnections: 1, ApprovedPrivateEndpointConnections: 1}
 	acctHost := func(suffix string) string { return "acct" + suffix }
 	cases := []struct {
 		name     string
@@ -249,13 +250,21 @@ func TestRun002ProofVantageAndDNSOutcomes(t *testing.T) {
 		{"public IP on a private-endpoint account fails", disabled, nil, rt.VantageVNet,
 			fakeResolver{answers: map[string][]string{acctHost(".cognitiveservices.azure.com"): {"52.1.1.1"}}}, "asserted with --vantage vnet", ""},
 		{"private answers pass", disabled, nil, rt.VantageVNet, fakeResolver{}, "", ""},
-		{"NXDOMAIN with a private endpoint fails", azure.AccountNetwork{PrivateEndpointConnections: 1}, nil, rt.VantageVNet,
+		{"NXDOMAIN with a private endpoint fails", approvedPE, nil, rt.VantageVNet,
 			fakeResolver{errs: map[string]error{acctHost(".openai.azure.com"): netprobe.ErrNXDomain}}, "NXDOMAIN", ""},
 		{"timeout is skipped, never a failure", disabled, nil, rt.VantageVNet, fakeResolver{err: context.DeadlineExceeded}, "", "timeout"},
-		{"public network access enabled and no endpoint: the skip is reachable", azure.AccountNetwork{PublicNetworkAccess: "Enabled"}, nil, rt.VantageVNet, fakeResolver{}, "", "no private-endpoint-backed dependencies"},
+		{"public network access enabled and no endpoint: the skip is reachable", azure.AccountNetwork{PublicNetworkAccess: "Enabled", CustomSubDomainName: "acct"}, nil, rt.VantageVNet, fakeResolver{}, "", "private-endpoint backing was not proven for any dependency"},
+		{"a Rejected private endpoint connection is not proof", azure.AccountNetwork{PublicNetworkAccess: "Enabled", CustomSubDomainName: "acct", PrivateEndpointConnections: 1}, nil, rt.VantageVNet,
+			fakeResolver{answers: map[string][]string{acctHost(".cognitiveservices.azure.com"): {"52.1.1.1"}}}, "", "none is Approved"},
+		{"Pending and Rejected alongside an Approved one still prove it", azure.AccountNetwork{PublicNetworkAccess: "Enabled", CustomSubDomainName: "acct", PrivateEndpointConnections: 3, ApprovedPrivateEndpointConnections: 1}, nil, rt.VantageVNet,
+			fakeResolver{answers: map[string][]string{acctHost(".cognitiveservices.azure.com"): {"52.1.1.1"}}}, "approved private endpoint", ""},
+		{"CGNAT answer on a private-endpoint account is uncertain, not a failure", disabled, nil, rt.VantageVNet,
+			fakeResolver{answers: map[string][]string{acctHost(".cognitiveservices.azure.com"): {"100.64.1.1"}}}, "", "neither a private nor a clearly public"},
+		{"private endpoint account without customSubDomainName is uncertain", azure.AccountNetwork{PublicNetworkAccess: "Disabled"}, nil, rt.VantageVNet, fakeResolver{}, "", "no customSubDomainName"},
+		{"publicNetworkAccess not reported is uncertain", azure.AccountNetwork{CustomSubDomainName: "acct"}, nil, rt.VantageVNet, fakeResolver{}, "", "does not report publicNetworkAccess"},
 		{"vantage none skips with the VNet explanation", disabled, nil, rt.VantageNone, fakeResolver{}, "", "inside the VNet"},
 		{"vantage local skips", disabled, nil, rt.VantageLocal, fakeResolver{}, "", "--vantage vnet"},
-		{"unreadable account network is not proof", azure.AccountNetwork{}, &azure.UnavailableError{Capability: "accounts/read", Permission: "Microsoft.CognitiveServices/accounts/read"}, rt.VantageVNet, fakeResolver{}, "", "no private-endpoint-backed dependencies"},
+		{"unreadable account network is not proof", azure.AccountNetwork{}, &azure.UnavailableError{Capability: "accounts/read", Permission: "Microsoft.CognitiveServices/accounts/read"}, rt.VantageVNet, fakeResolver{}, "", "could not be read"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -595,8 +604,9 @@ func TestRun005MissingAgentAndConnectionsAndCaps(t *testing.T) {
 	}
 	ok := foundrydp.AgentList{Agents: []foundrydp.Agent{{Name: "support-agent", LatestStatus: "active"}}}
 	res, err = evalRule(t, "FND-RUN-005", agentDeps(fakeProjectReader{agents: ok, connections: foundrydp.ConnectionList{Connections: []foundrydp.Connection{{Name: "search-conn"}}}}), baseInput())
-	if err != nil || len(res.Findings) != 2 || !strings.Contains(joinFindings(res.Findings), "does not list bound connection") {
-		t.Fatalf("missing connections: %+v err=%v", res, err)
+	if err != nil || len(res.Findings) != 0 || res.Skipped == nil || !strings.HasPrefix(res.Skipped.Reason, rt.UncertainPrefix) ||
+		!strings.Contains(res.Skipped.Reason, "storage-conn") || !strings.Contains(res.Skipped.Reason, "cosmos-conn") || !strings.Contains(res.Skipped.Reason, "account-level connection may not appear") {
+		t.Fatalf("a bound connection missing from the project listing is uncertain, never a failure: %+v err=%v", res, err)
 	}
 	res, err = evalRule(t, "FND-RUN-005", agentDeps(fakeProjectReader{agents: ok, connections: foundrydp.ConnectionList{Truncated: true}}), baseInput())
 	if err != nil || len(res.Findings) != 0 || res.Skipped == nil || !strings.Contains(res.Skipped.Reason, "capped") {
@@ -691,8 +701,9 @@ func TestRun006IndexSchemaAndProfiles(t *testing.T) {
 		t.Fatalf("res=%+v err=%v", res, err)
 	}
 	d = searchDeps(fakeSearch{index: searchprobe.Index{Name: "knowledge"}, stats: searchprobe.Stats{DocumentCount: 5}}, azure.ConnectionTarget{IndexNames: []string{"knowledge"}})
-	if res, err = evalRule(t, "FND-RUN-006", d, baseInput()); err != nil || len(res.Findings) != 1 || !strings.Contains(res.Findings[0].Evidence, "lacks a vector field") {
-		t.Fatalf("res=%+v err=%v", res, err)
+	if res, err = evalRule(t, "FND-RUN-006", d, baseInput()); err != nil || len(res.Findings) != 0 || res.Skipped == nil ||
+		!strings.HasPrefix(res.Skipped.Reason, rt.UncertainPrefix) || !strings.Contains(res.Skipped.Reason, "keyword-only index is valid") {
+		t.Fatalf("a keyword-only index is uncertain, never a failure: res=%+v err=%v", res, err)
 	}
 }
 
@@ -909,7 +920,7 @@ func TestEnvCachesAndErrors(t *testing.T) {
 	if err != nil || len(conns) == 0 || len(names) < 3 {
 		t.Fatalf("boundConnections conns=%+v names=%v err=%v", conns, names, err)
 	}
-	if got := e.agentNames(&sdk.Input{AzureYAML: nil}); got != nil {
+	if got := e.agentRefs(&sdk.Input{AzureYAML: nil}); got != nil {
 		t.Fatalf("expected nil agent names, got %v", got)
 	}
 }
@@ -1151,6 +1162,7 @@ func (staticCred) Token(context.Context, string) (azure.AccessToken, error) {
 func baseDeps() Deps {
 	return Deps{
 		FoundryMgmt: fakeMgmt{
+			net:     azure.AccountNetwork{CustomSubDomainName: "acct"},
 			project: project(),
 			hosts: []azure.CapabilityHost{{
 				ID: "host1", Name: "default", ProvisioningState: "Succeeded",

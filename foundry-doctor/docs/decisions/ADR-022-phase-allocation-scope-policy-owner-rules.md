@@ -47,3 +47,7 @@ waives it with a dated reason; silence does not waive it.
 - ADR-021 (e) refers to this ADR instead of "when the lead decides".
 - The Phase 2 hand-off DoD table shows the item as partly met and as a release gate.
 - Phase 9 / v1 hand-off must audit the four kinds against this ADR.
+
+## Amendment (2026-10-18)
+
+The Phase 3 live checks of FND-IDN-002 and FND-NET-002 were not delivered in Phase 3. ADR-023 moves their implementation to Phase 8, corrects the stated reason (FND-IDN-002 `properties.scope` is verified; only the FND-NET-002 subnet path is unverified), and keeps the v1 release gate. The table above shows the original allocation; ADR-023 supersedes it for those two rows.

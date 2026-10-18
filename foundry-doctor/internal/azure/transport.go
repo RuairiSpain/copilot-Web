@@ -56,7 +56,8 @@ type AllowedOperation struct {
 	// endpoint scope.
 	TokenScope string
 	// QueryKeys lists the query parameters (besides api-version) the operation
-	// may carry. Empty means the default set (allowedQueryKey).
+	// may carry. A nil slice means the default set (allowedQueryKey); a non-nil
+	// empty slice means the operation takes no query parameter at all.
 	QueryKeys []string
 }
 
@@ -85,6 +86,12 @@ var ErrDecode = errors.New("azure: response decode failed")
 
 func (o operation) withKeys(keys ...string) operation {
 	o.QueryKeys = keys
+	return o
+}
+
+// withNoQuery declares that the operation accepts no query parameter.
+func (o operation) withNoQuery() operation {
+	o.QueryKeys = []string{}
 	return o
 }
 
@@ -226,11 +233,13 @@ func logQueryOp() operation {
 	o.Origin = audienceLogAnalytics
 	o.TokenScope = logAnalyticsScope
 	o.body = validateLogQueryBody
-	return o
+	// The Logs query API carries the query in the body and its version in the
+	// path: no query-string key is allowed.
+	return o.withNoQuery()
 }
 
 func (o operation) queryKeyAllowed(k string) bool {
-	if len(o.QueryKeys) == 0 {
+	if o.QueryKeys == nil {
 		return allowedQueryKey(k)
 	}
 	for _, a := range o.QueryKeys {

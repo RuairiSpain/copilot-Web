@@ -45,8 +45,16 @@ func ExecRunner(ctx context.Context, name string, args ...string) ([]byte, error
 	if err != nil {
 		return nil, err
 	}
-	return exec.CommandContext(ctx, path, args...).Output()
+	cmd := exec.CommandContext(ctx, path, args...)
+	// A child that ignores the kill, or a grandchild that keeps the output pipe
+	// open, must not keep Output blocked after the context ends.
+	cmd.WaitDelay = execWaitDelay
+	return cmd.Output()
 }
+
+// execWaitDelay bounds how long Output waits for the child's pipes after the
+// context is done (os/exec Cmd.WaitDelay).
+const execWaitDelay = 2 * time.Second
 
 type cliSource struct {
 	name string

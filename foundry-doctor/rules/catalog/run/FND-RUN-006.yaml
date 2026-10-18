@@ -1,5 +1,5 @@
 id: FND-RUN-006
-version: 4
+version: 5
 group: RUN
 title: Search index/documents/vector/indexer health
 description: >-
@@ -50,8 +50,14 @@ evidence:
     product opinion, no source states the statistics lag; it is measured against the latest successful execution end
     time in lastResult or the visible executionHistory). A zero count where an indexer has no successful run in its
     visible history is a Fail that says so explicitly ("no indexer has a successful run in its visible history"; the
-    history is a bounded window, not proof of never). A zero count with no indexer hint, or whose last success is older
-    than the window, is a Fail. (3) GET
+    history is a bounded window, not proof of never). A zero count with no indexer evidence at all (no indexer hint, or
+    no indexer status readable) is Uncertain, not Fail, because the statistics lag (loop 2); a zero count whose last
+    successful indexer run is older than the window is a Fail. A keyword-only index (no vector fields) is not a
+    Fail: absence of vector fields is not a defect unless the user-supplied expected schema requires them.
+    Limitation (loop 2): the rule is effectively inert on a standard project. The index and indexer name hints are
+    UNVERIFIED connection metadata keys, so on a standard project no index is named and every Search connection is
+    Skipped (input-unavailable). Exit criterion: a real input source for the index and indexer names (a runtime flag or
+    the agent definition) is added and verified; until then the rule must not be read as evidence that Search is healthy. (3) GET
     /indexers('{indexer}')/search.status. Real enums (VERIFIED in the 2026-04-01 spec on 2026-10-17): the indexer `status`
     is unknown, error or running; the lastResult `status` (IndexerExecutionStatus) is transientFailure, success, inProgress
     or reset. Status error is Fail. lastResult transientFailure, inProgress and reset are Uncertain (a transientFailure may retry);
@@ -151,9 +157,14 @@ tests:
   uncertain:
   - statistics stale after a recent change (documentCount 0 within the freshness window)
   - indexer lastResult success less than 60 minutes ago but documentCount is 0
+  - documentCount is 0 and no indexer evidence is available (statistics lag, so not a Fail)
+  - keyword-only index with no vector fields (not a Fail unless the expected schema requires vectors)
   - indexer status running with lastResult transientFailure, inProgress or reset
 testability: Deterministic against recorded Search REST responses; live mode needs Search RBAC and network reach.
 notes: >-
+  Loop 2 (2026-10-18): zero documentCount without indexer evidence is Uncertain; a keyword-only index is not a Fail; the rule
+  is effectively inert on a standard project until a verified input source for index and indexer names exists (Azure black
+  belt round 2 NB7; exit criterion in the evidence text).
   Loop 1 (2026-10-17): real indexer enums, no errorCode, freshness in minutes, recent success with zero documents is
   Uncertain, vector profile existence checked, connection metadata index and indexer keys are UNVERIFIED hints that the rule reads (synced to the Go code 2026-10-18). Unverified: which
   Search role covers search.stats and indexer status individually (the RBAC table groups them under object management

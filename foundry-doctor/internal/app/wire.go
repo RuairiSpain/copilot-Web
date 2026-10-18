@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net"
 	"net/http"
 	"os"
 	"path"
@@ -83,6 +84,9 @@ type Options struct {
 	RuntimeHTTP       *http.Client
 	RuntimeCredential azure.TokenCredential
 	RuntimeResolver   netprobe.Resolver
+	// RuntimeNetResolver replaces the system resolver under the production
+	// resolver (tests only).
+	RuntimeNetResolver *net.Resolver
 }
 
 // DefaultServices wires the production pipeline. It needs no Azure
@@ -113,7 +117,7 @@ func NewServices(stderr io.Writer, o Options) Services {
 		Engine:    engineAdapter{cat: cat, azd: azd, adapter: store},
 		Preflight: preflightEngine{cat: cat, azd: azd, getenv: getenv},
 		Runtime: runtimeEngine{cat: cat, azd: azd, getenv: getenv, newClient: o.RuntimeClient,
-			httpClient: o.RuntimeHTTP, cred: o.RuntimeCredential, resolver: o.RuntimeResolver},
+			httpClient: o.RuntimeHTTP, cred: o.RuntimeCredential, resolver: o.RuntimeResolver, netResolver: o.RuntimeNetResolver},
 		Baseline:  baselineFilter{},
 		Suppress:  suppressFilter{},
 		Reporter:  reportAdapter{},

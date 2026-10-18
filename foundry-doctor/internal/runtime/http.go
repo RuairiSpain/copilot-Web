@@ -21,12 +21,33 @@ const (
 	maxRetryAfter    = 30 * time.Second
 )
 
+// ErrRequestRejected marks a request DoJSON refused before sending anything:
+// a method outside the read-only list, a non-https URL, or a missing host
+// suffix. It is a defect of the caller, never a property of the target.
+var ErrRequestRejected = errors.New("runtime: request rejected before it was sent")
+
+// allowedMethod reports whether DoJSON may send method. The data-plane
+// probes are reads; the Log Analytics query (a POST) goes through the Azure
+// adapter allow-list, not through DoJSON.
+func allowedMethod(method string) bool { return method == http.MethodGet }
+
 // DoJSON performs a bounded read-only HTTP request with OAuth auth and 429/5xx
-// retry semantics. It never returns response bodies in errors.
+// retry semantics. It never returns response bodies in errors. The bearer
+// token only ever goes to an https URL whose host matches expectedHostSuffix;
+// an empty suffix, a non-https URL or a method other than GET is rejected.
 func DoJSON(ctx context.Context, hc *http.Client, cred azure.TokenCredential, scope, method, rawURL, expectedHostSuffix string, body any, out any) error {
+	if !allowedMethod(method) {
+		return fmt.Errorf("%w: method %q is not allowed", ErrRequestRejected, method)
+	}
+	if strings.TrimSpace(expectedHostSuffix) == "" {
+		return fmt.Errorf("%w: no expected host suffix", ErrRequestRejected)
+	}
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return fmt.Errorf("parse url: %w", err)
+	}
+	if !strings.EqualFold(u.Scheme, "https") || u.User != nil {
+		return fmt.Errorf("%w: only https URLs without credentials are allowed", ErrRequestRejected)
 	}
 	if !hostMatchesSuffix(u.Hostname(), expectedHostSuffix) {
 		return fmt.Errorf("unexpected host %q", u.Hostname())

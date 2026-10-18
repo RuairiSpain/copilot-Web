@@ -1,5 +1,5 @@
 id: FND-RUN-004
-version: 3
+version: 4
 group: RUN
 title: Model deployment state and throttling signal
 description: >-
@@ -32,7 +32,10 @@ evidence:
     /{accountResourceId}/providers/Microsoft.Insights/metrics?api-version=2024-02-01 (allow-list operation runtime.metrics;
     query keys timespan, interval, metricnames, aggregation, top, $filter, metricnamespace and resulttype are accepted, and
     the rule sends timespan, interval, metricnames, aggregation, $filter and top). metricnames=AzureOpenAIRequests,
-    aggregation=Total, interval=PT1M (the only grain the supported-metrics table lists for these metrics), an explicit
+    aggregation=Total, interval=PT1M (Total aggregation, the dimensions ModelDeploymentName and StatusCode and the PT1M grain
+    of AzureOpenAIRequests, and the Maximum, Average and Minimum aggregations and the ModelDeploymentName dimension of
+    AzureOpenAIProvisionedManagedUtilizationV2, are VERIFIED in the azure-monitor-docs supported-metrics file
+    microsoft-cognitiveservices-accounts-metrics.md, read 2026-10-18), an explicit
     timespan of the form {startISO}/{endISO} (one hour ending now; product opinion; the doctor computes both ends, it
     does not use a relative duration), $filter=StatusCode eq '*' and ModelDeploymentName eq '*' so that the service
     splits the series by both dimensions, and top=50 (the spec says top defaults to 10 when $filter is set, so a split
@@ -40,7 +43,9 @@ evidence:
     Attribution is by the returned ModelDeploymentName dimension value only (it must be a safe resource name; otherwise
     the finding is attached to the account and says the series could not be attributed). StatusCode handling: a series
     whose StatusCode value is exactly 429 with a total above 0 (threshold 0; product opinion) is a finding for its
-    deployment. If every returned StatusCode value is a three-digit HTTP code (100 to 599) and none is 429, no throttling
+    deployment. The StatusCode VALUE domain stays UNVERIFIED: the docs describe the dimension by categories (successful,
+    clienterrors, server errors) and do not enumerate values, so in practice the 429 signal is usually Uncertain (loop 2).
+    If every returned StatusCode value is a three-digit HTTP code (100 to 599) and none is 429, no throttling
     occurred in the window (Pass for this signal). If any value is not a three-digit code and no series is identified as
     429, the result is Uncertain and names the observed values (at most 10): the Learn metric reference describes
     categories and does not enumerate the StatusCode values, so the value domain is UNVERIFIED. If the response has no
@@ -67,6 +72,15 @@ fix: |-
     }
   }
 sources:
+  - url: https://learn.microsoft.com/azure/azure-monitor/reference/supported-metrics/microsoft-cognitiveservices-accounts-metrics
+    lastVerified: "2026-10-18"
+    verifiedVia: >-
+      MicrosoftDocs/azure-monitor-docs articles/azure-monitor/reference/supported-metrics/microsoft-cognitiveservices-accounts-metrics.md
+      (local clone at commit 583ced4, ms.date 09/28/2026), read 2026-10-18
+    note: >-
+      AzureOpenAIRequests: Total (Sum), dimensions include ModelDeploymentName and StatusCode, PT1M; the description names
+      StatusCode categories (successful, clienterrors, server errors), not values.
+      AzureOpenAIProvisionedManagedUtilizationV2: Minimum, Maximum, Average; dimension ModelDeploymentName; PT1M.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
     lastVerified: "2026-10-17"
     verifiedVia: >-
@@ -147,8 +161,10 @@ tests:
     - a series cannot be attributed to a deployment (no safe ModelDeploymentName value), attached to the account
 testability: Deterministic against recorded ARM and Metrics responses; live mode needs ARM and Monitor read access.
 notes: >-
+  Loop 2 (2026-10-18): the Total aggregation for AzureOpenAIRequests, Maximum/Average/Minimum for utilisation, the
+  dimensions ModelDeploymentName and StatusCode and the PT1M grain are now VERIFIED (azure-monitor-docs, commit 583ced4,
+  ms.date 09/28/2026, file microsoft-cognitiveservices-accounts-metrics.md, read 2026-10-18). The StatusCode value domain
+  remains UNVERIFIED, so the 429 signal is usually Uncertain.
   Loop 1 (2026-10-18, synced to the Go code): AzureOpenAIRequests Total split by StatusCode and ModelDeploymentName (top=50,
-  PT1M, explicit start/end timespan, no metricnamespace), utilisation Maximum; the StatusCode value domain and the Total
-  aggregation as read from the supported-metrics reference cited in the monitor package are UNVERIFIED by the catalogue owner. Unverified: the per-metric dimension list for AzureOpenAIRequests (the docs list StatusCode and ModelDeploymentName
-  for the namespace, and the per-metric include file was not in the clone); metric retention and the exact metric
+  PT1M, explicit start/end timespan, no metricnamespace), utilisation Maximum. Unverified: the StatusCode value domain; metric retention and the exact metric
   namespace string; the built-in role needed for metric reads. The default window and threshold are product opinion.

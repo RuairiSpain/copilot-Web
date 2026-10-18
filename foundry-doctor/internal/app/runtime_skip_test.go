@@ -15,7 +15,7 @@ func TestRuntimeByDesignSkipDoesNotForceExit2(t *testing.T) {
 		want int
 	}{
 		{"not-implemented placeholder (FND-RUN-008) hid nothing", sdk.Skip{RuleID: "FND-RUN-008", Reason: sdk.SkipNotImplemented}, ExitOK},
-		{"no private-endpoint-backed dependencies hid nothing", sdk.Skip{RuleID: "FND-RUN-002", Reason: "input-unavailable: no private-endpoint-backed dependencies are in scope"}, ExitOK},
+		{"no dependency proven private-endpoint backed hid nothing", sdk.Skip{RuleID: "FND-RUN-002", Reason: "input-unavailable: no dependency is proven private-endpoint backed; private-endpoint backing was not proven for any dependency, so no DNS name was probed"}, ExitOK},
 		{"a permission gap hid a check", sdk.Skip{RuleID: "FND-RUN-001", Reason: "input-unavailable: capability roleAssignments; missing permission Microsoft.Authorization/roleAssignments/read"}, ExitUnavailable},
 		{"an internal error hid a check", sdk.Skip{RuleID: "FND-RUN-004", Reason: "uncertain: internal error: a request was refused by the read-only allow-list"}, ExitUnavailable},
 	}

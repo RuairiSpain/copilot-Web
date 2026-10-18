@@ -13,10 +13,10 @@ import (
 
 func TestHTTPErrorsAreTypedNotTextMatched(t *testing.T) {
 	for _, status := range []int{http.StatusNotFound, http.StatusBadRequest, http.StatusTeapot, http.StatusBadGateway} {
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(status)
 		}))
-		err := DoJSON(context.Background(), srv.Client(), cred{}, "scope", http.MethodGet, srv.URL, "", nil, nil)
+		err := DoJSON(context.Background(), srv.Client(), cred{}, "scope", http.MethodGet, srv.URL, "127.0.0.1", nil, nil)
 		srv.Close()
 		var he *HTTPError
 		if !errors.As(err, &he) || he.Status != status {
@@ -36,10 +36,10 @@ func TestHTTPErrorsAreTypedNotTextMatched(t *testing.T) {
 }
 
 func TestDecodeFailureIsAnInternalDecodeError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("{")) }))
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("{")) }))
 	defer srv.Close()
 	var out map[string]any
-	if err := DoJSON(context.Background(), srv.Client(), cred{}, "scope", http.MethodGet, srv.URL, "", nil, &out); !errors.Is(err, azure.ErrDecode) {
+	if err := DoJSON(context.Background(), srv.Client(), cred{}, "scope", http.MethodGet, srv.URL, "127.0.0.1", nil, &out); !errors.Is(err, azure.ErrDecode) {
 		t.Fatalf("err = %v", err)
 	}
 }

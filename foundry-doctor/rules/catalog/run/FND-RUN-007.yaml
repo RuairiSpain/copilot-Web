@@ -1,5 +1,5 @@
 id: FND-RUN-007
-version: 3
+version: 4
 group: RUN
 title: Diagnostic logs are arriving
 description: >-
@@ -55,7 +55,9 @@ evidence:
     | where TimeGenerated > ago(<window>) | summarize count() by Category. The ResourceId comparison is an upper-case
     endswith on the account suffix (AzureDiagnostics stores ResourceId in upper case; that storage form is UNVERIFIED,
     so the comparison is case-insensitive in intent and a zero-row result is judged against the traffic evidence, not on
-    its own). The response is read from the table named PrimaryResult in the tables array (the documented response example in
+    its own). Documented limit (loop 2): the endswith comparison is not scoped by subscription or resource group, so a
+    same-named account in another subscription or resource group that logs to the same workspace could mask missing logs
+    (a false pass of the log-arrival check; Azure black belt round 2 NB8). The response is read from the table named PrimaryResult in the tables array (the documented response example in
     logs/api/response-format.md names it PrimaryResult, VERIFIED 2026-10-18); any other table is ignored. The query projects only Category and a count; message,
     request, response and properties columns are never selected. Fail requires traffic in the window (any non-zero Total from the metric), the setting age known and at least two hours,
     and a total of zero rows from the AzureDiagnostics query (any row of any category counts as logs arriving). If the
@@ -165,6 +167,10 @@ tests:
   - workspace GUID (customerId) cannot be resolved from the workspace GET
 testability: Deterministic against recorded Monitor and query responses; live mode needs Monitor and workspace read access.
 notes: >-
+  Loop 2 (2026-10-18): documented limit: the KQL matches ResourceId endswith '/ACCOUNTS/<NAME>' without subscription or resource
+  group scoping, so a same-named account elsewhere that logs to the same workspace could mask missing logs. The resource name
+  is substituted into the fixed template after a strict regex check, not passed as a query parameter (ADR-006 item 7 amended,
+  ADR-021 g).
   Loop 1 (2026-10-17, synced to the Go code 2026-10-18; logQuery bypass removed, ADR-021 g closed): workspace GUID resolution, destination type from the setting, PrimaryResult table, endswith KQL,
   resource-specific is Uncertain. Unverified: Log Analytics query REST spec file and required workspace role; the stable API version for diagnostic settings
   (only 2021-05-01-preview and 2017-05-01-preview were found); resource-specific table names for Foundry. Defender and Advisor

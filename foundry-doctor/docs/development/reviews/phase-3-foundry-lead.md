@@ -22,3 +22,19 @@ N1-N9: recorded in the reviewer report held by the parent session; each is track
 ## Status
 
 All of B1-B7 and N1-N9: **in remediation, fix loop 1** (2026-10-17). Catalogue changes made by the catalogue owner in loop 1: FND-RUN-001..007 evidence, limitations, tests, `apiVersions` and `lastVerified` (each `version` raised by one). The Go behaviour changes are owned by the Go agent. The ADR-022 live checks FND-IDN-002 and FND-NET-002 are not delivered in Phase 3 (see the hand-off).
+
+
+## Round 2 (2026-10-18)
+
+Reviewer: `foundry-lead`. Verdict: **ACCEPT with conditions**; four conditions are **blocking**. This section is a summary recorded by the catalogue owner from the verdict relayed by the parent session; the full report is held by the parent session. Status below is 'fixed in loop 2, pending re-review': the Go agent, the catalogue or the documents were changed; the reviewer has not confirmed any item.
+
+### Blocking conditions
+
+1. **C1 FND-RUN-001 false pass with no resource ID.** A resource-backed connection with no resolvable ARM resource ID was not checked and could pass. Fixed in loop 2, pending re-review: the rule reports uncertain, 'effective access was not checked' (catalogue FND-RUN-001 v4).
+2. **C2 FND-RUN-002 unreadable account masked as by-design.** An unreadable Foundry account network read was reported as the by-design 'nothing in scope'. Fixed in loop 2, pending re-review: uncertain or skipped (FND-RUN-002 v4).
+3. **C3 FND-RUN-005 agent name assumption.** The agent name was assumed to be the azure.yaml service name. Fixed in loop 2, pending re-review: the name is resolved from the agent definition (azd deploys with `agentDef.Name`); otherwise 'not listed' is uncertain and names the assumption (FND-RUN-005 v4).
+4. **C4 Hand-off and ADR gaps.** (a) recorded data-plane fixtures, (b) integration tests and timeout, throttling and partial-permission tests, (c) FND-IDN-002 and (d) FND-NET-002 live checks left allocated to Phase 3 but not delivered. Fixed in loop 2, pending re-review: hand-off DoD rows, the ADR-021 (d) Phase 3 clause, and ADR-023 (implementing phase 8, corrected reasons, v1 release gate kept).
+
+### Non-blocking findings
+
+N1 to N11: recorded in the reviewer report held by the parent session; each is tracked as 'fixed in loop 2, pending re-review' in `docs/development/hand-offs/phase-3.md`.

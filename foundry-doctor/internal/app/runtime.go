@@ -147,10 +147,7 @@ func runtimeRun(ctx context.Context, svc Services, req RuntimeRequest, stdout io
 		return strings.Compare(a.Reason, b.Reason)
 	})
 	for i := range skips {
-		// A skip that hid a check makes the run exit 2. A by-design skip (for
-		// example the not-implemented FND-RUN-008 placeholder that FND-RUN-*
-		// selects, or "no private-endpoint-backed dependencies") hid nothing.
-		skips[i].Required = rules.ClassifySkip(skips[i]) == rules.SkipHidesCheck
+		skips[i].Required = runtimeSkipRequired(skips[i])
 	}
 	code := ExitCode(Outcome{Findings: shown, Skips: skips, FailOn: req.FailOn, Strict: req.Strict})
 	var buf bytes.Buffer
@@ -172,6 +169,25 @@ func runtimeRun(ctx context.Context, svc Services, req RuntimeRequest, stdout io
 	return code, nil
 }
 
+// runtimeSkipRequired applies the same rule as preflight: a skip is Required
+// (exit 2) only when a check could not run. An "uncertain" outcome ran and could
+// not reach a verdict: it is reported, counts against readiness, exits 0 and
+// exits 3 under --strict. A by-design skip (for example the not-implemented
+// FND-RUN-008 placeholder that FND-RUN-* selects) hid nothing and never
+// changes the exit code. An uncertain outcome that reports a defect of this
+// tool ("uncertain: internal error ...") did not run the check, so it is still
+// Required.
+func runtimeSkipRequired(s sdk.Skip) bool {
+	if rules.ClassifySkip(s) == rules.SkipByDesign {
+		return false
+	}
+	if rules.ReasonHead(s.Reason) != "uncertain" {
+		return true
+	}
+	_, detail, _ := strings.Cut(s.Reason, ":")
+	return strings.HasPrefix(strings.TrimSpace(detail), "internal error")
+}
+
 type runtimeEngine struct {
 	cat       *lazyCatalog
 	azd       func(context.Context) string
@@ -181,6 +197,9 @@ type runtimeEngine struct {
 	httpClient *http.Client
 	cred       azure.TokenCredential
 	resolver   netprobe.Resolver
+	// netResolver replaces the system resolver inside the production resolver
+	// (tests use a loopback DNS stub to get real *net.DNSError values).
+	netResolver *net.Resolver
 }
 
 func (e runtimeEngine) Run(ctx context.Context, in RuntimeInput) (RunOutput, error) {
@@ -214,7 +233,7 @@ func (e runtimeEngine) Run(ctx context.Context, in RuntimeInput) (RunOutput, err
 	if e.httpClient != nil {
 		httpClient = e.httpClient
 	}
-	var resolver netprobe.Resolver = runtimeResolver{}
+	var resolver netprobe.Resolver = productionResolver(e.netResolver)
 	if e.resolver != nil {
 		resolver = e.resolver
 	}
@@ -270,8 +289,11 @@ func (e runtimeEngine) Run(ctx context.Context, in RuntimeInput) (RunOutput, err
 	return RunOutput{Findings: rep.Findings, Skipped: rep.Skipped, Evaluated: rep.Evaluated}, nil
 }
 
-type runtimeResolver struct{}
-
-func (runtimeResolver) LookupHost(ctx context.Context, host string) ([]string, error) {
-	return net.DefaultResolver.LookupHost(ctx, host)
+// productionResolver is the resolver the runtime rules use. It must be
+// netprobe.NetResolver: that maps "no such host" to ErrNXDomain and a DNS
+// timeout to context.DeadlineExceeded. A bare net.Resolver would hand the rules
+// raw *net.DNSError values they do not recognise, so an NXDOMAIN would be
+// skipped as "resolver error" and a timeout would never read as a timeout.
+func productionResolver(r *net.Resolver) netprobe.Resolver {
+	return netprobe.NetResolver{Resolver: r}
 }

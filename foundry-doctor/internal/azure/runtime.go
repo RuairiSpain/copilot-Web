@@ -68,15 +68,32 @@ func (a *Adapter) GetAccountNetwork(ctx context.Context, subscriptionID, resourc
 	}
 	var resp struct {
 		Properties struct {
-			PublicNetworkAccess        string            `json:"publicNetworkAccess"`
-			PrivateEndpointConnections []json.RawMessage `json:"privateEndpointConnections"`
+			PublicNetworkAccess        string `json:"publicNetworkAccess"`
+			CustomSubDomainName        string `json:"customSubDomainName"`
+			PrivateEndpointConnections []struct {
+				Properties struct {
+					State struct {
+						Status string `json:"status"`
+					} `json:"privateLinkServiceConnectionState"`
+				} `json:"properties"`
+			} `json:"privateEndpointConnections"`
 		} `json:"properties"`
 	}
 	path := subPath(subscriptionID, "/resourceGroups/"+resourceGroup+"/providers/Microsoft.CognitiveServices/accounts/"+account)
 	if err := a.c.get(ctx, path, nil, &resp); err != nil {
 		return AccountNetwork{}, err
 	}
-	return AccountNetwork{PublicNetworkAccess: resp.Properties.PublicNetworkAccess, PrivateEndpointConnections: len(resp.Properties.PrivateEndpointConnections)}, nil
+	out := AccountNetwork{
+		PublicNetworkAccess:        resp.Properties.PublicNetworkAccess,
+		CustomSubDomainName:        strings.ToLower(strings.TrimSpace(resp.Properties.CustomSubDomainName)),
+		PrivateEndpointConnections: len(resp.Properties.PrivateEndpointConnections),
+	}
+	for _, pe := range resp.Properties.PrivateEndpointConnections {
+		if strings.EqualFold(strings.TrimSpace(pe.Properties.State.Status), "Approved") {
+			out.ApprovedPrivateEndpointConnections++
+		}
+	}
+	return out, nil
 }
 
 func (a *Adapter) ListProjectCapabilityHosts(ctx context.Context, subscriptionID, resourceGroup, account, project string) ([]CapabilityHost, error) {

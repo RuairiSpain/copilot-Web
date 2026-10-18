@@ -82,7 +82,7 @@ func contractRoutes() map[string]string {
 	const meta = `"type":"Microsoft.CognitiveServices/accounts/projects/connections"`
 	return map[string]string{
 		m + acctPath + "/projects/proj":                 `{"id":"` + acctPath + `/projects/proj","name":"proj","identity":{"type":"SystemAssigned","principalId":"` + principalID + `"},"properties":{"provisioningState":"Succeeded"}}`,
-		m + acctPath:                                    `{"id":"` + acctPath + `","name":"acct","properties":{"publicNetworkAccess":"Disabled","privateEndpointConnections":[{"id":"pe1"}]}}`,
+		m + acctPath:                                    `{"id":"` + acctPath + `","name":"acct","properties":{"publicNetworkAccess":"Disabled","customSubDomainName":"acct","privateEndpointConnections":[{"id":"pe1","properties":{"privateLinkServiceConnectionState":{"status":"Approved"}}}]}}`,
 		m + acctPath + "/projects/proj/capabilityHosts": `{"value":[{"id":"h1","name":"default","properties":{"provisioningState":"Succeeded","storageConnections":["storage-conn"],"threadStorageConnections":["cosmos-conn"],"vectorStoreConnections":["search-conn"]}}]}`,
 		m + acctPath + "/projects/proj/connections": `{"value":[
 		  {"id":"c1","name":"search-conn",` + meta + `,"properties":{"authType":"AAD","category":"CognitiveSearch","target":"https://searchsvc.search.windows.net","peRequirement":"Required","peStatus":"Active","metadata":{"ResourceId":"` + searchID + `","index":"knowledge","indexer":"load-knowledge"}}},

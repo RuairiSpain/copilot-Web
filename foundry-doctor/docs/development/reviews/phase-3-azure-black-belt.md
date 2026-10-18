@@ -23,3 +23,22 @@ N1-N9: recorded in the reviewer report held by the parent session; each is track
 ## Status
 
 All of B1a, B1b, B2-B7 and N1-N9: **in remediation, fix loop 1** (2026-10-17). The Go agent owns the behaviour and allow-list changes. The catalogue owner updated the rule YAML, `docs/permissions-matrix.md` (ARM runtime rows verified against the stable spec; new rows for the Foundry v1 data plane, the Search data plane and the new allow-list operations), `docs/runtime.md` and the hand-off. ADR-021 (g) stays open until the Go patch removing the `logQuery` bypass is confirmed.
+
+
+## Round 2 (2026-10-18)
+
+Reviewer: `azure-black-belt`. Verdict: **ACCEPT with conditions**; all conditions are **non-blocking**. This section is a summary recorded by the catalogue owner from the verdict relayed by the parent session; the full report is held by the parent session. Status is 'fixed in loop 2, pending re-review' except where stated.
+
+| Id | Condition | Status |
+|---|---|---|
+| C1 | No data-plane responses recorded from a live tenant | open by design: ADR-021 (d) Phase 3 clause records the exit criterion (first hand-off after a test tenant exists) |
+| NB1 | DNS resolver wiring left the NXDOMAIN branch dead | fixed in loop 2, pending re-review |
+| NB2 | Use `customSubDomainName` for FQDNs; only Approved private endpoint connections are proof | fixed in loop 2, pending re-review (FND-RUN-002 v4) |
+| NB3 | Definition of a private address | fixed in loop 2, pending re-review (clearly public versus other; exact definition stays UNVERIFIED) |
+| NB4 | Environment context-error cache | fixed in loop 2, pending re-review |
+| NB5 | `DoJSON` hardening (host suffix, https, GET only) and `WaitDelay` | fixed in loop 2, pending re-review |
+| NB6 | RBAC group noise and Cosmos container scope | kept uncertain, documented (FND-RUN-001 notes); not a fix |
+| NB7 | FND-RUN-006 zero documents | fixed in loop 2, pending re-review (FND-RUN-006 v5) |
+| NB8 | FND-RUN-007 KQL scoping | documented limit (FND-RUN-007 v4); not a fix |
+| NB9 | Permissions matrix drift | fixed in loop 2, pending re-review |
+| NB10 | Tests | fixed in loop 2, pending re-review |

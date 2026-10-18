@@ -799,8 +799,18 @@ type AccountNetwork struct {
 	// PublicNetworkAccess is properties.publicNetworkAccess (Enabled or Disabled);
 	// empty when the service did not report it.
 	PublicNetworkAccess string
-	// PrivateEndpointConnections counts properties.privateEndpointConnections.
+	// PrivateEndpointConnections counts properties.privateEndpointConnections
+	// in any state.
 	PrivateEndpointConnections int
+	// ApprovedPrivateEndpointConnections counts those whose
+	// properties.privateLinkServiceConnectionState.status is Approved
+	// (PrivateEndpointServiceConnectionStatus: Pending, Approved, Rejected).
+	// Only an Approved connection is proof of private-endpoint backing.
+	ApprovedPrivateEndpointConnections int
+	// CustomSubDomainName is properties.customSubDomainName, the real
+	// subdomain of the account's data-plane host names; it can differ from the
+	// ARM account name. Empty when the service did not report it.
+	CustomSubDomainName string
 }
 
 // RuntimeFoundry reads the management metadata used by RUN-001/002/003/004.

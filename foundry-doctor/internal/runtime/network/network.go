@@ -8,6 +8,8 @@ import (
 	"context"
 	"errors"
 	"net"
+	"net/netip"
+	"strings"
 	"time"
 
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime"
@@ -61,22 +63,70 @@ func ResolvePrivate(ctx context.Context, r Resolver, vantage runtime.Vantage, ho
 		}
 		return DNSResult{State: runtime.StateUncertain, Reason: "name resolves to no addresses " + VantageNote(vantage) + "; private-endpoint backing is not proven"}
 	}
-	allPrivate := true
+	allPrivate, anyPublic := true, false
 	for _, ans := range answers {
-		ip := net.ParseIP(ans)
-		if ip == nil || !ip.IsPrivate() {
+		switch classify(ans) {
+		case addrPrivate:
+		case addrPublic:
+			allPrivate, anyPublic = false, true
+		default:
 			allPrivate = false
-			break
 		}
 	}
 	switch {
 	case allPrivate:
 		return DNSResult{State: runtime.StatePass, Answers: answers}
-	case peBacked:
-		return DNSResult{State: runtime.StateFail, Answers: answers, Reason: "one or more answers are not private IP addresses " + VantageNote(vantage) + " although the dependency is private-endpoint backed"}
-	default:
+	case anyPublic && peBacked:
+		return DNSResult{State: runtime.StateFail, Answers: answers, Reason: "one or more answers are public IP addresses " + VantageNote(vantage) + " although the dependency is private-endpoint backed"}
+	case anyPublic:
 		return DNSResult{State: runtime.StateUncertain, Answers: answers, Reason: "an answer is a public IP address " + VantageNote(vantage) + "; private-endpoint backing is not proven, so this is not treated as a failure"}
+	default:
+		return DNSResult{State: runtime.StateUncertain, Answers: answers, Reason: "an answer is neither a private nor a clearly public IP address (for example shared 100.64.0.0/10, loopback, link-local, reserved or unparseable) " + VantageNote(vantage) + "; this is not treated as a failure"}
 	}
+}
+
+type addrClass int
+
+const (
+	addrOther   addrClass = iota // not private, not clearly public: never a failure
+	addrPrivate                  // RFC 1918 or IPv6 ULA (fc00::/7)
+	addrPublic                   // clearly public, global unicast
+)
+
+// reservedPrefixes are non-private ranges that are not publicly routable and so
+// are never evidence of a public endpoint. IANA special-purpose registries.
+var reservedPrefixes = func() []netip.Prefix {
+	var out []netip.Prefix
+	for _, s := range []string{
+		"0.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16",
+		"192.0.0.0/24", "192.0.2.0/24", "198.18.0.0/15", "198.51.100.0/24",
+		"203.0.113.0/24", "224.0.0.0/4", "240.0.0.0/4",
+		"::/128", "::1/128", "64:ff9b::/96", "100::/64", "2001:db8::/32", "fe80::/10", "ff00::/8",
+	} {
+		out = append(out, netip.MustParsePrefix(s))
+	}
+	return out
+}()
+
+// classify says whether ans is private, clearly public, or neither.
+func classify(ans string) addrClass {
+	addr, err := netip.ParseAddr(strings.TrimSpace(ans))
+	if err != nil {
+		return addrOther
+	}
+	addr = addr.Unmap().WithZone("")
+	if addr.IsPrivate() {
+		return addrPrivate
+	}
+	if !addr.IsGlobalUnicast() || addr.IsLoopback() || addr.IsLinkLocalUnicast() || addr.IsMulticast() {
+		return addrOther
+	}
+	for _, p := range reservedPrefixes {
+		if p.Contains(addr) {
+			return addrOther
+		}
+	}
+	return addrPublic
 }
 
 // NetResolver adapts net.Resolver to Resolver.

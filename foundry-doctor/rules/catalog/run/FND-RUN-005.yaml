@@ -1,5 +1,5 @@
 id: FND-RUN-005
-version: 3
+version: 4
 group: RUN
 title: Agent tools/connections respond
 description: >-
@@ -47,18 +47,23 @@ evidence:
     paging with `after` (the last_id of the page) while has_more is true, up to a fixed page cap, and a list that is still
     has_more at the cap is Uncertain. Each agent object carries `versions.latest`, the latest version; the rule reads the
     version and its status from it.
-    (2) Agent status model (what the code reads): each agent named in azure.yaml (host azure.ai.agent) is matched by name,
+    (2) Agent name assumption (loop 2): azd deploys the agent under agentDef.Name from the agent definition
+    (azure.ai.agents service_target_agent.go, azure-dev commit afe4b2b, read 2026-10-18), which is not necessarily the azure.yaml
+    service name. The rule resolves the agent name from the agent definition when it is readable; when it is not
+    readable, the azure.yaml service name is used as an ASSUMPTION and an agent 'not listed' is Uncertain, naming that
+    assumption, never Fail. Agent status model (what the code reads): each agent so named (host azure.ai.agent) is matched by name,
     case-insensitive, against the listing, and its versions.latest.status is read from the listing; the rule does not issue
     the per-version GET. AgentVersionStatus is one of creating, active, failed, deleting, deleted (lower case; VERIFIED
     in the v1 OpenAPI document 2026-10-18). An absent or empty status is treated as active: the spec states that non-hosted
     agents default to active; this reading is UNVERIFIED for hosted agents that omit the field. active is healthy;
     creating is Uncertain; failed, deleting or deleted is Fail; any other value is Uncertain (unrecognised). An agent whose
     `state` is disabled (AgentState enabled|disabled, VERIFIED; the endpoint then rejects requests) is Uncertain. An agent
-    that is not in the listing is Fail, unless the listing was capped (the page cap was reached with has_more still
+    that is not in the listing is Fail only when its name was resolved from the agent definition, unless the listing was capped (the page cap was reached with has_more still
     true), in which case it is Uncertain with a note that the agent was not found in the first N agents. (3) GET {projectEndpoint}/connections: the response is a PagedConnection object whose items are in `value`
     (not `data`) with an optional `nextLink`; the rule follows nextLink up to the same page cap and reads only connection names; each connection bound by the
-    capability host (see FND-RUN-003) that is absent from the listing is Fail, unless the listing was capped, in which case
-    it is Uncertain. The Connection schema in the same document also lists a `credentials` property; the rule never
+    capability host (see FND-RUN-003) that is absent from the project listing is Uncertain: a bound account-level
+    connection may not appear in the project /connections listing (UNVERIFIED either way), so 'not listed' is never a
+    Fail on its own. A listing that was capped is also Uncertain. The Connection schema in the same document also lists a `credentials` property; the rule never
     reads or retains it and never calls the credentials operation. Required permission: the azd extension comments that
     agent list and get are Reader-level operations, and the Foundry docs assign Foundry User on the project to developers
     who create or edit agents; the exact data action was not verified. Vantage point: the project endpoint must be
@@ -75,6 +80,13 @@ fix: |-
     support-agent:
       host: azure.ai.agent
 sources:
+  - url: https://github.com/Azure/azure-dev/blob/main/cli/azd/extensions/azure.ai.agents/internal/project/service_target_agent.go
+    lastVerified: "2026-10-18"
+    verifiedVia: >-
+      Azure/azure-dev local clone at commit afe4b2b (2026-10-04), cli/azd/extensions/azure.ai.agents/internal/project/service_target_agent.go, read 2026-10-18
+    note: >-
+      Deploy path creates and updates the agent by agentDef.Name (the name in the agent definition), not by the azure.yaml
+      service name. Branch URL, not commit-pinned.
   - url: https://github.com/Azure/azure-dev/blob/main/cli/azd/extensions/azure.ai.agents/internal/cmd/doctor/checks_agent_status.go
     lastVerified: "2026-10-04"
     verifiedVia: >-
@@ -134,8 +146,7 @@ implementation:
 tests:
   positive:
     - agent versions.latest status failed, deleting or deleted
-    - agent named in azure.yaml not in the (complete) listing
-    - referenced connection name absent from the project (connection list read from `value`, including a second page)
+    - agent whose name was resolved from the agent definition is not in the (complete) listing
   negative:
     - endpoint reachable, all agent versions active, all referenced connections listed (connections read from `value`)
     - agent list with has_more true is followed to the last page and the versions are read from versions.latest
@@ -148,8 +159,13 @@ tests:
     - agent state disabled
     - agent or connection not found in a capped listing (page cap reached with has_more or nextLink still set)
     - tool responsiveness requested (not probed by design)
+    - agent name taken from the azure.yaml service name (agent definition not readable) and not in the listing (names the assumption)
+    - referenced connection name absent from the project /connections listing (a bound account-level connection may not appear there)
 testability: Deterministic against a fake project endpoint; live mode needs data-plane read access.
 notes: >-
+  Loop 2 (2026-10-18): the agent name is resolved from the agent definition (azd uses agentDef.Name), with an Uncertain
+  'not listed' naming the assumption otherwise (Foundry lead round 2 C3); a missing connection in the project listing is
+  Uncertain because account-level connection visibility in that listing is UNVERIFIED.
   Loop 1 (2026-10-17): response shapes, paging, limit and status values taken from the v1 OpenAPI document (list
   `data`/`has_more`, connections `value`/`nextLink`, `versions.latest`, status creating|active|failed|deleting|deleted).
   Unverified: the data action that a Reader or Foundry User needs; that every hosted and prompt agent reports `status`;

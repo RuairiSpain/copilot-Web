@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime"
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/network/dnsstub"
 )
 
 type fakeResolver struct {
@@ -35,7 +36,18 @@ func TestResolvePrivate(t *testing.T) {
 		{"public answer on a private-endpoint dependency fails", fakeResolver{answers: []string{"52.1.1.1"}}, runtime.VantageVNet, true, runtime.StateFail, "private-endpoint backed"},
 		{"public answer without proof is uncertain", fakeResolver{answers: []string{"52.1.1.1"}}, runtime.VantageVNet, false, runtime.StateUncertain, "not proven"},
 		{"mixed answers on a private-endpoint dependency fail", fakeResolver{answers: []string{"10.0.0.4", "52.1.1.1"}}, runtime.VantageVNet, true, runtime.StateFail, ""},
-		{"unparseable answer counts as not private", fakeResolver{answers: []string{"not-an-ip"}}, runtime.VantageVNet, true, runtime.StateFail, ""},
+		{"unparseable answer is uncertain, not a failure", fakeResolver{answers: []string{"not-an-ip"}}, runtime.VantageVNet, true, runtime.StateUncertain, "neither a private nor a clearly public"},
+		{"CGNAT 100.64.0.0/10 is not clearly public", fakeResolver{answers: []string{"100.64.1.1"}}, runtime.VantageVNet, true, runtime.StateUncertain, "neither a private nor a clearly public"},
+		{"loopback is not clearly public", fakeResolver{answers: []string{"127.0.0.1"}}, runtime.VantageVNet, true, runtime.StateUncertain, "neither"},
+		{"link-local is not clearly public", fakeResolver{answers: []string{"169.254.10.4"}}, runtime.VantageVNet, true, runtime.StateUncertain, "neither"},
+		{"IPv6 loopback is not clearly public", fakeResolver{answers: []string{"::1"}}, runtime.VantageVNet, true, runtime.StateUncertain, "neither"},
+		{"IPv6 link-local is not clearly public", fakeResolver{answers: []string{"fe80::1"}}, runtime.VantageVNet, true, runtime.StateUncertain, "neither"},
+		{"documentation range is not clearly public", fakeResolver{answers: []string{"203.0.113.7"}}, runtime.VantageVNet, true, runtime.StateUncertain, "neither"},
+		{"IPv6 ULA is private", fakeResolver{answers: []string{"fd00::4"}}, runtime.VantageVNet, true, runtime.StatePass, ""},
+		{"172.16/12 is private", fakeResolver{answers: []string{"172.20.0.4"}}, runtime.VantageVNet, true, runtime.StatePass, ""},
+		{"public IPv6 on a private-endpoint dependency fails", fakeResolver{answers: []string{"2603:1030::1"}}, runtime.VantageVNet, true, runtime.StateFail, "public IP"},
+		{"private plus CGNAT is uncertain", fakeResolver{answers: []string{"10.0.0.4", "100.100.0.1"}}, runtime.VantageVNet, true, runtime.StateUncertain, "neither"},
+		{"CGNAT without proof is uncertain too", fakeResolver{answers: []string{"100.64.1.1"}}, runtime.VantageVNet, false, runtime.StateUncertain, "neither"},
 		{"NXDOMAIN with a private endpoint fails", fakeResolver{err: ErrNXDomain}, runtime.VantageVNet, true, runtime.StateFail, "NXDOMAIN"},
 		{"NXDOMAIN without proof is uncertain", fakeResolver{err: ErrNXDomain}, runtime.VantageVNet, false, runtime.StateUncertain, "NXDOMAIN"},
 		{"wrapped NXDOMAIN is recognised", fakeResolver{err: errors.Join(errors.New("ctx"), ErrNXDomain)}, runtime.VantageVNet, true, runtime.StateFail, "NXDOMAIN"},
@@ -109,4 +121,38 @@ func TestMapLookupError(t *testing.T) {
 	if mapLookupError(plain) != plain {
 		t.Error("non-DNS errors must pass through")
 	}
+}
+
+// The production resolver must turn real resolver errors into the states the
+// rules rely on: NXDOMAIN -> ErrNXDomain, a lookup that runs out of time ->
+// context.DeadlineExceeded. The errors come from the Go resolver talking to a
+// loopback DNS stub, not from hand-built values.
+func TestNetResolverMapsRealDNSErrors(t *testing.T) {
+	t.Run("NXDOMAIN", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_, err := NetResolver{Resolver: dnsstub.NXDomain(t)}.LookupHost(ctx, "missing.example.test.")
+		if !errors.Is(err, ErrNXDomain) {
+			t.Fatalf("err = %v, want ErrNXDomain", err)
+		}
+		got := ResolvePrivate(ctx, NetResolver{Resolver: dnsstub.NXDomain(t)}, runtime.VantageVNet, "missing.example.test.", true)
+		if got.State != runtime.StateFail {
+			t.Fatalf("NXDOMAIN on a PE-backed dependency: %+v", got)
+		}
+	})
+	t.Run("timeout", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+		defer cancel()
+		_, err := NetResolver{Resolver: dnsstub.Silent(t)}.LookupHost(ctx, "slow.example.test.")
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("err = %v, want context.DeadlineExceeded", err)
+		}
+		if errors.Is(err, ErrNXDomain) {
+			t.Fatal("a timeout must never read as NXDOMAIN")
+		}
+		got := ResolvePrivate(context.Background(), fakeResolver{err: err}, runtime.VantageVNet, "slow.example.test.", true)
+		if got.State != runtime.StateSkipped {
+			t.Fatalf("timeout must be skipped: %+v", got)
+		}
+	})
 }

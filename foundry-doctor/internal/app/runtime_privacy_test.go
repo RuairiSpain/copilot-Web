@@ -67,7 +67,7 @@ func pvRoutes() map[string]string {
 	m := "GET management.test"
 	return map[string]string{
 		m + pvAcct + "/projects/proj": `{"id":"` + pvAcct + `/projects/proj","name":"proj","identity":{"type":"SystemAssigned","principalId":"` + pvPrin + `"},"properties":{"provisioningState":"Succeeded"}}`,
-		m + pvAcct:                    `{"id":"` + pvAcct + `","properties":{"publicNetworkAccess":"Disabled"}}`,
+		m + pvAcct:                    `{"id":"` + pvAcct + `","properties":{"publicNetworkAccess":"Disabled","customSubDomainName":"acct"}}`,
 		m + pvAcct + "/projects/proj/capabilityHosts": `{"value":[{"id":"h1","name":"default","properties":{"provisioningState":"Succeeded","storageConnections":["storage-conn"],"vectorStoreConnections":["search-conn"]}}]}`,
 		m + pvAcct + "/projects/proj/connections": `{"value":[
 		  {"id":"c1","name":"search-conn","properties":{"authType":"AAD","category":"CognitiveSearch","target":"https://searchsvc.search.windows.net","credentials":{"key":"SECRET_SENTINEL_VALUE"},"metadata":{"ResourceId":"` + pvSearch + `","index":"knowledge","indexer":"load-knowledge","note":"DOCUMENT_SENTINEL_TEXT"}}},
