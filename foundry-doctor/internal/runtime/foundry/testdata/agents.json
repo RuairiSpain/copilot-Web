@@ -1,9 +1,26 @@
 {
   "data": [
     {
+      "object": "agent",
+      "id": "agent_support",
       "name": "support-agent",
-      "latestVersion": "v2",
-      "instructions": "PROMPT_SENTINEL_TEXT"
+      "state": "enabled",
+      "configuration_state": "enabled",
+      "versions": {
+        "latest": {
+          "object": "agent.version",
+          "id": "support-agent:2",
+          "name": "support-agent",
+          "version": "2",
+          "created_at": 1760000000,
+          "status": "failed",
+          "metadata": {"last_completion": "COMPLETION_SENTINEL_TEXT"},
+          "definition": {"kind": "prompt", "model": "gpt-main", "instructions": "PROMPT_SENTINEL_TEXT"}
+        }
+      }
     }
-  ]
+  ],
+  "first_id": "agent_support",
+  "last_id": "agent_support",
+  "has_more": true
 }

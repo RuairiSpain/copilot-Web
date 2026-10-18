@@ -2,11 +2,30 @@
   "name": "knowledge",
   "fields": [
     {
+      "name": "id",
+      "type": "Edm.String",
+      "key": true
+    },
+    {
       "name": "contentVector",
       "type": "Collection(Edm.Single)",
       "dimensions": 1536,
       "vectorSearchProfile": "default",
       "sampleDocument": "DOCUMENT_SENTINEL_TEXT"
+    },
+    {
+      "name": "otherVector",
+      "type": "Collection(Edm.Single)",
+      "dimensions": 8,
+      "vectorSearchProfile": "undefined-profile"
     }
-  ]
+  ],
+  "vectorSearch": {
+    "profiles": [
+      {"name": "default", "algorithm": "hnsw-1"}
+    ],
+    "algorithms": [
+      {"name": "hnsw-1", "kind": "hnsw"}
+    ]
+  }
 }

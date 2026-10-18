@@ -35,12 +35,44 @@ func (c Correlator) Resource(typ, name, id string) Correlation {
 			}
 		}
 	}
-	if c.azure != nil && out.Source.File == "" {
+	// The azure.yaml fallback only makes sense for the Foundry account and
+	// project: a Search, Storage or Cosmos finding must not point at an
+	// unrelated agent service.
+	if c.azure != nil && out.Source.File == "" && isFoundryType(typ) {
 		for _, svc := range c.azure.ServiceNames() {
 			if host, loc, ok := c.azure.Lookup("services", svc, "host"); ok && (strings.Contains(strings.ToLower(host), "ai.") || strings.Contains(strings.ToLower(host), "foundry")) {
 				out.Source = loc
 				break
 			}
+		}
+	}
+	return out
+}
+
+func isFoundryType(typ string) bool {
+	t := strings.ToLower(typ)
+	return t == "microsoft.cognitiveservices/accounts" || strings.HasPrefix(t, "microsoft.cognitiveservices/accounts/")
+}
+
+// Agent returns the correlation of an azure.ai.agent service declared in
+// azure.yaml: the source location is the service entry itself.
+func (c Correlator) Agent(name string) Correlation {
+	out := Correlation{Resource: sdk.ResourceRef{Type: "azure.ai.agent", Name: name}}
+	if c.azure == nil {
+		return out
+	}
+	for _, svc := range c.azure.ServiceNames() {
+		host, loc, ok := c.azure.Lookup("services", svc, "host")
+		if !ok || !strings.EqualFold(host, "azure.ai.agent") {
+			continue
+		}
+		agentName := svc
+		if n, _, ok := c.azure.Lookup("services", svc, "name"); ok && strings.TrimSpace(n) != "" {
+			agentName = n
+		}
+		if strings.EqualFold(agentName, name) {
+			out.Source = loc
+			break
 		}
 	}
 	return out

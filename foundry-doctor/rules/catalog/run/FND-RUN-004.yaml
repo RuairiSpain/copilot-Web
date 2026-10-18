@@ -1,5 +1,5 @@
 id: FND-RUN-004
-version: 1
+version: 2
 group: RUN
 title: Model deployment state and throttling signal
 description: >-
@@ -31,13 +31,26 @@ evidence:
     Canceled or Disabled is Fail; Accepted, Creating, Deleting or Moving is Uncertain. Also report properties.dynamicThrottlingEnabled,
     properties.currentCapacity and properties.rateLimits (all read-only per the spec) as context. Probe 2: GET
     /{accountResourceId}/providers/Microsoft.Insights/metrics?api-version=2024-02-01 with metricnames=AzureOpenAIRequests,
-    aggregation=Total, an interval and a bounded timespan (default one hour; product opinion), filtered on the StatusCode
-    and ModelDeploymentName dimensions. A total above the configured threshold (default 0, product opinion) for
-    StatusCode 429 on a deployment is reported as a throttling signal. For provisioned-managed deployments also read
-    AzureOpenAIProvisionedManagedUtilizationV2, where 100 percent or above means calls are throttled. Required permission:
-    ARM read on the account for probe 1 and permission to read Azure Monitor metrics on the account for probe 2 (the
-    built-in role carrying these actions was not verified in the clones). Vantage point: control plane, any network.
-    Metadata read: deployment names, model names and versions, counts. No prompts or completions.
+    aggregation=Maximum (Average where a rate is reported; Total is not used), an interval, an explicit
+    timespan of the form {startISO}/{endISO} (default window one hour ending now; product opinion; the doctor computes both
+    ends, it does not use a relative duration), and $filter=StatusCode eq '*' and ModelDeploymentName eq '*' so that the
+    service splits the series by both dimensions and each time series carries its StatusCode and ModelDeploymentName
+    values. Attribution is by those returned dimension values only: a value above the configured threshold (default 0,
+    product opinion) on a series whose StatusCode is 429 is attributed to the deployment named by that series'
+    ModelDeploymentName. The documented query keys are timespan, interval, metricnames, aggregation, top, orderby,
+    $filter, resultType, metricnamespace, AutoAdjustTimegrain, ValidateDimensions and rollupby (Metrics_List,
+    2024-02-01, VERIFIED in the spec on 2026-10-17); the rule uses only metricnames, aggregation, timespan, interval and
+    $filter (plus metricnamespace if the namespace is set). The StatusCode value domain of AzureOpenAIRequests (whether
+    the value is the string '429') and the aggregation types the metric supports are UNVERIFIED: the Learn metric reference was
+    not readable. Therefore a 429 signal is reported only when a series carries a StatusCode that is recognised as 429; when
+    the dimension values cannot be matched to HTTP status codes, when the response has no StatusCode dimension, or when a
+    series cannot be attributed to a deployment, the result is Uncertain, never Pass and never a deployment-specific Fail.
+    A Pass for the 429 signal requires at least one returned series with a recognised StatusCode and none recognised as 429.
+    For provisioned-managed deployments also read AzureOpenAIProvisionedManagedUtilizationV2, where 100 percent or above
+    means calls are throttled (aggregation Maximum). Required permission:
+    ARM read on the account for probe 1 and permission to read Azure Monitor metrics on the account for probe 2
+    (Microsoft.Insights/metrics/read; the built-in role carrying it was not verified). Vantage point: control plane, any
+    network. Metadata read: deployment names, model names and versions, counts. No prompts or completions.
   confidence: likely
 recommendation: >-
   For a failed or disabled deployment, review the deployment error in the Foundry portal and recreate it. For 429
@@ -53,19 +66,20 @@ fix: |-
   }
 sources:
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
-    lastVerified: "2026-10-04"
+    lastVerified: "2026-10-17"
     verifiedVia: >-
       https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
     note: >-
       DeploymentProvisioningState enum, DeploymentProperties (provisioningState, rateLimits,
       dynamicThrottlingEnabled, currentCapacity); Deployments_Get path. Branch URL, not commit-pinned.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/monitor/resource-manager/Microsoft.Insights/Insights/stable/2024-02-01/metrics.json
-    lastVerified: "2026-10-04"
+    lastVerified: "2026-10-17"
     verifiedVia: >-
       https://github.com/Azure/azure-rest-api-specs/blob/main/specification/monitor/resource-manager/Microsoft.Insights/Insights/stable/2024-02-01/metrics.json
     note: >-
       Metrics_List path /{resourceUri}/providers/Microsoft.Insights/metrics with metricnamespace, timespan,
-      interval, metricnames, aggregation parameters. Branch URL, not commit-pinned.
+      interval, metricnames, aggregation, top, orderby, $filter, resultType, metricnamespace, AutoAdjustTimegrain,
+      ValidateDimensions, rollupby parameters (read 2026-10-17). Branch URL, not commit-pinned.
   - url: https://learn.microsoft.com/azure/foundry/openai/monitor-openai-reference
     lastVerified: "2026-10-04"
     verifiedVia: >-
@@ -116,18 +130,21 @@ implementation:
 tests:
   positive:
     - deployment provisioningState Failed
-    - 429 total above threshold for one deployment
+    - a series with StatusCode 429 above the threshold, attributed to one deployment by its ModelDeploymentName value
     - provisioned utilization at 100 percent
   negative:
-    - all used deployments Succeeded and zero 429 in the window
+    - all used deployments Succeeded and the split series carry recognised StatusCode values with none equal to 429 in the window
   skipped:
     - caller cannot read metrics
     - deployment is not used by the project (out of scope)
   uncertain:
     - deployment Creating or Updating
     - metric returns no data points (no traffic versus delayed ingestion)
+    - StatusCode values in the response cannot be identified as HTTP status codes, so 429 cannot be identified
+    - a series cannot be attributed to a deployment (no ModelDeploymentName value)
 testability: Deterministic against recorded ARM and Metrics responses; live mode needs ARM and Monitor read access.
 notes: >-
-  Unverified: the per-metric dimension list for AzureOpenAIRequests (the docs list StatusCode and ModelDeploymentName
+  Loop 1 (2026-10-17): Maximum/Average aggregation, '*' split attribution, explicit start/end timespan; the StatusCode
+  value domain is UNVERIFIED. Unverified: the per-metric dimension list for AzureOpenAIRequests (the docs list StatusCode and ModelDeploymentName
   for the namespace, and the per-metric include file was not in the clone); metric retention and the exact metric
   namespace string; the built-in role needed for metric reads. The default window and threshold are product opinion.

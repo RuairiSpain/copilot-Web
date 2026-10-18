@@ -380,18 +380,8 @@ func (e *env) inSubscription(id string) bool {
 // scopeAllowed implements the cross-resource-group scope policy: an ID is in
 // scope when it lies under the target resource group or an approved scope.
 func (e *env) scopeAllowed(id string) bool {
-	id = strings.ToLower(strings.TrimRight(id, "/"))
-	scopes := append([]string{e.rgScope()}, e.d.ApprovedScopes...)
-	for _, s := range scopes {
-		s = strings.ToLower(strings.TrimRight(s, "/"))
-		if s == "" {
-			continue
-		}
-		if id == s || strings.HasPrefix(id, s+"/") {
-			return true
-		}
-	}
-	return false
+	// The shared helper (azure.WithinScope) also serves FND-RUN-003.
+	return azure.WithinScope(id, append([]string{e.rgScope()}, e.d.ApprovedScopes...)...)
 }
 
 // needs returns a skip result when a required capability or target field is missing.

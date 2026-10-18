@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -85,7 +86,7 @@ func DoJSON(ctx context.Context, hc *http.Client, cred azure.TokenCredential, sc
 				return nil
 			}
 			if err := json.Unmarshal(data, out); err != nil {
-				return fmt.Errorf("decode response: %w", err)
+				return fmt.Errorf("%w: decode response: %v", azure.ErrDecode, err)
 			}
 			return nil
 		case resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == 500 || resp.StatusCode == 502 || resp.StatusCode == 503 || resp.StatusCode == 504:
@@ -95,17 +96,38 @@ func DoJSON(ctx context.Context, hc *http.Client, cred azure.TokenCredential, sc
 				}
 				continue
 			}
-			return fmt.Errorf("http %d", resp.StatusCode)
+			return &HTTPError{Status: resp.StatusCode}
 		case resp.StatusCode == http.StatusForbidden:
 			return &azure.UnavailableError{Capability: method + " " + safeURL(rawURL), Reason: "data-plane permission or network access unavailable"}
 		case resp.StatusCode == http.StatusUnauthorized:
 			return &azure.UnavailableError{Capability: method + " " + safeURL(rawURL), Reason: "credential rejected by service"}
-		case resp.StatusCode == http.StatusNotFound:
-			return fmt.Errorf("http 404")
 		default:
-			return fmt.Errorf("http %d", resp.StatusCode)
+			return &HTTPError{Status: resp.StatusCode}
 		}
 	}
+}
+
+// HTTPError is a non-success data-plane response reduced to its status code.
+// Bodies are never retained.
+type HTTPError struct{ Status int }
+
+func (e *HTTPError) Error() string { return fmt.Sprintf("http %d", e.Status) }
+
+// IsNotFound reports whether err is a data-plane HTTP 404.
+func IsNotFound(err error) bool {
+	var he *HTTPError
+	return errors.As(err, &he) && he.Status == http.StatusNotFound
+}
+
+// SameOrigin reports whether next is an absolute https URL on the same host
+// as base. It is used before following a nextLink with the bearer token.
+func SameOrigin(base, next string) bool {
+	b, err1 := url.Parse(base)
+	n, err2 := url.Parse(next)
+	if err1 != nil || err2 != nil || n.Scheme == "" || n.User != nil {
+		return false
+	}
+	return strings.EqualFold(b.Scheme, n.Scheme) && strings.EqualFold(b.Host, n.Host)
 }
 
 func retryAfter(h http.Header, attempt int) time.Duration {

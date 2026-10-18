@@ -49,11 +49,43 @@ type AllowedOperation struct {
 	APIVersion string
 	// Capability is the RBAC action the call exercises.
 	Capability string
+	// Origin is the declared origin the request is sent to. Empty means the
+	// configured ARM endpoint; otherwise one of the audience constants.
+	Origin string
+	// TokenScope is the OAuth scope requested for the call. Empty means the ARM
+	// endpoint scope.
+	TokenScope string
+	// QueryKeys lists the query parameters (besides api-version) the operation
+	// may carry. Empty means the default set (allowedQueryKey).
+	QueryKeys []string
 }
 
 type operation struct {
 	AllowedOperation
 	re *regexp.Regexp
+	// body validates the request body of an operation that sends one.
+	body func(any) error
+}
+
+// audienceLogAnalytics marks operations sent to the Log Analytics query origin.
+const audienceLogAnalytics = "loganalytics"
+
+// DefaultLogAnalyticsEndpoint is the public Log Analytics query origin
+// (MicrosoftDocs/azure-monitor-docs logs/api/request-format.md: api.loganalytics.azure.com
+// is the current endpoint; api.loganalytics.io is being replaced).
+const DefaultLogAnalyticsEndpoint = "https://api.loganalytics.azure.com"
+
+// logAnalyticsScope is the token scope documented in access-api.md
+// (scope=https://api.loganalytics.io/.default).
+const logAnalyticsScope = "https://api.loganalytics.io/.default"
+
+// ErrDecode marks a response that could not be decoded. It is an internal
+// defect (spec drift or adapter bug), not a permission or network problem.
+var ErrDecode = errors.New("azure: response decode failed")
+
+func (o operation) withKeys(keys ...string) operation {
+	o.QueryKeys = keys
+	return o
 }
 
 func newOp(name, method, template, version, capability string) operation {
@@ -61,6 +93,7 @@ func newOp(name, method, template, version, capability string) operation {
 	pat = strings.ReplaceAll(pat, `\{scope\}`, scopeRe)
 	pat = strings.ReplaceAll(pat, `\{resource\}`, idRe)
 	pat = strings.ReplaceAll(pat, `\{sub\}`, guidRe)
+	pat = strings.ReplaceAll(pat, `\{guid\}`, guidRe)
 	pat = strings.ReplaceAll(pat, `\{seg\}`, segRe)
 	pat = strings.ReplaceAll(pat, `\{roledef\}`, `(?:/subscriptions/`+guidRe+`)?/providers/Microsoft\.Authorization/roleDefinitions/`+guidRe)
 	return operation{
@@ -111,6 +144,10 @@ func allowList() []operation {
 		// Learn "List Azure deny assignments": 2018-07-01-preview or later
 		newOp("denyassignments.list", g, "{scope}/providers/Microsoft.Authorization/denyAssignments", "2022-04-01", "Microsoft.Authorization/denyAssignments/read"),
 		// catalogue FND-RUN-001..004
+		// Accounts_Get (cognitiveservices.json 2026-09-01): properties.publicNetworkAccess
+		// (Enabled|Disabled) and properties.privateEndpointConnections, used as the proof that
+		// the Foundry account is private-endpoint backed (FND-RUN-002).
+		newOp("runtime.account.get", g, "/subscriptions/{sub}/resourceGroups/{seg}/providers/Microsoft.CognitiveServices/accounts/{seg}", "2026-09-01", "Microsoft.CognitiveServices/accounts/read"),
 		newOp("runtime.project.get", g, "/subscriptions/{sub}/resourceGroups/{seg}/providers/Microsoft.CognitiveServices/accounts/{seg}/projects/{seg}", "2026-09-01", "Microsoft.CognitiveServices/accounts/projects/read"),
 		newOp("runtime.project.caphosts", g, "/subscriptions/{sub}/resourceGroups/{seg}/providers/Microsoft.CognitiveServices/accounts/{seg}/projects/{seg}/capabilityHosts", "2026-09-01", "Microsoft.CognitiveServices/accounts/projects/capabilityHosts/read"),
 		newOp("runtime.account.caphosts", g, "/subscriptions/{sub}/resourceGroups/{seg}/providers/Microsoft.CognitiveServices/accounts/{seg}/capabilityHosts", "2026-09-01", "Microsoft.CognitiveServices/accounts/capabilityHosts/read"),
@@ -118,8 +155,23 @@ func allowList() []operation {
 		newOp("runtime.account.connections", g, "/subscriptions/{sub}/resourceGroups/{seg}/providers/Microsoft.CognitiveServices/accounts/{seg}/connections", "2026-09-01", "Microsoft.CognitiveServices/accounts/connections/read"),
 		newOp("runtime.account.deployments", g, "/subscriptions/{sub}/resourceGroups/{seg}/providers/Microsoft.CognitiveServices/accounts/{seg}/deployments", "2026-09-01", "Microsoft.CognitiveServices/accounts/deployments/read"),
 		newOp("runtime.cosmos.sqlroleassignments", g, "/subscriptions/{sub}/resourceGroups/{seg}/providers/Microsoft.DocumentDB/databaseAccounts/{seg}/sqlRoleAssignments", "2025-10-15", "Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments/read"),
-		newOp("runtime.privatedns.links", g, "/subscriptions/{sub}/resourceGroups/{seg}/providers/Microsoft.Network/privateDnsZones/{seg}/virtualNetworkLinks", "2018-09-01", "Microsoft.Network/privateDnsZones/virtualNetworkLinks/read"),
-		newOp("runtime.metrics", g, "{resource}/providers/Microsoft.Insights/metrics", "2024-02-01", "Microsoft.Insights/metrics/read"),
+		// Metrics_List, Microsoft.Insights/Insights/stable/2024-02-01/metrics.json. Query parameters are
+		// the spec names (top and orderby carry no $ prefix there).
+		newOp("runtime.metrics", g, "{resource}/providers/Microsoft.Insights/metrics", "2024-02-01", "Microsoft.Insights/metrics/read").
+			withKeys("timespan", "interval", "metricnames", "aggregation", "top", "$filter", "metricnamespace", "resulttype"),
+		// RoleAssignments_ListForResource / ListForScope (2022-04-01) at a resource scope, for the
+		// Search, Storage and Cosmos DB resources bound to the project. $filter=principalId eq {id}
+		// returns assignments at, above or below the scope; callers filter by scope.
+		newOp("runtime.roleassignments.list.resource", g, "{resource}/providers/Microsoft.Authorization/roleAssignments", "2022-04-01", "Microsoft.Authorization/roleAssignments/read"),
+		// Workspaces_Get, Microsoft.OperationalInsights/OperationalInsights/stable/2025-02-01/Workspaces.json
+		// (a newer stable 2026-03-01 exists as openapi.json; 2025-02-01 is the version whose
+		// Workspaces_Get and properties.customerId were read). Used only to resolve customerId.
+		newOp("runtime.workspace.get", g, "/subscriptions/{sub}/resourcegroups/{seg}/providers/Microsoft.OperationalInsights/workspaces/{seg}", "2025-02-01", "Microsoft.OperationalInsights/workspaces/read"),
+		// Logs query API (azure-monitor-docs logs/api/request-format.md and access-api.md):
+		// POST https://api.loganalytics.azure.com/v1/workspaces/{workspaceId}/query, workspaceId is the
+		// workspace GUID (customerId). The path version v1 is not sent as api-version. The body is
+		// restricted to the shipped KQL template (ADR-006 item 7; ADR-021 g exit criterion).
+		logQueryOp(),
 		newOp("runtime.diagnosticsettings", g, "{resource}/providers/Microsoft.Insights/diagnosticSettings", "2021-05-01-preview", "Microsoft.Insights/diagnosticSettings/read"),
 		// catalogue: FND-DEP-004, FND-DEP-005, FND-DEP-006
 		newOp("models.list", g, "/subscriptions/{sub}/providers/Microsoft.CognitiveServices/locations/{seg}/models", "2026-09-01", "Microsoft.CognitiveServices/locations/models/read"),
@@ -163,6 +215,26 @@ func IsAllowed(method, path string) bool {
 	}
 	for _, o := range allowList() {
 		if o.Method == method && o.re.MatchString(path) {
+			return true
+		}
+	}
+	return false
+}
+
+func logQueryOp() operation {
+	o := newOp("runtime.loganalytics.query", http.MethodPost, "/v1/workspaces/{guid}/query", "v1", "Microsoft.OperationalInsights/workspaces/query/read")
+	o.Origin = audienceLogAnalytics
+	o.TokenScope = logAnalyticsScope
+	o.body = validateLogQueryBody
+	return o
+}
+
+func (o operation) queryKeyAllowed(k string) bool {
+	if len(o.QueryKeys) == 0 {
+		return allowedQueryKey(k)
+	}
+	for _, a := range o.QueryKeys {
+		if strings.EqualFold(a, k) {
 			return true
 		}
 	}
@@ -222,7 +294,9 @@ type armClient struct {
 	http       *http.Client
 	origin     string
 	base       string
+	laBase     string
 	scope      string
+	now        func() time.Time
 	sem        chan struct{}
 	maxRetries int
 	sleep      func(context.Context, time.Duration) error
@@ -321,12 +395,23 @@ func (c *armClient) doQuery(ctx context.Context, method, path string, query url.
 	}
 	vals := url.Values{}
 	for k, vs := range query {
-		if !allowedQueryKey(k) {
+		if !o.queryKeyAllowed(k) {
 			return response{}, fmt.Errorf("%w: query parameter %q", ErrNotAllowed, k)
 		}
 		vals[k] = vs
 	}
-	vals.Set("api-version", o.APIVersion)
+	base, tokenScope := c.base, c.scope
+	if o.Origin == audienceLogAnalytics {
+		// The Logs query API carries its version in the path (v1), not api-version.
+		base, tokenScope = c.laBase, o.TokenScope
+	} else {
+		vals.Set("api-version", o.APIVersion)
+	}
+	if o.body != nil {
+		if err := o.body(body); err != nil {
+			return response{}, err
+		}
+	}
 	enc := strings.ReplaceAll(vals.Encode(), "+", "%20")
 	if rawQuery != "" {
 		if o.Name != whatIfPollOp {
@@ -340,7 +425,10 @@ func (c *armClient) doQuery(ctx context.Context, method, path string, query url.
 			enc = kept + "&" + enc
 		}
 	}
-	full := c.base + path + "?" + enc
+	full := base + path
+	if enc != "" {
+		full += "?" + enc
+	}
 	var payload []byte
 	if body != nil {
 		if method != http.MethodPost {
@@ -362,7 +450,7 @@ func (c *armClient) doQuery(ctx context.Context, method, path string, query url.
 	defer func() { <-c.sem }()
 
 	for attempt := 0; ; attempt++ {
-		tok, err := c.cred.Token(ctx, c.scope)
+		tok, err := c.cred.Token(ctx, tokenScope)
 		if err != nil {
 			if ctx.Err() != nil {
 				return response{}, ctx.Err()
@@ -428,7 +516,19 @@ func (c *armClient) get(ctx context.Context, path string, q url.Values, out any)
 		return err
 	}
 	if err := json.Unmarshal(r.body, out); err != nil {
-		return fmt.Errorf("azure: decode response for %s: %w", path, err)
+		return fmt.Errorf("%w: %s: %v", ErrDecode, path, err)
+	}
+	return nil
+}
+
+// post sends an allow-listed POST with a validated body and decodes the JSON reply.
+func (c *armClient) post(ctx context.Context, path string, body any, out any) error {
+	r, err := c.do(ctx, http.MethodPost, path, nil, body)
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(r.body, out); err != nil {
+		return fmt.Errorf("%w: %s: %v", ErrDecode, path, err)
 	}
 	return nil
 }

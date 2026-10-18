@@ -18,7 +18,7 @@ func runtimeCmd(_ context.Context, svc app.Services, exit *int) *cobra.Command {
 		vantage                                                       string
 		timeout                                                       time.Duration
 		strict                                                        bool
-		rules                                                         []string
+		rules, approved                                               []string
 	)
 	cmd := &cobra.Command{
 		Use:   "runtime",
@@ -46,8 +46,9 @@ func runtimeCmd(_ context.Context, svc app.Services, exit *int) *cobra.Command {
 					Account:        account,
 					Project:        project,
 				},
-				Vantage: v,
-				Timeout: timeout,
+				Vantage:        v,
+				Timeout:        timeout,
+				ApprovedScopes: approved,
 			}
 			if req.Timeout <= 0 {
 				req.Timeout = 30 * time.Second
@@ -79,6 +80,7 @@ func runtimeCmd(_ context.Context, svc app.Services, exit *int) *cobra.Command {
 	f.StringVar(&account, "account", "", "target Foundry account name")
 	f.StringVar(&project, "project", "", "target Foundry project name")
 	f.StringVar(&vantage, "vantage", string(runtime.VantageNone), "network vantage: none, local or vnet")
+	f.StringSliceVar(&approved, "approved-scope", nil, "extra scope (resource ID) that connection targets may lie in besides the project resource group; repeatable")
 	f.DurationVar(&timeout, "timeout", 30*time.Second, "per-probe timeout")
 	return cmd
 }

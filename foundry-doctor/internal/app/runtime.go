@@ -19,6 +19,7 @@ import (
 	runrules "github.com/ruairispain/copilot-web/foundry-doctor/internal/rules/run"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime"
 	foundrydp "github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/foundry"
+	netprobe "github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/network"
 	searchprobe "github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/search"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
@@ -39,6 +40,9 @@ type RuntimeInput struct {
 	Target  RuntimeTarget
 	Vantage runtime.Vantage
 	Timeout time.Duration
+	// ApprovedScopes are extra scopes (resource IDs) that connection targets may
+	// lie in besides the project resource group (FND-RUN-003, ADR-022).
+	ApprovedScopes []string
 }
 
 // RuntimeEngine evaluates the FND-RUN rules against live Azure state.
@@ -49,9 +53,10 @@ type RuntimeEngine interface {
 // RuntimeRequest mirrors the runtime flags.
 type RuntimeRequest struct {
 	DoctorRequest
-	Target  RuntimeTarget
-	Vantage runtime.Vantage
-	Timeout time.Duration
+	Target         RuntimeTarget
+	Vantage        runtime.Vantage
+	Timeout        time.Duration
+	ApprovedScopes []string
 }
 
 // Runtime runs the Azure runtime diagnosis, writes the report with a readiness
@@ -108,7 +113,7 @@ func runtimeRun(ctx context.Context, svc Services, req RuntimeRequest, stdout io
 			Selectors: set.Rules, Exclude: set.Exclude, Source: src,
 			AzureYAML: doc, ARM: arm, Policy: MapPolicy(set.Policy),
 		},
-		Target: req.Target, Vantage: req.Vantage, Timeout: req.Timeout,
+		Target: req.Target, Vantage: req.Vantage, Timeout: req.Timeout, ApprovedScopes: req.ApprovedScopes,
 	})
 	if err != nil {
 		return 0, fmt.Errorf("run runtime rules: %w", err)
@@ -142,7 +147,10 @@ func runtimeRun(ctx context.Context, svc Services, req RuntimeRequest, stdout io
 		return strings.Compare(a.Reason, b.Reason)
 	})
 	for i := range skips {
-		skips[i].Required = true
+		// A skip that hid a check makes the run exit 2. A by-design skip (for
+		// example the not-implemented FND-RUN-008 placeholder that FND-RUN-*
+		// selects, or "no private-endpoint-backed dependencies") hid nothing.
+		skips[i].Required = rules.ClassifySkip(skips[i]) == rules.SkipHidesCheck
 	}
 	code := ExitCode(Outcome{Findings: shown, Skips: skips, FailOn: req.FailOn, Strict: req.Strict})
 	var buf bytes.Buffer
@@ -169,6 +177,10 @@ type runtimeEngine struct {
 	azd       func(context.Context) string
 	getenv    func(string) string
 	newClient func() (azure.Client, error)
+	// httpClient, cred and resolver override the data-plane defaults (tests).
+	httpClient *http.Client
+	cred       azure.TokenCredential
+	resolver   netprobe.Resolver
 }
 
 func (e runtimeEngine) Run(ctx context.Context, in RuntimeInput) (RunOutput, error) {
@@ -194,16 +206,26 @@ func (e runtimeEngine) Run(ctx context.Context, in RuntimeInput) (RunOutput, err
 		}
 		return genv(key)
 	}
-	cred := azure.NewDefaultCredential(nil)
+	var cred azure.TokenCredential = azure.NewDefaultCredential(nil)
+	if e.cred != nil {
+		cred = e.cred
+	}
 	httpClient := &http.Client{Timeout: runtime.Timeout(in.Timeout, 30*time.Second)}
+	if e.httpClient != nil {
+		httpClient = e.httpClient
+	}
+	var resolver netprobe.Resolver = runtimeResolver{}
+	if e.resolver != nil {
+		resolver = e.resolver
+	}
 	deps := runrules.Deps{
-		FoundryMgmt: client.Foundry,
-		RBAC:        client.RBAC,
-		DNS:         client.DNS,
-		Monitor:     client.Monitor,
-		ProjectData: foundrydp.HTTPClient{HTTP: httpClient, Credential: cred},
-		SearchData:  searchprobe.HTTPClient{HTTP: httpClient, Credential: cred},
-		Resolver:    runtimeResolver{},
+		FoundryMgmt:    client.Foundry,
+		RBAC:           client.RBAC,
+		Monitor:        client.Monitor,
+		ProjectData:    foundrydp.HTTPClient{HTTP: httpClient, Credential: cred},
+		SearchData:     searchprobe.HTTPClient{HTTP: httpClient, Credential: cred},
+		Resolver:       resolver,
+		ApprovedScopes: in.ApprovedScopes,
 		Target: runrules.Target{
 			SubscriptionID: pick(in.Target.SubscriptionID, "AZURE_SUBSCRIPTION_ID"),
 			ResourceGroup:  pick(in.Target.ResourceGroup, "AZURE_RESOURCE_GROUP"),
@@ -216,22 +238,32 @@ func (e runtimeEngine) Run(ctx context.Context, in RuntimeInput) (RunOutput, err
 			Parallelism: 4,
 		},
 	}
-	reg := rules.NewRegistry()
-	for _, r := range runrules.Register(deps) {
-		if err := reg.Register(r); err != nil {
-			return RunOutput{}, err
-		}
-	}
 	sel, required, err := BuildSelector(cat, in.Selectors, in.Exclude)
 	if err != nil {
 		return RunOutput{}, err
 	}
-	eng := &rules.Engine{Catalog: cat, Registry: reg, Selector: sel, Required: required}
 	ae := engineAdapter{azd: e.azd}
-	rep, err := eng.Run(ctx, &sdk.Input{
+	input := &sdk.Input{
 		Profile: in.Profile, Environment: in.Environment, AzdVersion: ae.azdVersion(ctx, in.RunInput),
 		AzureYAML: in.AzureYAML, ARM: in.ARM, Policy: in.Policy,
-	})
+	}
+	// The selected runtime rules run through runtime.Scheduler: bounded
+	// parallelism and a per-probe timeout (--timeout). The engine then replays
+	// the stored outcomes in rule order.
+	var selected []string
+	for _, cr := range cat {
+		if sel.Matches(cr) && slices.Contains(runrules.RuleIDs(), cr.ID) {
+			selected = append(selected, cr.ID)
+		}
+	}
+	reg := rules.NewRegistry()
+	for _, r := range runrules.Schedule(ctx, deps, input, selected) {
+		if err := reg.Register(r); err != nil {
+			return RunOutput{}, err
+		}
+	}
+	eng := &rules.Engine{Catalog: cat, Registry: reg, Selector: sel, Required: required}
+	rep, err := eng.Run(ctx, input)
 	if err != nil {
 		return RunOutput{}, err
 	}

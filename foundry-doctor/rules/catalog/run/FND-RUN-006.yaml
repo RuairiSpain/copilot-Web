@@ -1,11 +1,11 @@
 id: FND-RUN-006
-version: 2
+version: 3
 group: RUN
 title: Search index/documents/vector/indexer health
 description: >-
   For each Azure AI Search index that a Foundry project connection, agent tool or knowledge source references, the index
-  must exist, expose the expected schema (including vector fields with dimensions and a vector search profile), contain
-  at least one document, and any indexer that feeds it must not be in an error state or have a failed lastResult. Only
+  must exist, expose the expected schema (including vector fields with dimensions and a vector search profile that exists in the index's vectorSearch.profiles), contain
+  at least one document, and any indexer that feeds it must not be in an error state or have a lastResult in transientFailure. Only
   data-plane metadata is read: index definition, index statistics and indexer status. Documents are never queried or returned.
 status: verified
 phases:
@@ -33,19 +33,35 @@ compatibility:
     No azd dependency: Search data-plane reads; no azd behaviour dependency Azure AI Search data plane 2026-04-01: stable.
 evidence:
   description: >-
-    Read-only GETs against https://{search}.search.windows.net with api-version=2026-04-01. (1) GET /indexes('{index}'):
-    404 is Fail (index missing); the field list is compared with the expected field names and types; a vector field is a
-    SearchField with dimensions (2 to 4096) and vectorSearchProfile. (2) GET /indexes('{index}')/search.stats returns documentCount,
-    storageSize and vectorIndexSize; documentCount of 0 is Fail for an index the agent is meant to retrieve from, but the
-    spec states statistics are collected periodically and may not be current, so a zero count on a recently changed index
-    is Uncertain. (3) GET /indexers('{indexer}')/search.status: status unknown, error or running; a failed lastResult is
-    Fail even when the current status is running, transientFailure is Warn-class evidence, and the finding keeps only
-    structured status fields (errorCode and itemsFailed), never errorMessage free text. Required permission (Search RBAC): Search Service Contributor for object definitions and indexer status
-    (the docs state it manages indexes, indexers and other objects and that Search Index Data Reader cannot read object
-    definitions); the role needed for search.stats alone is not stated per operation. Without RBAC the doctor is Skipped;
-    admin keys are never retrieved. Vantage point: when the search service has public network access disabled or only private
-    endpoints, the checks run only from inside the VNet and are Skipped elsewhere. Metadata read: index and field names,
-    counts, indexer status. No document content, no search queries, no vectors.
+    Read-only GETs against https://{search}.search.windows.net with api-version=2026-04-01, token scope
+    https://search.azure.com/.default (scope UNVERIFIED by the catalogue owner: asserted by the Azure black belt review, the
+    Search RBAC article was not readable). (1) GET /indexes('{index}'): 404 is Fail (index missing); the field list is
+    compared with the expected field names and types; a vector field is a SearchField with dimensions and
+    vectorSearchProfile, and the named profile must exist in the index's vectorSearch.profiles (VectorSearchProfile.name;
+    VERIFIED in the 2026-04-01 spec on 2026-10-17); a vector field whose profile is not defined is Fail. The index name
+    comes from user configuration or the agent tool; the connection metadata keys that might carry an index name are
+    UNVERIFIED hints only: the ARM spec types metadata as a free map and no source read for this catalogue names an
+    index key, so the rule never derives an index name from connection metadata
+    and reports Skipped when no index name is configured. (2) GET /indexes('{index}')/search.stats returns documentCount,
+    storageSize and vectorIndexSize (VERIFIED). documentCount of 0 is Fail for an index the agent is meant to retrieve
+    from, except that the spec states statistics are collected periodically and may not be current: if the index was
+    changed or an indexer last succeeded within the freshness window, a zero count is Uncertain. The freshness window is
+    expressed in minutes (default 60; product opinion, no source states the statistics lag) and is measured against the
+    indexer lastResult endTime. A recent indexer success with documentCount 0 is Uncertain, never Fail. (3) GET
+    /indexers('{indexer}')/search.status. Real enums (VERIFIED in the 2026-04-01 spec on 2026-10-17): the indexer `status`
+    is unknown, error or running; the lastResult `status` (IndexerExecutionStatus) is transientFailure, success, inProgress
+    or reset. Status error is Fail. lastResult transientFailure is a Fail only when the indexer status is error; otherwise
+    it is Uncertain (it may retry); inProgress and reset are Uncertain; success is healthy; unknown is Uncertain. The
+    execution result has no `errorCode` property in the spec (it has status, errorMessage, startTime, endTime, errors,
+    warnings, itemsProcessed, itemsFailed, initialTrackingState, finalTrackingState), so no rule evidence uses an error
+    code. The finding keeps only the structured status values, itemsProcessed and itemsFailed, never errorMessage, errors
+    or warnings text. Required permission (Search RBAC): Search Service Contributor for object definitions and indexer
+    status (the docs state it manages indexes, indexers and other objects and that Search Index Data Reader cannot read
+    object definitions); the role needed for search.stats and indexer status per operation is UNVERIFIED. Without RBAC the
+    doctor is Skipped; admin keys are never retrieved. Vantage point: when the search service has public network access
+    disabled or only private endpoints, the checks run only from inside the VNet (asserted by the operator, not verified)
+    and are Skipped elsewhere. Metadata read: index and field names, counts, indexer status. No document content, no
+    search queries, no vectors.
   confidence: likely
 recommendation: >-
   Create or repair the index with the expected schema, run the indexer and review its execution errors, and confirm the
@@ -62,14 +78,14 @@ fix: |-
 sources:
 - url: >-
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/data-plane/Search/stable/2026-04-01/search.json
-  lastVerified: '2026-10-04'
+  lastVerified: '2026-10-17'
   verifiedVia: >-
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/data-plane/Search/stable/2026-04-01/search.json
   note: >-
     Paths /indexes('{indexName}'), /indexes('{indexName}')/search.stats,
     /indexers('{indexerName}')/search.status; GetIndexStatisticsResult, SearchIndexerStatus,
     IndexerExecutionResult, IndexerStatus (unknown, error, running), IndexerExecutionStatus (transientFailure,
-    success, inProgress, reset), SearchField (dimensions, vectorSearchProfile). Branch URL, not commit-pinned.
+    success, inProgress, reset), SearchField (dimensions, vectorSearchProfile), SearchIndex.vectorSearch.profiles. Re-read 2026-10-17. Branch URL, not commit-pinned.
 - url: https://learn.microsoft.com/azure/search/search-security-rbac
   lastVerified: '2026-10-04'
   verifiedVia: >-
@@ -118,22 +134,28 @@ tests:
   positive:
   - index returns 404
   - vector field missing dimensions or vectorSearchProfile
-  - documentCount is zero long after the last indexer success
+  - documentCount is zero and the last indexer success is older than the freshness window (minutes)
   - indexer status error
-  - indexer lastResult failed while status remains running
+  - vector field names a vectorSearchProfile that is absent from vectorSearch.profiles
   negative:
-  - index exists with expected fields, documentCount above zero, indexer status running with lastResult success
+  - index exists with expected fields, the vector profile exists, documentCount above zero, indexer status running with lastResult success
   skipped:
   - search service is private and the vantage point is outside the VNet
   - caller has no Search RBAC role
   - project has no Search connection
   uncertain:
-  - statistics stale after a recent change
-  - indexer lastResult inProgress
+  - statistics stale after a recent change (documentCount 0 within the freshness window)
+  - indexer lastResult success recently but documentCount is 0
+  - indexer status running with lastResult transientFailure, inProgress or reset
+  - indexer status unknown
 testability: Deterministic against recorded Search REST responses; live mode needs Search RBAC and network reach.
 notes: >-
-  Unverified: which Search role covers search.stats and docs/$count individually (the RBAC table groups them under object
-  management and querying); that documentCount 0 always means an unhealthy agent index (it is a product judgement for indexes
-  the agent depends on). The expected-schema source (which fields an agent index must have) is user-supplied configuration,
-  not a platform fact. Security review remediation: indexer errorMessage is not ingested at all because it can contain
-  document keys or content snippets; only structured status, counts, and errorCode are retained. See ADR-006 item 8.
+  Loop 1 (2026-10-17): real indexer enums, no errorCode, freshness in minutes, recent success with zero documents is
+  Uncertain, vector profile existence checked, connection metadata index keys are an UNVERIFIED hint. Unverified: which
+  Search role covers search.stats and indexer status individually (the RBAC table groups them under object management
+  and querying); the Search data plane token scope; that documentCount 0 always means an unhealthy agent index (a
+  product judgement for indexes the agent depends on); the freshness default of 60 minutes (product opinion). The
+  expected-schema source (which fields an agent index must have) is user-supplied configuration, not a platform fact.
+  Security review remediation: indexer errorMessage, errors and warnings are not ingested at all because they can
+  contain document keys or content snippets; only structured status, itemsProcessed and itemsFailed are retained. See
+  ADR-006 item 8.

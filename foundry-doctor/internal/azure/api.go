@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // ---------------------------------------------------------------------------
@@ -485,7 +486,6 @@ type Client struct {
 	Extras      InventoryExtras
 	Foundry     RuntimeFoundry
 	RBAC        RuntimeRBAC
-	DNS         RuntimeDNS
 	Monitor     RuntimeMonitor
 }
 
@@ -616,12 +616,31 @@ type PermissionEvidence interface {
 
 // FoundryProject is the management-plane summary of one project.
 type FoundryProject struct {
-	ID                string
-	Name              string
-	AccountID         string
-	PrincipalID       string
-	IdentityType      string
-	ProvisioningState string
+	ID        string
+	Name      string
+	AccountID string
+	// PrincipalID is the system-assigned identity principal (identity.principalId).
+	PrincipalID string
+	// UserAssignedPrincipalIDs are identity.userAssignedIdentities.*.principalId
+	// (cognitiveservices.json 2026-09-01, Identity), sorted and de-duplicated.
+	UserAssignedPrincipalIDs []string
+	IdentityType             string
+	ProvisioningState        string
+}
+
+// IdentityPrincipals returns the principals the project may act as: the
+// system-assigned principal first, then the user-assigned ones.
+func (p FoundryProject) IdentityPrincipals() []string {
+	var out []string
+	if p.PrincipalID != "" {
+		out = append(out, p.PrincipalID)
+	}
+	for _, u := range p.UserAssignedPrincipalIDs {
+		if u != p.PrincipalID {
+			out = append(out, u)
+		}
+	}
+	return out
 }
 
 // CapabilityHost is the management-plane summary of one capability host.
@@ -638,8 +657,15 @@ type CapabilityHost struct {
 
 // ConnectionTarget is the metadata-only connection target projection.
 type ConnectionTarget struct {
-	ResourceID   string
-	Endpoint     string
+	// ResourceID is metadata.ResourceId when present, else properties.target
+	// when that is itself an ARM resource ID. The spec types metadata as a free
+	// string map; the key name "ResourceId" is UNVERIFIED as a schema fact (it is
+	// the key Foundry connections use in practice).
+	ResourceID string
+	// Endpoint is properties.target.
+	Endpoint string
+	// IndexNames and IndexerNames come from connection metadata keys that the
+	// spec does not define (UNVERIFIED, optional hints only).
 	IndexNames   []string
 	IndexerNames []string
 }
@@ -652,7 +678,13 @@ type FoundryConnection struct {
 	Category string
 	AuthType string
 	Error    string
-	Target   ConnectionTarget
+	// PERequirement is properties.peRequirement (Required, NotRequired,
+	// NotApplicable) and PEStatus is properties.peStatus (Inactive, Active,
+	// NotApplicable) per cognitiveservices.json 2026-09-01 (ManagedPERequirement,
+	// ManagedPEStatus). They describe a managed private endpoint.
+	PERequirement string
+	PEStatus      string
+	Target        ConnectionTarget
 }
 
 // AccountDeployment is the management-plane summary of one account deployment.
@@ -677,41 +709,103 @@ type RoleAssignment struct {
 	Condition        string
 }
 
+// RoleAssignmentSet is the result of listing a principal's assignments around a target.
+// The list API with $filter=principalId eq {id} returns assignments at, above or
+// below the scope (authorization-RoleAssignmentsCalls.json 2022-04-01).
+type RoleAssignmentSet struct {
+	// Covering holds assignments whose scope equals or is a path-boundary
+	// ancestor of the target: the only ones that grant access at the target.
+	Covering []RoleAssignment
+	// Below holds assignments strictly below the target (for example a
+	// container scope). They never grant access at the target.
+	Below []RoleAssignment
+	// Unresolved holds assignments whose relation to the target cannot be
+	// proven: no scope in the response, or a root or management-group scope.
+	Unresolved []RoleAssignment
+	// Truncated is true when paging was cut short.
+	Truncated bool
+}
+
 // CosmosSQLRoleAssignment is the metadata-only Cosmos SQL role assignment evidence.
 type CosmosSQLRoleAssignment struct {
+	// RoleDefinitionID is the full ARM ID of the sqlRoleDefinition.
 	RoleDefinitionID string
 	PrincipalID      string
-	Scope            string
+	// Scope is the full ARM data-plane path (account, /dbs/{db} or /dbs/{db}/colls/{coll}).
+	Scope string
 }
 
-// PrivateDNSVNetLink is one private DNS virtual network link.
-type PrivateDNSVNetLink struct {
-	Name  string
-	State string
+// MetricQuery describes one Azure Monitor metrics read (Metrics_List 2024-02-01).
+type MetricQuery struct {
+	// MetricName is the REST name, for example AzureOpenAIRequests.
+	MetricName string
+	// Aggregation is Total, Maximum or Average. The metric must support it.
+	Aggregation string
+	// SplitDimensions become "$filter=Dim eq '*'" terms joined by "and".
+	// Names must match [A-Za-z][A-Za-z0-9]{0,63}.
+	SplitDimensions []string
+	// Window is the look-back (default 1h). The query sends an explicit
+	// timespan "startISO/endISO" computed from the adapter clock.
+	Window time.Duration
 }
 
-// MetricTotal is the aggregate count/value for one series.
-type MetricTotal struct {
-	Series string
-	Total  float64
+// MetricSeries is one time series of a metrics query.
+type MetricSeries struct {
+	// Dimensions maps lower-cased metadata names to values (metadatavalues).
+	Dimensions map[string]string
+	// Value aggregates the points: Total sums, Maximum takes the maximum,
+	// Average averages the non-null points.
+	Value float64
+	// Points counts non-null data points.
+	Points int
+}
+
+// MetricResult is the outcome of a metrics query.
+type MetricResult struct {
+	Series []MetricSeries
+	// Truncated is true when the series count reached the requested top, so
+	// further series may exist.
+	Truncated bool
+	// ErrorCode is the per-metric errorCode when it is not "Success".
+	ErrorCode string
 }
 
 // RuntimeDiagnosticSetting is the RUN-007 projection of a diagnostic setting.
 type RuntimeDiagnosticSetting struct {
-	Name        string
+	Name string
+	// WorkspaceID is the full ARM resource ID of the Log Analytics workspace.
 	WorkspaceID string
 	Categories  []string
-	AgeHours    int
+	// CategoryGroups are enabled logs[].categoryGroup values (for example allLogs).
+	CategoryGroups []string
+	// LogAnalyticsDestinationType is logAnalyticsDestinationType: "Dedicated"
+	// (resource-specific tables) or empty (AzureDiagnostics).
+	LogAnalyticsDestinationType string
+	// AgeKnown is true when systemData carried a parseable timestamp; AgeMinutes
+	// is the age of the last modification (or creation) and means nothing otherwise.
+	AgeKnown   bool
+	AgeMinutes int
 }
 
 // RuntimeLogsResult is the count-only projection of a Log Analytics query.
+// The response table is always named PrimaryResult, so it is not recorded.
 type RuntimeLogsResult struct {
-	Table  string
 	Counts map[string]int64
 }
 
-// RuntimeFoundry reads the management metadata used by RUN-001/003/004.
+// AccountNetwork is the network exposure of a Foundry account (Accounts_Get,
+// cognitiveservices.json 2026-09-01).
+type AccountNetwork struct {
+	// PublicNetworkAccess is properties.publicNetworkAccess (Enabled or Disabled);
+	// empty when the service did not report it.
+	PublicNetworkAccess string
+	// PrivateEndpointConnections counts properties.privateEndpointConnections.
+	PrivateEndpointConnections int
+}
+
+// RuntimeFoundry reads the management metadata used by RUN-001/002/003/004.
 type RuntimeFoundry interface {
+	GetAccountNetwork(ctx context.Context, subscriptionID, resourceGroup, account string) (AccountNetwork, error)
 	GetProject(ctx context.Context, subscriptionID, resourceGroup, account, project string) (FoundryProject, error)
 	ListProjectCapabilityHosts(ctx context.Context, subscriptionID, resourceGroup, account, project string) ([]CapabilityHost, error)
 	ListAccountCapabilityHosts(ctx context.Context, subscriptionID, resourceGroup, account string) ([]CapabilityHost, error)
@@ -722,20 +816,30 @@ type RuntimeFoundry interface {
 
 // RuntimeRBAC reads the metadata-only RBAC evidence used by RUN-001.
 type RuntimeRBAC interface {
-	ListRoleAssignments(ctx context.Context, scope, principalID string) ([]RoleAssignment, error)
+	ListRoleAssignments(ctx context.Context, scope, principalID string) (RoleAssignmentSet, error)
 	ListCosmosSQLRoleAssignments(ctx context.Context, accountID, principalID string) ([]CosmosSQLRoleAssignment, error)
-}
-
-// RuntimeDNS reads private DNS metadata used by RUN-002.
-type RuntimeDNS interface {
-	ListPrivateDNSVNetLinks(ctx context.Context, zoneID string) ([]PrivateDNSVNetLink, error)
 }
 
 // RuntimeMonitor reads the aggregate monitor evidence used by RUN-004/007.
 type RuntimeMonitor interface {
-	QueryAccountMetrics(ctx context.Context, accountID, metricName, filterDimension, filterValue, seriesDimension string) ([]MetricTotal, error)
+	QueryAccountMetrics(ctx context.Context, accountID string, q MetricQuery) (MetricResult, error)
 	ListDiagnosticSettings(ctx context.Context, resourceID string) ([]RuntimeDiagnosticSetting, error)
-	QueryDiagnosticCounts(ctx context.Context, workspaceID, accountName string, hours int) (RuntimeLogsResult, error)
+	// QueryDiagnosticCounts resolves the workspace customerId from the
+	// workspace ARM resource ID, then runs the fixed AzureDiagnostics count
+	// template through the allow-listed Log Analytics operation.
+	QueryDiagnosticCounts(ctx context.Context, workspaceResourceID, accountName string, hours int) (RuntimeLogsResult, error)
+}
+
+// WithinScope reports whether id equals or lies under any non-empty scope
+// (path-boundary, case-insensitive). It is the shared cross-resource-group
+// scope policy test (ADR-021 e, ADR-022).
+func WithinScope(id string, scopes ...string) bool {
+	for _, s := range scopes {
+		if LockCovers(s, id) {
+			return true
+		}
+	}
+	return false
 }
 
 // RegisterAction returns the RBAC action needed to register a resource

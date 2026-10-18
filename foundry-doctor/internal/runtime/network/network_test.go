@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,29 +19,46 @@ type fakeResolver struct {
 func (f fakeResolver) LookupHost(context.Context, string) ([]string, error) { return f.answers, f.err }
 
 func TestResolvePrivate(t *testing.T) {
-	if got := ResolvePrivate(context.Background(), fakeResolver{}, runtime.VantageNone, "x"); got.State != runtime.StateSkipped {
-		t.Fatalf("non-vnet state = %s", got.State)
+	ctx := context.Background()
+	cases := []struct {
+		name     string
+		r        fakeResolver
+		vantage  runtime.Vantage
+		peBacked bool
+		want     runtime.State
+		contains string
+	}{
+		{"non-vnet vantage skips", fakeResolver{}, runtime.VantageNone, true, runtime.StateSkipped, "asserted by you"},
+		{"local vantage skips", fakeResolver{answers: []string{"52.1.1.1"}}, runtime.VantageLocal, true, runtime.StateSkipped, "--vantage vnet"},
+		{"private answer passes", fakeResolver{answers: []string{"10.0.0.4"}}, runtime.VantageVNet, true, runtime.StatePass, ""},
+		{"private answer passes without proof", fakeResolver{answers: []string{"10.0.0.4"}}, runtime.VantageVNet, false, runtime.StatePass, ""},
+		{"public answer on a private-endpoint dependency fails", fakeResolver{answers: []string{"52.1.1.1"}}, runtime.VantageVNet, true, runtime.StateFail, "private-endpoint backed"},
+		{"public answer without proof is uncertain", fakeResolver{answers: []string{"52.1.1.1"}}, runtime.VantageVNet, false, runtime.StateUncertain, "not proven"},
+		{"mixed answers on a private-endpoint dependency fail", fakeResolver{answers: []string{"10.0.0.4", "52.1.1.1"}}, runtime.VantageVNet, true, runtime.StateFail, ""},
+		{"unparseable answer counts as not private", fakeResolver{answers: []string{"not-an-ip"}}, runtime.VantageVNet, true, runtime.StateFail, ""},
+		{"NXDOMAIN with a private endpoint fails", fakeResolver{err: ErrNXDomain}, runtime.VantageVNet, true, runtime.StateFail, "NXDOMAIN"},
+		{"NXDOMAIN without proof is uncertain", fakeResolver{err: ErrNXDomain}, runtime.VantageVNet, false, runtime.StateUncertain, "NXDOMAIN"},
+		{"wrapped NXDOMAIN is recognised", fakeResolver{err: errors.Join(errors.New("ctx"), ErrNXDomain)}, runtime.VantageVNet, true, runtime.StateFail, "NXDOMAIN"},
+		{"timeout is skipped, never a failure", fakeResolver{err: context.DeadlineExceeded}, runtime.VantageVNet, true, runtime.StateSkipped, "timeout"},
+		{"other resolver error is skipped", fakeResolver{err: errors.New("servfail")}, runtime.VantageVNet, true, runtime.StateSkipped, "not evidence"},
+		{"no answers with a private endpoint fails", fakeResolver{}, runtime.VantageVNet, true, runtime.StateFail, "no addresses"},
+		{"no answers without proof is uncertain", fakeResolver{}, runtime.VantageVNet, false, runtime.StateUncertain, "no addresses"},
 	}
-	if got := ResolvePrivate(context.Background(), fakeResolver{answers: []string{"10.0.0.4"}}, runtime.VantageVNet, "x"); got.State != runtime.StatePass {
-		t.Fatalf("private state = %s", got.State)
-	}
-	if got := ResolvePrivate(context.Background(), fakeResolver{answers: []string{"52.1.1.1"}}, runtime.VantageVNet, "x"); got.State != runtime.StateFail {
-		t.Fatalf("public state = %s", got.State)
-	}
-	if got := ResolvePrivate(context.Background(), fakeResolver{err: errors.New("boom")}, runtime.VantageVNet, "x"); got.State != runtime.StateSkipped {
-		t.Fatalf("error state = %s", got.State)
-	}
-	if got := ResolvePrivate(context.Background(), fakeResolver{answers: nil}, runtime.VantageVNet, "x"); got.State != runtime.StateFail {
-		t.Fatalf("empty state = %s", got.State)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := ResolvePrivate(ctx, c.r, c.vantage, "x.example", c.peBacked)
+			if got.State != c.want {
+				t.Fatalf("state = %s (%s), want %s", got.State, got.Reason, c.want)
+			}
+			if !strings.Contains(got.Reason, c.contains) {
+				t.Errorf("reason %q lacks %q", got.Reason, c.contains)
+			}
+			if c.vantage == runtime.VantageVNet && got.State != runtime.StatePass && !strings.Contains(got.Reason, "asserted with --vantage vnet") {
+				t.Errorf("reason does not state the assumed vantage: %q", got.Reason)
+			}
+		})
 	}
 }
-
-type fakeLinks struct {
-	links []Link
-	err   error
-}
-
-func (f fakeLinks) ListLinks(context.Context, string) ([]Link, error) { return f.links, f.err }
 
 // ctxResolver returns the context error as soon as the context is done. With
 // block set it waits for that; otherwise it checks once and answers.
@@ -57,19 +75,7 @@ func (c ctxResolver) LookupHost(ctx context.Context, _ string) ([]string, error)
 	return []string{"10.0.0.4"}, nil
 }
 
-func TestLinkStateAndTimeoutResolver(t *testing.T) {
-	if got := LinkState(context.Background(), fakeLinks{err: errors.New("boom")}, "zone"); got.State != runtime.StateSkipped {
-		t.Fatalf("link error state = %+v", got)
-	}
-	if got := LinkState(context.Background(), fakeLinks{}, "zone"); got.State != runtime.StateUncertain {
-		t.Fatalf("link empty state = %+v", got)
-	}
-	if got := LinkState(context.Background(), fakeLinks{links: []Link{{Name: "x", State: "Completed"}}}, "zone"); got.State != runtime.StatePass {
-		t.Fatalf("link state = %+v", got)
-	}
-	if got := LinkState(context.Background(), fakeLinks{links: []Link{{Name: "x", State: "InProgress"}}}, "zone"); got.State != runtime.StateUncertain {
-		t.Fatalf("link state = %+v", got)
-	}
+func TestTimeoutResolver(t *testing.T) {
 	// A real resolver may answer "localhost" from /etc/hosts without looking at
 	// the context, so cancellation is tested with an inner resolver that does.
 	ctx, cancel := context.WithCancel(context.Background())
@@ -85,5 +91,22 @@ func TestLinkStateAndTimeoutResolver(t *testing.T) {
 	}
 	if _, err := (TimeoutResolver{Inner: NetResolver{Resolver: net.DefaultResolver}, Timeout: time.Second}).LookupHost(ctx, "localhost"); err != nil && !errors.Is(err, context.Canceled) {
 		t.Fatalf("net resolver with cancelled context: %v", err)
+	}
+}
+
+func TestMapLookupError(t *testing.T) {
+	if err := mapLookupError(&net.DNSError{Err: "no such host", IsNotFound: true}); !errors.Is(err, ErrNXDomain) {
+		t.Errorf("not found -> %v", err)
+	}
+	if err := mapLookupError(&net.DNSError{Err: "i/o timeout", IsTimeout: true}); !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("timeout -> %v", err)
+	}
+	other := &net.DNSError{Err: "server misbehaving"}
+	if err := mapLookupError(other); errors.Is(err, ErrNXDomain) || errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("other -> %v", err)
+	}
+	plain := errors.New("x")
+	if mapLookupError(plain) != plain {
+		t.Error("non-DNS errors must pass through")
 	}
 }

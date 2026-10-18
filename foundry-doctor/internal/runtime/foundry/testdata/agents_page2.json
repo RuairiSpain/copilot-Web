@@ -1,0 +1,24 @@
+{
+  "data": [
+    {
+      "object": "agent",
+      "id": "agent_other",
+      "name": "other-agent",
+      "state": "disabled",
+      "configuration_state": "disabled",
+      "versions": {
+        "latest": {
+          "object": "agent.version",
+          "id": "other-agent:1",
+          "name": "other-agent",
+          "version": "1",
+          "created_at": 1760000001,
+          "definition": {"kind": "prompt", "model": "gpt-main", "instructions": "PROMPT_SENTINEL_TEXT"}
+        }
+      }
+    }
+  ],
+  "first_id": "agent_other",
+  "last_id": "agent_other",
+  "has_more": false
+}
