@@ -1,5 +1,5 @@
 id: FND-RUN-004
-version: 2
+version: 3
 group: RUN
 title: Model deployment state and throttling signal
 description: >-
@@ -28,26 +28,28 @@ evidence:
   description: >-
     Probe 1: GET /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.CognitiveServices/accounts/{a}/deployments?api-version=2026-09-01
     (Deployments list; one Get per deployment is equivalent). properties.provisioningState Succeeded is healthy; Failed,
-    Canceled or Disabled is Fail; Accepted, Creating, Deleting or Moving is Uncertain. Also report properties.dynamicThrottlingEnabled,
-    properties.currentCapacity and properties.rateLimits (all read-only per the spec) as context. Probe 2: GET
-    /{accountResourceId}/providers/Microsoft.Insights/metrics?api-version=2024-02-01 with metricnames=AzureOpenAIRequests,
-    aggregation=Maximum (Average where a rate is reported; Total is not used), an interval, an explicit
-    timespan of the form {startISO}/{endISO} (default window one hour ending now; product opinion; the doctor computes both
-    ends, it does not use a relative duration), and $filter=StatusCode eq '*' and ModelDeploymentName eq '*' so that the
-    service splits the series by both dimensions and each time series carries its StatusCode and ModelDeploymentName
-    values. Attribution is by those returned dimension values only: a value above the configured threshold (default 0,
-    product opinion) on a series whose StatusCode is 429 is attributed to the deployment named by that series'
-    ModelDeploymentName. The documented query keys are timespan, interval, metricnames, aggregation, top, orderby,
-    $filter, resultType, metricnamespace, AutoAdjustTimegrain, ValidateDimensions and rollupby (Metrics_List,
-    2024-02-01, VERIFIED in the spec on 2026-10-17); the rule uses only metricnames, aggregation, timespan, interval and
-    $filter (plus metricnamespace if the namespace is set). The StatusCode value domain of AzureOpenAIRequests (whether
-    the value is the string '429') and the aggregation types the metric supports are UNVERIFIED: the Learn metric reference was
-    not readable. Therefore a 429 signal is reported only when a series carries a StatusCode that is recognised as 429; when
-    the dimension values cannot be matched to HTTP status codes, when the response has no StatusCode dimension, or when a
-    series cannot be attributed to a deployment, the result is Uncertain, never Pass and never a deployment-specific Fail.
-    A Pass for the 429 signal requires at least one returned series with a recognised StatusCode and none recognised as 429.
-    For provisioned-managed deployments also read AzureOpenAIProvisionedManagedUtilizationV2, where 100 percent or above
-    means calls are throttled (aggregation Maximum). Required permission:
+    Canceled or Disabled is Fail; Accepted, Creating, Deleting or Moving is Uncertain. Probe 2: GET
+    /{accountResourceId}/providers/Microsoft.Insights/metrics?api-version=2024-02-01 (allow-list operation runtime.metrics;
+    query keys timespan, interval, metricnames, aggregation, top, $filter, metricnamespace and resulttype are accepted, and
+    the rule sends timespan, interval, metricnames, aggregation, $filter and top). metricnames=AzureOpenAIRequests,
+    aggregation=Total, interval=PT1M (the only grain the supported-metrics table lists for these metrics), an explicit
+    timespan of the form {startISO}/{endISO} (one hour ending now; product opinion; the doctor computes both ends, it
+    does not use a relative duration), $filter=StatusCode eq '*' and ModelDeploymentName eq '*' so that the service
+    splits the series by both dimensions, and top=50 (the spec says top defaults to 10 when $filter is set, so a split
+    by deployment needs more). metricnamespace is not sent (UNVERIFIED whether a namespace is needed for these metrics).
+    Attribution is by the returned ModelDeploymentName dimension value only (it must be a safe resource name; otherwise
+    the finding is attached to the account and says the series could not be attributed). StatusCode handling: a series
+    whose StatusCode value is exactly 429 with a total above 0 (threshold 0; product opinion) is a finding for its
+    deployment. If every returned StatusCode value is a three-digit HTTP code (100 to 599) and none is 429, no throttling
+    occurred in the window (Pass for this signal). If any value is not a three-digit code and no series is identified as
+    429, the result is Uncertain and names the observed values (at most 10): the Learn metric reference describes
+    categories and does not enumerate the StatusCode values, so the value domain is UNVERIFIED. If the response has no
+    time series at all, the result is Uncertain: no series is not a count of zero (no requests in the window, or the
+    metric was not emitted). If the response reports an errorCode, or the series count reached the top=50 cap, the result
+    is Uncertain with a truncation note (some deployments may be missing). For provisioned-managed deployments also read
+    AzureOpenAIProvisionedManagedUtilizationV2 (aggregation Maximum, split by ModelDeploymentName, same window, interval
+    and cap): a maximum of 100 percent or above in the window means calls were throttled and is a finding for that
+    deployment. Required permission:
     ARM read on the account for probe 1 and permission to read Azure Monitor metrics on the account for probe 2
     (Microsoft.Insights/metrics/read; the built-in role carrying it was not verified). Vantage point: control plane, any
     network. Metadata read: deployment names, model names and versions, counts. No prompts or completions.
@@ -133,18 +135,20 @@ tests:
     - a series with StatusCode 429 above the threshold, attributed to one deployment by its ModelDeploymentName value
     - provisioned utilization at 100 percent
   negative:
-    - all used deployments Succeeded and the split series carry recognised StatusCode values with none equal to 429 in the window
+    - all deployments Succeeded and every returned StatusCode value is a three-digit code with none equal to 429 (no throttling occurred)
   skipped:
     - caller cannot read metrics
     - deployment is not used by the project (out of scope)
   uncertain:
     - deployment Creating or Updating
-    - metric returns no data points (no traffic versus delayed ingestion)
-    - StatusCode values in the response cannot be identified as HTTP status codes, so 429 cannot be identified
-    - a series cannot be attributed to a deployment (no ModelDeploymentName value)
+    - no time series returned (no traffic versus metric not emitted; distinct from a count of zero)
+    - StatusCode values that are not three-digit codes and no series identified as 429
+    - metric response carries an errorCode, or the series count reached the top=50 cap (truncation note)
+    - a series cannot be attributed to a deployment (no safe ModelDeploymentName value), attached to the account
 testability: Deterministic against recorded ARM and Metrics responses; live mode needs ARM and Monitor read access.
 notes: >-
-  Loop 1 (2026-10-17): Maximum/Average aggregation, '*' split attribution, explicit start/end timespan; the StatusCode
-  value domain is UNVERIFIED. Unverified: the per-metric dimension list for AzureOpenAIRequests (the docs list StatusCode and ModelDeploymentName
+  Loop 1 (2026-10-18, synced to the Go code): AzureOpenAIRequests Total split by StatusCode and ModelDeploymentName (top=50,
+  PT1M, explicit start/end timespan, no metricnamespace), utilisation Maximum; the StatusCode value domain and the Total
+  aggregation as read from the supported-metrics reference cited in the monitor package are UNVERIFIED by the catalogue owner. Unverified: the per-metric dimension list for AzureOpenAIRequests (the docs list StatusCode and ModelDeploymentName
   for the namespace, and the per-metric include file was not in the clone); metric retention and the exact metric
   namespace string; the built-in role needed for metric reads. The default window and threshold are product opinion.

@@ -1,5 +1,5 @@
 id: FND-RUN-002
-version: 2
+version: 3
 group: RUN
 title: Private DNS resolves from an appropriate vantage point
 description: >-
@@ -27,12 +27,14 @@ compatibility:
   azd: ''
   extensions: {}
   apiVersions:
-  - { plane: management, provider: Microsoft.Network, resourceType: privateDnsZones, version: '2018-09-01' }
-  - { plane: management, provider: Microsoft.Network, resourceType: privateDnsZones/virtualNetworkLinks, version: '2018-09-01' }
+  - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts, version: '2026-09-01' }
+  - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts/projects/connections, operation: list, version: '2026-09-01' }
+  - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts/connections, operation: list, version: '2026-09-01' }
   preview: false
   notes: >-
-    No azd dependency: DNS lookup and ARM reads; no azd behaviour dependency Microsoft.Network/privateDnsZones and virtualNetworkLinks
-    2018-09-01: stable.
+    No azd dependency: DNS lookup and ARM reads; no azd behaviour dependency. Microsoft.CognitiveServices/accounts
+    (Accounts_Get) and connections 2026-09-01: stable. The Phase 3 runtime does not read Microsoft.Network private DNS
+    zones or virtual network links.
 evidence:
   description: >-
     Probe 1 (data-plane-free): resolve each FQDN (for example <account>.cognitiveservices.azure.com, <account>.openai.azure.com,
@@ -43,17 +45,23 @@ evidence:
     with reason "private DNS resolves only from inside the VNet".
     Pass requires the asserted in-VNet vantage point AND every answer is a private IP.
     Fail requires the asserted in-VNet vantage point AND the dependency proven private-endpoint-backed by control-plane
-    evidence that the finding names (a private endpoint connection on the dependency; the evidence reference is part of
-    the finding) AND either a public-IP answer or an NXDOMAIN answer. A public-IP or NXDOMAIN answer for a dependency that is
+    evidence that the finding names (account publicNetworkAccess Disabled or an existing private endpoint connection on
+    the Foundry account, or connection peStatus Active for the other dependencies; see below) AND either a public-IP answer or an NXDOMAIN answer. A public-IP or NXDOMAIN answer for a dependency that is
     not proven private-endpoint-backed is Uncertain (it may be a public endpoint by design), never Fail.
     NXDOMAIN (the resolver answered that the name does not exist) is a different outcome from a timeout, SERVFAIL or no
     resolver: those are Skipped as 'resolver unavailable' with the error class named, never Fail and never Pass.
-    Probe 2 (control plane, any vantage point, read only): GET /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Network/privateDnsZones/{zone}/virtualNetworkLinks?api-version=2018-09-01
-    to report zones with no link or virtualNetworkLinkState other than Completed as supporting context (never a Pass and
-    never the sole basis of a Fail). Its wiring into the runtime command is tracked in the Phase 3 hand-off; this
-    entry describes the evidence model, not an assumption that the probe runs. Required permission: ARM read on the
-    private DNS zones (probe 2 only) and on the dependency's private endpoint connections (proof for Fail); probe 1 needs
-    none. Metadata read: DNS answers and zone link names. No request is sent to the data plane, so no content is touched.
+    Proof of private-endpoint backing (control plane, read only): for the Foundry account, GET the account (Accounts_Get,
+    api-version 2026-09-01, allow-list operation runtime.account.get): publicNetworkAccess Disabled, or at least one entry
+    in properties.privateEndpointConnections, is the proof. For the Search, Cosmos DB and Storage resources bound to the
+    capability host, the proof is the connection's peStatus (ManagedPEStatus) equal to Active on the project or account
+    connection that points at the resource; the target's own private endpoint connections are not read. A dependency
+    without such proof is not probed and is Uncertain ("private-endpoint backing is not proven"). A failure to read the account is
+    Uncertain, not a Fail. The proof is named in each finding. The runtime does not read private DNS zones or virtual
+    network links: whether a zone is linked to the VNet is not evidence of this rule. Resolution runs per dependency under
+    the per-probe --timeout through the injected resolver; a resolver timeout or error is Skipped (resolver
+    unavailable), never Fail and never Pass. Required permission: ARM read on the Foundry account and on the project and
+    account connections. Probe 1 needs none. Metadata read: DNS answers, publicNetworkAccess, connection peStatus. No
+    request is sent to the data plane, so no content is touched.
   confidence: certain
 recommendation: >-
   Link each required privatelink zone to the VNet that hosts the agent client and private endpoint subnets, configure conditional
@@ -133,15 +141,16 @@ tests:
   - public-IP answer for a dependency with no private endpoint is not a Fail (Uncertain)
   skipped:
   - vantage point is outside the VNet or not declared
-  - no private endpoint is configured for the dependency
-  - resolver unavailable, timed out or SERVFAIL (distinct from NXDOMAIN)
+  - resolver unavailable, timed out (per-probe --timeout) or SERVFAIL (distinct from NXDOMAIN)
+  - no private-endpoint-backed dependency is in scope
   uncertain:
   - public-IP or NXDOMAIN answer for a dependency not proven private-endpoint-backed
-  - zone has no VNet link (context only, never the sole basis of a Fail)
+  - dependency's connection does not report peStatus Active (private-endpoint backing not proven, so not probed)
+  - the Foundry account's network exposure could not be read
   - split-horizon custom DNS returns different answers on repeated lookups
 testability: Resolver is an injected interface so tests use fake answers; real validation needs a host inside the VNet.
 notes: >-
-  Loop 1 (2026-10-17): Fail gated on private-endpoint evidence; NXDOMAIN distinct from timeout; vantage stated as user
+  Loop 1 (2026-10-17; synced to the Go code 2026-10-18; the private DNS VNet-link probe was removed): Fail gated on private-endpoint evidence; NXDOMAIN distinct from timeout; vantage stated as user
   asserted. Unverified: what counts as a private address (RFC 1918 versus any VNet range) is not stated in the Foundry docs; the docs
   say the name must resolve to a private IP address. The full Policy GUID was read from the definition file; it should be
   re-checked when the mapping is finalised. Defender and Advisor IDs were not available in any clone.

@@ -265,6 +265,24 @@ func TestAPIVersionValidation(t *testing.T) {
 		{"unknown suffix", `compatibility:
   apiVersions:
     - {plane: data, service: search, endpointFamily: indexes, version: "2026-09-01-beta"}`, "version must be an exact"},
+		{"foundry data plane v1", `compatibility:
+  apiVersions:
+    - {plane: data, service: MicrosoftFoundry, endpointFamily: agents, version: "v1"}`, ""},
+		{"v1 rejected on management plane", `compatibility:
+  apiVersions:
+    - {plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts, version: "v1"}`, "data plane only"},
+		{"v2 rejected", `compatibility:
+  apiVersions:
+    - {plane: data, service: MicrosoftFoundry, endpointFamily: agents, version: "v2"}`, "version must be an exact"},
+		{"uppercase V1 rejected", `compatibility:
+  apiVersions:
+    - {plane: data, service: MicrosoftFoundry, endpointFamily: agents, version: "V1"}`, "version must be an exact"},
+		{"v1 with suffix rejected", `compatibility:
+  apiVersions:
+    - {plane: data, service: MicrosoftFoundry, endpointFamily: agents, version: "v1-preview"}`, "version must be an exact"},
+		{"empty version rejected", `compatibility:
+  apiVersions:
+    - {plane: data, service: MicrosoftFoundry, endpointFamily: agents, version: ""}`, "version must be an exact"},
 		{"duplicate tuple", base + `
     - {plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts, version: "2026-09-01"}`, "duplicates apiVersions[0]"},
 	}

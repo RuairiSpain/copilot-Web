@@ -1,5 +1,5 @@
 id: FND-RUN-005
-version: 2
+version: 3
 group: RUN
 title: Agent tools/connections respond
 description: >-
@@ -21,14 +21,19 @@ compatibility:
   azd: ""
   extensions:
     azure.ai.agents: ">=1.0.0-beta.18 <=1.0.0-beta.20"
-  apiVersions: []
+  apiVersions:
+    - { plane: data, service: MicrosoftFoundry, endpointFamily: agents, version: v1 }
+    - { plane: data, service: MicrosoftFoundry, endpointFamily: connections, operation: list, version: v1 }
   preview: true
   notes: >-
     No azd dependency: data-plane reads against the project endpoint; azure.yaml service names are read for
     correlation only azure.ai.agents 1.0.0-beta.18: probe shapes read in source. Extension ranges are exactly the
     versions whose schemas or source were read; widen them in Phase 1 by reading older tags. Foundry project endpoint
-    agents API api-version v1 (plane data, service MicrosoftFoundry, endpoint families agents and connections; not expressible in compatibility.apiVersions because the catalogue validator accepts only YYYY-MM-DD[-preview] versions, so it is recorded here; the specification is Azure/azure-rest-api-specs
-    specification/ai-foundry/data-plane/Foundry/openapi3/v1/microsoft-foundry-openapi3.json, read 2026-10-17; the token
+    agents API api-version v1 (plane data, service MicrosoftFoundry, endpoint families agents and connections; recorded in apiVersions as the
+    literal v1, which the catalogue validator accepts on the data plane only; the specification documents v1 as info.version and its
+    api-version parameter is a string with minLength 1 and no enum, so whether other values exist is UNVERIFIED; the
+    specification is Azure/azure-rest-api-specs
+    specification/ai-foundry/data-plane/Foundry/openapi3/v1/microsoft-foundry-openapi3.json, read 2026-10-17 and 2026-10-18; the token
     scope in that spec is https://ai.azure.com/.default) Window widened 2026-10-16:
     azure.ai.agents to 1.0.0-beta.20. The azd and extension changelogs and the schema and source diffs from the
     previously verified versions were read; none touches this rule's verified facts for the widened fields (see
@@ -41,14 +46,19 @@ evidence:
     array of agents plus `first_id`, `last_id` and `has_more`; `limit` ranges from 1 to 100 (default 20); the rule follows
     paging with `after` (the last_id of the page) while has_more is true, up to a fixed page cap, and a list that is still
     has_more at the cap is Uncertain. Each agent object carries `versions.latest`, the latest version; the rule reads the
-    version to inspect from it and from the agent version path, not from a guessed field.
-    (2) GET {projectEndpoint}/agents/{name}/versions/{version}: the AgentVersionObject `status` is one of creating,
-    active, failed, deleting, deleted (lower case; VERIFIED in the v1 OpenAPI document). active is healthy; creating or
-    deleting is Uncertain; failed or deleted is Fail; 404 is Fail. An absent or empty `status` is Uncertain, never healthy
-    (the spec says non-hosted agents default to active, but the rule does not assume the default when the field is
-    absent). (3) GET {projectEndpoint}/connections: the response is a PagedConnection object whose items are in `value`
-    (not `data`) with an optional `nextLink`; the rule follows nextLink up to the same page cap and reads only name, type
-    (category) and target. The Connection schema in the same document also lists a `credentials` property; the rule never
+    version and its status from it.
+    (2) Agent status model (what the code reads): each agent named in azure.yaml (host azure.ai.agent) is matched by name,
+    case-insensitive, against the listing, and its versions.latest.status is read from the listing; the rule does not issue
+    the per-version GET. AgentVersionStatus is one of creating, active, failed, deleting, deleted (lower case; VERIFIED
+    in the v1 OpenAPI document 2026-10-18). An absent or empty status is treated as active: the spec states that non-hosted
+    agents default to active; this reading is UNVERIFIED for hosted agents that omit the field. active is healthy;
+    creating is Uncertain; failed, deleting or deleted is Fail; any other value is Uncertain (unrecognised). An agent whose
+    `state` is disabled (AgentState enabled|disabled, VERIFIED; the endpoint then rejects requests) is Uncertain. An agent
+    that is not in the listing is Fail, unless the listing was capped (the page cap was reached with has_more still
+    true), in which case it is Uncertain with a note that the agent was not found in the first N agents. (3) GET {projectEndpoint}/connections: the response is a PagedConnection object whose items are in `value`
+    (not `data`) with an optional `nextLink`; the rule follows nextLink up to the same page cap and reads only connection names; each connection bound by the
+    capability host (see FND-RUN-003) that is absent from the listing is Fail, unless the listing was capped, in which case
+    it is Uncertain. The Connection schema in the same document also lists a `credentials` property; the rule never
     reads or retains it and never calls the credentials operation. Required permission: the azd extension comments that
     agent list and get are Reader-level operations, and the Foundry docs assign Foundry User on the project to developers
     who create or edit agents; the exact data action was not verified. Vantage point: the project endpoint must be
@@ -123,20 +133,20 @@ implementation:
   package: internal/rules/run
 tests:
   positive:
-    - agent version Failed
-    - agent version not found (404)
+    - agent versions.latest status failed, deleting or deleted
+    - agent named in azure.yaml not in the (complete) listing
     - referenced connection name absent from the project (connection list read from `value`, including a second page)
-    - agent version status failed
   negative:
     - endpoint reachable, all agent versions active, all referenced connections listed (connections read from `value`)
     - agent list with has_more true is followed to the last page and the versions are read from versions.latest
+    - agent versions.latest status absent or empty (treated as active, per the spec default for non-hosted agents)
   skipped:
     - project endpoint not set or not reachable from this vantage point
     - 401 or 403 from the project endpoint
   uncertain:
-    - agent version creating
-    - agent version status absent or empty
-    - agent or connection list still has_more or has nextLink at the page cap
+    - agent versions.latest status creating, or an unrecognised status value
+    - agent state disabled
+    - agent or connection not found in a capped listing (page cap reached with has_more or nextLink still set)
     - tool responsiveness requested (not probed by design)
 testability: Deterministic against a fake project endpoint; live mode needs data-plane read access.
 notes: >-
@@ -144,4 +154,5 @@ notes: >-
   `data`/`has_more`, connections `value`/`nextLink`, `versions.latest`, status creating|active|failed|deleting|deleted).
   Unverified: the data action that a Reader or Foundry User needs; that every hosted and prompt agent reports `status`;
   no source documents a side-effect-free tool or MCP probe, hence
-  product-opinion. Whether prompt agents report a status is not stated in the spec; an absent status is Uncertain.
+  product-opinion. Whether prompt agents report a status is not stated in the spec; an absent status is treated as active (spec default for non-hosted agents), UNVERIFIED for hosted agents. The
+  api-version enum is not documented (parameter is any non-empty string); only v1 is recorded.

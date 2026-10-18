@@ -73,6 +73,19 @@ mitigations are weaker than ADR-006 item 7 asks for (the item also requires a sh
 remediation, route the call through the allow-list (operation, origin and token scope declared there, with a hostile-name replay test), then delete this exception.
 This is recorded here because it shares the package and allow-list; Phase 3 owns its review.
 
+**(g) status: CLOSED in Phase 3 fix loop 1 (2026-10-18), pending re-review.** The exit criterion was met in the Phase 3 loop 1 Go patch (commit 173db99): the
+`logQuery` bypass no longer exists. The Log Analytics query now goes through the shared transport as the allow-listed operation `runtime.loganalytics.query`
+(`POST /v1/workspaces/{guid}/query`, declared origin `https://api.loganalytics.azure.com`, declared token scope `https://api.loganalytics.io/.default`,
+a body validator that accepts only the shipped aggregate template and a `PT<n>H` timespan), after the workspace GUID is resolved through the allow-listed
+operation `runtime.workspace.get` (Workspaces_Get 2025-02-01, `properties.customerId`). Evidence: the shared transport applies retry, 429 and Retry-After handling,
+a response size cap (32 MiB) and refusal to follow redirects to the Log Analytics call as it does to every ARM call; tests in `internal/azure/runtime_adapter_test.go`:
+`TestQueryDiagnosticCountsRoutesThroughAllowList`, `TestQueryDiagnosticCountsHostileNameReplayFailsClosed` (the hostile-name replay test),
+`TestLogQueryBodyValidationRejectsNonTemplates`, `TestLogQueryPermissionAndRedirectAndSizeCap`, `TestLogAnalyticsEndpointMustBeHTTPSOrigin`. The token scope was
+checked 2026-10-18 against azure-monitor-docs `logs/api/access-api.md` (tokens use the `api.loganalytics.io` audience; requests go to the `api.loganalytics.azure.com`
+origin, `logs/api/request-format.md`); the earlier text above names the `.io` origin for requests, which the docs now replace with `.azure.com` (the `.io` host is documented as
+being replaced and still supported). This status line was written by the catalogue owner from the code on disk and the tests listed; it has not been run or re-reviewed
+by this agent, and closure is final only when the Foundry lead and Azure black belt accept the re-review.
+
 ## Consequences
 
 - The Phase 2 hand-off marks the affected DoD items as waived-by-ADR-021 with the exit criteria above, never as met.

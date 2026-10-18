@@ -1,12 +1,12 @@
 id: FND-RUN-003
-version: 2
+version: 3
 group: RUN
 title: Capability host and project connections healthy
 description: >-
   The project and its capability host must be provisioned successfully, and the connections the capability host binds
   (AI services, storage, thread storage and vector store) must exist on the project or be shared to it and report no
   connection error. The rule also applies the cross-resource-group scope policy (ADR-021 e, ADR-022) to connection targets: a
-  connection whose `properties.target` is a literal ARM resource ID outside the project's resource group and outside every
+  connection whose target resource ID (`metadata.ResourceId` when present, otherwise `properties.target` when that is itself an ARM resource ID) is outside the project's resource group and outside every
   `--approved-scope` is a finding. The rule reads ARM provisioning state and connection metadata only; connection
   credentials are never requested.
 status: verified
@@ -46,17 +46,19 @@ evidence:
     (operation in progress), never Pass. GET .../projects/{p}/connections and .../accounts/{a}/connections (never the
     list-with-credentials operation): every name in capability host aiServicesConnections, storageConnections,
     threadStorageConnections and vectorStoreConnections must exist; a non-empty ConnectionPropertiesV2.error is Fail
-    (described in the spec as the error message if the connection fails). Scope policy (loop 1, ADR-022): for every
-    connection the rule reads ConnectionPropertiesV2.target (a string property VERIFIED in the 2026-09-01 spec on
-    2026-10-17). If the target is a literal ARM resource ID (it starts with /subscriptions/ and names a resource group)
-    and that resource group is not the project's resource group and the ID is not under an `--approved-scope` (match on
-    path boundaries, the same rule as the Phase 2 scope policy), the connection is a finding that names the connection
-    and the target resource group. A target that is an endpoint URL rather than an ARM ID, or that cannot be read, cannot
-    be placed in a resource group from the string and is Uncertain with that reason, never Pass for the scope check.
-    The connection metadata map is not read for scope in loop 1: docs/development/phase-1-fact-check.md (row 6)
-    records that `target` is a URL for the categories it checked and that `metadata.ResourceId` (an ARM ID) is
-    documented for them (Foundry docs, not the ARM spec), so most live targets are Uncertain for the scope check until
-    a later change reads metadata.ResourceId under a verified source; that key is not implemented here. Required
+    (described in the spec as the error message if the connection fails). Scope policy (ADR-022): the connection target resource ID is `metadata.ResourceId` when that
+    key is present, otherwise `properties.target` when that value is itself an ARM resource ID. `properties.target` is a
+    string property VERIFIED in the 2026-09-01 spec on 2026-10-17; `metadata` is typed as a free string map in the ARM spec,
+    so the key name ResourceId is a documented-in-Learn convention (docs/development/phase-1-fact-check.md row 6: the Foundry
+    docs describe `metadata.ResourceId` as the ARM ID, while `target` is a URL for the categories checked) and is
+    UNVERIFIED as a schema fact. If the resolved ID is a literal ARM resource ID and it is not in the project's resource group
+    and not under an `--approved-scope` (a `runtime` flag, repeatable; path-boundary match, the same rule as the Phase 2
+    scope policy), the connection is a finding that names the connection and the target. A resolved value that is an
+    unresolved template expression (starts with `[`, or contains `${`, `parameters(`, `reference(` or `resourceId(`) is Uncertain.
+    A connection of a resource-backed category (cognitivesearch, cosmosdb, azurestorageaccount, azureblob, adlsgen2,
+    azureopenai, aiservices) that yields no resource ID (an endpoint-URL `target` and no `metadata.ResourceId`) is
+    Uncertain: the scope policy was not evaluated, never Pass. A connection of any other category with no resource ID is
+    not evaluated. Required
     permission: ARM read on the account
     and project (Reader scope); exact resource provider action names were not verified in the clones. Vantage point: control
     plane, any network. Metadata read: names, provisioning states, connection category/authType/target. Never credentials,
@@ -140,10 +142,11 @@ tests:
   uncertain:
     - capability host Creating or Updating
     - connection shared to the project but account connections unreadable
-    - connection target is an endpoint URL or unreadable, so its resource group cannot be determined (scope policy)
+    - resource-backed connection exposes no resource ID (endpoint-URL target and no metadata.ResourceId), so the scope policy was not evaluated
+    - connection target resource ID is an unresolved template expression
 testability: Deterministic against recorded ARM responses; live mode needs ARM read on the account and project.
 notes: >-
-  Loop 1 (2026-10-17): scope policy for connection targets added (ADR-022). Verified in the 2026-09-01 spec on
+  Loop 1 (2026-10-17; synced to the Go code 2026-10-18): scope policy for connection targets added (ADR-022); the resource ID is metadata.ResourceId when present, else an ARM-ID target. Verified in the 2026-09-01 spec on
   2026-10-17: ProjectCapabilityHosts_List, ProjectConnections_List, AccountCapabilityHosts_List, AccountConnections_List;
   CapabilityHostProperties aiServicesConnections, storageConnections, threadStorageConnections, vectorStoreConnections;
   ConnectionPropertiesV2 authType, category, error, metadata, peRequirement, peStatus, target. Unverified: whether

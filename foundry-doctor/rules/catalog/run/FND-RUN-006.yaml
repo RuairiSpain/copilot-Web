@@ -1,5 +1,5 @@
 id: FND-RUN-006
-version: 3
+version: 4
 group: RUN
 title: Search index/documents/vector/indexer health
 description: >-
@@ -39,19 +39,23 @@ evidence:
     compared with the expected field names and types; a vector field is a SearchField with dimensions and
     vectorSearchProfile, and the named profile must exist in the index's vectorSearch.profiles (VectorSearchProfile.name;
     VERIFIED in the 2026-04-01 spec on 2026-10-17); a vector field whose profile is not defined is Fail. The index name
-    comes from user configuration or the agent tool; the connection metadata keys that might carry an index name are
-    UNVERIFIED hints only: the ARM spec types metadata as a free map and no source read for this catalogue names an
-    index key, so the rule never derives an index name from connection metadata
-    and reports Skipped when no index name is configured. (2) GET /indexes('{index}')/search.stats returns documentCount,
+    comes from optional connection metadata hints (keys index, indexName, indexes for indexes; indexer, indexerName,
+    indexers for indexers): these key names are UNVERIFIED because the ARM spec types metadata as a free map and no source
+    read for this catalogue names an index key. A hint that is not a valid object name is not queried (Uncertain). When a
+    Search connection carries no index name hint the index to check is unknown and the connection is Skipped
+    (input-unavailable), never passed. (2) GET /indexes('{index}')/search.stats returns documentCount,
     storageSize and vectorIndexSize (VERIFIED). documentCount of 0 is Fail for an index the agent is meant to retrieve
-    from, except that the spec states statistics are collected periodically and may not be current: if the index was
-    changed or an indexer last succeeded within the freshness window, a zero count is Uncertain. The freshness window is
-    expressed in minutes (default 60; product opinion, no source states the statistics lag) and is measured against the
-    indexer lastResult endTime. A recent indexer success with documentCount 0 is Uncertain, never Fail. (3) GET
+    from, except that the spec states statistics are collected periodically and may not be current: a zero count is Uncertain
+    when an indexer succeeded less than 60 minutes ago or is inProgress or was reset (the freshness window is 60 minutes;
+    product opinion, no source states the statistics lag; it is measured against the latest successful execution end
+    time in lastResult or the visible executionHistory). A zero count where an indexer has no successful run in its
+    visible history is a Fail that says so explicitly ("no indexer has a successful run in its visible history"; the
+    history is a bounded window, not proof of never). A zero count with no indexer hint, or whose last success is older
+    than the window, is a Fail. (3) GET
     /indexers('{indexer}')/search.status. Real enums (VERIFIED in the 2026-04-01 spec on 2026-10-17): the indexer `status`
     is unknown, error or running; the lastResult `status` (IndexerExecutionStatus) is transientFailure, success, inProgress
-    or reset. Status error is Fail. lastResult transientFailure is a Fail only when the indexer status is error; otherwise
-    it is Uncertain (it may retry); inProgress and reset are Uncertain; success is healthy; unknown is Uncertain. The
+    or reset. Status error is Fail. lastResult transientFailure, inProgress and reset are Uncertain (a transientFailure may retry);
+    success is healthy. A non-error indexer with no visible successful run is Uncertain when the index has documents. The
     execution result has no `errorCode` property in the spec (it has status, errorMessage, startTime, endTime, errors,
     warnings, itemsProcessed, itemsFailed, initialTrackingState, finalTrackingState), so no rule evidence uses an error
     code. The finding keeps only the structured status values, itemsProcessed and itemsFailed, never errorMessage, errors
@@ -143,15 +147,15 @@ tests:
   - search service is private and the vantage point is outside the VNet
   - caller has no Search RBAC role
   - project has no Search connection
+  - Search connection carries no index name hint (the index to check is unknown)
   uncertain:
   - statistics stale after a recent change (documentCount 0 within the freshness window)
-  - indexer lastResult success recently but documentCount is 0
+  - indexer lastResult success less than 60 minutes ago but documentCount is 0
   - indexer status running with lastResult transientFailure, inProgress or reset
-  - indexer status unknown
 testability: Deterministic against recorded Search REST responses; live mode needs Search RBAC and network reach.
 notes: >-
   Loop 1 (2026-10-17): real indexer enums, no errorCode, freshness in minutes, recent success with zero documents is
-  Uncertain, vector profile existence checked, connection metadata index keys are an UNVERIFIED hint. Unverified: which
+  Uncertain, vector profile existence checked, connection metadata index and indexer keys are UNVERIFIED hints that the rule reads (synced to the Go code 2026-10-18). Unverified: which
   Search role covers search.stats and indexer status individually (the RBAC table groups them under object management
   and querying); the Search data plane token scope; that documentCount 0 always means an unhealthy agent index (a
   product judgement for indexes the agent depends on); the freshness default of 60 minutes (product opinion). The
