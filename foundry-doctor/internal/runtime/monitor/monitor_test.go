@@ -2,31 +2,41 @@ package monitor
 
 import (
 	"context"
-	"fmt"
-	"net/http"
-	"net/http/httptest"
-	"strings"
+	"errors"
 	"testing"
 
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/azure"
 )
 
-type fakeInner struct{}
+type fakeInner struct {
+	queries []azure.MetricQuery
+	err     error
+}
 
-func (fakeInner) QueryAccountMetrics(context.Context, string, string, string, string, string) ([]azure.MetricTotal, error) {
-	return []azure.MetricTotal{{Series: "dep1", Total: 2}}, nil
+func (f *fakeInner) QueryAccountMetrics(_ context.Context, _ string, q azure.MetricQuery) (azure.MetricResult, error) {
+	f.queries = append(f.queries, q)
+	if f.err != nil {
+		return azure.MetricResult{}, f.err
+	}
+	return azure.MetricResult{
+		Series:    []azure.MetricSeries{{Dimensions: map[string]string{"modeldeploymentname": "dep1", "StatusCode": "429"}, Value: 2, Points: 1}},
+		Truncated: true, ErrorCode: "BadRequest",
+	}, nil
 }
-func (fakeInner) ListDiagnosticSettings(context.Context, string) ([]azure.RuntimeDiagnosticSetting, error) {
-	return []azure.RuntimeDiagnosticSetting{{Name: "diag", WorkspaceID: "law", Categories: []string{"Audit"}, AgeHours: 3}}, nil
+func (*fakeInner) ListDiagnosticSettings(context.Context, string) ([]azure.RuntimeDiagnosticSetting, error) {
+	return []azure.RuntimeDiagnosticSetting{{Name: "diag", WorkspaceID: "law", Categories: []string{"Audit"}, CategoryGroups: []string{"allLogs"}, LogAnalyticsDestinationType: "Dedicated", AgeKnown: true, AgeMinutes: 180}}, nil
 }
-func (fakeInner) QueryDiagnosticCounts(context.Context, string, string, int) (azure.RuntimeLogsResult, error) {
-	return azure.RuntimeLogsResult{Table: "AzureDiagnostics", Counts: map[string]int64{"Audit": 1}}, nil
+func (*fakeInner) QueryDiagnosticCounts(context.Context, string, string, int) (azure.RuntimeLogsResult, error) {
+	return azure.RuntimeLogsResult{Counts: map[string]int64{"Audit": 1}}, nil
 }
 
 func TestBuildQuery(t *testing.T) {
 	q, ok := BuildQuery("acct-01", 1)
 	if !ok || q == "" {
 		t.Fatal("expected valid query")
+	}
+	if want := `AzureDiagnostics | where ResourceProvider == "MICROSOFT.COGNITIVESERVICES" | where ResourceId endswith "/ACCOUNTS/ACCT-01" | where TimeGenerated > ago(1h) | summarize count() by Category`; q != want {
+		t.Fatalf("query = %q", q)
 	}
 	if bad, ok := BuildQuery("acct\"bad", 1); ok || bad != "" {
 		t.Fatalf("invalid account accepted: %q", bad)
@@ -36,62 +46,62 @@ func TestBuildQuery(t *testing.T) {
 	}
 }
 
-func TestFixedClientAdapters(t *testing.T) {
-	c := FixedClient{Inner: fakeInner{}}
-	if got, err := c.QueryTraffic(context.Background(), "id"); err != nil || len(got) != 1 || got[0].Series != "dep1" {
+func TestFixedClientSendsTheDocumentedQueries(t *testing.T) {
+	f := &fakeInner{}
+	c := FixedClient{Inner: f}
+	ctx := context.Background()
+	if got, err := c.QueryTraffic(ctx, "id"); err != nil || len(got.Series) != 1 || got.Series[0].Dimensions["modeldeploymentname"] != "dep1" || !got.Truncated || got.ErrorCode != "BadRequest" {
 		t.Fatalf("traffic = %+v err=%v", got, err)
 	}
-	if got, err := c.Query429(context.Background(), "id"); err != nil || len(got) != 1 {
-		t.Fatalf("429 = %+v err=%v", got, err)
+	if got, err := c.QueryRequestsByStatus(ctx, "id"); err != nil || got.Series[0].Dimensions["statuscode"] != "429" {
+		t.Fatalf("status = %+v err=%v (dimension keys are lower-cased)", got, err)
 	}
-	if got, err := c.QueryProvisionedUtilization(context.Background(), "id"); err != nil || len(got) != 1 {
-		t.Fatalf("util = %+v err=%v", got, err)
+	if _, err := c.QueryProvisionedUtilization(ctx, "id"); err != nil {
+		t.Fatal(err)
 	}
-	if got, err := c.ListDiagnosticSettings(context.Background(), "id"); err != nil || len(got) != 1 || got[0].WorkspaceID != "law" {
+	want := []azure.MetricQuery{
+		{MetricName: "AzureOpenAIRequests", Aggregation: "Total"},
+		{MetricName: "AzureOpenAIRequests", Aggregation: "Total", SplitDimensions: []string{"ModelDeploymentName", "StatusCode"}},
+		{MetricName: "AzureOpenAIProvisionedManagedUtilizationV2", Aggregation: "Maximum", SplitDimensions: []string{"ModelDeploymentName"}},
+	}
+	for i, w := range want {
+		g := f.queries[i]
+		if g.MetricName != w.MetricName || g.Aggregation != w.Aggregation || len(g.SplitDimensions) != len(w.SplitDimensions) {
+			t.Errorf("query %d = %+v, want %+v", i, g, w)
+		}
+	}
+	if got, err := c.ListDiagnosticSettings(ctx, "id"); err != nil || len(got) != 1 || got[0].WorkspaceID != "law" || !got[0].DedicatedTables() {
 		t.Fatalf("diags = %+v err=%v", got, err)
 	}
-	if got, err := c.QueryDiagnosticCounts(context.Background(), "law", "acct", 1); err != nil || got.Counts["Audit"] != 1 {
+	if got, err := c.QueryDiagnosticCounts(ctx, "law", "acct", 1); err != nil || got.Counts["Audit"] != 1 {
 		t.Fatalf("logs = %+v err=%v", got, err)
 	}
 }
 
-func TestWorkspaceClientQuery(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			t.Fatalf("method = %s", r.Method)
+func TestFixedClientPropagatesErrors(t *testing.T) {
+	boom := errors.New("boom")
+	c := FixedClient{Inner: &fakeInner{err: boom}}
+	if _, err := c.QueryTraffic(context.Background(), "id"); !errors.Is(err, boom) {
+		t.Errorf("err = %v", err)
+	}
+}
+
+func TestDiagnosticSettingPredicates(t *testing.T) {
+	cases := []struct {
+		name             string
+		s                DiagnosticSetting
+		sends, dedicated bool
+	}{
+		{"audit category", DiagnosticSetting{Categories: []string{"Audit"}}, true, false},
+		{"request response category", DiagnosticSetting{Categories: []string{"RequestResponse"}}, true, false},
+		{"allLogs group", DiagnosticSetting{CategoryGroups: []string{"allLogs"}}, true, false},
+		{"other category", DiagnosticSetting{Categories: []string{"Trace"}}, false, false},
+		{"audit group is not assumed", DiagnosticSetting{CategoryGroups: []string{"audit"}}, false, false},
+		{"dedicated", DiagnosticSetting{Categories: []string{"Audit"}, LogAnalyticsDestinationType: "dedicated"}, true, true},
+	}
+	for _, c := range cases {
+		if c.s.SendsAuditOrRequestResponse() != c.sends || c.s.DedicatedTables() != c.dedicated {
+			t.Errorf("%s: sends=%v dedicated=%v", c.name, c.s.SendsAuditOrRequestResponse(), c.s.DedicatedTables())
 		}
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"tables":[{"name":"PrimaryResult"}]}`)
-	}))
-	defer srv.Close()
-
-	var out struct {
-		Tables []struct {
-			Name string `json:"name"`
-		} `json:"tables"`
-	}
-	hc := srv.Client()
-	base := hc.Transport
-	hc.Transport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
-		r.URL.Scheme = "http"
-		r.URL.Host = strings.TrimPrefix(srv.URL, "http://")
-		return base.RoundTrip(r)
-	})
-	c := WorkspaceClient{HTTP: hc, Credential: staticCred{}}
-	if err := c.Query(context.Background(), "https://api.loganalytics.io/v1/workspaces/demo/query", map[string]string{"query": "x"}, &out); err != nil {
-		t.Fatal(err)
-	}
-	if len(out.Tables) != 1 || out.Tables[0].Name != "PrimaryResult" {
-		t.Fatalf("out = %+v", out)
 	}
 }
-
-type staticCred struct{}
-
-func (staticCred) Token(context.Context, string) (azure.AccessToken, error) {
-	return azure.AccessToken{Token: "token"}, nil
-}
-
-type roundTripperFunc func(*http.Request) (*http.Response, error)
-
-func (f roundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }

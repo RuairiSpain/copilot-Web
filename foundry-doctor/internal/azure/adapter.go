@@ -12,8 +12,11 @@ import (
 
 // Options configures the read-only Azure adapters. All fields are optional.
 type Options struct {
-	// Credential defaults to NewDefaultCredential(nil) (azd, then az CLI).
+	// Credential defaults to NewDefaultCredentialForTenant(nil, TenantID) (azd, then az CLI).
 	Credential TokenCredential
+	// TenantID is the target tenant passed to the default credential's CLI
+	// calls; ignored when Credential is set.
+	TenantID string
 	// Endpoint is the ARM endpoint; defaults to DefaultEndpoint.
 	Endpoint string
 	// HTTPClient defaults to a client with a 60s timeout and no redirects.
@@ -24,6 +27,11 @@ type Options struct {
 	MaxRetries int
 	// Sleep replaces the backoff timer (tests).
 	Sleep func(ctx context.Context, d time.Duration) error
+	// LogAnalyticsEndpoint is the Logs query origin; defaults to
+	// DefaultLogAnalyticsEndpoint. It must be an https origin.
+	LogAnalyticsEndpoint string
+	// Now is the clock used to compute metric timespans (tests); defaults to time.Now.
+	Now func() time.Time
 }
 
 // Adapter implements every capability interface with strictly read-only ARM
@@ -40,9 +48,9 @@ var (
 	_ Policy          = (*Adapter)(nil)
 	_ WhatIf          = (*Adapter)(nil)
 	_ Names           = (*Adapter)(nil)
+	_ InventoryExtras = (*Adapter)(nil)
 	_ RuntimeFoundry  = (*Adapter)(nil)
 	_ RuntimeRBAC     = (*Adapter)(nil)
-	_ RuntimeDNS      = (*Adapter)(nil)
 	_ RuntimeMonitor  = (*Adapter)(nil)
 )
 
@@ -56,9 +64,21 @@ func New(o Options) (*Adapter, error) {
 	if err != nil || u.Scheme != "https" || u.Host == "" || u.Path != "" {
 		return nil, fmt.Errorf("%w: endpoint must be an https origin", ErrInvalidInput)
 	}
+	la := strings.TrimRight(o.LogAnalyticsEndpoint, "/")
+	if la == "" {
+		la = DefaultLogAnalyticsEndpoint
+	}
+	lu, err := url.Parse(la)
+	if err != nil || lu.Scheme != "https" || lu.Host == "" || lu.Path != "" {
+		return nil, fmt.Errorf("%w: log analytics endpoint must be an https origin", ErrInvalidInput)
+	}
+	now := o.Now
+	if now == nil {
+		now = time.Now
+	}
 	cred := o.Credential
 	if cred == nil {
-		cred = NewDefaultCredential(nil)
+		cred = NewDefaultCredentialForTenant(nil, o.TenantID)
 	}
 	hc := o.HTTPClient
 	if hc == nil {
@@ -81,6 +101,7 @@ func New(o Options) (*Adapter, error) {
 	}
 	return &Adapter{c: &armClient{
 		cred: cred, http: &cp, origin: u.Scheme + "://" + u.Host, base: endpoint,
+		laBase: la, now: now,
 		scope: endpoint + "/.default", sem: make(chan struct{}, conc),
 		maxRetries: retries, sleep: sleep, ops: allowList(),
 	}}, nil
@@ -89,8 +110,8 @@ func New(o Options) (*Adapter, error) {
 // Client returns the aggregate wired to this adapter.
 func (a *Adapter) Client() Client {
 	return Client{Context: a, Inventory: a, Permissions: a, Models: a, Policy: a, WhatIf: a, Names: a,
-		Regions: a, Deployments: a, SubnetLinks: a, Evidence: a,
-		Foundry: a, RBAC: a, DNS: a, Monitor: a}
+		Regions: a, Deployments: a, SubnetLinks: a, Evidence: a, Extras: a,
+		Foundry: a, RBAC: a, Monitor: a}
 }
 
 var (

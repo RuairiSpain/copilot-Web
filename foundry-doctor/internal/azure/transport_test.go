@@ -24,16 +24,16 @@ func TestInterfaceSurface(t *testing.T) {
 		"Inventory":          {reflect.TypeOf((*Inventory)(nil)).Elem(), []string{"GetSubnet", "ListLocks", "ListResources", "ResourceGroup"}},
 		"Permissions":        {reflect.TypeOf((*Permissions)(nil)).Elem(), []string{"EffectiveActions"}},
 		"Models":             {reflect.TypeOf((*Models)(nil)).Elem(), []string{"ListModels", "ListUsages"}},
-		"Policy":             {reflect.TypeOf((*Policy)(nil)).Elem(), []string{"CheckRestrictions", "ListAssignments", "ListExemptions"}},
+		"Policy":             {reflect.TypeOf((*Policy)(nil)).Elem(), []string{"CheckRestrictions", "ListAssignments"}},
+		"InventoryExtras":    {reflect.TypeOf((*InventoryExtras)(nil)).Elem(), []string{"GetVNet", "ListResourceLocks"}},
 		"WhatIf":             {reflect.TypeOf((*WhatIf)(nil)).Elem(), []string{"Run"}},
 		"Names":              {reflect.TypeOf((*Names)(nil)).Elem(), []string{"CheckName", "ListSoftDeleted"}},
 		"RegionAvailability": {reflect.TypeOf((*RegionAvailability)(nil)).Elem(), []string{"ListLocations", "ProviderResourceTypes"}},
 		"DeploymentHistory":  {reflect.TypeOf((*DeploymentHistory)(nil)).Elem(), []string{"CountDeployments"}},
 		"SubnetLinks":        {reflect.TypeOf((*SubnetLinks)(nil)).Elem(), []string{"SubnetLinks"}},
 		"PermissionEvidence": {reflect.TypeOf((*PermissionEvidence)(nil)).Elem(), []string{"CheckReportedActions", "ReportedPermissions"}},
-		"RuntimeFoundry":     {reflect.TypeOf((*RuntimeFoundry)(nil)).Elem(), []string{"GetProject", "ListAccountCapabilityHosts", "ListAccountConnections", "ListAccountDeployments", "ListProjectCapabilityHosts", "ListProjectConnections"}},
+		"RuntimeFoundry":     {reflect.TypeOf((*RuntimeFoundry)(nil)).Elem(), []string{"GetAccountNetwork", "GetProject", "ListAccountCapabilityHosts", "ListAccountConnections", "ListAccountDeployments", "ListProjectCapabilityHosts", "ListProjectConnections"}},
 		"RuntimeRBAC":        {reflect.TypeOf((*RuntimeRBAC)(nil)).Elem(), []string{"ListCosmosSQLRoleAssignments", "ListRoleAssignments"}},
-		"RuntimeDNS":         {reflect.TypeOf((*RuntimeDNS)(nil)).Elem(), []string{"ListPrivateDNSVNetLinks"}},
 		"RuntimeMonitor":     {reflect.TypeOf((*RuntimeMonitor)(nil)).Elem(), []string{"ListDiagnosticSettings", "QueryAccountMetrics", "QueryDiagnosticCounts"}},
 	}
 	ctxType := reflect.TypeOf((*context.Context)(nil)).Elem()
@@ -63,6 +63,8 @@ func TestAllowListIsReadOnly(t *testing.T) {
 	allowedPOST := map[string]bool{
 		"policy.checkrestrictions": true, "whatif.run": true, "name.keyvault": true, "name.storage": true,
 		"name.acr": true, "name.apim": true, "name.search": true, "name.foundry": true,
+		// ADR-006 item 7 / ADR-021 (g): Log Analytics count-only query, fixed KQL template.
+		"runtime.loganalytics.query": true,
 	}
 	seen := map[string]bool{}
 	for _, o := range AllowedOperations() {

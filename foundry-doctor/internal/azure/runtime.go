@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"net/url"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -20,12 +21,17 @@ func (a *Adapter) GetProject(ctx context.Context, subscriptionID, resourceGroup,
 	if !segOnlyRe.MatchString(resourceGroup) || !segOnlyRe.MatchString(account) || !segOnlyRe.MatchString(project) {
 		return FoundryProject{}, fmt.Errorf("%w: project coordinates", ErrInvalidInput)
 	}
+	// Shape: cognitiveservices.json 2026-09-01, Project (identity: Identity with
+	// principalId and userAssignedIdentities map of UserAssignedIdentity).
 	var resp struct {
 		ID       string `json:"id"`
 		Name     string `json:"name"`
 		Identity struct {
-			Type        string `json:"type"`
-			PrincipalID string `json:"principalId"`
+			Type                   string `json:"type"`
+			PrincipalID            string `json:"principalId"`
+			UserAssignedIdentities map[string]struct {
+				PrincipalID string `json:"principalId"`
+			} `json:"userAssignedIdentities"`
 		} `json:"identity"`
 		Properties struct {
 			ProvisioningState string `json:"provisioningState"`
@@ -35,10 +41,59 @@ func (a *Adapter) GetProject(ctx context.Context, subscriptionID, resourceGroup,
 	if err := a.c.get(ctx, path, nil, &resp); err != nil {
 		return FoundryProject{}, err
 	}
+	var ua []string
+	for _, v := range resp.Identity.UserAssignedIdentities {
+		if subIDRe.MatchString(v.PrincipalID) {
+			ua = append(ua, strings.ToLower(v.PrincipalID))
+		}
+	}
+	principal := resp.Identity.PrincipalID
+	if principal != "" && !subIDRe.MatchString(principal) {
+		principal = ""
+	}
 	return FoundryProject{
 		ID: resp.ID, Name: resp.Name, AccountID: subPath(subscriptionID, "/resourceGroups/"+resourceGroup+"/providers/Microsoft.CognitiveServices/accounts/"+account),
-		PrincipalID: resp.Identity.PrincipalID, IdentityType: resp.Identity.Type, ProvisioningState: resp.Properties.ProvisioningState,
+		PrincipalID: strings.ToLower(principal), UserAssignedPrincipalIDs: sortedUnique(ua),
+		IdentityType: resp.Identity.Type, ProvisioningState: resp.Properties.ProvisioningState,
 	}, nil
+}
+
+// GetAccountNetwork reads the account's public network access and private endpoint connection count.
+func (a *Adapter) GetAccountNetwork(ctx context.Context, subscriptionID, resourceGroup, account string) (AccountNetwork, error) {
+	if err := requireSub(subscriptionID); err != nil {
+		return AccountNetwork{}, err
+	}
+	if !segOnlyRe.MatchString(resourceGroup) || !segOnlyRe.MatchString(account) {
+		return AccountNetwork{}, fmt.Errorf("%w: account coordinates", ErrInvalidInput)
+	}
+	var resp struct {
+		Properties struct {
+			PublicNetworkAccess        string `json:"publicNetworkAccess"`
+			CustomSubDomainName        string `json:"customSubDomainName"`
+			PrivateEndpointConnections []struct {
+				Properties struct {
+					State struct {
+						Status string `json:"status"`
+					} `json:"privateLinkServiceConnectionState"`
+				} `json:"properties"`
+			} `json:"privateEndpointConnections"`
+		} `json:"properties"`
+	}
+	path := subPath(subscriptionID, "/resourceGroups/"+resourceGroup+"/providers/Microsoft.CognitiveServices/accounts/"+account)
+	if err := a.c.get(ctx, path, nil, &resp); err != nil {
+		return AccountNetwork{}, err
+	}
+	out := AccountNetwork{
+		PublicNetworkAccess:        resp.Properties.PublicNetworkAccess,
+		CustomSubDomainName:        strings.ToLower(strings.TrimSpace(resp.Properties.CustomSubDomainName)),
+		PrivateEndpointConnections: len(resp.Properties.PrivateEndpointConnections),
+	}
+	for _, pe := range resp.Properties.PrivateEndpointConnections {
+		if strings.EqualFold(strings.TrimSpace(pe.Properties.State.Status), "Approved") {
+			out.ApprovedPrivateEndpointConnections++
+		}
+	}
+	return out, nil
 }
 
 func (a *Adapter) ListProjectCapabilityHosts(ctx context.Context, subscriptionID, resourceGroup, account, project string) ([]CapabilityHost, error) {
@@ -83,7 +138,7 @@ func (a *Adapter) listCapabilityHosts(ctx context.Context, path string) ([]Capab
 			} `json:"properties"`
 		}
 		if err := json.Unmarshal(raw, &h); err != nil {
-			return nil, fmt.Errorf("azure: decode capability host: %w", err)
+			return nil, fmt.Errorf("%w: capability host: %v", ErrDecode, err)
 		}
 		out = append(out, CapabilityHost{
 			ID: h.ID, Type: h.Type, Name: h.Name, ProvisioningState: h.Properties.ProvisioningState,
@@ -125,35 +180,56 @@ func (a *Adapter) listFoundryConnections(ctx context.Context, path string) ([]Fo
 	}
 	out := make([]FoundryConnection, 0, len(items))
 	for _, raw := range items {
+		// ConnectionPropertiesV2 (cognitiveservices.json 2026-09-01): authType, category,
+		// error, metadata (string map), peRequirement, peStatus, target. Credentials are
+		// never decoded.
 		var c struct {
 			ID         string `json:"id"`
 			Type       string `json:"type"`
 			Name       string `json:"name"`
 			Properties struct {
-				Category string         `json:"category"`
-				AuthType string         `json:"authType"`
-				Error    string         `json:"error"`
-				Target   string         `json:"target"`
-				Metadata map[string]any `json:"metadata"`
+				Category      string         `json:"category"`
+				AuthType      string         `json:"authType"`
+				Error         string         `json:"error"`
+				Target        string         `json:"target"`
+				PERequirement string         `json:"peRequirement"`
+				PEStatus      string         `json:"peStatus"`
+				Metadata      map[string]any `json:"metadata"`
 			} `json:"properties"`
 		}
 		if err := json.Unmarshal(raw, &c); err != nil {
-			return nil, fmt.Errorf("azure: decode connection: %w", err)
+			return nil, fmt.Errorf("%w: connection: %v", ErrDecode, err)
 		}
 		target := ConnectionTarget{Endpoint: c.Properties.Target}
-		if rid, ok := c.Properties.Metadata["ResourceId"].(string); ok && strings.TrimSpace(rid) != "" {
+		if rid := metadataString(c.Properties.Metadata, "ResourceId"); rid != "" {
 			target.ResourceID = rid
-		} else if rid, ok := c.Properties.Metadata["resourceId"].(string); ok && strings.TrimSpace(rid) != "" {
-			target.ResourceID = rid
+		} else if IsARMResourceID(c.Properties.Target) {
+			target.ResourceID = strings.TrimSpace(c.Properties.Target)
 		}
 		target.IndexNames = extractStrings(c.Properties.Metadata, "index", "indexName", "indexes")
 		target.IndexerNames = extractStrings(c.Properties.Metadata, "indexer", "indexerName", "indexers")
 		out = append(out, FoundryConnection{
 			ID: c.ID, Type: c.Type, Name: c.Name, Category: c.Properties.Category, AuthType: c.Properties.AuthType,
-			Error: c.Properties.Error, Target: target,
+			Error: c.Properties.Error, PERequirement: c.Properties.PERequirement, PEStatus: c.Properties.PEStatus, Target: target,
 		})
 	}
 	return out, nil
+}
+
+// IsARMResourceID reports whether s looks like a literal ARM resource or scope ID.
+func IsARMResourceID(s string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(s)), "/subscriptions/")
+}
+
+func metadataString(m map[string]any, key string) string {
+	for k, v := range m {
+		if strings.EqualFold(k, key) {
+			if s, ok := v.(string); ok {
+				return strings.TrimSpace(s)
+			}
+		}
+	}
+	return ""
 }
 
 func extractStrings(m map[string]any, keys ...string) []string {
@@ -162,21 +238,8 @@ func extractStrings(m map[string]any, keys ...string) []string {
 	}
 	var out []string
 	for _, k := range keys {
-		v, ok := m[k]
-		if !ok {
-			continue
-		}
-		switch vv := v.(type) {
-		case string:
-			if strings.TrimSpace(vv) != "" {
-				out = append(out, vv)
-			}
-		case []any:
-			for _, x := range vv {
-				if s, ok := x.(string); ok && strings.TrimSpace(s) != "" {
-					out = append(out, s)
-				}
-			}
+		if s := metadataString(m, k); s != "" {
+			out = append(out, s)
 		}
 	}
 	return sortedUnique(out)
@@ -201,7 +264,8 @@ func (a *Adapter) ListAccountDeployments(ctx context.Context, subscriptionID, re
 			Type string `json:"type"`
 			Name string `json:"name"`
 			SKU  struct {
-				Capacity int `json:"capacity"`
+				Name     string `json:"name"`
+				Capacity int    `json:"capacity"`
 			} `json:"sku"`
 			Properties struct {
 				DeploymentState   string `json:"deploymentState"`
@@ -214,7 +278,7 @@ func (a *Adapter) ListAccountDeployments(ctx context.Context, subscriptionID, re
 			} `json:"properties"`
 		}
 		if err := json.Unmarshal(raw, &d); err != nil {
-			return nil, fmt.Errorf("azure: decode deployment: %w", err)
+			return nil, fmt.Errorf("%w: deployment: %v", ErrDecode, err)
 		}
 		limit := 0
 		for _, rl := range d.Properties.RateLimits {
@@ -225,7 +289,7 @@ func (a *Adapter) ListAccountDeployments(ctx context.Context, subscriptionID, re
 			capacity = d.SKU.Capacity
 		}
 		out = append(out, AccountDeployment{
-			ID: d.ID, Type: d.Type, Name: d.Name, DeploymentState: d.Properties.DeploymentState, ProvisioningState: d.Properties.ProvisioningState,
+			ID: d.ID, Type: d.Type, Name: d.Name, DeploymentState: d.Properties.DeploymentState, ProvisioningState: d.Properties.ProvisioningState, SKUName: d.SKU.Name,
 			DynamicThrottling: d.Properties.DynamicThrottling, CurrentCapacity: capacity, ProvisionedRateLimit: limit,
 		})
 	}
@@ -234,16 +298,23 @@ func (a *Adapter) ListAccountDeployments(ctx context.Context, subscriptionID, re
 
 // RuntimeRBAC ---------------------------------------------------------------
 
-func (a *Adapter) ListRoleAssignments(ctx context.Context, scope, principalID string) ([]RoleAssignment, error) {
-	if strings.TrimSpace(scope) == "" || !subIDRe.MatchString(principalID) {
-		return nil, fmt.Errorf("%w: role assignment query", ErrInvalidInput)
+// ListRoleAssignments lists the assignments of principalID at, above and below
+// scope (subscription, resource group or resource ID) and splits them by their
+// relation to scope. $filter=principalId eq {id} returns assignments at, above
+// or below the scope (authorization-RoleAssignmentsCalls.json 2022-04-01), so
+// the split is done here: only an assignment whose scope equals or is a
+// path-boundary ancestor of scope grants access at scope.
+func (a *Adapter) ListRoleAssignments(ctx context.Context, scope, principalID string) (RoleAssignmentSet, error) {
+	scope = strings.TrimRight(strings.TrimSpace(scope), "/")
+	if !IsARMResourceID(scope) || !subIDRe.MatchString(principalID) {
+		return RoleAssignmentSet{}, fmt.Errorf("%w: role assignment query", ErrInvalidInput)
 	}
 	q := url.Values{"$filter": {"principalId eq " + principalID}}
-	items, _, err := a.c.list(ctx, strings.TrimRight(scope, "/")+"/providers/Microsoft.Authorization/roleAssignments", q, 0)
+	items, truncated, err := a.c.list(ctx, scope+"/providers/Microsoft.Authorization/roleAssignments", q, 0)
 	if err != nil {
-		return nil, err
+		return RoleAssignmentSet{}, err
 	}
-	out := make([]RoleAssignment, 0, len(items))
+	set := RoleAssignmentSet{Truncated: truncated}
 	for _, raw := range items {
 		var r struct {
 			Properties struct {
@@ -254,16 +325,33 @@ func (a *Adapter) ListRoleAssignments(ctx context.Context, scope, principalID st
 			} `json:"properties"`
 		}
 		if err := json.Unmarshal(raw, &r); err != nil {
-			return nil, fmt.Errorf("azure: decode role assignment: %w", err)
+			return RoleAssignmentSet{}, fmt.Errorf("%w: role assignment: %v", ErrDecode, err)
 		}
-		out = append(out, RoleAssignment{
+		ra := RoleAssignment{
 			RoleDefinitionID: r.Properties.RoleDefinitionID,
 			PrincipalID:      r.Properties.PrincipalID,
 			Scope:            r.Properties.Scope,
 			Condition:        r.Properties.Condition,
-		})
+		}
+		switch {
+		case ra.Scope == "":
+			set.Unresolved = append(set.Unresolved, ra)
+		case LockCovers(ra.Scope, scope):
+			set.Covering = append(set.Covering, ra)
+		case LockCovers(scope, ra.Scope):
+			set.Below = append(set.Below, ra)
+		case isHierarchyScope(ra.Scope):
+			// Root or management group: an ancestor only if the hierarchy says so,
+			// which this read cannot prove.
+			set.Unresolved = append(set.Unresolved, ra)
+		}
 	}
-	return out, nil
+	return set, nil
+}
+
+func isHierarchyScope(s string) bool {
+	s = strings.ToLower(strings.TrimRight(strings.TrimSpace(s), "/"))
+	return s == "" || strings.HasPrefix(s, "/providers/microsoft.management/managementgroups/")
 }
 
 func (a *Adapter) ListCosmosSQLRoleAssignments(ctx context.Context, accountID, principalID string) ([]CosmosSQLRoleAssignment, error) {
@@ -276,6 +364,8 @@ func (a *Adapter) ListCosmosSQLRoleAssignments(ctx context.Context, accountID, p
 	}
 	out := []CosmosSQLRoleAssignment{}
 	for _, raw := range items {
+		// SqlRoleAssignmentResource (cosmos rbac.json 2025-10-15): roleDefinitionId
+		// (full ARM ID), scope (full ARM data-plane path), principalId.
 		var r struct {
 			Properties struct {
 				RoleDefinitionID string `json:"roleDefinitionId"`
@@ -284,7 +374,7 @@ func (a *Adapter) ListCosmosSQLRoleAssignments(ctx context.Context, accountID, p
 			} `json:"properties"`
 		}
 		if err := json.Unmarshal(raw, &r); err != nil {
-			return nil, fmt.Errorf("azure: decode cosmos sql role assignment: %w", err)
+			return nil, fmt.Errorf("%w: cosmos sql role assignment: %v", ErrDecode, err)
 		}
 		if strings.EqualFold(r.Properties.PrincipalID, principalID) {
 			out = append(out, CosmosSQLRoleAssignment{
@@ -297,52 +387,69 @@ func (a *Adapter) ListCosmosSQLRoleAssignments(ctx context.Context, accountID, p
 	return out, nil
 }
 
-// RuntimeDNS ----------------------------------------------------------------
-
-func (a *Adapter) ListPrivateDNSVNetLinks(ctx context.Context, zoneID string) ([]PrivateDNSVNetLink, error) {
-	if !strings.Contains(strings.ToLower(zoneID), "/providers/microsoft.network/privatednszones/") {
-		return nil, fmt.Errorf("%w: private dns zone id", ErrInvalidInput)
-	}
-	items, _, err := a.c.list(ctx, strings.TrimRight(zoneID, "/")+"/virtualNetworkLinks", nil, 0)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]PrivateDNSVNetLink, 0, len(items))
-	for _, raw := range items {
-		var l struct {
-			Name       string `json:"name"`
-			Properties struct {
-				State string `json:"virtualNetworkLinkState"`
-			} `json:"properties"`
-		}
-		if err := json.Unmarshal(raw, &l); err != nil {
-			return nil, fmt.Errorf("azure: decode private dns link: %w", err)
-		}
-		out = append(out, PrivateDNSVNetLink{Name: l.Name, State: l.Properties.State})
-	}
-	return out, nil
-}
-
 // RuntimeMonitor ------------------------------------------------------------
 
-func (a *Adapter) QueryAccountMetrics(ctx context.Context, accountID, metricName, filterDimension, filterValue, seriesDimension string) ([]MetricTotal, error) {
+var (
+	metricNameRe    = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_.]{0,127}$`)
+	dimensionNameRe = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9]{0,63}$`)
+)
+
+// metricsTop is the per-resource series cap sent as top. The spec says top
+// defaults to 10 when $filter is set, so splitting by deployment needs more.
+const metricsTop = 50
+
+const defaultMetricWindow = time.Hour
+
+// metricTimespan renders the documented "startDateTime_ISO/endDateTime_ISO" form.
+func metricTimespan(end time.Time, window time.Duration) string {
+	end = end.UTC().Truncate(time.Second)
+	start := end.Add(-window)
+	const layout = "2006-01-02T15:04:05Z"
+	return start.Format(layout) + "/" + end.Format(layout)
+}
+
+// QueryAccountMetrics reads one metric of a Foundry (Cognitive Services)
+// account, split by the requested dimensions, over an explicit timespan.
+// Series are attributed through their metadatavalues; nothing is inferred
+// from the metric name.
+func (a *Adapter) QueryAccountMetrics(ctx context.Context, accountID string, mq MetricQuery) (MetricResult, error) {
 	if !strings.Contains(strings.ToLower(accountID), "/providers/microsoft.cognitiveservices/accounts/") {
-		return nil, fmt.Errorf("%w: account id", ErrInvalidInput)
+		return MetricResult{}, fmt.Errorf("%w: account id", ErrInvalidInput)
+	}
+	if !metricNameRe.MatchString(mq.MetricName) {
+		return MetricResult{}, fmt.Errorf("%w: metric name", ErrInvalidInput)
+	}
+	switch mq.Aggregation {
+	case "Total", "Maximum", "Average", "Minimum", "Count":
+	default:
+		return MetricResult{}, fmt.Errorf("%w: aggregation %q", ErrInvalidInput, mq.Aggregation)
+	}
+	window := mq.Window
+	if window <= 0 {
+		window = defaultMetricWindow
 	}
 	q := url.Values{
-		"metricnames": {metricName},
-		"aggregation": {"Total"},
-		"timespan":    {"PT1H"},
-		"interval":    {"PT1H"},
+		"metricnames": {mq.MetricName},
+		"aggregation": {mq.Aggregation},
+		"timespan":    {metricTimespan(a.c.now(), window)},
+		// PT1M is the only time grain the supported-metrics table lists for the
+		// AzureOpenAI metrics used here.
+		"interval": {"PT1M"},
 	}
-	if filterDimension != "" && filterValue != "" {
-		q.Set("$filter", filterDimension+" eq '"+filterValue+"'")
+	if len(mq.SplitDimensions) > 0 {
+		terms := make([]string, 0, len(mq.SplitDimensions))
+		for _, d := range mq.SplitDimensions {
+			if !dimensionNameRe.MatchString(d) {
+				return MetricResult{}, fmt.Errorf("%w: dimension name", ErrInvalidInput)
+			}
+			terms = append(terms, d+" eq '*'")
+		}
+		q.Set("$filter", strings.Join(terms, " and "))
+		q.Set("top", strconv.Itoa(metricsTop))
 	}
 	var resp struct {
 		Value []struct {
-			Name struct {
-				Value string `json:"value"`
-			} `json:"name"`
+			ErrorCode  string `json:"errorCode"`
 			Timeseries []struct {
 				Metadatavalues []struct {
 					Name struct {
@@ -351,33 +458,91 @@ func (a *Adapter) QueryAccountMetrics(ctx context.Context, accountID, metricName
 					Value string `json:"value"`
 				} `json:"metadatavalues"`
 				Data []struct {
-					Total *float64 `json:"total"`
+					Total   *float64 `json:"total"`
+					Maximum *float64 `json:"maximum"`
+					Average *float64 `json:"average"`
+					Minimum *float64 `json:"minimum"`
+					Count   *float64 `json:"count"`
 				} `json:"data"`
 			} `json:"timeseries"`
 		} `json:"value"`
 	}
 	if err := a.c.get(ctx, strings.TrimRight(accountID, "/")+"/providers/Microsoft.Insights/metrics", q, &resp); err != nil {
-		return nil, err
+		return MetricResult{}, err
 	}
-	out := []MetricTotal{}
+	var out MetricResult
 	for _, m := range resp.Value {
+		if m.ErrorCode != "" && !strings.EqualFold(m.ErrorCode, "Success") && safeCode.MatchString(m.ErrorCode) {
+			out.ErrorCode = m.ErrorCode
+		}
 		for _, ts := range m.Timeseries {
-			label := metricName
+			s := MetricSeries{Dimensions: map[string]string{}}
 			for _, md := range ts.Metadatavalues {
-				if seriesDimension == "" || strings.EqualFold(md.Name.Value, seriesDimension) {
-					label = md.Value
-				}
+				s.Dimensions[strings.ToLower(md.Name.Value)] = md.Value
 			}
-			var total float64
+			var sum float64
 			for _, d := range ts.Data {
-				if d.Total != nil {
-					total += *d.Total
+				var v *float64
+				switch mq.Aggregation {
+				case "Total":
+					v = d.Total
+				case "Maximum":
+					v = d.Maximum
+				case "Average":
+					v = d.Average
+				case "Minimum":
+					v = d.Minimum
+				case "Count":
+					v = d.Count
+				}
+				if v == nil {
+					continue
+				}
+				s.Points++
+				switch mq.Aggregation {
+				case "Maximum":
+					if s.Points == 1 || *v > s.Value {
+						s.Value = *v
+					}
+				case "Minimum":
+					if s.Points == 1 || *v < s.Value {
+						s.Value = *v
+					}
+				default:
+					sum += *v
 				}
 			}
-			out = append(out, MetricTotal{Series: label, Total: total})
+			switch mq.Aggregation {
+			case "Average":
+				if s.Points > 0 {
+					s.Value = sum / float64(s.Points)
+				}
+			case "Total", "Count":
+				s.Value = sum
+			}
+			out.Series = append(out.Series, s)
 		}
 	}
+	if len(mq.SplitDimensions) > 0 && len(out.Series) >= metricsTop {
+		out.Truncated = true
+	}
+	sort.SliceStable(out.Series, func(i, j int) bool {
+		return seriesKey(out.Series[i]) < seriesKey(out.Series[j])
+	})
 	return out, nil
+}
+
+func seriesKey(s MetricSeries) string {
+	keys := make([]string, 0, len(s.Dimensions))
+	for k := range s.Dimensions {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var b strings.Builder
+	for _, k := range keys {
+		b.WriteString(k + "=" + s.Dimensions[k] + ";")
+	}
+	return b.String()
 }
 
 func (a *Adapter) ListDiagnosticSettings(ctx context.Context, resourceID string) ([]RuntimeDiagnosticSetting, error) {
@@ -390,6 +555,9 @@ func (a *Adapter) ListDiagnosticSettings(ctx context.Context, resourceID string)
 	}
 	out := []RuntimeDiagnosticSetting{}
 	for _, raw := range items {
+		// DiagnosticSettings (diagnosticsSettings_API.json 2021-05-01-preview): workspaceId is the
+		// full ARM ID; logs[] has category, categoryGroup, enabled; logAnalyticsDestinationType
+		// is "Dedicated" or null.
 		var s struct {
 			Name       string `json:"name"`
 			SystemData struct {
@@ -397,52 +565,137 @@ func (a *Adapter) ListDiagnosticSettings(ctx context.Context, resourceID string)
 				LastModifiedAt string `json:"lastModifiedAt"`
 			} `json:"systemData"`
 			Properties struct {
-				WorkspaceID string `json:"workspaceId"`
-				Logs        []struct {
-					Category string `json:"category"`
-					Enabled  bool   `json:"enabled"`
+				WorkspaceID                 string `json:"workspaceId"`
+				LogAnalyticsDestinationType string `json:"logAnalyticsDestinationType"`
+				Logs                        []struct {
+					Category      string `json:"category"`
+					CategoryGroup string `json:"categoryGroup"`
+					Enabled       bool   `json:"enabled"`
 				} `json:"logs"`
 			} `json:"properties"`
 		}
 		if err := json.Unmarshal(raw, &s); err != nil {
-			return nil, fmt.Errorf("azure: decode diagnostic setting: %w", err)
+			return nil, fmt.Errorf("%w: diagnostic setting: %v", ErrDecode, err)
 		}
-		cats := []string{}
+		cats, groups := []string{}, []string{}
 		for _, l := range s.Properties.Logs {
-			if l.Enabled {
+			if !l.Enabled {
+				continue
+			}
+			if l.Category != "" {
 				cats = append(cats, l.Category)
 			}
+			if l.CategoryGroup != "" {
+				groups = append(groups, l.CategoryGroup)
+			}
 		}
-		out = append(out, RuntimeDiagnosticSetting{Name: s.Name, WorkspaceID: s.Properties.WorkspaceID, Categories: sortedUnique(cats), AgeHours: ageHours(s.SystemData)})
+		minutes, known := a.ageMinutes(s.SystemData.LastModifiedAt, s.SystemData.CreatedAt)
+		out = append(out, RuntimeDiagnosticSetting{
+			Name: s.Name, WorkspaceID: s.Properties.WorkspaceID, Categories: sortedUnique(cats), CategoryGroups: sortedUnique(groups),
+			LogAnalyticsDestinationType: s.Properties.LogAnalyticsDestinationType, AgeKnown: known, AgeMinutes: minutes,
+		})
 	}
 	return out, nil
 }
 
-func ageHours(systemData struct {
-	CreatedAt      string `json:"createdAt"`
-	LastModifiedAt string `json:"lastModifiedAt"`
-}) int {
-	for _, raw := range []string{systemData.LastModifiedAt, systemData.CreatedAt} {
+func (a *Adapter) ageMinutes(candidates ...string) (int, bool) {
+	for _, raw := range candidates {
 		if raw == "" {
 			continue
 		}
 		if ts, err := time.Parse(time.RFC3339, raw); err == nil {
-			return int(time.Since(ts).Hours())
+			return max(int(a.c.now().Sub(ts)/time.Minute), 0), true
 		}
 	}
-	return 0
+	return 0, false
+}
+
+// Log Analytics -------------------------------------------------------------
+
+var (
+	workspaceIDRe = regexp.MustCompile(`(?i)^/subscriptions/(` + guidRe + `)/resourcegroups/(` + segRe + `)/providers/microsoft\.operationalinsights/workspaces/(` + segRe + `)$`)
+	// logQueryRe is the only query text the client sends (ADR-006 item 7).
+	logQueryRe = regexp.MustCompile(`^AzureDiagnostics \| where ResourceProvider == "MICROSOFT\.COGNITIVESERVICES" \| where ResourceId endswith "/ACCOUNTS/([A-Za-z0-9._-]{1,64})" \| where TimeGenerated > ago\([1-9][0-9]{0,2}h\) \| summarize count\(\) by Category$`)
+	logSpanRe  = regexp.MustCompile(`^PT[1-9][0-9]{0,2}H$`)
+	// kqlForbidden lists the tokens ADR-006 item 7 rejects (take, top, message, *)
+	// and operators that could widen the projection or the data touched.
+	kqlForbidden = regexp.MustCompile(`(?i)\b(take|top|limit|message|project|extend|union|join|search|print|invoke|evaluate|externaldata|find|parse|sample|distinct|mv-expand)\b|[*;]`)
+)
+
+// logQueryBody is the only request body the Log Analytics operation accepts.
+type logQueryBody struct {
+	Query    string `json:"query"`
+	Timespan string `json:"timespan"`
+}
+
+// DiagnosticCountsKQL returns the shipped aggregate-only template for RUN-007
+// with the account name as the only variable part. The name is validated
+// against the ARM name charset first; KQL endswith is case-insensitive.
+func DiagnosticCountsKQL(accountName string, hours int) (string, bool) {
+	if !safeAccountName.MatchString(accountName) || hours <= 0 || hours > 999 {
+		return "", false
+	}
+	return `AzureDiagnostics | where ResourceProvider == "MICROSOFT.COGNITIVESERVICES" | where ResourceId endswith "/ACCOUNTS/` +
+		strings.ToUpper(accountName) + `" | where TimeGenerated > ago(` + strconv.Itoa(hours) + `h) | summarize count() by Category`, true
+}
+
+func validateLogQueryBody(body any) error {
+	b, ok := body.(logQueryBody)
+	if !ok {
+		return fmt.Errorf("%w: log query body", ErrNotAllowed)
+	}
+	m := logQueryRe.FindStringSubmatch(b.Query)
+	if m == nil {
+		return fmt.Errorf("%w: log query is not the shipped template", ErrNotAllowed)
+	}
+	// Scan the template without the variable name (a name may legitimately contain "top").
+	if kqlForbidden.MatchString(strings.Replace(b.Query, m[1], "", 1)) {
+		return fmt.Errorf("%w: log query contains a forbidden operator", ErrNotAllowed)
+	}
+	if !logSpanRe.MatchString(b.Timespan) {
+		return fmt.Errorf("%w: log query timespan", ErrNotAllowed)
+	}
+	return nil
 }
 
 var safeAccountName = regexp.MustCompile(`^[A-Za-z0-9._-]{1,64}$`)
 
-func (a *Adapter) QueryDiagnosticCounts(ctx context.Context, workspaceID, accountName string, hours int) (RuntimeLogsResult, error) {
-	if !safeAccountName.MatchString(accountName) || strings.TrimSpace(workspaceID) == "" || hours <= 0 {
+// workspaceCustomerID resolves properties.customerId (the workspace GUID the
+// query path needs) from the workspace ARM resource ID.
+func (a *Adapter) workspaceCustomerID(ctx context.Context, workspaceResourceID string) (string, error) {
+	m := workspaceIDRe.FindStringSubmatch(strings.TrimRight(strings.TrimSpace(workspaceResourceID), "/"))
+	if m == nil {
+		return "", fmt.Errorf("%w: workspace resource id", ErrInvalidInput)
+	}
+	path := subPath(m[1], "/resourceGroups/"+m[2]+"/providers/Microsoft.OperationalInsights/workspaces/"+m[3])
+	var resp struct {
+		Properties struct {
+			CustomerID string `json:"customerId"`
+		} `json:"properties"`
+	}
+	if err := a.c.get(ctx, path, nil, &resp); err != nil {
+		return "", err
+	}
+	if !subIDRe.MatchString(resp.Properties.CustomerID) {
+		return "", fmt.Errorf("%w: workspace has no customerId", ErrDecode)
+	}
+	return resp.Properties.CustomerID, nil
+}
+
+// QueryDiagnosticCounts counts the account's AzureDiagnostics rows per
+// Category. Only aggregate counts are kept. The call goes through the
+// allow-listed Log Analytics operation (declared origin, token scope, path and
+// KQL template), after resolving the workspace GUID through an allow-listed
+// workspace read.
+func (a *Adapter) QueryDiagnosticCounts(ctx context.Context, workspaceResourceID, accountName string, hours int) (RuntimeLogsResult, error) {
+	kql, ok := DiagnosticCountsKQL(accountName, hours)
+	if !ok {
 		return RuntimeLogsResult{}, fmt.Errorf("%w: workspace query", ErrInvalidInput)
 	}
-	type queryReq struct {
-		Query string `json:"query"`
+	guid, err := a.workspaceCustomerID(ctx, workspaceResourceID)
+	if err != nil {
+		return RuntimeLogsResult{}, err
 	}
-	body := queryReq{Query: "AzureDiagnostics | where ResourceProvider == \"MICROSOFT.COGNITIVESERVICES\" | where ResourceId has \"" + accountName + "\" | where TimeGenerated > ago(" + fmt.Sprintf("%dh", hours) + ") | summarize count() by Category"}
 	var resp struct {
 		Tables []struct {
 			Name    string `json:"name"`
@@ -452,59 +705,30 @@ func (a *Adapter) QueryDiagnosticCounts(ctx context.Context, workspaceID, accoun
 			Rows [][]any `json:"rows"`
 		} `json:"tables"`
 	}
-	if err := a.logQuery(ctx, workspaceID, body, &resp); err != nil {
+	body := logQueryBody{Query: kql, Timespan: "PT" + strconv.Itoa(hours) + "H"}
+	if err := a.c.post(ctx, "/v1/workspaces/"+guid+"/query", body, &resp); err != nil {
 		return RuntimeLogsResult{}, err
 	}
 	out := RuntimeLogsResult{Counts: map[string]int64{}}
-	if len(resp.Tables) == 0 {
-		return out, nil
-	}
-	out.Table = resp.Tables[0].Name
-	for _, row := range resp.Tables[0].Rows {
-		if len(row) >= 2 {
+	// The result table is always PrimaryResult (response-format.md).
+	for _, t := range resp.Tables {
+		if t.Name != "PrimaryResult" {
+			continue
+		}
+		for _, row := range t.Rows {
+			if len(row) < 2 {
+				continue
+			}
 			cat, _ := row[0].(string)
 			switch n := row[1].(type) {
 			case float64:
-				out.Counts[cat] = int64(n)
-			case int64:
-				out.Counts[cat] = n
+				out.Counts[cat] += int64(n)
+			case json.Number:
+				if v, err := n.Int64(); err == nil {
+					out.Counts[cat] += v
+				}
 			}
 		}
 	}
 	return out, nil
-}
-
-func (a *Adapter) logQuery(ctx context.Context, workspaceID string, body any, out any) error {
-	scope := "https://api.loganalytics.io/.default"
-	tok, err := a.c.cred.Token(ctx, scope)
-	if err != nil {
-		return &UnavailableError{Capability: "Log Analytics workspace query", Reason: "no usable Azure credential (run `azd auth login` or `az login`)", Err: err}
-	}
-	endpoint := "https://api.loganalytics.io/v1/workspaces/" + url.PathEscape(workspaceID) + "/query"
-	payload, err := json.Marshal(body)
-	if err != nil {
-		return err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(string(payload)))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+tok.Token)
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := a.c.http.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusForbidden {
-		return &UnavailableError{Capability: "Log Analytics workspace query", Reason: "workspace query permission unavailable"}
-	}
-	if resp.StatusCode == http.StatusUnauthorized {
-		return &UnavailableError{Capability: "Log Analytics workspace query", Reason: "credential rejected by workspace"}
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("http %d", resp.StatusCode)
-	}
-	return json.NewDecoder(resp.Body).Decode(out)
 }

@@ -49,11 +49,50 @@ type AllowedOperation struct {
 	APIVersion string
 	// Capability is the RBAC action the call exercises.
 	Capability string
+	// Origin is the declared origin the request is sent to. Empty means the
+	// configured ARM endpoint; otherwise one of the audience constants.
+	Origin string
+	// TokenScope is the OAuth scope requested for the call. Empty means the ARM
+	// endpoint scope.
+	TokenScope string
+	// QueryKeys lists the query parameters (besides api-version) the operation
+	// may carry. A nil slice means the default set (allowedQueryKey); a non-nil
+	// empty slice means the operation takes no query parameter at all.
+	QueryKeys []string
 }
 
 type operation struct {
 	AllowedOperation
 	re *regexp.Regexp
+	// body validates the request body of an operation that sends one.
+	body func(any) error
+}
+
+// audienceLogAnalytics marks operations sent to the Log Analytics query origin.
+const audienceLogAnalytics = "loganalytics"
+
+// DefaultLogAnalyticsEndpoint is the public Log Analytics query origin
+// (MicrosoftDocs/azure-monitor-docs logs/api/request-format.md: api.loganalytics.azure.com
+// is the current endpoint; api.loganalytics.io is being replaced).
+const DefaultLogAnalyticsEndpoint = "https://api.loganalytics.azure.com"
+
+// logAnalyticsScope is the token scope documented in access-api.md
+// (scope=https://api.loganalytics.io/.default).
+const logAnalyticsScope = "https://api.loganalytics.io/.default"
+
+// ErrDecode marks a response that could not be decoded. It is an internal
+// defect (spec drift or adapter bug), not a permission or network problem.
+var ErrDecode = errors.New("azure: response decode failed")
+
+func (o operation) withKeys(keys ...string) operation {
+	o.QueryKeys = keys
+	return o
+}
+
+// withNoQuery declares that the operation accepts no query parameter.
+func (o operation) withNoQuery() operation {
+	o.QueryKeys = []string{}
+	return o
 }
 
 func newOp(name, method, template, version, capability string) operation {
@@ -61,6 +100,7 @@ func newOp(name, method, template, version, capability string) operation {
 	pat = strings.ReplaceAll(pat, `\{scope\}`, scopeRe)
 	pat = strings.ReplaceAll(pat, `\{resource\}`, idRe)
 	pat = strings.ReplaceAll(pat, `\{sub\}`, guidRe)
+	pat = strings.ReplaceAll(pat, `\{guid\}`, guidRe)
 	pat = strings.ReplaceAll(pat, `\{seg\}`, segRe)
 	pat = strings.ReplaceAll(pat, `\{roledef\}`, `(?:/subscriptions/`+guidRe+`)?/providers/Microsoft\.Authorization/roleDefinitions/`+guidRe)
 	return operation{
@@ -79,11 +119,20 @@ func allowList() []operation {
 		newOp("subscription.get", g, "/subscriptions/{sub}", "2022-12-01", "Microsoft.Resources/subscriptions/read"),
 		// catalogue: FND-DEP-002
 		newOp("provider.get", g, "/subscriptions/{sub}/providers/{seg}", "2025-04-01", "Microsoft.Resources/subscriptions/providers/read"),
-		// unverified: resource groups and resource listing use the Microsoft.Resources 2022-12-01 spec
-		newOp("resourcegroup.get", g, "/subscriptions/{sub}/resourcegroups/{seg}", "2022-12-01", "Microsoft.Resources/subscriptions/resourceGroups/read"),
-		newOp("resources.list", g, "{scope}/resources", "2022-12-01", "Microsoft.Resources/subscriptions/resources/read"),
-		// catalogue: locks 2020-05-01
+		// Verified against Microsoft.Resources/resources/stable/2025-04-01/resources.json (Resources_List,
+		// Resources_ListByResourceGroup, ResourceGroups_Get). 2022-12-01 is NOT published for
+		// Microsoft.Resources/resources (refuted in the Phase 2 gate review) and must not be used here.
+		newOp("resourcegroup.get", g, "/subscriptions/{sub}/resourcegroups/{seg}", "2025-04-01", "Microsoft.Resources/subscriptions/resourceGroups/read"),
+		newOp("resources.list.subscription", g, "/subscriptions/{sub}/resources", "2025-04-01", "Microsoft.Resources/subscriptions/resources/read"),
+		newOp("resources.list.resourcegroup", g, "/subscriptions/{sub}/resourcegroups/{seg}/resources", "2025-04-01", "Microsoft.Resources/subscriptions/resourcegroups/resources/read"),
+		// catalogue: locks 2020-05-01 (ListAtSubscriptionLevel, ListAtResourceGroupLevel, ListAtResourceLevel).
+		// The list returns locks at AND BELOW the scope; callers filter by lock scope. The $filter value
+		// atScope() is NOT documented in the 2020-05-01 spec ("The filter to apply on the operation."), so it
+		// is not used. locks.list takes a subscription or resource group scope only.
 		newOp("locks.list", g, "{scope}/providers/Microsoft.Authorization/locks", "2020-05-01", "Microsoft.Authorization/locks/read"),
+		newOp("locks.list.resource", g, "{resource}/providers/Microsoft.Authorization/locks", "2020-05-01", "Microsoft.Authorization/locks/read"),
+		// catalogue FND-DEP-011: VirtualNetworks_Get, Microsoft.Network/Network/stable/2025-05-01/virtualNetwork.json
+		newOp("vnet.get", g, "/subscriptions/{sub}/resourceGroups/{seg}/providers/Microsoft.Network/virtualNetworks/{seg}", "2025-05-01", "Microsoft.Network/virtualNetworks/read"),
 		// catalogue: virtualNetworks/subnets 2025-05-01
 		newOp("subnet.get", g, "/subscriptions/{sub}/resourceGroups/{seg}/providers/Microsoft.Network/virtualNetworks/{seg}/subnets/{seg}", "2025-05-01", "Microsoft.Network/virtualNetworks/subnets/read"),
 		// catalogue: roleAssignments 2022-04-01
@@ -91,9 +140,10 @@ func allowList() []operation {
 		newOp("locations.list", g, "/subscriptions/{sub}/locations", "2022-12-01", "Microsoft.Resources/subscriptions/locations/read"),
 		// catalogue FND-DEP-010 (deployments 2026-06-01); only the count is used
 		newOp("deployments.list", g, "/subscriptions/{sub}/resourcegroups/{seg}/providers/Microsoft.Resources/deployments", "2026-06-01", "Microsoft.Resources/deployments/read"),
-		// catalogue FND-DEP-011 (2025-05-01); exact RBAC action for link reads UNVERIFIED
-		newOp("subnet.associationlinks", g, "/subscriptions/{sub}/resourceGroups/{seg}/providers/Microsoft.Network/virtualNetworks/{seg}/subnets/{seg}/ServiceAssociationLinks", "2025-05-01", "Microsoft.Network/virtualNetworks/subnets/read"),
-		newOp("subnet.navigationlinks", g, "/subscriptions/{sub}/resourceGroups/{seg}/providers/Microsoft.Network/virtualNetworks/{seg}/subnets/{seg}/ResourceNavigationLinks", "2025-05-01", "Microsoft.Network/virtualNetworks/subnets/read"),
+		// catalogue FND-DEP-011 (2025-05-01). RBAC actions verified in MicrosoftDocs/azure-docs
+		// role-based-access-control/permissions/networking.md.
+		newOp("subnet.associationlinks", g, "/subscriptions/{sub}/resourceGroups/{seg}/providers/Microsoft.Network/virtualNetworks/{seg}/subnets/{seg}/ServiceAssociationLinks", "2025-05-01", "Microsoft.Network/virtualNetworks/subnets/serviceAssociationLinks/read"),
+		newOp("subnet.navigationlinks", g, "/subscriptions/{sub}/resourceGroups/{seg}/providers/Microsoft.Network/virtualNetworks/{seg}/subnets/{seg}/ResourceNavigationLinks", "2025-05-01", "Microsoft.Network/virtualNetworks/subnets/resourceNavigationLinks/read"),
 		// catalogue FND-DEP-003 (permissions 2022-04-01; RG and resource scope only)
 		newOp("permissions.list", g, "{scope}/providers/Microsoft.Authorization/permissions", "2022-04-01", "Microsoft.Authorization/permissions/read"),
 		newOp("roleassignments.list", g, "{scope}/providers/Microsoft.Authorization/roleAssignments", "2022-04-01", "Microsoft.Authorization/roleAssignments/read"),
@@ -101,6 +151,10 @@ func allowList() []operation {
 		// Learn "List Azure deny assignments": 2018-07-01-preview or later
 		newOp("denyassignments.list", g, "{scope}/providers/Microsoft.Authorization/denyAssignments", "2022-04-01", "Microsoft.Authorization/denyAssignments/read"),
 		// catalogue FND-RUN-001..004
+		// Accounts_Get (cognitiveservices.json 2026-09-01): properties.publicNetworkAccess
+		// (Enabled|Disabled) and properties.privateEndpointConnections, used as the proof that
+		// the Foundry account is private-endpoint backed (FND-RUN-002).
+		newOp("runtime.account.get", g, "/subscriptions/{sub}/resourceGroups/{seg}/providers/Microsoft.CognitiveServices/accounts/{seg}", "2026-09-01", "Microsoft.CognitiveServices/accounts/read"),
 		newOp("runtime.project.get", g, "/subscriptions/{sub}/resourceGroups/{seg}/providers/Microsoft.CognitiveServices/accounts/{seg}/projects/{seg}", "2026-09-01", "Microsoft.CognitiveServices/accounts/projects/read"),
 		newOp("runtime.project.caphosts", g, "/subscriptions/{sub}/resourceGroups/{seg}/providers/Microsoft.CognitiveServices/accounts/{seg}/projects/{seg}/capabilityHosts", "2026-09-01", "Microsoft.CognitiveServices/accounts/projects/capabilityHosts/read"),
 		newOp("runtime.account.caphosts", g, "/subscriptions/{sub}/resourceGroups/{seg}/providers/Microsoft.CognitiveServices/accounts/{seg}/capabilityHosts", "2026-09-01", "Microsoft.CognitiveServices/accounts/capabilityHosts/read"),
@@ -108,8 +162,23 @@ func allowList() []operation {
 		newOp("runtime.account.connections", g, "/subscriptions/{sub}/resourceGroups/{seg}/providers/Microsoft.CognitiveServices/accounts/{seg}/connections", "2026-09-01", "Microsoft.CognitiveServices/accounts/connections/read"),
 		newOp("runtime.account.deployments", g, "/subscriptions/{sub}/resourceGroups/{seg}/providers/Microsoft.CognitiveServices/accounts/{seg}/deployments", "2026-09-01", "Microsoft.CognitiveServices/accounts/deployments/read"),
 		newOp("runtime.cosmos.sqlroleassignments", g, "/subscriptions/{sub}/resourceGroups/{seg}/providers/Microsoft.DocumentDB/databaseAccounts/{seg}/sqlRoleAssignments", "2025-10-15", "Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments/read"),
-		newOp("runtime.privatedns.links", g, "/subscriptions/{sub}/resourceGroups/{seg}/providers/Microsoft.Network/privateDnsZones/{seg}/virtualNetworkLinks", "2018-09-01", "Microsoft.Network/privateDnsZones/virtualNetworkLinks/read"),
-		newOp("runtime.metrics", g, "{resource}/providers/Microsoft.Insights/metrics", "2024-02-01", "Microsoft.Insights/metrics/read"),
+		// Metrics_List, Microsoft.Insights/Insights/stable/2024-02-01/metrics.json. Query parameters are
+		// the spec names (top and orderby carry no $ prefix there).
+		newOp("runtime.metrics", g, "{resource}/providers/Microsoft.Insights/metrics", "2024-02-01", "Microsoft.Insights/metrics/read").
+			withKeys("timespan", "interval", "metricnames", "aggregation", "top", "$filter", "metricnamespace", "resulttype"),
+		// RoleAssignments_ListForResource / ListForScope (2022-04-01) at a resource scope, for the
+		// Search, Storage and Cosmos DB resources bound to the project. $filter=principalId eq {id}
+		// returns assignments at, above or below the scope; callers filter by scope.
+		newOp("runtime.roleassignments.list.resource", g, "{resource}/providers/Microsoft.Authorization/roleAssignments", "2022-04-01", "Microsoft.Authorization/roleAssignments/read"),
+		// Workspaces_Get, Microsoft.OperationalInsights/OperationalInsights/stable/2025-02-01/Workspaces.json
+		// (a newer stable 2026-03-01 exists as openapi.json; 2025-02-01 is the version whose
+		// Workspaces_Get and properties.customerId were read). Used only to resolve customerId.
+		newOp("runtime.workspace.get", g, "/subscriptions/{sub}/resourcegroups/{seg}/providers/Microsoft.OperationalInsights/workspaces/{seg}", "2025-02-01", "Microsoft.OperationalInsights/workspaces/read"),
+		// Logs query API (azure-monitor-docs logs/api/request-format.md and access-api.md):
+		// POST https://api.loganalytics.azure.com/v1/workspaces/{workspaceId}/query, workspaceId is the
+		// workspace GUID (customerId). The path version v1 is not sent as api-version. The body is
+		// restricted to the shipped KQL template (ADR-006 item 7; ADR-021 g exit criterion).
+		logQueryOp(),
 		newOp("runtime.diagnosticsettings", g, "{resource}/providers/Microsoft.Insights/diagnosticSettings", "2021-05-01-preview", "Microsoft.Insights/diagnosticSettings/read"),
 		// catalogue: FND-DEP-004, FND-DEP-005, FND-DEP-006
 		newOp("models.list", g, "/subscriptions/{sub}/providers/Microsoft.CognitiveServices/locations/{seg}/models", "2026-09-01", "Microsoft.CognitiveServices/locations/models/read"),
@@ -117,13 +186,13 @@ func allowList() []operation {
 		newOp("deletedaccounts.list", g, "/subscriptions/{sub}/providers/Microsoft.CognitiveServices/deletedAccounts", "2026-09-01", "Microsoft.CognitiveServices/deletedAccounts/read"),
 		newOp("deletedvaults.list", g, "/subscriptions/{sub}/providers/Microsoft.KeyVault/deletedVaults", "2026-05-15", "Microsoft.KeyVault/deletedVaults/read"),
 		newOp("deletedservices.list", g, "/subscriptions/{sub}/providers/Microsoft.ApiManagement/deletedservices", "2024-05-01", "Microsoft.ApiManagement/deletedservices/read"),
-		// catalogue: policyAssignments 2026-07-01; exemptions/restrictions unverified
+		// catalogue: policyAssignments 2026-07-01. Policy exemptions are not read (the unused
+		// 2022-07-01-preview entry was removed in the Phase 2 gate fixes).
 		newOp("policyassignments.list", g, "{scope}/providers/Microsoft.Authorization/policyAssignments", "2026-07-01", "Microsoft.Authorization/policyAssignments/read"),
-		newOp("policyexemptions.list", g, "{scope}/providers/Microsoft.Authorization/policyExemptions", "2022-07-01-preview", "Microsoft.Authorization/policyExemptions/read"),
 		newOp("policy.checkrestrictions", p, "{scope}/providers/Microsoft.PolicyInsights/checkPolicyRestrictions", "2024-10-01", "Microsoft.PolicyInsights/checkPolicyRestrictions/read"),
 		// catalogue: deployments whatIf 2026-06-01 (explicit opt-in only)
 		newOp("whatif.run", p, "{scope}/providers/Microsoft.Resources/deployments/{seg}/whatIf", "2026-06-01", "Microsoft.Resources/deployments/whatIf/action"),
-		newOp("whatif.poll", g, "{scope}/providers/Microsoft.Resources/deployments/{seg}/operationStatuses/{seg}", "2026-06-01", "Microsoft.Resources/deployments/read"),
+		newOp("whatif.poll", g, "{scope}/providers/Microsoft.Resources/deployments/{seg}/operationStatuses/{seg}", "2026-06-01", "Microsoft.Resources/deployments/operationstatuses/read"),
 		// provider-level name-availability POSTs (ADR-006 allows these POSTs)
 		newOp("name.keyvault", p, "/subscriptions/{sub}/providers/Microsoft.KeyVault/checkNameAvailability", "2026-05-15", "Microsoft.KeyVault/checkNameAvailability/read"),
 		newOp("name.storage", p, "/subscriptions/{sub}/providers/Microsoft.Storage/checkNameAvailability", "2026-09-01", "Microsoft.Storage/checknameavailability/read"),
@@ -153,6 +222,28 @@ func IsAllowed(method, path string) bool {
 	}
 	for _, o := range allowList() {
 		if o.Method == method && o.re.MatchString(path) {
+			return true
+		}
+	}
+	return false
+}
+
+func logQueryOp() operation {
+	o := newOp("runtime.loganalytics.query", http.MethodPost, "/v1/workspaces/{guid}/query", "v1", "Microsoft.OperationalInsights/workspaces/query/read")
+	o.Origin = audienceLogAnalytics
+	o.TokenScope = logAnalyticsScope
+	o.body = validateLogQueryBody
+	// The Logs query API carries the query in the body and its version in the
+	// path: no query-string key is allowed.
+	return o.withNoQuery()
+}
+
+func (o operation) queryKeyAllowed(k string) bool {
+	if o.QueryKeys == nil {
+		return allowedQueryKey(k)
+	}
+	for _, a := range o.QueryKeys {
+		if strings.EqualFold(a, k) {
 			return true
 		}
 	}
@@ -212,7 +303,9 @@ type armClient struct {
 	http       *http.Client
 	origin     string
 	base       string
+	laBase     string
 	scope      string
+	now        func() time.Time
 	sem        chan struct{}
 	maxRetries int
 	sleep      func(context.Context, time.Duration) error
@@ -253,19 +346,98 @@ func sleepCtx(ctx context.Context, d time.Duration) error {
 
 // do performs one allow-listed request with bounded concurrency and retry.
 func (c *armClient) do(ctx context.Context, method, path string, query url.Values, body any) (response, error) {
+	return c.doQuery(ctx, method, path, query, "", body)
+}
+
+// whatIfPollOp is the only operation whose status URL (the opaque Location of
+// a 202) is replayed with its query string verbatim.
+const whatIfPollOp = "whatif.poll"
+
+// pollWhatIf GETs a what-if operation-status URL taken from a Location header.
+// The caller has already checked the origin. The path must match the whatif.poll
+// pattern without dot segments, and the query is replayed verbatim (ARM puts
+// opaque parameters such as t, c, s and h on it) except api-version, which is
+// always the allow-listed one. No other operation can use this path: every
+// other call keeps the strict query allow-list in do.
+func (c *armClient) pollWhatIf(ctx context.Context, path, rawQuery string) (response, error) {
+	if rawQuery == "" {
+		return c.doQuery(ctx, http.MethodGet, path, nil, "", nil)
+	}
+	return c.doQuery(ctx, http.MethodGet, path, nil, rawQuery, nil)
+}
+
+// verbatimQuery validates and returns the replayed query with api-version
+// removed. It refuses control characters and whitespace.
+func verbatimQuery(raw string) (string, error) {
+	for i := 0; i < len(raw); i++ {
+		if raw[i] <= ' ' || raw[i] == 0x7f || raw[i] == '#' {
+			return "", fmt.Errorf("%w: status location query", ErrNotAllowed)
+		}
+	}
+	var keep []string
+	for _, kv := range strings.Split(raw, "&") {
+		if kv == "" {
+			continue
+		}
+		k, _, _ := strings.Cut(kv, "=")
+		if dk, err := url.QueryUnescape(k); err != nil || strings.EqualFold(dk, "api-version") {
+			if err != nil {
+				return "", fmt.Errorf("%w: status location query", ErrNotAllowed)
+			}
+			continue
+		}
+		keep = append(keep, kv)
+	}
+	return strings.Join(keep, "&"), nil
+}
+
+// doQuery is do with an optional verbatim query (whatif.poll only).
+func (c *armClient) doQuery(ctx context.Context, method, path string, query url.Values, rawQuery string, body any) (response, error) {
+	for _, seg := range strings.Split(path, "/") {
+		if seg == ".." || seg == "." {
+			return response{}, fmt.Errorf("%w: %s %s", ErrNotAllowed, method, path)
+		}
+	}
 	o, ok := c.match(method, path)
 	if !ok {
 		return response{}, fmt.Errorf("%w: %s %s", ErrNotAllowed, method, path)
 	}
 	vals := url.Values{}
 	for k, vs := range query {
-		if !allowedQueryKey(k) {
+		if !o.queryKeyAllowed(k) {
 			return response{}, fmt.Errorf("%w: query parameter %q", ErrNotAllowed, k)
 		}
 		vals[k] = vs
 	}
-	vals.Set("api-version", o.APIVersion)
-	full := c.base + path + "?" + strings.ReplaceAll(vals.Encode(), "+", "%20")
+	base, tokenScope := c.base, c.scope
+	if o.Origin == audienceLogAnalytics {
+		// The Logs query API carries its version in the path (v1), not api-version.
+		base, tokenScope = c.laBase, o.TokenScope
+	} else {
+		vals.Set("api-version", o.APIVersion)
+	}
+	if o.body != nil {
+		if err := o.body(body); err != nil {
+			return response{}, err
+		}
+	}
+	enc := strings.ReplaceAll(vals.Encode(), "+", "%20")
+	if rawQuery != "" {
+		if o.Name != whatIfPollOp {
+			return response{}, fmt.Errorf("%w: query parameters outside the allow-list", ErrNotAllowed)
+		}
+		kept, err := verbatimQuery(rawQuery)
+		if err != nil {
+			return response{}, err
+		}
+		if kept != "" {
+			enc = kept + "&" + enc
+		}
+	}
+	full := base + path
+	if enc != "" {
+		full += "?" + enc
+	}
 	var payload []byte
 	if body != nil {
 		if method != http.MethodPost {
@@ -287,7 +459,7 @@ func (c *armClient) do(ctx context.Context, method, path string, query url.Value
 	defer func() { <-c.sem }()
 
 	for attempt := 0; ; attempt++ {
-		tok, err := c.cred.Token(ctx, c.scope)
+		tok, err := c.cred.Token(ctx, tokenScope)
 		if err != nil {
 			if ctx.Err() != nil {
 				return response{}, ctx.Err()
@@ -353,7 +525,19 @@ func (c *armClient) get(ctx context.Context, path string, q url.Values, out any)
 		return err
 	}
 	if err := json.Unmarshal(r.body, out); err != nil {
-		return fmt.Errorf("azure: decode response for %s: %w", path, err)
+		return fmt.Errorf("%w: %s: %v", ErrDecode, path, err)
+	}
+	return nil
+}
+
+// post sends an allow-listed POST with a validated body and decodes the JSON reply.
+func (c *armClient) post(ctx context.Context, path string, body any, out any) error {
+	r, err := c.do(ctx, http.MethodPost, path, nil, body)
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(r.body, out); err != nil {
+		return fmt.Errorf("%w: %s: %v", ErrDecode, path, err)
 	}
 	return nil
 }

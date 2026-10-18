@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net"
+	"net/http"
 	"os"
 	"path"
 	"path/filepath"
@@ -15,6 +17,7 @@ import (
 	"time"
 
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/armmodel"
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/azure"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/azureyaml"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/baseline"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/bicep"
@@ -32,6 +35,7 @@ import (
 	opsrules "github.com/ruairispain/copilot-web/foundry-doctor/internal/rules/ops"
 	relrules "github.com/ruairispain/copilot-web/foundry-doctor/internal/rules/rel"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/rules/sec"
+	netprobe "github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/network"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/suppress"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 	ruledata "github.com/ruairispain/copilot-web/foundry-doctor/rules"
@@ -74,6 +78,15 @@ type Options struct {
 	BicepRunner bicep.Runner
 	// AzdVersion replaces `azd version` detection (tests, embedding).
 	AzdVersion func(ctx context.Context) string
+	// Runtime* replace the Azure adapter, HTTP client, credential and DNS
+	// resolver of the runtime command (tests, embedding). Nil keeps production.
+	RuntimeClient     func() (azure.Client, error)
+	RuntimeHTTP       *http.Client
+	RuntimeCredential azure.TokenCredential
+	RuntimeResolver   netprobe.Resolver
+	// RuntimeNetResolver replaces the system resolver under the production
+	// resolver (tests only).
+	RuntimeNetResolver *net.Resolver
 }
 
 // DefaultServices wires the production pipeline. It needs no Azure
@@ -103,7 +116,8 @@ func NewServices(stderr io.Writer, o Options) Services {
 		ARM:       armLoader{disc: disc, runner: o.BicepRunner, stderr: stderr, adapter: store},
 		Engine:    engineAdapter{cat: cat, azd: azd, adapter: store},
 		Preflight: preflightEngine{cat: cat, azd: azd, getenv: getenv},
-		Runtime:   runtimeEngine{cat: cat, azd: azd, getenv: getenv},
+		Runtime: runtimeEngine{cat: cat, azd: azd, getenv: getenv, newClient: o.RuntimeClient,
+			httpClient: o.RuntimeHTTP, cred: o.RuntimeCredential, resolver: o.RuntimeResolver, netResolver: o.RuntimeNetResolver},
 		Baseline:  baselineFilter{},
 		Suppress:  suppressFilter{},
 		Reporter:  reportAdapter{},

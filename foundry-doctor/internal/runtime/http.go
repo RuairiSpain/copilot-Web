@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -20,12 +21,33 @@ const (
 	maxRetryAfter    = 30 * time.Second
 )
 
+// ErrRequestRejected marks a request DoJSON refused before sending anything:
+// a method outside the read-only list, a non-https URL, or a missing host
+// suffix. It is a defect of the caller, never a property of the target.
+var ErrRequestRejected = errors.New("runtime: request rejected before it was sent")
+
+// allowedMethod reports whether DoJSON may send method. The data-plane
+// probes are reads; the Log Analytics query (a POST) goes through the Azure
+// adapter allow-list, not through DoJSON.
+func allowedMethod(method string) bool { return method == http.MethodGet }
+
 // DoJSON performs a bounded read-only HTTP request with OAuth auth and 429/5xx
-// retry semantics. It never returns response bodies in errors.
+// retry semantics. It never returns response bodies in errors. The bearer
+// token only ever goes to an https URL whose host matches expectedHostSuffix;
+// an empty suffix, a non-https URL or a method other than GET is rejected.
 func DoJSON(ctx context.Context, hc *http.Client, cred azure.TokenCredential, scope, method, rawURL, expectedHostSuffix string, body any, out any) error {
+	if !allowedMethod(method) {
+		return fmt.Errorf("%w: method %q is not allowed", ErrRequestRejected, method)
+	}
+	if strings.TrimSpace(expectedHostSuffix) == "" {
+		return fmt.Errorf("%w: no expected host suffix", ErrRequestRejected)
+	}
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return fmt.Errorf("parse url: %w", err)
+	}
+	if !strings.EqualFold(u.Scheme, "https") || u.User != nil {
+		return fmt.Errorf("%w: only https URLs without credentials are allowed", ErrRequestRejected)
 	}
 	if !hostMatchesSuffix(u.Hostname(), expectedHostSuffix) {
 		return fmt.Errorf("unexpected host %q", u.Hostname())
@@ -85,7 +107,7 @@ func DoJSON(ctx context.Context, hc *http.Client, cred azure.TokenCredential, sc
 				return nil
 			}
 			if err := json.Unmarshal(data, out); err != nil {
-				return fmt.Errorf("decode response: %w", err)
+				return fmt.Errorf("%w: decode response: %v", azure.ErrDecode, err)
 			}
 			return nil
 		case resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == 500 || resp.StatusCode == 502 || resp.StatusCode == 503 || resp.StatusCode == 504:
@@ -95,17 +117,38 @@ func DoJSON(ctx context.Context, hc *http.Client, cred azure.TokenCredential, sc
 				}
 				continue
 			}
-			return fmt.Errorf("http %d", resp.StatusCode)
+			return &HTTPError{Status: resp.StatusCode}
 		case resp.StatusCode == http.StatusForbidden:
 			return &azure.UnavailableError{Capability: method + " " + safeURL(rawURL), Reason: "data-plane permission or network access unavailable"}
 		case resp.StatusCode == http.StatusUnauthorized:
 			return &azure.UnavailableError{Capability: method + " " + safeURL(rawURL), Reason: "credential rejected by service"}
-		case resp.StatusCode == http.StatusNotFound:
-			return fmt.Errorf("http 404")
 		default:
-			return fmt.Errorf("http %d", resp.StatusCode)
+			return &HTTPError{Status: resp.StatusCode}
 		}
 	}
+}
+
+// HTTPError is a non-success data-plane response reduced to its status code.
+// Bodies are never retained.
+type HTTPError struct{ Status int }
+
+func (e *HTTPError) Error() string { return fmt.Sprintf("http %d", e.Status) }
+
+// IsNotFound reports whether err is a data-plane HTTP 404.
+func IsNotFound(err error) bool {
+	var he *HTTPError
+	return errors.As(err, &he) && he.Status == http.StatusNotFound
+}
+
+// SameOrigin reports whether next is an absolute https URL on the same host
+// as base. It is used before following a nextLink with the bearer token.
+func SameOrigin(base, next string) bool {
+	b, err1 := url.Parse(base)
+	n, err2 := url.Parse(next)
+	if err1 != nil || err2 != nil || n.Scheme == "" || n.User != nil {
+		return false
+	}
+	return strings.EqualFold(b.Scheme, n.Scheme) && strings.EqualFold(b.Host, n.Host)
 }
 
 func retryAfter(h http.Header, attempt int) time.Duration {

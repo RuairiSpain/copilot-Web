@@ -38,7 +38,8 @@ func TestErrorsAndTypes(t *testing.T) {
 	if _, ok := AsUnavailable(errors.New("plain")); ok {
 		t.Error("plain error must not be unavailable")
 	}
-	for ct, want := range map[ChangeType]bool{ChangeDelete: true, ChangeReplace: true, ChangeCreate: false, ChangeModify: false, ChangeNoChange: false, ChangeUnknown: false} {
+	// ARM has no Replace change type: only a returned Delete is destructive.
+	for ct, want := range map[ChangeType]bool{ChangeDelete: true, ChangeCreate: false, ChangeModify: false, ChangeNoChange: false, ChangeDeploy: false, ChangeIgnore: false, ChangeUnsupported: false, ChangeUnknown: false, "Replace": false} {
 		if got := (WhatIfChange{ChangeType: ct}).Destructive(); got != want {
 			t.Errorf("Destructive(%s) = %v", ct, got)
 		}
@@ -285,11 +286,10 @@ func TestPolicy(t *testing.T) {
 			t.Error("PolicyAssignment gained a field: confirm it carries no parameter values")
 		}
 	})
-	t.Run("exemptions", func(t *testing.T) {
-		a, _ := newAdapter(t, newFake(t).onFile("GET", testRG+"/providers/Microsoft.Authorization/policyExemptions", "exemptions.json"))
-		got, err := a.ListExemptions(ctx, testRG)
-		if err != nil || len(got) != 1 || got[0].Category != "Waiver" || got[0].Scope != testRG || got[0].ExpiresOn != "2027-01-01T00:00:00Z" {
-			t.Errorf("got %+v, %v", got, err)
+	t.Run("exemptions are not readable", func(t *testing.T) {
+		// The unverified 2022-07-01-preview exemptions entry was removed from the allow-list.
+		if IsAllowed("GET", testRG+"/providers/Microsoft.Authorization/policyExemptions") {
+			t.Error("policyExemptions must not be allow-listed")
 		}
 	})
 	t.Run("restricted", func(t *testing.T) {
@@ -438,17 +438,21 @@ func TestWhatIf(t *testing.T) {
 		f := newFake(t).onFile("POST", runPath, "whatif_done.json")
 		a, _ := newAdapter(t, f)
 		got, err := a.Run(ctx, req)
-		if err != nil || len(got.Changes) != 3 {
+		if err != nil || len(got.Changes) != 4 || got.Status != "Succeeded" {
 			t.Fatalf("got %+v, %v", got, err)
 		}
-		want := []ChangeType{ChangeReplace, ChangeNoChange, ChangeModify}
+		// ARM has no Replace: the Delete and Create of the same ID are reported as returned.
+		want := []ChangeType{ChangeCreate, ChangeDelete, ChangeNoChange, ChangeModify}
 		for i, c := range got.Changes {
 			if c.ChangeType != want[i] {
 				t.Errorf("change %d = %s, want %s", i, c.ChangeType, want[i])
 			}
 		}
-		if !got.Changes[0].Destructive() || got.Changes[2].Destructive() {
+		if got.Changes[0].Destructive() || !got.Changes[1].Destructive() || got.Changes[3].Destructive() {
 			t.Error("destructive classification wrong")
+		}
+		if n := reflect.TypeOf(WhatIfChange{}).NumField(); n != 2 {
+			t.Errorf("WhatIfChange gained a field (%d): confirm it retains no before/after payload", n)
 		}
 		body := f.bodies["POST "+runPath][0]
 		for _, w := range []string{`"ResourceIdOnly"`, `"Incremental"`, `"name":{"value":"zeta"}`} {
@@ -469,7 +473,7 @@ func TestWhatIf(t *testing.T) {
 			on("GET", poll, reply{status: 202, header: http.Header{"Location": {"https://management.test" + poll}}}, reply{status: 200, body: fixture(t, "whatif_done.json")})
 		a, sl := newAdapter(t, f)
 		got, err := a.Run(ctx, req)
-		if err != nil || len(got.Changes) != 3 || len(sl.d) != 2 || sl.d[0] != 3*time.Second {
+		if err != nil || len(got.Changes) != 4 || len(sl.d) != 2 || sl.d[0] != 3*time.Second {
 			t.Errorf("got %+v, %v, sleeps %v", got, err, sl.d)
 		}
 	})
@@ -480,10 +484,40 @@ func TestWhatIf(t *testing.T) {
 			t.Errorf("err=%v calls=%d", err, f.callCount())
 		}
 	})
-	t.Run("failed keeps only codes", func(t *testing.T) {
+	t.Run("failed is unavailable, never an empty pass, and keeps only codes", func(t *testing.T) {
 		a, _ := newAdapter(t, newFake(t).onFile("POST", runPath, "whatif_failed.json"))
 		got, err := a.Run(ctx, req)
-		if err != nil || len(got.Changes) != 0 || !reflect.DeepEqual(got.DiagnosticCodes, []string{"InvalidTemplate", "ResourceNotFound"}) {
+		u, ok := AsUnavailable(err)
+		if !ok || len(got.Changes) != 0 || !strings.Contains(u.Reason, "status Failed") ||
+			!strings.Contains(u.Reason, "InvalidTemplate,ResourceNotFound") || strings.Contains(err.Error(), "free text") {
+			t.Errorf("got %+v, %v", got, err)
+		}
+	})
+	t.Run("only Succeeded counts", func(t *testing.T) {
+		for name, body := range map[string]string{
+			"canceled":     `{"status":"Canceled","properties":{"changes":[]}}`,
+			"empty status": `{"properties":{"changes":[]}}`,
+			"running":      `{"status":"Running","properties":{"changes":[]}}`,
+			"hostile":      `{"status":"Succeeded\nfake","properties":{"changes":[]}}`,
+		} {
+			a, _ := newAdapter(t, newFake(t).on("POST", runPath, reply{status: 200, body: body}))
+			got, err := a.Run(ctx, req)
+			if !errors.Is(err, ErrUnavailable) || len(got.Changes) != 0 {
+				t.Errorf("%s: got %+v, %v", name, got, err)
+			}
+		}
+		a, _ := newAdapter(t, newFake(t).on("POST", runPath, reply{status: 200, body: `{"status":"Failed","error":{"code":"AuthorizationFailed"}}`}))
+		_, err := a.Run(ctx, req)
+		if u, ok := AsUnavailable(err); !ok || u.Permission != "Microsoft.Resources/deployments/whatIf/action" {
+			t.Errorf("authorization failure must name the permission: %v", err)
+		}
+	})
+	t.Run("potential changes are separate uncertain evidence", func(t *testing.T) {
+		id := testRG + "/providers/Microsoft.Storage/storageAccounts/p"
+		body := `{"status":"Succeeded","properties":{"changes":[],"potentialChanges":[{"resourceId":"` + id + `","changeType":"Delete","before":{"x":"y"}},{"resourceId":"` + id + `","changeType":"Unsupported"}]}}`
+		a, _ := newAdapter(t, newFake(t).on("POST", runPath, reply{status: 200, body: body}))
+		got, err := a.Run(ctx, req)
+		if err != nil || len(got.Changes) != 0 || len(got.PotentialChanges) != 2 || got.PotentialChanges[0].ChangeType != ChangeDelete || got.PotentialChanges[1].ChangeType != ChangeUnsupported {
 			t.Errorf("got %+v, %v", got, err)
 		}
 	})

@@ -129,6 +129,11 @@ func TestClassifySkip(t *testing.T) {
 		{"input-unavailable: account has no model deployments", SkipByDesign},
 		{"input-unavailable: Project has no capability host or no bound resources", SkipByDesign},
 		{"input-unavailable: Foundry management metadata is not available", SkipHidesCheck},
+		{"input-unavailable: no dependency is proven private-endpoint backed; private-endpoint backing was not proven for any dependency, so no DNS name was probed", SkipByDesign},
+		{"input-unavailable: no bound connection targets a search, storage or cosmos db resource, so no effective access was checked", SkipByDesign},
+		// An unreadable account network is not "nothing in scope".
+		{"uncertain: the Foundry account's network exposure could not be read", SkipHidesCheck},
+		{"input-unavailable: no private-endpoint-backed dependencies are in scope", SkipHidesCheck},
 		{sdk.SkipInputUnavailable, SkipHidesCheck},
 		{sdk.SkipUnsupportedVersion, SkipHidesCheck},
 		{sdk.SkipAzdVersionUnknown, SkipHidesCheck},

@@ -1,9 +1,35 @@
 {
+  "name": "load-knowledge",
   "status": "running",
   "lastResult": {
     "status": "success",
-    "itemsFailed": 0,
     "errorMessage": "DOCUMENT_SENTINEL_TEXT",
-    "errorCode": "none"
-  }
+    "startTime": "2026-10-17T11:50:00Z",
+    "endTime": "2026-10-17T11:55:00Z",
+    "errors": [{"errorMessage": "DOCUMENT_SENTINEL_TEXT", "statusCode": 400}],
+    "warnings": [],
+    "itemsProcessed": 8,
+    "itemsFailed": 0
+  },
+  "executionHistory": [
+    {
+      "status": "success",
+      "startTime": "2026-10-17T11:50:00Z",
+      "endTime": "2026-10-17T11:55:00Z",
+      "errors": [],
+      "warnings": [],
+      "itemsProcessed": 8,
+      "itemsFailed": 0
+    },
+    {
+      "status": "transientFailure",
+      "startTime": "2026-10-17T09:50:00Z",
+      "endTime": "2026-10-17T09:51:00Z",
+      "errors": [],
+      "warnings": [],
+      "itemsProcessed": 0,
+      "itemsFailed": 3
+    }
+  ],
+  "limits": {"maxRunTime": "PT2H"}
 }

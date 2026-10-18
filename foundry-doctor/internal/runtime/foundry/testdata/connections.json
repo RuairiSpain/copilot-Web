@@ -1,11 +1,14 @@
 {
-  "data": [
+  "value": [
     {
       "name": "search-conn",
-      "category": "AzureAISearch",
-      "documents": [
-        "DOCUMENT_SENTINEL_TEXT"
-      ]
+      "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/acct/projects/proj/connections/search-conn",
+      "type": "CognitiveSearch",
+      "target": "https://searchsvc.search.windows.net",
+      "isDefault": false,
+      "credentials": {"type": "AAD"},
+      "metadata": {"ApiType": "Azure", "note": "DOCUMENT_SENTINEL_TEXT"}
     }
-  ]
+  ],
+  "nextLink": "https://acct.services.ai.azure.com/api/projects/proj/connections?api-version=v1&skiptoken=page2"
 }

@@ -899,7 +899,10 @@ func validateAPIVersion(v APIVersion) error {
 		}
 	}
 	if !validExactAPIVersion(v.Version) {
-		return fmt.Errorf("version must be an exact, valid YYYY-MM-DD or YYYY-MM-DD-preview value, got %q", v.Version)
+		return fmt.Errorf("version must be an exact, valid YYYY-MM-DD or YYYY-MM-DD-preview value (or the literal v1 on the data plane), got %q", v.Version)
+	}
+	if v.Version == dataPlaneV1 && v.Plane != APIPlaneData {
+		return fmt.Errorf("version v1 is accepted on the data plane only, got plane %q", v.Plane)
 	}
 	return nil
 }
@@ -941,7 +944,14 @@ func validAPITarget(value string, allowPath bool) bool {
 	return true
 }
 
+// dataPlaneV1 is the only non-date api-version literal accepted: the Foundry
+// project data plane documents api-version v1 (OpenAPI info.version, no enum).
+const dataPlaneV1 = "v1"
+
 func validExactAPIVersion(value string) bool {
+	if value == dataPlaneV1 {
+		return true
+	}
 	const preview = "-preview"
 	date := strings.TrimSuffix(value, preview)
 	if len(date) != len("2006-01-02") || date[:4] == "0000" ||

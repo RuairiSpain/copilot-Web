@@ -34,7 +34,33 @@ func TestCorrelatorResource(t *testing.T) {
 	}
 	got = c.Resource("Microsoft.CognitiveServices/accounts", "acct", "/subscriptions/x/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/acct")
 	if got.Source.File == "" {
-		t.Fatalf("expected yaml fallback, got %+v", got)
+		t.Fatalf("expected yaml fallback for a Foundry account, got %+v", got)
+	}
+	got = c.Resource("Microsoft.CognitiveServices/accounts/projects", "proj", "id")
+	if got.Source.File == "" {
+		t.Fatalf("expected yaml fallback for a Foundry project, got %+v", got)
+	}
+}
+
+func TestCorrelatorFallbackNeverAttachesAgentServiceToOtherResources(t *testing.T) {
+	c := NewCorrelator(&sdk.Input{AzureYAML: yamlView{}})
+	for _, typ := range []string{"Microsoft.Search/searchServices", "Microsoft.Storage/storageAccounts", "Microsoft.DocumentDB/databaseAccounts", "", "azure.ai.agent", "Microsoft.CognitiveServicesX/accounts"} {
+		if got := c.Resource(typ, "n", "id"); got.Source.File != "" {
+			t.Errorf("%q got an unrelated source location: %+v", typ, got.Source)
+		}
+	}
+}
+
+func TestCorrelatorAgentUsesTheServiceEntry(t *testing.T) {
+	c := NewCorrelator(&sdk.Input{AzureYAML: yamlView{}})
+	if got := c.Agent("svc"); got.Source.File != "azure.yaml" || got.Source.Line != 3 || got.Resource.Type != "azure.ai.agent" {
+		t.Errorf("agent = %+v", got)
+	}
+	if got := c.Agent("other"); got.Source.File != "" {
+		t.Errorf("unknown agent got a location: %+v", got)
+	}
+	if got := NewCorrelator(nil).Agent("svc"); got.Source.File != "" || got.Resource.Name != "svc" {
+		t.Errorf("nil input: %+v", got)
 	}
 }
 

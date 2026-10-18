@@ -1,5 +1,5 @@
 id: FND-DEP-011
-version: 1
+version: 2
 group: DEP
 title: Subnet delegation/capacity/use is compatible
 description: >-
@@ -64,7 +64,7 @@ evidence:
     (f) the virtual network location equals the Foundry resource location. NSG, firewall and UDR dependency rules are not
     evaluated. Role family: Microsoft.Network/virtualNetworks/subnets/read and related link reads are covered by Reader
     (*/read). Reader suffices. The answer is definitive for (a), (b), (c) outside 100.64.0.0/10, (e) and (f) and likely
-    for (d) and free-address capacity, which cannot be computed from the sources read.
+    for (d) and free-address capacity, which cannot be computed from the sources read. Implementation (version 2): a prefix between /25 and /27 is an advisory note (warning), not a finding, and a prefix longer than /27 is a finding. The subnet is read only when it lies in the target resource group or an approved scope (--approved-scope); otherwise a finding is raised without a read. The virtual network location comes from one VirtualNetworks_Get (api-version 2025-05-01). A link owned by the account's own resource is ignored; when the account's resource ID is not literal, ownership is unresolved and noted.
   confidence: likely
 recommendation: >-
   Use a dedicated subnet of /24 (at least /27) in an allowed private range, delegate it to Microsoft.App/environments, keep

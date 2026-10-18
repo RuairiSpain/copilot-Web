@@ -74,7 +74,11 @@ func (r *Readiness) console(b *strings.Builder) {
 	}{{"ready", r.Ready}, {"blocked", r.Blocked}, {"uncertain", r.Uncertain}, {"skipped", r.Skipped}} {
 		b.WriteString("  " + cleanText(r.line(l.n, l.ids)) + "\n")
 	}
-	b.WriteString("  " + readinessCaveat + "\n\n")
+	b.WriteString("  " + readinessCaveat + "\n")
+	if n := len(r.Uncertain); n > 0 {
+		fmt.Fprintf(b, "  %d check(s) uncertain: exit 0 does not mean ready\n", n)
+	}
+	b.WriteString("\n")
 }
 
 func (r *Readiness) markdown(b *strings.Builder) {

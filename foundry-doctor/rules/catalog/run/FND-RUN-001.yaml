@@ -1,5 +1,5 @@
 id: FND-RUN-001
-version: 1
+version: 4
 group: RUN
 title: Effective project identity access
 description: >-
@@ -43,21 +43,49 @@ compatibility:
     this rule's verified facts for the widened fields (see docs/tool-compatibility.md section 6).
 evidence:
   description: >-
-    Read-only probes. (1) GET project (2026-09-01) for identity.principalId. (2) GET project capabilityHosts (2026-09-01)
-    for storageConnections, threadStorageConnections and vectorStoreConnections, then GET project/account connections
-    (2026-09-01) to resolve target resource IDs (never the list-with-secrets operation). (3) GET
-    /{scope}/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01 with $filter=principalId eq {id}
-    at each bound resource scope (inherited assignments are included by the filter semantics in the spec). (4) For Cosmos
-    DB, GET Microsoft.DocumentDB/databaseAccounts/{account}/sqlRoleAssignments (2025-10-15), because Cosmos data-plane
-    roles are not Azure RBAC assignments. Expected roles come from the Foundry standard agent setup tables (Search Index
-    Data Contributor and Search Service Contributor on Search; Storage Blob Data Contributor and Storage Blob Data Owner
-    on the project containers; Cosmos DB Built-in Data Contributor on the enterprise_memory database; for the
-    system-assigned identity also Cosmos DB Operator and Storage Account Contributor at account level). A missing
-    expected role is a fail. Custom roles, conditions, deny assignments, container-scoped Blob grants and key/SAS/service-principal
-    connections yield Uncertain or Skipped, never Pass. Required permission of the doctor: read of role assignments
-    (Microsoft.Authorization/roleAssignments/read) at the bound resource scopes, and ARM read on the project and Cosmos
-    account. Vantage point: control plane only, any network. Metadata read: IDs, role definition IDs, principal IDs. Never
-    keys, documents, threads or vectors.
+    Read-only probes. (1) GET project (2026-09-01) for the identity: identity.principalId for a system-assigned identity,
+    and identity.userAssignedIdentities[*].principalId for each user-assigned identity (both paths VERIFIED in the 2026-09-01
+    spec on 2026-10-17); the rule evaluates every principal the project carries and names which one it evaluated. (2) GET
+    project capabilityHosts (2026-09-01) for storageConnections, threadStorageConnections and vectorStoreConnections, then
+    GET project/account connections (2026-09-01) to resolve target resource IDs (never the list-with-secrets operation).
+    (3) GET /{resourceId}/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01 with $filter=principalId
+    eq {id} at each bound resource scope (resource scope, allow-list operation runtime.roleassignments.list.resource).
+    The filter returns assignments at, above or below the scope, so the rule keeps only assignments whose own scope is the
+    resource or an ancestor of it (scope-aware); an assignment on a child scope (for example one container) is not an
+    assignment on the resource. The roleDefinitionId of each kept assignment is compared by its GUID with the built-in role GUIDs
+    in the rule (role-definition-aware; a role matched by display name alone is never accepted). The role definition is
+    not fetched at runtime: the Azure built-in role names and GUIDs used (Search Service Contributor, Search Index Data
+    Contributor, Storage Blob Data Contributor, Storage Blob Data Owner, Storage Account Contributor, Cosmos DB Operator,
+    Owner, Contributor, Reader) were checked in MicrosoftDocs/azure-docs articles/role-based-access-control/built-in-roles.md
+    on 2026-10-18. (4) For Cosmos DB, GET databaseAccounts/{account}/sqlRoleAssignments (2025-10-15; allow-list operation
+    runtime.cosmos.sqlroleassignments). A sqlRoleAssignment carries roleDefinitionId, scope and principalId (VERIFIED in the
+    2025-10-15 spec on 2026-10-17). The rule matches roleDefinitionId against the Cosmos DB Built-in Data Contributor
+    SQL role GUID 00000000-0000-0000-0000-000000000002; that GUID is UNVERIFIED in this catalogue (sqlRoleDefinitions is not
+    read, so a custom role is recognised only as "another role" and is Uncertain). The assignment is a grant when its scope
+    is the Cosmos account or the database /dbs/enterprise_memory (the database named in the Foundry standard agent setup;
+    not re-verified); a grant scoped to any other database, to a collection or to an unrecognised path is Uncertain.
+
+    Expected roles (Foundry standard agent setup tables): Search Index Data Contributor and Search Service Contributor on
+    Search; Storage Blob Data Contributor and Storage Blob Data Owner (the setup tables scope them to the project containers; the rule checks the storage account and its ancestors, and a container-scoped grant is Uncertain); Cosmos DB Built-in Data
+    Contributor on the enterprise_memory database. Storage Account Contributor and Cosmos DB Operator at account level are
+    expected for the system-assigned identity only, as the setup tables list them; they are not required of a
+    user-assigned identity, and a missing one is never reported for a user-assigned principal.
+
+    Outcomes. A missing expected role at a contained scope is a Fail, reported with confidence capped at medium
+    ('likely'). A custom or unrecognised role covering the target, a conditional assignment of the expected role, a Blob
+    data role assigned only at container scope (an assignment below the target), an Owner or Contributor assignment for a
+    management-plane role (Search Service Contributor, Storage Account Contributor, Cosmos DB Operator: these roles may
+    include the needed actions, which are not resolved), a root or management-group assignment that cannot be tied to the
+    target, or a truncated listing is Uncertain, never Pass and never Fail. Owner, Contributor and Reader never satisfy a
+    data role. Storage Blob Data Owner satisfies Storage Blob Data Contributor. Group-based assignments, deny assignments
+    and ABAC conditions are not evaluated by this rule: the principalId filter returns assignments to the principal itself,
+    so a role granted through a group is not seen and a deny assignment is not applied; the finding evidence says so. Key,
+    SAS and service-principal connections are Skipped. A resource-backed connection (one that stands for a Search, Storage or Cosmos DB resource) whose
+    ARM resource ID cannot be resolved from the connection (no ARM ID in metadata.ResourceId or properties.target) is Uncertain
+    with the reason 'effective access was not checked'; it is never Pass and never omitted (loop 2, 2026-10-18). Required permission of the doctor:
+    Microsoft.Authorization/roleAssignments/read at the bound resource scopes, and ARM read on the
+    project and Cosmos account. Vantage point: control plane only, any network. Metadata read: IDs, role definition IDs,
+    principal IDs. Never keys, documents, threads or vectors.
   confidence: likely
 recommendation: >-
   Assign the project managed identity the roles the Foundry standard agent setup lists on each bound resource, at the
@@ -101,19 +129,20 @@ sources:
       RoleAssignments_ListForScope; $filter=principalId eq {id} returns assignments at, above or below the
       scope. Branch URL, not commit-pinned.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
-    lastVerified: "2026-10-04"
+    lastVerified: "2026-10-17"
     verifiedVia: >-
       https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
     note: >-
       ProjectCapabilityHosts_List path; CapabilityHostProperties storageConnections, threadStorageConnections,
-      vectorStoreConnections. Branch URL, not commit-pinned.
+      vectorStoreConnections; Project.identity (principalId, userAssignedIdentities[*].principalId). Re-read 2026-10-17. Branch URL, not commit-pinned.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2025-10-15/cosmos-db.json
-    lastVerified: "2026-10-04"
+    lastVerified: "2026-10-17"
     verifiedVia: >-
       https://github.com/Azure/azure-rest-api-specs/tree/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2025-10-15
     note: >-
-      databaseAccounts/{accountName}/sqlRoleAssignments and sqlRoleDefinitions paths (found in example files
-      and path keys). Branch URL, not commit-pinned.
+      databaseAccounts/{accountName}/sqlRoleAssignments and sqlRoleDefinitions paths and the SqlRoleAssignmentResource
+      properties roleDefinitionId, scope, principalId, and SqlRoleDefinitionResource type BuiltInRole|CustomRole, read in
+      rbac.json of the same version on 2026-10-17. Branch URL, not commit-pinned.
   - url: https://github.com/Azure/azure-dev/blob/main/cli/azd/extensions/azure.ai.agents/internal/cmd/doctor/checks_storage_rbac.go
     lastVerified: "2026-10-04"
     verifiedVia: >-
@@ -151,20 +180,36 @@ tests:
   positive:
     - Search Service Contributor missing on the bound search service
     - Cosmos DB Built-in Data Contributor missing from sqlRoleAssignments
-    - Storage Blob Data Owner missing on the agent container
+    - Storage Blob Data Owner missing on the storage account
+    - Cosmos sqlRoleAssignment for another principal only, the project principal has none
+    - user-assigned project identity lacks Search Index Data Contributor (the user-assigned principalId is the one evaluated)
   negative:
     - project identity holds all expected roles on Search, Storage containers and Cosmos database
     - role assigned at a parent scope is counted as inherited
+    - user-assigned project identity holds the user-assigned roles; Storage Account Contributor and Cosmos DB Operator are not demanded of it
+    - Cosmos sqlRoleAssignment of the built-in data contributor role at the account scope or the enterprise_memory database
   skipped:
     - caller cannot read role assignments (403)
     - connection uses account key, SAS or service principal
     - project has no capability host or no bound resources
   uncertain:
-    - custom role or conditional assignment whose data actions cannot be resolved
-    - container-scoped Blob assignment
+    - custom role (Azure RBAC role definition or Cosmos CustomRole) or conditional assignment whose data actions cannot be resolved
+    - container-scoped Blob assignment (a child scope is not an assignment on the account)
+    - role granted only through a group or blocked by a deny assignment cannot be seen (reported as likely, not certain)
+    - role assignment on a child scope of the resource is not counted as a grant on the resource
+    - Cosmos assignment of the data contributor role on another database or a collection, or of a different (custom) role
+    - Owner or Contributor covers a management-plane role (Search Service Contributor, Storage Account Contributor, Cosmos DB Operator)
     - assignment listing truncated or unreadable
+    - resource-backed connection with no resolvable ARM resource ID (reported as effective access was not checked; never a pass)
 testability: Deterministic against recorded ARM JSON fixtures; live mode needs read access to role assignments.
 notes: >-
-  Unverified: exact built-in role action lists (Reader including roleAssignments/read) and the Cosmos built-in role
-  GUIDs were not available in the clones. The expected-role set follows the Foundry docs and may differ for the
-  capability settings flow, where Azure AI Search needs no caller role.
+  Loop 2 (2026-10-18): a resource-backed connection whose ARM ID cannot be resolved is Uncertain ('effective access was not
+  checked'), closing a false pass (Foundry lead round 2 C1). Group-based assignments are not evaluated; the principalId filter
+  does not return them, so group-granted roles are not seen (Azure black belt round 2 NB6: the Cosmos container-scope case stays
+  Uncertain, by design).
+  Loop 1 (2026-10-17; synced to the Go code 2026-10-18): scope-aware, GUID-based role matching (role definitions are not
+  fetched); user-assigned principal; Cosmos matching by roleDefinitionId GUID and scope; group and deny assignments are not
+  evaluated (confidence capped at medium). Verified 2026-10-18: the built-in role names and GUIDs in built-in-roles.md.
+  Unverified: the Cosmos DB Built-in Data Contributor SQL role GUID (00000000-0000-0000-0000-000000000002) and the
+  enterprise_memory database name as read from this catalogue; exact built-in role action lists. The expected-role set
+  follows the Foundry docs and may differ for the capability settings flow, where Azure AI Search needs no caller role.

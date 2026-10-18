@@ -6,11 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path"
 	"slices"
 	"strings"
 
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/azure"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/azureyaml"
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/bicep"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/findings"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/preflight"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/report"
@@ -35,6 +38,11 @@ type PreflightInput struct {
 	WhatIf         bool
 	ApprovedScopes []string
 	AllowedDeletes []string
+	// Parameters are the deployment parameter values of the root template from
+	// the parameter file (ADR-018); a nil value is set but unresolved. Values of
+	// secret-looking keys are already withheld (nil). They are used only for the
+	// opt-in what-if, and the rules still drop secure parameters.
+	Parameters map[string]any
 }
 
 // PreflightEngine evaluates the FND-DEP rules against live Azure state.
@@ -107,6 +115,10 @@ func preflightRun(ctx context.Context, svc Services, req PreflightRequest, stdou
 			return 0, fmt.Errorf("load bicep/arm model: %w", err)
 		}
 	}
+	var params map[string]any
+	if req.WhatIf {
+		params = whatIfParameters(ctx, svc, src, arm != nil)
+	}
 	out, err := svc.Preflight.Run(ctx, PreflightInput{
 		RunInput: RunInput{
 			Profile: set.Profile, Environment: set.Environment, AzdVersion: set.AzdVersion,
@@ -115,6 +127,7 @@ func preflightRun(ctx context.Context, svc Services, req PreflightRequest, stdou
 		},
 		Target: req.Target, WhatIf: req.WhatIf,
 		ApprovedScopes: req.ApprovedScopes, AllowedDeletes: req.AllowedDeletes,
+		Parameters: params,
 	})
 	if err != nil {
 		return 0, fmt.Errorf("run preflight rules: %w", err)
@@ -147,8 +160,13 @@ func preflightRun(ctx context.Context, svc Services, req PreflightRequest, stdou
 		}
 		return strings.Compare(a.Reason, b.Reason)
 	})
+	// A check that could not run (missing permission, unresolved input) is a
+	// required skip: exit 2. An "uncertain" outcome ran and could not reach a
+	// verdict; it is reported, counts against readiness, and exits 3 only under
+	// --strict, like a doctor skip that hides a check. FND-DEP-002, -008 and
+	// -009 are uncertain by design, so exit 2 for them would make every run fail.
 	for i := range skips {
-		skips[i].Required = true
+		skips[i].Required = rules.ReasonHead(skips[i].Reason) != "uncertain"
 	}
 	code := ExitCode(Outcome{Findings: shown, Skips: skips, FailOn: req.FailOn, Strict: req.Strict})
 	var buf bytes.Buffer
@@ -173,6 +191,72 @@ func preflightRun(ctx context.Context, svc Services, req PreflightRequest, stdou
 	return code, nil
 }
 
+// deploymentParameterSource is implemented by the production ARM loader. It
+// reads the same parameter files as the model (ADR-018) so the what-if request
+// describes the deployment the model describes.
+type deploymentParameterSource interface {
+	DeploymentParameters(ctx context.Context, src Source) map[string]any
+}
+
+// whatIfParameters returns the root-template parameter values for the what-if
+// request, or nil when no parameter file applies or the loader cannot supply
+// them (the rules then report the required parameters as unresolved).
+func whatIfParameters(ctx context.Context, svc Services, src Source, haveModel bool) map[string]any {
+	if !haveModel || svc.ARM == nil {
+		return nil
+	}
+	ps, ok := svc.ARM.(deploymentParameterSource)
+	if !ok {
+		return nil
+	}
+	return ps.DeploymentParameters(ctx, src)
+}
+
+// DeploymentParameters implements deploymentParameterSource for the production
+// loader. It repeats the entry resolution and parameter-file loading of Load
+// (ADR-018: .bicepparam before .parameters.json, azd substitution from the
+// selected environment, no secrets) and returns the values by parameter name. A
+// value the loader could not resolve is nil, and the value of a key that looks
+// like a secret holder is withheld (nil) so that it can never be sent. Warnings
+// were already printed by Load and are not repeated.
+func (l armLoader) DeploymentParameters(ctx context.Context, src Source) map[string]any {
+	if src.Dir == "" {
+		return nil
+	}
+	entry := path.Join(defaultInfraPath(src.InfraPath), "main.bicep")
+	if doc, err := azureyaml.Parse(src.AzureYAML, src.AzureYAMLAt); err == nil {
+		if resolved, ok := resolveBicepEntry(src, doc); ok {
+			entry = resolved
+		}
+	}
+	root, err := os.OpenRoot(src.Dir)
+	if err != nil {
+		return nil
+	}
+	defer root.Close()
+	var pr paramResult
+	if fi, err := root.Stat(entry); err == nil && fi.Mode().IsRegular() {
+		var comp *bicep.Compiler
+		if tool, err := bicep.Discover(ctx, l.disc); err == nil {
+			comp = &bicep.Compiler{Tool: tool, Runner: l.runner, Root: src.Dir}
+		}
+		pr = l.loadParameters(ctx, root, entry, comp, src)
+	} else {
+		pr = l.loadParameters(ctx, root, strings.TrimSuffix(entry, ".bicep")+".json", nil, src)
+	}
+	if !pr.provided {
+		return nil
+	}
+	out := make(map[string]any, len(pr.values))
+	for k, v := range pr.values {
+		if secretishKey(k) {
+			v = nil
+		}
+		out[k] = v
+	}
+	return out
+}
+
 // preflightEngine wires the real read-only Azure adapter. The adapter is built
 // lazily and performs no I/O until a rule needs it; with no usable credential
 // every Azure-dependent rule skips as input-unavailable.
@@ -184,8 +268,13 @@ type preflightEngine struct {
 	newClient func() (azure.Client, error)
 }
 
-func defaultAzureClient() (azure.Client, error) {
-	a, err := azure.New(azure.Options{})
+func defaultAzureClient() (azure.Client, error) { return azureClientForTenant("") }
+
+// azureClientForTenant builds the read-only adapter. A non-empty tenant is
+// passed to the azd and az token calls so a multi-tenant sign-in yields a token
+// for the tenant that owns the target subscription.
+func azureClientForTenant(tenant string) (azure.Client, error) {
+	a, err := azure.New(azure.Options{TenantID: tenant})
 	if err != nil {
 		return azure.Client{}, err
 	}
@@ -197,14 +286,6 @@ func (e preflightEngine) Run(ctx context.Context, in PreflightInput) (RunOutput,
 	if err != nil {
 		return RunOutput{}, err
 	}
-	mk := e.newClient
-	if mk == nil {
-		mk = defaultAzureClient
-	}
-	client, err := mk()
-	if err != nil {
-		return RunOutput{}, fmt.Errorf("%w: azure adapter: %w", ErrUnavailable, err)
-	}
 	genv := e.getenv
 	if genv == nil {
 		genv = func(string) string { return "" }
@@ -215,17 +296,31 @@ func (e preflightEngine) Run(ctx context.Context, in PreflightInput) (RunOutput,
 		}
 		return genv(key)
 	}
+	tenant := pick(in.Target.TenantID, "AZURE_TENANT_ID")
+	mk := e.newClient
+	if mk == nil {
+		mk = func() (azure.Client, error) { return azureClientForTenant(tenant) }
+	}
+	client, err := mk()
+	if err != nil {
+		return RunOutput{}, fmt.Errorf("%w: azure adapter: %w", ErrUnavailable, err)
+	}
 	d := preflight.Deps{
 		Context: client.Context, Inventory: client.Inventory, Permissions: client.Permissions,
 		Models: client.Models, Policy: client.Policy, WhatIf: client.WhatIf, Names: client.Names,
 		Regions: client.Regions, Deployments: client.Deployments, SubnetLinks: client.SubnetLinks, Evidence: client.Evidence,
+		Extras: client.Extras, Parameters: in.Parameters,
 		Target: preflight.Target{
-			TenantID:       pick(in.Target.TenantID, "AZURE_TENANT_ID"),
+			TenantID:       tenant,
 			SubscriptionID: pick(in.Target.SubscriptionID, "AZURE_SUBSCRIPTION_ID"),
 			ResourceGroup:  pick(in.Target.ResourceGroup, "AZURE_RESOURCE_GROUP"),
 			Location:       pick(in.Target.Location, "AZURE_LOCATION"),
 		},
 		WhatIfOptIn: in.WhatIf, ApprovedScopes: in.ApprovedScopes, AllowedDeletes: in.AllowedDeletes,
+	}
+	// A nil RuntimeFoundry interface must stay a nil AccountDeployments.
+	if client.Foundry != nil {
+		d.Foundry = client.Foundry
 	}
 	reg := rules.NewRegistry()
 	if err := preflight.Register(reg, d); err != nil {

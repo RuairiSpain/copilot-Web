@@ -1,5 +1,5 @@
 id: FND-DEP-003
-version: 1
+version: 2
 group: DEP
 title: Deployer can create resources and role assignments
 description: >-
@@ -54,7 +54,7 @@ evidence:
     reflected. Subscription-scope deployments cannot use the permissions API, so the role-assignment list is the only evidence
     there and is also non-conclusive. Role family: Microsoft.Authorization/permissions/read and Microsoft.Authorization/roleAssignments/read
     are in Reader (*/read). Reader suffices to read the evidence. The answer is only ever a likely violation or uncertain,
-    never a definitive pass.
+    never a definitive pass. Implementation (version 2): resource-group templates use the Permissions API at the target group; a subscription-scope template is evaluated at the subscription from role assignments only (non-conclusive, noted); management-group and tenant-scope templates are skipped; an unknown scope assumes the resource group and says so. Microsoft.Resources/deployments/whatIf/action is added to the required actions only when the user opted in to what-if. The register/action requirement is added only for a template namespace whose state was read and is not Registered (a state that cannot be read is a note, not an assumption).
   confidence: likely
 recommendation: >-
   Assign the deployer a role that includes the missing write actions at the narrowest sufficient scope. For templates that

@@ -1,0 +1,14 @@
+{
+  "Name": "Foundry Doctor Preflight What-If, subscription scope (optional addendum, sample)",
+  "IsCustom": true,
+  "Description": "OPTIONAL variant of preflight-whatif-role.json for templates with targetScope = subscription. What-if of a subscription-scope deployment needs Microsoft.Resources/deployments/* at the subscription, so this role is assignable at subscription scope, which is broader than the resource-group variant: use it only when the template really deploys at subscription scope. Same caveats: not read-only, the doctor only sends the what-if POST and never deploys, and the template's resource write actions must be added or granted separately. Assign together with preflight-role.json. Review before assigning.",
+  "Actions": [
+    "Microsoft.Resources/deployments/*"
+  ],
+  "NotActions": [],
+  "DataActions": [],
+  "NotDataActions": [],
+  "AssignableScopes": [
+    "/subscriptions/<subscription-id>"
+  ]
+}

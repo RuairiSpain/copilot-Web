@@ -17,60 +17,308 @@ import (
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/report"
 	rt "github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime"
 	foundrydp "github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/foundry"
+	netprobe "github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/network"
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/rbac"
 	searchprobe "github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/search"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
 
-func TestRun001MissingRolesAndSkips(t *testing.T) {
-	d := baseDeps()
-	d.RBAC = fakeRBAC{
-		assignments: map[string][]azure.RoleAssignment{
-			searchID:  {{RoleDefinitionID: "/providers/Microsoft.Authorization/roleDefinitions/" + "8ebe5a00-799e-43f5-93ac-243d3dce84a7"}},
-			storageID: {{RoleDefinitionID: "/providers/Microsoft.Authorization/roleDefinitions/" + "17d1049b-9a84-46fb-8f53-869881c3d3ab"}},
-		},
-		sql: map[string][]azure.CosmosSQLRoleAssignment{},
+const (
+	subID       = "11111111-1111-1111-1111-111111111111"
+	principalID = "22222222-2222-2222-2222-222222222222"
+	uaPrincipal = "33333333-3333-3333-3333-333333333333"
+	rgScope     = "/subscriptions/" + subID + "/resourceGroups/rg"
+	searchID    = rgScope + "/providers/Microsoft.Search/searchServices/searchsvc"
+	storageID   = rgScope + "/providers/Microsoft.Storage/storageAccounts/storageacct"
+	cosmosID    = rgScope + "/providers/Microsoft.DocumentDB/databaseAccounts/cosmosacct"
+	roleBase    = "/subscriptions/" + subID + "/providers/Microsoft.Authorization/roleDefinitions/"
+	cosmosRole  = cosmosID + "/sqlRoleDefinitions/" + rbac.CosmosDataContributorID
+)
+
+var roleGUID = map[string]string{
+	rbac.SearchServiceContributor:   "7ca78c08-252a-4471-8644-bb5ff32d4ba0",
+	rbac.SearchIndexDataContributor: "8ebe5a00-799e-43f5-93ac-243d3dce84a7",
+	rbac.StorageBlobDataContributor: "ba92f5b4-2d11-453d-a403-e96b0029c9fe",
+	rbac.StorageBlobDataOwner:       "b7e6dc6d-f1e8-4753-8033-0f276bb0955b",
+	rbac.StorageAccountContributor:  "17d1049b-9a84-46fb-8f53-869881c3d3ab",
+	rbac.CosmosDBOperator:           "230815da-be43-4aae-9cb4-875f7bd000aa",
+}
+
+func asg(scope string, keys ...string) azure.RoleAssignmentSet {
+	var s azure.RoleAssignmentSet
+	for _, k := range keys {
+		s.Covering = append(s.Covering, azure.RoleAssignment{RoleDefinitionID: roleBase + roleGUID[k], Scope: scope, PrincipalID: principalID})
 	}
+	return s
+}
+
+func allGranted() fakeRBAC {
+	return fakeRBAC{
+		sets: map[string]azure.RoleAssignmentSet{
+			searchID:  asg(searchID, rbac.SearchServiceContributor, rbac.SearchIndexDataContributor),
+			storageID: asg(storageID, rbac.StorageBlobDataContributor, rbac.StorageBlobDataOwner, rbac.StorageAccountContributor),
+			cosmosID:  asg(cosmosID, rbac.CosmosDBOperator),
+		},
+		sql: map[string][]azure.CosmosSQLRoleAssignment{cosmosID: {{RoleDefinitionID: cosmosRole, Scope: cosmosID, PrincipalID: principalID}}},
+	}
+}
+
+func joinFindings(fs []sdk.Finding) string {
+	var parts []string
+	for _, f := range fs {
+		parts = append(parts, f.Evidence)
+	}
+	return strings.Join(parts, "\n")
+}
+
+func TestRun001MissingRolesCarryIdentityTargetAndRoleNames(t *testing.T) {
+	d := baseDeps()
+	d.RBAC = fakeRBAC{sets: map[string]azure.RoleAssignmentSet{}, sql: map[string][]azure.CosmosSQLRoleAssignment{}}
 	res, err := evalRule(t, "FND-RUN-001", d, baseInput())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res.Findings) < 2 {
-		t.Fatalf("want findings, got %+v", res)
+	all := joinFindings(res.Findings)
+	for _, want := range []string{
+		principalID, searchID, storageID, cosmosID,
+		"Search Service Contributor", "Search Index Data Contributor", "Storage Blob Data Contributor", "Storage Blob Data Owner",
+		"Storage Account Contributor", "Cosmos DB Operator", "Cosmos DB Built-in Data Contributor",
+		"group assignments and deny assignments are not evaluated",
+	} {
+		if !strings.Contains(all, want) {
+			t.Errorf("findings lack %q:\n%s", want, all)
+		}
+	}
+	if len(res.Findings) != 7 {
+		t.Errorf("findings = %d, want 7:\n%s", len(res.Findings), all)
+	}
+	for _, f := range res.Findings {
+		if f.Confidence != sdk.ConfidenceMedium {
+			t.Errorf("missing-role confidence = %q, want capped at medium (likely)", f.Confidence)
+		}
+		if f.Location.File == "azure.yaml" {
+			t.Errorf("a %s finding got the unrelated azure.yaml agent location: %+v", f.Resource.Type, f.Location)
+		}
 	}
 }
 
-func TestRun001PermissionUnavailableSkips(t *testing.T) {
+func TestRun001GrantedIsPassAndUserAssignedNeedsNoSystemOnlyRoles(t *testing.T) {
+	d := baseDeps()
+	d.RBAC = allGranted()
+	res, err := evalRule(t, "FND-RUN-001", d, baseInput())
+	if err != nil || res.Skipped != nil || len(res.Findings) != 0 {
+		t.Fatalf("all roles granted must pass: %+v err=%v", res, err)
+	}
+
+	// User-assigned only: no Storage Account Contributor / Cosmos DB Operator requirement,
+	// and the user-assigned principal is the identity that is checked.
+	d = baseDeps()
+	p := project()
+	p.PrincipalID, p.IdentityType, p.UserAssignedPrincipalIDs = "", "UserAssigned", []string{uaPrincipal}
+	d.FoundryMgmt = withProject(d.FoundryMgmt.(fakeMgmt), p)
+	d.RBAC = fakeRBAC{
+		sets: map[string]azure.RoleAssignmentSet{
+			searchID:  asg(searchID, rbac.SearchServiceContributor, rbac.SearchIndexDataContributor),
+			storageID: asg(storageID, rbac.StorageBlobDataContributor, rbac.StorageBlobDataOwner),
+		},
+		sql:  map[string][]azure.CosmosSQLRoleAssignment{cosmosID: {{RoleDefinitionID: cosmosRole, Scope: cosmosID + "/dbs/enterprise_memory", PrincipalID: uaPrincipal}}},
+		only: uaPrincipal,
+	}
+	res, err = evalRule(t, "FND-RUN-001", d, baseInput())
+	if err != nil || res.Skipped != nil || len(res.Findings) != 0 {
+		t.Fatalf("user-assigned project with its roles must pass: %+v err=%v", res, err)
+	}
+}
+
+func TestRun001UncertainInsteadOfFail(t *testing.T) {
+	custom := roleBase + "99999999-9999-9999-9999-999999999999"
+	cases := []struct {
+		name string
+		rb   fakeRBAC
+		want string
+	}{
+		{"custom role on search", func() fakeRBAC {
+			r := allGranted()
+			r.sets[searchID] = azure.RoleAssignmentSet{Covering: []azure.RoleAssignment{{RoleDefinitionID: custom, Scope: searchID}}}
+			return r
+		}(), "custom or unrecognised"},
+		{"conditional assignment", func() fakeRBAC {
+			r := allGranted()
+			r.sets[searchID] = azure.RoleAssignmentSet{Covering: []azure.RoleAssignment{
+				{RoleDefinitionID: roleBase + roleGUID[rbac.SearchServiceContributor], Scope: searchID, Condition: "cond"},
+				{RoleDefinitionID: roleBase + roleGUID[rbac.SearchIndexDataContributor], Scope: searchID, Condition: "cond"},
+			}}
+			return r
+		}(), "conditional"},
+		{"container-scoped blob owner", func() fakeRBAC {
+			r := allGranted()
+			r.sets[storageID] = azure.RoleAssignmentSet{
+				Covering: asg(storageID, rbac.StorageBlobDataContributor, rbac.StorageAccountContributor).Covering,
+				Below:    []azure.RoleAssignment{{RoleDefinitionID: roleBase + roleGUID[rbac.StorageBlobDataOwner], Scope: storageID + "/blobServices/default/containers/c"}},
+			}
+			return r
+		}(), "below the target"},
+		{"cosmos custom sql role", func() fakeRBAC {
+			r := allGranted()
+			r.sql[cosmosID] = []azure.CosmosSQLRoleAssignment{{RoleDefinitionID: cosmosID + "/sqlRoleDefinitions/11111111-0000-0000-0000-000000000000", Scope: cosmosID}}
+			return r
+		}(), "custom roles"},
+		{"cosmos container scope", func() fakeRBAC {
+			r := allGranted()
+			r.sql[cosmosID] = []azure.CosmosSQLRoleAssignment{{RoleDefinitionID: cosmosRole, Scope: cosmosID + "/dbs/enterprise_memory/colls/c"}}
+			return r
+		}(), "container scope"},
+		{"truncated listing", func() fakeRBAC {
+			r := allGranted()
+			s := r.sets[searchID]
+			s.Covering, s.Truncated = nil, true
+			r.sets[searchID] = s
+			return r
+		}(), "truncated"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			d := baseDeps()
+			d.RBAC = c.rb
+			res, err := evalRule(t, "FND-RUN-001", d, baseInput())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(res.Findings) != 0 || res.Skipped == nil || !strings.HasPrefix(res.Skipped.Reason, rt.UncertainPrefix) || !strings.Contains(res.Skipped.Reason, c.want) {
+				t.Fatalf("want uncertain containing %q, got %+v", c.want, res)
+			}
+		})
+	}
+}
+
+func TestRun001SkipsAndInputs(t *testing.T) {
 	d := baseDeps()
 	d.RBAC = fakeRBAC{assignErr: &azure.UnavailableError{Capability: "roleAssignments", Permission: "Microsoft.Authorization/roleAssignments/read"}}
 	res, err := evalRule(t, "FND-RUN-001", d, baseInput())
-	if err != nil {
-		t.Fatal(err)
+	if err != nil || res.Skipped == nil || !strings.Contains(res.Skipped.Reason, "roleAssignments") || !strings.HasPrefix(res.Skipped.Reason, "input-unavailable") {
+		t.Fatalf("permission skip: %+v err=%v", res, err)
 	}
-	if res.Skipped == nil || !strings.Contains(res.Skipped.Reason, "roleAssignments") {
-		t.Fatalf("expected skipped result, got %+v", res)
+
+	d = baseDeps()
+	d.FoundryMgmt = nil
+	if res, err = evalRule(t, "FND-RUN-001", d, baseInput()); err != nil || res.Skipped == nil {
+		t.Fatalf("nil mgmt: %+v err=%v", res, err)
+	}
+
+	d = baseDeps()
+	m := d.FoundryMgmt.(fakeMgmt)
+	m.projectConnections = []azure.FoundryConnection{{Name: "sas-conn", AuthType: "SAS", Target: azure.ConnectionTarget{ResourceID: storageID}}}
+	m.hosts = []azure.CapabilityHost{{ID: "h", Name: "default", ProvisioningState: "Succeeded", StorageConnections: []string{"sas-conn"}}}
+	d.FoundryMgmt = m
+	if res, err = evalRule(t, "FND-RUN-001", d, baseInput()); err != nil || res.Skipped == nil || !strings.Contains(res.Skipped.Reason, "cannot be proven") {
+		t.Fatalf("auth skip: %+v err=%v", res, err)
+	}
+
+	d = baseDeps()
+	p := project()
+	p.PrincipalID, p.UserAssignedPrincipalIDs = "", nil
+	d.FoundryMgmt = withProject(d.FoundryMgmt.(fakeMgmt), p)
+	if res, err = evalRule(t, "FND-RUN-001", d, baseInput()); err != nil || res.Skipped == nil || !strings.Contains(res.Skipped.Reason, "no managed identity principal") {
+		t.Fatalf("no principal: %+v err=%v", res, err)
+	}
+
+	d = baseDeps()
+	m = d.FoundryMgmt.(fakeMgmt)
+	m.projectConnections = []azure.FoundryConnection{{Name: "search-conn", Target: azure.ConnectionTarget{ResourceID: searchID + "/../../x"}}}
+	m.hosts = []azure.CapabilityHost{{ID: "h", Name: "default", ProvisioningState: "Succeeded", VectorStoreConnections: []string{"search-conn"}}}
+	d.FoundryMgmt = m
+	d.RBAC = fakeRBAC{}
+	res, err = evalRule(t, "FND-RUN-001", d, baseInput())
+	if err != nil || res.Skipped == nil || !strings.Contains(res.Skipped.Reason, "malformed") || res.Findings != nil {
+		t.Fatalf("hostile resource id must be rejected before any request: %+v err=%v", res, err)
 	}
 }
 
-func TestRun002VantageAndResolver(t *testing.T) {
+func TestRun002ProofVantageAndDNSOutcomes(t *testing.T) {
+	disabled := azure.AccountNetwork{PublicNetworkAccess: "Disabled", CustomSubDomainName: "acct"}
+	approvedPE := azure.AccountNetwork{PublicNetworkAccess: "Enabled", CustomSubDomainName: "acct", PrivateEndpointConnections: 1, ApprovedPrivateEndpointConnections: 1}
+	acctHost := func(suffix string) string { return "acct" + suffix }
+	cases := []struct {
+		name     string
+		net      azure.AccountNetwork
+		netErr   error
+		vantage  rt.Vantage
+		resolver fakeResolver
+		wantFind string // substring of the finding evidence; empty means none expected
+		wantSkip string // substring of the skip reason; empty means no skip
+	}{
+		{"public IP on a private-endpoint account fails", disabled, nil, rt.VantageVNet,
+			fakeResolver{answers: map[string][]string{acctHost(".cognitiveservices.azure.com"): {"52.1.1.1"}}}, "asserted with --vantage vnet", ""},
+		{"private answers pass", disabled, nil, rt.VantageVNet, fakeResolver{}, "", ""},
+		{"NXDOMAIN with a private endpoint fails", approvedPE, nil, rt.VantageVNet,
+			fakeResolver{errs: map[string]error{acctHost(".openai.azure.com"): netprobe.ErrNXDomain}}, "NXDOMAIN", ""},
+		{"timeout is skipped, never a failure", disabled, nil, rt.VantageVNet, fakeResolver{err: context.DeadlineExceeded}, "", "timeout"},
+		{"public network access enabled and no endpoint: the skip is reachable", azure.AccountNetwork{PublicNetworkAccess: "Enabled", CustomSubDomainName: "acct"}, nil, rt.VantageVNet, fakeResolver{}, "", "private-endpoint backing was not proven for any dependency"},
+		{"a Rejected private endpoint connection is not proof", azure.AccountNetwork{PublicNetworkAccess: "Enabled", CustomSubDomainName: "acct", PrivateEndpointConnections: 1}, nil, rt.VantageVNet,
+			fakeResolver{answers: map[string][]string{acctHost(".cognitiveservices.azure.com"): {"52.1.1.1"}}}, "", "none is Approved"},
+		{"Pending and Rejected alongside an Approved one still prove it", azure.AccountNetwork{PublicNetworkAccess: "Enabled", CustomSubDomainName: "acct", PrivateEndpointConnections: 3, ApprovedPrivateEndpointConnections: 1}, nil, rt.VantageVNet,
+			fakeResolver{answers: map[string][]string{acctHost(".cognitiveservices.azure.com"): {"52.1.1.1"}}}, "approved private endpoint", ""},
+		{"CGNAT answer on a private-endpoint account is uncertain, not a failure", disabled, nil, rt.VantageVNet,
+			fakeResolver{answers: map[string][]string{acctHost(".cognitiveservices.azure.com"): {"100.64.1.1"}}}, "", "neither a private nor a clearly public"},
+		{"private endpoint account without customSubDomainName is uncertain", azure.AccountNetwork{PublicNetworkAccess: "Disabled"}, nil, rt.VantageVNet, fakeResolver{}, "", "no customSubDomainName"},
+		{"publicNetworkAccess not reported is uncertain", azure.AccountNetwork{CustomSubDomainName: "acct"}, nil, rt.VantageVNet, fakeResolver{}, "", "does not report publicNetworkAccess"},
+		{"vantage none skips with the VNet explanation", disabled, nil, rt.VantageNone, fakeResolver{}, "", "inside the VNet"},
+		{"vantage local skips", disabled, nil, rt.VantageLocal, fakeResolver{}, "", "--vantage vnet"},
+		{"unreadable account network is not proof", azure.AccountNetwork{}, &azure.UnavailableError{Capability: "accounts/read", Permission: "Microsoft.CognitiveServices/accounts/read"}, rt.VantageVNet, fakeResolver{}, "", "could not be read"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			d := baseDeps()
+			m := d.FoundryMgmt.(fakeMgmt)
+			m.net, m.netErr = c.net, c.netErr
+			m.hosts, m.projectConnections = nil, nil // connection-level proof is tested separately
+			d.FoundryMgmt = m
+			d.Options.Vantage = c.vantage
+			d.Resolver = c.resolver
+			res, err := evalRule(t, "FND-RUN-002", d, baseInput())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c.wantFind != "" {
+				if len(res.Findings) == 0 || !strings.Contains(joinFindings(res.Findings), c.wantFind) {
+					t.Fatalf("want a finding containing %q, got %+v", c.wantFind, res)
+				}
+				return
+			}
+			if len(res.Findings) != 0 {
+				t.Fatalf("unexpected findings: %+v", res.Findings)
+			}
+			if (c.wantSkip == "") != (res.Skipped == nil) || (c.wantSkip != "" && !strings.Contains(res.Skipped.Reason, c.wantSkip)) {
+				t.Fatalf("skip = %+v, want %q", res.Skipped, c.wantSkip)
+			}
+		})
+	}
+}
+
+func TestRun002ConnectionLevelProof(t *testing.T) {
 	d := baseDeps()
+	m := d.FoundryMgmt.(fakeMgmt)
+	m.net = azure.AccountNetwork{PublicNetworkAccess: "Enabled"}
+	m.projectConnections = []azure.FoundryConnection{
+		{Name: "search-conn", PERequirement: "Required", PEStatus: "Active", Target: azure.ConnectionTarget{ResourceID: searchID}},
+		{Name: "storage-conn", PERequirement: "NotApplicable", PEStatus: "NotApplicable", Target: azure.ConnectionTarget{ResourceID: storageID}},
+		{Name: "cosmos-conn", Target: azure.ConnectionTarget{ResourceID: cosmosID}},
+	}
+	d.FoundryMgmt = m
 	d.Options.Vantage = rt.VantageVNet
 	d.Resolver = fakeResolver{answers: map[string][]string{
-		d.Target.Account + ".cognitiveservices.azure.com": {"52.1.1.1"},
+		"searchsvc.search.windows.net":      {"20.1.1.1"},
+		"storageacct.blob.core.windows.net": {"20.2.2.2"}, // not proven private: must not be probed or failed
 	}}
 	res, err := evalRule(t, "FND-RUN-002", d, baseInput())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res.Findings) == 0 {
-		t.Fatalf("expected finding, got %+v", res)
+	if len(res.Findings) != 1 || res.Findings[0].Resource.Type != "Microsoft.Search/searchServices" || !strings.Contains(res.Findings[0].Evidence, "peStatus Active") {
+		t.Fatalf("want exactly the proven search finding, got %+v", res)
 	}
-	d.Options.Vantage = rt.VantageNone
-	res, err = evalRule(t, "FND-RUN-002", d, baseInput())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Skipped == nil || !strings.Contains(res.Skipped.Reason, "inside the VNet") {
-		t.Fatalf("expected skipped result, got %+v", res)
+	if res.Findings[0].Location.File == "azure.yaml" {
+		t.Errorf("search finding got the unrelated agent location")
 	}
 }
 
@@ -91,66 +339,622 @@ func TestRun003ConnectionErrorAndMissing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res.Findings) < 2 {
+	if len(res.Findings) < 3 {
 		t.Fatalf("expected findings, got %+v", res)
 	}
-	if strings.Contains(res.Findings[0].Evidence, "abcdefghijklmno") {
+	if strings.Contains(joinFindings(res.Findings), "abcdefghijklmno") {
 		t.Fatalf("secret leaked: %+v", res.Findings)
 	}
 }
 
-func TestRun004MetricsAndProvisioning(t *testing.T) {
+func TestRun003ScopePolicy(t *testing.T) {
+	other := "/subscriptions/" + subID + "/resourceGroups/other-rg/providers/Microsoft.Search/searchServices/foreign"
+	mk := func(rid, category string) Deps {
+		d := baseDeps()
+		m := d.FoundryMgmt.(fakeMgmt)
+		m.hosts = []azure.CapabilityHost{{ID: "h", Name: "default", ProvisioningState: "Succeeded", VectorStoreConnections: []string{"search-conn"}}}
+		m.projectConnections = []azure.FoundryConnection{{ID: "c1", Name: "search-conn", Category: category, Target: azure.ConnectionTarget{ResourceID: rid}}}
+		d.FoundryMgmt = m
+		return d
+	}
+	t.Run("positive: outside the resource group and not approved", func(t *testing.T) {
+		res, err := evalRule(t, "FND-RUN-003", mk(other, "CognitiveSearch"), baseInput())
+		if err != nil || len(res.Findings) != 1 || !strings.Contains(res.Findings[0].Evidence, other) || !strings.Contains(res.Findings[0].Evidence, "--approved-scope") {
+			t.Fatalf("res=%+v err=%v", res, err)
+		}
+	})
+	t.Run("inside the resource group is clean", func(t *testing.T) {
+		res, err := evalRule(t, "FND-RUN-003", mk(searchID, "CognitiveSearch"), baseInput())
+		if err != nil || res.Skipped != nil || len(res.Findings) != 0 {
+			t.Fatalf("res=%+v err=%v", res, err)
+		}
+	})
+	t.Run("approved scope covers it on a path boundary", func(t *testing.T) {
+		d := mk(other, "CognitiveSearch")
+		d.ApprovedScopes = []string{"/subscriptions/" + subID + "/resourceGroups/other-rg"}
+		if res, err := evalRule(t, "FND-RUN-003", d, baseInput()); err != nil || res.Skipped != nil || len(res.Findings) != 0 {
+			t.Fatalf("approved: res=%+v err=%v", res, err)
+		}
+		d.ApprovedScopes = []string{"/subscriptions/" + subID + "/resourceGroups/other"} // name prefix is not a boundary
+		if res, err := evalRule(t, "FND-RUN-003", d, baseInput()); err != nil || len(res.Findings) != 1 {
+			t.Fatalf("prefix scope must not approve: res=%+v err=%v", res, err)
+		}
+	})
+	t.Run("uncertain: unresolved expression", func(t *testing.T) {
+		res, err := evalRule(t, "FND-RUN-003", mk("[parameters('searchId')]", "CognitiveSearch"), baseInput())
+		if err != nil || len(res.Findings) != 0 || res.Skipped == nil || !strings.HasPrefix(res.Skipped.Reason, rt.UncertainPrefix) || !strings.Contains(res.Skipped.Reason, "unresolved expression") {
+			t.Fatalf("res=%+v err=%v", res, err)
+		}
+	})
+	t.Run("uncertain: resource-backed connection without a resource ID", func(t *testing.T) {
+		res, err := evalRule(t, "FND-RUN-003", mk("", "CognitiveSearch"), baseInput())
+		if err != nil || res.Skipped == nil || !strings.HasPrefix(res.Skipped.Reason, rt.UncertainPrefix) {
+			t.Fatalf("res=%+v err=%v", res, err)
+		}
+		if res, err = evalRule(t, "FND-RUN-003", mk("", "ApiKey"), baseInput()); err != nil || res.Skipped != nil || len(res.Findings) != 0 {
+			t.Fatalf("a URL-only connection is not subject to the policy: res=%+v err=%v", res, err)
+		}
+	})
+}
+
+func TestRun003SkipBranches(t *testing.T) {
 	d := baseDeps()
-	d.FoundryMgmt = fakeMgmt{
-		project:            project(),
-		hosts:              []azure.CapabilityHost{{ID: "host1", Name: "default", ProvisioningState: "Succeeded", VectorStoreConnections: []string{"search-conn"}}},
-		projectConnections: []azure.FoundryConnection{{Name: "search-conn", Target: azure.ConnectionTarget{ResourceID: searchID}}},
-		deployments:        []azure.AccountDeployment{{Name: "dep1", ProvisioningState: "Failed"}},
+	d.FoundryMgmt = nil
+	res, err := evalRule(t, "FND-RUN-003", d, baseInput())
+	if err != nil || res.Skipped == nil {
+		t.Fatalf("res=%+v err=%v", res, err)
 	}
-	d.Monitor = fakeMonitor{
-		metrics: func(_ context.Context, _ string, metricName, _, _, _ string) ([]azure.MetricTotal, error) {
-			switch metricName {
-			case "AzureOpenAIRequests":
-				return []azure.MetricTotal{{Series: "dep1", Total: 2}}, nil
-			default:
-				return []azure.MetricTotal{{Series: "dep1", Total: 100}}, nil
-			}
-		},
+	d = baseDeps()
+	d.FoundryMgmt = fakeMgmt{project: project()}
+	if res, err = evalRule(t, "FND-RUN-003", d, baseInput()); err != nil || res.Skipped == nil {
+		t.Fatalf("no capability host: res=%+v err=%v", res, err)
 	}
+}
+
+func mseries(v float64, kv ...string) azure.MetricSeries {
+	s := azure.MetricSeries{Dimensions: map[string]string{}, Value: v, Points: 1}
+	for i := 0; i+1 < len(kv); i += 2 {
+		s.Dimensions[kv[i]] = kv[i+1]
+	}
+	return s
+}
+
+// monitorFor answers the three RUN-004/007 metric reads by their query shape.
+func monitorFor(traffic, status, util azure.MetricResult) fakeMonitor {
+	return fakeMonitor{metrics: func(q azure.MetricQuery) (azure.MetricResult, error) {
+		switch {
+		case q.MetricName == "AzureOpenAIProvisionedManagedUtilizationV2":
+			return util, nil
+		case len(q.SplitDimensions) == 0:
+			return traffic, nil
+		default:
+			return status, nil
+		}
+	}}
+}
+
+func deployDeps(m fakeMonitor, deps ...azure.AccountDeployment) Deps {
+	d := baseDeps()
+	d.FoundryMgmt = fakeMgmt{project: project(), deployments: deps}
+	d.Monitor = m
+	return d
+}
+
+func TestRun004AttributesSeriesToDeployments(t *testing.T) {
+	m := monitorFor(azure.MetricResult{}, azure.MetricResult{Series: []azure.MetricSeries{
+		mseries(5, "statuscode", "429", "modeldeploymentname", "gpt-main"),
+		mseries(40, "statuscode", "200", "modeldeploymentname", "gpt-main"),
+		mseries(0, "statuscode", "429", "modeldeploymentname", "quiet"),
+	}}, azure.MetricResult{Series: []azure.MetricSeries{
+		mseries(100, "modeldeploymentname", "gpt-ptu"),
+		mseries(60, "modeldeploymentname", "gpt-low"),
+	}})
+	d := deployDeps(m, azure.AccountDeployment{Name: "gpt-main", ProvisioningState: "Succeeded"}, azure.AccountDeployment{Name: "broken", ProvisioningState: "Failed"})
 	res, err := evalRule(t, "FND-RUN-004", d, baseInput())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res.Findings) < 3 {
-		t.Fatalf("expected deployment + metric findings, got %+v", res)
+	if len(res.Findings) != 3 {
+		t.Fatalf("findings = %+v", res.Findings)
+	}
+	acct := accountID(d.Target)
+	byID := map[string]sdk.Finding{}
+	for _, f := range res.Findings {
+		byID[f.Resource.ID] = f
+		if f.Resource.Name == "AzureOpenAIRequests" || f.Resource.Name == "AzureOpenAIProvisionedManagedUtilizationV2" || strings.Contains(f.Resource.ID, "AzureOpenAI") {
+			t.Errorf("a metric name was used as a deployment: %+v", f.Resource)
+		}
+	}
+	if f, ok := byID[acct+"/deployments/gpt-main"]; !ok || !strings.Contains(f.Evidence, "5 HTTP 429") || f.Resource.Name != "gpt-main" {
+		t.Errorf("429 finding = %+v", f)
+	}
+	if f, ok := byID[acct+"/deployments/gpt-ptu"]; !ok || !strings.Contains(f.Evidence, "100%") {
+		t.Errorf("utilisation finding = %+v", f)
+	}
+	if _, ok := byID[acct+"/deployments/broken"]; !ok {
+		t.Errorf("provisioning finding missing: %+v", byID)
 	}
 }
+
+func TestRun004UncertainAndQuietCases(t *testing.T) {
+	ok := azure.AccountDeployment{Name: "gpt-main", ProvisioningState: "Succeeded"}
+	cases := []struct {
+		name     string
+		m        fakeMonitor
+		wantNote string // empty: clean pass
+	}{
+		{"numeric codes without 429 mean none occurred", monitorFor(azure.MetricResult{}, azure.MetricResult{Series: []azure.MetricSeries{mseries(40, "statuscode", "200", "modeldeploymentname", "gpt-main")}}, azure.MetricResult{}), ""},
+		{"429 series with zero total is a healthy pass", monitorFor(azure.MetricResult{}, azure.MetricResult{Series: []azure.MetricSeries{mseries(0, "statuscode", "429", "modeldeploymentname", "gpt-main")}}, azure.MetricResult{}), ""},
+		{"category values cannot identify 429", monitorFor(azure.MetricResult{}, azure.MetricResult{Series: []azure.MetricSeries{mseries(9, "statuscode", "clienterrors", "modeldeploymentname", "gpt-main"), mseries(40, "statuscode", "successful", "modeldeploymentname", "gpt-main")}}, azure.MetricResult{}), "no StatusCode value could be identified as 429 (observed: clienterrors, successful)"},
+		{"no time series is not zero", monitorFor(azure.MetricResult{}, azure.MetricResult{}, azure.MetricResult{}), "no time series"},
+		{"truncated series", monitorFor(azure.MetricResult{}, azure.MetricResult{Truncated: true, Series: []azure.MetricSeries{mseries(1, "statuscode", "200")}}, azure.MetricResult{}), "maximum number of series"},
+		{"metric error code", monitorFor(azure.MetricResult{}, azure.MetricResult{ErrorCode: "BadRequest", Series: []azure.MetricSeries{mseries(1, "statuscode", "200")}}, azure.MetricResult{}), "errorCode BadRequest"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			res, err := evalRule(t, "FND-RUN-004", deployDeps(c.m, ok), baseInput())
+			if err != nil || len(res.Findings) != 0 {
+				t.Fatalf("res=%+v err=%v", res, err)
+			}
+			if c.wantNote == "" {
+				if res.Skipped != nil {
+					t.Fatalf("want pass, got %+v", res.Skipped)
+				}
+				return
+			}
+			if res.Skipped == nil || !strings.HasPrefix(res.Skipped.Reason, rt.UncertainPrefix) || !strings.Contains(res.Skipped.Reason, c.wantNote) {
+				t.Fatalf("skip = %+v, want uncertain containing %q", res.Skipped, c.wantNote)
+			}
+		})
+	}
+}
+
+func TestRun004UnattributableAndHostileSeries(t *testing.T) {
+	m := monitorFor(azure.MetricResult{}, azure.MetricResult{Series: []azure.MetricSeries{
+		mseries(3, "statuscode", "429"),
+		mseries(2, "statuscode", "429", "modeldeploymentname", "x/../../y"),
+	}}, azure.MetricResult{Series: []azure.MetricSeries{mseries(120, "modeldeploymentname", "bad name")}})
+	d := deployDeps(m, azure.AccountDeployment{Name: "gpt-main", ProvisioningState: "Succeeded"})
+	res, err := evalRule(t, "FND-RUN-004", d, baseInput())
+	if err != nil || len(res.Findings) != 3 {
+		t.Fatalf("res=%+v err=%v", res, err)
+	}
+	for _, f := range res.Findings {
+		if f.Resource.ID != accountID(d.Target) || strings.Contains(f.Evidence, "..") || strings.Contains(f.Evidence, "bad name") {
+			t.Errorf("an unvalidated series name reached a finding: %+v", f)
+		}
+	}
+}
+
+func TestRun004SkipBranches(t *testing.T) {
+	d := baseDeps()
+	d.FoundryMgmt = fakeMgmt{deployments: nil}
+	if res, err := evalRule(t, "FND-RUN-004", d, baseInput()); err != nil || res.Skipped == nil {
+		t.Fatalf("res=%+v err=%v", res, err)
+	}
+	d = baseDeps()
+	d.Target.SubscriptionID = ""
+	if res, err := evalRule(t, "FND-RUN-004", d, baseInput()); err != nil || res.Skipped == nil || !strings.Contains(res.Skipped.Reason, "--subscription") {
+		t.Fatalf("res=%+v err=%v", res, err)
+	}
+	d = deployDeps(fakeMonitor{}, azure.AccountDeployment{Name: "d", ProvisioningState: "Creating"})
+	if res, err := evalRule(t, "FND-RUN-004", d, baseInput()); err != nil || res.Skipped == nil || !strings.HasPrefix(res.Skipped.Reason, rt.UncertainPrefix) {
+		t.Fatalf("res=%+v err=%v", res, err)
+	}
+}
+
+func agentDeps(r fakeProjectReader) Deps {
+	d := baseDeps()
+	d.ProjectData = r
+	return d
+}
+
+func TestRun005AgentStatusesFollowTheSpec(t *testing.T) {
+	cases := []struct {
+		name     string
+		agent    foundrydp.Agent
+		wantFind string
+		wantNote string
+	}{
+		{"active", foundrydp.Agent{Name: "support-agent", LatestVersion: "2", LatestStatus: "active"}, "", ""},
+		{"absent status means active, never a failure", foundrydp.Agent{Name: "support-agent", LatestVersion: "2"}, "", ""},
+		{"creating is uncertain", foundrydp.Agent{Name: "support-agent", LatestVersion: "2", LatestStatus: "creating"}, "", "still creating"},
+		{"failed", foundrydp.Agent{Name: "support-agent", LatestVersion: "2", LatestStatus: "failed"}, "status is failed", ""},
+		{"deleted", foundrydp.Agent{Name: "support-agent", LatestVersion: "2", LatestStatus: "deleted"}, "status is deleted", ""},
+		{"unknown status is uncertain", foundrydp.Agent{Name: "support-agent", LatestVersion: "2", LatestStatus: "Broken"}, "", "unrecognised"},
+		{"disabled agent is uncertain", foundrydp.Agent{Name: "support-agent", LatestVersion: "2", State: "disabled"}, "", "disabled"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			d := agentDeps(fakeProjectReader{
+				agents:      foundrydp.AgentList{Agents: []foundrydp.Agent{c.agent}},
+				connections: foundrydp.ConnectionList{Connections: []foundrydp.Connection{{Name: "search-conn"}, {Name: "storage-conn"}, {Name: "cosmos-conn"}}},
+			})
+			res, err := evalRule(t, "FND-RUN-005", d, baseInput())
+			if err != nil {
+				t.Fatal(err)
+			}
+			switch {
+			case c.wantFind != "":
+				if len(res.Findings) != 1 || !strings.Contains(res.Findings[0].Evidence, c.wantFind) || res.Findings[0].Location.File != "azure.yaml" {
+					t.Fatalf("res=%+v", res)
+				}
+			case c.wantNote != "":
+				if res.Skipped == nil || !strings.HasPrefix(res.Skipped.Reason, rt.UncertainPrefix) || !strings.Contains(res.Skipped.Reason, c.wantNote) {
+					t.Fatalf("res=%+v", res)
+				}
+			default:
+				if res.Skipped != nil || len(res.Findings) != 0 {
+					t.Fatalf("want pass: %+v", res)
+				}
+			}
+		})
+	}
+}
+
+func TestRun005MissingAgentAndConnectionsAndCaps(t *testing.T) {
+	conns := foundrydp.ConnectionList{Connections: []foundrydp.Connection{{Name: "search-conn"}, {Name: "storage-conn"}, {Name: "cosmos-conn"}}}
+	res, err := evalRule(t, "FND-RUN-005", agentDeps(fakeProjectReader{connections: conns}), baseInput())
+	if err != nil || len(res.Findings) != 1 || !strings.Contains(res.Findings[0].Evidence, "is not listed") {
+		t.Fatalf("missing agent: %+v err=%v", res, err)
+	}
+	res, err = evalRule(t, "FND-RUN-005", agentDeps(fakeProjectReader{agents: foundrydp.AgentList{Truncated: true}, connections: conns}), baseInput())
+	if err != nil || len(res.Findings) != 0 || res.Skipped == nil || !strings.Contains(res.Skipped.Reason, "capped") {
+		t.Fatalf("capped agent listing must be uncertain: %+v err=%v", res, err)
+	}
+	ok := foundrydp.AgentList{Agents: []foundrydp.Agent{{Name: "support-agent", LatestStatus: "active"}}}
+	res, err = evalRule(t, "FND-RUN-005", agentDeps(fakeProjectReader{agents: ok, connections: foundrydp.ConnectionList{Connections: []foundrydp.Connection{{Name: "search-conn"}}}}), baseInput())
+	if err != nil || len(res.Findings) != 0 || res.Skipped == nil || !strings.HasPrefix(res.Skipped.Reason, rt.UncertainPrefix) ||
+		!strings.Contains(res.Skipped.Reason, "storage-conn") || !strings.Contains(res.Skipped.Reason, "cosmos-conn") || !strings.Contains(res.Skipped.Reason, "account-level connection may not appear") {
+		t.Fatalf("a bound connection missing from the project listing is uncertain, never a failure: %+v err=%v", res, err)
+	}
+	res, err = evalRule(t, "FND-RUN-005", agentDeps(fakeProjectReader{agents: ok, connections: foundrydp.ConnectionList{Truncated: true}}), baseInput())
+	if err != nil || len(res.Findings) != 0 || res.Skipped == nil || !strings.Contains(res.Skipped.Reason, "capped") {
+		t.Fatalf("capped connection listing must be uncertain: %+v err=%v", res, err)
+	}
+}
+
+func TestRun005SkipsAndTypedErrors(t *testing.T) {
+	res, err := evalRule(t, "FND-RUN-005", agentDeps(fakeProjectReader{pingErr: &azure.UnavailableError{Capability: "project endpoint"}}), baseInput())
+	if err != nil || res.Skipped == nil || !strings.HasPrefix(res.Skipped.Reason, "input-unavailable") {
+		t.Fatalf("res=%+v err=%v", res, err)
+	}
+	d := baseDeps()
+	d.ProjectData = nil
+	if res, err = evalRule(t, "FND-RUN-005", d, baseInput()); err != nil || res.Skipped == nil {
+		t.Fatalf("res=%+v err=%v", res, err)
+	}
+}
+
+func goodIndex() searchprobe.Index {
+	return searchprobe.Index{Name: "knowledge", VectorProfiles: []string{"p"}, Fields: []searchprobe.Field{{Name: "v", Type: "Collection(Edm.Single)", Dimensions: 1536, VectorSearchProfile: "p"}}}
+}
+
+func searchDeps(s fakeSearch, hint azure.ConnectionTarget) Deps {
+	d := baseDeps()
+	m := d.FoundryMgmt.(fakeMgmt)
+	hint.ResourceID = searchID
+	m.projectConnections = []azure.FoundryConnection{{Name: "search-conn", Target: hint}}
+	m.hosts = []azure.CapabilityHost{{ID: "h", Name: "default", ProvisioningState: "Succeeded", VectorStoreConnections: []string{"search-conn"}}}
+	d.FoundryMgmt = m
+	d.SearchData = s
+	return d
+}
+
+var hint = azure.ConnectionTarget{IndexNames: []string{"knowledge"}, IndexerNames: []string{"load-knowledge"}}
+
+func TestRun006IndexerStatesFollowTheSpecEnums(t *testing.T) {
+	cases := []struct {
+		name     string
+		docs     int64
+		status   searchprobe.IndexerStatus
+		wantFind string
+		wantNote string
+	}{
+		{"healthy", 5, searchprobe.IndexerStatus{Status: "running", LastResultStatus: "success", HasSuccess: true, LastSuccessMinutes: 500}, "", ""},
+		{"status error is a finding", 5, searchprobe.IndexerStatus{Status: "error", LastResultStatus: "transientFailure", HasSuccess: true, LastSuccessMinutes: 500, ItemsFailed: 3}, "in error state (itemsFailed=3)", "transient failure"},
+		{"transient failure alone is a warning-class note", 5, searchprobe.IndexerStatus{Status: "running", LastResultStatus: "transientFailure", HasSuccess: true, LastSuccessMinutes: 500}, "", "transient failure"},
+		{"reset", 5, searchprobe.IndexerStatus{Status: "running", LastResultStatus: "reset", HasSuccess: true, LastSuccessMinutes: 500}, "", "was reset"},
+		{"zero docs after an old success is a failure", 0, searchprobe.IndexerStatus{Status: "running", LastResultStatus: "success", HasSuccess: true, LastSuccessMinutes: 500}, "documentCount 0", ""},
+		{"zero docs right after a success is uncertain", 0, searchprobe.IndexerStatus{Status: "running", LastResultStatus: "success", HasSuccess: true, LastSuccessMinutes: 59}, "", "statistics lag"},
+		{"zero docs and a success exactly at the window is a failure", 0, searchprobe.IndexerStatus{Status: "running", LastResultStatus: "success", HasSuccess: true, LastSuccessMinutes: 60}, "documentCount 0", ""},
+		{"a success zero minutes ago is recent, not ambiguous", 0, searchprobe.IndexerStatus{Status: "running", LastResultStatus: "success", HasSuccess: true, LastSuccessMinutes: 0}, "", "statistics lag"},
+		{"zero docs while in progress is uncertain", 0, searchprobe.IndexerStatus{Status: "running", LastResultStatus: "inProgress", HasSuccess: true, LastSuccessMinutes: 500}, "", "in progress"},
+		{"never succeeded with zero docs", 0, searchprobe.IndexerStatus{Status: "unknown"}, "no indexer has a successful run", ""},
+		{"never succeeded with documents is a note", 5, searchprobe.IndexerStatus{Status: "unknown"}, "", "no successful run in its visible"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			d := searchDeps(fakeSearch{index: goodIndex(), stats: searchprobe.Stats{DocumentCount: c.docs}, status: c.status}, hint)
+			res, err := evalRule(t, "FND-RUN-006", d, baseInput())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c.wantFind != "" {
+				if !strings.Contains(joinFindings(res.Findings), c.wantFind) {
+					t.Fatalf("want a finding containing %q, got %+v", c.wantFind, res)
+				}
+				return
+			}
+			if len(res.Findings) != 0 {
+				t.Fatalf("unexpected findings %+v", res.Findings)
+			}
+			if c.wantNote == "" {
+				if res.Skipped != nil {
+					t.Fatalf("want pass, got %+v", res.Skipped)
+				}
+				return
+			}
+			if res.Skipped == nil || !strings.HasPrefix(res.Skipped.Reason, rt.UncertainPrefix) || !strings.Contains(res.Skipped.Reason, c.wantNote) {
+				t.Fatalf("skip = %+v, want uncertain containing %q", res.Skipped, c.wantNote)
+			}
+		})
+	}
+}
+
+func TestRun006IndexSchemaAndProfiles(t *testing.T) {
+	idx := goodIndex()
+	idx.VectorProfiles = []string{"other"}
+	d := searchDeps(fakeSearch{index: idx, stats: searchprobe.Stats{DocumentCount: 5}, status: searchprobe.IndexerStatus{Status: "running", LastResultStatus: "success", HasSuccess: true, LastSuccessMinutes: 500}}, hint)
+	res, err := evalRule(t, "FND-RUN-006", d, baseInput())
+	if err != nil || len(res.Findings) != 1 || !strings.Contains(res.Findings[0].Evidence, "not defined in vectorSearch.profiles") || !strings.Contains(res.Findings[0].Evidence, "p") {
+		t.Fatalf("res=%+v err=%v", res, err)
+	}
+	d = searchDeps(fakeSearch{index: searchprobe.Index{Name: "knowledge"}, stats: searchprobe.Stats{DocumentCount: 5}}, azure.ConnectionTarget{IndexNames: []string{"knowledge"}})
+	if res, err = evalRule(t, "FND-RUN-006", d, baseInput()); err != nil || len(res.Findings) != 0 || res.Skipped == nil ||
+		!strings.HasPrefix(res.Skipped.Reason, rt.UncertainPrefix) || !strings.Contains(res.Skipped.Reason, "keyword-only index is valid") {
+		t.Fatalf("a keyword-only index is uncertain, never a failure: res=%+v err=%v", res, err)
+	}
+}
+
+func TestRun006InputSourceIsHonest(t *testing.T) {
+	// No index hint on the Search connection: the rule says the index is unknown.
+	d := searchDeps(fakeSearch{}, azure.ConnectionTarget{})
+	res, err := evalRule(t, "FND-RUN-006", d, baseInput())
+	if err != nil || res.Skipped == nil || !strings.Contains(res.Skipped.Reason, "unverified optional inputs") || strings.HasPrefix(res.Skipped.Reason, rt.UncertainPrefix) {
+		t.Fatalf("res=%+v err=%v", res, err)
+	}
+	// No Search connection at all.
+	d = baseDeps()
+	m := d.FoundryMgmt.(fakeMgmt)
+	m.projectConnections = []azure.FoundryConnection{{Name: "blob", Target: azure.ConnectionTarget{ResourceID: storageID}}}
+	m.hosts = []azure.CapabilityHost{{ID: "h", Name: "default", ProvisioningState: "Succeeded", StorageConnections: []string{"blob"}}}
+	d.FoundryMgmt = m
+	if res, err = evalRule(t, "FND-RUN-006", d, baseInput()); err != nil || res.Skipped == nil || !strings.Contains(res.Skipped.Reason, "no Search connection") {
+		t.Fatalf("res=%+v err=%v", res, err)
+	}
+	// Hostile hints never reach the client.
+	d = searchDeps(fakeSearch{indexErr: errors.New("must not be called")}, azure.ConnectionTarget{IndexNames: []string{"x')/docs"}, IndexerNames: []string{"a/b"}})
+	if res, err = evalRule(t, "FND-RUN-006", d, baseInput()); err != nil || res.Skipped == nil || !strings.Contains(res.Skipped.Reason, "not a valid index name") {
+		t.Fatalf("hostile hint: res=%+v err=%v", res, err)
+	}
+	// Missing index is a typed 404.
+	d = searchDeps(fakeSearch{indexErr: &rt.HTTPError{Status: 404}}, hint)
+	if res, err = evalRule(t, "FND-RUN-006", d, baseInput()); err != nil || len(res.Findings) != 1 || !strings.Contains(res.Findings[0].Evidence, "does not exist") {
+		t.Fatalf("404: res=%+v err=%v", res, err)
+	}
+	// A string that merely contains "404" is not a not-found.
+	d = searchDeps(fakeSearch{indexErr: errors.New("request id 40412 failed")}, hint)
+	if res, err = evalRule(t, "FND-RUN-006", d, baseInput()); err != nil || len(res.Findings) != 0 || res.Skipped == nil {
+		t.Fatalf("text match must not be a 404: res=%+v err=%v", res, err)
+	}
+}
+
+func logsDeps(settings []azure.RuntimeDiagnosticSetting, traffic azure.MetricResult, logs azure.RuntimeLogsResult) Deps {
+	d := baseDeps()
+	d.Monitor = fakeMonitor{
+		metrics: func(q azure.MetricQuery) (azure.MetricResult, error) { return traffic, nil },
+		diags:   settings,
+		logs:    logs,
+	}
+	return d
+}
+
+func TestRun007Outcomes(t *testing.T) {
+	old := azure.RuntimeDiagnosticSetting{Name: "to-law", WorkspaceID: "/w", Categories: []string{"Audit"}, AgeKnown: true, AgeMinutes: 600}
+	traffic := azure.MetricResult{Series: []azure.MetricSeries{mseries(5)}}
+	cases := []struct {
+		name     string
+		settings []azure.RuntimeDiagnosticSetting
+		traffic  azure.MetricResult
+		logs     azure.RuntimeLogsResult
+		wantFind bool
+		wantSkip string
+	}{
+		{"logs not arriving", []azure.RuntimeDiagnosticSetting{old}, traffic, azure.RuntimeLogsResult{Counts: map[string]int64{}}, true, ""},
+		{"logs arriving", []azure.RuntimeDiagnosticSetting{old}, traffic, azure.RuntimeLogsResult{Counts: map[string]int64{"Audit": 2}}, false, ""},
+		{"recent setting is uncertain", []azure.RuntimeDiagnosticSetting{func() azure.RuntimeDiagnosticSetting { s := old; s.AgeMinutes = 60; return s }()}, traffic, azure.RuntimeLogsResult{}, false, "created recently"},
+		{"unknown age is uncertain", []azure.RuntimeDiagnosticSetting{func() azure.RuntimeDiagnosticSetting { s := old; s.AgeKnown, s.AgeMinutes = false, 0; return s }()}, traffic, azure.RuntimeLogsResult{}, false, "age is not reported"},
+		{"resource-specific tables are uncertain, never logs-missing", []azure.RuntimeDiagnosticSetting{func() azure.RuntimeDiagnosticSetting { s := old; s.LogAnalyticsDestinationType = "Dedicated"; return s }()}, traffic, azure.RuntimeLogsResult{}, false, "resource-specific tables"},
+		{"allLogs group counts", []azure.RuntimeDiagnosticSetting{{Name: "g", WorkspaceID: "/w", CategoryGroups: []string{"allLogs"}, AgeKnown: true, AgeMinutes: 600}}, traffic, azure.RuntimeLogsResult{Counts: map[string]int64{"x": 1}}, false, ""},
+		{"no time series is not zero traffic", []azure.RuntimeDiagnosticSetting{old}, azure.MetricResult{}, azure.RuntimeLogsResult{}, false, "no time series"},
+		{"zero traffic", []azure.RuntimeDiagnosticSetting{old}, azure.MetricResult{Series: []azure.MetricSeries{mseries(0)}}, azure.RuntimeLogsResult{}, false, "no traffic"},
+		{"no qualifying setting", nil, traffic, azure.RuntimeLogsResult{}, false, "no diagnostic setting"},
+		{"setting without workspace", []azure.RuntimeDiagnosticSetting{{Name: "x", Categories: []string{"Audit"}}}, traffic, azure.RuntimeLogsResult{}, false, "no diagnostic setting"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			res, err := evalRule(t, "FND-RUN-007", logsDeps(c.settings, c.traffic, c.logs), baseInput())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c.wantFind != (len(res.Findings) == 1) {
+				t.Fatalf("findings = %+v", res.Findings)
+			}
+			if c.wantSkip == "" && !c.wantFind && res.Skipped != nil {
+				t.Fatalf("want pass, got %+v", res.Skipped)
+			}
+			if c.wantSkip != "" && (res.Skipped == nil || !strings.Contains(res.Skipped.Reason, c.wantSkip)) {
+				t.Fatalf("skip = %+v, want %q", res.Skipped, c.wantSkip)
+			}
+		})
+	}
+}
+
+func TestEngineErrorsAreNotHiddenAsUnavailable(t *testing.T) {
+	cases := []struct {
+		name       string
+		err        error
+		wantPrefix string
+		wantText   string
+	}{
+		{"allow-list refusal", fmt.Errorf("wrap: %w: GET /x", azure.ErrNotAllowed), "uncertain: internal error", "allow-list"},
+		{"decode failure", fmt.Errorf("%w: /x: bad", azure.ErrDecode), "uncertain: internal error", "expected shape"},
+		{"rejected input", fmt.Errorf("%w: scope", azure.ErrInvalidInput), "uncertain: internal error", "rejected"},
+		{"permission", &azure.UnavailableError{Capability: "cap", Permission: "Microsoft.X/y/read"}, "input-unavailable", "Microsoft.X/y/read"},
+		{"network", errors.New("transport failure"), "input-unavailable", "transport failure"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			d := baseDeps()
+			d.FoundryMgmt = fakeMgmt{projectErr: c.err}
+			res, err := evalRule(t, "FND-RUN-003", d, baseInput())
+			if err != nil || res.Skipped == nil {
+				t.Fatalf("res=%+v err=%v", res, err)
+			}
+			if !strings.HasPrefix(res.Skipped.Reason, c.wantPrefix) || !strings.Contains(res.Skipped.Reason, c.wantText) {
+				t.Fatalf("reason = %q", res.Skipped.Reason)
+			}
+		})
+	}
+	// An internal error must also not look like a by-design skip to --strict.
+	if got := azureReason(azure.ErrNotAllowed); strings.HasPrefix(got, "input-unavailable") {
+		t.Errorf("internal error is disguised as unavailability: %q", got)
+	}
+}
+
+func TestEvaluateContextHandling(t *testing.T) {
+	d := baseDeps()
+	d.FoundryMgmt = fakeMgmt{projectErr: context.DeadlineExceeded}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	for _, r := range Register(d) {
+		if r.ID() != "FND-RUN-003" {
+			continue
+		}
+		if _, err := r.Evaluate(ctx, baseInput()); !errors.Is(err, context.Canceled) {
+			t.Errorf("cancelled run err = %v", err)
+		}
+		dctx, dcancel := context.WithTimeout(context.Background(), time.Nanosecond)
+		defer dcancel()
+		<-dctx.Done()
+		res, err := r.Evaluate(dctx, baseInput())
+		if err != nil || res.Skipped == nil || !strings.Contains(res.Skipped.Reason, "--timeout") {
+			t.Errorf("deadline: res=%+v err=%v", res, err)
+		}
+	}
+}
+
+func TestRuleEvaluateNilInput(t *testing.T) {
+	rules := Register(baseDeps())
+	res, err := rules[0].Evaluate(context.Background(), nil)
+	if err != nil || res.Skipped == nil {
+		t.Fatalf("res=%+v err=%v", res, err)
+	}
+	if len(RuleIDs()) != 7 || len(rules) != 7 {
+		t.Fatal("seven runtime rules expected")
+	}
+}
+
+func TestNeedTargetAndReasonHelpers(t *testing.T) {
+	for _, c := range []struct {
+		t    Target
+		want string
+	}{
+		{Target{}, "--subscription"},
+		{Target{SubscriptionID: "s"}, "--resource-group"},
+		{Target{SubscriptionID: "s", ResourceGroup: "rg"}, "--account"},
+		{Target{SubscriptionID: "s", ResourceGroup: "rg", Account: "a"}, "--project"},
+	} {
+		if got := needTarget(c.t, true); !strings.Contains(got, c.want) {
+			t.Errorf("needTarget(%+v) = %q", c.t, got)
+		}
+	}
+	if got := needTarget(Target{SubscriptionID: "s", ResourceGroup: "rg", Account: "a"}, false); got != "" {
+		t.Errorf("project not needed: %q", got)
+	}
+	if msg := azureReason(&azure.UnavailableError{Capability: "x", Permission: "perm", Reason: "why"}); !strings.Contains(msg, "missing permission perm") {
+		t.Errorf("azureReason = %q", msg)
+	}
+	if lastIDSegment("abc") != "abc" || lastIDSegment("/a/b/") != "b" {
+		t.Error("lastIDSegment")
+	}
+	if validResourceID(searchID+"/../x") || validResourceID("") || !validResourceID(searchID) || !looksLikeExpression("[parameters('x')]") || looksLikeExpression(searchID) {
+		t.Error("resource id helpers")
+	}
+}
+
+func TestEnvCachesAndErrors(t *testing.T) {
+	ctx := context.Background()
+	e := &env{d: baseDeps()}
+	for i := 0; i < 2; i++ {
+		if _, err := e.projectInfo(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got, err := e.projectConnections(ctx); err != nil || len(got) == 0 {
+		t.Fatalf("projectConnections got=%+v err=%v", got, err)
+	}
+	for name, mk := range map[string]fakeMgmt{
+		"project": {projectErr: errors.New("boom")}, "projectConns": {projectConnsErr: errors.New("boom")},
+		"accountConns": {accountConnsErr: errors.New("boom")}, "deployments": {deploymentsErr: errors.New("boom")},
+	} {
+		e := &env{d: baseDeps()}
+		e.d.FoundryMgmt = mk
+		var err error
+		switch name {
+		case "project":
+			_, err = e.projectInfo(ctx)
+		case "projectConns":
+			_, err = e.projectConnections(ctx)
+		case "accountConns":
+			_, err = e.accountConnections(ctx)
+		default:
+			_, err = e.deployments(ctx)
+		}
+		if err == nil {
+			t.Errorf("%s: expected error", name)
+		}
+	}
+	conns, names, err := (&env{d: baseDeps()}).boundConnections(ctx)
+	if err != nil || len(conns) == 0 || len(names) < 3 {
+		t.Fatalf("boundConnections conns=%+v names=%v err=%v", conns, names, err)
+	}
+	if got := e.agentRefs(&sdk.Input{AzureYAML: nil}); got != nil {
+		t.Fatalf("expected nil agent names, got %v", got)
+	}
+}
+
+// ---- privacy: no content sentinel may reach any rendered output ------------------
 
 func TestRun005AndRun006PrivacyFixtures(t *testing.T) {
 	foundrySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		dir := filepath.Join("..", "..", "runtime", "foundry", "testdata")
 		switch {
-		case strings.HasPrefix(r.URL.Path, "/agents/support-agent/versions/v2"):
-			fmt.Fprint(w, mustRead(t, filepath.Join("..", "..", "runtime", "foundry", "testdata", "agent_version.json")))
-		case strings.HasPrefix(r.URL.Path, "/agents"):
-			fmt.Fprint(w, mustRead(t, filepath.Join("..", "..", "runtime", "foundry", "testdata", "agents.json")))
-		case strings.HasPrefix(r.URL.Path, "/connections"):
-			fmt.Fprint(w, mustRead(t, filepath.Join("..", "..", "runtime", "foundry", "testdata", "connections.json")))
+		case strings.HasSuffix(r.URL.Path, "/agents") && r.URL.Query().Get("after") != "":
+			fmt.Fprint(w, mustRead(t, filepath.Join(dir, "agents_page2.json")))
+		case strings.HasSuffix(r.URL.Path, "/agents"):
+			fmt.Fprint(w, mustRead(t, filepath.Join(dir, "agents.json")))
+		case strings.HasSuffix(r.URL.Path, "/connections") && r.URL.Query().Get("skiptoken") != "":
+			fmt.Fprint(w, mustRead(t, filepath.Join(dir, "connections_page2.json")))
+		case strings.HasSuffix(r.URL.Path, "/connections"):
+			fmt.Fprint(w, mustRead(t, filepath.Join(dir, "connections.json")))
 		default:
 			http.NotFound(w, r)
 		}
 	}))
 	defer foundrySrv.Close()
-
 	searchSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		dir := filepath.Join("..", "..", "runtime", "search", "testdata")
 		switch {
 		case strings.HasPrefix(r.URL.EscapedPath(), "/indexes('knowledge')/search.stats"):
-			fmt.Fprint(w, mustRead(t, filepath.Join("..", "..", "runtime", "search", "testdata", "stats.json")))
+			fmt.Fprint(w, mustRead(t, filepath.Join(dir, "stats.json")))
 		case strings.HasPrefix(r.URL.EscapedPath(), "/indexes('knowledge')"):
-			fmt.Fprint(w, mustRead(t, filepath.Join("..", "..", "runtime", "search", "testdata", "index.json")))
+			fmt.Fprint(w, mustRead(t, filepath.Join(dir, "index.json")))
 		case strings.HasPrefix(r.URL.EscapedPath(), "/indexers('load-knowledge')/search.status"):
-			fmt.Fprint(w, mustRead(t, filepath.Join("..", "..", "runtime", "search", "testdata", "indexer_status.json")))
+			fmt.Fprint(w, mustRead(t, filepath.Join(dir, "indexer_status.json")))
 		default:
 			http.NotFound(w, r)
 		}
@@ -158,19 +962,12 @@ func TestRun005AndRun006PrivacyFixtures(t *testing.T) {
 	defer searchSrv.Close()
 
 	d := baseDeps()
-	d.ProjectData = fixtureProjectReader{endpoint: foundrySrv.URL, client: foundrydp.HTTPClient{HTTP: foundrySrv.Client(), Credential: staticCred{}}}
-	d.SearchData = fixtureSearchClient{serviceURL: searchSrv.URL, client: searchprobe.HTTPClient{HTTP: rewriteClient(searchSrv), Credential: staticCred{}}}
-	d.FoundryMgmt = fakeMgmt{
-		project: project(),
-		hosts: []azure.CapabilityHost{{
-			ID: "host1", Name: "default", ProvisioningState: "Succeeded",
-			VectorStoreConnections: []string{"search-conn"},
-		}},
-		projectConnections: []azure.FoundryConnection{{
-			ID: "conn1", Name: "search-conn", Category: "AzureAISearch",
-			Target: azure.ConnectionTarget{ResourceID: searchID, IndexNames: []string{"knowledge"}, IndexerNames: []string{"load-knowledge"}},
-		}},
-	}
+	d.ProjectData = foundrydp.HTTPClient{HTTP: rewriteClient(foundrySrv), Credential: staticCred{}}
+	d.SearchData = searchprobe.HTTPClient{HTTP: rewriteClient(searchSrv), Credential: staticCred{}, Now: func() time.Time { return time.Date(2026, 10, 17, 12, 0, 0, 0, time.UTC) }}
+	m := d.FoundryMgmt.(fakeMgmt)
+	m.projectConnections = []azure.FoundryConnection{{ID: "conn1", Name: "search-conn", Category: "CognitiveSearch", Target: azure.ConnectionTarget{ResourceID: searchID, IndexNames: []string{"knowledge"}, IndexerNames: []string{"load-knowledge"}}}}
+	m.hosts = []azure.CapabilityHost{{ID: "host1", Name: "default", ProvisioningState: "Succeeded", VectorStoreConnections: []string{"search-conn"}}}
+	d.FoundryMgmt = m
 	in := baseInput()
 	res5, err := evalRule(t, "FND-RUN-005", d, in)
 	if err != nil {
@@ -180,6 +977,12 @@ func TestRun005AndRun006PrivacyFixtures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if !strings.Contains(joinFindings(res5.Findings), "status is failed") {
+		t.Fatalf("the spec-shaped fixture must produce the failed-status finding: %+v", res5)
+	}
+	if !strings.Contains(joinFindings(res6.Findings), "undefined-profile") {
+		t.Fatalf("the spec-shaped fixture must produce the unresolved-profile finding: %+v", res6)
+	}
 	rendered := renderAll(t, append(tagFindings("FND-RUN-005", sdk.SeverityWarning, res5.Findings), tagFindings("FND-RUN-006", sdk.SeverityError, res6.Findings)...), nil)
 	for _, s := range []string{"PROMPT_SENTINEL_TEXT", "DOCUMENT_SENTINEL_TEXT", "COMPLETION_SENTINEL_TEXT"} {
 		if strings.Contains(rendered, s) {
@@ -188,414 +991,7 @@ func TestRun005AndRun006PrivacyFixtures(t *testing.T) {
 	}
 }
 
-func TestRun006ZeroDocsAndIndexerStates(t *testing.T) {
-	d := baseDeps()
-	d.SearchData = fakeSearch{
-		index:  searchprobe.Index{Name: "knowledge", Fields: []searchprobe.Field{{Name: "v", Type: "Collection(Edm.Single)", Dimensions: 10, VectorSearchProfile: "p"}}},
-		stats:  searchprobe.Stats{DocumentCount: 0},
-		status: searchprobe.IndexerStatus{Status: "unknown", LastResultStatus: "inProgress"},
-	}
-	res, err := evalRule(t, "FND-RUN-006", d, baseInput())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Skipped == nil || !strings.Contains(res.Skipped.Reason, rt.UncertainPrefix) {
-		t.Fatalf("expected uncertain skip, got %+v", res)
-	}
-}
-
-func TestRun007LogsArrival(t *testing.T) {
-	d := baseDeps()
-	d.Monitor = fakeMonitor{
-		metrics: func(_ context.Context, _ string, metricName, _, _, _ string) ([]azure.MetricTotal, error) {
-			if metricName == "AzureOpenAIRequests" {
-				return []azure.MetricTotal{{Series: "all", Total: 1}}, nil
-			}
-			return nil, nil
-		},
-		diags: []azure.RuntimeDiagnosticSetting{{Name: "to-law", WorkspaceID: "/workspaces/law", Categories: []string{"Audit"}, AgeHours: 3}},
-		logs:  azure.RuntimeLogsResult{Table: "AzureDiagnostics", Counts: map[string]int64{"Audit": 0}},
-	}
-	res, err := evalRule(t, "FND-RUN-007", d, baseInput())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(res.Findings) != 1 {
-		t.Fatalf("expected finding, got %+v", res)
-	}
-	d.Monitor = fakeMonitor{
-		metrics: func(_ context.Context, _ string, metricName, _, _, _ string) ([]azure.MetricTotal, error) {
-			if metricName == "AzureOpenAIRequests" {
-				return []azure.MetricTotal{{Series: "all", Total: 1}}, nil
-			}
-			return nil, nil
-		},
-		diags: []azure.RuntimeDiagnosticSetting{{Name: "to-law", WorkspaceID: "/workspaces/law", Categories: []string{"Audit"}, AgeHours: 1}},
-		logs:  azure.RuntimeLogsResult{Table: "AzureDiagnostics", Counts: map[string]int64{"Audit": 0}},
-	}
-	res, err = evalRule(t, "FND-RUN-007", d, baseInput())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Skipped == nil || !strings.Contains(res.Skipped.Reason, "created recently") {
-		t.Fatalf("expected recent-setting uncertainty, got %+v", res)
-	}
-}
-
-func TestRuleHelpersAndEdgeCases(t *testing.T) {
-	if got := needTarget(Target{}, true); !strings.Contains(got, "--subscription") {
-		t.Fatalf("needTarget = %q", got)
-	}
-	if got := azureReason(errors.New("boom")); !strings.Contains(got, "boom") {
-		t.Fatalf("azureReason = %q", got)
-	}
-	d := baseDeps()
-	d.FoundryMgmt = fakeMgmt{projectErr: errors.New("boom")}
-	if _, err := evalRule(t, "FND-RUN-003", d, baseInput()); err != nil {
-		t.Fatal(err)
-	}
-	if lastIDSegment("abc") != "abc" {
-		t.Fatal("unexpected last segment")
-	}
-}
-
-func TestRun005SkipAndStatusBranches(t *testing.T) {
-	d := baseDeps()
-	d.ProjectData = fakeProjectReader{pingErr: &azure.UnavailableError{Capability: "project endpoint"}}
-	res, err := evalRule(t, "FND-RUN-005", d, baseInput())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Skipped == nil {
-		t.Fatalf("expected skip, got %+v", res)
-	}
-
-	d = baseDeps()
-	d.ProjectData = fakeProjectReader{
-		agents:      []foundrydp.Agent{{Name: "support-agent", LatestVersion: "v2"}},
-		versions:    map[string]foundrydp.AgentVersion{"support-agent": {Name: "support-agent", Version: "v2", Status: "Broken"}},
-		connections: []foundrydp.Connection{},
-	}
-	res, err = evalRule(t, "FND-RUN-005", d, baseInput())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(res.Findings) == 0 {
-		t.Fatalf("expected finding, got %+v", res)
-	}
-}
-
-func TestRun006SkipAndMissingIndex(t *testing.T) {
-	d := baseDeps()
-	d.FoundryMgmt = fakeMgmt{
-		project:            project(),
-		hosts:              []azure.CapabilityHost{{ID: "host1", Name: "default", ProvisioningState: "Succeeded"}},
-		projectConnections: []azure.FoundryConnection{{Name: "blob", Target: azure.ConnectionTarget{ResourceID: storageID}}},
-	}
-	res, err := evalRule(t, "FND-RUN-006", d, baseInput())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Skipped == nil {
-		t.Fatalf("expected search skip, got %+v", res)
-	}
-
-	d = baseDeps()
-	d.SearchData = fakeSearch{indexErr: errors.New("http 404")}
-	res, err = evalRule(t, "FND-RUN-006", d, baseInput())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(res.Findings) == 0 {
-		t.Fatalf("expected missing index finding, got %+v", res)
-	}
-}
-
-func TestRun007UncertainModes(t *testing.T) {
-	d := baseDeps()
-	d.Monitor = fakeMonitor{diags: []azure.RuntimeDiagnosticSetting{{Name: "diag", WorkspaceID: "law", Categories: []string{"Audit"}, AgeHours: 3}}, logs: azure.RuntimeLogsResult{Table: "CustomTable", Counts: map[string]int64{}}}
-	d.Monitor = fakeMonitor{
-		metrics: func(_ context.Context, _ string, metricName, _, _, _ string) ([]azure.MetricTotal, error) {
-			if metricName == "AzureOpenAIRequests" {
-				return []azure.MetricTotal{{Series: "all", Total: 1}}, nil
-			}
-			return nil, nil
-		},
-		diags: []azure.RuntimeDiagnosticSetting{{Name: "diag", WorkspaceID: "law", Categories: []string{"Audit"}, AgeHours: 3}},
-		logs:  azure.RuntimeLogsResult{Table: "CustomTable", Counts: map[string]int64{}},
-	}
-	res, err := evalRule(t, "FND-RUN-007", d, baseInput())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Skipped == nil || !strings.Contains(res.Skipped.Reason, rt.UncertainPrefix) {
-		t.Fatalf("expected uncertain skip, got %+v", res)
-	}
-}
-
-func TestRuleEvaluateNilInputAndTargetValidation(t *testing.T) {
-	rules := Register(baseDeps())
-	res, err := rules[0].Evaluate(context.Background(), nil)
-	if err != nil || res.Skipped == nil {
-		t.Fatalf("res=%+v err=%v", res, err)
-	}
-
-	d := baseDeps()
-	d.Target.SubscriptionID = ""
-	res, err = evalRule(t, "FND-RUN-004", d, baseInput())
-	if err != nil || res.Skipped == nil || !strings.Contains(res.Skipped.Reason, "--subscription") {
-		t.Fatalf("res=%+v err=%v", res, err)
-	}
-}
-
-func TestRun003AndRun004SkipBranches(t *testing.T) {
-	d := baseDeps()
-	d.FoundryMgmt = nil
-	res, err := evalRule(t, "FND-RUN-003", d, baseInput())
-	if err != nil || res.Skipped == nil {
-		t.Fatalf("res=%+v err=%v", res, err)
-	}
-
-	d = baseDeps()
-	d.FoundryMgmt = fakeMgmt{deployments: nil}
-	res, err = evalRule(t, "FND-RUN-004", d, baseInput())
-	if err != nil || res.Skipped == nil {
-		t.Fatalf("res=%+v err=%v", res, err)
-	}
-}
-
-func TestRun005AdditionalBranches(t *testing.T) {
-	d := baseDeps()
-	d.ProjectData = fakeProjectReader{
-		agents:      []foundrydp.Agent{{Name: "support-agent", LatestVersion: "v1"}},
-		versions:    map[string]foundrydp.AgentVersion{"support-agent": {Name: "support-agent", Version: "v1", Status: "Creating"}},
-		connections: []foundrydp.Connection{{Name: "search-conn"}, {Name: "storage-conn"}, {Name: "cosmos-conn"}},
-	}
-	res, err := evalRule(t, "FND-RUN-005", d, baseInput())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Skipped == nil || !strings.Contains(res.Skipped.Reason, rt.UncertainPrefix) || !strings.Contains(res.Skipped.Reason, "still creating") {
-		t.Fatalf("expected uncertain creating status, got %+v", res)
-	}
-
-	d = baseDeps()
-	d.ProjectData = fakeProjectReader{
-		agents:      []foundrydp.Agent{{Name: "support-agent", LatestVersion: "v1"}},
-		versions:    map[string]foundrydp.AgentVersion{},
-		versionErr:  map[string]error{"support-agent": context.DeadlineExceeded},
-		connections: []foundrydp.Connection{{Name: "search-conn"}, {Name: "storage-conn"}, {Name: "cosmos-conn"}},
-	}
-	res, err = evalRule(t, "FND-RUN-005", d, baseInput())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Skipped == nil || !strings.Contains(res.Skipped.Reason, "timed out") {
-		t.Fatalf("expected timeout uncertainty, got %+v", res)
-	}
-}
-
-func TestRun006AdditionalBranches(t *testing.T) {
-	d := baseDeps()
-	d.SearchData = fakeSearch{
-		index:  searchprobe.Index{Name: "knowledge", Fields: []searchprobe.Field{{Name: "v", Type: "Collection(Edm.Single)", Dimensions: 1536, VectorSearchProfile: "p"}}},
-		stats:  searchprobe.Stats{DocumentCount: 0},
-		status: searchprobe.IndexerStatus{Status: "error", LastResultStatus: "failed"},
-	}
-	res, err := evalRule(t, "FND-RUN-006", d, baseInput())
-	if err != nil {
-		t.Fatal(err)
-	}
-	found := false
-	for _, f := range res.Findings {
-		if strings.Contains(f.Evidence, "last result failed") {
-			found = true
-			break
-		}
-	}
-	if len(res.Findings) == 0 || !found {
-		t.Fatalf("expected indexer last-result failure finding, got %+v", res)
-	}
-
-	d = baseDeps()
-	d.SearchData = fakeSearch{
-		index:  searchprobe.Index{Name: "knowledge", Fields: []searchprobe.Field{{Name: "v", Type: "Collection(Edm.Single)", Dimensions: 1536, VectorSearchProfile: "p"}}},
-		stats:  searchprobe.Stats{DocumentCount: 3},
-		status: searchprobe.IndexerStatus{Status: "running", LastResultStatus: "failed", ItemsFailed: 2, SafeErrorCode: "IndexerExecutionFailure"},
-	}
-	res, err = evalRule(t, "FND-RUN-006", d, baseInput())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(res.Findings) != 1 || !strings.Contains(res.Findings[0].Evidence, "last result failed") || !strings.Contains(res.Findings[0].Evidence, "IndexerExecutionFailure") || !strings.Contains(res.Findings[0].Evidence, "itemsFailed=2") {
-		t.Fatalf("expected structured last-result failure, got %+v", res)
-	}
-}
-
-func TestEnvHelpersAndCaches(t *testing.T) {
-	e := &env{d: baseDeps()}
-	ctx := context.Background()
-	if _, err := e.projectInfo(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := e.projectInfo(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if got, err := e.projectConnections(ctx); err != nil || len(got) == 0 {
-		t.Fatalf("projectConnections got=%+v err=%v", got, err)
-	}
-	e.d.FoundryMgmt = fakeMgmt{accountConnections: []azure.FoundryConnection{{Name: "extra"}}}
-	if got, err := e.accountConnections(ctx); err != nil || len(got) != 1 {
-		t.Fatalf("accountConnections got=%+v err=%v", got, err)
-	}
-	e.d.FoundryMgmt = fakeMgmt{deployments: []azure.AccountDeployment{{Name: "dep1"}}}
-	if got, err := e.deployments(ctx); err != nil || len(got) != 1 {
-		t.Fatalf("deployments got=%+v err=%v", got, err)
-	}
-}
-
-func TestNeedTargetAzureReasonBoundConnectionsAndAgentNames(t *testing.T) {
-	if got := needTarget(Target{SubscriptionID: "s"}, true); !strings.Contains(got, "--resource-group") {
-		t.Fatalf("needTarget rg = %q", got)
-	}
-	if got := needTarget(Target{SubscriptionID: "s", ResourceGroup: "rg"}, true); !strings.Contains(got, "--account") {
-		t.Fatalf("needTarget account = %q", got)
-	}
-	if got := needTarget(Target{SubscriptionID: "s", ResourceGroup: "rg", Account: "acct"}, true); !strings.Contains(got, "--project") {
-		t.Fatalf("needTarget project = %q", got)
-	}
-	msg := azureReason(&azure.UnavailableError{Capability: "x", Permission: "perm", Reason: "why"})
-	if !strings.Contains(msg, "missing permission perm") {
-		t.Fatalf("azureReason unavailable = %q", msg)
-	}
-
-	e := &env{d: baseDeps()}
-	conns, names, err := e.boundConnections(context.Background())
-	if err != nil || len(conns) == 0 || len(names) < 3 {
-		t.Fatalf("boundConnections conns=%+v names=%v err=%v", conns, names, err)
-	}
-	if got := e.agentNames(&sdk.Input{AzureYAML: nil}); got != nil {
-		t.Fatalf("expected nil agent names, got %v", got)
-	}
-}
-
-func TestRun001AndRun007AdditionalSkips(t *testing.T) {
-	d := baseDeps()
-	d.FoundryMgmt = nil
-	res, err := evalRule(t, "FND-RUN-001", d, baseInput())
-	if err != nil || res.Skipped == nil {
-		t.Fatalf("run001 res=%+v err=%v", res, err)
-	}
-
-	d = baseDeps()
-	d.FoundryMgmt = fakeMgmt{
-		project: project(),
-		hosts: []azure.CapabilityHost{{
-			ID: "host1", Name: "default", ProvisioningState: "Succeeded",
-			StorageConnections: []string{"sas-conn"},
-		}},
-		projectConnections: []azure.FoundryConnection{{Name: "sas-conn", AuthType: "SAS", Target: azure.ConnectionTarget{ResourceID: storageID}}},
-	}
-	res, err = evalRule(t, "FND-RUN-001", d, baseInput())
-	if err != nil || res.Skipped == nil || !strings.Contains(res.Skipped.Reason, "cannot be proven") {
-		t.Fatalf("run001 auth skip res=%+v err=%v", res, err)
-	}
-
-	d = baseDeps()
-	d.Monitor = fakeMonitor{diags: []azure.RuntimeDiagnosticSetting{{Name: "diag", WorkspaceID: "law", Categories: []string{"Audit"}, AgeHours: 3}}}
-	res, err = evalRule(t, "FND-RUN-007", d, baseInput())
-	if err != nil || res.Skipped == nil || !strings.Contains(res.Skipped.Reason, "no traffic") {
-		t.Fatalf("run007 res=%+v err=%v", res, err)
-	}
-}
-
-func TestRun005NotFoundBranch(t *testing.T) {
-	d := baseDeps()
-	d.ProjectData = fakeProjectReader{
-		agents:      []foundrydp.Agent{{Name: "support-agent", LatestVersion: "v1"}},
-		versions:    map[string]foundrydp.AgentVersion{},
-		versionErr:  map[string]error{"support-agent": errors.New("http 404")},
-		connections: []foundrydp.Connection{{Name: "search-conn"}, {Name: "storage-conn"}, {Name: "cosmos-conn"}},
-	}
-	res, err := evalRule(t, "FND-RUN-005", d, baseInput())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(res.Findings) == 0 || !strings.Contains(res.Findings[0].Evidence, "was not found") {
-		t.Fatalf("expected not-found finding, got %+v", res)
-	}
-}
-
-func TestEnvErrorBranchesAndRunSkips(t *testing.T) {
-	ctx := context.Background()
-	e := &env{d: baseDeps()}
-	e.d.FoundryMgmt = fakeMgmt{projectErr: errors.New("boom")}
-	if _, err := e.projectInfo(ctx); err == nil {
-		t.Fatal("expected projectInfo error")
-	}
-	e = &env{d: baseDeps()}
-	e.d.FoundryMgmt = fakeMgmt{projectConnsErr: errors.New("boom")}
-	if _, err := e.projectConnections(ctx); err == nil {
-		t.Fatal("expected projectConnections error")
-	}
-	e = &env{d: baseDeps()}
-	e.d.FoundryMgmt = fakeMgmt{accountConnsErr: errors.New("boom")}
-	if _, err := e.accountConnections(ctx); err == nil {
-		t.Fatal("expected accountConnections error")
-	}
-	e = &env{d: baseDeps()}
-	e.d.FoundryMgmt = fakeMgmt{deploymentsErr: errors.New("boom")}
-	if _, err := e.deployments(ctx); err == nil {
-		t.Fatal("expected deployments error")
-	}
-
-	d := baseDeps()
-	d.Resolver = nil
-	res, err := evalRule(t, "FND-RUN-002", d, baseInput())
-	if err != nil || res.Skipped == nil {
-		t.Fatalf("run002 res=%+v err=%v", res, err)
-	}
-
-	d = baseDeps()
-	d.FoundryMgmt = fakeMgmt{project: project()}
-	res, err = evalRule(t, "FND-RUN-003", d, baseInput())
-	if err != nil || res.Skipped == nil {
-		t.Fatalf("run003 res=%+v err=%v", res, err)
-	}
-}
-
-func TestRun004AndRun007MoreBranches(t *testing.T) {
-	d := baseDeps()
-	d.FoundryMgmt = fakeMgmt{deployments: []azure.AccountDeployment{{Name: "dep1", ProvisioningState: "Succeeded"}}}
-	d.Monitor = fakeMonitor{}
-	res, err := evalRule(t, "FND-RUN-004", d, baseInput())
-	if err != nil || res.Skipped == nil || !strings.Contains(res.Skipped.Reason, rt.UncertainPrefix) {
-		t.Fatalf("run004 res=%+v err=%v", res, err)
-	}
-
-	d = baseDeps()
-	d.Monitor = fakeMonitor{diags: nil}
-	res, err = evalRule(t, "FND-RUN-007", d, baseInput())
-	if err != nil || res.Skipped == nil || !strings.Contains(res.Skipped.Reason, "no diagnostic setting") {
-		t.Fatalf("run007 missing diag res=%+v err=%v", res, err)
-	}
-
-	d = baseDeps()
-	d.Monitor = fakeMonitor{
-		metrics: func(_ context.Context, _ string, metricName, _, _, _ string) ([]azure.MetricTotal, error) {
-			if metricName == "AzureOpenAIRequests" {
-				return []azure.MetricTotal{{Series: "all", Total: 2}}, nil
-			}
-			return nil, nil
-		},
-		diags: []azure.RuntimeDiagnosticSetting{{Name: "diag", WorkspaceID: "law", Categories: []string{"Audit"}, AgeHours: 3}},
-		logs:  azure.RuntimeLogsResult{Table: "AzureDiagnostics", Counts: map[string]int64{"Audit": 2}},
-	}
-	res, err = evalRule(t, "FND-RUN-007", d, baseInput())
-	if err != nil || res.Skipped != nil || len(res.Findings) != 0 {
-		t.Fatalf("run007 expected pass, got res=%+v err=%v", res, err)
-	}
-}
+// ---- fakes -------------------------------------------------------------------------
 
 type fakeMgmt struct {
 	project            azure.FoundryProject
@@ -608,8 +1004,15 @@ type fakeMgmt struct {
 	accountConnsErr    error
 	deployments        []azure.AccountDeployment
 	deploymentsErr     error
+	net                azure.AccountNetwork
+	netErr             error
 }
 
+func withProject(m fakeMgmt, p azure.FoundryProject) fakeMgmt { m.project = p; return m }
+
+func (f fakeMgmt) GetAccountNetwork(context.Context, string, string, string) (azure.AccountNetwork, error) {
+	return f.net, f.netErr
+}
 func (f fakeMgmt) GetProject(context.Context, string, string, string, string) (azure.FoundryProject, error) {
 	return f.project, f.projectErr
 }
@@ -630,42 +1033,46 @@ func (f fakeMgmt) ListAccountDeployments(context.Context, string, string, string
 }
 
 type fakeRBAC struct {
-	assignments map[string][]azure.RoleAssignment
-	assignErr   error
-	sql         map[string][]azure.CosmosSQLRoleAssignment
-	sqlErr      error
+	sets      map[string]azure.RoleAssignmentSet
+	assignErr error
+	sql       map[string][]azure.CosmosSQLRoleAssignment
+	sqlErr    error
+	// only, when set, restricts the data to one principal: any other principal has nothing.
+	only string
 }
 
-func (f fakeRBAC) ListRoleAssignments(context.Context, string, string) ([]azure.RoleAssignment, error) {
+func (f fakeRBAC) ListRoleAssignments(_ context.Context, scope, principal string) (azure.RoleAssignmentSet, error) {
 	if f.assignErr != nil {
-		return nil, f.assignErr
+		return azure.RoleAssignmentSet{}, f.assignErr
 	}
-	out := []azure.RoleAssignment{}
-	for _, roles := range f.assignments {
-		out = append(out, roles...)
+	if f.only != "" && f.only != principal {
+		return azure.RoleAssignmentSet{}, nil
 	}
-	return out, nil
+	return f.sets[scope], nil
 }
-func (f fakeRBAC) ListCosmosSQLRoleAssignments(_ context.Context, accountID, _ string) ([]azure.CosmosSQLRoleAssignment, error) {
+func (f fakeRBAC) ListCosmosSQLRoleAssignments(_ context.Context, accountID, principal string) ([]azure.CosmosSQLRoleAssignment, error) {
 	if f.sqlErr != nil {
 		return nil, f.sqlErr
+	}
+	if f.only != "" && f.only != principal {
+		return nil, nil
 	}
 	return append([]azure.CosmosSQLRoleAssignment(nil), f.sql[accountID]...), nil
 }
 
 type fakeMonitor struct {
-	metrics func(context.Context, string, string, string, string, string) ([]azure.MetricTotal, error)
+	metrics func(azure.MetricQuery) (azure.MetricResult, error)
 	diags   []azure.RuntimeDiagnosticSetting
 	diagErr error
 	logs    azure.RuntimeLogsResult
 	logErr  error
 }
 
-func (f fakeMonitor) QueryAccountMetrics(ctx context.Context, accountID, metricName, filterDimension, filterValue, seriesDimension string) ([]azure.MetricTotal, error) {
+func (f fakeMonitor) QueryAccountMetrics(_ context.Context, _ string, q azure.MetricQuery) (azure.MetricResult, error) {
 	if f.metrics == nil {
-		return nil, nil
+		return azure.MetricResult{}, nil
 	}
-	return f.metrics(ctx, accountID, metricName, filterDimension, filterValue, seriesDimension)
+	return f.metrics(q)
 }
 func (f fakeMonitor) ListDiagnosticSettings(context.Context, string) ([]azure.RuntimeDiagnosticSetting, error) {
 	return f.diags, f.diagErr
@@ -676,44 +1083,18 @@ func (f fakeMonitor) QueryDiagnosticCounts(context.Context, string, string, int)
 
 type fakeProjectReader struct {
 	pingErr     error
-	agents      []foundrydp.Agent
+	agents      foundrydp.AgentList
 	agentsErr   error
-	versions    map[string]foundrydp.AgentVersion
-	versionErr  map[string]error
-	connections []foundrydp.Connection
+	connections foundrydp.ConnectionList
 	connectErr  error
 }
 
 func (f fakeProjectReader) Ping(context.Context, string) error { return f.pingErr }
-func (f fakeProjectReader) ListAgents(context.Context, string) ([]foundrydp.Agent, error) {
+func (f fakeProjectReader) ListAgents(context.Context, string) (foundrydp.AgentList, error) {
 	return f.agents, f.agentsErr
 }
-func (f fakeProjectReader) GetAgentVersion(_ context.Context, _ string, name, _ string) (foundrydp.AgentVersion, error) {
-	if err := f.versionErr[name]; err != nil {
-		return foundrydp.AgentVersion{}, err
-	}
-	return f.versions[name], nil
-}
-func (f fakeProjectReader) ListConnections(context.Context, string) ([]foundrydp.Connection, error) {
+func (f fakeProjectReader) ListConnections(context.Context, string) (foundrydp.ConnectionList, error) {
 	return f.connections, f.connectErr
-}
-
-type fixtureProjectReader struct {
-	endpoint string
-	client   foundrydp.HTTPClient
-}
-
-func (f fixtureProjectReader) Ping(ctx context.Context, _ string) error {
-	return f.client.Ping(ctx, f.endpoint)
-}
-func (f fixtureProjectReader) ListAgents(ctx context.Context, _ string) ([]foundrydp.Agent, error) {
-	return f.client.ListAgents(ctx, f.endpoint)
-}
-func (f fixtureProjectReader) GetAgentVersion(ctx context.Context, _ string, name, version string) (foundrydp.AgentVersion, error) {
-	return f.client.GetAgentVersion(ctx, f.endpoint, name, version)
-}
-func (f fixtureProjectReader) ListConnections(ctx context.Context, _ string) ([]foundrydp.Connection, error) {
-	return f.client.ListConnections(ctx, f.endpoint)
 }
 
 type fakeSearch struct {
@@ -735,29 +1116,18 @@ func (f fakeSearch) GetIndexerStatus(context.Context, string, string) (searchpro
 	return f.status, f.statusErr
 }
 
-type fixtureSearchClient struct {
-	serviceURL string
-	client     searchprobe.HTTPClient
-}
-
-func (f fixtureSearchClient) GetIndex(ctx context.Context, _ string, index string) (searchprobe.Index, error) {
-	return f.client.GetIndex(ctx, "svc", index)
-}
-func (f fixtureSearchClient) GetIndexStatistics(ctx context.Context, _ string, index string) (searchprobe.Stats, error) {
-	return f.client.GetIndexStatistics(ctx, "svc", index)
-}
-func (f fixtureSearchClient) GetIndexerStatus(ctx context.Context, _ string, indexer string) (searchprobe.IndexerStatus, error) {
-	return f.client.GetIndexerStatus(ctx, "svc", indexer)
-}
-
 type fakeResolver struct {
 	answers map[string][]string
+	errs    map[string]error
 	err     error
 }
 
 func (f fakeResolver) LookupHost(_ context.Context, host string) ([]string, error) {
 	if f.err != nil {
 		return nil, f.err
+	}
+	if e, ok := f.errs[host]; ok {
+		return nil, e
 	}
 	if x, ok := f.answers[host]; ok {
 		return x, nil
@@ -792,30 +1162,30 @@ func (staticCred) Token(context.Context, string) (azure.AccessToken, error) {
 func baseDeps() Deps {
 	return Deps{
 		FoundryMgmt: fakeMgmt{
+			net:     azure.AccountNetwork{CustomSubDomainName: "acct"},
 			project: project(),
 			hosts: []azure.CapabilityHost{{
 				ID: "host1", Name: "default", ProvisioningState: "Succeeded",
 				StorageConnections: []string{"storage-conn"}, ThreadStorageConnections: []string{"cosmos-conn"}, VectorStoreConnections: []string{"search-conn"},
 			}},
 			projectConnections: []azure.FoundryConnection{
-				{Name: "search-conn", Target: azure.ConnectionTarget{ResourceID: searchID, IndexNames: []string{"knowledge"}, IndexerNames: []string{"load-knowledge"}}},
-				{Name: "storage-conn", Target: azure.ConnectionTarget{ResourceID: storageID}},
-				{Name: "cosmos-conn", Target: azure.ConnectionTarget{ResourceID: cosmosID}},
+				{Name: "search-conn", Category: "CognitiveSearch", Target: azure.ConnectionTarget{ResourceID: searchID, IndexNames: []string{"knowledge"}, IndexerNames: []string{"load-knowledge"}}},
+				{Name: "storage-conn", Category: "AzureStorageAccount", Target: azure.ConnectionTarget{ResourceID: storageID}},
+				{Name: "cosmos-conn", Category: "CosmosDB", Target: azure.ConnectionTarget{ResourceID: cosmosID}},
 			},
 		},
-		RBAC:    fakeRBAC{assignments: map[string][]azure.RoleAssignment{}, sql: map[string][]azure.CosmosSQLRoleAssignment{}},
+		RBAC:    fakeRBAC{},
 		Monitor: fakeMonitor{},
 		ProjectData: fakeProjectReader{
-			agents:      []foundrydp.Agent{{Name: "support-agent", LatestVersion: "v1"}},
-			versions:    map[string]foundrydp.AgentVersion{"support-agent": {Name: "support-agent", Version: "v1", Status: "Active"}},
-			connections: []foundrydp.Connection{{Name: "search-conn", Category: "AzureAISearch"}},
+			agents:      foundrydp.AgentList{Agents: []foundrydp.Agent{{Name: "support-agent", LatestVersion: "1", LatestStatus: "active"}}},
+			connections: foundrydp.ConnectionList{Connections: []foundrydp.Connection{{Name: "search-conn", Type: "CognitiveSearch"}, {Name: "storage-conn"}, {Name: "cosmos-conn"}}},
 		},
 		SearchData: fakeSearch{
-			index:  searchprobe.Index{Name: "knowledge", Fields: []searchprobe.Field{{Name: "v", Type: "Collection(Edm.Single)", Dimensions: 1536, VectorSearchProfile: "p"}}},
+			index:  goodIndex(),
 			stats:  searchprobe.Stats{DocumentCount: 1},
-			status: searchprobe.IndexerStatus{Status: "running", LastResultStatus: "success"},
+			status: searchprobe.IndexerStatus{Status: "running", LastResultStatus: "success", HasSuccess: true, LastSuccessMinutes: 500},
 		},
-		Resolver: fakeResolver{answers: map[string][]string{}},
+		Resolver: fakeResolver{},
 		Target:   Target{SubscriptionID: subID, ResourceGroup: "rg", Account: "acct", Project: "proj"},
 		Options:  rt.Options{Timeout: time.Second, Vantage: rt.VantageLocal},
 	}
@@ -898,11 +1268,3 @@ func project() azure.FoundryProject {
 		ProvisioningState: "Succeeded",
 	}
 }
-
-const (
-	subID       = "11111111-1111-1111-1111-111111111111"
-	principalID = "22222222-2222-2222-2222-222222222222"
-	searchID    = "/subscriptions/" + subID + "/resourceGroups/rg/providers/Microsoft.Search/searchServices/searchsvc"
-	storageID   = "/subscriptions/" + subID + "/resourceGroups/rg/providers/Microsoft.Storage/storageAccounts/storageacct"
-	cosmosID    = "/subscriptions/" + subID + "/resourceGroups/rg/providers/Microsoft.DocumentDB/databaseAccounts/cosmosacct"
-)

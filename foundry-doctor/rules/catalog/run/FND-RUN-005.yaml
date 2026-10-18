@@ -1,5 +1,5 @@
 id: FND-RUN-005
-version: 1
+version: 4
 group: RUN
 title: Agent tools/connections respond
 description: >-
@@ -21,26 +21,55 @@ compatibility:
   azd: ""
   extensions:
     azure.ai.agents: ">=1.0.0-beta.18 <=1.0.0-beta.20"
-  apiVersions: []
+  apiVersions:
+    - { plane: data, service: MicrosoftFoundry, endpointFamily: agents, version: v1 }
+    - { plane: data, service: MicrosoftFoundry, endpointFamily: connections, operation: list, version: v1 }
   preview: true
   notes: >-
     No azd dependency: data-plane reads against the project endpoint; azure.yaml service names are read for
     correlation only azure.ai.agents 1.0.0-beta.18: probe shapes read in source. Extension ranges are exactly the
     versions whose schemas or source were read; widen them in Phase 1 by reading older tags. Foundry project endpoint
-    agents API api-version v1 (read in azd extension source; no REST spec in the clones) Window widened 2026-10-16:
+    agents API api-version v1 (plane data, service MicrosoftFoundry, endpoint families agents and connections; recorded in apiVersions as the
+    literal v1, which the catalogue validator accepts on the data plane only; the specification documents v1 as info.version and its
+    api-version parameter is a string with minLength 1 and no enum, so whether other values exist is UNVERIFIED; the
+    specification is Azure/azure-rest-api-specs
+    specification/ai-foundry/data-plane/Foundry/openapi3/v1/microsoft-foundry-openapi3.json, read 2026-10-17 and 2026-10-18; the token
+    scope in that spec is https://ai.azure.com/.default) Window widened 2026-10-16:
     azure.ai.agents to 1.0.0-beta.20. The azd and extension changelogs and the schema and source diffs from the
     previously verified versions were read; none touches this rule's verified facts for the widened fields (see
     docs/tool-compatibility.md section 6).
 evidence:
   description: >-
-    Read-only GETs against the project endpoint: GET {projectEndpoint}/agents?api-version=v1&limit=1 (endpoint reachable),
-    GET {projectEndpoint}/agents/{name}/versions/{version}?api-version=v1 (status Active is healthy, Creating is Uncertain,
-    Failed or not found is Fail) and GET {projectEndpoint}/connections?api-version=v1 (names and categories only; the
-    getConnectionWithCredentials operation is never called). Required permission: the azd extension comments that agent
-    list and get are Reader-level operations, and the Foundry docs assign Foundry User on the project to developers who
-    create or edit agents; the exact data action was not verified. Vantage point: the project endpoint must be reachable
-    from the host; when public network access is disabled the check is Skipped outside the VNet. Metadata read: agent
-    names, versions, status, connection names. Never instructions, prompts, threads, tool arguments or secrets.
+    Read-only GETs against the Foundry project endpoint (https://{account}.services.ai.azure.com/api/projects/{project}),
+    api-version=v1, token scope https://ai.azure.com/.default (all VERIFIED in the v1 OpenAPI document on 2026-10-17).
+    (1) GET {projectEndpoint}/agents?limit=100 (reachability and agent list). The list response is an object with a `data`
+    array of agents plus `first_id`, `last_id` and `has_more`; `limit` ranges from 1 to 100 (default 20); the rule follows
+    paging with `after` (the last_id of the page) while has_more is true, up to a fixed page cap, and a list that is still
+    has_more at the cap is Uncertain. Each agent object carries `versions.latest`, the latest version; the rule reads the
+    version and its status from it.
+    (2) Agent name assumption (loop 2): azd deploys the agent under agentDef.Name from the agent definition
+    (azure.ai.agents service_target_agent.go, azure-dev commit afe4b2b, read 2026-10-18), which is not necessarily the azure.yaml
+    service name. The rule resolves the agent name from the agent definition when it is readable; when it is not
+    readable, the azure.yaml service name is used as an ASSUMPTION and an agent 'not listed' is Uncertain, naming that
+    assumption, never Fail. Agent status model (what the code reads): each agent so named (host azure.ai.agent) is matched by name,
+    case-insensitive, against the listing, and its versions.latest.status is read from the listing; the rule does not issue
+    the per-version GET. AgentVersionStatus is one of creating, active, failed, deleting, deleted (lower case; VERIFIED
+    in the v1 OpenAPI document 2026-10-18). An absent or empty status is treated as active: the spec states that non-hosted
+    agents default to active; this reading is UNVERIFIED for hosted agents that omit the field. active is healthy;
+    creating is Uncertain; failed, deleting or deleted is Fail; any other value is Uncertain (unrecognised). An agent whose
+    `state` is disabled (AgentState enabled|disabled, VERIFIED; the endpoint then rejects requests) is Uncertain. An agent
+    that is not in the listing is Fail only when its name was resolved from the agent definition, unless the listing was capped (the page cap was reached with has_more still
+    true), in which case it is Uncertain with a note that the agent was not found in the first N agents. (3) GET {projectEndpoint}/connections: the response is a PagedConnection object whose items are in `value`
+    (not `data`) with an optional `nextLink`; the rule follows nextLink up to the same page cap and reads only connection names; each connection bound by the
+    capability host (see FND-RUN-003) that is absent from the project listing is Uncertain: a bound account-level
+    connection may not appear in the project /connections listing (UNVERIFIED either way), so 'not listed' is never a
+    Fail on its own. A listing that was capped is also Uncertain. The Connection schema in the same document also lists a `credentials` property; the rule never
+    reads or retains it and never calls the credentials operation. Required permission: the azd extension comments that
+    agent list and get are Reader-level operations, and the Foundry docs assign Foundry User on the project to developers
+    who create or edit agents; the exact data action was not verified. Vantage point: the project endpoint must be
+    reachable from the host; when public network access is disabled the check is Skipped outside the VNet (the doctor does
+    not verify where it runs). Metadata read: agent names, versions, status, connection names. Never instructions, prompts,
+    threads, tool arguments or secrets.
   confidence: uncertain
 recommendation: >-
   Open the failing agent version or connection in the Foundry portal, read its error, and redeploy the agent or recreate
@@ -51,6 +80,13 @@ fix: |-
     support-agent:
       host: azure.ai.agent
 sources:
+  - url: https://github.com/Azure/azure-dev/blob/main/cli/azd/extensions/azure.ai.agents/internal/project/service_target_agent.go
+    lastVerified: "2026-10-18"
+    verifiedVia: >-
+      Azure/azure-dev local clone at commit afe4b2b (2026-10-04), cli/azd/extensions/azure.ai.agents/internal/project/service_target_agent.go, read 2026-10-18
+    note: >-
+      Deploy path creates and updates the agent by agentDef.Name (the name in the agent definition), not by the azure.yaml
+      service name. Branch URL, not commit-pinned.
   - url: https://github.com/Azure/azure-dev/blob/main/cli/azd/extensions/azure.ai.agents/internal/cmd/doctor/checks_agent_status.go
     lastVerified: "2026-10-04"
     verifiedVia: >-
@@ -72,6 +108,14 @@ sources:
     note: >-
       connections list at <endpoint>/connections?api-version=v1; a per-connection credentials operation exists
       and must be avoided. Branch URL, not commit-pinned.
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/ai-foundry/data-plane/Foundry/openapi3/v1/microsoft-foundry-openapi3.json
+    lastVerified: "2026-10-17"
+    verifiedVia: >-
+      https://raw.githubusercontent.com/Azure/azure-rest-api-specs/main/specification/ai-foundry/data-plane/Foundry/openapi3/v1/microsoft-foundry-openapi3.json
+      (info.version v1; paths /agents, /agents/{agent_name}/versions/{agent_version}, /connections; schemas AgentObject,
+      AgentVersionObject, AgentVersionStatus, PagedConnection, Connection; OAuth2 scope https://ai.azure.com/.default)
+    note: >-
+      Specification for the Foundry project data plane api-version v1. Branch URL, not commit-pinned.
 overlap:
   decision: adapt
   provisional: true
@@ -101,19 +145,30 @@ implementation:
   package: internal/rules/run
 tests:
   positive:
-    - agent version Failed
-    - agent version not found (404)
-    - referenced connection name absent from the project
+    - agent versions.latest status failed, deleting or deleted
+    - agent whose name was resolved from the agent definition is not in the (complete) listing
   negative:
-    - endpoint reachable, all agent versions Active, all referenced connections listed
+    - endpoint reachable, all agent versions active, all referenced connections listed (connections read from `value`)
+    - agent list with has_more true is followed to the last page and the versions are read from versions.latest
+    - agent versions.latest status absent or empty (treated as active, per the spec default for non-hosted agents)
   skipped:
     - project endpoint not set or not reachable from this vantage point
     - 401 or 403 from the project endpoint
   uncertain:
-    - agent version Creating
+    - agent versions.latest status creating, or an unrecognised status value
+    - agent state disabled
+    - agent or connection not found in a capped listing (page cap reached with has_more or nextLink still set)
     - tool responsiveness requested (not probed by design)
+    - agent name taken from the azure.yaml service name (agent definition not readable) and not in the listing (names the assumption)
+    - referenced connection name absent from the project /connections listing (a bound account-level connection may not appear there)
 testability: Deterministic against a fake project endpoint; live mode needs data-plane read access.
 notes: >-
-  Unverified: no REST specification for the project agents API (api-version v1) was in the clones, so paths and statuses
-  are taken from the azd extension source only; no source documents a side-effect-free tool or MCP probe, hence
-  product-opinion. Hosted agents only: prompt agents may expose different status values.
+  Loop 2 (2026-10-18): the agent name is resolved from the agent definition (azd uses agentDef.Name), with an Uncertain
+  'not listed' naming the assumption otherwise (Foundry lead round 2 C3); a missing connection in the project listing is
+  Uncertain because account-level connection visibility in that listing is UNVERIFIED.
+  Loop 1 (2026-10-17): response shapes, paging, limit and status values taken from the v1 OpenAPI document (list
+  `data`/`has_more`, connections `value`/`nextLink`, `versions.latest`, status creating|active|failed|deleting|deleted).
+  Unverified: the data action that a Reader or Foundry User needs; that every hosted and prompt agent reports `status`;
+  no source documents a side-effect-free tool or MCP probe, hence
+  product-opinion. Whether prompt agents report a status is not stated in the spec; an absent status is treated as active (spec default for non-hosted agents), UNVERIFIED for hosted agents. The
+  api-version enum is not documented (parameter is any non-empty string); only v1 is recorded.

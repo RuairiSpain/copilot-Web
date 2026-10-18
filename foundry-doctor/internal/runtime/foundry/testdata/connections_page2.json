@@ -1,0 +1,13 @@
+{
+  "value": [
+    {
+      "name": "storage-conn",
+      "id": "storage-conn-id",
+      "type": "AzureStorageAccount",
+      "target": "https://storageacct.blob.core.windows.net",
+      "isDefault": true,
+      "credentials": {"type": "AAD"},
+      "metadata": {}
+    }
+  ]
+}

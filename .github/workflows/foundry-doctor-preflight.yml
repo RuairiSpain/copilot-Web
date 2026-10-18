@@ -1,12 +1,77 @@
 name: foundry-doctor-preflight
 
-# Manual / protected-branch Azure preflight. OIDC federated credentials only;
-# no client secrets. The protected environment gates access and holds the
-# non-secret identifiers (AZURE_CLIENT_ID, AZURE_TENANT_ID,
-# AZURE_SUBSCRIPTION_ID) as environment variables. Never runs on pull requests.
-# The doctor is read-only: preflight + what-if only, nothing is deployed.
-
+# Reusable workflow (PRD section 10 deliverable "GitHub reusable workflow") and manual dispatch: Azure deployment
+# preflight with Foundry Doctor. OIDC federated credentials only; no client secrets. The protected environment gates
+# access and holds the non-secret identifiers (AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID) as
+# environment variables. The doctor is read-only: preflight plus ARM what-if only, nothing is deployed.
+#
+# Call it from a workflow in the consuming repository (see foundry-doctor/samples/preflight/reusable-caller.example.yml):
+#
+#   permissions: { contents: read, id-token: write }
+#   jobs:
+#     preflight:
+#       uses: RuairiSpain/copilot-Web/.github/workflows/foundry-doctor-preflight.yml@<tag-or-sha>
+#       with: { environment: preflight-test, resource-group: rg-foundry-test, location: eastus2, os: linux }
+#
+# When source-repository differs from the calling repository (the default points at RuairiSpain/copilot-Web), the caller
+# must pass source-ref as a release tag (vX.Y.Z) or a full 40-character commit SHA; a branch such as main is rejected.
+#
+# --strict is deliberately not used. Some checks are uncertain by design (FND-DEP-002, FND-DEP-008 Incremental mode and
+# FND-DEP-009), so --strict would always exit 3 and the job could never succeed. Exit 3 also outranks exit 1 (ADR-010
+# precedence 4,2,3,1,0), so --strict would mask a real error finding. Exit codes (foundry-doctor README, "Exit codes"):
+# 0 clean, 1 at least one finding at or above --fail-on (default error), 2 validation could not run (invalid input,
+# unavailable dependency), 3 only with --strict (a skip hid a check), 4 internal error. The job exits with the doctor's
+# code, so any non-zero code fails the job; exit 1 is the documented findings policy and the evidence artifact says why.
+# The what-if input is off by default: --what-if needs deployment-level rights (see samples/preflight/README).
+#
+# The caller must grant `id-token: write`: a called workflow can only narrow the caller's token.
+#
+# Safety: the workflow never runs for pull_request or pull_request_target events (fork pull requests must not reach an
+# Azure identity). The first step fails the run if a caller triggers it from one. Offline validation for pull requests is
+# foundry-doctor-offline.yml.
 on:
+  workflow_call:
+    inputs:
+      environment:
+        description: "Protected GitHub environment that holds the AZURE_* variables and the OIDC approval gate."
+        type: string
+        required: true
+      profile:
+        description: "Doctor profile: dev, test or prod."
+        type: string
+        default: "test"
+      project-path:
+        description: "Project directory relative to the repository root."
+        type: string
+        default: "."
+      resource-group:
+        description: "Target resource group (target-bound checks are skipped without it)."
+        type: string
+        required: true
+      location:
+        description: "Target Azure region name, for example eastus2."
+        type: string
+        required: true
+      os:
+        description: "Runner operating system: linux (ubuntu-latest) or windows (windows-latest). Any other value fails the first step."
+        type: string
+        default: "linux"
+      source-repository:
+        description: "owner/name that holds the Foundry Doctor source to build."
+        type: string
+        default: "RuairiSpain/copilot-Web"
+      source-ref:
+        description: "Git ref of the Foundry Doctor source: a release tag (vX.Y.Z) or full 40-character commit SHA. Required to be one of those when source-repository differs from the calling repository; a branch is only accepted for same-repository runs."
+        type: string
+        default: "main"
+      what-if:
+        description: "Add --what-if (ARM what-if; needs the separate what-if role, which grants deployment-level rights)."
+        type: boolean
+        default: false
+    outputs:
+      exit-code:
+        description: "Exit code of foundry-doctor preflight."
+        value: ${{ jobs.preflight.outputs.exit-code }}
   workflow_dispatch:
     inputs:
       environment:
@@ -22,44 +87,137 @@ on:
         type: string
         default: .
       resource-group:
-        description: Target resource group (required so target-bound checks are not skipped under --strict).
+        description: Target resource group (target-bound checks are skipped without it).
         type: string
         required: true
       location:
         description: Target Azure region name, for example eastus2.
         type: string
         required: true
+      os:
+        description: Runner operating system.
+        type: choice
+        options: [linux, windows]
+        default: linux
+      source-repository:
+        description: owner/name that holds the Foundry Doctor source to build.
+        type: string
+        default: RuairiSpain/copilot-Web
+      source-ref:
+        description: Git ref of the Foundry Doctor source (release tag or full commit SHA; a branch only for same-repository runs).
+        type: string
+        default: main
+      what-if:
+        description: Add --what-if (needs the separate what-if role with deployment-level rights).
+        type: boolean
+        default: false
 
+# Least privilege by default; the job adds id-token: write.
 permissions:
   contents: read
 
 jobs:
   preflight:
-    runs-on: ubuntu-latest
+    name: foundry-doctor preflight
+    # Linux and Windows are supported (ADR-011 Amendment 2). The ternary maps anything that is not exactly 'windows' to
+    # Linux, so the first step rejects every value other than linux or windows.
+    runs-on: ${{ inputs.os == 'windows' && 'windows-latest' || 'ubuntu-latest' }}
     timeout-minutes: 30
     environment: ${{ inputs.environment }}
     permissions:
       contents: read
       id-token: write   # OIDC token exchange; no secrets stored
+    outputs:
+      exit-code: ${{ steps.run.outputs.exit-code }}
+    defaults:
+      run:
+        shell: bash
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Validate inputs and refuse pull request events
+        env:
+          IN_OS: ${{ inputs.os }}
+          IN_PROFILE: ${{ inputs.profile }}
+          IN_PATH: ${{ inputs.project-path }}
+          IN_RG: ${{ inputs.resource-group }}
+          IN_LOCATION: ${{ inputs.location }}
+          IN_REPO: ${{ inputs.source-repository }}
+          IN_REF: ${{ inputs.source-ref }}
+          EVENT_NAME: ${{ github.event_name }}
+          CALLER_REPO: ${{ github.repository }}
+        run: |
+          # Inputs reach the shell only through env vars and are validated here, never interpolated into scripts.
+          bad() { echo "::error title=foundry-doctor-preflight::$1"; exit 2; }
+          case "$EVENT_NAME" in pull_request|pull_request_target) bad "Azure preflight must not run for pull request events (fork safety). Use foundry-doctor-offline.yml for pull requests.";; esac
+          case "$IN_OS" in linux|windows) ;; *) bad "input os must be linux or windows (any other value would have selected Linux silently)";; esac
+          case "$IN_PROFILE" in dev|test|prod) ;; *) bad "input profile must be dev, test or prod";; esac
+          case "$IN_PATH" in ''|/*|*..*|*[!A-Za-z0-9._/-]*) bad "input project-path must be a relative path without '..' (letters, digits, . _ / -)";; esac
+          case "$IN_RG" in ''|*[!A-Za-z0-9._-]*) bad "input resource-group may only contain letters, digits and . _ -";; esac
+          case "$IN_LOCATION" in ''|*[!A-Za-z0-9]*) bad "input location must be an Azure region name such as eastus2";; esac
+          case "$IN_REPO" in */*) ;; *) bad "input source-repository must be owner/name";; esac
+          case "$IN_REPO$IN_REF" in *[!A-Za-z0-9._/@+-]*) bad "source-repository and source-ref may only contain letters, digits and . _ / @ + -";; esac
+          if [ "$IN_REPO" != "$CALLER_REPO" ]; then
+            printf '%s' "$IN_REF" | grep -Eq '^([0-9a-f]{40}|v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.+-]+)?)$' \
+              || bad "source-ref must be a release tag (vX.Y.Z) or a full 40-character commit SHA when source-repository differs from the calling repository"
+          fi
+
+      - name: Check out the project
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+
+      - name: Check out Foundry Doctor source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          go-version-file: foundry-doctor/go.mod
-          cache-dependency-path: foundry-doctor/go.sum
+          repository: ${{ inputs.source-repository }}
+          ref: ${{ inputs.source-ref }}
+          path: .foundry-doctor-src
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: .foundry-doctor-src/foundry-doctor/go.mod
+          cache-dependency-path: .foundry-doctor-src/foundry-doctor/go.sum
+
+      - name: Build foundry-doctor
+        run: |
+          exe=""; [ "$RUNNER_OS" = Windows ] && exe=".exe"
+          cd .foundry-doctor-src/foundry-doctor
+          CGO_ENABLED=0 GOWORK=off go build -trimpath -o "$RUNNER_TEMP/foundry-doctor$exe" ./cmd/foundry-doctor
+
+      - name: Install the pinned Bicep CLI
+        # The doctor compiles Bicep with the Bicep CLI (it has no Bicep parser) and requires 0.48.1 (ContractVersion);
+        # runner images carry other versions. Runs before azure/login so no Azure credential exists while code is built
+        # or downloaded. The Azure/bicep release publishes no checksum file, so the SHA256 values below were computed
+        # from the v0.48.1 release assets (trust on first download, 2026-10-17) and pinned; the download is rejected on any
+        # mismatch. Update them together with v when bumping Bicep.
+        run: |
+          v=0.48.1
+          case "$RUNNER_OS-$RUNNER_ARCH" in
+            Linux-X64) asset=bicep-linux-x64; sha=b09ec25a9d376c1f8e33ede6ed22b587f915ad68488d5db77a6f9541748c7f6e ;;
+            Linux-ARM64) asset=bicep-linux-arm64; sha=9cbf6a211137e894a863fbc842e355c2197fc2124a7bda902afe1bceffa35245 ;;
+            Windows-X64) asset=bicep-win-x64.exe; sha=398af294cf16ac4becdbd008a77d148d0e8e91492309a6b60ec911b7e1cab082 ;;
+            Windows-ARM64) asset=bicep-win-arm64.exe; sha=613a0afb0ffed4dca106e6466688d780b7db0eac7cf3576f62ae9eab11554b05 ;;
+            *) echo "no Bicep asset for $RUNNER_OS-$RUNNER_ARCH" >&2; exit 1 ;;
+          esac
+          dest="$RUNNER_TEMP/bicep-bin"; mkdir -p "$dest"
+          exe="$dest/bicep"; [ "$RUNNER_OS" = Windows ] && exe="$dest/bicep.exe"
+          curl -fsSL -o "$exe" "https://github.com/Azure/bicep/releases/download/v$v/$asset"
+          got=$(sha256sum "$exe" | cut -d' ' -f1)
+          [ "$got" = "$sha" ] || { echo "::error title=foundry-doctor-preflight::Bicep SHA256 mismatch for $asset (got $got, want $sha)" >&2; exit 1; }
+          chmod +x "$exe"
+          "$exe" --version
+          echo "BICEP_PATH=$exe" >> "$GITHUB_ENV"
+
       - name: Azure login (OIDC)
         uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      - name: Build foundry-doctor
-        working-directory: foundry-doctor
-        run: go build -trimpath -o "$RUNNER_TEMP/foundry-doctor" ./cmd/foundry-doctor
+
       - name: Run preflight
-        shell: bash
+        id: run
         env:
           PROFILE: ${{ inputs.profile }}
           PROJECT_PATH: ${{ inputs.project-path }}
@@ -67,13 +225,21 @@ jobs:
           AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
           AZURE_RESOURCE_GROUP: ${{ inputs.resource-group }}
           AZURE_LOCATION: ${{ inputs.location }}
+          WHAT_IF: ${{ inputs.what-if }}
         run: |
+          exe=""; [ "$RUNNER_OS" = Windows ] && exe=".exe"
+          extra=(); [ "$WHAT_IF" = "true" ] && extra+=(--what-if)
           mkdir -p "$RUNNER_TEMP/evidence"
-          cd "$PROJECT_PATH"
-          "$RUNNER_TEMP/foundry-doctor" preflight --what-if --profile "$PROFILE" --strict \
+          set +e
+          ( cd "$PROJECT_PATH" && "$RUNNER_TEMP/foundry-doctor$exe" preflight "${extra[@]}" --profile "$PROFILE" \
             --resource-group "$AZURE_RESOURCE_GROUP" --location "$AZURE_LOCATION" \
-            --format json --out "$RUNNER_TEMP/evidence/preflight.json"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+            --format json --out "$RUNNER_TEMP/evidence/preflight.json" )
+          rc=$?
+          set -e
+          echo "exit-code=$rc" >> "$GITHUB_OUTPUT"
+          exit "$rc"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: foundry-doctor-preflight-evidence

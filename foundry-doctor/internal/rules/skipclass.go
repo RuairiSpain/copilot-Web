@@ -58,7 +58,8 @@ var byDesignHeads = []string{
 var byDesignInputDetails = []string{
 	"project has no capability host",
 	"project has no search connection with index metadata",
-	"no private-endpoint-backed dependencies are in scope",
+	"no dependency is proven private-endpoint backed",
+	"no bound connection targets a search, storage or cosmos db resource",
 	"account has no model deployments",
 }
 

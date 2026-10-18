@@ -1,11 +1,146 @@
 # Phase 3 hand-off: runtime diagnosis
 
-Status: implemented; independent reviews (foundry-lead, black-belt, privacy) not yet run.
+Status: **gate round 1 on 2026-10-17: Foundry lead REJECT, Azure black belt REJECT. Fix loop 1 landed in commit 173db99 (Go) and a catalogue and docs sync (2026-10-18). Gate round 2 on 2026-10-18: Foundry lead ACCEPT with four blocking conditions (C1 to C4), Azure black belt ACCEPT with ten non-blocking conditions (C1, NB1 to NB10). Fix loop 2 (Go patch by the Go agent, catalogue and docs by the catalogue owner) addresses them and is pending re-review. Phase 3 is not complete until both reviewers confirm the loop 2 fixes and the blocking conditions are closed.** The security and Go principal reviews are deferred by ADR-019. The parent session updates this file after the re-review.
 
-- internal/runtime (+foundry, search, network, monitor, rbac): probe scheduler, timeouts, 429 handling, redaction, metadata-only guard.
-- Rules FND-RUN-001..007 in internal/rules/run.
-- `foundry-doctor runtime` command; docs/runtime.md, docs/troubleshooting-report-template.md, permissions-matrix entries.
-- Gates (windows/arm64, Go 1.25.13): gofmt, vet, test, staticcheck, govulncheck, secret scan, catalogue check pass. -race not run locally.
-- Coverage on new packages 85-91%.
+## Delivered
+- `internal/runtime` (with foundry, search, network, monitor, rbac sub-packages): runtime probes, timeouts, 429 handling, redaction, metadata-only guard. The scheduler is wired: `rules/run.Schedule` (called from `internal/app/runtime.go`) runs the selected rules through `runtime.Scheduler` with `Options.Parallelism` (4) bounding the rules in flight and a per-probe `Options.Timeout` (`--timeout`, default 30s); a probe that exceeds it is skipped as input-unavailable naming `--timeout`, and the engine then replays the stored outcomes in rule order. Concurrent behaviour has been tested only with fakes (`schedule_test.go`), never against a live tenant.
+- Rules FND-RUN-001..007 in `internal/rules/run`.
+- `foundry-doctor runtime` command; `docs/runtime.md`, `docs/troubleshooting-report-template.md`, `docs/permissions-matrix.md` entries.
+- Coverage on the new packages was 85-91% before the gate (not re-measured after loop 1).
 
-Open: independent reviews pending; API versions/RBAC actions marked UNVERIFIED in permissions-matrix.md; real-tenant and VNet probes untested; monitor resource-specific tables yield uncertain.
+## Changed contracts
+- Phase 3 gate loop 1 changes the behaviour of every FND-RUN rule (see below); the catalogue `version` of each is raised by one. Loop 2 changes RUN-001, 002, 004, 005, 006 and 007 again (one more `version` each; RUN-003 unchanged): see the loop 2 section.
+- ADR-021 (g) (the `logQuery` allow-list bypass) is closed in Phase 3 loop 1, pending re-review: the call is the allow-listed operation `runtime.loganalytics.query` (after `runtime.workspace.get`) through the shared transport. See the (g) status paragraph in `docs/decisions/ADR-021-phase-2-deviations.md`.
+- The runtime allow-list no longer contains any private DNS operation: the VNet-link probe (`ListPrivateDNSVNetLinks`, `LinkState`, `RuntimeDNS`, `runtime.privatedns.links`) was deleted from the Go code and from FND-RUN-002.
+- The catalogue validator now accepts the literal api-version `v1` on the data plane (and nothing else that is not a date); FND-RUN-005 records it.
+
+## Rule catalogue changes (loop 1, 2026-10-17)
+Rules raised one `version` in loop 1 (2026-10-17) and one more when the text was synced to the Go code (2026-10-18): FND-RUN-001 (3), 002 (3), 003 (3), 004 (3), 005 (3), 006 (4), 007 (3). Catalogue text, tests lists, `lastVerified` and source notes were updated from the primary sources read on 2026-10-17 and 2026-10-18 (Azure/azure-rest-api-specs: cognitiveservices 2026-09-01, Foundry v1 OpenAPI, Search 2026-04-01, Insights metrics 2024-02-01, diagnostic settings 2021-05-01-preview, Log Analytics workspaces 2025-02-01, Cosmos DB rbac 2025-10-15; MicrosoftDocs: built-in-roles.md, Log Analytics API access-api.md, request-format.md, response-format.md). The catalogue now describes the Go code on disk, not intended behaviour; where the Go code relies on something the catalogue owner could not verify, the rule text says UNVERIFIED.
+
+## Gate round 2 (2026-10-18) and loop 2 remediation
+
+Foundry lead: ACCEPT with BLOCKING conditions C1 to C4. Azure black belt: ACCEPT, all conditions non-blocking. Records: `docs/development/reviews/phase-3-foundry-lead.md` and `docs/development/reviews/phase-3-azure-black-belt.md` (Round 2 sections). 'Fixed in loop 2, pending re-review' means the Go code (Go agent, in its own worktree), the catalogue or the documents were changed; the catalogue entries below were written from the loop 2 specification and the parent session re-checks them against the Go patch.
+
+| Condition | Summary | Status |
+|---|---|---|
+| Foundry lead C1 (blocking) | FND-RUN-001 false pass when a resource-backed connection has no resolvable ARM ID | fixed in loop 2, pending re-review (RUN-001 v4: uncertain, 'effective access was not checked') |
+| Foundry lead C2 (blocking) | FND-RUN-002 unreadable Foundry account masked as the by-design 'nothing in scope' | fixed in loop 2, pending re-review (RUN-002 v4: uncertain or skipped) |
+| Foundry lead C3 (blocking) | FND-RUN-005 agent name assumed to equal the azure.yaml service name | fixed in loop 2, pending re-review (RUN-005 v4: name from the agent definition, else uncertain naming the assumption) |
+| Foundry lead C4 (blocking) | Hand-off and ADR gaps: recorded fixtures, integration tests, timeout and partial-permission tests (C4a, C4b); IDN-002 and NET-002 left allocated to Phase 3 (C4c, C4d) | fixed in loop 2, pending re-review (DoD table below; ADR-021 (d) Phase 3 clause; ADR-023) |
+| Foundry lead N1-N11 | Non-blocking findings | fixed in loop 2, pending re-review |
+| Azure black belt C1 | No data-plane responses recorded from a live tenant | open by ADR-021 (d) Phase 3 clause; exit criterion recorded |
+| Azure black belt NB1 | DNS resolver wiring left the NXDOMAIN branch dead | fixed in loop 2, pending re-review (Go agent; RUN-002 v4) |
+| Azure black belt NB2 | `customSubDomainName` for FQDNs; only Approved private endpoint connections count | fixed in loop 2, pending re-review (RUN-002 v4) |
+| Azure black belt NB3 | Definition of a private address | fixed in loop 2, pending re-review (clearly public versus other; the exact private definition stays UNVERIFIED) |
+| Azure black belt NB4 | Environment context-error cache | fixed in loop 2, pending re-review (Go agent) |
+| Azure black belt NB5 | `DoJSON` hardening (host suffix on a label boundary, https, GET only) and `WaitDelay` | fixed in loop 2, pending re-review (Go agent; `docs/runtime.md`) |
+| Azure black belt NB6 | RBAC group noise and Cosmos container scope | kept uncertain, documented (RUN-001 notes): container-scoped Cosmos grants stay Uncertain; group-granted roles are not seen |
+| Azure black belt NB7 | RUN-006 zero documents | fixed in loop 2, pending re-review (RUN-006 v5: uncertain without indexer evidence; the rule is effectively inert on a standard project, exit criterion recorded) |
+| Azure black belt NB8 | RUN-007 KQL scoping | documented limit (RUN-007 v4): the `endswith` match is not scoped by subscription or resource group |
+| Azure black belt NB9 | Permissions matrix drift (per-version GET, sovereign clouds) | fixed in loop 2, pending re-review (`docs/permissions-matrix.md`) |
+| Azure black belt NB10 | Tests | fixed in loop 2, pending re-review (Go agent) |
+
+Catalogue changes in loop 2 (2026-10-18): FND-RUN-001 v4, FND-RUN-002 v4 (confidence likely), FND-RUN-004 v4 (Total aggregation, utilisation aggregations, the dimensions ModelDeploymentName and StatusCode and PT1M now VERIFIED in azure-monitor-docs `microsoft-cognitiveservices-accounts-metrics.md`, commit 583ced4, read 2026-10-18; the StatusCode value domain stays UNVERIFIED, so the 429 signal is usually uncertain), FND-RUN-005 v4, FND-RUN-006 v5, FND-RUN-007 v4. RUN-002 also records that the PrivateEndpointServiceConnectionStatus enum (Pending, Approved, Rejected) was read in ARM common-types v3 `privatelinks.json` on 2026-10-18.
+
+## Gate round 1 (2026-10-17) and remediation
+Both reviewers rejected round 1. 'Fixed in loop 1, pending re-review' means the Go code and the catalogue were changed to address the finding; no reviewer has confirmed it. Summaries: `docs/development/reviews/phase-3-foundry-lead.md` and `docs/development/reviews/phase-3-azure-black-belt.md`.
+
+| Reviewer finding | Blocking finding (summary) | Status |
+|---|---|---|
+| Foundry lead B1 | FND-RUN-005 wrong response shapes (connections `value`, `versions.latest`, limit at most 100, paging, empty status) | fixed in loop 1, pending re-review (RUN-005 v3) |
+| Foundry lead B2 | FND-RUN-007 cannot pass or fail (workspace GUID, `PrimaryResult`, `.azure.com` endpoint) | fixed in loop 1, pending re-review (RUN-007 v3) |
+| Foundry lead B3 | FND-RUN-004 malformed metric queries, misattributed evidence | fixed in loop 1, pending re-review (RUN-004 v3) |
+| Foundry lead B4 | FND-RUN-001 Cosmos false pass, Storage false fail, user-assigned principal | fixed in loop 1, pending re-review (RUN-001 v3) |
+| Foundry lead B5 | FND-RUN-002 fails on public endpoints; probe 2 not wired (probe 2 deleted from the Go code and the catalogue) | fixed in loop 1, pending re-review (RUN-002 v3) |
+| Foundry lead B6 | FND-RUN-006 impossible fail path, false fail, invented metadata | fixed in loop 1, pending re-review (RUN-006 v4) |
+| Foundry lead B7 | ADR-022 obligations undisclosed | fixed in loop 1, pending re-review (this file, section below) |
+| Foundry lead N1-N9 | Non-blocking findings | fixed in loop 1, pending re-review |
+| Azure black belt B1a | Metrics query keys rejected by the allow-list | fixed in loop 1, pending re-review (Go agent) |
+| Azure black belt B1b | Resource-scope role assignments rejected by the allow-list | fixed in loop 1, pending re-review (Go agent) |
+| Azure black belt B2 | Foundry response shapes | fixed in loop 1, pending re-review |
+| Azure black belt B3 | Search enum, freshness, aggregation, timespan | fixed in loop 1, pending re-review |
+| Azure black belt B4 | Scope-aware, role-definition-aware RBAC | fixed in loop 1, pending re-review |
+| Azure black belt B5 | DNS FAIL gated on private endpoint evidence | fixed in loop 1, pending re-review |
+| Azure black belt B6 | `logQuery` bypass (ADR-021 g exit criterion) and workspace identifier: bypass removed, ADR-021 (g) closed | fixed in loop 1, pending re-review |
+| Azure black belt B7 | Governance gaps (this hand-off, matrix rows, `-race` note) | fixed in loop 1, pending re-review (matrix rows, this file); `-race` note updated below |
+| Azure black belt N1-N9 | Non-blocking findings | fixed in loop 1, pending re-review |
+
+## ADR-022 obligations (Foundry lead B7)
+- **FND-RUN-003 connection-target scope policy**: delivered in loop 1 (catalogue and Go), pending re-review. The Go code uses `metadata.ResourceId` when present, otherwise an ARM-ID `properties.target`; a literal ARM ID outside the project's resource group and every `--approved-scope` (a `runtime` flag) is a finding; a resource-backed connection with no resource ID, or an unresolved expression, is uncertain. The key name `ResourceId` is UNVERIFIED as a schema fact (the ARM spec types `metadata` as a free map).
+- **FND-IDN-002 live check and FND-NET-002 live check are NOT delivered in Phase 3. An audit is not a delivery.** ADR-023 (2026-10-18) moves their implementation to **Phase 8** (partial fit, scope extended by the ADR). Corrected reasons: the FND-IDN-002 `properties.scope` property of role assignments IS verified (2022-04-01 authorization spec, read for FND-RUN-001), so it is deferred for scope and priority, not because the path is unverified; the FND-NET-002 private endpoint subnet property path stays unverified in its evidence, and CLAUDE.md forbids implementing an unverified property path. Both remain part of the **v1 release gate** (ADR-022, ADR-023): the cross-resource-group DoD item stays PARTLY MET and the gate is carried to the Phase 9 audit. Phase 8 must add the positive and uncertain tests that ADR-021 (e) requires. FND-SEC-005 stays allocated to Phase 8. Silence does not waive any of these; only a new dated ADR does.
+
+## Commands implemented
+`foundry-doctor runtime` (flags in `docs/runtime.md`). `--vantage vnet` is an operator assertion, not a verified fact.
+
+## Tests executed and results
+`-race` was previously noted as not run. It now passes on linux/amd64 with go1.26.9 (reported by the parent session; this agent did not run it). The Phase 2 toolchain note (Go 1.25.13) is superseded by the toolchain the parent session uses. Other gates were not re-run by the catalogue owner. Catalogue gates run after the loop 1 catalogue edits (from `foundry-doctor`): `go run ./cmd/rulecatalog validate`, `generate-docs --check`, `generate-overlap --check`, `bash scripts/claude/check-rule-catalog.sh`: see the parent session's final run. No live Azure test has ever run.
+
+## Security and privacy review
+Deferred by ADR-019 to Phase 9. Not met.
+
+## Foundry lead review
+Round 1: REJECT (2026-10-17). Round 2: ACCEPT with blocking conditions C1 to C4 (2026-10-18). See `docs/development/reviews/phase-3-foundry-lead.md`. Re-review after loop 2: pending.
+
+## Azure black belt review
+Round 1: REJECT (2026-10-17). Round 2: ACCEPT with non-blocking conditions (2026-10-18). See `docs/development/reviews/phase-3-azure-black-belt.md`. Re-review after loop 2: pending.
+
+## Known limitations
+- Nothing in loop 1 has been re-reviewed; no live Azure test, real-tenant or VNet probe has ever run.
+- FND-RUN-001 does not evaluate group-based or deny assignments (confidence capped at medium). Role definitions are not fetched; roles are matched by built-in GUID (VERIFIED in `built-in-roles.md` 2026-10-18).
+- FND-RUN-002: the vantage point is asserted, not verified (confidence likely); what counts as a private address is unverified; non-Foundry dependencies (Search, Storage, Cosmos DB) are proven private-endpoint-backed only through the connection `peStatus` Active, never through their own private endpoint connections.
+- FND-RUN-004: the `StatusCode` value domain is unverified (the docs describe categories), so the 429 signal is usually uncertain.
+- FND-RUN-005: the agent name comes from the agent definition when readable; a bound account-level connection may not appear in the project `/connections` listing (unverified), so 'not listed' is uncertain.
+- Sovereign clouds are unsupported (public-cloud endpoints and scopes only).
+- FND-RUN-006: Search role per operation and the data-plane token scope are unverified; connection metadata keys for index and indexer names are UNVERIFIED hints, so the rule is effectively inert on a standard project (exit criterion: a real input source such as a flag or the agent definition); the 60-minute freshness window is product opinion; zero documents without indexer evidence is uncertain.
+- FND-RUN-007: the query RBAC action and the Monitoring Reader and Log Analytics Reader sufficiency are unverified; resource-specific destinations are uncertain; the KQL `ResourceId endswith` match is not scoped by subscription or resource group, so a same-named account elsewhere logging to the same workspace could mask missing logs (documented limit).
+
+## Unverified list (catalogue owner, 2026-10-18)
+- `StatusCode` dimension value domain of `AzureOpenAIRequests` (FND-RUN-004).
+- Cosmos DB Built-in Data Contributor SQL role GUID `00000000-0000-0000-0000-000000000002` (FND-RUN-001); the `enterprise_memory` database name is taken from the catalogue evidence.
+- Connection metadata keys: `ResourceId` (FND-RUN-003) and `index`/`indexName`/`indexes`/`indexer`/`indexerName`/`indexers` (FND-RUN-006).
+- Foundry data plane api-version `v1`: the spec documents `info.version` v1 and its `api-version` parameter has no enum, so other values are not excluded.
+- `metricnamespace` is not sent on the metrics query; whether these metrics need one is unverified.
+- Workspaces_Get 2025-02-01 was read; a newer stable 2026-03-01 exists and was not read.
+- Diagnostic setting category group `audit` is not assumed to carry Audit or RequestResponse rows; only the `allLogs` group is counted.
+- Non-Foundry dependencies are proven PE-backed only through the connection `peStatus` Active.
+- RBAC action names for most runtime operations and the built-in roles carrying them (Monitoring Reader, Log Analytics Reader, Foundry User) remain UNVERIFIED; see `docs/permissions-matrix.md`.
+
+## Deferred issues with rationale
+- Live disposable-subscription tests and recorded data-plane fixtures: no Azure environment (ADR-021 d, Phase 3 clause, 2026-10-18; exit criterion there).
+- FND-IDN-002 and FND-NET-002 live checks: moved to Phase 8 by ADR-023, a v1 release gate (not deferred silently).
+
+## Compatibility matrix
+Linux and Windows, amd64 and arm64 (ADR-011 Amendment 2). `-race` evidence only on linux/amd64.
+
+## Artefacts for next phase
+`internal/runtime`, `internal/rules/run`, `docs/runtime.md`, `docs/permissions-matrix.md` (Phases 2 and 3), catalogue rules FND-RUN-001..007.
+
+## Exact next-phase prerequisites
+- Re-review of Phase 3 loop 2 by the Foundry lead (blocking conditions C1 to C4) and the Azure black belt, both ACCEPT.
+- ADR-021 (g) is closed in loop 1 and its ADR-006 item 7 deviation is recorded (2026-10-18); the reviewers confirm both.
+- The Phase 8 hand-off lists FND-IDN-002 (live), FND-NET-002 (live) and FND-SEC-005 (ADR-022, ADR-023); the Phase 9 audit checks them.
+- The first hand-off written after a test tenant exists records and scrubs real data-plane responses and diffs them against the synthetic fixtures (ADR-021 d, Phase 3 clause).
+
+## Definition of Done audit
+Statuses are conservative while the re-review is pending.
+
+| DoD item | Status (met / unmet / waived-by-ADR) | Current evidence |
+|---|---|---|
+| FND-RUN-001..007 report pass/fail/skipped/uncertain correctly | fixed in loop 2, pending re-review | Round 1 REJECT from both reviewers; round 2 ACCEPT with conditions (Foundry lead blocking C1 to C3); loop 2 Go patch and catalogue sync; not re-reviewed |
+| Runtime probes are read-only and go through the allow-list | fixed in loop 1, pending re-review | Metrics, resource-scope role assignments, account, workspace and Log Analytics query are allow-listed operations; `logQuery` bypass removed (ADR-021 g closed, pending re-review) |
+| Skipped and uncertain are never reported as pass | fixed in loop 1, pending re-review | Catalogue states this per rule; Go report matches it |
+| No document, prompt, completion or secret content is read or emitted | unmet pending re-review | Metadata-only guard; not independently reviewed (ADR-019) |
+| Permissions matrix covers every runtime probe | partly met | Rows for every runtime allow-list operation exist; several action names, roles and the Search token scope are UNVERIFIED |
+| Cross-resource-group scope policy (ADR-022): FND-RUN-003 | fixed in loop 1, pending re-review | Delivered and synced to the Go code; not yet reviewed |
+| Cross-resource-group scope policy (ADR-022): FND-IDN-002, FND-NET-002 live checks | unmet; v1 release gate (ADR-022, ADR-023), implementing phase is Phase 8, audited in Phase 9 | Not delivered in Phase 3 (an audit is not a delivery): IDN-002 deferred for scope and priority (`properties.scope` is verified), NET-002 subnet path unverified |
+| Recorded data-plane fixtures | PARTLY MET | Fixtures are synthetic, derived from the specifications and labelled as such; none was recorded from a live tenant. Exit criterion: ADR-021 (d) Phase 3 clause (the first hand-off after a test tenant exists records and scrubs real responses and diffs them against the synthetic fixtures) |
+| Integration tests in public and private sample environments | waived-by-ADR-021 (d), extended to Phase 3 | No Azure test tenant or VNet exists; Phase 3 clause of ADR-021 (d) (2026-10-18) |
+| Timeout, throttling and partial-permission tests | met with fakes | Scheduler timeout: `TestSchedulePerProbeTimeoutBecomesInputUnavailable` (`internal/rules/run/schedule_test.go`), `TestTimeoutResolver` (`internal/runtime/network`). 429 and Retry-After: `TestDoJSONRetryAndUnavailable`, `TestRetryAfterAndSafeURL`, `TestRetryAfterDateAndSleepRetryCancel` (`internal/runtime/http_test.go`), `TestLogQueryRetriesOn429AndHonoursRetryAfter` (`internal/azure/runtime_adapter_test.go`). Restricted identity: `TestListRoleAssignmentsRestricted`, `TestLogQueryPermissionAndRedirectAndSizeCap` (`internal/azure/runtime_adapter_test.go`), `TestForbiddenAndUnauthorizedAreUnavailable` (`internal/azure/transport_test.go`), `TestRun001SkipsAndInputs` (`internal/rules/run/run_test.go`). Fakes only; never against a live service |
+| Independent Foundry lead and Azure black belt reviews | unmet | Round 1 REJECT both (2026-10-17); round 2 ACCEPT with conditions both (2026-10-18); loop 2 re-review pending |
+| Security and Go principal reviews | waived-by-ADR-019 | Deferred to Phase 9 |
+| `-race` run | met | Passes on linux/amd64 go1.26.9 (parent session report) |
+| Hand-off written, DoD audited | met | This file |
+
+## Gate decision (2026-10-18)
+
+Phase 3 gate, round 3 (final confirmation, 2026-10-18): Azure black belt ACCEPT (no blocking findings; non-blocking: RUN-005 catalogue wording says the name is resolved 'from the agent definition when readable' but the code reads azure.yaml only; a panicking memo fetch would leave waiters blocked until their context ends; stale 'pending re-review' text in RUN-002 evidence; RUN-006 inert until its input source exists); Foundry lead ACCEPT with conditions. The one blocking condition (N1: RUN-005 treated a prompt-kind service with a `$ref` definition as authoritative, a possible false FAIL) is fixed in the merge commit with two new test cases in `TestRun005AgentNameResolution`; it was not re-reviewed by the Foundry lead. Gate result: PASSED WITH CONDITIONS (no unresolved blocking finding other than the unreviewed N1 fix). Non-blocking items carried: RUN-001 uncertain (not by-design skip) when the capability host lists bound names that resolve to no connection; the 'FND-RUN-001..007 report correctly' DoD row is marked met by the Foundry lead's round-3 review, subject to the open items; the RUN-002 vantage point is asserted by the user; live integration and recorded fixtures are deferred by ADR-021 (d); FND-IDN-002 and FND-NET-002 live checks and FND-SEC-005 remain the v1 release gate (ADR-022, ADR-023).

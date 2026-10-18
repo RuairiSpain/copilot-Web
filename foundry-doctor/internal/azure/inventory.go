@@ -175,9 +175,50 @@ func (a *Adapter) ResourceGroup(ctx context.Context, subscriptionID, name string
 	return ResourceGroupInfo{Name: rg.Name, Location: rg.Location, Exists: true}, nil
 }
 
-// ListLocks implements Inventory.
+var (
+	subScopeRe = regexp.MustCompile(`(?i)^/subscriptions/` + guidRe + `(?:/resourceGroups/` + segRe + `)?$`)
+	resIDRe    = regexp.MustCompile(`(?i)^` + idRe + `$`)
+)
+
+// ListLocks implements Inventory. The scope must be a subscription or resource
+// group ID: the allow-list has no other lock scope (see locks.list), and the
+// result includes locks BELOW the scope, which callers filter with LockCovers.
 func (a *Adapter) ListLocks(ctx context.Context, scope string) ([]Lock, error) {
-	items, _, err := a.c.list(ctx, strings.TrimRight(scope, "/")+"/providers/Microsoft.Authorization/locks", nil, 0)
+	scope = strings.TrimRight(scope, "/")
+	if !subScopeRe.MatchString(scope) {
+		return nil, fmt.Errorf("%w: locks can be listed at a subscription or resource group scope only", ErrNotAllowed)
+	}
+	return a.readLocks(ctx, scope)
+}
+
+// ListResourceLocks implements InventoryExtras (ManagementLocks_ListAtResourceLevel).
+func (a *Adapter) ListResourceLocks(ctx context.Context, resourceID string) ([]Lock, error) {
+	id := strings.TrimRight(resourceID, "/")
+	if !resIDRe.MatchString(id) {
+		return nil, fmt.Errorf("%w: resource-level lock listing needs a resource ID", ErrNotAllowed)
+	}
+	locks, err := a.readLocks(ctx, id)
+	if isNotFound(err) {
+		return []Lock{}, nil
+	}
+	return locks, err
+}
+
+// GetVNet implements InventoryExtras (VirtualNetworks_Get).
+func (a *Adapter) GetVNet(ctx context.Context, vnetID string) (VNet, error) {
+	id := strings.TrimRight(vnetID, "/")
+	if !resIDRe.MatchString(id) || !strings.Contains(strings.ToLower(id), "/providers/microsoft.network/virtualnetworks/") || strings.Contains(strings.ToLower(id), "/subnets/") {
+		return VNet{}, fmt.Errorf("%w: virtual network id", ErrNotAllowed)
+	}
+	var v struct{ ID, Name, Location string }
+	if err := a.c.get(ctx, id, nil, &v); err != nil {
+		return VNet{}, err
+	}
+	return VNet{ID: v.ID, Name: v.Name, Location: v.Location}, nil
+}
+
+func (a *Adapter) readLocks(ctx context.Context, scope string) ([]Lock, error) {
+	items, _, err := a.c.list(ctx, scope+"/providers/Microsoft.Authorization/locks", nil, 0)
 	if err != nil {
 		return nil, err
 	}

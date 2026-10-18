@@ -41,6 +41,10 @@ type fakeFoundry struct {
 	deploymentsErr     error
 }
 
+func (f *fakeFoundry) GetAccountNetwork(context.Context, string, string, string) (azure.AccountNetwork, error) {
+	return azure.AccountNetwork{}, nil
+}
+
 func (f *fakeFoundry) GetProject(context.Context, string, string, string, string) (azure.FoundryProject, error) {
 	if f.projectErr != nil {
 		return azure.FoundryProject{}, f.projectErr

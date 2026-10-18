@@ -41,6 +41,39 @@ func TestPreflightHelpListsFlags(t *testing.T) {
 	}
 }
 
+// The help states that DEP-002, DEP-008 and DEP-009 are uncertain by design.
+// An uncertain result exits 0, or 3 under --strict; the next test pins that.
+func TestPreflightHelpExplainsStrictAndUncertainRules(t *testing.T) {
+	var out, errb bytes.Buffer
+	if code := run(context.Background(), []string{"preflight", "--help"}, &out, &errb, preflightSvc(nil)); code != 0 {
+		t.Fatalf("exit %d: %s", code, errb.String())
+	}
+	want := "are uncertain by design (they can never pass)"
+	for _, w := range []string{"FND-DEP-002, FND-DEP-008 and FND-DEP-009", want, "exits 0 unless --strict is set, which exits 3"} {
+		if !strings.Contains(out.String(), w) {
+			t.Errorf("help lacks %q:\n%s", w, out.String())
+		}
+	}
+}
+
+func TestPreflightUncertainRulesExitZeroOrThreeUnderStrict(t *testing.T) {
+	t.Setenv("FOUNDRY_DOCTOR_ENVIRONMENT", "")
+	t.Setenv("AZURE_ENV_NAME", "")
+	for _, id := range []string{"FND-DEP-002", "FND-DEP-008", "FND-DEP-009"} {
+		for strict, want := range map[bool]int{true: 3, false: 0} {
+			pf := &recordingPreflight{out: app.RunOutput{Skipped: []sdk.Skip{{RuleID: id, Reason: "uncertain: no restriction was reported"}}}}
+			args := []string{"preflight", "--dir", sample("good")}
+			if strict {
+				args = append(args, "--strict")
+			}
+			var out, errb bytes.Buffer
+			if code := run(context.Background(), args, &out, &errb, preflightSvc(pf)); code != want {
+				t.Errorf("%s strict=%v: exit %d, want %d (%s)", id, strict, code, want, errb.String())
+			}
+		}
+	}
+}
+
 func TestPreflightFlagsReachEngine(t *testing.T) {
 	pf := &recordingPreflight{}
 	t.Setenv("FOUNDRY_DOCTOR_ENVIRONMENT", "")
