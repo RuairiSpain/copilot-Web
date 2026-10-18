@@ -9,7 +9,8 @@
     "This report maps available Foundry Doctor evidence to selected Azure Well-Architected aligned controls. It is not a certification and does not claim complete WAF compliance.",
     "Controls without complete deterministic evidence remain visible as UNKNOWN, QUESTION or SKIPPED rather than being treated as passing; a partly skipped evaluation is UNKNOWN, never PASS.",
     "ATTESTED controls rest on an answer the team recorded in Foundry Doctor configuration. Foundry Doctor did not verify the answer.",
-    "Control IDs are Foundry Doctor rule IDs. They are not mapped to WAF checklist codes in this release, and pillar assignments come from the rule catalogue.",
+    "Control IDs are Foundry Doctor rule IDs. They are not mapped to WAF checklist codes in this release. Pillar assignments come from the rule catalogue and are project judgement, not Microsoft guidance.",
+    "A suppressed or baselined finding is shown as WARNING and stays visible in the evidence pack. It does not by itself produce a No-go decision, so the decision can be Proceed with conditions while accepted failures remain.",
     "The decision wording and the top-action ranking are project opinion, not Microsoft guidance.",
     "PSRule for Azure, Azure Advisor and Microsoft Defender for Cloud recommendations were not imported. Overlapping external check IDs are listed for reference only (ADR-020, ADR-026).",
     "Deployed Azure state was not queried: assess waf runs offline. Controls that need deployment or runtime evidence and were not evaluated: FND-COST-001, FND-DEP-001, FND-DEP-002, FND-DEP-003, FND-DEP-004, FND-DEP-005, FND-DEP-006, FND-DEP-007, FND-DEP-008, FND-DEP-009, FND-DEP-010, FND-DEP-011, FND-DEP-012, FND-IDN-002, FND-IDN-005, FND-NET-006, FND-OPS-009, FND-RUN-001, FND-RUN-002, FND-RUN-003, FND-RUN-004, FND-RUN-005, FND-RUN-006, FND-RUN-007, FND-SEC-008, FND-SEC-009.",
@@ -20,9 +21,9 @@
     "states": {
       "ATTESTED": 1,
       "NOT_APPLICABLE": 4,
+      "PASS": 6,
       "QUESTION": 1,
       "SKIPPED": 65,
-      "UNKNOWN": 6,
       "WARNING": 1
     },
     "pillars": {
@@ -34,9 +35,9 @@
       "operations": {
         "states": {
           "NOT_APPLICABLE": 3,
+          "PASS": 3,
           "QUESTION": 1,
           "SKIPPED": 11,
-          "UNKNOWN": 3,
           "WARNING": 1
         }
       },
@@ -44,14 +45,14 @@
         "states": {
           "ATTESTED": 1,
           "NOT_APPLICABLE": 1,
-          "SKIPPED": 28,
-          "UNKNOWN": 1
+          "PASS": 1,
+          "SKIPPED": 28
         }
       },
       "security": {
         "states": {
-          "SKIPPED": 24,
-          "UNKNOWN": 2
+          "PASS": 2,
+          "SKIPPED": 24
         }
       }
     }
@@ -74,36 +75,12 @@
       "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
-      "controlId": "FND-CFG-001",
-      "ruleId": "FND-CFG-001",
-      "title": "Valid YAML, duplicate-key detection and compatible azure.ai.* schema",
-      "pillar": "operations",
-      "state": "UNKNOWN",
-      "stateReason": "No evidence was recorded for this control."
-    },
-    {
-      "controlId": "FND-CFG-002",
-      "ruleId": "FND-CFG-002",
-      "title": "Unique service names by kind",
-      "pillar": "operations",
-      "state": "UNKNOWN",
-      "stateReason": "No evidence was recorded for this control."
-    },
-    {
       "controlId": "FND-CFG-006",
       "ruleId": "FND-CFG-006",
       "title": "Every variable has an environment or infrastructure producer",
       "pillar": "operations",
       "state": "SKIPPED",
       "stateReason": "Skipped: input-unavailable: no-environment-selected."
-    },
-    {
-      "controlId": "FND-CFG-011",
-      "ruleId": "FND-CFG-011",
-      "title": "Preview/retired fields are version-aware",
-      "pillar": "operations",
-      "state": "UNKNOWN",
-      "stateReason": "No evidence was recorded for this control."
     },
     {
       "controlId": "FND-DEP-001",
@@ -192,14 +169,6 @@
       "pillar": "operations",
       "state": "SKIPPED",
       "stateReason": "Skipped: not-implemented."
-    },
-    {
-      "controlId": "FND-CFG-003",
-      "ruleId": "FND-CFG-003",
-      "title": "All inter-service references resolve",
-      "pillar": "reliability",
-      "state": "UNKNOWN",
-      "stateReason": "No evidence was recorded for this control."
     },
     {
       "controlId": "FND-CFG-004",
@@ -426,22 +395,6 @@
       "stateReason": "Skipped: not-implemented."
     },
     {
-      "controlId": "FND-CFG-005",
-      "ruleId": "FND-CFG-005",
-      "title": "No raw secrets in YAML/Bicep/environment blocks",
-      "pillar": "security",
-      "state": "UNKNOWN",
-      "stateReason": "No evidence was recorded for this control."
-    },
-    {
-      "controlId": "FND-CFG-007",
-      "ruleId": "FND-CFG-007",
-      "title": "Outbound endpoints use HTTPS and reject unsafe local/metadata targets",
-      "pillar": "security",
-      "state": "UNKNOWN",
-      "stateReason": "No evidence was recorded for this control."
-    },
-    {
       "controlId": "FND-DEP-003",
       "ruleId": "FND-DEP-003",
       "title": "Deployer can create resources and role assignments",
@@ -642,7 +595,7 @@
       "pillar": "operations",
       "state": "QUESTION",
       "mandatory": false,
-      "recommendation": "If server-side tracing or hosted-agent telemetry is a declared requirement, connect an Application Insights resource to the Foundry project (a connection with category AppInsights) and link the component to a Log Analytics workspace. Keep exactly one AppInsights connection per scope. Choose sampling, retention and daily-cap settings deliberately: telemetry ingestion and retention incur cost, so a project that does not require this observability path should not be forced to enable it.",
+      "recommendation": "Obtain evidence for this control before relying on it. No requirement or objective is declared (no-explicit-observability-or-server-tracing-requirement); the control needs a team decision.",
       "sourceUrl": "https://learn.microsoft.com/azure/foundry/observability/how-to/trace-agent-setup",
       "lastVerified": "2026-10-04",
       "projectOpinion": true,
@@ -658,7 +611,7 @@
       "pillar": "operations",
       "state": "SKIPPED",
       "mandatory": false,
-      "recommendation": "Set workspace retentionInDays to at least the value your policy requires, or set totalRetentionInDays on the tables that hold Foundry diagnostics and traces to keep older data in low-cost long-term retention. Retention beyond the free period is billed.",
+      "recommendation": "Obtain evidence for this control before relying on it. Skipped: input-unavailable: compiled ARM model unavailable.",
       "sourceUrl": "https://learn.microsoft.com/azure/azure-monitor/logs/data-retention-configure",
       "lastVerified": "2026-10-04",
       "projectOpinion": true,
@@ -674,7 +627,7 @@
       "pillar": "reliability",
       "state": "SKIPPED",
       "mandatory": false,
-      "recommendation": "Set properties.replicaCount to at least 2 if the application only queries, or at least 3 if it also updates indexes online. Each replica adds search units and cost, so keep dev and test at 1 unless you are testing failover behaviour.",
+      "recommendation": "Obtain evidence for this control before relying on it. Skipped: input-unavailable: compiled ARM model unavailable.",
       "sourceUrl": "https://learn.microsoft.com/azure/search/search-limits-quotas-capacity",
       "lastVerified": "2026-10-04",
       "projectOpinion": false,
@@ -690,7 +643,7 @@
       "pillar": "reliability",
       "state": "SKIPPED",
       "mandatory": false,
-      "recommendation": "Use Standard_ZRS at minimum for storage that holds project or agent data, and Standard_GZRS for Agent Service standard-mode storage as recommended by the Foundry resiliency guidance. SKU changes on an existing account are a migration, so decide at design time. Note the Foundry multi-region section says default storage failover with GRS/GZRS is not supported for Foundry projects, so geo-redundancy there protects data recovery, not automatic project failover.",
+      "recommendation": "Obtain evidence for this control before relying on it. Skipped: input-unavailable: compiled ARM model unavailable.",
       "sourceUrl": "https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency",
       "lastVerified": "2026-10-04",
       "projectOpinion": false,
@@ -706,12 +659,12 @@
       "pillar": "reliability",
       "state": "SKIPPED",
       "mandatory": false,
-      "recommendation": "Set isZoneRedundant true on each location in regions that support availability zones, and set backupPolicy.type Continuous (7-day or 30-day tier, per the Foundry guidance) before an incident occurs. Continuous backup adds cost. Also consider a second location with automatic failover enabled (see FND-REL-007).",
+      "recommendation": "Obtain evidence for this control before relying on it. Skipped: input-unavailable: compiled ARM model unavailable.",
       "sourceUrl": "https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency",
       "lastVerified": "2026-10-04",
       "projectOpinion": false,
       "costly": true,
-      "costBasis": "Continuous backup at the 30-day or 35-day tier carries a monthly backup storage charge and every restore is charged; the 7-day tier has no backup storage charge. The cost of zone redundancy is not cited here.",
+      "costBasis": "Continuous backup beyond the 7-day tier carries a monthly backup storage charge and every restore is charged; the 7-day tier has no backup storage charge. The cost of zone redundancy is not cited here.",
       "costSourceUrl": "https://learn.microsoft.com/azure/cosmos-db/continuous-backup-restore-introduction",
       "costLastVerified": "2026-10-18"
     },
@@ -722,7 +675,7 @@
       "pillar": "security",
       "state": "SKIPPED",
       "mandatory": false,
-      "recommendation": "Decide the telemetry path. For private telemetry, create one AMPLS per DNS boundary, add the Application Insights component and its workspace as scoped resources, create the private endpoint with group ID azuremonitor and link the Azure Monitor private DNS zones, and set both access modes explicitly. Use Open while resources are still being added and switch to Private Only only when all Azure Monitor resources are in the scope. If you accept public telemetry, record that decision in the Foundry Doctor config so the finding is suppressed with a reason.",
+      "recommendation": "Obtain evidence for this control before relying on it. Skipped: input-unavailable: compiled ARM model unavailable.",
       "sourceUrl": "https://learn.microsoft.com/azure/azure-monitor/fundamentals/private-link-design",
       "lastVerified": "2026-10-04",
       "projectOpinion": true,
@@ -738,7 +691,7 @@
       "pillar": "security",
       "state": "SKIPPED",
       "mandatory": false,
-      "recommendation": "Associate an NSG with each subnet that supports one and review inbound allow rules. If the design exposes public IP addresses, enable Azure DDoS Protection (IP Protection on the public IP, or Network Protection on the VNet with a plan). For a fully private design, rely on the default infrastructure protection and do not buy a plan for it.",
+      "recommendation": "Obtain evidence for this control before relying on it. Skipped: input-unavailable: compiled ARM model unavailable.",
       "sourceUrl": "https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.VNET.UseNSGs/",
       "lastVerified": "2026-10-04",
       "projectOpinion": false,
@@ -754,7 +707,7 @@
       "pillar": "security",
       "state": "SKIPPED",
       "mandatory": false,
-      "recommendation": "Enable the Defender plan for each resource type in use on the subscription (Standard tier), or confirm it is enforced at a parent scope. Enabling Defender plans has a cost; review pricing before enabling in non-production.",
+      "recommendation": "Obtain evidence for this control before relying on it. Skipped: input-unavailable: compiled ARM model unavailable.",
       "sourceUrl": "https://github.com/Azure/azure-rest-api-specs/blob/main/specification/security/resource-manager/Microsoft.Security/Security/stable/2026-07-01/pricings.json",
       "lastVerified": "2026-10-04",
       "projectOpinion": false,
@@ -770,7 +723,7 @@
       "pillar": "security",
       "state": "SKIPPED",
       "mandatory": false,
-      "recommendation": "If your compliance regime requires customer-managed keys, configure them on each resource listed and use a Key Vault with soft delete and purge protection (see FND-SEC-005). Otherwise no action is needed.",
+      "recommendation": "Obtain evidence for this control before relying on it. Skipped: input-unavailable: compiled ARM model unavailable.",
       "sourceUrl": "https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json",
       "lastVerified": "2026-10-04",
       "projectOpinion": false,
@@ -786,7 +739,7 @@
       "pillar": "security",
       "state": "SKIPPED",
       "mandatory": false,
-      "recommendation": "If you need to control data exfiltration, set the managed network to AllowOnlyApprovedOutbound or restrict outbound access with an allowed FQDN list, and confirm required dependencies are reachable. Otherwise record the decision.",
+      "recommendation": "Obtain evidence for this control before relying on it. Skipped: unsupported-version.",
       "sourceUrl": "https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json",
       "lastVerified": "2026-10-04",
       "projectOpinion": false,
@@ -947,6 +900,116 @@
           }
         ],
         "evaluated": false
+      }
+    ],
+    "pass": [
+      {
+        "controlId": "FND-CFG-001",
+        "ruleId": "FND-CFG-001",
+        "ruleVersion": 7,
+        "title": "Valid YAML, duplicate-key detection and compatible azure.ai.* schema",
+        "pillar": "operations",
+        "state": "PASS",
+        "basis": "deterministic",
+        "stateReason": "Evaluated with no remaining finding and no skipped check.",
+        "mandatory": true,
+        "costly": false,
+        "projectOpinion": false,
+        "sourceUrl": "https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference",
+        "lastVerified": "2026-10-05",
+        "recommendation": "Fix the YAML syntax or the reported schema violation. Add the yaml-language-server schema comment to azure.yaml so the editor flags the same errors, and install azure.ai.agents and azure.ai.projects at the versions declared in requiredVersions.",
+        "fix": "# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json\nname: my-agent-project\nservices:\n  ai-project:\n    host: azure.ai.project\n  my-agent:\n    host: azure.ai.agent\n    project: src/my-agent\n    uses: [ai-project]\n    kind: hosted",
+        "evaluated": true
+      },
+      {
+        "controlId": "FND-CFG-002",
+        "ruleId": "FND-CFG-002",
+        "ruleVersion": 2,
+        "title": "Unique service names by kind",
+        "pillar": "operations",
+        "state": "PASS",
+        "basis": "deterministic",
+        "stateReason": "Evaluated with no remaining finding and no skipped check.",
+        "mandatory": true,
+        "costly": false,
+        "projectOpinion": false,
+        "sourceUrl": "https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference",
+        "lastVerified": "2026-10-04",
+        "recommendation": "Give separate logical agents distinct names. If the services intentionally represent versions of one agent, keep one service definition and deploy the intended version through that service.",
+        "fix": "services:\n  ai-project:\n    host: azure.ai.project\n  triage:\n    host: azure.ai.agent\n    project: src/triage\n    uses: [ai-project]\n    kind: hosted\n    name: triage-agent\n  summarizer:\n    host: azure.ai.agent\n    project: src/summarizer\n    uses: [ai-project]\n    kind: hosted\n    name: summarizer-agent",
+        "evaluated": true
+      },
+      {
+        "controlId": "FND-CFG-011",
+        "ruleId": "FND-CFG-011",
+        "ruleVersion": 5,
+        "title": "Preview/retired fields are version-aware",
+        "pillar": "operations",
+        "state": "PASS",
+        "basis": "deterministic",
+        "stateReason": "Evaluated with no remaining finding and no skipped check.",
+        "mandatory": true,
+        "costly": false,
+        "projectOpinion": false,
+        "sourceUrl": "https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference",
+        "lastVerified": "2026-10-04",
+        "recommendation": "Move to the unified service-level shape: put env on the agent service, use kind voice, use host azure.ai.project instead of microsoft.foundry, drop fields the hosted-agent create request ignores, and declare requiredVersions for extension versions verified by this catalogue. Do not infer a field's introduction version from the current schema.",
+        "fix": "requiredVersions:\n  extensions:\n    azure.ai.agents: \"\u003e=1.0.0-beta.18\"\n    azure.ai.projects: \"\u003e=1.0.0-beta.13\"\nservices:\n  ai-project:\n    host: azure.ai.project\n  my-agent:\n    host: azure.ai.agent\n    project: src/my-agent\n    uses: [ai-project]\n    kind: hosted\n    env:\n      MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME: ${MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME}",
+        "evaluated": true
+      },
+      {
+        "controlId": "FND-CFG-003",
+        "ruleId": "FND-CFG-003",
+        "ruleVersion": 4,
+        "title": "All inter-service references resolve",
+        "pillar": "reliability",
+        "state": "PASS",
+        "basis": "deterministic",
+        "stateReason": "Evaluated with no remaining finding and no skipped check.",
+        "mandatory": true,
+        "costly": false,
+        "projectOpinion": false,
+        "sourceUrl": "https://learn.microsoft.com/azure/foundry/agents/how-to/author-azure-yaml",
+        "lastVerified": "2026-10-04",
+        "recommendation": "Make each referenced name match a service key defined under services, and add toolbox and connection services to the consuming agent uses list as well as its toolboxes or connections list.",
+        "fix": "# Partial fragment: category, target and authentication fields for the\n# connection, plus toolbox-specific required fields, depend on the selected\n# documented tool. Merge this graph into a schema-valid manifest.\nservices:\n  ai-project:\n    host: azure.ai.project\n  github-conn:\n    host: azure.ai.connection\n    uses: [ai-project]\n  agent-tools:\n    host: azure.ai.toolbox\n    uses: [ai-project, github-conn]\n    tools:\n      - type: mcp\n        connection: github-conn\n  my-agent:\n    host: azure.ai.agent\n    project: src/my-agent\n    uses: [ai-project, github-conn, agent-tools]\n    kind: hosted\n    toolboxes: [agent-tools]",
+        "evaluated": true
+      },
+      {
+        "controlId": "FND-CFG-005",
+        "ruleId": "FND-CFG-005",
+        "ruleVersion": 4,
+        "title": "No raw secrets in YAML/Bicep/environment blocks",
+        "pillar": "security",
+        "state": "PASS",
+        "basis": "deterministic",
+        "stateReason": "Evaluated with no remaining finding and no skipped check.",
+        "mandatory": true,
+        "costly": false,
+        "projectOpinion": false,
+        "sourceUrl": "https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference",
+        "lastVerified": "2026-10-05",
+        "recommendation": "Store the secret in the azd environment as a secret (azd env set-secret) or in Key Vault, and reference it with ${VAR} in azure.yaml. In Bicep, mark secret parameters @secure() with no default and never output them. Prefer Entra ID or managed identity authentication where the target supports it.",
+        "fix": "services:\n  github-conn:\n    host: azure.ai.connection\n    uses: [ai-project]\n    category: RemoteTool\n    target: https://api.githubcopilot.com/mcp\n    authType: CustomKeys\n    credentials:\n      Authorization: ${GITHUB_PAT}   # set with: azd env set-secret GITHUB_PAT",
+        "evaluated": true
+      },
+      {
+        "controlId": "FND-CFG-007",
+        "ruleId": "FND-CFG-007",
+        "ruleVersion": 2,
+        "title": "Outbound endpoints use HTTPS and reject unsafe local/metadata targets",
+        "pillar": "security",
+        "state": "PASS",
+        "basis": "deterministic",
+        "stateReason": "Evaluated with no remaining finding and no skipped check.",
+        "mandatory": true,
+        "costly": false,
+        "projectOpinion": true,
+        "sourceUrl": "https://learn.microsoft.com/azure/foundry/agents/how-to/tools/model-context-protocol",
+        "lastVerified": "2026-10-04",
+        "recommendation": "Use https endpoints reachable from the service that calls them. For internal servers, publish them on a private endpoint or an internal Container Apps ingress and use their private DNS name over https instead of an IP literal. Remove localhost and metadata addresses from deployed configuration.",
+        "fix": "services:\n  github-conn:\n    host: azure.ai.connection\n    category: RemoteTool\n    target: https://api.githubcopilot.com/mcp",
+        "evaluated": true
       }
     ],
     "question": [
@@ -1766,7 +1829,7 @@
         "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": false,
         "costly": true,
-        "costBasis": "Continuous backup at the 30-day or 35-day tier carries a monthly backup storage charge and every restore is charged; the 7-day tier has no backup storage charge. The cost of zone redundancy is not cited here.",
+        "costBasis": "Continuous backup beyond the 7-day tier carries a monthly backup storage charge and every restore is charged; the 7-day tier has no backup storage charge. The cost of zone redundancy is not cited here.",
         "costSourceUrl": "https://learn.microsoft.com/azure/cosmos-db/continuous-backup-restore-introduction",
         "costLastVerified": "2026-10-18",
         "projectOpinion": false,
@@ -2640,116 +2703,6 @@
         "evaluated": false
       }
     ],
-    "unknown": [
-      {
-        "controlId": "FND-CFG-001",
-        "ruleId": "FND-CFG-001",
-        "ruleVersion": 7,
-        "title": "Valid YAML, duplicate-key detection and compatible azure.ai.* schema",
-        "pillar": "operations",
-        "state": "UNKNOWN",
-        "basis": "none",
-        "stateReason": "No evidence was recorded for this control.",
-        "mandatory": true,
-        "costly": false,
-        "projectOpinion": false,
-        "sourceUrl": "https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference",
-        "lastVerified": "2026-10-05",
-        "recommendation": "Fix the YAML syntax or the reported schema violation. Add the yaml-language-server schema comment to azure.yaml so the editor flags the same errors, and install azure.ai.agents and azure.ai.projects at the versions declared in requiredVersions.",
-        "fix": "# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json\nname: my-agent-project\nservices:\n  ai-project:\n    host: azure.ai.project\n  my-agent:\n    host: azure.ai.agent\n    project: src/my-agent\n    uses: [ai-project]\n    kind: hosted",
-        "evaluated": false
-      },
-      {
-        "controlId": "FND-CFG-002",
-        "ruleId": "FND-CFG-002",
-        "ruleVersion": 2,
-        "title": "Unique service names by kind",
-        "pillar": "operations",
-        "state": "UNKNOWN",
-        "basis": "none",
-        "stateReason": "No evidence was recorded for this control.",
-        "mandatory": true,
-        "costly": false,
-        "projectOpinion": false,
-        "sourceUrl": "https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference",
-        "lastVerified": "2026-10-04",
-        "recommendation": "Give separate logical agents distinct names. If the services intentionally represent versions of one agent, keep one service definition and deploy the intended version through that service.",
-        "fix": "services:\n  ai-project:\n    host: azure.ai.project\n  triage:\n    host: azure.ai.agent\n    project: src/triage\n    uses: [ai-project]\n    kind: hosted\n    name: triage-agent\n  summarizer:\n    host: azure.ai.agent\n    project: src/summarizer\n    uses: [ai-project]\n    kind: hosted\n    name: summarizer-agent",
-        "evaluated": false
-      },
-      {
-        "controlId": "FND-CFG-011",
-        "ruleId": "FND-CFG-011",
-        "ruleVersion": 5,
-        "title": "Preview/retired fields are version-aware",
-        "pillar": "operations",
-        "state": "UNKNOWN",
-        "basis": "none",
-        "stateReason": "No evidence was recorded for this control.",
-        "mandatory": true,
-        "costly": false,
-        "projectOpinion": false,
-        "sourceUrl": "https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference",
-        "lastVerified": "2026-10-04",
-        "recommendation": "Move to the unified service-level shape: put env on the agent service, use kind voice, use host azure.ai.project instead of microsoft.foundry, drop fields the hosted-agent create request ignores, and declare requiredVersions for extension versions verified by this catalogue. Do not infer a field's introduction version from the current schema.",
-        "fix": "requiredVersions:\n  extensions:\n    azure.ai.agents: \"\u003e=1.0.0-beta.18\"\n    azure.ai.projects: \"\u003e=1.0.0-beta.13\"\nservices:\n  ai-project:\n    host: azure.ai.project\n  my-agent:\n    host: azure.ai.agent\n    project: src/my-agent\n    uses: [ai-project]\n    kind: hosted\n    env:\n      MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME: ${MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME}",
-        "evaluated": false
-      },
-      {
-        "controlId": "FND-CFG-003",
-        "ruleId": "FND-CFG-003",
-        "ruleVersion": 4,
-        "title": "All inter-service references resolve",
-        "pillar": "reliability",
-        "state": "UNKNOWN",
-        "basis": "none",
-        "stateReason": "No evidence was recorded for this control.",
-        "mandatory": true,
-        "costly": false,
-        "projectOpinion": false,
-        "sourceUrl": "https://learn.microsoft.com/azure/foundry/agents/how-to/author-azure-yaml",
-        "lastVerified": "2026-10-04",
-        "recommendation": "Make each referenced name match a service key defined under services, and add toolbox and connection services to the consuming agent uses list as well as its toolboxes or connections list.",
-        "fix": "# Partial fragment: category, target and authentication fields for the\n# connection, plus toolbox-specific required fields, depend on the selected\n# documented tool. Merge this graph into a schema-valid manifest.\nservices:\n  ai-project:\n    host: azure.ai.project\n  github-conn:\n    host: azure.ai.connection\n    uses: [ai-project]\n  agent-tools:\n    host: azure.ai.toolbox\n    uses: [ai-project, github-conn]\n    tools:\n      - type: mcp\n        connection: github-conn\n  my-agent:\n    host: azure.ai.agent\n    project: src/my-agent\n    uses: [ai-project, github-conn, agent-tools]\n    kind: hosted\n    toolboxes: [agent-tools]",
-        "evaluated": false
-      },
-      {
-        "controlId": "FND-CFG-005",
-        "ruleId": "FND-CFG-005",
-        "ruleVersion": 4,
-        "title": "No raw secrets in YAML/Bicep/environment blocks",
-        "pillar": "security",
-        "state": "UNKNOWN",
-        "basis": "none",
-        "stateReason": "No evidence was recorded for this control.",
-        "mandatory": true,
-        "costly": false,
-        "projectOpinion": false,
-        "sourceUrl": "https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference",
-        "lastVerified": "2026-10-05",
-        "recommendation": "Store the secret in the azd environment as a secret (azd env set-secret) or in Key Vault, and reference it with ${VAR} in azure.yaml. In Bicep, mark secret parameters @secure() with no default and never output them. Prefer Entra ID or managed identity authentication where the target supports it.",
-        "fix": "services:\n  github-conn:\n    host: azure.ai.connection\n    uses: [ai-project]\n    category: RemoteTool\n    target: https://api.githubcopilot.com/mcp\n    authType: CustomKeys\n    credentials:\n      Authorization: ${GITHUB_PAT}   # set with: azd env set-secret GITHUB_PAT",
-        "evaluated": false
-      },
-      {
-        "controlId": "FND-CFG-007",
-        "ruleId": "FND-CFG-007",
-        "ruleVersion": 2,
-        "title": "Outbound endpoints use HTTPS and reject unsafe local/metadata targets",
-        "pillar": "security",
-        "state": "UNKNOWN",
-        "basis": "none",
-        "stateReason": "No evidence was recorded for this control.",
-        "mandatory": true,
-        "costly": false,
-        "projectOpinion": true,
-        "sourceUrl": "https://learn.microsoft.com/azure/foundry/agents/how-to/tools/model-context-protocol",
-        "lastVerified": "2026-10-04",
-        "recommendation": "Use https endpoints reachable from the service that calls them. For internal servers, publish them on a private endpoint or an internal Container Apps ingress and use their private DNS name over https instead of an IP literal. Remove localhost and metadata addresses from deployed configuration.",
-        "fix": "services:\n  github-conn:\n    host: azure.ai.connection\n    category: RemoteTool\n    target: https://api.githubcopilot.com/mcp",
-        "evaluated": false
-      }
-    ],
     "warning": [
       {
         "controlId": "FND-OPS-008",
@@ -2818,7 +2771,7 @@
             "fingerprint": "aaf47d8582ace29fe0b38d960dc2b856"
           }
         ],
-        "evaluated": false
+        "evaluated": true
       }
     ]
   }

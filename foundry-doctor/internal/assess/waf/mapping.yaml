@@ -277,7 +277,7 @@ costly:
   source: https://learn.microsoft.com/azure/storage/common/storage-redundancy
   lastVerified: '2026-10-18'
 - rule: FND-REL-003
-  basis: Continuous backup at the 30-day or 35-day tier carries a monthly backup storage charge and every restore is charged; the 7-day tier has no backup storage charge. The cost of zone redundancy is not cited here.
+  basis: Continuous backup beyond the 7-day tier carries a monthly backup storage charge and every restore is charged; the 7-day tier has no backup storage charge. The cost of zone redundancy is not cited here.
   source: https://learn.microsoft.com/azure/cosmos-db/continuous-backup-restore-introduction
   lastVerified: '2026-10-18'
 - rule: FND-SEC-008

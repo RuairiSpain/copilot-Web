@@ -117,6 +117,11 @@ func checkAssessInvariants(t *testing.T, r map[string][]byte) {
 	if !strings.Contains(strings.Join(pack.Limitations, " "), "were not imported") {
 		t.Error("limitations must disclose that PSRule/Advisor evidence was not imported")
 	}
+	// Regression for the engine adapter dropping RunOutput.Evaluated: with it
+	// dropped, every clean rule reported UNKNOWN and PASS was unreachable.
+	if len(pack.Controls["pass"]) == 0 {
+		t.Error("the real engine produced no PASS control; Evaluated is not reaching the assessment")
+	}
 	for _, c := range pack.Controls["pass"] {
 		if !c.Evaluated || c.Basis != "deterministic" {
 			t.Errorf("%s is PASS without a deterministic evaluation", c.RuleID)

@@ -1,7 +1,7 @@
 # Phase 4 hand-off: WAF assessment and evidence reporting
 
-Status: **round 1: REJECT, fixes applied in loop 1. Round 2: REJECT (foundry-lead NB1, NB2; azure-black-belt NB1), fixes
-applied in fix loop 2, pending round 3 re-review.**
+Status: **loop-4 review (post-merge, Go 1.26.9 available): both reviewers REJECT on one shared blocker
+(RunOutput.Evaluated dropped by the engine adapter); fixed in Phase 4 gate loop 1, pending re-review.**
 Fix log: `docs/development/reviews/phase-4-fixlog-loop1.md`. Decisions and deferrals: ADR-026.
 
 ## Delivered
@@ -55,26 +55,15 @@ Fix log: `docs/development/reviews/phase-4-fixlog-loop1.md`. Decisions and defer
 - `foundry-doctor assess waf`: owner Markdown/HTML, developer Markdown/HTML, evidence Markdown/JSON.
 
 ## Tests executed and results
-**Not run in fix loops 1 or 2.** No Go toolchain was available, so `gofmt`, `go vet`, `go build`, `go test ./...`,
-`go test -race ./...`, `staticcheck`, `govulncheck` and `scripts/claude/verify-phase.sh --strict` have **not** been run
-on this tree. The maintainer must run them. Expected first-run actions:
-- `gofmt -w` on the changed Go files (alignment was checked by hand only).
-- `TestAssessSampleReports` fails by design until the sample reports are regenerated:
-  `go test ./cmd/foundry-doctor -run TestAssessSampleReports -update-assess-samples`, then review and commit.
-- `TestAssessSampleReports` keeps `go test ./...` red by design until the samples are regenerated and reviewed. This
-  should be recorded in the CI/release checklist (`docs/development/ci.md`, not owned by Phase 4; foundry-lead round 2 N2)
-  so that a red run is not mistaken for a regression and a regeneration is not merged without review.
-- The round-1 hand-off's toolchain and gate claims are withdrawn: they could not be reproduced (`go.mod` declares
-  `go 1.26.9`) and the catalogue count was wrong (the tree has 108 rule files).
+Run on Go 1.26.9 after Phase 4 gate loop 1:
+- `go test ./...`: pass. `go vet ./...` and `gofmt -l .`: clean. `scripts/claude/check-rule-catalog.sh`: ok (108 rules).
+- `-race`, staticcheck, govulncheck and the `-tags spike` Bicep test are run by CI (`foundry-doctor-ci.yml`), not locally.
+- Sample reports `samples/assess-{dev,test,prod}/reports` are engine output (regenerated with `-update-assess-samples`);
+  no `HAND-DERIVED` marker remains.
+- Earlier statements that tests were "not run" and that `TestAssessSampleReports` "fails by design" are withdrawn.
 
-Tests added or changed in loop 1: `internal/assess/assess_test.go` (partial skip, not-applicable, hidden skips, info
-findings, question answers incl. false / missing or blank reference / non-boolean, costly separation, opinion labels,
-pillar names); `internal/assess/waf/mapping_test.go` (catalogue-wide coverage, phase 1-3 rules mapped, `Validate`
-negative cases, sourced cost flags, question keys, unknown fields); `internal/assess/wara/mapping_test.go` (GUID
-format, pgVerified, reliability + wara basis, ID present in the rule's own APRL source note);
-`internal/report/{owner,developer,evidence,html}` tests and goldens; `internal/app/assess_test.go` (owner vs developer
-HTML, limitations, partial skip in the evidence pack); `cmd/foundry-doctor/assess_test.go` and
-`assess_samples_test.go` (sample reports, `--evidence-pack` override, owner JSON rejected, invariants).
+Tests added in gate loop 1: `TestAssessSampleReports` now fails when the real engine yields no PASS control (verified
+by reverting the fix); `TestUnassessedActionHasNoFixText`; `TestDecisionStatesUnassessedCount`.
 
 ## Security and privacy review
 - Markdown escapes untrusted text; HTML is `html/template`, script-free; unsafe URLs are neutralised (`#ZgotmplZ`).
@@ -104,6 +93,16 @@ HTML, limitations, partial skip in the evidence pack); `cmd/foundry-doctor/asses
   candidates). PRD "Reviewer test with owner, developer and security personas" is covered only by the audience-difference
   and invariant tests; a persona review is part of the next review round.
 
+Carried from the Phase 4 gate loop 1 reviews (non-blocking, not fixed):
+- No per-pillar coverage statement; Performance Efficiency has no mapped rule (black belt N2).
+- Pillar labels follow the catalogue and include preflight/deployment rules under Reliability and Security (N3); the
+  limitations now call them project judgement.
+- Cost flags absent on FND-REL-009, FND-OPS-003, FND-REL-008; FND-NET-011 and FND-SEC-010/011 mix free and paid
+  advice (N4). Cost URLs and WARA `pgVerified` values need a Learn re-fetch before release (N5, N6); learn.microsoft.com
+  was unreachable from the review sandbox, and the two reviewers disagreed on Cosmos continuous-backup tiers, so the
+  mapping no longer names a tier beyond "beyond the 7-day tier".
+- Persona reviewer test and HTML accessibility audit remain deferred (ADR-026).
+
 ## Compatibility matrix
 - Not validated in loop 1 (no toolchain). `go.mod`/`go.work` declare `go 1.26.9`. No new module dependencies
   (`go.yaml.in/yaml/v3` was already required by `internal/catalog`).
@@ -118,8 +117,8 @@ HTML, limitations, partial skip in the evidence pack); `cmd/foundry-doctor/asses
 ## Definition of Done audit
 | DoD item | Status (met / unmet / requirement changed by ADR-NNN) | Current evidence |
 |---|---|---|
-| No report claims complete WAF compliance | unmet (pending round 3 review and a Go test run) | `assess.BaseLimitations` in every view; owner/developer/evidence/HTML headers; `docs/assess.md` |
-| Unknown/non-machine-verifiable controls are visible | unmet (pending round 3 review and a Go test run) | Partial skip → UNKNOWN; delegations → ATTESTED (mandatory keeps conditions); undeclared requirements → QUESTION; own skip classification; `TestPolicyManagedIsAttestedNotApplicable`, `TestUndeclaredRequirementIsQuestion`, `TestClassifySkip` |
-| Every recommendation links to a verified source or is labelled project opinion | unmet (pending round 3 review and a Go test run) | `common.Provenance` in owner/developer/evidence Markdown and HTML `prov` template; tests in each renderer package |
-| All three audiences receive materially different, useful views | unmet (pending round 3 review and a Go test run) | Separate owner and developer HTML; costly section; `TestOwnerAndDeveloperDiffer`, `TestAssessWAFHTMLAudiencesDiffer` |
-| Suppressed and baselined controls remain visible in evidence pack | unmet (pending round 3 review and a Go test run) | Evidence Markdown/JSON with suppression reason/owner/expiry and fingerprints; `TestSuppressedAndBaselinedRemainVisible` |
+| No report claims complete WAF compliance | met (code and tests pass on Go 1.26.9; pending loop 2 re-review) | `assess.BaseLimitations` in every view; owner/developer/evidence/HTML headers; `docs/assess.md` |
+| Unknown/non-machine-verifiable controls are visible | met (code and tests pass on Go 1.26.9; pending loop 2 re-review) | Partial skip → UNKNOWN; delegations → ATTESTED (mandatory keeps conditions); undeclared requirements → QUESTION; own skip classification; `TestPolicyManagedIsAttestedNotApplicable`, `TestUndeclaredRequirementIsQuestion`, `TestClassifySkip` |
+| Every recommendation links to a verified source or is labelled project opinion | met (code and tests pass on Go 1.26.9; pending loop 2 re-review) | `common.Provenance` in owner/developer/evidence Markdown and HTML `prov` template; tests in each renderer package |
+| All three audiences receive materially different, useful views | met (code and tests pass on Go 1.26.9; pending loop 2 re-review) | Separate owner and developer HTML; costly section; `TestOwnerAndDeveloperDiffer`, `TestAssessWAFHTMLAudiencesDiffer` |
+| Suppressed and baselined controls remain visible in evidence pack | met (code and tests pass on Go 1.26.9; pending loop 2 re-review) | Evidence Markdown/JSON with suppression reason/owner/expiry and fingerprints; `TestSuppressedAndBaselinedRemainVisible` |

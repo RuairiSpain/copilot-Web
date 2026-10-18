@@ -38,13 +38,13 @@
         <tbody>
           <tr><th scope="row" class="state-FAIL">FAIL</th><td>0</td></tr>
           <tr><th scope="row" class="state-WARNING">WARNING</th><td>1</td></tr>
-          <tr><th scope="row" class="state-UNKNOWN">UNKNOWN</th><td>6</td></tr>
+          <tr><th scope="row" class="state-UNKNOWN">UNKNOWN</th><td>0</td></tr>
           <tr><th scope="row" class="state-QUESTION">QUESTION</th><td>1</td></tr>
           <tr><th scope="row" class="state-SKIPPED">SKIPPED</th><td>65</td></tr>
           <tr><th scope="row" class="state-ATTESTED">ATTESTED</th><td>1</td></tr>
           <tr><th scope="row" class="state-INFO">INFO</th><td>0</td></tr>
           <tr><th scope="row" class="state-NOT_APPLICABLE">NOT_APPLICABLE</th><td>4</td></tr>
-          <tr><th scope="row" class="state-PASS">PASS</th><td>0</td></tr>
+          <tr><th scope="row" class="state-PASS">PASS</th><td>6</td></tr>
           
         </tbody>
       </table>
@@ -53,12 +53,12 @@
     <section aria-labelledby="pillar-security">
       <h2 id="pillar-security">Security</h2>
       <article aria-labelledby="control-FND-CFG-005">
-        <h3 id="control-FND-CFG-005">No raw secrets in YAML/Bicep/environment blocks — <span class="state-UNKNOWN">UNKNOWN</span></h3>
+        <h3 id="control-FND-CFG-005">No raw secrets in YAML/Bicep/environment blocks — <span class="state-PASS">PASS</span></h3>
         <dl>
           <dt>Rule</dt><dd>FND-CFG-005 (version 4)</dd>
           <dt>Mandatory</dt><dd>true</dd>
-          <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>No evidence was recorded for this control.</dd>
+          <dt>Evidence basis</dt><dd>deterministic</dd>
+          <dt>Why this state</dt><dd>Evaluated with no remaining finding and no skipped check.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference">https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference</a> (verified 2026-10-05)</dd>
           
@@ -79,12 +79,12 @@
         </dl>
       </article>
       <article aria-labelledby="control-FND-CFG-007">
-        <h3 id="control-FND-CFG-007">Outbound endpoints use HTTPS and reject unsafe local/metadata targets — <span class="state-UNKNOWN">UNKNOWN</span></h3>
+        <h3 id="control-FND-CFG-007">Outbound endpoints use HTTPS and reject unsafe local/metadata targets — <span class="state-PASS">PASS</span></h3>
         <dl>
           <dt>Rule</dt><dd>FND-CFG-007 (version 2)</dd>
           <dt>Mandatory</dt><dd>true</dd>
-          <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>No evidence was recorded for this control.</dd>
+          <dt>Evidence basis</dt><dd>deterministic</dd>
+          <dt>Why this state</dt><dd>Evaluated with no remaining finding and no skipped check.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://learn.microsoft.com/azure/foundry/agents/how-to/tools/model-context-protocol">https://learn.microsoft.com/azure/foundry/agents/how-to/tools/model-context-protocol</a> (verified 2026-10-04)</dd>
           
@@ -769,12 +769,12 @@ network:
     <section aria-labelledby="pillar-reliability">
       <h2 id="pillar-reliability">Reliability</h2>
       <article aria-labelledby="control-FND-CFG-003">
-        <h3 id="control-FND-CFG-003">All inter-service references resolve — <span class="state-UNKNOWN">UNKNOWN</span></h3>
+        <h3 id="control-FND-CFG-003">All inter-service references resolve — <span class="state-PASS">PASS</span></h3>
         <dl>
           <dt>Rule</dt><dd>FND-CFG-003 (version 4)</dd>
           <dt>Mandatory</dt><dd>true</dd>
-          <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>No evidence was recorded for this control.</dd>
+          <dt>Evidence basis</dt><dd>deterministic</dd>
+          <dt>Why this state</dt><dd>Evaluated with no remaining finding and no skipped check.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/how-to/author-azure-yaml">https://learn.microsoft.com/azure/foundry/agents/how-to/author-azure-yaml</a> (verified 2026-10-04)</dd>
           
@@ -1289,7 +1289,7 @@ resource pe &#39;Microsoft.Network/privateEndpoints@2024-05-01&#39; = { name: &#
           <dt>Mandatory</dt><dd>false</dd>
           <dt>Evidence basis</dt><dd>none</dd>
           <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
-          <dt>Costly recommendation</dt><dd>Continuous backup at the 30-day or 35-day tier carries a monthly backup storage charge and every restore is charged; the 7-day tier has no backup storage charge. The cost of zone redundancy is not cited here. (<a href="https://learn.microsoft.com/azure/cosmos-db/continuous-backup-restore-introduction">https://learn.microsoft.com/azure/cosmos-db/continuous-backup-restore-introduction</a>, verified 2026-10-18)</dd>
+          <dt>Costly recommendation</dt><dd>Continuous backup beyond the 7-day tier carries a monthly backup storage charge and every restore is charged; the 7-day tier has no backup storage charge. The cost of zone redundancy is not cited here. (<a href="https://learn.microsoft.com/azure/cosmos-db/continuous-backup-restore-introduction">https://learn.microsoft.com/azure/cosmos-db/continuous-backup-restore-introduction</a>, verified 2026-10-18)</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency">https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency</a> (verified 2026-10-04)</dd>
           
           
@@ -1598,12 +1598,12 @@ services:
     <section aria-labelledby="pillar-operations">
       <h2 id="pillar-operations">Operational Excellence</h2>
       <article aria-labelledby="control-FND-CFG-001">
-        <h3 id="control-FND-CFG-001">Valid YAML, duplicate-key detection and compatible azure.ai.* schema — <span class="state-UNKNOWN">UNKNOWN</span></h3>
+        <h3 id="control-FND-CFG-001">Valid YAML, duplicate-key detection and compatible azure.ai.* schema — <span class="state-PASS">PASS</span></h3>
         <dl>
           <dt>Rule</dt><dd>FND-CFG-001 (version 7)</dd>
           <dt>Mandatory</dt><dd>true</dd>
-          <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>No evidence was recorded for this control.</dd>
+          <dt>Evidence basis</dt><dd>deterministic</dd>
+          <dt>Why this state</dt><dd>Evaluated with no remaining finding and no skipped check.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference">https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference</a> (verified 2026-10-05)</dd>
           
@@ -1625,12 +1625,12 @@ services:
         </dl>
       </article>
       <article aria-labelledby="control-FND-CFG-002">
-        <h3 id="control-FND-CFG-002">Unique service names by kind — <span class="state-UNKNOWN">UNKNOWN</span></h3>
+        <h3 id="control-FND-CFG-002">Unique service names by kind — <span class="state-PASS">PASS</span></h3>
         <dl>
           <dt>Rule</dt><dd>FND-CFG-002 (version 2)</dd>
           <dt>Mandatory</dt><dd>true</dd>
-          <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>No evidence was recorded for this control.</dd>
+          <dt>Evidence basis</dt><dd>deterministic</dd>
+          <dt>Why this state</dt><dd>Evaluated with no remaining finding and no skipped check.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference">https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference</a> (verified 2026-10-04)</dd>
           
@@ -1689,12 +1689,12 @@ services:
         </dl>
       </article>
       <article aria-labelledby="control-FND-CFG-011">
-        <h3 id="control-FND-CFG-011">Preview/retired fields are version-aware — <span class="state-UNKNOWN">UNKNOWN</span></h3>
+        <h3 id="control-FND-CFG-011">Preview/retired fields are version-aware — <span class="state-PASS">PASS</span></h3>
         <dl>
           <dt>Rule</dt><dd>FND-CFG-011 (version 5)</dd>
           <dt>Mandatory</dt><dd>true</dd>
-          <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>No evidence was recorded for this control.</dd>
+          <dt>Evidence basis</dt><dd>deterministic</dd>
+          <dt>Why this state</dt><dd>Evaluated with no remaining finding and no skipped check.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference">https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference</a> (verified 2026-10-04)</dd>
           
@@ -2173,7 +2173,8 @@ resource chat &#39;Microsoft.CognitiveServices/accounts/deployments@2026-09-01&#
         <li>This report maps available Foundry Doctor evidence to selected Azure Well-Architected aligned controls. It is not a certification and does not claim complete WAF compliance.</li>
         <li>Controls without complete deterministic evidence remain visible as UNKNOWN, QUESTION or SKIPPED rather than being treated as passing; a partly skipped evaluation is UNKNOWN, never PASS.</li>
         <li>ATTESTED controls rest on an answer the team recorded in Foundry Doctor configuration. Foundry Doctor did not verify the answer.</li>
-        <li>Control IDs are Foundry Doctor rule IDs. They are not mapped to WAF checklist codes in this release, and pillar assignments come from the rule catalogue.</li>
+        <li>Control IDs are Foundry Doctor rule IDs. They are not mapped to WAF checklist codes in this release. Pillar assignments come from the rule catalogue and are project judgement, not Microsoft guidance.</li>
+        <li>A suppressed or baselined finding is shown as WARNING and stays visible in the evidence pack. It does not by itself produce a No-go decision, so the decision can be Proceed with conditions while accepted failures remain.</li>
         <li>The decision wording and the top-action ranking are project opinion, not Microsoft guidance.</li>
         <li>PSRule for Azure, Azure Advisor and Microsoft Defender for Cloud recommendations were not imported. Overlapping external check IDs are listed for reference only (ADR-020, ADR-026).</li>
         <li>Deployed Azure state was not queried: assess waf runs offline. Controls that need deployment or runtime evidence and were not evaluated: FND-COST-001, FND-DEP-001, FND-DEP-002, FND-DEP-003, FND-DEP-004, FND-DEP-005, FND-DEP-006, FND-DEP-007, FND-DEP-008, FND-DEP-009, FND-DEP-010, FND-DEP-011, FND-DEP-012, FND-IDN-002, FND-IDN-005, FND-NET-006, FND-OPS-009, FND-RUN-001, FND-RUN-002, FND-RUN-003, FND-RUN-004, FND-RUN-005, FND-RUN-006, FND-RUN-007, FND-SEC-008, FND-SEC-009.</li>
