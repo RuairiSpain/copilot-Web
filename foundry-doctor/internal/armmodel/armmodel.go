@@ -758,7 +758,9 @@ func toResource(r bicep.Resource, node map[string]any, bl bicep.Location, sc sco
 	inheritPresence(&res, sc)
 	if sku, ok := node["sku"].(map[string]any); ok {
 		at("sku", func() { res.SKU = normalizeValue(sku, tx).(map[string]any) })
-		if n := str(sku["name"]); n != "" && !strings.HasPrefix(n, "[") {
+		// SKUName follows the substituted sku.name, so a parameter-file or
+		// module-parameter value is seen the same way as res.SKU and res.Region.
+		if n := str(res.SKU["name"]); n != "" && !strings.HasPrefix(n, "[") {
 			res.SKUName = n
 		}
 	}

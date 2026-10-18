@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
 	"slices"
 	"strings"
@@ -10,6 +12,7 @@ import (
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/azure"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/rules/gw"
 	iqrules "github.com/ruairispain/copilot-web/foundry-doctor/internal/rules/iq"
+	rt "github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime"
 	runtimeiq "github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/iq"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
@@ -75,16 +78,32 @@ func (m iqSnapshotModel) FromDefaultPaths(r sdk.ARMResource) []string {
 	return nil
 }
 
+// Bounds of the opt-in Foundry IQ metadata probe (ADR-028): the whole probe
+// shares one time budget, each request has its own timeout, and the number of
+// objects read is capped.
+const (
+	phase8ProbeBudget     = 60 * time.Second
+	phase8RequestTimeout  = 20 * time.Second
+	phase8MaxBases        = 8
+	phase8MaxSourcesPerKB = 32
+)
+
+// withPhase8Snapshot attaches the Foundry IQ data-plane snapshot to the ARM
+// model. The probe is opt-in (RunInput.IQMetadataProbe, doctor --iq-metadata)
+// and never runs with --local. Without it the IQ rules see only azure.yaml and
+// ARM metadata and skip every data-plane leg.
 func withPhase8Snapshot(ctx context.Context, in RunInput) sdk.ARMModel {
-	if in.Local || in.ARM == nil || in.AzureYAML == nil {
+	if in.Local || !in.IQMetadataProbe || in.ARM == nil || in.AzureYAML == nil {
 		return in.ARM
 	}
+	ctx, cancel := context.WithTimeout(ctx, phase8ProbeBudget)
+	defer cancel()
 	client := runtimeiq.HTTPClient{
-		HTTP:       &http.Client{Timeout: 20 * time.Second},
+		HTTP:       &http.Client{Timeout: phase8RequestTimeout},
 		Credential: azure.NewDefaultCredential(nil),
 	}
 	snap := buildPhase8Snapshot(ctx, in, client)
-	if len(snap.Bases) == 0 && len(snap.Sources) == 0 && len(snap.Indexes) == 0 && len(snap.Skillsets) == 0 && len(snap.ProbeIssues) == 0 {
+	if !snap.LiveRead && len(snap.ProbeIssues) == 0 {
 		return in.ARM
 	}
 	return iqSnapshotModel{ARMModel: in.ARM, snap: snap}
@@ -99,45 +118,80 @@ func buildPhase8Snapshot(ctx context.Context, in RunInput, client runtimeiq.Clie
 		Indexes:     map[string]runtimeiq.Index{},
 		Skillsets:   map[string]runtimeiq.Skillset{},
 	}
+	bases := 0
 	for _, conn := range connections {
 		if conn.TargetKind != runtimeiq.ConnectionTargetKnowledgeBaseMCP {
 			continue
 		}
+		if bases >= phase8MaxBases {
+			snap.ProbeIssues = append(snap.ProbeIssues, fmt.Sprintf("more than %d knowledge base MCP connections; the rest were not read", phase8MaxBases))
+			break
+		}
+		bases++
 		apiVersion := conn.APIVersion
 		if apiVersion == "" {
 			snap.ProbeIssues = append(snap.ProbeIssues, "knowledge base MCP connection "+conn.Name+" does not pin api-version")
 			continue
 		}
-		kb, err := client.GetKnowledgeBase(ctx, conn.SearchService, conn.KnowledgeBase, apiVersion)
-		if err != nil {
-			snap.ProbeIssues = append(snap.ProbeIssues, "knowledge base metadata could not be read for connection "+conn.Name)
+		if !runtimeiq.KnownAPIVersion(apiVersion) {
+			snap.ProbeIssues = append(snap.ProbeIssues, sdk.SkipUnsupportedVersion+": knowledge base MCP connection "+conn.Name+" uses api-version "+apiVersion+" outside the verified set ("+runtimeiq.KnownAPIVersionList+")")
 			continue
 		}
+		snap.LiveRead = true
+		kb, err := client.GetKnowledgeBase(ctx, conn.SearchService, conn.KnowledgeBase, apiVersion)
+		if err != nil {
+			snap.ProbeIssues = append(snap.ProbeIssues, phase8ProbeFailure("knowledge base", "connection "+conn.Name, err))
+			continue
+		}
+		if kb.Name == "" {
+			kb.Name = conn.KnowledgeBase
+		}
 		kb.Location = conn.Location
-		for _, sourceName := range kb.KnowledgeSources {
+		for i, sourceName := range kb.KnowledgeSources {
+			if i >= phase8MaxSourcesPerKB {
+				snap.ProbeIssues = append(snap.ProbeIssues, fmt.Sprintf("knowledge base %s references more than %d knowledge sources; the rest were not read", kb.Name, phase8MaxSourcesPerKB))
+				break
+			}
+			if ctx.Err() != nil {
+				snap.ProbeIssues = append(snap.ProbeIssues, "knowledge source metadata for "+conn.Name+" was not read: probe time budget exhausted")
+				break
+			}
 			source, err := client.GetKnowledgeSource(ctx, conn.SearchService, sourceName, apiVersion)
 			if err != nil {
-				snap.ProbeIssues = append(snap.ProbeIssues, "knowledge source metadata could not be read for "+conn.Name+"/"+sourceName)
+				snap.ProbeIssues = append(snap.ProbeIssues, phase8ProbeFailure("knowledge source", conn.Name+"/"+sourceName, err))
 				continue
+			}
+			if source.Name == "" {
+				source.Name = sourceName
 			}
 			source.Location = conn.Location
 			snap.Sources[strings.ToLower(source.Name)] = source
-			if source.SearchIndexName != "" {
-				idx, err := client.GetIndex(ctx, conn.SearchService, source.SearchIndexName, apiVersion)
-				if err != nil {
-					snap.ProbeIssues = append(snap.ProbeIssues, "index metadata could not be read for "+conn.Name+"/"+source.SearchIndexName)
-				} else {
-					idx.Location = conn.Location
-					snap.Indexes[strings.ToLower(idx.Name)] = idx
+			if idxName := source.BackingIndex(); idxName != "" {
+				if _, done := snap.Indexes[strings.ToLower(idxName)]; !done {
+					idx, err := client.GetIndex(ctx, conn.SearchService, idxName, apiVersion)
+					if err != nil {
+						snap.ProbeIssues = append(snap.ProbeIssues, phase8ProbeFailure("index", conn.Name+"/"+idxName, err))
+					} else {
+						if idx.Name == "" {
+							idx.Name = idxName
+						}
+						idx.Location = conn.Location
+						snap.Indexes[strings.ToLower(idx.Name)] = idx
+					}
 				}
 			}
-			if source.SkillsetName != "" {
-				ss, err := client.GetSkillset(ctx, conn.SearchService, source.SkillsetName, apiVersion)
-				if err != nil {
-					snap.ProbeIssues = append(snap.ProbeIssues, "skillset metadata could not be read for "+conn.Name+"/"+source.SkillsetName)
-				} else {
-					ss.Location = conn.Location
-					snap.Skillsets[strings.ToLower(ss.Name)] = ss
+			if ssName := source.SkillsetName; ssName != "" {
+				if _, done := snap.Skillsets[strings.ToLower(ssName)]; !done {
+					ss, err := client.GetSkillset(ctx, conn.SearchService, ssName, apiVersion)
+					if err != nil {
+						snap.ProbeIssues = append(snap.ProbeIssues, phase8ProbeFailure("skillset", conn.Name+"/"+ssName, err))
+					} else {
+						if ss.Name == "" {
+							ss.Name = ssName
+						}
+						ss.Location = conn.Location
+						snap.Skillsets[strings.ToLower(ss.Name)] = ss
+					}
 				}
 			}
 			switch strings.ToLower(source.Kind) {
@@ -152,6 +206,22 @@ func buildPhase8Snapshot(ctx context.Context, in RunInput, client runtimeiq.Clie
 	slices.Sort(snap.ProbeIssues)
 	snap.ProbeIssues = dedupeStrings(snap.ProbeIssues)
 	return snap
+}
+
+// phase8ProbeFailure turns a probe error into a secret-free reason that keeps
+// permission, not-found and budget failures apart.
+func phase8ProbeFailure(object, target string, err error) string {
+	var unavailable *azure.UnavailableError
+	switch {
+	case errors.As(err, &unavailable):
+		return object + " metadata for " + target + " is not readable (" + unavailable.Reason + "; needs Reader or Search Service Contributor on the search service, which must allow role-based access)"
+	case rt.IsNotFound(err):
+		return object + " " + target + " was not found"
+	case errors.Is(err, context.DeadlineExceeded):
+		return object + " metadata for " + target + " was not read: probe time budget exhausted"
+	default:
+		return object + " metadata could not be read for " + target
+	}
 }
 
 func dedupeStrings(in []string) []string {

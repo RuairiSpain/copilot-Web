@@ -22,6 +22,7 @@ type Config struct {
 	Timeout          time.Duration
 	MaxPromptBytes   int
 	MaxResponseBytes int
+	MaxOutputTokens  int
 }
 
 // Options are per-command overrides. Empty fields fall back to environment

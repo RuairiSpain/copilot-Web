@@ -1,0 +1,10 @@
+digraph foundry_doctor {
+  rankdir=LR;
+  node [shape=box];
+  n1 [label="proj\n(local)", style="filled", fillcolor="#dbeafe"];
+  n2 [label="gpt-4o-mini\n(both, unhealthy)", style="filled,bold", fillcolor="#ede9fe"];
+  n3 [label="st\", x→y\n(unobserved)", style="filled,dotted", fillcolor="#f1f5f9"];
+  n4 [label="ghost\n(missing)", style="filled,dashed", fillcolor="#fee2e2"];
+  n1 -> n2 [label="deploys"];
+  n1 -> n4 [label="uses", style="dashed"];
+}

@@ -13,14 +13,32 @@ import (
 // State is the WAF assessment state.
 type State string
 
-// Assessment states.
+// Assessment states. PASS, INFO and FAIL/WARNING come only from deterministic
+// rule evidence. ATTESTED comes only from a recorded team answer. Skipped is
+// never a pass.
 const (
-	StatePass     State = "PASS"
-	StateFail     State = "FAIL"
-	StateWarning  State = "WARNING"
-	StateUnknown  State = "UNKNOWN"
-	StateQuestion State = "QUESTION"
-	StateSkipped  State = "SKIPPED"
+	StatePass          State = "PASS"
+	StateFail          State = "FAIL"
+	StateWarning       State = "WARNING"
+	StateUnknown       State = "UNKNOWN"
+	StateQuestion      State = "QUESTION"
+	StateSkipped       State = "SKIPPED"
+	StateInfo          State = "INFO"
+	StateAttested      State = "ATTESTED"
+	StateNotApplicable State = "NOT_APPLICABLE"
+)
+
+// States lists every state in report order.
+var States = []State{
+	StateFail, StateWarning, StateUnknown, StateQuestion, StateSkipped,
+	StateAttested, StateInfo, StateNotApplicable, StatePass,
+}
+
+// Evidence bases recorded on every control.
+const (
+	BasisDeterministic = "deterministic"
+	BasisAttested      = "attested"
+	BasisNone          = "none"
 )
 
 // Definition maps one catalogue rule to one WAF-facing control.
@@ -30,9 +48,24 @@ type Definition struct {
 	ControlTitle    string
 	Pillar          string
 	Costly          bool
+	CostBasis       string
+	CostSourceURL   string
+	CostVerified    string
 	NoEvidenceState State
-	QuestionKey     string
-	QuestionPrompt  string
+	// QuestionKey is the flattened policy key whose boolean value answers the
+	// question. QuestionReferenceKey, when set, must hold a non-empty string
+	// for a true answer to count as attested.
+	QuestionKey          string
+	QuestionReferenceKey string
+	QuestionPrompt       string
+}
+
+// WARARef is one WARA (APRL) recommendation reference.
+type WARARef struct {
+	ID         string `json:"id"`
+	Label      string `json:"label,omitempty"`
+	PGVerified string `json:"pgVerified"`
+	SourceURL  string `json:"sourceUrl,omitempty"`
 }
 
 // Input is the aggregation input.
@@ -46,9 +79,10 @@ type Input struct {
 	Evaluated   []string
 	Policy      map[string]any
 	ToolVersion string
+	GeneratedAt string
 	ScopeNote   string
 	Limitations []string
-	WARALookups map[string][]string
+	WARALookups map[string][]WARARef
 }
 
 // Assessment is the aggregate WAF result.
@@ -56,6 +90,7 @@ type Assessment struct {
 	Framework   string       `json:"framework"`
 	Profile     string       `json:"profile"`
 	ToolVersion string       `json:"toolVersion,omitempty"`
+	GeneratedAt string       `json:"generatedAt,omitempty"`
 	ProjectPath string       `json:"projectPath,omitempty"`
 	ScopeNote   string       `json:"scopeNote,omitempty"`
 	Decision    string       `json:"decision"`
@@ -64,7 +99,7 @@ type Assessment struct {
 	Controls    []Control    `json:"controls"`
 	Summary     Summary      `json:"summary"`
 	Unassessed  []ControlRef `json:"unassessed"`
-	Costly      []ControlRef `json:"costlyRecommendations"`
+	Costly      []Action     `json:"costlyRecommendations"`
 }
 
 // Action is a prioritised next step.
@@ -74,19 +109,25 @@ type Action struct {
 	Title          string `json:"title"`
 	Pillar         string `json:"pillar"`
 	State          State  `json:"state"`
+	Mandatory      bool   `json:"mandatory"`
 	Recommendation string `json:"recommendation,omitempty"`
 	SourceURL      string `json:"sourceUrl,omitempty"`
 	LastVerified   string `json:"lastVerified,omitempty"`
+	ProjectOpinion bool   `json:"projectOpinion"`
 	Costly         bool   `json:"costly"`
+	CostBasis      string `json:"costBasis,omitempty"`
+	CostSourceURL  string `json:"costSourceUrl,omitempty"`
+	CostVerified   string `json:"costLastVerified,omitempty"`
 }
 
 // ControlRef is a light-weight control reference.
 type ControlRef struct {
-	ControlID string `json:"controlId"`
-	RuleID    string `json:"ruleId"`
-	Title     string `json:"title"`
-	Pillar    string `json:"pillar"`
-	State     State  `json:"state"`
+	ControlID   string `json:"controlId"`
+	RuleID      string `json:"ruleId"`
+	Title       string `json:"title"`
+	Pillar      string `json:"pillar"`
+	State       State  `json:"state"`
+	StateReason string `json:"stateReason,omitempty"`
 }
 
 // Summary is the overall state count summary.
@@ -104,11 +145,17 @@ type SummaryPillar struct {
 type Control struct {
 	ControlID      string        `json:"controlId"`
 	RuleID         string        `json:"ruleId"`
+	RuleVersion    int           `json:"ruleVersion,omitempty"`
 	Title          string        `json:"title"`
 	Pillar         string        `json:"pillar"`
 	State          State         `json:"state"`
+	Basis          string        `json:"basis,omitempty"`
+	StateReason    string        `json:"stateReason,omitempty"`
 	Mandatory      bool          `json:"mandatory"`
 	Costly         bool          `json:"costly"`
+	CostBasis      string        `json:"costBasis,omitempty"`
+	CostSourceURL  string        `json:"costSourceUrl,omitempty"`
+	CostVerified   string        `json:"costLastVerified,omitempty"`
 	ProjectOpinion bool          `json:"projectOpinion"`
 	SourceURL      string        `json:"sourceUrl,omitempty"`
 	LastVerified   string        `json:"lastVerified,omitempty"`
@@ -116,10 +163,41 @@ type Control struct {
 	Fix            string        `json:"fix,omitempty"`
 	QuestionPrompt string        `json:"questionPrompt,omitempty"`
 	QuestionAnswer string        `json:"questionAnswer,omitempty"`
-	WARAReferences []string      `json:"waraReferences,omitempty"`
+	WARAReferences []WARARef     `json:"waraReferences,omitempty"`
+	ExternalIDs    []string      `json:"externalOverlap,omitempty"`
 	Findings       []sdk.Finding `json:"findings,omitempty"`
 	Skipped        []sdk.Skip    `json:"skipped,omitempty"`
 	Evaluated      bool          `json:"evaluated"`
+}
+
+// PillarName returns the Azure Well-Architected Framework pillar name for a
+// catalogue pillar key (https://learn.microsoft.com/azure/well-architected/pillars).
+func PillarName(p string) string {
+	switch p {
+	case "reliability":
+		return "Reliability"
+	case "security":
+		return "Security"
+	case "cost":
+		return "Cost Optimization"
+	case "operations":
+		return "Operational Excellence"
+	case "performance":
+		return "Performance Efficiency"
+	}
+	return p
+}
+
+// Pillars lists catalogue pillar keys in report order.
+var Pillars = []string{"security", "reliability", "operations", "cost", "performance"}
+
+// BaseLimitations are printed on every assessment.
+var BaseLimitations = []string{
+	"This report maps available Foundry Doctor evidence to selected Azure Well-Architected aligned controls. It is not a certification and does not claim complete WAF compliance.",
+	"Controls without complete deterministic evidence remain visible as UNKNOWN, QUESTION or SKIPPED rather than being treated as passing; a partly skipped evaluation is UNKNOWN, never PASS.",
+	"ATTESTED controls rest on an answer the team recorded in Foundry Doctor configuration. Foundry Doctor did not verify the answer.",
+	"Control IDs are Foundry Doctor rule IDs. They are not mapped to WAF checklist codes in this release, and pillar assignments come from the rule catalogue.",
+	"The decision wording and the top-action ranking are project opinion, not Microsoft guidance.",
 }
 
 // Build aggregates findings into control views.
@@ -145,13 +223,11 @@ func Build(in Input) (Assessment, error) {
 		Framework:   "azure-waf",
 		Profile:     in.Profile,
 		ToolVersion: in.ToolVersion,
+		GeneratedAt: in.GeneratedAt,
 		ProjectPath: in.ProjectPath,
 		ScopeNote:   in.ScopeNote,
-		Limitations: append([]string{
-			"This report maps available Foundry Doctor evidence to selected Azure Well-Architected aligned controls. It is not a certification and does not claim complete WAF compliance.",
-			"Controls without deterministic evidence remain visible as UNKNOWN, QUESTION or SKIPPED rather than being treated as passing.",
-		}, in.Limitations...),
-		Summary: Summary{States: map[State]int{}, Pillars: map[string]SummaryPillar{}},
+		Limitations: append(slices.Clone(BaseLimitations), in.Limitations...),
+		Summary:     Summary{States: map[State]int{}, Pillars: map[string]SummaryPillar{}},
 	}
 
 	controls := make([]Control, 0, len(in.Definitions))
@@ -163,30 +239,27 @@ func Build(in Input) (Assessment, error) {
 		ctrl := Control{
 			ControlID:      choose(def.ControlID, rule.ID),
 			RuleID:         rule.ID,
+			RuleVersion:    rule.Version,
 			Title:          choose(def.ControlTitle, rule.Title),
 			Pillar:         choose(def.Pillar, rule.Pillar),
 			Mandatory:      rule.Category == "must-have",
 			Costly:         def.Costly,
+			CostBasis:      def.CostBasis,
+			CostSourceURL:  def.CostSourceURL,
+			CostVerified:   def.CostVerified,
 			ProjectOpinion: rule.Status == catalog.StatusProductOpinion || slices.Contains(rule.Basis, "opinion"),
 			SourceURL:      firstSourceURL(rule),
 			LastVerified:   firstLastVerified(rule),
 			Recommendation: strings.TrimSpace(rule.Recommendation),
 			Fix:            strings.TrimSpace(rule.Fix),
 			QuestionPrompt: def.QuestionPrompt,
-			WARAReferences: append([]string(nil), in.WARALookups[rule.ID]...),
-			Findings:       append([]sdk.Finding(nil), findingsByRule[rule.ID]...),
-			Skipped:        append([]sdk.Skip(nil), skipsByRule[rule.ID]...),
+			WARAReferences: slices.Clone(in.WARALookups[rule.ID]),
+			ExternalIDs:    externalIDs(rule),
+			Findings:       slices.Clone(findingsByRule[rule.ID]),
+			Skipped:        slices.Clone(skipsByRule[rule.ID]),
 			Evaluated:      evaluated[rule.ID],
 		}
-		ctrl.State = stateFor(ctrl, def, in.Policy)
-		if def.QuestionKey != "" {
-			if v, ok := in.Policy[def.QuestionKey]; ok {
-				ctrl.QuestionAnswer = fmt.Sprint(v)
-				if ctrl.State == StateQuestion {
-					ctrl.State = StatePass
-				}
-			}
-		}
+		ctrl.State, ctrl.Basis, ctrl.StateReason, ctrl.QuestionAnswer = stateFor(ctrl, def, in.Policy)
 		controls = append(controls, ctrl)
 	}
 
@@ -208,11 +281,11 @@ func Build(in Input) (Assessment, error) {
 		}
 		p.States[c.State]++
 		out.Summary.Pillars[c.Pillar] = p
-		if c.State == StateUnknown || c.State == StateQuestion || c.State == StateSkipped {
+		if Unassessed(c.State) {
 			out.Unassessed = append(out.Unassessed, toRef(c))
 		}
-		if c.Costly {
-			out.Costly = append(out.Costly, toRef(c))
+		if costlyRecommendation(c) {
+			out.Costly = append(out.Costly, toAction(c))
 		}
 	}
 	out.TopActions = topActions(controls)
@@ -220,10 +293,24 @@ func Build(in Input) (Assessment, error) {
 	return out, nil
 }
 
-func stateFor(c Control, d Definition, policy map[string]any) State {
-	activeErr, activeWarn, exceptions := false, false, false
+// Unassessed reports whether a state means the control was not fully assessed.
+func Unassessed(s State) bool {
+	return s == StateUnknown || s == StateQuestion || s == StateSkipped
+}
+
+// Outstanding reports whether a state calls for action or review.
+func Outstanding(s State) bool {
+	return s == StateFail || s == StateWarning || s == StateUnknown || s == StateQuestion
+}
+
+// stateFor derives the state, its evidence basis, a short reason and the
+// recorded answer (question controls only).
+func stateFor(c Control, d Definition, policy map[string]any) (State, string, string, string) {
+	activeErr, activeWarn, exceptions, info := false, false, false, false
 	for _, f := range c.Findings {
 		switch {
+		case f.Severity == sdk.SeverityInfo:
+			info = true
 		case f.Suppressed != nil || f.Baselined:
 			exceptions = true
 		case f.Severity == sdk.SeverityError:
@@ -234,24 +321,169 @@ func stateFor(c Control, d Definition, policy map[string]any) State {
 	}
 	switch {
 	case activeErr:
-		return StateFail
-	case activeWarn || exceptions:
-		return StateWarning
-	case c.Evaluated:
-		return StatePass
+		return StateFail, BasisDeterministic, "An active error-severity finding remains for the selected profile.", ""
+	case activeWarn:
+		return StateWarning, BasisDeterministic, "An active warning-severity finding remains for the selected profile.", ""
+	case exceptions:
+		return StateWarning, BasisDeterministic, "Findings exist but are suppressed or baselined; they remain open debt.", ""
 	}
 	if d.QuestionKey != "" {
-		if _, ok := policy[d.QuestionKey]; ok {
-			return StatePass
+		return answerState(d, policy)
+	}
+	var hidden, delegated, undeclared, notApp []sdk.Skip
+	for _, s := range c.Skipped {
+		switch classifySkip(s) {
+		case skipDelegated:
+			delegated = append(delegated, s)
+		case skipUndeclared:
+			undeclared = append(undeclared, s)
+		case skipNotApplicable:
+			notApp = append(notApp, s)
+		default:
+			hidden = append(hidden, s)
 		}
 	}
-	if d.NoEvidenceState != "" {
-		return d.NoEvidenceState
+	switch {
+	case len(hidden) > 0 && c.Evaluated:
+		return StateUnknown, BasisDeterministic, fmt.Sprintf("Partial evaluation: %d check(s) skipped (%s).", len(hidden), skipReasons(hidden)), ""
+	case len(hidden) > 0:
+		return StateSkipped, BasisNone, "Skipped: " + skipReasons(hidden) + ".", ""
+	case len(undeclared) > 0:
+		return StateQuestion, BasisNone, "No requirement or objective is declared (" + skipReasons(undeclared) + "); the control needs a team decision.", ""
+	case len(delegated) > 0:
+		return StateAttested, BasisAttested, "Delegated to Azure Policy by configuration; assignment and compliance not verified (" + skipReasons(delegated) + ").", ""
+	case c.Evaluated && info:
+		return StateInfo, BasisDeterministic, "Evaluated; informational at this profile's severity, see evidence.", ""
+	case c.Evaluated && len(notApp) > 0:
+		return StatePass, BasisDeterministic, "Evaluated with no remaining finding; other checks were not applicable (" + skipReasons(notApp) + ").", ""
+	case c.Evaluated:
+		return StatePass, BasisDeterministic, "Evaluated with no remaining finding and no skipped check.", ""
+	case len(notApp) > 0:
+		return StateNotApplicable, BasisDeterministic, "Not applicable: " + skipReasons(notApp) + ".", ""
+	case d.NoEvidenceState != "":
+		return d.NoEvidenceState, BasisNone, "No evidence was recorded for this control.", ""
 	}
-	if len(c.Skipped) != 0 {
-		return StateSkipped
+	return StateUnknown, BasisNone, "No evidence was recorded for this control.", ""
+}
+
+// answerState evaluates a recorded question answer. Only a boolean true with
+// the required reference is ATTESTED; false is WARNING; anything else stays a
+// QUESTION.
+func answerState(d Definition, policy map[string]any) (State, string, string, string) {
+	v, ok := policy[d.QuestionKey]
+	if !ok {
+		return StateQuestion, BasisNone, "No answer recorded (" + d.QuestionKey + ").", ""
 	}
-	return StateUnknown
+	answer := fmt.Sprint(v)
+	b, isBool := v.(bool)
+	switch {
+	case !isBool:
+		return StateQuestion, BasisNone, "Recorded answer for " + d.QuestionKey + " is not true or false.", answer
+	case !b:
+		return StateWarning, BasisAttested, "The team recorded " + d.QuestionKey + ": false.", answer
+	}
+	if d.QuestionReferenceKey != "" {
+		ref, _ := policy[d.QuestionReferenceKey].(string)
+		if strings.TrimSpace(ref) == "" {
+			return StateQuestion, BasisNone, "Answer recorded without the required reference (" + d.QuestionReferenceKey + ").", answer
+		}
+		answer += "; reference: " + strings.TrimSpace(ref)
+	}
+	return StateAttested, BasisAttested, "Answered by team attestation; not verified by Foundry Doctor.", answer
+}
+
+type skipKind int
+
+const (
+	// skipHidden: the check did not run; the control was not assessed.
+	skipHidden skipKind = iota
+	// skipNotApplicable: the project has no resource or scope the rule checks.
+	skipNotApplicable
+	// skipDelegated: configuration says another mechanism (Azure Policy,
+	// central DNS) owns the setting. Foundry Doctor did not verify it.
+	skipDelegated
+	// skipUndeclared: the rule needs a requirement or objective that the
+	// team has not declared.
+	skipUndeclared
+)
+
+// notApplicableHeads are reason heads that mean the project has nothing the
+// rule checks. This list is the WAF view's own classification; it is
+// deliberately separate from rules.ClassifySkip, which decides --strict exit
+// codes (ADR-010 decision 9, ADR-026).
+var notApplicableHeads = []string{
+	sdk.SkipNotApplicable,
+	"dev-profile",
+	"environment-not-classified-as-dev",
+	"no-supported-fixed-capacity-resources",
+	"project-has-no-agent-services",
+	"no-apis",
+	"no-ai-gateway-apis",
+	"no-emit-token-metric-policy",
+	"api-not-fronting-a-model-endpoint",
+	"non-foundry-backend-host",
+	"backend-does-not-target-foundry-or-azure-openai",
+	"schedule-null",
+}
+
+// notApplicableInputDetails are input-unavailable details that state the
+// project has no such resource, as opposed to an input that could not be read.
+var notApplicableInputDetails = []string{
+	"project has no capability host",
+	"project has no search connection with index metadata",
+	"no bound connection targets a search, storage or cosmos db resource",
+	"account has no model deployments",
+}
+
+// delegatedHeads are configuration delegations (ADR-026 item 3).
+var delegatedHeads = []string{"policy-managed", "central-dns"}
+
+func classifySkip(s sdk.Skip) skipKind {
+	head, detail, _ := strings.Cut(s.Reason, ":")
+	head = strings.TrimSpace(head)
+	switch {
+	case slices.Contains(delegatedHeads, head):
+		return skipDelegated
+	case strings.HasPrefix(head, "no-") && (strings.HasSuffix(head, "-declared") || strings.HasSuffix(head, "-requirement")):
+		return skipUndeclared
+	case slices.Contains(notApplicableHeads, head):
+		return skipNotApplicable
+	case head == sdk.SkipInputUnavailable:
+		detail = strings.ToLower(strings.TrimSpace(detail))
+		for _, d := range notApplicableInputDetails {
+			if strings.HasPrefix(detail, d) {
+				return skipNotApplicable
+			}
+		}
+	}
+	return skipHidden
+}
+
+func skipReasons(skips []sdk.Skip) string {
+	seen := map[string]bool{}
+	var parts []string
+	for _, s := range skips {
+		r := strings.TrimSpace(s.Reason)
+		if r == "" || seen[r] {
+			continue
+		}
+		seen[r] = true
+		parts = append(parts, r)
+	}
+	if len(parts) == 0 {
+		return "no reason recorded"
+	}
+	return strings.Join(parts, "; ")
+}
+
+// costlyRecommendation: an optional control whose remediation adds Azure cost
+// and that is still outstanding or unassessed. Mandatory controls never land
+// here (the mapping file forbids it); they stay in the top actions.
+func costlyRecommendation(c Control) bool {
+	if !c.Costly || c.Mandatory {
+		return false
+	}
+	return Outstanding(c.State) || c.State == StateSkipped
 }
 
 func topActions(controls []Control) []Action {
@@ -261,7 +493,7 @@ func topActions(controls []Control) []Action {
 	}
 	var rows []ranked
 	for _, c := range controls {
-		if c.State == StatePass || c.State == StateSkipped {
+		if !Outstanding(c.State) || costlyRecommendation(c) {
 			continue
 		}
 		rank := 90
@@ -278,23 +510,7 @@ func topActions(controls []Control) []Action {
 		if !c.Mandatory {
 			rank += 20
 		}
-		if c.Costly {
-			rank += 10
-		}
-		rows = append(rows, ranked{
-			rank: rank,
-			Action: Action{
-				ControlID:      c.ControlID,
-				RuleID:         c.RuleID,
-				Title:          c.Title,
-				Pillar:         c.Pillar,
-				State:          c.State,
-				Recommendation: c.Recommendation,
-				SourceURL:      c.SourceURL,
-				LastVerified:   c.LastVerified,
-				Costly:         c.Costly,
-			},
-		})
+		rows = append(rows, ranked{rank: rank, Action: toAction(c)})
 	}
 	slices.SortFunc(rows, func(a, b ranked) int {
 		if a.rank != b.rank {
@@ -317,23 +533,16 @@ func topActions(controls []Control) []Action {
 
 func decisionFor(controls []Control) string {
 	has := func(match func(Control) bool) bool {
-		for _, c := range controls {
-			if match(c) {
-				return true
-			}
-		}
-		return false
+		return slices.ContainsFunc(controls, match)
 	}
 	switch {
 	case has(func(c Control) bool { return c.Mandatory && c.State == StateFail }):
 		return "No-go within assessed scope: one or more mandatory controls failed."
 	case has(func(c Control) bool {
-		return c.Mandatory && (c.State == StateWarning || c.State == StateUnknown || c.State == StateQuestion || c.State == StateSkipped)
+		return c.Mandatory && (c.State == StateWarning || c.State == StateAttested || Unassessed(c.State))
 	}):
 		return "Proceed with conditions: mandatory controls need remediation or manual review."
-	case has(func(c Control) bool {
-		return c.State == StateFail || c.State == StateWarning || c.State == StateUnknown || c.State == StateQuestion
-	}):
+	case has(func(c Control) bool { return Outstanding(c.State) }):
 		return "Proceed with recommendations: no mandatory failures, but outstanding improvements remain."
 	default:
 		return "Proceed within assessed scope: no outstanding control failures were found in the assessed set."
@@ -354,6 +563,17 @@ func firstLastVerified(r catalog.Rule) string {
 	return r.Sources[0].LastVerified
 }
 
+func externalIDs(r catalog.Rule) []string {
+	var out []string
+	for _, id := range r.Overlap.PSRule {
+		out = append(out, "PSRule "+id)
+	}
+	for _, id := range r.Overlap.AzurePolicy {
+		out = append(out, "Azure Policy "+id)
+	}
+	return out
+}
+
 func choose(v, fallback string) string {
 	if strings.TrimSpace(v) != "" {
 		return v
@@ -362,5 +582,24 @@ func choose(v, fallback string) string {
 }
 
 func toRef(c Control) ControlRef {
-	return ControlRef{ControlID: c.ControlID, RuleID: c.RuleID, Title: c.Title, Pillar: c.Pillar, State: c.State}
+	return ControlRef{ControlID: c.ControlID, RuleID: c.RuleID, Title: c.Title, Pillar: c.Pillar, State: c.State, StateReason: c.StateReason}
+}
+
+func toAction(c Control) Action {
+	return Action{
+		ControlID:      c.ControlID,
+		RuleID:         c.RuleID,
+		Title:          c.Title,
+		Pillar:         c.Pillar,
+		State:          c.State,
+		Mandatory:      c.Mandatory,
+		Recommendation: c.Recommendation,
+		SourceURL:      c.SourceURL,
+		LastVerified:   c.LastVerified,
+		ProjectOpinion: c.ProjectOpinion,
+		Costly:         c.Costly,
+		CostBasis:      c.CostBasis,
+		CostSourceURL:  c.CostSourceURL,
+		CostVerified:   c.CostVerified,
+	}
 }

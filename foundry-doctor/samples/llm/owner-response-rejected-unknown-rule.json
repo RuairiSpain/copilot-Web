@@ -1,0 +1,15 @@
+{
+  "summary": "FND-NET-009 is also failing in this project.",
+  "sections": [
+    {
+      "heading": "Identity",
+      "summary": "Moving to managed identities removes credential handling from the deployment path.",
+      "actions": [],
+      "ruleIds": [
+        "FND-IDN-001",
+        "FND-NET-001",
+        "FND-NOPE-999"
+      ]
+    }
+  ]
+}

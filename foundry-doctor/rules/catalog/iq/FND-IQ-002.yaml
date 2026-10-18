@@ -1,5 +1,5 @@
 id: FND-IQ-002
-version: 1
+version: 2
 group: IQ
 title: "Required key/content/title/vector/semantic fields"
 description: >-
@@ -82,6 +82,16 @@ sources:
       MicrosoftDocs/azure-ai-docs: articles/search/agentic-knowledge-source-how-to-search-index.md; retrieved
       2026-10-04
     note: Starting with 2026-05-01-preview semanticConfigurationName is optional; earlier versions still require it.
+  - url: https://learn.microsoft.com/rest/api/searchservice/supported-data-types
+    lastVerified: '2026-10-18'
+    verifiedVia: https://learn.microsoft.com/rest/api/searchservice/supported-data-types (web fetch, Phase 8 fix loop 1)
+    note: >-
+      Vector EDM types are Collection(Edm.Single|Half|Int16|SByte|Byte); Collection(Edm.String) and the other collections are non-vector types.
+  - url: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-blob
+    lastVerified: '2026-10-18'
+    verifiedVia: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-blob (web fetch, Phase 8 fix loop 1)
+    note: >-
+      GET response shape: azureBlobParameters.{connectionString, isADLSGen2, ingestionParameters.{ingestionPermissionOptions, embeddingModel, chatCompletionModel, aiServices, assetStore, ingestionSchedule}, createdResources.{datasource, indexer, skillset, index}}; ingestionPermissionOptions need 2026-08-01-preview and are not supported by 2026-04-01.
 overlap:
   decision: native
   provisional: true
@@ -129,3 +139,4 @@ notes: >-
   Whether the service rejects an index missing these elements at knowledge source creation or fails later at
   retrieve time is not stated; the rule asserts only the documented criteria. A recommended-field check
   (title, citation, description) is proposed as a separate new rule in docs/overlap/iq-gw.md.
+  Round-1 fix (2026-10-18): a field is a vector field only for the documented vector EDM types or when it declares dimensions or vectorSearchProfile, so a filterable Collection(Edm.String) permission field is not a vector field. Generated indexes (createdResources.index) are read for blob, indexed SharePoint and indexed OneLake sources. Unknown API versions are uncertain; no data plane read means skipped.

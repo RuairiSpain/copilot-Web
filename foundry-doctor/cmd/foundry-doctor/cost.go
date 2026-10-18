@@ -20,7 +20,8 @@ func costCmd(_ context.Context, svc app.Services, exit *int) *cobra.Command {
 		Use:   "cost",
 		Short: "Estimate fixed-capacity monthly cost from the compiled plan",
 		Long: "Build an advisory fixed-capacity estimate from the compiled ARM plan using public Azure retail prices.\n" +
-			"It never estimates token consumption, discounts, taxes, or negotiated pricing.",
+			"It never estimates token consumption, discounts, taxes, or negotiated pricing. Totals cover the estimated\n" +
+			"lines only; excluded and unsupported resources are listed. Cost output never fails CI.",
 		Example: "  foundry-doctor cost --environment prod --compare dev\n" +
 			"  foundry-doctor cost --offline --price-cache .foundry-doctor/cache/prices.json --format json",
 		Args: cobra.NoArgs,
@@ -38,10 +39,10 @@ func costCmd(_ context.Context, svc app.Services, exit *int) *cobra.Command {
 	f.StringVar(&profile, "profile", "", "curated profile: dev, test or prod (default from config)")
 	f.StringVar(&environment, "environment", "", "azd environment name to resolve before estimating")
 	f.StringSliceVar(&compare, "compare", nil, "additional azd environment name(s) to compare against the primary estimate")
-	f.StringVar(&currency, "currency", "USD", "ISO currency code for retail lookup (default USD)")
+	f.StringVar(&currency, "currency", "USD", "ISO 4217 currency code for retail lookup; non-USD prices are reference values")
 	f.Float64Var(&hours, "hours-per-month", 730, "documented monthly-hours assumption for hourly meters")
 	f.BoolVar(&offline, "offline", false, "use only the local price cache; do not call the Retail Prices API")
-	f.StringVar(&priceCache, "price-cache", "", "price cache file path (default .foundry-doctor/cache/prices.json)")
+	f.StringVar(&priceCache, "price-cache", "", "price cache file path (default <dir>/.foundry-doctor/cache/prices.json)")
 	f.StringVar(&format, "format", "console", "report format: console, json or markdown")
 	f.StringVar(&out, "out", "", "write the report to this file instead of stdout")
 	_ = cmd.RegisterFlagCompletionFunc("format", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {

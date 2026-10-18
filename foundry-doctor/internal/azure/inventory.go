@@ -138,7 +138,8 @@ func (a *Adapter) ListResources(ctx context.Context, q InventoryQuery) (Resource
 			ID, Name, Type, Location, Kind string
 			SKU                            struct{ Name string }
 			Tags                           map[string]string
-			ProvisioningState              string `json:"provisioningState"`
+			ProvisioningState              string          `json:"provisioningState"`
+			Identity                       json.RawMessage `json:"identity"`
 		}
 		if err := json.Unmarshal(raw, &r); err != nil {
 			return ResourceList{}, fmt.Errorf("azure: decode resource: %w", err)
@@ -150,10 +151,35 @@ func (a *Adapter) ListResources(ctx context.Context, q InventoryQuery) (Resource
 		if wantProv && r.ProvisioningState != "" {
 			out.Properties = map[string]string{"properties.provisioningState": r.ProvisioningState}
 		}
+		out.UserAssignedIdentities = userAssignedIdentityIDs(r.Identity)
 		res.Resources = append(res.Resources, out)
 	}
 	sort.Slice(res.Resources, func(i, j int) bool { return res.Resources[i].ID < res.Resources[j].ID })
 	return res, nil
+}
+
+// userAssignedIdentityIDs returns the sorted keys of
+// identity.userAssignedIdentities. The identity is a best-effort hint whose
+// 2025-04-01 shape is UNVERIFIED, so any unexpected shape (null, a string, an
+// array) yields no IDs instead of failing the whole inventory list.
+func userAssignedIdentityIDs(raw json.RawMessage) []string {
+	if len(raw) == 0 {
+		return nil
+	}
+	var identity struct {
+		UserAssignedIdentities map[string]json.RawMessage `json:"userAssignedIdentities"`
+	}
+	if err := json.Unmarshal(raw, &identity); err != nil {
+		return nil
+	}
+	var out []string
+	for id := range identity.UserAssignedIdentities {
+		if id = strings.TrimSpace(id); id != "" {
+			out = append(out, id)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // ResourceGroup implements Inventory. A 404 is Exists=false, not an error.

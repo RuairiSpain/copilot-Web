@@ -2,8 +2,10 @@ package redact
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/assess"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/catalog"
@@ -18,6 +20,19 @@ const (
 	maxEvidenceBytes       = 320
 	maxRecommendationBytes = 240
 	maxAssessmentFindings  = 10
+)
+
+var (
+	// armResourceID matches ARM resource IDs and scopes, which name the
+	// subscription, resource group and resource.
+	armResourceID = regexp.MustCompile(`(?i)/subscriptions/[^\s;,'"()<>]+`)
+
+	// guidToken matches subscription, tenant, object and client IDs.
+	guidToken = regexp.MustCompile(`(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b`)
+
+	// hostName matches DNS names under a common public suffix (resource FQDNs such as <name>.openai.azure.com). File
+	// names such as main.bicep or azure.yaml do not match.
+	hostName = regexp.MustCompile(`(?i)\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:com|net|io|org|us|cn|ai|ms|gov|dev|app|cloud)\b`)
 )
 
 // Rule converts one catalogue rule into the allow-listed model payload.
@@ -52,7 +67,10 @@ func Assessment(rules []catalog.Rule, a assess.Assessment, audience llm.Audience
 	projected := make([]llm.Finding, 0, len(controls))
 	seen := map[string]bool{}
 	for _, c := range controls {
-		if c.State == assess.StatePass || seen[c.RuleID] {
+		// Only outstanding or unassessed controls are narrated. PASS, INFO,
+		// ATTESTED and NOT_APPLICABLE carry no state in llm.Finding, so sending
+		// them would invite the model to describe them as problems.
+		if !(assess.Outstanding(c.State) || c.State == assess.StateSkipped) || seen[c.RuleID] {
 			continue
 		}
 		r, ok := rulesByID[c.RuleID]
@@ -71,7 +89,7 @@ func Assessment(rules []catalog.Rule, a assess.Assessment, audience llm.Audience
 		}
 	}
 	if len(projected) == 0 {
-		return llm.AssessmentInput{}, fmt.Errorf("%w: no non-pass findings available for advisory narrative", llm.ErrUnavailable)
+		return llm.AssessmentInput{}, fmt.Errorf("%w: no outstanding or unassessed controls available for advisory narrative", llm.ErrUnavailable)
 	}
 	return llm.AssessmentInput{
 		Audience: audience,
@@ -90,7 +108,7 @@ func controlEvidence(c assess.Control) string {
 		}
 	}
 	for _, s := range c.Skipped {
-		reason := clean(strings.TrimSpace(findings.Redact(s.Reason)))
+		reason := redactHosts(clean(strings.TrimSpace(findings.Redact(s.Reason))))
 		if reason != "" {
 			parts = append(parts, "skipped: "+reason)
 		}
@@ -117,8 +135,16 @@ func location(loc sdk.Location) string {
 
 func clean(s string) string {
 	s = findings.Redact(s)
+	s = armResourceID.ReplaceAllString(s, "<azure-resource-id>")
+	s = guidToken.ReplaceAllString(s, "<id>")
 	s = strings.Join(strings.Fields(s), " ")
 	return s
+}
+
+// redactHosts removes DNS names from adapter-authored free text (skip
+// reasons); catalogue text keeps its documented host suffixes.
+func redactHosts(s string) string {
+	return hostName.ReplaceAllString(s, "<host>")
 }
 
 func truncate(s string, max int) string {
@@ -126,9 +152,17 @@ func truncate(s string, max int) string {
 		return s
 	}
 	if max < 4 {
-		return s[:max]
+		return runePrefix(s, max)
 	}
-	return strings.TrimSpace(s[:max-3]) + "..."
+	return strings.TrimSpace(runePrefix(s, max-3)) + "..."
+}
+
+// runePrefix cuts s to at most n bytes without splitting a UTF-8 rune.
+func runePrefix(s string, n int) string {
+	for n > 0 && n < len(s) && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n]
 }
 
 func rank(state assess.State) int {

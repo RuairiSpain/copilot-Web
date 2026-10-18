@@ -1,5 +1,5 @@
 id: FND-IQ-001
-version: 1
+version: 2
 group: IQ
 title: "Filter fields/claims reference filterable fields"
 description: >-
@@ -136,3 +136,4 @@ notes: >-
   the only documented filter-over-claims pattern. Whether a non-filterable field in baseFilter is rejected at
   knowledge source creation or at retrieve time is not stated in the sources, so only the documented
   requirement (filters evaluate over filterable fields) is asserted.
+  Round-1 fix (2026-10-18): baseFilter fields are extracted by an OData tokenizer that ignores string, number and typed literals, keywords, search.* and geo.* functions and lambda range variables; complex-field paths and unknown functions are reported uncertain. Every data-plane object outside 2026-04-01, 2026-05-01-preview and 2026-08-01-preview is uncertain, and the rule skips when the opt-in data-plane probe (doctor --iq-metadata) did not run.

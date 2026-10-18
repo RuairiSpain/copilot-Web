@@ -12,7 +12,7 @@
   "files": [
     {
       "path": "azure.yaml",
-      "reviewPath": "review/sample.review/azure.yaml",
+      "reviewPath": "review/sample.review/azure.review.yaml",
       "commentStyle": "yaml",
       "annotationCount": 1
     }

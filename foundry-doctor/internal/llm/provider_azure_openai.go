@@ -21,21 +21,33 @@ type AzureOpenAIProvider struct {
 	Credential azure.TokenCredential
 }
 
-// NewAzureOpenAIProvider builds the production provider.
+// NewAzureOpenAIProvider builds the production provider. A nil client uses a
+// dedicated client (default transport, so HTTPS_PROXY is honoured) and a nil
+// credential uses the azd/az chain without AZURE_ACCESS_TOKEN, whose audience
+// is unknown and must never be forwarded to an inference host.
 func NewAzureOpenAIProvider(client *http.Client, credential azure.TokenCredential) AzureOpenAIProvider {
 	if client == nil {
-		client = http.DefaultClient
+		client = &http.Client{CheckRedirect: refuseRedirect}
 	}
 	if credential == nil {
-		credential = azure.NewDefaultCredential(nil)
+		credential = azure.NewCLICredentialForTenant(nil, "")
 	}
 	return AzureOpenAIProvider{Client: client, Credential: credential}
+}
+
+// refuseRedirect stops the client at the first 3xx so neither the projected
+// payload nor the bearer token is re-sent to a host outside the allow-list.
+func refuseRedirect(*http.Request, []*http.Request) error {
+	return http.ErrUseLastResponse
 }
 
 func (p AzureOpenAIProvider) Complete(ctx context.Context, cfg Config, prompt Prompt) (Completion, error) {
 	endpoint, err := providerURL(cfg.Endpoint)
 	if err != nil {
 		return Completion{}, fmt.Errorf("%w: %s", ErrUnavailable, err)
+	}
+	if !allowedScopes[cfg.Scope] {
+		return Completion{}, fmt.Errorf("%w: token scope is not allow-listed", ErrUnavailable)
 	}
 	tok, err := p.Credential.Token(ctx, cfg.Scope)
 	if err != nil {
@@ -44,9 +56,11 @@ func (p AzureOpenAIProvider) Complete(ctx context.Context, cfg Config, prompt Pr
 		}
 		return Completion{}, fmt.Errorf("%w: %s", ErrUnavailable, err)
 	}
+	// temperature is deliberately not sent: reasoning deployments do not accept
+	// the same parameter set as other chat models, and determinism is enforced
+	// by response validation rather than sampling settings.
 	body := map[string]any{
-		"model":       cfg.Deployment,
-		"temperature": 0,
+		"model": cfg.Deployment,
 		"messages": []map[string]string{
 			{"role": "system", "content": prompt.System},
 			{"role": "user", "content": prompt.User},
@@ -59,6 +73,9 @@ func (p AzureOpenAIProvider) Complete(ctx context.Context, cfg Config, prompt Pr
 				"schema": prompt.Schema,
 			},
 		},
+	}
+	if cfg.MaxOutputTokens > 0 {
+		body["max_completion_tokens"] = cfg.MaxOutputTokens
 	}
 	payload, err := json.Marshal(body)
 	if err != nil {
@@ -73,7 +90,12 @@ func (p AzureOpenAIProvider) Complete(ctx context.Context, cfg Config, prompt Pr
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tok.Token)
-	resp, err := p.Client.Do(req)
+	client := http.Client{}
+	if p.Client != nil {
+		client = *p.Client
+	}
+	client.CheckRedirect = refuseRedirect
+	resp, err := client.Do(req)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return Completion{}, err
@@ -90,19 +112,35 @@ func (p AzureOpenAIProvider) Complete(ctx context.Context, cfg Config, prompt Pr
 	if len(raw) > cfg.MaxResponseBytes {
 		return Completion{}, fmt.Errorf("%w: provider response exceeded %d bytes", ErrRejected, cfg.MaxResponseBytes)
 	}
+	if resp.StatusCode >= 300 && resp.StatusCode <= 399 {
+		return Completion{}, fmt.Errorf("%w: provider redirected (status %d); redirects are refused", ErrUnavailable, resp.StatusCode)
+	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		return Completion{}, parseProviderError(raw, resp.StatusCode)
 	}
 	var out struct {
 		Model   string `json:"model"`
 		Choices []struct {
-			Message struct {
+			FinishReason string `json:"finish_reason"`
+			Message      struct {
 				Content string `json:"content"`
+				Refusal string `json:"refusal"`
 			} `json:"message"`
 		} `json:"choices"`
 	}
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return Completion{}, fmt.Errorf("%w: provider response is not valid JSON", ErrRejected)
+	}
+	if len(out.Choices) > 0 {
+		if strings.TrimSpace(out.Choices[0].Message.Refusal) != "" {
+			return Completion{}, fmt.Errorf("%w: model refused the request", ErrRejected)
+		}
+		switch out.Choices[0].FinishReason {
+		case "length":
+			return Completion{}, fmt.Errorf("%w: model output was truncated at the %d-token cap", ErrRejected, cfg.MaxOutputTokens)
+		case "content_filter":
+			return Completion{}, fmt.Errorf("%w: model output was blocked by the content filter", ErrRejected)
+		}
 	}
 	if len(out.Choices) == 0 || strings.TrimSpace(out.Choices[0].Message.Content) == "" {
 		return Completion{}, fmt.Errorf("%w: provider response contained no narrative content", ErrRejected)
@@ -125,6 +163,9 @@ func providerURL(raw string) (string, error) {
 	}
 	if u.RawQuery != "" || u.Fragment != "" {
 		return "", fmt.Errorf("endpoint must not contain query or fragment")
+	}
+	if u.Port() != "" {
+		return "", fmt.Errorf("endpoint must not specify a port")
 	}
 	host := strings.ToLower(u.Hostname())
 	if !strings.HasSuffix(host, ".openai.azure.com") && !strings.HasSuffix(host, ".services.ai.azure.com") {

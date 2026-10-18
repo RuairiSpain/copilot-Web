@@ -1,0 +1,96 @@
+{
+  "description": "Environment-difference graph: two recorded deployed inventories (rg-dev as base, rg-prod as target) rendered with --format json and compared with --diff-base/--diff-target. Search is added, Application Insights changed from failed to succeeded, and the storage identity edge was removed.",
+  "diffBase": {
+    "mode": "deployed",
+    "scope": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-dev",
+    "inventory": [
+      {
+        "ID": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-dev/providers/Microsoft.CognitiveServices/accounts/aif-sample",
+        "Name": "aif-sample",
+        "Type": "Microsoft.CognitiveServices/accounts",
+        "Properties": {
+          "properties.provisioningState": "Succeeded"
+        },
+        "UserAssignedIdentities": [
+          "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-dev/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-sample"
+        ]
+      },
+      {
+        "ID": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-dev/providers/Microsoft.Insights/components/appi-sample",
+        "Name": "appi-sample",
+        "Type": "Microsoft.Insights/components",
+        "Properties": {
+          "properties.provisioningState": "Failed"
+        }
+      },
+      {
+        "ID": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-dev/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-sample",
+        "Name": "id-sample",
+        "Type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+        "Properties": {
+          "properties.provisioningState": "Succeeded"
+        }
+      },
+      {
+        "ID": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-dev/providers/Microsoft.Storage/storageAccounts/stsample",
+        "Name": "stsample",
+        "Type": "Microsoft.Storage/storageAccounts",
+        "Properties": {
+          "properties.provisioningState": "Succeeded"
+        },
+        "UserAssignedIdentities": [
+          "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-dev/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-sample"
+        ]
+      }
+    ]
+  },
+  "diffTarget": {
+    "mode": "deployed",
+    "scope": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-prod",
+    "inventory": [
+      {
+        "ID": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-prod/providers/Microsoft.CognitiveServices/accounts/aif-sample",
+        "Name": "aif-sample",
+        "Type": "Microsoft.CognitiveServices/accounts",
+        "Properties": {
+          "properties.provisioningState": "Succeeded"
+        },
+        "UserAssignedIdentities": [
+          "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-prod/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-sample"
+        ]
+      },
+      {
+        "ID": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-prod/providers/Microsoft.Insights/components/appi-sample",
+        "Name": "appi-sample",
+        "Type": "Microsoft.Insights/components",
+        "Properties": {
+          "properties.provisioningState": "Succeeded"
+        }
+      },
+      {
+        "ID": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-prod/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-sample",
+        "Name": "id-sample",
+        "Type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+        "Properties": {
+          "properties.provisioningState": "Succeeded"
+        }
+      },
+      {
+        "ID": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-prod/providers/Microsoft.Search/searchServices/srch-sample",
+        "Name": "srch-sample",
+        "Type": "Microsoft.Search/searchServices",
+        "Properties": {
+          "properties.provisioningState": "Succeeded"
+        }
+      },
+      {
+        "ID": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-prod/providers/Microsoft.Storage/storageAccounts/stsample",
+        "Name": "stsample",
+        "Type": "Microsoft.Storage/storageAccounts",
+        "Properties": {
+          "properties.provisioningState": "Succeeded"
+        }
+      }
+    ]
+  }
+}

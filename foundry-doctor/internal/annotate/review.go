@@ -22,6 +22,9 @@ const (
 	diffName     = "annotations.diff"
 )
 
+// ReviewRequest describes one review copy. InfraPath is the resolved,
+// project-relative infra directory (azure.yaml infra.path or the configured
+// override); it is copied whole.
 type ReviewRequest struct {
 	RootDir     string
 	OutDir      string
@@ -37,9 +40,20 @@ type ReviewResult struct {
 	Manifest Manifest
 }
 
+// copiedFile is one input copied into the review tree. ReviewRel differs from
+// Rel only for azd project files, which are renamed so azd cannot discover
+// the copy as a project.
+type copiedFile struct {
+	Rel       string
+	ReviewRel string
+	Perm      fs.FileMode
+}
+
 // WriteReview writes a generated review tree rooted at OutDir. OutDir must be a
-// repo-relative path ending in ".review".
-func WriteReview(ctx context.Context, req ReviewRequest) (ReviewResult, error) {
+// repo-relative path ending in ".review". An existing OutDir is replaced only
+// when it is empty or was written by this tool. On error the partial tree is
+// removed.
+func WriteReview(ctx context.Context, req ReviewRequest) (res ReviewResult, err error) {
 	if err := ctx.Err(); err != nil {
 		return ReviewResult{}, err
 	}
@@ -47,7 +61,8 @@ func WriteReview(ctx context.Context, req ReviewRequest) (ReviewResult, error) {
 	if err != nil {
 		return ReviewResult{}, err
 	}
-	if err := validateOutputPlacement(outRel, req.AzureYAML, req.InfraPath); err != nil {
+	inputs := []string{req.AzureYAML, req.InfraPath}
+	if err := validateOutputPlacement(outRel, inputs...); err != nil {
 		return ReviewResult{}, err
 	}
 	root, err := os.OpenRoot(req.RootDir)
@@ -58,20 +73,25 @@ func WriteReview(ctx context.Context, req ReviewRequest) (ReviewResult, error) {
 	if err := ensureNoSymlinkComponents(root, outRel); err != nil {
 		return ReviewResult{}, err
 	}
-	if err := root.RemoveAll(outRel); err != nil {
-		return ReviewResult{}, fmt.Errorf("reset review directory: %w", err)
+	if err := checkIdentityOverlap(root, outRel, inputs); err != nil {
+		return ReviewResult{}, err
 	}
-	if err := root.MkdirAll(outRel, 0o755); err != nil {
-		return ReviewResult{}, fmt.Errorf("create review directory: %w", err)
+	if err := resetReviewDir(root, outRel); err != nil {
+		return ReviewResult{}, err
 	}
+	defer func() {
+		if err != nil {
+			_ = root.RemoveAll(outRel)
+		}
+	}()
 
 	files, err := copyInputs(ctx, root, outRel, req.AzureYAML, req.InfraPath)
 	if err != nil {
 		return ReviewResult{}, err
 	}
 	copied := make(map[string]bool, len(files))
-	for _, rel := range files {
-		copied[rel] = true
+	for _, f := range files {
+		copied[f.Rel] = true
 	}
 	yamlComments := map[string][]yaml.Comment{}
 	bicepComments := map[string][]bicepcomments.Comment{}
@@ -97,7 +117,7 @@ func WriteReview(ctx context.Context, req ReviewRequest) (ReviewResult, error) {
 
 	manifest := Manifest{
 		SchemaVersion: ManifestSchemaVersion,
-		Tool:          "foundry-doctor",
+		Tool:          toolName,
 		ToolVersion:   req.ToolVersion,
 		Profile:       req.Profile,
 		ReviewDir:     outRel,
@@ -108,41 +128,45 @@ func WriteReview(ctx context.Context, req ReviewRequest) (ReviewResult, error) {
 		manifest.DiffPath = path.Join(outRel, diffName)
 	}
 	var diffParts [][]byte
-	for _, rel := range files {
-		var (
-			updated []byte
-			before  []byte
-		)
-		staged := path.Join(outRel, rel)
-		before, err = root.ReadFile(staged)
+	for _, f := range files {
+		staged := path.Join(outRel, f.ReviewRel)
+		before, err := root.ReadFile(staged)
 		if err != nil {
-			return ReviewResult{}, fmt.Errorf("read staged file %s: %w", rel, err)
+			return ReviewResult{}, fmt.Errorf("read staged file %s: %w", f.Rel, err)
 		}
-		updated = before
+		updated := before
 		commentStyle := ""
-		if cs := yamlComments[rel]; len(cs) > 0 {
-			updated, err = yaml.Apply(before, cs)
-			commentStyle = "yaml"
-		} else if cs := bicepComments[rel]; len(cs) > 0 {
-			updated, err = bicepcomments.Apply(before, cs)
-			commentStyle = "bicep"
+		count := 0
+		ext := strings.ToLower(path.Ext(f.Rel))
+		switch {
+		case (ext == ".yaml" || ext == ".yml") && (len(yamlComments[f.Rel]) > 0 || f.ReviewRel != f.Rel):
+			// Every renamed azd project file carries the banner, with or
+			// without annotations.
+			updated, err = yaml.Apply(before, yamlComments[f.Rel])
+			commentStyle, count = "yaml", len(yamlComments[f.Rel])
+		case ext == ".bicep":
+			// Every copied Bicep file carries the banner; the copy is then
+			// recompiled and compared with the original.
+			updated, err = bicepcomments.Apply(before, bicepComments[f.Rel])
+			commentStyle, count = "bicep", len(bicepComments[f.Rel])
 		}
 		if err != nil {
 			return ReviewResult{}, err
 		}
-		if commentStyle != "" {
-			if err := root.WriteFile(staged, updated, 0o644); err != nil {
-				return ReviewResult{}, fmt.Errorf("write annotated file %s: %w", rel, err)
-			}
-			manifest.Files = append(manifest.Files, ManifestFile{
-				Path:            rel,
-				ReviewPath:      path.Join(outRel, rel),
-				CommentStyle:    commentStyle,
-				AnnotationCount: len(yamlComments[rel]) + len(bicepComments[rel]),
-			})
-			if req.WriteDiff {
-				diffParts = append(diffParts, diff.Unified(rel, before, updated))
-			}
+		if commentStyle == "" {
+			continue
+		}
+		if err := root.WriteFile(staged, updated, f.Perm); err != nil {
+			return ReviewResult{}, fmt.Errorf("write annotated file %s: %w", f.Rel, err)
+		}
+		manifest.Files = append(manifest.Files, ManifestFile{
+			Path:            f.Rel,
+			ReviewPath:      staged,
+			CommentStyle:    commentStyle,
+			AnnotationCount: count,
+		})
+		if req.WriteDiff {
+			diffParts = append(diffParts, diff.Unified(f.Rel, before, updated))
 		}
 	}
 	manifest.Summary.Total = len(entries)
@@ -157,12 +181,12 @@ func WriteReview(ctx context.Context, req ReviewRequest) (ReviewResult, error) {
 	if err != nil {
 		return ReviewResult{}, fmt.Errorf("encode manifest: %w", err)
 	}
-	if err := root.WriteFile(path.Join(outRel, manifestName), manifestData, 0o644); err != nil {
+	if err := writeNewFile(root, path.Join(outRel, manifestName), manifestData, manifestPerm); err != nil {
 		return ReviewResult{}, fmt.Errorf("write manifest: %w", err)
 	}
 	if req.WriteDiff {
 		data := joinDiffs(diffParts)
-		if err := root.WriteFile(path.Join(outRel, diffName), data, 0o644); err != nil {
+		if err := writeNewFile(root, path.Join(outRel, diffName), data, diffPerm); err != nil {
 			return ReviewResult{}, fmt.Errorf("write diff: %w", err)
 		}
 	}
@@ -183,65 +207,67 @@ func joinDiffs(parts [][]byte) []byte {
 func safeOutputPath(out string) (string, error) {
 	out = filepath.ToSlash(out)
 	if out == "" {
-		return "", fmt.Errorf("--out is required")
+		return "", fmt.Errorf("%w: --out is required", ErrUnsafeOutput)
 	}
 	if strings.HasPrefix(out, "/") || filepath.IsAbs(filepath.FromSlash(out)) || !filepath.IsLocal(filepath.FromSlash(out)) {
-		return "", fmt.Errorf("--out must stay inside the project directory")
+		return "", fmt.Errorf("%w: --out must stay inside the project directory", ErrUnsafeOutput)
 	}
 	out = path.Clean(out)
 	if !strings.HasSuffix(path.Base(out), ".review") {
-		return "", fmt.Errorf("--out must end with .review")
+		return "", fmt.Errorf("%w: --out must end with .review", ErrUnsafeOutput)
 	}
 	return out, nil
 }
 
-func validateOutputPlacement(outRel, azureYAML, infraPath string) error {
-	for _, parent := range []string{azureYAML, infraPath} {
-		parent = path.Clean(filepath.ToSlash(parent))
-		if parent == "" {
-			continue
-		}
-		if pathsOverlap(outRel, parent) {
-			return fmt.Errorf("--out must not be nested under copied inputs")
-		}
+// reviewName maps a copied path to its name in the review tree. azd finds a
+// project by the file name azure.yaml, so azd project files are renamed to
+// azure.review.yaml (azure.yml to azure.review.yml).
+func reviewName(rel string) string {
+	dir, base := path.Split(rel)
+	switch strings.ToLower(base) {
+	case "azure.yaml":
+		return dir + "azure.review.yaml"
+	case "azure.yml":
+		return dir + "azure.review.yml"
 	}
-	return nil
+	return rel
 }
 
-func pathsOverlap(a, b string) bool {
-	a = path.Clean(filepath.ToSlash(a))
-	b = path.Clean(filepath.ToSlash(b))
-	return a == b || strings.HasPrefix(a, b+"/") || strings.HasPrefix(b, a+"/")
-}
-
-func copyInputs(ctx context.Context, root *os.Root, outDir, azureYAML, infraPath string) ([]string, error) {
-	var copied []string
+func copyInputs(ctx context.Context, root *os.Root, outDir, azureYAML, infraPath string) ([]copiedFile, error) {
+	var copied []copiedFile
+	seen := map[string]bool{}
 	if azureYAML != "" {
-		if err := copyFile(root, outDir, azureYAML); err != nil {
+		azureYAML = path.Clean(filepath.ToSlash(azureYAML))
+		f, err := copyFile(root, outDir, azureYAML)
+		if err != nil {
 			return nil, err
 		}
-		copied = append(copied, azureYAML)
+		copied = append(copied, f)
+		seen[azureYAML] = true
 	}
 	if infraPath != "" {
+		infraPath = path.Clean(filepath.ToSlash(infraPath))
 		if info, err := root.Lstat(infraPath); err == nil {
-			if info.Mode()&fs.ModeSymlink != 0 {
-				return nil, fmt.Errorf("infra path must not be a symlink: %s", infraPath)
+			if info.Mode()&(fs.ModeSymlink|fs.ModeIrregular) != 0 {
+				return nil, fmt.Errorf("infra path must not be a symlink or reparse point: %s", infraPath)
 			}
-			files, err := copyTree(ctx, root, outDir, infraPath)
-			if err != nil {
-				return nil, err
+			if info.IsDir() {
+				files, err := copyTree(ctx, root, outDir, infraPath, seen)
+				if err != nil {
+					return nil, err
+				}
+				copied = append(copied, files...)
 			}
-			copied = append(copied, files...)
 		} else if !errors.Is(err, fs.ErrNotExist) {
 			return nil, fmt.Errorf("stat infra path %s: %w", infraPath, err)
 		}
 	}
-	slices.Sort(copied)
+	slices.SortFunc(copied, func(a, b copiedFile) int { return strings.Compare(a.Rel, b.Rel) })
 	return copied, nil
 }
 
-func copyTree(ctx context.Context, root *os.Root, outDir, rel string) ([]string, error) {
-	var files []string
+func copyTree(ctx context.Context, root *os.Root, outDir, rel string, seen map[string]bool) ([]copiedFile, error) {
+	var files []copiedFile
 	err := fs.WalkDir(root.FS(), rel, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -249,77 +275,76 @@ func copyTree(ctx context.Context, root *os.Root, outDir, rel string) ([]string,
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if p == outDir || strings.HasPrefix(p, outDir+"/") {
+		if isWithin(p, outDir) {
 			if d.IsDir() {
 				return fs.SkipDir
 			}
 			return nil
 		}
-		if d.Type()&fs.ModeSymlink != 0 {
-			return fmt.Errorf("infra review copy does not follow symlinks: %s", p)
+		if d.Type()&(fs.ModeSymlink|fs.ModeIrregular) != 0 {
+			return fmt.Errorf("infra review copy does not follow symlinks or reparse points: %s", p)
 		}
 		if d.IsDir() {
-			return root.MkdirAll(path.Join(outDir, p), 0o755)
+			info, err := d.Info()
+			if err != nil {
+				return err
+			}
+			return root.MkdirAll(path.Join(outDir, p), info.Mode().Perm()|0o700)
 		}
-		if !d.Type().IsRegular() {
+		if !d.Type().IsRegular() || seen[p] {
 			return nil
 		}
-		if err := copyFile(root, outDir, p); err != nil {
+		f, err := copyFile(root, outDir, p)
+		if err != nil {
 			return err
 		}
-		files = append(files, p)
+		seen[p] = true
+		files = append(files, f)
 		return nil
 	})
 	return files, err
 }
 
-func ensureNoSymlinkComponents(root *os.Root, rel string) error {
-	current := ""
-	for _, component := range strings.FieldsFunc(rel, func(r rune) bool { return r == '/' || r == '\\' }) {
-		current = path.Join(current, component)
-		info, err := root.Lstat(current)
-		if err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
-				return nil
-			}
-			return fmt.Errorf("stat review path %s: %w", current, err)
-		}
-		if info.Mode()&fs.ModeSymlink != 0 {
-			return fmt.Errorf("review output must not traverse symlinks: %s", current)
-		}
-		if !info.IsDir() && current != rel {
-			return fmt.Errorf("review output parent is not a directory: %s", current)
-		}
+// isWithin reports whether p is dir or lies under it, case-folded on
+// case-insensitive hosts.
+func isWithin(p, dir string) bool {
+	if foldCase() {
+		p, dir = strings.ToLower(p), strings.ToLower(dir)
 	}
-	return nil
+	return p == dir || strings.HasPrefix(p, dir+"/")
 }
 
-func copyFile(root *os.Root, outDir, rel string) error {
+// copyFile copies rel into the review tree. The copy is never more
+// permissive than the source: group and other bits are kept as they are, and
+// only owner read/write is added so the copy can be annotated.
+func copyFile(root *os.Root, outDir, rel string) (copiedFile, error) {
 	if strings.HasPrefix(rel, "../") || rel == ".." || strings.Contains(rel, "/../") {
-		return fmt.Errorf("path escapes project: %s", rel)
+		return copiedFile{}, fmt.Errorf("path escapes project: %s", rel)
 	}
 	info, err := root.Lstat(rel)
 	if err != nil {
-		return fmt.Errorf("stat source file %s: %w", rel, err)
+		return copiedFile{}, fmt.Errorf("stat source file %s: %w", rel, err)
 	}
-	if info.Mode()&fs.ModeSymlink != 0 {
-		return fmt.Errorf("source file must not be a symlink: %s", rel)
+	if info.Mode()&(fs.ModeSymlink|fs.ModeIrregular) != 0 {
+		return copiedFile{}, fmt.Errorf("source file must not be a symlink or reparse point: %s", rel)
 	}
 	if !info.Mode().IsRegular() {
-		return fmt.Errorf("source file is not regular: %s", rel)
+		return copiedFile{}, fmt.Errorf("source file is not regular: %s", rel)
 	}
 	data, err := root.ReadFile(rel)
 	if err != nil {
-		return fmt.Errorf("read source file %s: %w", rel, err)
+		return copiedFile{}, fmt.Errorf("read source file %s: %w", rel, err)
 	}
-	target := path.Join(outDir, filepath.ToSlash(rel))
-	if err := root.MkdirAll(path.Dir(target), 0o755); err != nil {
-		return fmt.Errorf("create review path %s: %w", rel, err)
+	perm := info.Mode().Perm()&0o666 | 0o600
+	reviewRel := reviewName(filepath.ToSlash(rel))
+	target := path.Join(outDir, reviewRel)
+	if err := root.MkdirAll(path.Dir(target), reviewDirPerm); err != nil {
+		return copiedFile{}, fmt.Errorf("create review path %s: %w", rel, err)
 	}
-	if err := root.WriteFile(target, data, 0o644); err != nil {
-		return fmt.Errorf("write review file %s: %w", rel, err)
+	if err := writeNewFile(root, target, data, perm); err != nil {
+		return copiedFile{}, fmt.Errorf("write review file %s: %w", rel, err)
 	}
-	return nil
+	return copiedFile{Rel: rel, ReviewRel: reviewRel, Perm: perm}, nil
 }
 
 // MarshalSchema is used by tests and docs to emit the manifest schema.

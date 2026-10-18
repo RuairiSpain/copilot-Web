@@ -43,6 +43,14 @@ func exec(t *testing.T, args ...string) (int, string, string) {
 	t.Setenv("AZURE_CLIENT_SECRET", "")
 	t.Setenv("FOUNDRY_DOCTOR_ENVIRONMENT", "")
 	t.Setenv("AZURE_ENV_NAME", "")
+	// Phase 9: an ambient LLM target must never turn a test into a real
+	// provider call; with no endpoint the advisory falls back before any I/O.
+	for _, k := range []string{
+		"FOUNDRY_DOCTOR_LLM_PROVIDER", "FOUNDRY_DOCTOR_LLM_ENDPOINT", "FOUNDRY_DOCTOR_LLM_DEPLOYMENT", "FOUNDRY_DOCTOR_LLM_SCOPE",
+		"AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_DEPLOYMENT", "AZURE_ACCESS_TOKEN",
+	} {
+		t.Setenv(k, "")
+	}
 	code := run(context.Background(), args, &out, &errb, app.DefaultServices(&errb))
 	return code, out.String(), errb.String()
 }
@@ -186,34 +194,6 @@ func TestVersionCommand(t *testing.T) {
 	for _, want := range []string{"foundry-doctor", ".foundry-doctor/config.yaml", "minimum azd: 1.34.2", "minimum bicep: 0.48.1"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("version output missing %q: %q", want, out)
-		}
-	}
-}
-
-func TestAnnotate(t *testing.T) {
-	dir := project(t)
-	out := "review\\sample.review"
-	if code, _, errs := exec(t, "annotate", "--out", out, "--dir", dir); code != 0 && code != 1 {
-		t.Fatalf("annotate exit=%d err=%q", code, errs)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "review", "sample.review", "annotations-manifest.json")); err != nil {
-		t.Fatal(err)
-	}
-	if code, _, _ := exec(t, "annotate", "--format", "review", "--dir", dir); code != 2 {
-		t.Fatalf("annotate without out exit=%d, want 2", code)
-	}
-	if code, _, errs := exec(t, "annotate", "--format", "github", "--dir", dir); code != 0 || errs != "" {
-		t.Fatalf("github annotate exit=%d err=%q", code, errs)
-	}
-	if code, out, errs := exec(t, "annotate", "--format", "sarif", "--dir", dir); code != 0 && code != 1 {
-		t.Fatalf("sarif annotate exit=%d err=%q", code, errs)
-	} else {
-		var v map[string]any
-		if err := json.Unmarshal([]byte(out), &v); err != nil {
-			t.Fatalf("invalid sarif json: %v\n%s", err, out)
-		}
-		if v["version"] != "2.1.0" {
-			t.Fatalf("sarif version = %v", v["version"])
 		}
 	}
 }

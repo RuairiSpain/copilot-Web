@@ -3,21 +3,57 @@
   "$id": "https://example.invalid/foundry-doctor/annotations-manifest.schema.json",
   "title": "Foundry Doctor annotation manifest",
   "type": "object",
-  "required": ["schemaVersion", "tool", "toolVersion", "profile", "reviewDir", "summary", "annotations"],
+  "required": [
+    "schemaVersion",
+    "tool",
+    "toolVersion",
+    "profile",
+    "reviewDir",
+    "summary",
+    "files",
+    "annotations"
+  ],
   "properties": {
-    "schemaVersion": { "type": "string", "const": "1" },
-    "tool": { "type": "string" },
-    "toolVersion": { "type": "string" },
-    "profile": { "type": "string" },
-    "reviewDir": { "type": "string" },
-    "diffPath": { "type": "string" },
+    "schemaVersion": {
+      "type": "string",
+      "const": "1"
+    },
+    "tool": {
+      "type": "string",
+      "const": "foundry-doctor"
+    },
+    "toolVersion": {
+      "type": "string"
+    },
+    "profile": {
+      "type": "string"
+    },
+    "reviewDir": {
+      "type": "string"
+    },
+    "diffPath": {
+      "type": "string"
+    },
     "summary": {
       "type": "object",
-      "required": ["total", "inline", "manifestOnly"],
+      "required": [
+        "total",
+        "inline",
+        "manifestOnly"
+      ],
       "properties": {
-        "total": { "type": "integer", "minimum": 0 },
-        "inline": { "type": "integer", "minimum": 0 },
-        "manifestOnly": { "type": "integer", "minimum": 0 }
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "inline": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "manifestOnly": {
+          "type": "integer",
+          "minimum": 0
+        }
       },
       "additionalProperties": true
     },
@@ -25,36 +61,100 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["path", "reviewPath", "commentStyle", "annotationCount"],
+        "required": [
+          "path",
+          "reviewPath",
+          "commentStyle",
+          "annotationCount"
+        ],
         "properties": {
-          "path": { "type": "string" },
-          "reviewPath": { "type": "string" },
-          "commentStyle": { "type": "string", "enum": ["yaml", "bicep"] },
-          "annotationCount": { "type": "integer", "minimum": 0 }
+          "path": {
+            "type": "string"
+          },
+          "reviewPath": {
+            "type": "string"
+          },
+          "commentStyle": {
+            "type": "string",
+            "enum": [
+              "yaml",
+              "bicep"
+            ]
+          },
+          "annotationCount": {
+            "type": "integer",
+            "minimum": 0
+          }
         },
         "additionalProperties": true
-      }
+      },
+      "description": "Every copied file that was rewritten: annotated, or bannered (azure.yaml copies, written as azure.review.yaml, and every .bicep copy). reviewPath is project-relative and includes reviewDir."
     },
     "annotations": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "kind", "ruleId", "message", "inline"],
+        "required": [
+          "id",
+          "kind",
+          "ruleId",
+          "message",
+          "inline"
+        ],
         "properties": {
-          "id": { "type": "string" },
-          "kind": { "type": "string", "enum": ["finding", "bicep-diagnostic"] },
-          "ruleId": { "type": "string" },
-          "severity": { "type": "string", "enum": ["info", "warning", "error"] },
-          "category": { "type": "string" },
-          "file": { "type": "string" },
-          "line": { "type": "integer", "minimum": 0 },
-          "column": { "type": "integer", "minimum": 0 },
-          "message": { "type": "string" },
-          "recommendation": { "type": "string" },
-          "fingerprint": { "type": "string" },
-          "adapter": { "type": "string" },
-          "inline": { "type": "boolean" },
-          "inlineReason": { "type": "string" }
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "finding",
+              "bicep-diagnostic"
+            ]
+          },
+          "ruleId": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "info",
+              "warning",
+              "error"
+            ]
+          },
+          "category": {
+            "type": "string"
+          },
+          "file": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "column": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "message": {
+            "type": "string"
+          },
+          "recommendation": {
+            "type": "string"
+          },
+          "fingerprint": {
+            "type": "string"
+          },
+          "adapter": {
+            "type": "string"
+          },
+          "inline": {
+            "type": "boolean"
+          },
+          "inlineReason": {
+            "type": "string"
+          }
         },
         "additionalProperties": true
       }

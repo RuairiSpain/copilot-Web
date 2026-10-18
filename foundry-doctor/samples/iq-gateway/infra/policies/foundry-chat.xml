@@ -1,0 +1,22 @@
+<policies>
+  <inbound>
+    <base />
+    <validate-jwt header-name="Authorization" failed-validation-httpcode="401" require-scheme="Bearer">
+      <openid-config url="https://login.microsoftonline.com/00000000-0000-0000-0000-000000000000/v2.0/.well-known/openid-configuration" />
+      <audiences>
+        <audience>api://foundry-gateway-sample</audience>
+      </audiences>
+    </validate-jwt>
+    <include-fragment fragment-id="token-governance" />
+    <authentication-managed-identity resource="https://cognitiveservices.azure.com" />
+  </inbound>
+  <backend>
+    <base />
+  </backend>
+  <outbound>
+    <base />
+  </outbound>
+  <on-error>
+    <base />
+  </on-error>
+</policies>

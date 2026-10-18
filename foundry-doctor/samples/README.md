@@ -12,11 +12,11 @@ secrets or secret-shaped strings.
 | `azure-yaml-only/` | `azure.yaml` with no infra directory | Infra checks reported as skipped, not passed |
 | `bicep-backed/` | `azure.yaml` plus `infra/main.bicep` and a module (Bicep 0.48.1 valid) | Bicep analysed; no findings expected |
 | `cost-fixed/` | Bicep sample with Search, APIM, Cosmos RU/s and model deployments for the cost command | Advisory monthly estimate with explicit exclusions/unsupported items |
-| `assess-dev/` | Dev-profile WAF assessment fixture with local-only evidence | Owner summary emphasises unassessed scope and recommendations |
-| `assess-test/` | Test-profile WAF assessment fixture with invalid YAML and unresolved references | Evidence pack shows failures and skipped controls |
-| `assess-prod/` | Prod-profile WAF assessment fixture with Bicep-backed infrastructure and DR policy declaration | Developer and HTML views show mandatory and costly recommendations |
+| `assess-dev/` | Dev-profile WAF assessment fixture with local-only evidence | Owner summary emphasises unassessed scope and recommendations; reports in `reports/` (hand-derived, ADR-026) |
+| `assess-test/` | Test-profile WAF assessment fixture with an unresolved `uses:` reference and a variable without a producer | Evidence pack shows failures and skipped controls; reports in `reports/` (hand-derived, ADR-026) |
+| `assess-prod/` | Prod-profile WAF assessment fixture with Bicep-backed infrastructure and DR policy declaration | Developer and HTML views show mandatory controls, costly optional recommendations and the attested DR answer; reports in `reports/` (hand-derived, ADR-026) |
 | `llm/` | Redacted advisory LLM request/response examples | `projected-request.json` is safe to send; `owner-response-bad.json` is expected to be rejected |
-| `iq-gateway/` | Minimal Foundry IQ MCP connection sample for Phase 8 docs | Shape reference only; rule tests supply deterministic IQ/gateway metadata |
+| `iq-gateway/` | Foundry IQ MCP connection plus an API Management AI gateway (Bicep, policy XML, policy fragment, role assignment) for Phase 8 | Expected results per rule are in its README; IQ data-plane rules skip unless `doctor --iq-metadata` reads the knowledge base |
 
 Each sample's `agents/assistant/` directory holds a `.gitkeep` placeholder.
 

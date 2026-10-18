@@ -1,32 +1,50 @@
 # Foundry Doctor WAF evidence pack
 
-> Audit-oriented output. Passed, failed, suppressed, baselined and skipped evidence remains visible. This is not a certification.
+> Audit-oriented output. Passed, failed, suppressed, baselined, attested, not-applicable and skipped evidence remains visible. This is not a certification.
 
 - Profile: `foundry-prod`
 - Decision: Proceed with conditions\.
+- Tool version: `0.4.0-test`
+- Generated: `2026-10-18T00:00:00Z`
+- Assessed scope: azure\.yaml only
+
+## Summary
+
+| State | Count |
+|---|---|
+| FAIL | 1 |
+| WARNING | 2 |
+| UNKNOWN | 0 |
+| QUESTION | 1 |
+| SKIPPED | 1 |
+| ATTESTED | 1 |
+| INFO | 0 |
+| NOT_APPLICABLE | 1 |
+| PASS | 1 |
 
 ## FAIL
 
 ### Failed control
 
 - Rule: `FND-IDN-001`
-- Pillar: security
-- Mandatory: false
-- finding: identity missing
+- Pillar: Security
+- Mandatory: true
+- finding: identity missing (severity error) fingerprint `fp1`
 
 ## WARNING
 
 ### Suppressed control
 
 - Rule: `FND-SEC-011`
-- Pillar: security
+- Pillar: Security
 - Mandatory: false
 - suppressed: accepted
+  - suppression reason: tracked; owner: team; expires: `2027-01-01`
 
 ### Baselined control
 
 - Rule: `FND-NET-010`
-- Pillar: security
+- Pillar: Security
 - Mandatory: false
 - baselined: old debt
 
@@ -39,23 +57,56 @@ None.
 ### Question control
 
 - Rule: `FND-REL-007`
-- Pillar: reliability
+- Pillar: Reliability
 - Mandatory: false
+- Project opinion, not Microsoft guidance; no source recorded
 
 ## SKIPPED
 
 ### Skipped control
 
 - Rule: `FND-OPS-002`
-- Pillar: operations
+- Pillar: Operational Excellence
 - Mandatory: false
-- skipped: input\-unavailable
+- skipped: input\-unavailable (missing: control plane)
+
+## ATTESTED
+
+### Attested control
+
+- Rule: `FND-REL-008`
+- Pillar: Reliability
+- Mandatory: false
+- Evidence basis: attested
+- Recorded answer (team attestation, not verified): `true`
+
+## INFO
+
+None.
+
+## NOT_APPLICABLE
+
+### Not applicable control
+
+- Rule: `FND-SEC-003`
+- Pillar: Security
+- Mandatory: false
+- skipped: not\-applicable\: no Cosmos DB
 
 ## PASS
 
 ### Passed control
 
-- Rule: `FND-OPS-001`
-- Pillar: operations
+- Rule: `FND-OPS-001` (version 1)
+- Pillar: Operational Excellence
 - Mandatory: false
+- Evidence basis: deterministic
+- Source: <https://learn.microsoft.com/ops> (verified `2026-10-04`)
 
+## Costly recommendations (optional)
+
+- `FND-REL-001` Search replicas (WARNING): Replicas are billed\. (<https://learn.microsoft.com/azure/search/search-sku-manage-costs>, verified `2026-10-18`)
+
+## Limitations
+
+- Not a certification\.

@@ -3,8 +3,12 @@ package llm
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -107,5 +111,148 @@ func TestAzureOpenAIProviderRejectsBadEndpoint(t *testing.T) {
 	}, Prompt{System: "sys", User: "user", Schema: map[string]any{"type": "object"}})
 	if err == nil || !strings.Contains(err.Error(), "https URL") {
 		t.Fatalf("err=%v", err)
+	}
+}
+
+const validCompletion = `{"model":"gpt-test","choices":[{"finish_reason":"stop","message":{"content":"{\"summary\":\"Advisory\",\"sections\":[]}"}}]}`
+
+func okResponse(body string) *http.Response {
+	return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}
+}
+
+func testConfig() Config {
+	return Config{
+		Provider: "azure-openai", Endpoint: "https://demo.openai.azure.com", Deployment: "dep",
+		Scope: DefaultScope, MaxPromptBytes: 4096, MaxResponseBytes: 4096, MaxOutputTokens: DefaultMaxCompletionTokens,
+	}
+}
+
+func testPrompt() Prompt {
+	return Prompt{System: "sys", User: "user", Schema: map[string]any{"type": "object"}}
+}
+
+func TestAzureOpenAIProviderRequestBodyKeys(t *testing.T) {
+	client := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		raw, _ := io.ReadAll(r.Body)
+		var body map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &body); err != nil {
+			t.Fatal(err)
+		}
+		want := []string{"max_completion_tokens", "messages", "model", "response_format"}
+		got := make([]string, 0, len(body))
+		for k := range body {
+			got = append(got, k)
+		}
+		sort.Strings(got)
+		if strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Fatalf("request keys=%v want=%v", got, want)
+		}
+		if string(body["max_completion_tokens"]) != "4096" {
+			t.Fatalf("max_completion_tokens=%s", body["max_completion_tokens"])
+		}
+		return okResponse(validCompletion), nil
+	})}
+	if _, err := NewAzureOpenAIProvider(client, staticCredential{}).Complete(context.Background(), testConfig(), testPrompt()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAzureOpenAIProviderRefusesRedirects(t *testing.T) {
+	calls := 0
+	client := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		calls++
+		if r.URL.Host != "demo.openai.azure.com" {
+			t.Errorf("payload re-sent to %s", r.URL.Host)
+		}
+		h := make(http.Header)
+		h.Set("Location", "https://collector.example.com/steal")
+		return &http.Response{StatusCode: http.StatusTemporaryRedirect, Body: io.NopCloser(strings.NewReader("")), Header: h, Request: r}, nil
+	})}
+	_, err := NewAzureOpenAIProvider(client, staticCredential{}).Complete(context.Background(), testConfig(), testPrompt())
+	if !errors.Is(err, ErrUnavailable) || !strings.Contains(err.Error(), "redirect") {
+		t.Fatalf("err=%v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("transport calls=%d, want 1 (redirect must not be followed)", calls)
+	}
+}
+
+func TestNewAzureOpenAIProviderDefaultClientRefusesRedirects(t *testing.T) {
+	p := NewAzureOpenAIProvider(nil, staticCredential{})
+	if p.Client == nil || p.Client.CheckRedirect == nil {
+		t.Fatal("default client must refuse redirects")
+	}
+	if err := p.Client.CheckRedirect(nil, nil); !errors.Is(err, http.ErrUseLastResponse) {
+		t.Fatalf("CheckRedirect err=%v", err)
+	}
+}
+
+func TestAzureOpenAIProviderRejectsRefusalAndTruncation(t *testing.T) {
+	cases := map[string]string{
+		"refused":   `{"model":"m","choices":[{"finish_reason":"stop","message":{"content":"","refusal":"I can't help with that."}}]}`,
+		"truncated": `{"model":"m","choices":[{"finish_reason":"length","message":{"content":"{\"summary\":\"Adv"}}]}`,
+	}
+	for name, body := range cases {
+		t.Run(name, func(t *testing.T) {
+			client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+				return okResponse(body), nil
+			})}
+			_, err := NewAzureOpenAIProvider(client, staticCredential{}).Complete(context.Background(), testConfig(), testPrompt())
+			want := map[string]string{"refused": "refused", "truncated": "truncated"}[name]
+			if !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), want) {
+				t.Fatalf("err=%v", err)
+			}
+		})
+	}
+}
+
+func TestAzureOpenAIProviderRejectsPortAndScope(t *testing.T) {
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatal("unexpected request")
+		return nil, nil
+	})}
+	p := NewAzureOpenAIProvider(client, staticCredential{})
+	cfg := testConfig()
+	cfg.Endpoint = "https://demo.openai.azure.com:8443"
+	if _, err := p.Complete(context.Background(), cfg, testPrompt()); err == nil || !strings.Contains(err.Error(), "port") {
+		t.Fatalf("port err=%v", err)
+	}
+	cfg = testConfig()
+	cfg.Scope = "https://management.azure.com/.default"
+	if _, err := p.Complete(context.Background(), cfg, testPrompt()); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("scope err=%v", err)
+	}
+}
+
+// An ARM-audience AZURE_ACCESS_TOKEN must never reach the inference host: the
+// production credential is the azd/az chain without the environment source.
+func TestAzureOpenAIProviderNeverForwardsEnvironmentToken(t *testing.T) {
+	armToken := "eyJhbGciOiJub25lIn0." + base64.RawURLEncoding.EncodeToString([]byte(`{"aud":"https://management.azure.com"}`)) + ".sig"
+	t.Setenv("AZURE_ACCESS_TOKEN", armToken)
+	var gotScope string
+	run := func(_ context.Context, name string, args ...string) ([]byte, error) {
+		for i, a := range args {
+			if a == "--scope" && i+1 < len(args) {
+				gotScope = args[i+1]
+			}
+		}
+		if name != "azd" {
+			return nil, errors.New("unexpected source")
+		}
+		return []byte(`{"token":"tok-ai-audience","expiresOn":"2099-01-01T00:00:00Z"}`), nil
+	}
+	client := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		auth := r.Header.Get("Authorization")
+		if strings.Contains(auth, armToken) || auth != "Bearer tok-ai-audience" {
+			t.Fatalf("unexpected Authorization header forwarded")
+		}
+		return okResponse(validCompletion), nil
+	})}
+	p := NewAzureOpenAIProvider(client, azure.NewCLICredentialForTenant(run, ""))
+	if _, err := p.Complete(context.Background(), testConfig(), testPrompt()); err != nil {
+		t.Fatal(err)
+	}
+	if gotScope != DefaultScope {
+		t.Fatalf("azd scope=%q", gotScope)
 	}
 }

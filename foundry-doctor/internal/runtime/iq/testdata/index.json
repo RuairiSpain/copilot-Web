@@ -1,0 +1,30 @@
+{
+  "name": "hotels",
+  "fields": [
+    { "name": "id", "type": "Edm.String", "key": true, "searchable": false, "retrievable": true, "filterable": true },
+    { "name": "content", "type": "Edm.String", "searchable": true, "retrievable": true },
+    { "name": "groupIds", "type": "Collection(Edm.String)", "filterable": true, "retrievable": false },
+    { "name": "contentVector", "type": "Collection(Edm.Single)", "searchable": true, "retrievable": false, "dimensions": 1536, "vectorSearchProfile": "vp" }
+  ],
+  "semantic": {
+    "defaultConfiguration": "default",
+    "configurations": [ { "name": "default", "prioritizedFields": { "prioritizedContentFields": [ { "fieldName": "content" } ] } } ]
+  },
+  "vectorSearch": {
+    "profiles": [ { "name": "vp", "algorithm": "hnsw", "vectorizer": "aoai" } ],
+    "algorithms": [ { "name": "hnsw", "kind": "hnsw" } ],
+    "vectorizers": [
+      {
+        "name": "aoai",
+        "kind": "azureOpenAI",
+        "azureOpenAIParameters": {
+          "resourceUri": "https://acct.openai.azure.com",
+          "deploymentId": "text-embedding-3-small",
+          "modelName": "text-embedding-3-small",
+          "apiKey": "<redacted>",
+          "authIdentity": null
+        }
+      }
+    ]
+  }
+}

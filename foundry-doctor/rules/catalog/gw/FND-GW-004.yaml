@@ -1,5 +1,5 @@
 id: FND-GW-004
-version: 1
+version: 2
 group: GW
 title: "Route paths unique"
 description: >-
@@ -68,6 +68,11 @@ sources:
       (ApiContractProperties.path "Relative URL uniquely identifying this API and all of its resource paths
       within the API Management service instance", maxLength 400)
     note: Branch URL, not commit-pinned.
+  - url: https://learn.microsoft.com/azure/templates/microsoft.apimanagement/service/apis/policies
+    lastVerified: '2026-10-18'
+    verifiedVia: https://learn.microsoft.com/azure/templates/microsoft.apimanagement/service/apis/policies (web fetch, Phase 8 fix loop 1)
+    note: >-
+      Policy format values rawxml, rawxml-link, xml, xml-link; Learn's own xml sample is not well-formed XML, so unparsable policy text is reported uncertain.
 overlap:
   decision: native
   provisional: true
@@ -117,3 +122,4 @@ notes: >-
   duplicates are failed. Path case sensitivity and slash normalisation are conservative choices, and are the
   reason confidence is likely. Operation-level duplicates (method plus urlTemplate) were not found in a source
   and are not checked.
+  Round-1 fix (2026-10-18): a path that is an ARM expression is uncertain (path-from-unresolved-parameter) and a template without APIs is skipped (no-apis), never passed. APIM resources outside the verified api-versions are uncertain.

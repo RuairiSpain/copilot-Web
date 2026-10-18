@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -79,11 +80,15 @@ func Annotate(ctx context.Context, svc Services, req AnnotateRequest, stdout io.
 	if err := req.Validate(); err != nil {
 		return ExitCodeForError(err), err
 	}
-	req.Out = normalizeOutPath(req.Out)
+	out, err := annotateOutPath(req.Dir, req.Out)
+	if err != nil {
+		return ExitCodeForError(err), err
+	}
 	run, err := collectAnnotationRun(ctx, svc, req)
 	if err != nil {
 		return ExitCodeForError(err), err
 	}
+	inputs := annotateInputs(run)
 	code := ExitCode(Outcome{Findings: run.shownFindings, Skips: run.skips, FailOn: req.FailOn, Strict: req.Strict})
 	switch req.Format {
 	case ann.FormatGitHub:
@@ -91,10 +96,7 @@ func Annotate(ctx context.Context, svc Services, req AnnotateRequest, stdout io.
 		if err := ann.GitHubWorkflowCommands(&buf, run.entries); err != nil {
 			return ExitInternal, err
 		}
-		if err := rejectInputOverlap(run.source, req.Out); err != nil {
-			return ExitCodeForError(err), err
-		}
-		if err := emitAnnotateOutput(req.Dir, req.Out, buf.Bytes(), stdout); err != nil {
+		if err := emitAnnotateOutput(req.Dir, out, inputs, buf.Bytes(), stdout); err != nil {
 			return ExitCodeForError(err), err
 		}
 	case ann.FormatSARIF:
@@ -104,40 +106,76 @@ func Annotate(ctx context.Context, svc Services, req AnnotateRequest, stdout io.
 		}); err != nil {
 			return ExitInternal, fmt.Errorf("render sarif annotations: %w", err)
 		}
-		if err := rejectInputOverlap(run.source, req.Out); err != nil {
-			return ExitCodeForError(err), err
-		}
-		if err := emitAnnotateOutput(req.Dir, req.Out, buf.Bytes(), stdout); err != nil {
+		if err := emitAnnotateOutput(req.Dir, out, inputs, buf.Bytes(), stdout); err != nil {
 			return ExitCodeForError(err), err
 		}
 	default:
-		outDir := req.Out
-		if filepath.IsAbs(outDir) {
-			if rel, err := filepath.Rel(req.Dir, outDir); err == nil && filepath.IsLocal(rel) {
-				outDir = rel
-			}
-		}
-		if _, err := ann.WriteReview(ctx, ann.ReviewRequest{
+		res, err := ann.WriteReview(ctx, ann.ReviewRequest{
 			RootDir:     req.Dir,
-			OutDir:      outDir,
+			OutDir:      out,
 			AzureYAML:   run.source.AzureYAMLAt,
-			InfraPath:   run.source.InfraPath,
+			InfraPath:   run.infra.Dir,
 			Entries:     run.entries,
 			Profile:     run.settings.Profile,
 			ToolVersion: ToolVersion,
 			WriteDiff:   req.Diff,
-		}); err != nil {
+		})
+		if err != nil {
+			err = outputError(err)
 			return ExitCodeForError(err), err
 		}
-		if err := validateReviewCopy(ctx, req.Dir, req.Out, run.source.AzureYAMLAt, run.compile); err != nil {
-			_ = removeReviewCopy(req.Dir, req.Out)
+		if err := validateReviewCopy(ctx, req.Dir, out, res.Manifest.Files, run.source.AzureYAMLAt, run.compile); err != nil {
+			_ = ann.RemoveReview(req.Dir, out)
 			return ExitCodeForError(err), err
 		}
 	}
 	return code, nil
 }
 
-func emitAnnotateOutput(rootDir, out string, data []byte, stdout io.Writer) error {
+// outputError turns a refused --out into a usage error (exit 2).
+func outputError(err error) error {
+	if errors.Is(err, ann.ErrUnsafeOutput) {
+		return Usagef("%s", err.Error())
+	}
+	return err
+}
+
+// annotateOutPath returns --out as a project-relative, slash-separated path,
+// or "" for stdout. An absolute --out inside --dir is made relative, so every
+// later step (write, validation, cleanup) uses the same path.
+func annotateOutPath(dir, out string) (string, error) {
+	out = normalizeOutPath(out)
+	if out == "" {
+		return "", nil
+	}
+	if native := filepath.FromSlash(out); filepath.IsAbs(native) {
+		if absDir, err := filepath.Abs(dir); err == nil {
+			if rel, err := filepath.Rel(absDir, filepath.Clean(native)); err == nil && filepath.IsLocal(rel) {
+				out = filepath.ToSlash(rel)
+			} else if realDir, err := filepath.EvalSymlinks(absDir); err == nil {
+				if rel, err := filepath.Rel(realDir, filepath.Clean(native)); err == nil && filepath.IsLocal(rel) {
+					out = filepath.ToSlash(rel)
+				}
+			}
+		}
+	}
+	return safeRepoOutputPath(out)
+}
+
+// annotateInputs are the deployable inputs an output must never overlap. An
+// infra directory of "." (the project root) is left out for file outputs;
+// review mode refuses it in WriteReview.
+func annotateInputs(run annotationRun) []string {
+	var in []string
+	for _, p := range []string{run.source.AzureYAMLAt, run.infra.Dir, run.source.InfraPath} {
+		if p != "" && p != "." && !slices.Contains(in, p) {
+			in = append(in, p)
+		}
+	}
+	return in
+}
+
+func emitAnnotateOutput(rootDir, out string, inputs []string, data []byte, stdout io.Writer) error {
 	if out == "" {
 		_, err := stdout.Write(data)
 		if err != nil {
@@ -145,22 +183,7 @@ func emitAnnotateOutput(rootDir, out string, data []byte, stdout io.Writer) erro
 		}
 		return nil
 	}
-	out, err := safeRepoOutputPath(out)
-	if err != nil {
-		return err
-	}
-	root, err := os.OpenRoot(rootDir)
-	if err != nil {
-		return fmt.Errorf("open project root: %w", err)
-	}
-	defer root.Close()
-	if err := root.MkdirAll(path.Dir(out), 0o755); err != nil {
-		return fmt.Errorf("create output directory: %w", err)
-	}
-	if err := root.WriteFile(out, data, 0o644); err != nil {
-		return fmt.Errorf("write --out %q: %w", out, err)
-	}
-	return nil
+	return outputError(ann.WriteOutputFile(rootDir, out, inputs, data))
 }
 
 // normalizeOutPath treats a backslash as a path separator on every OS, so a
@@ -181,42 +204,10 @@ func safeRepoOutputPath(out string) (string, error) {
 	return path.Clean(out), nil
 }
 
-func rejectInputOverlap(src Source, out string) error {
-	if out == "" {
-		return nil
-	}
-	out, err := safeRepoOutputPath(out)
-	if err != nil {
-		return err
-	}
-	for _, in := range []string{src.AzureYAMLAt, src.InfraPath} {
-		if in == "" {
-			continue
-		}
-		in = path.Clean(filepath.ToSlash(in))
-		if out == in || strings.HasPrefix(out, in+"/") || strings.HasPrefix(in, out+"/") {
-			return Usagef("--out must not overlap deployable source inputs")
-		}
-	}
-	return nil
-}
-
-func removeReviewCopy(rootDir, out string) error {
-	out, err := safeRepoOutputPath(out)
-	if err != nil {
-		return err
-	}
-	root, err := os.OpenRoot(rootDir)
-	if err != nil {
-		return err
-	}
-	defer root.Close()
-	return root.RemoveAll(out)
-}
-
 type annotationRun struct {
 	settings      Settings
 	source        Source
+	infra         infraTarget
 	shownFindings []sdk.Finding
 	skips         []sdk.Skip
 	entries       []ann.Entry
@@ -238,8 +229,11 @@ func collectAnnotationRun(ctx context.Context, svc Services, req AnnotateRequest
 	if err != nil {
 		return annotationRun{}, fmt.Errorf("%w: parse azure.yaml: %w", ErrUnavailable, err)
 	}
+	infra, infraOK := resolveInfra(src, doc)
 	var arm sdk.ARMModel
-	if svc.ARM != nil {
+	// A non-Bicep provider (terraform, an extension provider) is never
+	// compiled, even when a main.bicep happens to exist.
+	if svc.ARM != nil && (!infraOK || infra.isBicep()) {
 		arm, err = svc.ARM.Load(ctx, src)
 		switch {
 		case err == nil:
@@ -286,7 +280,7 @@ func collectAnnotationRun(ctx context.Context, svc Services, req AnnotateRequest
 		}
 		return strings.Compare(a.Reason, b.Reason)
 	})
-	compile, diags, err := compileDiagnostics(ctx, svc, src, doc, req.MinSeverity)
+	compile, diags, err := compileDiagnostics(ctx, svc, src, doc, infra, infraOK, req.MinSeverity)
 	if err != nil {
 		if req.Format != ann.FormatReview && errors.Is(err, ErrUnavailable) {
 			compile, diags = nil, nil
@@ -298,11 +292,88 @@ func collectAnnotationRun(ctx context.Context, svc Services, req AnnotateRequest
 	return annotationRun{
 		settings:      set,
 		source:        src,
+		infra:         infra,
 		shownFindings: shown,
 		skips:         skips,
 		entries:       entries,
 		compile:       compile,
 	}, nil
+}
+
+// infraTarget is the one resolved azd infrastructure location. The review
+// copy, the annotate compiles and the ARM loader all use it.
+type infraTarget struct {
+	// Dir is the project-relative, slash-separated infra directory.
+	Dir string
+	// Entry is the project-relative entry module, inside Dir.
+	Entry string
+	// Provider is azure.yaml infra.provider, lower-cased; "" means bicep.
+	Provider string
+}
+
+// isBicep reports whether azd provisions this project with Bicep. Built-in
+// providers are bicep (the default) and terraform; extensions can register
+// more (https://learn.microsoft.com/azure/developer/azure-developer-cli/azd-schema,
+// infra section, verified 2026-10-18). Only bicep is compiled.
+func (t infraTarget) isBicep() bool { return t.Provider == "" || t.Provider == "bicep" }
+
+// resolveInfra resolves the infra directory and entry module. Precedence: a
+// Foundry Doctor inputs.infraPath that differs from the default "infra"; then
+// azure.yaml infra.path; then "infra". The azure.yaml value and the default
+// are relative to the directory that contains azure.yaml, which azd treats as
+// the project directory. A configured inputs.infraPath of exactly "infra"
+// cannot be told apart from the default. The module defaults to "main", and a
+// module without an extension gets ".bicep". ok is false when a path is
+// absolute, escapes the project, or the entry leaves the infra directory.
+func resolveInfra(src Source, doc *azureyaml.Document) (infraTarget, bool) {
+	var t infraTarget
+	if doc != nil {
+		if v, _, ok := doc.Lookup("infra", "provider"); ok {
+			t.Provider = strings.ToLower(strings.TrimSpace(v))
+		}
+	}
+	base := "."
+	if src.AzureYAMLAt != "" {
+		base = path.Dir(path.Clean(filepath.ToSlash(src.AzureYAMLAt)))
+	}
+	configured := ""
+	if src.InfraPath != "" {
+		configured = path.Clean(filepath.ToSlash(src.InfraPath))
+	}
+	switch {
+	case configured != "" && configured != project.DefaultInfraPath:
+		t.Dir = configured
+	default:
+		infra := project.DefaultInfraPath
+		if doc != nil {
+			if v, _, ok := doc.Lookup("infra", "path"); ok && strings.TrimSpace(v) != "" {
+				infra = strings.TrimSpace(v)
+			}
+		}
+		infra = filepath.ToSlash(infra)
+		if strings.HasPrefix(infra, "/") || hasDriveLetter(infra) || filepath.IsAbs(filepath.FromSlash(infra)) {
+			return t, false
+		}
+		t.Dir = path.Join(base, infra)
+	}
+	if t.Dir != "." && !isProjectRelative(t.Dir) {
+		return t, false
+	}
+	module := "main"
+	if doc != nil {
+		if v, _, ok := doc.Lookup("infra", "module"); ok && strings.TrimSpace(v) != "" {
+			module = strings.TrimSpace(v)
+		}
+	}
+	module = filepath.ToSlash(module)
+	if path.Ext(module) == "" {
+		module += ".bicep"
+	}
+	t.Entry = path.Clean(path.Join(t.Dir, module))
+	if !isProjectRelative(t.Entry) || (t.Dir != "." && !strings.HasPrefix(t.Entry, t.Dir+"/")) {
+		return t, false
+	}
+	return t, true
 }
 
 type compilePair struct {
@@ -311,7 +382,10 @@ type compilePair struct {
 	do       func(context.Context, string) (bicep.Result, error)
 }
 
-func compileDiagnostics(ctx context.Context, svc Services, src Source, doc *azureyaml.Document, min sdk.Severity) (*compilePair, []bicep.Diagnostic, error) {
+func compileDiagnostics(ctx context.Context, svc Services, src Source, doc *azureyaml.Document, infra infraTarget, infraOK bool, min sdk.Severity) (*compilePair, []bicep.Diagnostic, error) {
+	if !infraOK {
+		return nil, nil, fmt.Errorf("%w: azure.yaml infra.path or infra.module is not a project-relative path inside the infra directory", ErrUnavailable)
+	}
 	loader, ok := svc.ARM.(armLoader)
 	if !ok {
 		return nil, nil, nil
@@ -319,20 +393,24 @@ func compileDiagnostics(ctx context.Context, svc Services, src Source, doc *azur
 	if hasInfraLayers(doc) {
 		return nil, nil, fmt.Errorf("%w: annotate review does not yet support infra.layers Bicep validation", ErrUnavailable)
 	}
-	entryRel, ok := resolveBicepEntry(src, doc)
-	if !ok {
+	if !infra.isBicep() || path.Ext(infra.Entry) != ".bicep" {
 		return nil, nil, nil
 	}
+	entryRel := infra.Entry
 	root, err := os.OpenRoot(src.Dir)
 	if err != nil {
 		return nil, nil, fmt.Errorf("open project root: %w", err)
 	}
-	defer root.Close()
-	if _, err := root.Stat(entryRel); err != nil {
+	fi, err := root.Stat(entryRel)
+	root.Close()
+	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil, nil
 		}
 		return nil, nil, fmt.Errorf("stat bicep entry: %w", err)
+	}
+	if !fi.Mode().IsRegular() {
+		return nil, nil, nil
 	}
 	tool, err := bicep.Discover(ctx, loader.disc)
 	if err != nil {
@@ -341,9 +419,20 @@ func compileDiagnostics(ctx context.Context, svc Services, src Source, doc *azur
 		}
 		return nil, nil, fmt.Errorf("discover bicep: %w", err)
 	}
-	doCompile := func(ctx context.Context, root string) (bicep.Result, error) {
-		c := bicep.Compiler{Tool: tool, Runner: loader.runner, Root: root}
-		return c.Compile(ctx, filepath.Join(root, filepath.FromSlash(entryRel)))
+	// Both the original and the review-copy compile run the ADR-018 file-load
+	// guard first; a refused entry is never handed to the Bicep CLI.
+	doCompile := func(ctx context.Context, dir string) (bicep.Result, error) {
+		r, err := os.OpenRoot(dir)
+		if err != nil {
+			return bicep.Result{}, fmt.Errorf("open bicep root: %w", err)
+		}
+		gerr := bicep.GuardFileLoads(r, entryRel)
+		r.Close()
+		if gerr != nil {
+			return bicep.Result{}, fmt.Errorf("%w: %s not compiled: %s", ErrUnavailable, entryRel, findings.Redact(gerr.Error()))
+		}
+		c := bicep.Compiler{Tool: tool, Runner: loader.runner, Root: dir}
+		return c.Compile(ctx, filepath.Join(dir, filepath.FromSlash(entryRel)))
 	}
 	res, err := doCompile(ctx, src.Dir)
 	if err != nil {
@@ -359,27 +448,14 @@ func compileDiagnostics(ctx context.Context, svc Services, src Source, doc *azur
 	return &compilePair{entryRel: entryRel, original: res, do: doCompile}, diags, nil
 }
 
+// resolveBicepEntry returns the Bicep entry module for the ARM loader and the
+// preflight. It is false for a non-Bicep provider or an unsafe path.
 func resolveBicepEntry(src Source, doc *azureyaml.Document) (string, bool) {
-	infra := src.InfraPath
-	if doc != nil {
-		if v, _, ok := doc.Lookup("infra", "path"); ok && strings.TrimSpace(v) != "" {
-			infra = v
-		}
+	t, ok := resolveInfra(src, doc)
+	if !ok || !t.isBicep() {
+		return "", false
 	}
-	if infra == "" {
-		infra = project.DefaultInfraPath
-	}
-	module := "main.bicep"
-	if doc != nil {
-		if v, _, ok := doc.Lookup("infra", "module"); ok && strings.TrimSpace(v) != "" {
-			module = v
-		}
-	}
-	if path.Ext(module) == "" {
-		module += ".bicep"
-	}
-	entryRel := path.Clean(path.Join(filepath.ToSlash(infra), filepath.ToSlash(module)))
-	return entryRel, isProjectRelative(entryRel)
+	return t.Entry, true
 }
 
 func hasInfraLayers(doc *azureyaml.Document) bool {
@@ -402,39 +478,56 @@ func isProjectRelative(p string) bool {
 	return cleaned != "." && cleaned != ".." && !strings.HasPrefix(cleaned, "../") && !strings.Contains(cleaned, "/../")
 }
 
-func validateReviewCopy(ctx context.Context, rootDir, outDir, azureYAMLRel string, compile *compilePair) error {
-	reviewRoot := filepath.Join(rootDir, filepath.FromSlash(outDir))
-	root, err := os.OpenRoot(reviewRoot)
+// validateReviewCopy checks the written review copy: every annotated or
+// bannered YAML file still parses to the same documents, and the Bicep entry
+// in the copy gives the same compile status, compiled ARM and diagnostic set.
+// Any difference fails the run.
+func validateReviewCopy(ctx context.Context, rootDir, outDir string, files []ann.ManifestFile, azureYAMLRel string, compile *compilePair) error {
+	root, err := os.OpenRoot(rootDir)
 	if err != nil {
-		return fmt.Errorf("open review directory: %w", err)
+		return fmt.Errorf("open project root: %w", err)
 	}
 	defer root.Close()
-	data, err := root.ReadFile(azureYAMLRel)
-	if err != nil {
-		return fmt.Errorf("read annotated azure.yaml: %w", err)
-	}
-	if _, err := azureyaml.Parse(data, azureYAMLRel); err != nil {
-		return fmt.Errorf("annotated azure.yaml does not parse: %w", err)
-	}
-	var beforeYAML, afterYAML any
-	if original, err := compileYAMLSource(rootDir, azureYAMLRel); err == nil {
-		if err := goyaml.Unmarshal(original, &beforeYAML); err == nil {
-			if err := goyaml.Unmarshal(data, &afterYAML); err == nil && !reflect.DeepEqual(beforeYAML, afterYAML) {
-				return fmt.Errorf("annotated azure.yaml changed YAML semantics")
+	for _, f := range files {
+		if f.CommentStyle != "yaml" {
+			continue
+		}
+		original, err := root.ReadFile(f.Path)
+		if err != nil {
+			return fmt.Errorf("read original %s: %w", f.Path, err)
+		}
+		annotated, err := root.ReadFile(f.ReviewPath)
+		if err != nil {
+			return fmt.Errorf("read annotated %s: %w", f.ReviewPath, err)
+		}
+		if f.Path == azureYAMLRel {
+			if _, err := azureyaml.Parse(annotated, azureYAMLRel); err != nil {
+				return fmt.Errorf("annotated azure.yaml does not parse: %w", err)
 			}
+		}
+		before, err := yamlDocuments(original)
+		if err != nil {
+			return fmt.Errorf("cannot verify annotated %s: original does not parse: %w", f.Path, err)
+		}
+		after, err := yamlDocuments(annotated)
+		if err != nil {
+			return fmt.Errorf("annotated %s does not parse: %w", f.Path, err)
+		}
+		if !reflect.DeepEqual(before, after) {
+			return fmt.Errorf("annotated %s changed YAML semantics", f.Path)
 		}
 	}
 	if compile == nil {
 		return nil
 	}
-	got, err := compile.do(ctx, reviewRoot)
+	got, err := compile.do(ctx, filepath.Join(rootDir, filepath.FromSlash(outDir)))
 	if err != nil {
 		return fmt.Errorf("compile annotated bicep review copy: %w", err)
 	}
 	if compile.original.OK != got.OK {
 		return fmt.Errorf("annotated bicep changed compile status")
 	}
-	if compile.original.OK && got.OK && !bytes.Equal(bytes.TrimSpace(compile.original.ARM), bytes.TrimSpace(got.ARM)) {
+	if compile.original.OK && got.OK && !sameARM(compile.original.ARM, got.ARM) {
 		return fmt.Errorf("annotated bicep changed compiled ARM output")
 	}
 	if !sameDiagnostics(compile.original.Diagnostics, got.Diagnostics) {
@@ -443,13 +536,60 @@ func validateReviewCopy(ctx context.Context, rootDir, outDir, azureYAMLRel strin
 	return nil
 }
 
-func compileYAMLSource(rootDir, rel string) ([]byte, error) {
-	root, err := os.OpenRoot(rootDir)
-	if err != nil {
+// sameARM compares two compiled templates. The Bicep generator metadata
+// (metadata._generator: name, version, templateHash) is left out at every
+// nesting level, so the check does not depend on whether templateHash is
+// sensitive to comment-only source edits (unverified); every other part of
+// the template must be identical.
+func sameARM(a, b []byte) bool {
+	ca, errA := canonicalARM(a)
+	cb, errB := canonicalARM(b)
+	if errA != nil || errB != nil {
+		return bytes.Equal(bytes.TrimSpace(a), bytes.TrimSpace(b))
+	}
+	return bytes.Equal(ca, cb)
+}
+
+func canonicalARM(raw []byte) ([]byte, error) {
+	var v any
+	if err := json.Unmarshal(raw, &v); err != nil {
 		return nil, err
 	}
-	defer root.Close()
-	return root.ReadFile(rel)
+	stripGenerator(v)
+	return json.Marshal(v)
+}
+
+func stripGenerator(v any) {
+	switch t := v.(type) {
+	case map[string]any:
+		if md, ok := t["metadata"].(map[string]any); ok {
+			delete(md, "_generator")
+		}
+		for _, child := range t {
+			stripGenerator(child)
+		}
+	case []any:
+		for _, child := range t {
+			stripGenerator(child)
+		}
+	}
+}
+
+// yamlDocuments decodes every document in a YAML stream.
+func yamlDocuments(data []byte) ([]any, error) {
+	dec := goyaml.NewDecoder(bytes.NewReader(data))
+	var docs []any
+	for {
+		var v any
+		err := dec.Decode(&v)
+		if errors.Is(err, io.EOF) {
+			return docs, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		docs = append(docs, v)
+	}
 }
 
 func sameDiagnostics(a, b []bicep.Diagnostic) bool {
@@ -465,17 +605,28 @@ func signatures(in []bicep.Diagnostic) []string {
 	return out
 }
 
+// toFindings maps entries to SARIF findings. A location that is not
+// inline-eligible keeps at most its project-relative file: no line or column
+// is emitted, so code scanning never shows an untrusted location as exact.
 func toFindings(entries []ann.Entry) []sdk.Finding {
 	out := make([]sdk.Finding, 0, len(entries))
 	for _, e := range entries {
+		loc := sdk.Location{File: e.File}
+		if e.Inline {
+			loc.Line, loc.Column = e.Line, e.Column
+		}
+		fp := e.Fingerprint
+		if fp == "" {
+			fp = e.ID
+		}
 		out = append(out, sdk.Finding{
 			RuleID:         e.RuleID,
 			Severity:       e.Severity,
 			Category:       sdk.Category(e.Category),
-			Location:       sdk.Location{File: e.File, Line: e.Line, Column: e.Column},
+			Location:       loc,
 			Evidence:       e.Message,
 			Recommendation: e.Recommendation,
-			Fingerprint:    e.ID,
+			Fingerprint:    fp,
 			Adapter:        e.Adapter,
 		})
 	}

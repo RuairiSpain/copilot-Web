@@ -1,5 +1,5 @@
 id: FND-IQ-007
-version: 1
+version: 2
 group: IQ
 title: Knowledge source type/API and planning model supported
 description: >-
@@ -82,6 +82,16 @@ sources:
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/data-plane/Search/stable/2026-04-01/search.json
     (KnowledgeSourceKind enum)
   note: Branch URL, not commit-pinned.
+- url: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-blob
+  lastVerified: '2026-10-18'
+  verifiedVia: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-blob (web fetch, Phase 8 fix loop 1)
+  note: >-
+    GET response shape: azureBlobParameters.{connectionString, isADLSGen2, ingestionParameters.{ingestionPermissionOptions, embeddingModel, chatCompletionModel, aiServices, assetStore, ingestionSchedule}, createdResources.{datasource, indexer, skillset, index}}; ingestionPermissionOptions need 2026-08-01-preview and are not supported by 2026-04-01.
+- url: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-sharepoint-indexed
+  lastVerified: '2026-10-18'
+  verifiedVia: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-sharepoint-indexed (web fetch, Phase 8 fix loop 1)
+  note: >-
+    GET response shape: indexedSharePointParameters.{connectionString (shown redacted), containerName, query, ingestionParameters, createdResources}; preview only (2026-08-01-preview).
 overlap:
   decision: native
   provisional: true
@@ -130,3 +140,4 @@ notes: >-
   absent from the Learn table may still be accepted by the service, so the check warns instead of failing, and it is no
   longer a platform-basis error. The target Search API version is not an azure.yaml field and must come from the profile
   or the template.
+  Round-1 fix (2026-10-18): objects read with an unknown API version are uncertain; no data plane read means skipped.

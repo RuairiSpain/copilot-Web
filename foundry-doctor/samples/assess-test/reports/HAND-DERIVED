@@ -1,0 +1,4 @@
+These reports were hand-derived in Phase 4 fix loop 1 without a Go toolchain (ADR-026).
+They are NOT engine output. TestAssessSampleReports fails while this file exists.
+Regenerate: go test ./cmd/foundry-doctor -run TestAssessSampleReports -update-assess-samples
+Then review the diff and commit; the update run deletes this file.

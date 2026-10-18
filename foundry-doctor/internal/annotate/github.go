@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"unicode"
 )
 
 // GitHubWorkflowCommands writes GitHub Actions workflow command annotations for
@@ -30,11 +29,19 @@ func GitHubWorkflowCommands(w io.Writer, entries []Entry) error {
 			msg += " — " + e.Recommendation
 		}
 		if _, err := fmt.Fprintf(w, "::%s file=%s,line=%d,col=%d,title=%s::%s\n",
-			level, escapeCommandProperty(e.File), e.Line, max(1, e.Column), escapeCommandProperty(summarise(title)), summarise(msg)); err != nil {
+			level, escapeCommandProperty(e.File), e.Line, max(1, e.Column), escapeCommandProperty(singleLine(title)), escapeCommandData(singleLine(msg))); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// escapeCommandData and escapeCommandProperty mirror escapeData and
+// escapeProperty in actions/toolkit packages/core/src/command.ts. They are
+// applied once, here, at the GitHub sink only; Entry text stays plain.
+func escapeCommandData(s string) string {
+	repl := strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A")
+	return repl.Replace(s)
 }
 
 func escapeCommandProperty(s string) string {
@@ -67,7 +74,10 @@ func singleLine(s string) string {
 	var b strings.Builder
 	space := false
 	for _, r := range s {
-		if r == '\r' || r == '\n' || unicode.IsControl(r) {
+		if isFormatRune(r) {
+			continue
+		}
+		if isBreakRune(r) {
 			if !space {
 				b.WriteByte(' ')
 				space = true

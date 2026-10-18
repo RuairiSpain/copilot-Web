@@ -1,5 +1,5 @@
 id: FND-IQ-009
-version: 2
+version: 3
 group: IQ
 title: Document-level access control configured when required
 description: >-
@@ -35,15 +35,16 @@ compatibility:
   - { plane: data, service: AzureAISearch, endpointFamily: knowledgesources, version: '2026-04-01' }
   preview: true
   notes: >-
-    API 2026-08-01-preview: ingestionPermissionOptions documented for retrieval enforcement. API 2026-05-01-preview: property
-    present in spec. API 2026-04-01: not supported.
+    API 2026-08-01-preview: ingestionPermissionOptions documented for retrieval enforcement. API 2026-05-01-preview: enforcement
+    not documented, reported uncertain. API 2026-04-01: not supported (documented).
 evidence:
   description: >-
     Applies only when the project states a document-level access requirement (a declared project setting; the rule is skipped,
     not passed, when no requirement is declared because the need cannot be inferred from metadata). Then, for each azureBlob,
     indexedOneLake and indexedSharePoint knowledge source in the knowledge base, fail when ingestionParameters.ingestionPermissionOptions
-    is empty or absent; fail when assetStore is also set; fail when the call API version is 2026-04-01; and fail when the
-    Foundry MCP tool or project connection has no header forwarding for x-ms-query-source-authorization. Values must be
+    is empty or absent; fail when assetStore is also set; fail when the call API version is 2026-04-01. Header forwarding of
+    x-ms-query-source-authorization is configured on the agent MCP tool headers, which Foundry Doctor does not read from the
+    repository, so that leg is always reported uncertain (header-forwarding-configured-outside-repo) and the rule never passes. Values must be
     in the spec enum userIds, groupIds, rbacScope, sensitivityLabels. Remote sources (remoteSharePoint, fabricDataAgent,
     fabricOntology, workIQ) enforce permissions at the source and are not assessed. The alternate header
     x-ms-query-work-iq-source-authorization is reserved for Work IQ scenarios and never counts as pass evidence for the
@@ -97,6 +98,16 @@ sources:
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/data-plane/Search/preview/2026-08-01-preview/search.json
     (KnowledgeSourceIngestionPermissionOption enum)
   note: Branch URL, not commit-pinned.
+- url: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-sharepoint-indexed
+  lastVerified: '2026-10-18'
+  verifiedVia: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-sharepoint-indexed (web fetch, Phase 8 fix loop 1)
+  note: >-
+    GET response shape: indexedSharePointParameters.{connectionString (shown redacted), containerName, query, ingestionParameters, createdResources}; preview only (2026-08-01-preview).
+- url: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-onelake
+  lastVerified: '2026-10-18'
+  verifiedVia: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-onelake (web fetch, Phase 8 fix loop 1)
+  note: >-
+    GET response shape: indexedOneLakeParameters.{fabricWorkspaceId, lakehouseId, targetPath, ingestionParameters, createdResources}.
 overlap:
   decision: native
   provisional: true
@@ -128,7 +139,6 @@ tests:
   - requirement-declared-blob-ks-without-permission-options
   - permission-options-with-asset-store
   - permission-options-on-2026-04-01
-  - mcp-connection-without-user-token-header
   negative:
   - blob-ks-with-userIds-groupIds
   - remote-sharepoint-source-not-assessed
@@ -145,3 +155,4 @@ notes: >-
   states it. The Work IQ-specific header name stays out of pass evidence here because Microsoft Learn documents
   x-ms-query-source-authorization for these indexed and remote-SharePoint retrieval paths. A decision on where that
   declaration lives (profile key) is needed before Phase 8.
+  Round-1 fix (2026-10-18): ingestion options are read from azureBlobParameters, indexedSharePointParameters and indexedOneLakeParameters .ingestionParameters; an absent parameters object is uncertain. Only 2026-04-01 fails the version leg (documented unsupported); 2026-05-01-preview and unknown versions are uncertain. The header leg is never decided from the repository: Learn sets x-ms-query-source-authorization on the agent MCP tool headers with a {{placeholder}}, a shape Foundry Doctor does not read, so the rule reports header-forwarding-configured-outside-repo as uncertain and never passes. The azure.yaml headers/requestHeaders/forwardHeaders keys used before were unverified and are no longer read.

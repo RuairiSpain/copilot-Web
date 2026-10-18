@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -37,9 +38,43 @@ func TestAssessEvidenceJSON(t *testing.T) {
 }
 
 func TestAssessInvalidYAMLExitsTwo(t *testing.T) {
-	code, _, errs := exec(t, "assess", "waf", "--dir", sample("assess-test"))
+	dir := t.TempDir()
+	yaml := "name: assess-invalid\nname: assess-invalid-duplicate\nservices: {}\n"
+	if err := os.WriteFile(filepath.Join(dir, "azure.yaml"), []byte(yaml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, _, errs := exec(t, "assess", "waf", "--dir", dir)
 	if code != 2 {
 		t.Fatalf("exit=%d err=%q", code, errs)
+	}
+}
+
+// The assess-test sample parses and renders a report (it was unparseable in
+// round 1, so the test fixture could never produce a sample report).
+func TestAssessTestSampleRenders(t *testing.T) {
+	code, out, errs := exec(t, "assess", "waf", "--dir", sample("assess-test"))
+	if code == 2 || code == 4 {
+		t.Fatalf("exit=%d err=%q", code, errs)
+	}
+	if !strings.Contains(out, "WAF owner summary") {
+		t.Fatalf("out=%s", out)
+	}
+}
+
+func TestAssessEvidencePackOverridesAudience(t *testing.T) {
+	code, out, errs := exec(t, "assess", "waf", "--audience", "owner", "--evidence-pack", "--dir", sample("assess-dev"))
+	if code == 2 || code == 4 {
+		t.Fatalf("exit=%d err=%q", code, errs)
+	}
+	if !strings.Contains(out, "WAF evidence pack") {
+		t.Fatalf("out=%s", out)
+	}
+}
+
+func TestAssessRejectsOwnerJSON(t *testing.T) {
+	code, _, _ := exec(t, "assess", "waf", "--audience", "owner", "--format", "json", "--dir", sample("assess-dev"))
+	if code != 2 {
+		t.Fatalf("exit=%d", code)
 	}
 }
 

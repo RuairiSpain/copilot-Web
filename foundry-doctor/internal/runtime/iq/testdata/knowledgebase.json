@@ -1,0 +1,21 @@
+{
+  "name": "my-kb",
+  "description": null,
+  "retrievalInstructions": null,
+  "answerInstructions": null,
+  "outputMode": "extractiveData",
+  "knowledgeSources": [ { "name": "my-blob-ks" }, { "name": "my-index-ks" } ],
+  "models": [
+    {
+      "kind": "azureOpenAI",
+      "azureOpenAIParameters": {
+        "resourceUri": "https://acct.openai.azure.com",
+        "deploymentId": "gpt-5-mini",
+        "modelName": "gpt-5-mini",
+        "authIdentity": { "@odata.type": "#Microsoft.Azure.Search.DataUserAssignedIdentity", "userAssignedIdentity": "/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/rg/providers/Microsoft.ManagedIdentity/userAssignedIdentities/search-uai" }
+      }
+    }
+  ],
+  "encryptionKey": null,
+  "retrievalReasoningEffort": { "kind": "low" }
+}

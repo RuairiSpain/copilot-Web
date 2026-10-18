@@ -1,5 +1,5 @@
 id: FND-COST-004
-version: 2
+version: 3
 group: COST
 title: "Informational monthly fixed-capacity estimate"
 description: >-
@@ -24,6 +24,8 @@ compatibility:
     - { plane: management, provider: Microsoft.Search, resourceType: searchServices, version: "2025-05-01" }
     - { plane: management, provider: Microsoft.ApiManagement, resourceType: service, version: "2024-05-01" }
     - { plane: management, provider: Microsoft.DocumentDB, resourceType: databaseAccounts/throughputSettings, version: "2026-03-15" }
+    - { plane: management, provider: Microsoft.DocumentDB, resourceType: databaseAccounts/sqlDatabases, version: "2025-04-15" }
+    - { plane: management, provider: Microsoft.DocumentDB, resourceType: databaseAccounts/sqlDatabases/containers, version: "2025-04-15" }
   preview: true
   notes: >-
     azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18,
@@ -34,19 +36,27 @@ compatibility:
     fields (see docs/tool-compatibility.md section 6).
 evidence:
   description: >-
-    From the compiled resource plan, derive fixed-capacity drivers - Search units as replicaCount x partitionCount for the
-    sku.name; API Management sku.name and sku.capacity; Cosmos DB provisioned throughput or autoscale maximum; PTU capacity of
-    provisioned Foundry deployments (sku.capacity). Map each driver to a retail meter through a supported-meter catalogue and
-    multiply by the quantity and hours with a documented assumption (for example 730 hours in a month, configurable). Output a
-    low and high estimate, the meter date and currency, and an explicit list of unsupported or consumption-based resources
-    (model tokens, storage, bandwidth). Offline mode uses a cached price file and says so; no price is invented when a meter is
-    missing, the resource is listed as unsupported. Nothing is compared with actual spend.
+    From the compiled resource plan (resources whose condition is the literal false are ignored; a non-literal condition or a
+    copy loop is listed as unsupported), derive fixed-capacity drivers - Search units as replicaCount x partitionCount for the
+    sku.name (default compute and hosting mode only); API Management sku.capacity in the primary region; Cosmos DB manual
+    provisioned throughput on throughputSettings and on SQL databases and containers (properties.options.throughput), priced in
+    every region of the parent account's properties.locations. Map each driver to a retail meter through the supported-meter
+    catalogue and multiply by the quantity and hours (730 by default, configurable). Prices come from the Azure Retail Prices
+    API with api-version 2023-01-01-preview, priceType Consumption, the requested currency (verified on the answer), primary
+    meter regions preferred and tiered rows excluded; more than one remaining price is ambiguous and not used. Report the low
+    and high estimate (equal, because every estimated line is a fixed hourly meter), the price date, currency and cache use,
+    and list every other resource - consumption-based or not modelled as excluded; fixed costs that cannot be priced (PTU
+    deployments with their PTU count and type, Cosmos autoscale, multi-region write, free tier or zone redundancy, API
+    Management additionalLocations, Search confidential compute or HighDensity, unknown or unresolved deployment SKUs,
+    sovereign-cloud regions, unresolved values) as unsupported. Totals cover estimated lines only. Offline mode uses a cached
+    price file and says so; no price is invented. Nothing is compared with actual spend. The check-time rule reports what makes
+    the estimate incomplete, using the same extraction as the cost command.
   confidence: uncertain
 recommendation: >-
   Treat the figure as a planning aid for comparing dev, test and prod fixed capacity, and confirm with the Azure pricing
   calculator and your own agreement before committing spend.
 fix: |
-  foundry-doctor cost --env prod --compare dev
+  foundry-doctor cost --environment prod --compare dev
 sources:
   - url: https://learn.microsoft.com/azure/search/search-sku-tier
     lastVerified: "2026-10-04"
@@ -80,10 +90,26 @@ sources:
       MicrosoftDocs/azure-ai-docs: articles/foundry/concepts/manage-costs.md; retrieved 2026-10-04
     note: Foundry estimates cover standard deployment costs only, not provisioned throughput, and do not reflect discounts or contracted pricing; invoices and meter records are the source of truth. Page ms.date 08/27/2026.
   - url: https://learn.microsoft.com/rest/api/cost-management/retail-prices/azure-retail-prices
-    lastVerified: "2026-10-04"
+    lastVerified: "2026-10-18"
     verifiedVia: >-
-      https://learn.microsoft.com/rest/api/cost-management/retail-prices/azure-retail-prices (web search result summary only; learn.microsoft.com and prices.azure.com were blocked by the egress proxy, so the page was not fetched)
-    note: Not verified from a primary source file. The search summary described an unauthenticated endpoint https://prices.azure.com/api/retail/prices with a $filter query parameter and an api-version 2023-01-01-preview with case-sensitive filters; none of this is used until confirmed.
+      https://learn.microsoft.com/en-us/rest/api/cost-management/retail-prices/azure-retail-prices (fetched 2026-10-18, page
+      last updated 08/06/2024); recorded responses from https://prices.azure.com/api/retail/prices (search-engine snapshot of
+      the public endpoint, 2026-10-18) in internal/cost/prices/testdata
+    note: >-
+      Unauthenticated endpoint https://prices.azure.com/api/retail/prices; api-version 2023-01-01-preview, filter values
+      case sensitive from that version; currencyCode='EUR' (quoted) request form; non-USD prices are reference values; type
+      Consumption, DevTestConsumption or Reservation (priceType filter); a Reservation row can have unitOfMeasure 1 Hour;
+      isPrimaryMeterRegion marks billing meters; tierMinimumUnits on every row; at most 1,000 records per page and an
+      absolute NextPageLink; Commercial cloud only.
+  - url: https://azure.microsoft.com/pricing/details/cosmos-db/standard-provisioned/
+    lastVerified: "2026-10-18"
+    verifiedVia: >-
+      https://azure.microsoft.com/en-us/pricing/details/cosmos-db/standard-provisioned/ and the same table on
+      https://www.azure.cn/en-us/pricing/details/cosmos-db/ (search result text, 2026-10-18)
+    note: >-
+      Standard provisioned throughput is billed hourly per 100 RU/s across every account region (100 RU/s x N regions);
+      multi-region write and availability-zone regions bill at different rates; autoscale bills 10-100% of the maximum per
+      hour. The retail meter name 100 RU/s is not verified.
 overlap:
   decision: native
   provisional: true
@@ -115,6 +141,8 @@ testability: >-
 tests:
   positive:
     - supported-search-or-apim-fixed-capacity-is-omitted-from-the-estimate-reports-an-incomplete-estimate-finding
+    - cosmos-autoscale-or-parent-account-unresolved-reports-an-incomplete-estimate-finding
+    - unknown-deployment-sku-or-provisioned-deployment-reports-an-incomplete-estimate-finding
     - unsupported-resource-is-not-listed-in-exclusions-reports-an-incomplete-estimate-finding
     - requested-dev-prod-comparison-omits-one-environment-reports-an-incomplete-comparison-finding
   negative:
@@ -126,7 +154,9 @@ tests:
 notes: >-
   Findings carry a Finding.Key per sub-check so fingerprints are stable.
   Informational only (PRD section 15). Marked product opinion because there is no platform rule to verify; the capacity drivers
-  and property names are verified from the specifications. Unverified - the Azure Retail Prices API contract (endpoint,
-  filtering, versions, meter and SKU naming) because Learn and prices.azure.com are blocked here; the mapping from each sku to a
-  retail meter; the hours-per-month assumption; whether provisioned throughput (PTU) meters can be priced from the public API.
-  Mapped IDs are intentionally empty.
+  and property names are verified from the specifications and the Retail Prices API contract from Learn (2026-10-18). Verified
+  meter names (recorded response 2026-10-18) - Search Basic Unit, Standard S1 Unit, Standard S3 Unit; API Management Developer
+  Unit, Standard Unit, Basic v2 Unit. Unverified - the other Search and API Management meter names (naming pattern only), the
+  Cosmos 100 RU/s meter name, whether provisioned throughput (PTU) meters can be priced from the public API, the Search default
+  replica and partition counts when absent. Control-plane and Advisor inputs are deferred (ADR-025). Mapped IDs are intentionally
+  empty.

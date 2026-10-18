@@ -390,7 +390,7 @@ func TestAnnotateReviewWritesCopy(t *testing.T) {
 	if code, err := Annotate(context.Background(), svc, AnnotateRequest{Format: "review", Out: "review\\demo.review", Dir: dir}, io.Discard); err != nil || code != ExitFindings {
 		t.Fatalf("review annotate code=%d err=%v", code, err)
 	}
-	data, err := os.ReadFile(filepath.Join(dir, "review", "demo.review", "azure.yaml"))
+	data, err := os.ReadFile(filepath.Join(dir, "review", "demo.review", "azure.review.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}

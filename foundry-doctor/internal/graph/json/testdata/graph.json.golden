@@ -1,0 +1,63 @@
+{
+  "schemaVersion": "1",
+  "mode": "combined",
+  "nodes": [
+    {
+      "id": "n1",
+      "label": "proj",
+      "kind": "project",
+      "origin": "local",
+      "type": "azure.ai.project",
+      "name": "proj",
+      "source": {
+        "file": "azure.yaml",
+        "line": 4,
+        "column": 11
+      }
+    },
+    {
+      "id": "n2",
+      "label": "st",
+      "kind": "storage",
+      "origin": "both",
+      "type": "Microsoft.Storage/storageAccounts",
+      "name": "st",
+      "resource": "/subscriptions/s/resourceGroups/rg/providers/Microsoft.Storage/storageAccounts/st",
+      "source": {},
+      "findings": 1,
+      "severity": "error",
+      "unhealthy": true,
+      "health": "succeeded"
+    },
+    {
+      "id": "n3",
+      "label": "external-url",
+      "kind": "external",
+      "origin": "external",
+      "source": {},
+      "external": true
+    }
+  ],
+  "edges": [
+    {
+      "from": "n1",
+      "to": "n2",
+      "kind": "uses"
+    },
+    {
+      "from": "n1",
+      "to": "n3",
+      "kind": "targets",
+      "external": true
+    }
+  ],
+  "summary": {
+    "mode": "combined",
+    "nodeCount": 3,
+    "edgeCount": 2,
+    "unmatchedFindings": 1,
+    "notes": [
+      "project capability hosts overlay skipped: not readable with the current permissions or unavailable"
+    ]
+  }
+}

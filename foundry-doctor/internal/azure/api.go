@@ -127,6 +127,14 @@ type Resource struct {
 	Tags          map[string]string
 	// Properties holds only allow-listed scalar properties requested by the caller.
 	Properties map[string]string
+	// UserAssignedIdentities are the keys of identity.userAssignedIdentities in
+	// the Resources - List response (GenericResourceExpanded.identity): ARM IDs
+	// of Microsoft.ManagedIdentity/userAssignedIdentities, sorted. Verified
+	// 2026-10-18 against
+	// https://learn.microsoft.com/rest/api/resources/resources/list (page
+	// version 2021-04-01; the adapter's 2025-04-01 shape is assumed unchanged,
+	// UNVERIFIED). Empty when the resource reports none.
+	UserAssignedIdentities []string
 }
 
 // InventoryQuery selects resources. Scope is a subscription or resource group ID.

@@ -6,7 +6,7 @@
   "required": ["schemaVersion", "mode", "nodes", "edges", "summary"],
   "properties": {
     "schemaVersion": { "type": "string", "const": "1" },
-    "mode": { "type": "string", "enum": ["source", "deployed", "combined"] },
+    "mode": { "type": "string", "enum": ["source", "deployed", "combined", "diff"] },
     "nodes": {
       "type": "array",
       "items": {
@@ -16,10 +16,13 @@
           "id": { "type": "string" },
           "label": { "type": "string" },
           "kind": { "type": "string" },
-          "origin": { "type": "string", "enum": ["local", "azure", "both", "external", "missing", "collapsed"] },
+          "origin": { "type": "string", "enum": ["local", "azure", "both", "external", "missing", "unobserved"] },
           "type": { "type": "string" },
           "name": { "type": "string" },
-          "resource": { "type": "string" },
+          "resource": {
+            "type": "string",
+            "description": "Azure Resource Manager resource ID only; never a template pointer. Absent for nodes not correlated with deployed state."
+          },
           "source": {
             "type": "object",
             "properties": {
@@ -36,7 +39,9 @@
           "baselined": { "type": "integer", "minimum": 0 },
           "severity": { "type": "string", "enum": ["info", "warning", "error"] },
           "unhealthy": { "type": "boolean" },
-          "health": { "type": "string" }
+          "health": { "type": "string" },
+          "conditional": { "type": "boolean" },
+          "diff": { "type": "string", "enum": ["added", "removed", "changed"] }
         },
         "additionalProperties": true
       }
@@ -52,7 +57,8 @@
           "kind": { "type": "string" },
           "external": { "type": "boolean" },
           "missing": { "type": "boolean" },
-          "collapsed": { "type": "boolean" }
+          "collapsed": { "type": "boolean" },
+          "diff": { "type": "string", "enum": ["added", "removed"] }
         },
         "additionalProperties": true
       }
@@ -61,12 +67,16 @@
       "type": "object",
       "required": ["mode", "nodeCount", "edgeCount"],
       "properties": {
-        "mode": { "type": "string", "enum": ["source", "deployed", "combined"] },
+        "mode": { "type": "string", "enum": ["source", "deployed", "combined", "diff"] },
         "nodeCount": { "type": "integer", "minimum": 0 },
         "edgeCount": { "type": "integer", "minimum": 0 },
         "collapsedNodes": { "type": "integer", "minimum": 0 },
         "collapsedEdges": { "type": "integer", "minimum": 0 },
-        "unmatchedFindings": { "type": "integer", "minimum": 0 }
+        "unmatchedFindings": { "type": "integer", "minimum": 0 },
+        "addedNodes": { "type": "integer", "minimum": 0 },
+        "removedNodes": { "type": "integer", "minimum": 0 },
+        "changedNodes": { "type": "integer", "minimum": 0 },
+        "notes": { "type": "array", "items": { "type": "string" } }
       },
       "additionalProperties": true
     }

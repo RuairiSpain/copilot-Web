@@ -64,7 +64,7 @@ sources:
   lastVerified: '2026-10-04'
   verifiedVia: >-
     https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/Search/searchServices/recommendations.yaml
-  note: WARA dff62efe (multi-region AI Search), pgVerified false. Branch URL, not commit-pinned.
+  note: WARA dff62efe-c3a3-4621-98b3-c877c65cb195 (multi-region AI Search), pgVerified false. Branch URL, not commit-pinned.
 - url: >-
     https://github.com/Azure/Azure-Proactive-Resiliency-Library-v2/blob/main/azure-resources/DocumentDB/databaseAccounts/recommendations.yaml
   lastVerified: '2026-10-04'

@@ -1,9 +1,17 @@
+# Phase 8 Foundry IQ and AI gateway sample. All values are fake.
 name: iq-gateway-sample
+infra:
+  provider: bicep
+  path: infra
+  module: main
 services:
   iq:
     host: azure.ai.connection
-    target: https://sample-search.search.windows.net/knowledgebases/sample-kb/mcp
+    # Knowledge base MCP endpoint (foundry-iq-connect, read 2026-10-18).
+    target: https://srch-iq-sample.search.windows.net/knowledgebases/hr-kb/mcp?api-version=2026-08-01-preview
     authType: ProjectManagedIdentity
-    # UNVERIFIED: this sample keeps the documented header name only.
-    headers:
-      x-ms-query-source-authorization: "{user_token}"
+    category: RemoteTool
+    audience: https://search.azure.com/
+    # x-ms-query-source-authorization is NOT set here. Learn sets it on the
+    # agent's MCP tool headers with a structured-input placeholder such as
+    # "{{search_auth_token}}", so FND-IQ-009 reports that leg as uncertain.

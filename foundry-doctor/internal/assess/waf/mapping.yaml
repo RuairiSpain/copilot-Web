@@ -1,0 +1,294 @@
+# Rule-to-WAF mapping for `foundry-doctor assess waf` (PRD section 12).
+#
+# Every catalogue rule appears exactly once, under `mapped` or `excluded`.
+# internal/assess/waf/mapping_test.go fails when a catalogue rule is missing,
+# duplicated, mapped to a pillar that differs from its catalogue pillar, or when a
+# rule scheduled in phases 1-4 is excluded. Pillar keys are the catalogue keys;
+# reports print the WAF pillar names from pillarSource. WAF checklist codes
+# (RE:/SE:/OE:/CO:/PE:) are not mapped in this version (ADR-026).
+version: 1
+lastReviewed: '2026-10-18'
+pillarSource:
+  url: https://learn.microsoft.com/azure/well-architected/pillars
+  lastVerified: '2026-10-18'
+mapped:
+- rule: FND-CFG-001
+  pillar: operations
+- rule: FND-CFG-002
+  pillar: operations
+- rule: FND-CFG-003
+  pillar: reliability
+- rule: FND-CFG-004
+  pillar: reliability
+- rule: FND-CFG-005
+  pillar: security
+- rule: FND-CFG-006
+  pillar: operations
+- rule: FND-CFG-007
+  pillar: security
+- rule: FND-CFG-011
+  pillar: operations
+- rule: FND-CFG-012
+  pillar: reliability
+- rule: FND-COST-001
+  pillar: cost
+- rule: FND-COST-002
+  pillar: cost
+- rule: FND-DEP-001
+  pillar: operations
+- rule: FND-DEP-002
+  pillar: operations
+- rule: FND-DEP-003
+  pillar: security
+- rule: FND-DEP-004
+  pillar: reliability
+- rule: FND-DEP-005
+  pillar: reliability
+- rule: FND-DEP-006
+  pillar: reliability
+- rule: FND-DEP-007
+  pillar: reliability
+- rule: FND-DEP-008
+  pillar: reliability
+- rule: FND-DEP-009
+  pillar: operations
+- rule: FND-DEP-010
+  pillar: reliability
+- rule: FND-DEP-011
+  pillar: reliability
+- rule: FND-DEP-012
+  pillar: reliability
+- rule: FND-ENV-001
+  pillar: operations
+- rule: FND-ENV-002
+  pillar: operations
+- rule: FND-ENV-003
+  pillar: reliability
+- rule: FND-ENV-004
+  pillar: operations
+- rule: FND-IDN-001
+  pillar: security
+- rule: FND-IDN-002
+  pillar: security
+- rule: FND-IDN-003
+  pillar: reliability
+- rule: FND-IDN-004
+  pillar: security
+- rule: FND-IDN-005
+  pillar: security
+- rule: FND-IDN-006
+  pillar: security
+- rule: FND-NET-001
+  pillar: security
+- rule: FND-NET-002
+  pillar: security
+- rule: FND-NET-003
+  pillar: reliability
+- rule: FND-NET-004
+  pillar: reliability
+- rule: FND-NET-005
+  pillar: reliability
+- rule: FND-NET-006
+  pillar: reliability
+- rule: FND-NET-007
+  pillar: security
+- rule: FND-NET-008
+  pillar: reliability
+- rule: FND-NET-010
+  pillar: security
+- rule: FND-NET-011
+  pillar: security
+- rule: FND-OPS-001
+  pillar: operations
+- rule: FND-OPS-002
+  pillar: operations
+- rule: FND-OPS-003
+  pillar: operations
+- rule: FND-OPS-004
+  pillar: operations
+- rule: FND-OPS-005
+  pillar: operations
+- rule: FND-OPS-006
+  pillar: operations
+- rule: FND-OPS-007
+  pillar: operations
+- rule: FND-OPS-008
+  pillar: operations
+- rule: FND-OPS-009
+  pillar: security
+- rule: FND-OPS-010
+  pillar: security
+- rule: FND-REL-001
+  pillar: reliability
+- rule: FND-REL-002
+  pillar: reliability
+- rule: FND-REL-003
+  pillar: reliability
+- rule: FND-REL-004
+  pillar: reliability
+- rule: FND-REL-005
+  pillar: reliability
+- rule: FND-REL-007
+  pillar: reliability
+- rule: FND-REL-008
+  pillar: reliability
+- rule: FND-REL-009
+  pillar: reliability
+- rule: FND-RUN-001
+  pillar: security
+- rule: FND-RUN-002
+  pillar: reliability
+- rule: FND-RUN-003
+  pillar: reliability
+- rule: FND-RUN-004
+  pillar: reliability
+- rule: FND-RUN-005
+  pillar: reliability
+- rule: FND-RUN-006
+  pillar: reliability
+- rule: FND-RUN-007
+  pillar: operations
+- rule: FND-SEC-001
+  pillar: security
+- rule: FND-SEC-002
+  pillar: security
+- rule: FND-SEC-003
+  pillar: security
+- rule: FND-SEC-004
+  pillar: security
+- rule: FND-SEC-006
+  pillar: security
+- rule: FND-SEC-008
+  pillar: security
+- rule: FND-SEC-009
+  pillar: security
+- rule: FND-SEC-010
+  pillar: security
+- rule: FND-SEC-011
+  pillar: security
+- rule: FND-SEC-014
+  pillar: security
+excluded:
+- rule: FND-CFG-008
+  reason: "Not scheduled in an implemented phase (phases: later); no evaluator ships in this release, so it would only ever be SKIPPED."
+- rule: FND-CFG-009
+  reason: "Not scheduled in an implemented phase (phases: later); no evaluator ships in this release, so it would only ever be SKIPPED."
+- rule: FND-CFG-010
+  reason: "Not scheduled in an implemented phase (phases: later); no evaluator ships in this release, so it would only ever be SKIPPED."
+- rule: FND-COST-003
+  reason: "Phase 8 Foundry IQ / AI gateway rule (phases: 8); it needs IQ or gateway metadata that `assess waf` does not load (ADR-026)."
+- rule: FND-COST-004
+  reason: "Phase 7 cost-estimate rule evaluated by the `cost` command from priced estimates; `assess waf` does not build cost estimates."
+- rule: FND-GW-001
+  reason: "Phase 8 Foundry IQ / AI gateway rule (phases: 8); it needs IQ or gateway metadata that `assess waf` does not load (ADR-026)."
+- rule: FND-GW-002
+  reason: "Phase 8 Foundry IQ / AI gateway rule (phases: 8); it needs IQ or gateway metadata that `assess waf` does not load (ADR-026)."
+- rule: FND-GW-003
+  reason: "Phase 8 Foundry IQ / AI gateway rule (phases: 8); it needs IQ or gateway metadata that `assess waf` does not load (ADR-026)."
+- rule: FND-GW-004
+  reason: "Phase 8 Foundry IQ / AI gateway rule (phases: 8); it needs IQ or gateway metadata that `assess waf` does not load (ADR-026)."
+- rule: FND-GW-005
+  reason: "Phase 8 Foundry IQ / AI gateway rule (phases: 8); it needs IQ or gateway metadata that `assess waf` does not load (ADR-026)."
+- rule: FND-GW-006
+  reason: "Phase 8 Foundry IQ / AI gateway rule (phases: 8); it needs IQ or gateway metadata that `assess waf` does not load (ADR-026)."
+- rule: FND-IQ-001
+  reason: "Phase 8 Foundry IQ / AI gateway rule (phases: 8); it needs IQ or gateway metadata that `assess waf` does not load (ADR-026)."
+- rule: FND-IQ-002
+  reason: "Phase 8 Foundry IQ / AI gateway rule (phases: 8); it needs IQ or gateway metadata that `assess waf` does not load (ADR-026)."
+- rule: FND-IQ-003
+  reason: "Phase 8 Foundry IQ / AI gateway rule (phases: 8); it needs IQ or gateway metadata that `assess waf` does not load (ADR-026)."
+- rule: FND-IQ-004
+  reason: "Phase 8 Foundry IQ / AI gateway rule (phases: 8); it needs IQ or gateway metadata that `assess waf` does not load (ADR-026)."
+- rule: FND-IQ-005
+  reason: "Phase 8 Foundry IQ / AI gateway rule (phases: 8); it needs IQ or gateway metadata that `assess waf` does not load (ADR-026)."
+- rule: FND-IQ-006
+  reason: "Phase 8 Foundry IQ / AI gateway rule (phases: 8); it needs IQ or gateway metadata that `assess waf` does not load (ADR-026)."
+- rule: FND-IQ-007
+  reason: "Phase 8 Foundry IQ / AI gateway rule (phases: 8); it needs IQ or gateway metadata that `assess waf` does not load (ADR-026)."
+- rule: FND-IQ-008
+  reason: "Phase 8 Foundry IQ / AI gateway rule (phases: 8); it needs IQ or gateway metadata that `assess waf` does not load (ADR-026)."
+- rule: FND-IQ-009
+  reason: "Phase 8 Foundry IQ / AI gateway rule (phases: 8); it needs IQ or gateway metadata that `assess waf` does not load (ADR-026)."
+- rule: FND-IQ-010
+  reason: "Phase 8 Foundry IQ / AI gateway rule (phases: 8); it needs IQ or gateway metadata that `assess waf` does not load (ADR-026)."
+- rule: FND-IQ-011
+  reason: "Phase 8 Foundry IQ / AI gateway rule (phases: 8); it needs IQ or gateway metadata that `assess waf` does not load (ADR-026)."
+- rule: FND-IQ-012
+  reason: "Phase 8 Foundry IQ / AI gateway rule (phases: 8); it needs IQ or gateway metadata that `assess waf` does not load (ADR-026)."
+- rule: FND-NET-009
+  reason: "Phase 8 Foundry IQ / AI gateway rule (phases: 8); it needs IQ or gateway metadata that `assess waf` does not load (ADR-026)."
+- rule: FND-REL-006
+  reason: "Phase 8 Foundry IQ / AI gateway rule (phases: 8); it needs IQ or gateway metadata that `assess waf` does not load (ADR-026)."
+- rule: FND-RUN-008
+  reason: "Not scheduled in an implemented phase (phases: future); no evaluator ships in this release, so it would only ever be SKIPPED."
+- rule: FND-SEC-005
+  reason: "Not scheduled in an implemented phase (phases: later); no evaluator ships in this release, so it would only ever be SKIPPED."
+- rule: FND-SEC-007
+  reason: "Not scheduled in an implemented phase (phases: later); no evaluator ships in this release, so it would only ever be SKIPPED."
+- rule: FND-SEC-012
+  reason: "Phase 8 Foundry IQ / AI gateway rule (phases: 8); it needs IQ or gateway metadata that `assess waf` does not load (ADR-026)."
+- rule: FND-SEC-013
+  reason: "Phase 8 Foundry IQ / AI gateway rule (phases: 8); it needs IQ or gateway metadata that `assess waf` does not load (ADR-026)."
+# Controls that need business or operational context. The prompts are project
+# opinion. Only FND-REL-007 has a configuration key (ADR-007); FND-IDN-005,
+# FND-OPS-002, FND-OPS-008 and FND-REL-009 have none, so they can only be
+# answered by deterministic evidence or remain QUESTION/SKIPPED (ADR-026).
+questions:
+- rule: FND-IDN-005
+  prompt: Has the team reviewed standing human admin access with current business and support context?
+- rule: FND-OPS-002
+  prompt: Is server-side tracing or hosted-agent telemetry a declared requirement for this project? (No configuration key exists yet; ADR-026.)
+- rule: FND-OPS-008
+  prompt: Is promotion gated by evaluations that reflect the project's release decision?
+- rule: FND-REL-007
+  key: disasterRecovery.declared
+  referenceKey: disasterRecovery.reference
+  prompt: Has the team recorded its disaster recovery strategy and a reference to the supporting plan?
+- rule: FND-REL-009
+  prompt: Which API Management SLA, zone-redundancy or multi-region objective does the workload need? (The rule reads reliability.apimSlaRequired, apimZoneRequired and apimRegionalRequired, which the configuration schema does not define yet; ADR-026.)
+# Optional recommendations whose remediation adds Azure cost. Each entry needs a
+# basis and a primary source. Mandatory (must-have) rules are never listed:
+# they are not optional, even when they cost money. The cost pillar does not
+# imply costly: budgets (FND-COST-001) are free in Cost Management and
+# FND-COST-002 reduces spend.
+costly:
+- rule: FND-NET-010
+  basis: An Azure Monitor Private Link Scope is reached through a private endpoint, and Azure Monitor refers its cost to Azure Private Link pricing.
+  source: https://learn.microsoft.com/azure/azure-monitor/fundamentals/private-link-security
+  lastVerified: '2026-10-18'
+- rule: FND-NET-011
+  basis: DDoS Network Protection and DDoS IP Protection are priced per protected IP or per 100 protected IPs; only DDoS infrastructure protection is at no additional cost.
+  source: https://learn.microsoft.com/azure/ddos-protection/ddos-protection-sku-comparison
+  lastVerified: '2026-10-18'
+- rule: FND-OPS-002
+  basis: Workspace-based Application Insights data is billed for ingestion and retention by the Log Analytics workspace that stores it.
+  source: https://learn.microsoft.com/azure/azure-monitor/logs/cost-logs
+  lastVerified: '2026-10-18'
+- rule: FND-OPS-006
+  basis: Log Analytics charges for data retention in addition to ingestion; longer retention adds cost.
+  source: https://learn.microsoft.com/azure/azure-monitor/logs/cost-logs
+  lastVerified: '2026-10-18'
+- rule: FND-REL-001
+  basis: Dedicated Azure AI Search bills per search unit (replicas x partitions); adding replicas raises cost.
+  source: https://learn.microsoft.com/azure/search/search-sku-manage-costs
+  lastVerified: '2026-10-18'
+- rule: FND-REL-002
+  basis: LRS is the lowest-cost redundancy option; ZRS and GZRS trade higher cost for availability.
+  source: https://learn.microsoft.com/azure/storage/common/storage-redundancy
+  lastVerified: '2026-10-18'
+- rule: FND-REL-003
+  basis: Continuous backup at the 30-day or 35-day tier carries a monthly backup storage charge and every restore is charged; the 7-day tier has no backup storage charge. The cost of zone redundancy is not cited here.
+  source: https://learn.microsoft.com/azure/cosmos-db/continuous-backup-restore-introduction
+  lastVerified: '2026-10-18'
+- rule: FND-SEC-008
+  basis: Defender for Cloud plans beyond foundational CSPM are paid plans; charges begin after the 30-day trial or usage limit.
+  source: https://learn.microsoft.com/azure/defender-for-cloud/connect-azure-subscription
+  lastVerified: '2026-10-18'
+- rule: FND-SEC-010
+  basis: Customer-managed keys require a billable Azure Key Vault (stated for Azure AI Search; the same Key Vault dependency applies to each service listed).
+  source: https://learn.microsoft.com/azure/search/search-sku-manage-costs
+  lastVerified: '2026-10-18'
+- rule: FND-SEC-011
+  basis: FQDN outbound rules in Allow Only Approved Outbound mode create a managed Azure Firewall, which adds Azure Firewall charges.
+  source: https://learn.microsoft.com/azure/foundry/how-to/managed-virtual-network
+  lastVerified: '2026-10-18'

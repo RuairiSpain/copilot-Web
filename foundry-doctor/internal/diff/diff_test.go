@@ -1,6 +1,9 @@
 package diff
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestUnified(t *testing.T) {
 	if got := Unified("azure.yaml", []byte("a\n"), []byte("a\n")); got != nil {
@@ -8,21 +11,22 @@ func TestUnified(t *testing.T) {
 	}
 	got := string(Unified("azure.yaml", []byte("a\n"), []byte("a\nb\n")))
 	for _, want := range []string{"--- a/azure.yaml", "+++ b/azure.yaml", "@@ -1,1 +1,2 @@", "-a", "+a", "+b"} {
-		if !contains(got, want) {
+		if !strings.Contains(got, want) {
 			t.Fatalf("diff missing %q:\n%s", want, got)
 		}
 	}
-}
-
-func contains(s, sub string) bool {
-	return len(s) >= len(sub) && (s == sub || (len(sub) > 0 && (func() bool { return len(s) > 0 && (index(s, sub) >= 0) })()))
-}
-
-func index(s, sub string) int {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return i
-		}
+	if strings.Contains(got, "No newline") {
+		t.Fatalf("unexpected no-newline marker:\n%s", got)
 	}
-	return -1
+}
+
+func TestUnifiedEmptyBeforeAndMissingNewline(t *testing.T) {
+	got := string(Unified("x.bicep", nil, []byte("// banner\n")))
+	if !strings.Contains(got, "@@ -0,0 +1,1 @@") {
+		t.Fatalf("empty before side must be -0,0:\n%s", got)
+	}
+	got = string(Unified("x.bicep", []byte("a"), []byte("// banner\na\n")))
+	if !strings.Contains(got, "-a\n\\ No newline at end of file\n+// banner\n") {
+		t.Fatalf("missing no-newline marker:\n%s", got)
+	}
 }

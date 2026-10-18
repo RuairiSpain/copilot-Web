@@ -1,0 +1,14 @@
+Foundry Doctor cost estimate (advisory only; not a bill)
+A.
+
+[dev] profile=foundry-dev currency=USD hours/month=730
+pricing: live retrieved 2026-10-18T00:00:00Z
+- s (Standard S1 Unit): 1.00 unit x 0.33600 => 245.28/month [eastus]
+    n1
+total (covered resources only): 245.28 to 245.28 USD/month
+excluded (consumption-based or not modelled; not in the total):
+  - chat (T): token-based
+unsupported or unverified (fixed cost not priced; estimate incomplete):
+  - ptu (T): PTU
+
+compare dev -> prod: x

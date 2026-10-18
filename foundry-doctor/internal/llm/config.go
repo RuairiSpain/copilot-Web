@@ -10,12 +10,25 @@ import (
 const (
 	DefaultProvider         = "azure-openai"
 	DefaultScope            = "https://ai.azure.com/.default"
+	LegacyScope             = "https://cognitiveservices.azure.com/.default"
 	DefaultTimeout          = 10 * time.Second
 	MinimumTimeout          = 1 * time.Second
 	MaximumTimeout          = 30 * time.Second
 	DefaultMaxPromptBytes   = 16 * 1024
 	DefaultMaxResponseBytes = 12 * 1024
+
+	// DefaultMaxCompletionTokens caps billed output (reasoning plus visible
+	// tokens) for the single provider call a command makes.
+	DefaultMaxCompletionTokens = 4096
 )
+
+// allowedScopes are the only token audiences the LLM provider may request.
+// Both appear in Microsoft Learn guidance for the /openai/v1/ route; anything
+// else (ARM, Graph, ...) would mint and forward an unrelated bearer token.
+var allowedScopes = map[string]bool{
+	DefaultScope: true,
+	LegacyScope:  true,
+}
 
 const (
 	EnvProvider   = "FOUNDRY_DOCTOR_LLM_PROVIDER"
@@ -63,6 +76,9 @@ func ResolveConfig(getenv func(string) string, opt Options, allowlist map[string
 	if scope == "" {
 		scope = DefaultScope
 	}
+	if !allowedScopes[scope] {
+		return Config{}, nil, fmt.Errorf("%w: %s must be %s or %s", ErrUnavailable, EnvScope, DefaultScope, LegacyScope)
+	}
 	if endpoint == "" {
 		return Config{}, nil, fmt.Errorf("%w: set %s or AZURE_OPENAI_ENDPOINT", ErrUnavailable, EnvEndpoint)
 	}
@@ -77,6 +93,7 @@ func ResolveConfig(getenv func(string) string, opt Options, allowlist map[string
 		Timeout:          timeout,
 		MaxPromptBytes:   DefaultMaxPromptBytes,
 		MaxResponseBytes: DefaultMaxResponseBytes,
+		MaxOutputTokens:  DefaultMaxCompletionTokens,
 	}, provider, nil
 }
 

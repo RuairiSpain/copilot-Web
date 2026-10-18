@@ -1,5 +1,5 @@
 id: FND-COST-001
-version: 3
+version: 4
 group: COST
 title: Budget and alerts exist
 description: >-
@@ -9,10 +9,8 @@ description: >-
 status: product-opinion
 phases:
 - '2'
-- '7'
 inputs:
 - bicep-arm
-- control-plane
 basis:
 - cost
 - opinion
@@ -48,9 +46,10 @@ evidence:
     an unresolved ARM expression (a string starting with [ that is not [[) makes the result uncertain, never a finding.
     Offline, a template that declares no budget is reported as skipped (budget-managed-outside-repository), because a
     budget is a subscription or resource-group object that is commonly created outside the project repository; the
-    template does not show the scope a budget applies to, so scope is not evaluated offline. Phase 7, control plane - list
-    budgets on the subscription and resource group with the Budgets API, report when none exists, and apply the same
-    checks. Budget amounts are never judged.
+    template does not show the scope a budget applies to, so scope is not evaluated offline. A notification threshold outside
+    0 to 1000 is reported (budget-threshold-out-of-range). Listing budgets on the subscription and resource group with the
+    Budgets API (control plane) is not implemented; it is deferred by ADR-025 and, when added, a missing budget must be
+    uncertain because budgets at billing scopes are not visible to a subscription Reader. Budget amounts are never judged.
   confidence: likely
 recommendation: >-
   Add a Microsoft.Consumption/budgets resource for the subscription or resource group with an actual-cost notification (for
@@ -135,11 +134,12 @@ overlap:
 implementation:
   owner: native
   package: internal/rules/cost
-testability: Phase 2 is offline against fixture ARM JSON; phase 7 uses a recorded Budgets API list. No spend data is read.
+testability: Offline against fixture ARM JSON. The control-plane Budgets API list is deferred (ADR-025). No spend data is read.
 tests:
   positive:
   - budget-without-enabled-notification
   - budget-has-no-forecasted-notification
+  - budget-threshold-out-of-range
   negative:
   - subscription-budget-with-actual-and-forecasted-notifications
   - resource-group-budget-with-action-group
@@ -148,7 +148,6 @@ tests:
   - budget-condition-false-or-unresolved
   - contact-emails-unresolved-expression
   - budget-managed-outside-repository
-  - control-plane-unavailable
   - dev-profile
 notes: >-
   Findings carry a Finding.Key per sub-check so fingerprints are stable.

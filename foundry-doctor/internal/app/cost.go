@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"path/filepath"
+	"strings"
 
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/cost"
 	costreport "github.com/ruairispain/copilot-web/foundry-doctor/internal/cost/report"
@@ -37,7 +39,36 @@ func (r *CostRequest) Validate() error {
 	if r.HoursPerMonth < 0 {
 		return Usagef("--hours-per-month must be >= 0")
 	}
+	r.Currency = strings.ToUpper(strings.TrimSpace(r.Currency))
+	if r.Currency == "" {
+		r.Currency = "USD"
+	}
+	if !isCurrencyCode(r.Currency) {
+		return Usagef("invalid --currency %q (want a three-letter ISO 4217 code such as USD or EUR)", r.Currency)
+	}
+	if r.PriceCache == "" {
+		dir := r.Dir
+		if dir == "" {
+			dir = "."
+		}
+		r.PriceCache = filepath.Join(dir, ".foundry-doctor", "cache", "prices.json")
+	}
 	return nil
+}
+
+// isCurrencyCode checks the ISO 4217 shape only. Whether the Retail Prices
+// API supports the code is checked per price: an answer in another currency
+// is reported as unsupported, never relabelled.
+func isCurrencyCode(s string) bool {
+	if len(s) != 3 {
+		return false
+	}
+	for _, c := range s {
+		if c < 'A' || c > 'Z' {
+			return false
+		}
+	}
+	return true
 }
 
 // Cost renders an advisory fixed-capacity estimate.

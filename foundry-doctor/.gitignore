@@ -7,3 +7,9 @@
 /runcover.out
 /runout
 /run
+
+# Local retail price cache written by `foundry-doctor cost`
+.foundry-doctor/cache/
+
+# Generated annotate review copies (never commit; azd could discover them)
+*.review/

@@ -117,12 +117,17 @@ func console(w io.Writer, doc Document) error {
 				line.ResourceName, line.MeterName, line.Quantity, line.Unit, line.UnitPrice, line.MonthlyHigh, line.Region); err != nil {
 				return err
 			}
+			for _, n := range line.Notes {
+				if _, err := fmt.Fprintf(w, "    %s\n", n); err != nil {
+					return err
+				}
+			}
 		}
-		if _, err := fmt.Fprintf(w, "total: %.2f to %.2f %s/month\n", env.TotalLow, env.TotalHigh, env.Currency); err != nil {
+		if _, err := fmt.Fprintf(w, "total (covered resources only): %.2f to %.2f %s/month\n", env.TotalLow, env.TotalHigh, env.Currency); err != nil {
 			return err
 		}
 		if len(env.Excluded) > 0 {
-			if _, err := fmt.Fprintln(w, "excluded consumption-based resources:"); err != nil {
+			if _, err := fmt.Fprintln(w, "excluded (consumption-based or not modelled; not in the total):"); err != nil {
 				return err
 			}
 			for _, x := range env.Excluded {
@@ -132,7 +137,7 @@ func console(w io.Writer, doc Document) error {
 			}
 		}
 		if len(env.Unsupported) > 0 {
-			if _, err := fmt.Fprintln(w, "unsupported or unverified resources:"); err != nil {
+			if _, err := fmt.Fprintln(w, "unsupported or unverified (fixed cost not priced; estimate incomplete):"); err != nil {
 				return err
 			}
 			for _, x := range env.Unsupported {
@@ -144,7 +149,7 @@ func console(w io.Writer, doc Document) error {
 	}
 	for _, cmp := range doc.Comparisons {
 		if cmp.Comparable {
-			if _, err := fmt.Fprintf(w, "\ncompare %s -> %s: delta %.2f to %.2f\n", cmp.Left, cmp.Right, cmp.DeltaLow, cmp.DeltaHigh); err != nil {
+			if _, err := fmt.Fprintf(w, "\ncompare %s -> %s: delta %.2f to %.2f (%s)\n", cmp.Left, cmp.Right, cmp.DeltaLow, cmp.DeltaHigh, cmp.Reason); err != nil {
 				return err
 			}
 		} else if _, err := fmt.Fprintf(w, "\ncompare %s -> %s: %s\n", cmp.Left, cmp.Right, cmp.Reason); err != nil {
@@ -158,36 +163,82 @@ func markdown(w io.Writer, doc Document) error {
 	if _, err := fmt.Fprintln(w, "# Foundry Doctor cost estimate"); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(w, "%s\n", doc.Advisory); err != nil {
+	if _, err := fmt.Fprintf(w, "\n%s\n", doc.Advisory); err != nil {
 		return err
 	}
 	for _, env := range doc.Environments {
 		if _, err := fmt.Fprintf(w, "\n## %s\n\n", env.Environment); err != nil {
 			return err
 		}
-		if _, err := fmt.Fprintf(w, "- Profile: `%s`\n- Currency: `%s`\n- Hours/month: `%.0f`\n- Total: `%.2f` to `%.2f` %s/month\n",
-			env.Profile, env.Currency, env.HoursPerMonth, env.TotalLow, env.TotalHigh, env.Currency); err != nil {
+		if _, err := fmt.Fprintf(w, "- Profile: `%s`\n- Currency: `%s`\n- Hours/month: `%.0f`\n- Total (covered resources only): `%.2f` to `%.2f` %s/month\n- Incomplete: `%t`\n",
+			env.Profile, env.Currency, env.HoursPerMonth, env.TotalLow, env.TotalHigh, env.Currency, env.Incomplete); err != nil {
 			return err
 		}
+		if env.PriceRetrieved != "" {
+			source := "live"
+			if env.UsedCache {
+				source = "cache"
+			}
+			if _, err := fmt.Fprintf(w, "- Pricing: %s, retrieved %s\n", source, env.PriceRetrieved); err != nil {
+				return err
+			}
+		}
 		for _, n := range env.Notes {
-			if _, err := fmt.Fprintf(w, "- Note: %s\n", n); err != nil {
+			if _, err := fmt.Fprintf(w, "- Note: %s\n", mdCell(n)); err != nil {
 				return err
 			}
 		}
 		if len(env.Estimated) > 0 {
-			if _, err := fmt.Fprintln(w, "\n| Resource | Meter | Quantity | Unit price | Monthly |"); err != nil {
+			if _, err := fmt.Fprintln(w, "\n| Resource | Region | Meter | Quantity | Unit price | Monthly | Notes |"); err != nil {
 				return err
 			}
-			if _, err := fmt.Fprintln(w, "|---|---|---:|---:|---:|"); err != nil {
+			if _, err := fmt.Fprintln(w, "|---|---|---|---:|---:|---:|---|"); err != nil {
 				return err
 			}
 			for _, line := range env.Estimated {
-				if _, err := fmt.Fprintf(w, "| %s | %s | %.2f %s | %.5f | %.2f |\n",
-					line.ResourceName, line.MeterName, line.Quantity, line.Unit, line.UnitPrice, line.MonthlyHigh); err != nil {
+				if _, err := fmt.Fprintf(w, "| %s | %s | %s | %.2f %s | %.5f | %.2f | %s |\n",
+					mdCell(line.ResourceName), line.Region, mdCell(line.MeterName), line.Quantity, line.Unit, line.UnitPrice, line.MonthlyHigh, mdCell(strings.Join(line.Notes, "; "))); err != nil {
 					return err
 				}
+			}
+		}
+		if err := mdNotes(w, "Excluded (not in the total)", env.Excluded); err != nil {
+			return err
+		}
+		if err := mdNotes(w, "Unsupported (fixed cost not priced)", env.Unsupported); err != nil {
+			return err
+		}
+	}
+	if len(doc.Comparisons) > 0 {
+		if _, err := fmt.Fprint(w, "\n## Comparisons\n\n"); err != nil {
+			return err
+		}
+		for _, cmp := range doc.Comparisons {
+			if cmp.Comparable {
+				if _, err := fmt.Fprintf(w, "- %s -> %s: delta `%.2f` to `%.2f` (%s)\n", cmp.Left, cmp.Right, cmp.DeltaLow, cmp.DeltaHigh, cmp.Reason); err != nil {
+					return err
+				}
+			} else if _, err := fmt.Fprintf(w, "- %s -> %s: %s\n", cmp.Left, cmp.Right, cmp.Reason); err != nil {
+				return err
 			}
 		}
 	}
 	return nil
 }
+
+func mdNotes(w io.Writer, title string, items []NoteItem) error {
+	if len(items) == 0 {
+		return nil
+	}
+	if _, err := fmt.Fprintf(w, "\n%s:\n\n", title); err != nil {
+		return err
+	}
+	for _, x := range items {
+		if _, err := fmt.Fprintf(w, "- `%s` (%s): %s\n", x.ResourceName, x.ResourceType, mdCell(x.Reason)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func mdCell(s string) string { return strings.ReplaceAll(s, "|", "\\|") }

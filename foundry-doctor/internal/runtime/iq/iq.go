@@ -1,9 +1,17 @@
 // Package iq contains metadata-only helpers for Foundry IQ and Azure AI Search
 // Phase 8 validation.
+//
+// Response shapes are parsed only for the Search data-plane API versions in
+// KnownAPIVersion. The knowledge source and model shapes follow the Learn
+// response examples read 2026-10-18 (agentic-knowledge-source-how-to-blob,
+// -sharepoint-indexed, -onelake, -search-index and
+// vector-search-vectorizer-azure-open-ai); see docs/iq-gateway.md.
 package iq
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -18,12 +26,40 @@ import (
 )
 
 const (
-	scope                    = "https://search.azure.com/.default"
-	apiVersionPreview        = "2026-08-01-preview"
-	apiVersionStable         = "2026-04-01"
-	modelVersionMgmt         = "2025-06-01"
-	searchServiceVersionMgmt = "2026-09-01-preview"
+	scope      = "https://search.azure.com/.default"
+	hostSuffix = ".search.windows.net"
+
+	// KnownAPIVersionList names the versions KnownAPIVersion accepts, for
+	// skip reasons and documentation.
+	KnownAPIVersionList = "2026-04-01, 2026-05-01-preview, 2026-08-01-preview"
 )
+
+// ErrUnsupportedAPIVersion is returned before any request is sent when the
+// requested api-version is outside KnownAPIVersion.
+var ErrUnsupportedAPIVersion = errors.New("iq: unsupported Search data-plane api-version")
+
+// ErrInvalidObjectName is returned before any request is sent when a Search
+// object name is not safe to place in a URL.
+var ErrInvalidObjectName = errors.New("iq: invalid Search object name")
+
+// KnownAPIVersion reports whether v is a Search data-plane API version whose
+// knowledge base, knowledge source, index and skillset shapes this package
+// parses. Every other version fails safe: no request, uncertain rules.
+func KnownAPIVersion(v string) bool {
+	switch strings.TrimSpace(v) {
+	case "2026-04-01", "2026-05-01-preview", "2026-08-01-preview":
+		return true
+	default:
+		return false
+	}
+}
+
+// objectNameRe bounds Search object names before they enter a URL (letters,
+// digits, dashes and underscores, up to 128), as internal/runtime/search does.
+var objectNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`)
+
+// ValidObjectName reports whether name is safe to place in a Search URL.
+func ValidObjectName(name string) bool { return objectNameRe.MatchString(name) }
 
 type Client interface {
 	GetKnowledgeBase(context.Context, string, string, string) (KnowledgeBase, error)
@@ -37,19 +73,22 @@ type HTTPClient struct {
 	Credential azure.TokenCredential
 }
 
+// Connection is an azure.ai.connection service from azure.yaml. Header
+// forwarding is not read here: Learn (foundry-iq-connect, 2026-10-18) sets
+// x-ms-query-source-authorization on the agent MCP tool headers, not on the
+// project connection.
 type Connection struct {
-	Name                    string
-	Kind                    string
-	Endpoint                string
-	TargetKind              string
-	SearchService           string
-	KnowledgeBase           string
-	APIVersion              string
-	AuthType                string
-	ForwardSourceAuth       bool
-	SourceAuthUsesUserToken bool
-	ForwardWorkIQAuth       bool
-	Location                sdk.Location
+	Name          string
+	Kind          string
+	Endpoint      string
+	TargetKind    string
+	SearchService string
+	KnowledgeBase string
+	APIVersion    string
+	AuthType      string
+	Category      string
+	Audience      string
+	Location      sdk.Location
 }
 
 type KnowledgeBase struct {
@@ -59,45 +98,76 @@ type KnowledgeBase struct {
 	KnowledgeSources       []string
 	RetrievalReasoningKind string
 	OutputMode             string
-	AnswerSynthesis        bool
 	Models                 []ModelRef
-	VectorQueries          []VectorQuery
-	DeclaredSemanticUsage  bool
 	UsesWebKnowledgeSource bool
 	UsesIndexedKnowledge   bool
 }
 
+// ModelRef is one Azure OpenAI (or AI Services) model reference. Path is the
+// JSON path of the reference inside its object, for evidence.
 type ModelRef struct {
-	Kind         string
-	ResourceURI  string
-	DeploymentID string
-	ModelName    string
-	APIKeySet    bool
-}
-
-type VectorQuery struct {
-	Weight float64
+	Kind            string
+	ResourceURI     string
+	DeploymentID    string
+	ModelName       string
+	APIKeySet       bool
+	AuthIdentitySet bool
+	Path            string
 }
 
 type KnowledgeSource struct {
-	Name                       string
-	APIVersion                 string
-	Location                   sdk.Location
-	Kind                       string
+	Name       string
+	APIVersion string
+	Location   sdk.Location
+	Kind       string
+	// ParametersRead is true when the kind-specific <kind>Parameters object
+	// was present in the response; IngestionRead when its
+	// ingestionParameters object was present.
+	ParametersRead bool
+	IngestionRead  bool
+	// SearchIndexName is searchIndexParameters.searchIndexName (an existing
+	// index); GeneratedIndexName and SkillsetName are
+	// <kind>Parameters.createdResources.index and .skillset.
 	SearchIndexName            string
+	GeneratedIndexName         string
+	SkillsetName               string
 	SemanticConfigurationName  string
 	BaseFilter                 string
 	FilterFields               []string
 	SecurityField              string
 	ResourceIDConnection       string
 	HasSecretConnection        bool
+	ConnectionUnclassified     bool
 	AssetStorePresent          bool
 	IngestionPermissionOptions []string
 	IsADLSGen2                 bool
 	RefreshSchedule            *Schedule
-	SkillsetName               string
-	SupportsChangeDetection    *bool
-	VectorizerModelRefs        []ModelRef
+	Models                     []ModelRef
+}
+
+// BackingIndex is the index the knowledge source reads: the existing index of
+// a searchIndex source, otherwise the generated index.
+func (k KnowledgeSource) BackingIndex() string {
+	if k.SearchIndexName != "" {
+		return k.SearchIndexName
+	}
+	return k.GeneratedIndexName
+}
+
+// ParametersKey is the JSON member that holds the kind-specific parameters.
+func ParametersKey(kind string) string {
+	switch strings.ToLower(strings.TrimSpace(kind)) {
+	case "searchindex":
+		return "searchIndexParameters"
+	case "azureblob":
+		return "azureBlobParameters"
+	case "indexedsharepoint":
+		return "indexedSharePointParameters"
+	case "indexedonelake":
+		return "indexedOneLakeParameters"
+	default:
+		return ""
+	}
 }
 
 type Schedule struct {
@@ -144,12 +214,13 @@ type VectorProfile struct {
 }
 
 type Vectorizer struct {
-	Name         string
-	Kind         string
-	ResourceURI  string
-	DeploymentID string
-	ModelName    string
-	APIKeySet    bool
+	Name            string
+	Kind            string
+	ResourceURI     string
+	DeploymentID    string
+	ModelName       string
+	APIKeySet       bool
+	AuthIdentitySet bool
 }
 
 type Skillset struct {
@@ -198,6 +269,9 @@ type EmbeddingDeployment struct {
 	SourceLocation sdk.Location
 }
 
+// Snapshot is the correlated Phase 8 view. LiveRead is true only when the
+// opt-in data-plane probe ran; rules that need data-plane objects skip, never
+// pass, when it is false.
 type Snapshot struct {
 	Connections []Connection
 	Bases       map[string]KnowledgeBase
@@ -208,129 +282,148 @@ type Snapshot struct {
 	Storage     map[string]StorageAccount
 	Deployments map[string]EmbeddingDeployment
 	ProbeIssues []string
+	LiveRead    bool
 }
 
 func Endpoint(service string) (string, error) {
 	if err := rt.ValidateDataPlaneName("search service", service); err != nil {
 		return "", err
 	}
-	return "https://" + service + ".search.windows.net", nil
+	return "https://" + service + hostSuffix, nil
 }
 
 func (c HTTPClient) GetKnowledgeBase(ctx context.Context, service, name, apiVersion string) (KnowledgeBase, error) {
-	apiVersion = requestedAPIVersion(apiVersion)
 	var resp struct {
 		Name                     string       `json:"name"`
 		KnowledgeSources         []namedRef   `json:"knowledgeSources"`
-		RetrievalReasoningEffort kindRef      `json:"retrievalReasoningEffort"`
+		RetrievalReasoningEffort *kindRef     `json:"retrievalReasoningEffort"`
 		OutputMode               string       `json:"outputMode"`
-		AnswerSynthesis          any          `json:"answerSynthesis"`
 		Models                   []modelShape `json:"models"`
-		VectorQueries            []struct {
-			Weight float64 `json:"weight"`
-		} `json:"vectorQueries"`
 	}
 	if err := c.get(ctx, service, "knowledgebases", name, apiVersion, &resp); err != nil {
 		return KnowledgeBase{}, err
 	}
 	out := KnowledgeBase{
-		Name:                   resp.Name,
-		APIVersion:             apiVersion,
-		RetrievalReasoningKind: strings.TrimSpace(resp.RetrievalReasoningEffort.Kind),
-		OutputMode:             strings.TrimSpace(resp.OutputMode),
-		AnswerSynthesis:        resp.AnswerSynthesis != nil,
+		Name:       resp.Name,
+		APIVersion: strings.TrimSpace(apiVersion),
+		OutputMode: strings.TrimSpace(resp.OutputMode),
+	}
+	if resp.RetrievalReasoningEffort != nil {
+		out.RetrievalReasoningKind = strings.TrimSpace(resp.RetrievalReasoningEffort.Kind)
 	}
 	for _, ks := range resp.KnowledgeSources {
 		if n := strings.TrimSpace(ks.Name); n != "" {
 			out.KnowledgeSources = append(out.KnowledgeSources, n)
 		}
 	}
-	for _, m := range resp.Models {
-		out.Models = append(out.Models, toModelRef(m))
-	}
-	for _, q := range resp.VectorQueries {
-		out.VectorQueries = append(out.VectorQueries, VectorQuery{Weight: q.Weight})
+	for i, m := range resp.Models {
+		out.Models = append(out.Models, toModelRef(m, fmt.Sprintf("models[%d]", i)))
 	}
 	return out, nil
 }
 
 func (c HTTPClient) GetKnowledgeSource(ctx context.Context, service, name, apiVersion string) (KnowledgeSource, error) {
-	apiVersion = requestedAPIVersion(apiVersion)
 	var resp struct {
-		Name                  string         `json:"name"`
-		Kind                  string         `json:"kind"`
-		SearchIndexParameters map[string]any `json:"searchIndexParameters"`
-		AzureBlobParameters   map[string]any `json:"azureBlobParameters"`
-		IndexedSQLParameters  map[string]any `json:"indexedSqlParameters"`
-		AssetStore            any            `json:"assetStore"`
-		IngestionParameters   map[string]any `json:"ingestionParameters"`
-		SkillsetName          string         `json:"skillsetName"`
-		Models                []modelShape   `json:"models"`
+		Name                        string         `json:"name"`
+		Kind                        string         `json:"kind"`
+		SearchIndexParameters       map[string]any `json:"searchIndexParameters"`
+		AzureBlobParameters         map[string]any `json:"azureBlobParameters"`
+		IndexedSharePointParameters map[string]any `json:"indexedSharePointParameters"`
+		IndexedOneLakeParameters    map[string]any `json:"indexedOneLakeParameters"`
 	}
 	if err := c.get(ctx, service, "knowledgesources", name, apiVersion, &resp); err != nil {
 		return KnowledgeSource{}, err
 	}
 	out := KnowledgeSource{
-		Name:              resp.Name,
-		Kind:              strings.TrimSpace(resp.Kind),
-		APIVersion:        apiVersion,
-		AssetStorePresent: resp.AssetStore != nil,
-		SkillsetName:      strings.TrimSpace(resp.SkillsetName),
+		Name:       resp.Name,
+		Kind:       strings.TrimSpace(resp.Kind),
+		APIVersion: strings.TrimSpace(apiVersion),
 	}
-	ingestion := resp.IngestionParameters
-	if m := resp.SearchIndexParameters; len(m) > 0 {
-		out.SearchIndexName = stringAt(m["searchIndexName"])
-		out.SemanticConfigurationName = stringAt(m["semanticConfigurationName"])
-		out.BaseFilter = stringAt(m["baseFilter"])
-		if qh, ok := m["queryHints"].(map[string]any); ok {
-			if filters, ok := qh["filters"].([]any); ok {
-				for _, raw := range filters {
-					if fm, ok := raw.(map[string]any); ok {
-						if field := stringAt(fm["field"]); field != "" {
-							out.FilterFields = append(out.FilterFields, field)
+	var params map[string]any
+	switch strings.ToLower(out.Kind) {
+	case "searchindex":
+		params = resp.SearchIndexParameters
+		if params != nil {
+			out.SearchIndexName = stringAt(params["searchIndexName"])
+			out.SemanticConfigurationName = stringAt(params["semanticConfigurationName"])
+			out.BaseFilter = stringAt(params["baseFilter"])
+			if qh, ok := params["queryHints"].(map[string]any); ok {
+				if filters, ok := qh["filters"].([]any); ok {
+					for _, raw := range filters {
+						if fm, ok := raw.(map[string]any); ok {
+							if field := stringAt(fm["field"]); field != "" {
+								out.FilterFields = append(out.FilterFields, field)
+							}
 						}
 					}
 				}
 			}
 		}
-	}
-	switch out.Kind {
-	case "azureBlob":
-		parseConnection(&out, resp.AzureBlobParameters)
-		if b, ok := boolAt(resp.AzureBlobParameters["isADLSGen2"]); ok {
+	case "azureblob":
+		params = resp.AzureBlobParameters
+		if b, ok := boolAt(params["isADLSGen2"]); ok {
 			out.IsADLSGen2 = b
 		}
-		if m, ok := mapAt(resp.AzureBlobParameters, "ingestionParameters"); ok {
-			ingestion = m
-			if _, ok := m["assetStore"]; ok {
-				out.AssetStorePresent = true
-			}
-		}
-	case "indexedSql":
-		parseConnection(&out, resp.IndexedSQLParameters)
-	case "indexedSharePoint":
-		parseConnection(&out, resp.IngestionParameters)
+		parseConnection(&out, params)
+	case "indexedsharepoint":
+		params = resp.IndexedSharePointParameters
+		parseConnection(&out, params)
+	case "indexedonelake":
+		params = resp.IndexedOneLakeParameters
 	}
-	if len(ingestion) > 0 {
-		if raw, ok := ingestion["ingestionPermissionOptions"].([]any); ok {
-			for _, v := range raw {
-				if s := stringAt(v); s != "" {
-					out.IngestionPermissionOptions = append(out.IngestionPermissionOptions, s)
-				}
-			}
-		}
-		if sched, ok := ingestion["ingestionSchedule"].(map[string]any); ok {
-			out.RefreshSchedule = &Schedule{Interval: stringAt(sched["interval"]), StartTime: stringAt(sched["startTime"])}
-		}
+	if params == nil {
+		return out, nil
 	}
-	for _, m := range resp.Models {
-		out.VectorizerModelRefs = append(out.VectorizerModelRefs, toModelRef(m))
+	out.ParametersRead = true
+	prefix := ParametersKey(out.Kind)
+	parseIngestion(&out, params, prefix)
+	if created, ok := mapAt(params, "createdResources"); ok {
+		out.GeneratedIndexName = stringAt(created["index"])
+		out.SkillsetName = stringAt(created["skillset"])
 	}
 	return out, nil
 }
 
+func parseIngestion(out *KnowledgeSource, params map[string]any, prefix string) {
+	ing, ok := mapAt(params, "ingestionParameters")
+	if !ok {
+		return
+	}
+	out.IngestionRead = true
+	if raw, ok := ing["ingestionPermissionOptions"].([]any); ok {
+		for _, v := range raw {
+			if s := stringAt(v); s != "" {
+				out.IngestionPermissionOptions = append(out.IngestionPermissionOptions, s)
+			}
+		}
+	}
+	if v, ok := ing["assetStore"]; ok && v != nil {
+		out.AssetStorePresent = true
+	}
+	if sched, ok := ing["ingestionSchedule"].(map[string]any); ok {
+		out.RefreshSchedule = &Schedule{Interval: stringAt(sched["interval"]), StartTime: stringAt(sched["startTime"])}
+	}
+	for _, key := range []string{"embeddingModel", "chatCompletionModel"} {
+		raw, ok := ing[key].(map[string]any)
+		if !ok {
+			continue
+		}
+		var m modelShape
+		if decodeMap(raw, &m) {
+			out.Models = append(out.Models, toModelRef(m, prefix+".ingestionParameters."+key))
+		}
+	}
+	if ai, ok := ing["aiServices"].(map[string]any); ok {
+		out.Models = append(out.Models, ModelRef{
+			Kind:        "aiServices",
+			ResourceURI: stringAt(ai["uri"]),
+			APIKeySet:   stringAt(ai["apiKey"]) != "",
+			Path:        prefix + ".ingestionParameters.aiServices",
+		})
+	}
+}
+
 func (c HTTPClient) GetIndex(ctx context.Context, service, name, apiVersion string) (Index, error) {
-	apiVersion = requestedAPIVersion(apiVersion)
 	var resp struct {
 		Name   string `json:"name"`
 		Fields []struct {
@@ -375,7 +468,7 @@ func (c HTTPClient) GetIndex(ctx context.Context, service, name, apiVersion stri
 	if err := c.get(ctx, service, "indexes", name, apiVersion, &resp); err != nil {
 		return Index{}, err
 	}
-	out := Index{Name: resp.Name, APIVersion: apiVersion, DefaultSemanticConfiguration: strings.TrimSpace(resp.Semantic.DefaultConfiguration)}
+	out := Index{Name: resp.Name, APIVersion: strings.TrimSpace(apiVersion), DefaultSemanticConfiguration: strings.TrimSpace(resp.Semantic.DefaultConfiguration)}
 	for _, f := range resp.Fields {
 		out.Fields = append(out.Fields, Field{
 			Name: f.Name, Type: f.Type, Key: f.Key, Searchable: f.Searchable, Retrievable: f.Retrievable,
@@ -400,10 +493,11 @@ func (c HTTPClient) GetIndex(ctx context.Context, service, name, apiVersion stri
 			out.VectorAlgorithms = append(out.VectorAlgorithms, n)
 		}
 	}
-	for _, v := range resp.VectorSearch.Vectorizers {
-		mv := toModelRef(v)
+	for i, v := range resp.VectorSearch.Vectorizers {
+		mv := toModelRef(v, fmt.Sprintf("vectorSearch.vectorizers[%d]", i))
 		out.Vectorizers = append(out.Vectorizers, Vectorizer{
-			Name: v.Name, Kind: v.Kind, ResourceURI: mv.ResourceURI, DeploymentID: mv.DeploymentID, ModelName: mv.ModelName, APIKeySet: mv.APIKeySet,
+			Name: v.Name, Kind: v.Kind, ResourceURI: mv.ResourceURI, DeploymentID: mv.DeploymentID, ModelName: mv.ModelName,
+			APIKeySet: mv.APIKeySet, AuthIdentitySet: mv.AuthIdentitySet,
 		})
 	}
 	for _, comp := range resp.VectorSearch.Compressions {
@@ -415,7 +509,6 @@ func (c HTTPClient) GetIndex(ctx context.Context, service, name, apiVersion stri
 }
 
 func (c HTTPClient) GetSkillset(ctx context.Context, service, name, apiVersion string) (Skillset, error) {
-	apiVersion = requestedAPIVersion(apiVersion)
 	var resp struct {
 		Name   string `json:"name"`
 		Skills []struct {
@@ -433,7 +526,7 @@ func (c HTTPClient) GetSkillset(ctx context.Context, service, name, apiVersion s
 	if err := c.get(ctx, service, "skillsets", name, apiVersion, &resp); err != nil {
 		return Skillset{}, err
 	}
-	out := Skillset{Name: resp.Name, APIVersion: apiVersion}
+	out := Skillset{Name: resp.Name, APIVersion: strings.TrimSpace(apiVersion)}
 	for _, s := range resp.Skills {
 		out.Skills = append(out.Skills, Skill{
 			ODataType: s.ODataType, TextSplitMode: s.TextSplitMode, Unit: s.Unit,
@@ -445,13 +538,33 @@ func (c HTTPClient) GetSkillset(ctx context.Context, service, name, apiVersion s
 	return out, nil
 }
 
+// get reads one object definition. The api-version must be known and the
+// object name must pass ValidObjectName; nothing is sent otherwise. Knowledge
+// objects use the documented /knowledgebases/{name} and
+// /knowledgesources/{name} paths; indexes and skillsets use the OData key form
+// already used by the Phase 3 Search probe.
 func (c HTTPClient) get(ctx context.Context, service, family, name, apiVersion string, out any) error {
+	apiVersion = strings.TrimSpace(apiVersion)
+	if !KnownAPIVersion(apiVersion) {
+		return fmt.Errorf("%w: %q", ErrUnsupportedAPIVersion, apiVersion)
+	}
+	if !ValidObjectName(name) {
+		return fmt.Errorf("%w: %s %q", ErrInvalidObjectName, family, name)
+	}
 	base, err := Endpoint(service)
 	if err != nil {
 		return err
 	}
-	u := fmt.Sprintf("%s/%s('%s')?api-version=%s", base, family, url.PathEscape(name), apiVersion)
-	return rt.DoJSON(ctx, c.HTTP, c.Credential, scope, http.MethodGet, u, ".search.windows.net", nil, out)
+	var path string
+	switch family {
+	case "knowledgebases", "knowledgesources":
+		path = "/" + family + "/" + url.PathEscape(name)
+	default:
+		path = "/" + family + "('" + url.PathEscape(name) + "')"
+	}
+	q := url.Values{}
+	q.Set("api-version", apiVersion)
+	return rt.DoJSON(ctx, c.HTTP, c.Credential, scope, http.MethodGet, base+path+"?"+q.Encode(), hostSuffix, nil, out)
 }
 
 type namedRef struct {
@@ -462,25 +575,42 @@ type kindRef struct {
 	Kind string `json:"kind"`
 }
 
+// modelShape is a vectorizer, knowledge base model or ingestion model. apiKey
+// and authIdentity live inside azureOpenAIParameters
+// (vector-search-vectorizer-azure-open-ai, read 2026-10-18).
 type modelShape struct {
-	Name                  string `json:"name"`
-	Kind                  string `json:"kind"`
-	APIKey                string `json:"apiKey"`
-	AzureOpenAIParameters struct {
-		ResourceURI  string `json:"resourceUri"`
-		DeploymentID string `json:"deploymentId"`
-		ModelName    string `json:"modelName"`
-	} `json:"azureOpenAIParameters"`
+	Name                  string      `json:"name"`
+	Kind                  string      `json:"kind"`
+	AzureOpenAIParameters *aoaiParams `json:"azureOpenAIParameters"`
 }
 
-func toModelRef(m modelShape) ModelRef {
-	return ModelRef{
-		Kind:         strings.TrimSpace(m.Kind),
-		ResourceURI:  strings.TrimSpace(m.AzureOpenAIParameters.ResourceURI),
-		DeploymentID: strings.TrimSpace(m.AzureOpenAIParameters.DeploymentID),
-		ModelName:    strings.TrimSpace(m.AzureOpenAIParameters.ModelName),
-		APIKeySet:    strings.TrimSpace(m.APIKey) != "",
+type aoaiParams struct {
+	ResourceURI  string          `json:"resourceUri"`
+	DeploymentID string          `json:"deploymentId"`
+	ModelName    string          `json:"modelName"`
+	APIKey       *string         `json:"apiKey"`
+	AuthIdentity json.RawMessage `json:"authIdentity"`
+}
+
+func toModelRef(m modelShape, path string) ModelRef {
+	out := ModelRef{Kind: strings.TrimSpace(m.Kind), Path: path}
+	if p := m.AzureOpenAIParameters; p != nil {
+		out.ResourceURI = strings.TrimSpace(p.ResourceURI)
+		out.DeploymentID = strings.TrimSpace(p.DeploymentID)
+		out.ModelName = strings.TrimSpace(p.ModelName)
+		out.APIKeySet = p.APIKey != nil && strings.TrimSpace(*p.APIKey) != ""
+		raw := strings.TrimSpace(string(p.AuthIdentity))
+		out.AuthIdentitySet = raw != "" && raw != "null"
 	}
+	return out
+}
+
+func decodeMap(in map[string]any, out any) bool {
+	data, err := json.Marshal(in)
+	if err != nil {
+		return false
+	}
+	return json.Unmarshal(data, out) == nil
 }
 
 func stringAt(v any) string {
@@ -501,6 +631,9 @@ func boolAt(v any) (bool, bool) {
 	return b, ok
 }
 
+// parseConnection classifies connectionString without keeping it: a
+// ResourceId= value is managed identity, a known secret marker is
+// secret-backed, anything else (including a redacted value) is unclassified.
 func parseConnection(out *KnowledgeSource, m map[string]any) {
 	if len(m) == 0 {
 		return
@@ -509,17 +642,17 @@ func parseConnection(out *KnowledgeSource, m map[string]any) {
 	if conn == "" {
 		return
 	}
-	if id := ResourceIDFromConnectionString(conn); id != "" {
-		out.ResourceIDConnection = id
+	switch {
+	case ConnectionUsesSecret(conn):
+		out.HasSecretConnection = true
+		if id := ResourceIDFromConnectionString(conn); id != "" {
+			out.ResourceIDConnection = id
+		}
+	case ResourceIDFromConnectionString(conn) != "":
+		out.ResourceIDConnection = ResourceIDFromConnectionString(conn)
+	default:
+		out.ConnectionUnclassified = true
 	}
-	out.HasSecretConnection = ConnectionUsesSecret(conn)
-}
-
-func requestedAPIVersion(apiVersion string) string {
-	if strings.TrimSpace(apiVersion) == "" {
-		return apiVersionPreview
-	}
-	return strings.TrimSpace(apiVersion)
 }
 
 func ResourceIDFromConnectionString(v string) string {
@@ -537,7 +670,7 @@ func ResourceIDFromConnectionString(v string) string {
 
 func ConnectionUsesSecret(v string) bool {
 	s := strings.ToLower(v)
-	for _, marker := range []string{"accountkey=", "sharedaccesssignature=", "clientsecret=", "************sig=", "user id=", "userid=", "uid=", "password=", "pwd="} {
+	for _, marker := range []string{"accountkey=", "sharedaccesssignature=", "clientsecret=", "sig=", "user id=", "userid=", "uid=", "password=", "pwd="} {
 		if strings.Contains(s, marker) {
 			return true
 		}
@@ -548,6 +681,9 @@ func ConnectionUsesSecret(v string) bool {
 const (
 	ConnectionTargetKnowledgeBaseMCP      = "KnowledgeBaseMCP"
 	ConnectionTargetCognitiveSearchTarget = "CognitiveSearchService"
+	// ConnectionTargetUnresolved marks a Search-looking or RemoteTool
+	// connection whose target is still a ${VAR} reference.
+	ConnectionTargetUnresolved = "Unresolved"
 )
 
 type ParsedConnectionEndpoint struct {
@@ -565,10 +701,10 @@ func ParseConnectionEndpoint(raw string) (ParsedConnectionEndpoint, bool) {
 		return ParsedConnectionEndpoint{}, false
 	}
 	host := strings.ToLower(u.Hostname())
-	if !strings.HasSuffix(host, ".search.windows.net") {
+	if !strings.HasSuffix(host, hostSuffix) {
 		return ParsedConnectionEndpoint{}, false
 	}
-	service := strings.TrimSuffix(host, ".search.windows.net")
+	service := strings.TrimSuffix(host, hostSuffix)
 	apiVersion := strings.TrimSpace(u.Query().Get("api-version"))
 	switch strings.TrimSpace(u.EscapedPath()) {
 	case "", "/":
@@ -578,7 +714,11 @@ func ParseConnectionEndpoint(raw string) (ParsedConnectionEndpoint, bool) {
 	if len(match) != 2 {
 		return ParsedConnectionEndpoint{}, false
 	}
-	return ParsedConnectionEndpoint{TargetKind: ConnectionTargetKnowledgeBaseMCP, SearchService: service, KnowledgeBase: match[1], APIVersion: apiVersion}, true
+	kb, err := url.PathUnescape(match[1])
+	if err != nil || !ValidObjectName(kb) {
+		return ParsedConnectionEndpoint{}, false
+	}
+	return ParsedConnectionEndpoint{TargetKind: ConnectionTargetKnowledgeBaseMCP, SearchService: service, KnowledgeBase: kb, APIVersion: apiVersion}, true
 }
 
 func ParseKnowledgeBaseEndpoint(raw string) (service, kb string, ok bool) {
@@ -669,7 +809,7 @@ func ConnectionsFromAzureYAML(in *sdk.Input) []Connection {
 	}
 	var out []Connection
 	services := child(d.Root(), "services")
-	if services == nil || services.Kind != 4 {
+	if services == nil || services.Kind != yamlMapping {
 		return nil
 	}
 	for i := 0; i+1 < len(services.Content); i += 2 {
@@ -678,25 +818,32 @@ func ConnectionsFromAzureYAML(in *sdk.Input) []Connection {
 			continue
 		}
 		target := strNode(val, "target")
+		conn := Connection{
+			Name:     key.Value,
+			Kind:     "azure.ai.connection",
+			Endpoint: target,
+			AuthType: strNode(val, "authType"),
+			Category: strNode(val, "category"),
+			Audience: strNode(val, "audience"),
+			Location: sdk.Location{File: d.Path(), Line: key.Line, Column: key.Column},
+		}
+		if strings.Contains(target, "${") {
+			lower := strings.ToLower(target)
+			if strings.Contains(lower, hostSuffix) || strings.Contains(lower, "/knowledgebases/") || strings.EqualFold(conn.Category, "RemoteTool") {
+				conn.TargetKind = ConnectionTargetUnresolved
+				out = append(out, conn)
+			}
+			continue
+		}
 		parsed, ok := ParseConnectionEndpoint(target)
 		if !ok {
 			continue
 		}
-		forwardSourceAuth, sourceAuthUsesUserToken, forwardWorkIQAuth := connectionAuthHeaders(val)
-		out = append(out, Connection{
-			Name:                    key.Value,
-			Kind:                    "azure.ai.connection",
-			Endpoint:                target,
-			TargetKind:              parsed.TargetKind,
-			SearchService:           parsed.SearchService,
-			KnowledgeBase:           parsed.KnowledgeBase,
-			APIVersion:              parsed.APIVersion,
-			AuthType:                strNode(val, "authType"),
-			ForwardSourceAuth:       forwardSourceAuth,
-			SourceAuthUsesUserToken: sourceAuthUsesUserToken,
-			ForwardWorkIQAuth:       forwardWorkIQAuth,
-			Location:                sdk.Location{File: d.Path(), Line: key.Line, Column: key.Column},
-		})
+		conn.TargetKind = parsed.TargetKind
+		conn.SearchService = parsed.SearchService
+		conn.KnowledgeBase = parsed.KnowledgeBase
+		conn.APIVersion = parsed.APIVersion
+		out = append(out, conn)
 	}
 	slices.SortFunc(out, func(a, b Connection) int { return strings.Compare(a.Name, b.Name) })
 	return out
@@ -738,44 +885,6 @@ func strNode(n *yaml.Node, key string) string {
 		return ""
 	}
 	return strings.TrimSpace(c.Value)
-}
-
-func connectionAuthHeaders(n *yaml.Node) (forwardSourceAuth, sourceAuthUsesUserToken, forwardWorkIQAuth bool) {
-	for _, key := range []string{"headers", "requestHeaders", "forwardHeaders"} {
-		h := child(n, key)
-		if h == nil {
-			continue
-		}
-		if present, usesUserToken := headerNamed(h, "x-ms-query-source-authorization"); present {
-			forwardSourceAuth = true
-			sourceAuthUsesUserToken = sourceAuthUsesUserToken || usesUserToken
-		}
-		if present, _ := headerNamed(h, "x-ms-query-work-iq-source-authorization"); present {
-			forwardWorkIQAuth = true
-		}
-	}
-	return forwardSourceAuth, sourceAuthUsesUserToken, forwardWorkIQAuth
-}
-
-func headerNamed(n *yaml.Node, name string) (present, usesUserToken bool) {
-	switch {
-	case n == nil:
-		return false, false
-	case n.Kind == yamlMapping:
-		for i := 0; i+1 < len(n.Content); i += 2 {
-			if strings.EqualFold(n.Content[i].Value, name) {
-				return true, scalarUsesUserToken(n.Content[i+1])
-			}
-			if present, usesUserToken := headerNamed(n.Content[i+1], name); present {
-				return true, usesUserToken
-			}
-		}
-	}
-	return false, false
-}
-
-func scalarUsesUserToken(n *yaml.Node) bool {
-	return n != nil && n.Kind == yamlScalar && strings.Contains(strings.ToLower(strings.TrimSpace(n.Value)), "user_token")
 }
 
 func nestedString(m map[string]any, path ...string) (string, bool) {

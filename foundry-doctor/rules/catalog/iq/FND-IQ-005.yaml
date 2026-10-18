@@ -1,5 +1,5 @@
 id: FND-IQ-005
-version: 2
+version: 3
 group: IQ
 title: "Retrieval mode supported by index and service tier"
 description: >-
@@ -83,6 +83,11 @@ sources:
       https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/data-plane/Search/stable/2026-04-01/search.json
       (KnowledgeRetrievalReasoningEffortKind, KnowledgeRetrievalOutputMode, KnowledgeBase properties)
     note: Branch URL, not commit-pinned.
+  - url: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-blob
+    lastVerified: '2026-10-18'
+    verifiedVia: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-blob (web fetch, Phase 8 fix loop 1)
+    note: >-
+      GET response shape: azureBlobParameters.{connectionString, isADLSGen2, ingestionParameters.{ingestionPermissionOptions, embeddingModel, chatCompletionModel, aiServices, assetStore, ingestionSchedule}, createdResources.{datasource, indexer, skillset, index}}; ingestionPermissionOptions need 2026-08-01-preview and are not supported by 2026-04-01.
 overlap:
   decision: native
   provisional: true
@@ -133,3 +138,4 @@ notes: >-
   agentic API (2025-08-01-preview "knowledge agent") is out of scope. The tier and region tables come from
   Learn text dated up to 2026-08 and can change; they are data in the rule pack, not code. Current code has
   no deterministic service-age signal for Basic-tier services, so 6-10 knowledge sources stay uncertain.
+  Round-1 fix (2026-10-18): the unverified answerSynthesis knowledge-base member is no longer read; tier and region legs are skipped when the Search service is not in the template. Unknown API versions are uncertain; no data plane read means skipped.

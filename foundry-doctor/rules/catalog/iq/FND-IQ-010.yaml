@@ -1,5 +1,5 @@
 id: FND-IQ-010
-version: 1
+version: 2
 group: IQ
 title: "ADLS Gen2 hierarchical namespace enabled"
 description: >-
@@ -117,3 +117,4 @@ notes: >-
   The statement that hierarchical namespace cannot be toggled after account creation is not asserted by any
   source read here; the recommendation text is deliberately limited. The OneLake source has no HNS concept
   and is out of scope.
+  Round-1 fix (2026-10-18): the storage account match uses the ResourceId suffix /storageAccounts/<name>. Unknown API versions are uncertain; no data plane read means skipped.

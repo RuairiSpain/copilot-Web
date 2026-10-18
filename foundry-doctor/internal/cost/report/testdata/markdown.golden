@@ -1,0 +1,28 @@
+# Foundry Doctor cost estimate
+
+A.
+
+## dev
+
+- Profile: `foundry-dev`
+- Currency: `USD`
+- Hours/month: `730`
+- Total (covered resources only): `245.28` to `245.28` USD/month
+- Incomplete: `true`
+- Pricing: live, retrieved 2026-10-18T00:00:00Z
+
+| Resource | Region | Meter | Quantity | Unit price | Monthly | Notes |
+|---|---|---|---:|---:|---:|---|
+| s | eastus | Standard S1 Unit | 1.00 unit | 0.33600 | 245.28 | n1 |
+
+Excluded (not in the total):
+
+- `chat` (T): token-based
+
+Unsupported (fixed cost not priced):
+
+- `ptu` (T): PTU
+
+## Comparisons
+
+- dev -> prod: x

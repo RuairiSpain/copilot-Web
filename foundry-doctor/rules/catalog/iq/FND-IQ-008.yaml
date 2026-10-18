@@ -1,5 +1,5 @@
 id: FND-IQ-008
-version: 1
+version: 2
 group: IQ
 title: "Source connection uses managed identity"
 description: >-
@@ -90,6 +90,16 @@ sources:
       https://learn.microsoft.com/azure/foundry/agents/how-to/foundry-iq-connect; source file
       MicrosoftDocs/azure-ai-docs: articles/foundry/agents/how-to/foundry-iq-connect.md; retrieved 2026-10-04
     note: RemoteTool connection with authType ProjectManagedIdentity; role-based access recommended for production, key-based as fallback.
+  - url: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-sharepoint-indexed
+    lastVerified: '2026-10-18'
+    verifiedVia: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-sharepoint-indexed (web fetch, Phase 8 fix loop 1)
+    note: >-
+      GET response shape: indexedSharePointParameters.{connectionString (shown redacted), containerName, query, ingestionParameters, createdResources}; preview only (2026-08-01-preview).
+  - url: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-onelake
+    lastVerified: '2026-10-18'
+    verifiedVia: https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-onelake (web fetch, Phase 8 fix loop 1)
+    note: >-
+      GET response shape: indexedOneLakeParameters.{fabricWorkspaceId, lakehouseId, targetPath, ingestionParameters, createdResources}.
 overlap:
   decision: adapt
   provisional: true
@@ -145,3 +155,4 @@ notes: >-
   azd/Bicep or Search JSON in the repository is the primary input. Learn names Cognitive Services User for the
   Search-to-model path of knowledge sources and Cognitive Services OpenAI User for the vectorizer; both are
   cited as written.
+  Round-1 fix (2026-10-18): apiKey is read inside azureOpenAIParameters (vectorizers, knowledge-base models, ingestionParameters.embeddingModel and chatCompletionModel) and from ingestionParameters.aiServices.apiKey. Whether Search GET responses redact or omit secrets is UNVERIFIED, so a redacted or unclassifiable connectionString and a model without apiKey and without authIdentity are uncertain, not passed. Search identity type None counts as no identity. The azure.yaml connection leg also checks category RemoteTool and audience https://search.azure.com/ when present (azd azure.ai.connection schema). Without the data plane the rule reports only azure.yaml findings and otherwise skips.

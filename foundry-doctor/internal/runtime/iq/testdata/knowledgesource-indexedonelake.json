@@ -1,0 +1,34 @@
+{
+  "name": "my-onelake-ks",
+  "kind": "indexedOneLake",
+  "description": "Shape from Learn agentic-knowledge-source-how-to-onelake (read 2026-10-18). Values are fake.",
+  "encryptionKey": null,
+  "indexedOneLakeParameters": {
+    "fabricWorkspaceId": "00000000-0000-0000-0000-000000000001",
+    "lakehouseId": "00000000-0000-0000-0000-000000000002",
+    "targetPath": null,
+    "ingestionParameters": {
+      "disableImageVerbalization": false,
+      "ingestionPermissionOptions": [],
+      "contentExtractionMode": "standard",
+      "identity": null,
+      "embeddingModel": {
+        "kind": "azureOpenAI",
+        "azureOpenAIParameters": {
+          "resourceUri": "https://acct.openai.azure.com",
+          "deploymentId": "text-embedding-3-large",
+          "modelName": "text-embedding-3-large"
+        }
+      },
+      "chatCompletionModel": null,
+      "ingestionSchedule": { "interval": "PT1H", "startTime": "2026-10-01T00:00:00Z" },
+      "aiServices": { "uri": "https://acct.services.ai.azure.com", "apiKey": "<redacted>" }
+    },
+    "createdResources": {
+      "datasource": "my-onelake-ks-datasource",
+      "indexer": "my-onelake-ks-indexer",
+      "skillset": "my-onelake-ks-skillset",
+      "index": "my-onelake-ks-index"
+    }
+  }
+}
