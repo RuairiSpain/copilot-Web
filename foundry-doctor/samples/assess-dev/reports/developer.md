@@ -1,5 +1,3 @@
-> **HAND-DERIVED SAMPLE, NOT ENGINE OUTPUT (ADR-026).** Regenerate with `go test ./cmd/foundry-doctor -run TestAssessSampleReports -update-assess-samples`; regeneration removes this line.
-
 # Foundry Doctor WAF developer detail
 
 > Detailed control evidence for remediation. This report is scoped to available evidence and does not claim complete WAF compliance.
@@ -10,12 +8,12 @@
 
 ## Security
 
-### No raw secrets in YAML/Bicep/environment blocks — PASS
+### No raw secrets in YAML/Bicep/environment blocks — UNKNOWN
 
 - Rule: `FND-CFG-005` (version 4)
 - Mandatory: true
-- Evidence basis: deterministic
-- Why this state: Evaluated with no remaining finding and no skipped check\.
+- Evidence basis: none
+- Why this state: No evidence was recorded for this control\.
 - Costly recommendation: false
 - Source: <https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference> (verified `2026-10-05`)
 - Recommendation: Store the secret in the azd environment as a secret \(azd env set\-secret\) or in Key Vault, and reference it with \$\{VAR\} in azure\.yaml\. In Bicep, mark secret parameters \@secure\(\) with no default and never output them\. Prefer Entra ID or managed identity authentication where the target supports it\.
@@ -35,12 +33,12 @@
 
 - Evidence: no finding or skip record was present.
 
-### Outbound endpoints use HTTPS and reject unsafe local/metadata targets — PASS
+### Outbound endpoints use HTTPS and reject unsafe local/metadata targets — UNKNOWN
 
 - Rule: `FND-CFG-007` (version 2)
 - Mandatory: true
-- Evidence basis: deterministic
-- Why this state: Evaluated with no remaining finding and no skipped check\.
+- Evidence basis: none
+- Why this state: No evidence was recorded for this control\.
 - Costly recommendation: false
 - Recommendation basis: project opinion
 - Project opinion, not Microsoft guidance; context source: <https://learn.microsoft.com/azure/foundry/agents/how-to/tools/model-context-protocol> (verified `2026-10-04`)
@@ -81,7 +79,7 @@
 - Rule: `FND-IDN-001` (version 3)
 - Mandatory: true
 - Evidence basis: none
-- Why this state: Skipped\: synthetic\-infrastructure\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: false
 - Source: <https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup> (verified `2026-10-04`)
 - Recommendation: Enable a system\-assigned or user\-assigned managed identity on the Foundry account, on each project and on every workload that calls Foundry, then grant that identity data\-plane roles on the dependent resources \(see FND\-IDN\-002\)\. Choose the user\-assigned option at project creation if you need it, because the project identity type cannot be changed later\.
@@ -106,7 +104,7 @@
   ```
 
 - Evidence:
-  - skipped: synthetic\-infrastructure
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
 ### Project identity has required data roles — SKIPPED
 
@@ -139,7 +137,7 @@
 - Rule: `FND-IDN-004` (version 6)
 - Mandatory: true
 - Evidence basis: none
-- Why this state: Skipped\: synthetic\-infrastructure\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: false
 - Source: <https://learn.microsoft.com/azure/role-based-access-control/role-assignments-steps> (verified `2026-10-04`)
 - Recommendation: Replace Owner, Contributor, User Access Administrator and Role Based Access Control Administrator on application identities with the narrow roles the workload needs, such as Foundry User on the project, Foundry Agent Consumer for callers, and the data\-plane roles in FND\-IDN\-002\. Keep any unavoidable privileged role at the narrowest scope and add an ABAC condition when the role can assign roles\. Give pipelines a separate deployment identity\.
@@ -159,14 +157,14 @@
   ```
 
 - Evidence:
-  - skipped: synthetic\-infrastructure
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
 ### Standing human admin access reviewed — SKIPPED
 
 - Rule: `FND-IDN-005` (version 2)
 - Mandatory: false
 - Evidence basis: none
-- Why this state: Skipped\: input\-unavailable\: control\-plane evidence is not available offline \(estimated reason\)\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: false
 - Source: <https://learn.microsoft.com/azure/role-based-access-control/best-practices> (verified `2026-10-04`)
 - Review question: Has the team reviewed standing human admin access with current business and support context?
@@ -180,14 +178,14 @@
   ```
 
 - Evidence:
-  - skipped: input\-unavailable\: control\-plane evidence is not available offline \(estimated reason\)
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
 ### Federated credentials use HTTPS issuer and specific subject — SKIPPED
 
 - Rule: `FND-IDN-006` (version 1)
 - Mandatory: true
 - Evidence basis: none
-- Why this state: Skipped\: synthetic\-infrastructure\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: false
 - Source: <https://openid.net/specs/openid-connect-discovery-1_0.html#IssuerDiscovery> (verified `2026-10-04`)
 - Recommendation: Use the exact https issuer of the provider and a subject that names one workload\: for GitHub Actions an environment, branch, pull request or tag of one repository, preferably in the immutable subject form; for AKS the exact namespace and service account\. Do not put wildcards in a standard credential; if one credential must cover several branches, use a flexible federated identity credential \(preview\) with an immutable claim, and remove credentials whose workload no longer exists\.
@@ -206,14 +204,14 @@
   ```
 
 - Evidence:
-  - skipped: synthetic\-infrastructure
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
 ### Foundry public access/private endpoint posture — SKIPPED
 
 - Rule: `FND-NET-001` (version 4)
 - Mandatory: true
 - Evidence basis: none
-- Why this state: Skipped\: synthetic\-infrastructure\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: false
 - Source: <https://learn.microsoft.com/azure/foundry/agents/concepts/networking-options> (verified `2026-10-04`)
 - Recommendation: For test and production set publicNetworkAccess to Disabled and add a private endpoint with group ID account in the VNet that hosts your clients and agents, with its private DNS zones \(see FND\-NET\-003\)\. If you need limited public access, use restricted mode \(defaultAction Deny plus an explicit allow list\)\. Public access is acceptable for dev prototyping\.
@@ -246,14 +244,14 @@
   ```
 
 - Evidence:
-  - skipped: synthetic\-infrastructure
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
 ### Dependent services public access/default\-deny/private endpoints — SKIPPED
 
 - Rule: `FND-NET-002` (version 3)
 - Mandatory: true
 - Evidence basis: none
-- Why this state: Skipped\: synthetic\-infrastructure\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: false
 - Source: <https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks> (verified `2026-10-04`)
 - Recommendation: Disable public network access on the Storage, Cosmos DB and AI Search resources that back the agents and give each a private endpoint in the private endpoint subnet, with its private DNS zone \(FND\-NET\-003\)\. Do not rely on the Foundry template to create them; the Foundry documentation states it does not\.
@@ -280,14 +278,14 @@
   ```
 
 - Evidence:
-  - skipped: synthetic\-infrastructure
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
 ### Restricted mode has allowed IP range — SKIPPED
 
 - Rule: `FND-NET-007` (version 2)
 - Mandatory: true
 - Evidence basis: none
-- Why this state: Skipped\: synthetic\-infrastructure\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: false
 - Source: <https://learn.microsoft.com/azure/foundry/how-to/configure-private-link> (verified `2026-10-04`)
 - Recommendation: If you want restricted mode, list the egress IPs of your build agents and developer networks as ipRules \(or subnets as virtualNetworkRules\)\. If you want fully private access, set publicNetworkAccess to Disabled and use a private endpoint instead\.
@@ -305,14 +303,14 @@
   ```
 
 - Evidence:
-  - skipped: synthetic\-infrastructure
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
 ### Azure Monitor private\-link choice is explicit — SKIPPED
 
 - Rule: `FND-NET-010` (version 3)
 - Mandatory: false
 - Evidence basis: none
-- Why this state: Skipped\: synthetic\-infrastructure\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: An Azure Monitor Private Link Scope is reached through a private endpoint, and Azure Monitor refers its cost to Azure Private Link pricing\. (<https://learn.microsoft.com/azure/azure-monitor/fundamentals/private-link-security>, verified `2026-10-18`)
 - Recommendation basis: project opinion
 - Project opinion, not Microsoft guidance; context source: <https://learn.microsoft.com/azure/azure-monitor/fundamentals/private-link-design> (verified `2026-10-04`)
@@ -336,14 +334,14 @@
   ```
 
 - Evidence:
-  - skipped: synthetic\-infrastructure
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
 ### NSG/DDoS recommendations — SKIPPED
 
 - Rule: `FND-NET-011` (version 3)
 - Mandatory: false
 - Evidence basis: none
-- Why this state: Skipped\: synthetic\-infrastructure\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: DDoS Network Protection and DDoS IP Protection are priced per protected IP or per 100 protected IPs; only DDoS infrastructure protection is at no additional cost\. (<https://learn.microsoft.com/azure/ddos-protection/ddos-protection-sku-comparison>, verified `2026-10-18`)
 - Source: <https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.VNET.UseNSGs/> (verified `2026-10-04`)
 - Recommendation: Associate an NSG with each subnet that supports one and review inbound allow rules\. If the design exposes public IP addresses, enable Azure DDoS Protection \(IP Protection on the public IP, or Network Protection on the VNet with a plan\)\. For a fully private design, rely on the default infrastructure protection and do not buy a plan for it\.
@@ -362,14 +360,14 @@
   ```
 
 - Evidence:
-  - skipped: synthetic\-infrastructure
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
-### Data\-residency regions and deployment SKU — PASS
+### Data\-residency regions and deployment SKU — SKIPPED
 
 - Rule: `FND-OPS-009` (version 2)
 - Mandatory: true
-- Evidence basis: deterministic
-- Why this state: Evaluated with no remaining finding and no skipped check\.
+- Evidence basis: none
+- Why this state: Skipped\: profile\-key\-missing\:dataResidency\.scope\.
 - Costly recommendation: false
 - Source: <https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types> (verified `2026-10-04`)
 - Recommendation: Choose a deployment SKU that matches the residency requirement \- Data Zone Standard or Data Zone Provisioned for a data zone, Standard or Regional Provisioned for a geography \- in a region that belongs to that zone or geography, and keep the region list in the profile current\.
@@ -386,14 +384,15 @@
           sku: { name: DataZoneStandard, capacity: 10 }
   ```
 
-- Evidence: no finding or skip record was present.
+- Evidence:
+  - skipped: profile\-key\-missing\:dataResidency\.scope
 
-### Model allow/deny lists remain consistent — PASS
+### Model allow/deny lists remain consistent — SKIPPED
 
 - Rule: `FND-OPS-010` (version 2)
 - Mandatory: false
-- Evidence basis: deterministic
-- Why this state: Evaluated with no remaining finding and no skipped check\.
+- Evidence basis: none
+- Why this state: Skipped\: profile\-key\-missing\:models\.allow\.
 - Costly recommendation: false
 - Recommendation basis: project opinion
 - Project opinion, not Microsoft guidance; context source: <https://learn.microsoft.com/azure/foundry/how-to/model-deployment-policy> (verified `2026-10-04`)
@@ -408,14 +407,15 @@
     deny: []
   ```
 
-- Evidence: no finding or skip record was present.
+- Evidence:
+  - skipped: profile\-key\-missing\:models\.allow
 
 ### Effective project identity access — SKIPPED
 
 - Rule: `FND-RUN-001` (version 4)
 - Mandatory: true
 - Evidence basis: none
-- Why this state: Skipped\: synthetic\-infrastructure\.
+- Why this state: Skipped\: not\-implemented\.
 - Costly recommendation: false
 - Source: <https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup> (verified `2026-10-04`)
 - Recommendation: Assign the project managed identity the roles the Foundry standard agent setup lists on each bound resource, at the narrowest scope that contains the resources\. Assign Cosmos DB Built\-in Data Contributor with a Cosmos SQL role assignment, not the Access control \(IAM\) blade\.
@@ -434,14 +434,14 @@
   ```
 
 - Evidence:
-  - skipped: synthetic\-infrastructure
+  - skipped: not\-implemented
 
 ### Foundry local authentication disabled — SKIPPED
 
 - Rule: `FND-SEC-001` (version 3)
 - Mandatory: true
 - Evidence basis: none
-- Why this state: Skipped\: synthetic\-infrastructure\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: false
 - Source: <https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json> (verified `2026-10-04`)
 - Recommendation: Set properties\.disableLocalAuth to true on the Foundry account and grant callers Entra ID roles instead of distributing keys\. Keep keys enabled only in dev with a recorded suppression \(reason and expiry\)\.
@@ -461,14 +461,14 @@
   ```
 
 - Evidence:
-  - skipped: synthetic\-infrastructure
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
 ### AI Search key authentication disabled or RBAC\-only — SKIPPED
 
 - Rule: `FND-SEC-002` (version 3)
 - Mandatory: true
 - Evidence basis: none
-- Why this state: Skipped\: synthetic\-infrastructure\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: false
 - Source: <https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json> (verified `2026-10-04`)
 - Recommendation: Set disableLocalAuth to true and remove authOptions, then assign Entra roles \(for example index data roles\) to the Foundry project identity\. If a migration needs keys temporarily, use authOptions\.aadOrApiKey with aadAuthFailureMode and track removal with a suppression expiry\.
@@ -486,14 +486,14 @@
   ```
 
 - Evidence:
-  - skipped: synthetic\-infrastructure
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
 ### Cosmos DB local authentication disabled — SKIPPED
 
 - Rule: `FND-SEC-003` (version 3)
 - Mandatory: true
 - Evidence basis: none
-- Why this state: Skipped\: synthetic\-infrastructure\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: false
 - Source: <https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json> (verified `2026-10-04`)
 - Recommendation: Set properties\.disableLocalAuth to true and grant the Foundry project managed identity a Cosmos DB data\-plane role assignment\. Check that clients use Entra ID before enforcing in an existing environment\.
@@ -513,14 +513,14 @@
   ```
 
 - Evidence:
-  - skipped: synthetic\-infrastructure
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
 ### Storage shared key/anonymous access disabled; HTTPS/TLS required — SKIPPED
 
 - Rule: `FND-SEC-004` (version 2)
 - Mandatory: true
 - Evidence basis: none
-- Why this state: Skipped\: synthetic\-infrastructure\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: false
 - Source: <https://github.com/Azure/azure-rest-api-specs/blob/main/specification/storage/resource-manager/Microsoft.Storage/stable/2026-06-01/openapi.json> (verified `2026-10-04`)
 - Recommendation: Set allowSharedKeyAccess false, allowBlobPublicAccess false, supportsHttpsTrafficOnly true and minimumTlsVersion TLS1\_2 on the account, and give the Foundry identity Storage data roles\. Verify no client still uses account keys or SAS signed with the account key before disabling Shared Key\.
@@ -542,14 +542,14 @@
   ```
 
 - Evidence:
-  - skipped: synthetic\-infrastructure
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
 ### Firewall rules reject private/open ranges — SKIPPED
 
 - Rule: `FND-SEC-006` (version 3)
 - Mandatory: true
 - Evidence basis: none
-- Why this state: Skipped\: synthetic\-infrastructure\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: false
 - Source: <https://learn.microsoft.com/azure/storage/common/storage-network-security-limitations> (verified `2026-10-04`)
 - Recommendation: Remove open or private ranges from IP rules\. Use private endpoints, virtual network rules or service endpoints for private traffic, and list only the specific public egress addresses that need access\.
@@ -565,14 +565,14 @@
   ```
 
 - Evidence:
-  - skipped: synthetic\-infrastructure
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
 ### Relevant Defender plans enabled — SKIPPED
 
 - Rule: `FND-SEC-008` (version 2)
 - Mandatory: false
 - Evidence basis: none
-- Why this state: Skipped\: synthetic\-infrastructure\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: Defender for Cloud plans beyond foundational CSPM are paid plans; charges begin after the 30\-day trial or usage limit\. (<https://learn.microsoft.com/azure/defender-for-cloud/connect-azure-subscription>, verified `2026-10-18`)
 - Source: <https://github.com/Azure/azure-rest-api-specs/blob/main/specification/security/resource-manager/Microsoft.Security/Security/stable/2026-07-01/pricings.json> (verified `2026-10-04`)
 - Recommendation: Enable the Defender plan for each resource type in use on the subscription \(Standard tier\), or confirm it is enforced at a parent scope\. Enabling Defender plans has a cost; review pricing before enabling in non\-production\.
@@ -586,14 +586,14 @@
   ```
 
 - Evidence:
-  - skipped: synthetic\-infrastructure
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
 ### Policy coverage and compliance evidence — SKIPPED
 
 - Rule: `FND-SEC-009` (version 2)
 - Mandatory: false
 - Evidence basis: none
-- Why this state: Skipped\: input\-unavailable\: control\-plane evidence is not available offline \(estimated reason\)\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: false
 - Recommendation basis: project opinion
 - Project opinion, not Microsoft guidance; context source: <https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Authorization/policy/stable/2025-01-01/policyAssignments.json> (verified `2026-10-04`)
@@ -611,14 +611,14 @@
   ```
 
 - Evidence:
-  - skipped: input\-unavailable\: control\-plane evidence is not available offline \(estimated reason\)
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
 ### Customer\-managed keys informational — SKIPPED
 
 - Rule: `FND-SEC-010` (version 2)
 - Mandatory: false
 - Evidence basis: none
-- Why this state: Skipped\: synthetic\-infrastructure\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: Customer\-managed keys require a billable Azure Key Vault \(stated for Azure AI Search; the same Key Vault dependency applies to each service listed\)\. (<https://learn.microsoft.com/azure/search/search-sku-manage-costs>, verified `2026-10-18`)
 - Source: <https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json> (verified `2026-10-04`)
 - Recommendation: If your compliance regime requires customer\-managed keys, configure them on each resource listed and use a Key Vault with soft delete and purge protection \(see FND\-SEC\-005\)\. Otherwise no action is needed\.
@@ -632,14 +632,14 @@
   ```
 
 - Evidence:
-  - skipped: synthetic\-infrastructure
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
-### Controlled outbound egress informational — PASS
+### Controlled outbound egress informational — SKIPPED
 
 - Rule: `FND-SEC-011` (version 1)
 - Mandatory: false
-- Evidence basis: deterministic
-- Why this state: Evaluated with no remaining finding and no skipped check\.
+- Evidence basis: none
+- Why this state: Skipped\: unsupported\-version\.
 - Costly recommendation: FQDN outbound rules in Allow Only Approved Outbound mode create a managed Azure Firewall, which adds Azure Firewall charges\. (<https://learn.microsoft.com/azure/foundry/how-to/managed-virtual-network>, verified `2026-10-18`)
 - Source: <https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json> (verified `2026-10-04`)
 - Recommendation: If you need to control data exfiltration, set the managed network to AllowOnlyApprovedOutbound or restrict outbound access with an allowed FQDN list, and confirm required dependencies are reachable\. Otherwise record the decision\.
@@ -654,14 +654,15 @@
     isolationMode: AllowOnlyApprovedOutbound
   ```
 
-- Evidence: no finding or skip record was present.
+- Evidence:
+  - skipped: unsupported\-version
 
 ### Secrets not emitted as Bicep outputs — SKIPPED
 
 - Rule: `FND-SEC-014` (version 2)
 - Mandatory: true
 - Evidence basis: none
-- Why this state: Skipped\: synthetic\-infrastructure\.
+- Why this state: Skipped\: unsupported\-version\.
 - Costly recommendation: false
 - Source: <https://learn.microsoft.com/azure/azure-resource-manager/bicep/linter-rule-outputs-should-not-contain-secrets> (verified `2026-10-16`)
 - Recommendation: Output the resourceId of the resource that holds the secret, or store the secret in Key Vault, and read it at the consuming resource\. Do not output keys, connection strings or passwords\.
@@ -672,16 +673,16 @@
   ```
 
 - Evidence:
-  - skipped: synthetic\-infrastructure
+  - skipped: unsupported\-version
 
 ## Reliability
 
-### All inter\-service references resolve — PASS
+### All inter\-service references resolve — UNKNOWN
 
 - Rule: `FND-CFG-003` (version 4)
 - Mandatory: true
-- Evidence basis: deterministic
-- Why this state: Evaluated with no remaining finding and no skipped check\.
+- Evidence basis: none
+- Why this state: No evidence was recorded for this control\.
 - Costly recommendation: false
 - Source: <https://learn.microsoft.com/azure/foundry/agents/how-to/author-azure-yaml> (verified `2026-10-04`)
 - Recommendation: Make each referenced name match a service key defined under services, and add toolbox and connection services to the consuming agent uses list as well as its toolboxes or connections list\.
@@ -713,12 +714,12 @@
 
 - Evidence: no finding or skip record was present.
 
-### Prompt model or hosted source/image is valid — PASS
+### Prompt model or hosted source/image is valid — SKIPPED
 
 - Rule: `FND-CFG-004` (version 4)
 - Mandatory: true
-- Evidence basis: deterministic
-- Why this state: Evaluated with no remaining finding and no skipped check\.
+- Evidence basis: none
+- Why this state: Skipped\: uncertain\: assistant\: no Dockerfile under \"\./agents/assistant\" and no image, codeConfiguration, runtime, startupCommand or skill; the agent source is unclear\.
 - Costly recommendation: false
 - Source: <https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference> (verified `2026-10-05`)
 - Recommendation: Set model to the name of a deployment declared on the project, provide instructions for prompt agents, and for hosted agents provide either source with a Dockerfile, a codeConfiguration, or a prebuilt image\.
@@ -742,14 +743,15 @@
       instructions: Answer briefly.
   ```
 
-- Evidence: no finding or skip record was present.
+- Evidence:
+  - skipped: uncertain\: assistant\: no Dockerfile under \"\./agents/assistant\" and no image, codeConfiguration, runtime, startupCommand or skill; the agent source is unclear
 
-### Azure region values are valid — PASS
+### Azure region values are valid — SKIPPED
 
 - Rule: `FND-CFG-012` (version 4)
 - Mandatory: false
-- Evidence basis: deterministic
-- Why this state: Evaluated with no remaining finding and no skipped check\.
+- Evidence basis: none
+- Why this state: Skipped\: input\-unavailable\: no\-environment\-selected\.
 - Costly recommendation: false
 - Recommendation basis: project opinion
 - Project opinion, not Microsoft guidance; context source: <https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/subscriptions/stable/2022-12-01/subscriptions.json> (verified `2026-10-04`)
@@ -760,7 +762,8 @@
   azd env set AZURE_LOCATION eastus2
   ```
 
-- Evidence: no finding or skip record was present.
+- Evidence:
+  - skipped: input\-unavailable\: no\-environment\-selected
 
 ### Model/version/SKU offered in target region — SKIPPED
 
@@ -923,12 +926,12 @@
 - Evidence:
   - skipped: not\-implemented
 
-### Prod does not reference non\-prod resource IDs — SKIPPED
+### Prod does not reference non\-prod resource IDs — NOT_APPLICABLE
 
 - Rule: `FND-ENV-003` (version 4)
 - Mandatory: true
-- Evidence basis: none
-- Why this state: Skipped\: input\-unavailable\: azd environment values are not available \(estimated reason\)\.
+- Evidence basis: deterministic
+- Why this state: Not applicable\: not\-applicable\: fewer than two azd environments\.
 - Costly recommendation: false
 - Recommendation basis: project opinion
 - Project opinion, not Microsoft guidance; context source: <https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview> (verified `2026-10-05`)
@@ -941,14 +944,14 @@
   ```
 
 - Evidence:
-  - skipped: input\-unavailable\: azd environment values are not available \(estimated reason\)
+  - skipped: not\-applicable\: fewer than two azd environments
 
 ### Role assignments use object IDs and principalType — SKIPPED
 
 - Rule: `FND-IDN-003` (version 5)
 - Mandatory: true
 - Evidence basis: none
-- Why this state: Skipped\: synthetic\-infrastructure\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: false
 - Source: <https://learn.microsoft.com/azure/role-based-access-control/role-assignments-template> (verified `2026-10-04`)
 - Recommendation: Pass the object ID of the identity \(identity\.principalId or the user\-assigned identity\'s properties\.principalId\), never the client ID, and set principalType explicitly\. Use ServicePrincipal for managed identities and service principals created in the same deployment, and use API version 2022\-04\-01 or later\.
@@ -967,14 +970,14 @@
   ```
 
 - Evidence:
-  - skipped: synthetic\-infrastructure
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
 ### Private endpoint DNS zone groups and VNet links — SKIPPED
 
 - Rule: `FND-NET-003` (version 3)
 - Mandatory: true
 - Evidence basis: none
-- Why this state: Skipped\: synthetic\-infrastructure\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: false
 - Source: <https://learn.microsoft.com/azure/private-link/private-endpoint-dns> (verified `2026-10-04`)
 - Recommendation: Add a privateDnsZoneGroup to each private endpoint with the documented zones \(three for a Foundry account\) and link every zone to the VNet that resolves the names\. If DNS is centralised in a hub or a private resolver, declare that in the Foundry Doctor configuration so the check is skipped with a reason instead of failing\.
@@ -1001,14 +1004,14 @@
   ```
 
 - Evidence:
-  - skipped: synthetic\-infrastructure
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
 ### Agent subnet delegation and sizing — SKIPPED
 
 - Rule: `FND-NET-004` (version 3)
 - Mandatory: true
 - Evidence basis: none
-- Why this state: Skipped\: synthetic\-infrastructure\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: false
 - Source: <https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks> (verified `2026-10-04`)
 - Recommendation: Create a dedicated subnet for each Foundry account, delegate it to Microsoft\.App/environments, size it /27 or larger \(the Foundry docs recommend /24 for production hosted agents\), keep the name at 63 bytes or fewer, and do not reuse it for another Foundry resource or other services\. Set the network injection when you create the account; it cannot be added to an existing account for hosted agents\.
@@ -1031,14 +1034,14 @@
   ```
 
 - Evidence:
-  - skipped: synthetic\-infrastructure
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
 ### Private\-mode VNet/region consistency — SKIPPED
 
 - Rule: `FND-NET-005` (version 4)
 - Mandatory: true
 - Evidence basis: none
-- Why this state: Skipped\: synthetic\-infrastructure\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: false
 - Source: <https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks> (verified `2026-10-04`)
 - Recommendation: Create the VNet, agent subnet and Foundry account in the same region, and create each private endpoint in the region and subscription of the VNet that hosts it\. Cross\-region data resources are allowed but cost more in data transfer; keep them in the Foundry region unless you have a reason\.
@@ -1052,14 +1055,14 @@
   ```
 
 - Evidence:
-  - skipped: synthetic\-infrastructure
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
 ### Private address space and overlap — SKIPPED
 
 - Rule: `FND-NET-006` (version 3)
 - Mandatory: true
 - Evidence basis: none
-- Why this state: Skipped\: synthetic\-infrastructure\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: false
 - Source: <https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks> (verified `2026-10-04`)
 - Recommendation: Put the agent subnet in 10\.0\.0\.0/8, 172\.16\.0\.0/12 \(avoiding 172\.30\.0\.0/16 and 172\.31\.0\.0/16\) or 192\.168\.0\.0/16 and keep the VNet and its peers disjoint from each other and from the reserved ranges\. If your IP plan overlaps or you cannot manage ranges, use a Microsoft managed virtual network instead\.
@@ -1077,14 +1080,14 @@
   ```
 
 - Evidence:
-  - skipped: synthetic\-infrastructure
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
 ### Search SKU supports private endpoints — SKIPPED
 
 - Rule: `FND-NET-008` (version 3)
 - Mandatory: true
 - Evidence basis: none
-- Why this state: Skipped\: synthetic\-infrastructure\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: false
 - Source: <https://learn.microsoft.com/azure/search/service-create-private-endpoint> (verified `2026-10-04`)
 - Recommendation: If private access is required, choose Basic or higher and account for the additional fixed cost; otherwise keep Free public rather than creating a false expectation that Free supports Private Link\. Plan the tier against indexer needs using the Search limits article\.
@@ -1100,14 +1103,14 @@
   ```
 
 - Evidence:
-  - skipped: synthetic\-infrastructure
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
 ### Search replica/SLA posture — SKIPPED
 
 - Rule: `FND-REL-001` (version 1)
 - Mandatory: false
 - Evidence basis: none
-- Why this state: Skipped\: synthetic\-infrastructure\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: Dedicated Azure AI Search bills per search unit \(replicas x partitions\); adding replicas raises cost\. (<https://learn.microsoft.com/azure/search/search-sku-manage-costs>, verified `2026-10-18`)
 - Source: <https://learn.microsoft.com/azure/search/search-limits-quotas-capacity> (verified `2026-10-04`)
 - WARA references (recommendations, not platform facts):
@@ -1129,14 +1132,14 @@
   ```
 
 - Evidence:
-  - skipped: synthetic\-infrastructure
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
 ### Storage redundancy posture — SKIPPED
 
 - Rule: `FND-REL-002` (version 1)
 - Mandatory: false
 - Evidence basis: none
-- Why this state: Skipped\: synthetic\-infrastructure\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: LRS is the lowest\-cost redundancy option; ZRS and GZRS trade higher cost for availability\. (<https://learn.microsoft.com/azure/storage/common/storage-redundancy>, verified `2026-10-18`)
 - Source: <https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency> (verified `2026-10-04`)
 - WARA references (recommendations, not platform facts):
@@ -1154,14 +1157,14 @@
   ```
 
 - Evidence:
-  - skipped: synthetic\-infrastructure
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
 ### Cosmos zone redundancy and continuous backup — SKIPPED
 
 - Rule: `FND-REL-003` (version 1)
 - Mandatory: false
 - Evidence basis: none
-- Why this state: Skipped\: synthetic\-infrastructure\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: Continuous backup at the 30\-day or 35\-day tier carries a monthly backup storage charge and every restore is charged; the 7\-day tier has no backup storage charge\. The cost of zone redundancy is not cited here\. (<https://learn.microsoft.com/azure/cosmos-db/continuous-backup-restore-introduction>, verified `2026-10-18`)
 - Source: <https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency> (verified `2026-10-04`)
 - WARA references (recommendations, not platform facts):
@@ -1188,14 +1191,14 @@
   ```
 
 - Evidence:
-  - skipped: synthetic\-infrastructure
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
 ### Delete locks on stateful services — SKIPPED
 
 - Rule: `FND-REL-004` (version 2)
 - Mandatory: false
 - Evidence basis: none
-- Why this state: Skipped\: synthetic\-infrastructure\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: false
 - Source: <https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency> (verified `2026-10-04`)
 - Recommendation: Add a CanNotDelete lock on the Foundry account and on each stateful dependency, or on the resource group that contains only that workload\. Creating locks needs Microsoft\.Authorization/locks/write \(Owner or User Access Administrator, not Contributor\)\. Locks do not protect data\-plane content such as individual blobs, indexes or threads; combine with least\-privilege RBAC and, optionally, the Azure Policy denyAction effect\.
@@ -1213,14 +1216,14 @@
   ```
 
 - Evidence:
-  - skipped: synthetic\-infrastructure
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
 ### Search sizing within platform limits — SKIPPED
 
 - Rule: `FND-REL-005` (version 1)
 - Mandatory: true
 - Evidence basis: none
-- Why this state: Skipped\: synthetic\-infrastructure\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: false
 - Source: <https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json> (verified `2026-10-04`)
 - Recommendation: Choose a partitionCount from 1, 2, 3, 4, 6 or 12 and a replicaCount of 12 or fewer \(3 or fewer on basic\), keep replicas x partitions at or below 36 search units, and use hostingMode HighDensity only with standard3 and at most 3 partitions\. See the partition and replica combinations table in the capacity planning article\.
@@ -1239,7 +1242,7 @@
   ```
 
 - Evidence:
-  - skipped: synthetic\-infrastructure
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
 ### Multi\-region/DR plan question — QUESTION
 
@@ -1276,7 +1279,7 @@
 - Rule: `FND-REL-008` (version 1)
 - Mandatory: false
 - Evidence basis: none
-- Why this state: Skipped\: synthetic\-infrastructure\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: false
 - Source: <https://learn.microsoft.com/azure/foundry/openai/how-to/spillover-traffic-management> (verified `2026-10-04`)
 - WARA references (recommendations, not platform facts):
@@ -1298,14 +1301,14 @@
   ```
 
 - Evidence:
-  - skipped: synthetic\-infrastructure
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
 ### APIM availability tier recommendation — SKIPPED
 
 - Rule: `FND-REL-009` (version 1)
 - Mandatory: false
 - Evidence basis: none
-- Why this state: Skipped\: synthetic\-infrastructure\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: false
 - Recommendation basis: project opinion
 - Project opinion, not Microsoft guidance; context source: <https://learn.microsoft.com/azure/api-management/api-management-features> (verified `2026-10-04`)
@@ -1339,14 +1342,14 @@
   ```
 
 - Evidence:
-  - skipped: synthetic\-infrastructure
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
 ### Private DNS resolves from an appropriate vantage point — SKIPPED
 
 - Rule: `FND-RUN-002` (version 4)
 - Mandatory: true
 - Evidence basis: none
-- Why this state: Skipped\: input\-unavailable\: control\-plane evidence is not available offline \(estimated reason\)\.
+- Why this state: Skipped\: not\-implemented\.
 - Costly recommendation: false
 - Source: <https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks> (verified `2026-10-04`)
 - Recommendation: Link each required privatelink zone to the VNet that hosts the agent client and private endpoint subnets, configure conditional forwarders to 168\.63\.129\.16 where custom DNS is used, and re\-run the doctor from a machine inside the VNet\.
@@ -1365,14 +1368,14 @@
   ```
 
 - Evidence:
-  - skipped: input\-unavailable\: control\-plane evidence is not available offline \(estimated reason\)
+  - skipped: not\-implemented
 
 ### Capability host and project connections healthy — SKIPPED
 
 - Rule: `FND-RUN-003` (version 3)
 - Mandatory: true
 - Evidence basis: none
-- Why this state: Skipped\: input\-unavailable\: control\-plane evidence is not available offline \(estimated reason\)\.
+- Why this state: Skipped\: not\-implemented\.
 - Costly recommendation: false
 - Source: <https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json> (verified `2026-10-17`)
 - Recommendation: Inspect the failing capability host or project in the Foundry portal or with az rest, correct the underlying cause \(for example a missing role or a deleted bound resource\), and redeploy the capability host\. Recreate any missing connection with the same name the capability host references\.
@@ -1392,14 +1395,14 @@
   ```
 
 - Evidence:
-  - skipped: input\-unavailable\: control\-plane evidence is not available offline \(estimated reason\)
+  - skipped: not\-implemented
 
 ### Model deployment state and throttling signal — SKIPPED
 
 - Rule: `FND-RUN-004` (version 4)
 - Mandatory: true
 - Evidence basis: none
-- Why this state: Skipped\: input\-unavailable\: control\-plane evidence is not available offline \(estimated reason\)\.
+- Why this state: Skipped\: not\-implemented\.
 - Costly recommendation: false
 - Recommendation basis: project opinion
 - Project opinion, not Microsoft guidance; context source: <https://learn.microsoft.com/azure/azure-monitor/reference/supported-metrics/microsoft-cognitiveservices-accounts-metrics> (verified `2026-10-18`)
@@ -1418,14 +1421,14 @@
   ```
 
 - Evidence:
-  - skipped: input\-unavailable\: control\-plane evidence is not available offline \(estimated reason\)
+  - skipped: not\-implemented
 
-### Agent tools/connections respond — PASS
+### Agent tools/connections respond — SKIPPED
 
 - Rule: `FND-RUN-005` (version 4)
 - Mandatory: false
-- Evidence basis: deterministic
-- Why this state: Evaluated with no remaining finding and no skipped check\.
+- Evidence basis: none
+- Why this state: Skipped\: not\-implemented\.
 - Costly recommendation: false
 - Recommendation basis: project opinion
 - Project opinion, not Microsoft guidance; context source: <https://github.com/Azure/azure-dev/blob/main/cli/azd/extensions/azure.ai.agents/internal/project/service_target_agent.go> (verified `2026-10-18`)
@@ -1439,14 +1442,15 @@
       host: azure.ai.agent
   ```
 
-- Evidence: no finding or skip record was present.
+- Evidence:
+  - skipped: not\-implemented
 
 ### Search index/documents/vector/indexer health — SKIPPED
 
 - Rule: `FND-RUN-006` (version 5)
 - Mandatory: true
 - Evidence basis: none
-- Why this state: Skipped\: input\-unavailable\: control\-plane evidence is not available offline \(estimated reason\)\.
+- Why this state: Skipped\: not\-implemented\.
 - Costly recommendation: false
 - Source: <https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/data-plane/Search/stable/2026-04-01/search.json> (verified `2026-10-17`)
 - Recommendation: Create or repair the index with the expected schema, run the indexer and review its execution errors, and confirm the agent\'s search connection and index name match\. Grant the doctor identity Search Service Contributor only if you want schema and indexer checks\.
@@ -1463,16 +1467,16 @@
   ```
 
 - Evidence:
-  - skipped: input\-unavailable\: control\-plane evidence is not available offline \(estimated reason\)
+  - skipped: not\-implemented
 
 ## Operational Excellence
 
-### Valid YAML, duplicate\-key detection and compatible azure\.ai\.\* schema — PASS
+### Valid YAML, duplicate\-key detection and compatible azure\.ai\.\* schema — UNKNOWN
 
 - Rule: `FND-CFG-001` (version 7)
 - Mandatory: true
-- Evidence basis: deterministic
-- Why this state: Evaluated with no remaining finding and no skipped check\.
+- Evidence basis: none
+- Why this state: No evidence was recorded for this control\.
 - Costly recommendation: false
 - Source: <https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference> (verified `2026-10-05`)
 - Recommendation: Fix the YAML syntax or the reported schema violation\. Add the yaml\-language\-server schema comment to azure\.yaml so the editor flags the same errors, and install azure\.ai\.agents and azure\.ai\.projects at the versions declared in requiredVersions\.
@@ -1493,12 +1497,12 @@
 
 - Evidence: no finding or skip record was present.
 
-### Unique service names by kind — PASS
+### Unique service names by kind — UNKNOWN
 
 - Rule: `FND-CFG-002` (version 2)
 - Mandatory: true
-- Evidence basis: deterministic
-- Why this state: Evaluated with no remaining finding and no skipped check\.
+- Evidence basis: none
+- Why this state: No evidence was recorded for this control\.
 - Costly recommendation: false
 - Source: <https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference> (verified `2026-10-04`)
 - Recommendation: Give separate logical agents distinct names\. If the services intentionally represent versions of one agent, keep one service definition and deploy the intended version through that service\.
@@ -1524,12 +1528,12 @@
 
 - Evidence: no finding or skip record was present.
 
-### Every variable has an environment or infrastructure producer — PASS
+### Every variable has an environment or infrastructure producer — SKIPPED
 
 - Rule: `FND-CFG-006` (version 5)
 - Mandatory: true
-- Evidence basis: deterministic
-- Why this state: Evaluated with no remaining finding and no skipped check\.
+- Evidence basis: none
+- Why this state: Skipped\: input\-unavailable\: no\-environment\-selected\.
 - Costly recommendation: false
 - Source: <https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference> (verified `2026-10-04`)
 - Recommendation: Set the variable in the active azd environment \(azd env set\), emit it from a Bicep output, give it an inline default, or remove the reference\. Do not declare FOUNDRY\_ or AGENT\_ prefixed names in the azure\.yaml service env \(FND\-CFG\-011\)\.
@@ -1551,14 +1555,15 @@
         LOG_LEVEL: ${LOG_LEVEL:-info}
   ```
 
-- Evidence: no finding or skip record was present.
+- Evidence:
+  - skipped: input\-unavailable\: no\-environment\-selected
 
-### Preview/retired fields are version\-aware — PASS
+### Preview/retired fields are version\-aware — UNKNOWN
 
 - Rule: `FND-CFG-011` (version 5)
 - Mandatory: true
-- Evidence basis: deterministic
-- Why this state: Evaluated with no remaining finding and no skipped check\.
+- Evidence basis: none
+- Why this state: No evidence was recorded for this control\.
 - Costly recommendation: false
 - Source: <https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference> (verified `2026-10-04`)
 - Recommendation: Move to the unified service\-level shape\: put env on the agent service, use kind voice, use host azure\.ai\.project instead of microsoft\.foundry, drop fields the hosted\-agent create request ignores, and declare requiredVersions for extension versions verified by this catalogue\. Do not infer a field\'s introduction version from the current schema\.
@@ -1642,12 +1647,12 @@
 - Evidence:
   - skipped: not\-implemented
 
-### Environments do not unintentionally share resource groups — SKIPPED
+### Environments do not unintentionally share resource groups — NOT_APPLICABLE
 
 - Rule: `FND-ENV-001` (version 5)
 - Mandatory: true
-- Evidence basis: none
-- Why this state: Skipped\: input\-unavailable\: azd environment values are not available \(estimated reason\)\.
+- Evidence basis: deterministic
+- Why this state: Not applicable\: not\-applicable\: fewer than two azd environments\.
 - Costly recommendation: false
 - Source: <https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview> (verified `2026-10-05`)
 - Recommendation: Give each environment its own resource group, for example by including the environment name in the group name \(resourceGroup\: rg\-\$\{AZURE\_ENV\_NAME\}\), or record an explicit suppression with a reason and expiry when sharing is intentional\.
@@ -1659,14 +1664,14 @@
   ```
 
 - Evidence:
-  - skipped: input\-unavailable\: azd environment values are not available \(estimated reason\)
+  - skipped: not\-applicable\: fewer than two azd environments
 
-### Environment\-bound names/IDs/rules were not copied unchanged — SKIPPED
+### Environment\-bound names/IDs/rules were not copied unchanged — NOT_APPLICABLE
 
 - Rule: `FND-ENV-002` (version 4)
 - Mandatory: false
-- Evidence basis: none
-- Why this state: Skipped\: input\-unavailable\: azd environment values are not available \(estimated reason\)\.
+- Evidence basis: deterministic
+- Why this state: Not applicable\: not\-applicable\: fewer than two azd environments\.
 - Costly recommendation: false
 - Recommendation basis: project opinion
 - Project opinion, not Microsoft guidance; context source: <https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview> (verified `2026-10-05`)
@@ -1680,14 +1685,14 @@
   ```
 
 - Evidence:
-  - skipped: input\-unavailable\: azd environment values are not available \(estimated reason\)
+  - skipped: not\-applicable\: fewer than two azd environments
 
-### Informational difference summary — SKIPPED
+### Informational difference summary — NOT_APPLICABLE
 
 - Rule: `FND-ENV-004` (version 3)
 - Mandatory: false
-- Evidence basis: none
-- Why this state: Skipped\: input\-unavailable\: azd environment values are not available \(estimated reason\)\.
+- Evidence basis: deterministic
+- Why this state: Not applicable\: not\-applicable\: fewer than two azd environments\.
 - Costly recommendation: false
 - Recommendation basis: project opinion
 - Project opinion, not Microsoft guidance; context source: <https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview> (verified `2026-10-05`)
@@ -1699,14 +1704,14 @@
   ```
 
 - Evidence:
-  - skipped: input\-unavailable\: azd environment values are not available \(estimated reason\)
+  - skipped: not\-applicable\: fewer than two azd environments
 
 ### Diagnostic settings to Log Analytics — SKIPPED
 
 - Rule: `FND-OPS-001` (version 2)
 - Mandatory: true
 - Evidence basis: none
-- Why this state: Skipped\: synthetic\-infrastructure\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: false
 - Source: <https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-cognitiveservices-accounts-logs> (verified `2026-10-04`)
 - Recommendation: Add a Microsoft\.Insights/diagnosticSettings resource per resource, scoped to the resource, that sends the audit category group \(or allLogs when you need request and response diagnostics\) to your Log Analytics workspace\. Use audit as a low\-cost start because several categories \(for example AzureOpenAIRequestUsage and ManagedNetworkEvent on accounts, and all project categories\) are marked as having a cost to export in the Azure Monitor reference\.
@@ -1726,7 +1731,7 @@
   ```
 
 - Evidence:
-  - skipped: synthetic\-infrastructure
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
 ### Application Insights connected — QUESTION
 
@@ -1756,7 +1761,7 @@
 - Rule: `FND-OPS-003` (version 2)
 - Mandatory: false
 - Evidence basis: none
-- Why this state: Skipped\: synthetic\-infrastructure\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: false
 - Recommendation basis: project opinion
 - Project opinion, not Microsoft guidance; context source: <https://learn.microsoft.com/azure/foundry/how-to/stay-informed-service-health> (verified `2026-10-04`)
@@ -1783,14 +1788,14 @@
   ```
 
 - Evidence:
-  - skipped: synthetic\-infrastructure
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
 ### Required tags exist — SKIPPED
 
 - Rule: `FND-OPS-004` (version 2)
 - Mandatory: false
 - Evidence basis: none
-- Why this state: Skipped\: synthetic\-infrastructure\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: false
 - Recommendation basis: project opinion
 - Project opinion, not Microsoft guidance; context source: <https://learn.microsoft.com/azure/azure-resource-manager/management/tag-resources> (verified `2026-10-04`)
@@ -1812,14 +1817,14 @@
   ```
 
 - Evidence:
-  - skipped: synthetic\-infrastructure
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
-### Resource\-name provider constraints — PASS
+### Resource\-name provider constraints — SKIPPED
 
 - Rule: `FND-OPS-005` (version 2)
 - Mandatory: true
-- Evidence basis: deterministic
-- Why this state: Evaluated with no remaining finding and no skipped check\.
+- Evidence basis: none
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: false
 - Source: <https://learn.microsoft.com/azure/azure-resource-manager/management/resource-name-rules> (verified `2026-10-04`)
 - Recommendation: Choose names that satisfy the provider limits for every environment name azd can produce, constrain name parameters with \@minLength and \@maxLength, and keep a short resource token for globally scoped resources \(Storage 24, Key Vault 24, Cosmos DB 44, APIM 50, Search 60\)\.
@@ -1838,14 +1843,15 @@
   }
   ```
 
-- Evidence: no finding or skip record was present.
+- Evidence:
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
 ### Log retention meets policy — SKIPPED
 
 - Rule: `FND-OPS-006` (version 2)
 - Mandatory: false
 - Evidence basis: none
-- Why this state: Skipped\: synthetic\-infrastructure\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: Log Analytics charges for data retention in addition to ingestion; longer retention adds cost\. (<https://learn.microsoft.com/azure/azure-monitor/logs/cost-logs>, verified `2026-10-18`)
 - Recommendation basis: project opinion
 - Project opinion, not Microsoft guidance; context source: <https://learn.microsoft.com/azure/azure-monitor/logs/data-retention-configure> (verified `2026-10-04`)
@@ -1863,7 +1869,7 @@
   ```
 
 - Evidence:
-  - skipped: synthetic\-infrastructure
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
 ### CI/CD pipeline exists — NOT_APPLICABLE
 
@@ -1910,7 +1916,7 @@
 - Rule: `FND-RUN-007` (version 4)
 - Mandatory: false
 - Evidence basis: none
-- Why this state: Skipped\: input\-unavailable\: control\-plane evidence is not available offline \(estimated reason\)\.
+- Why this state: Skipped\: not\-implemented\.
 - Costly recommendation: false
 - Source: <https://learn.microsoft.com/azure/foundry/how-to/diagnostic-logging> (verified `2026-10-04`)
 - Recommendation: Enable a diagnostic setting for the Foundry account that sends Audit and Request and Response logs to a Log Analytics workspace, wait up to two hours, and confirm rows with a count query\. Check workspace access and ingestion errors if rows stay at zero while the account has traffic\.
@@ -1931,7 +1937,7 @@
   ```
 
 - Evidence:
-  - skipped: input\-unavailable\: control\-plane evidence is not available offline \(estimated reason\)
+  - skipped: not\-implemented
 
 ## Cost Optimization
 
@@ -1940,7 +1946,7 @@
 - Rule: `FND-COST-001` (version 4)
 - Mandatory: false
 - Evidence basis: none
-- Why this state: Skipped\: synthetic\-infrastructure\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: false
 - Recommendation basis: project opinion
 - Project opinion, not Microsoft guidance; context source: <https://github.com/Azure/azure-rest-api-specs/tree/main/specification/consumption/resource-manager/Microsoft.Consumption/Consumption/stable/2023-11-01> (verified `2026-10-04`)
@@ -1971,14 +1977,14 @@
   ```
 
 - Evidence:
-  - skipped: synthetic\-infrastructure
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
 ### Dev avoids production\-sized fixed SKUs — SKIPPED
 
 - Rule: `FND-COST-002` (version 4)
 - Mandatory: false
 - Evidence basis: none
-- Why this state: Skipped\: synthetic\-infrastructure\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Costly recommendation: false
 - Recommendation basis: project opinion
 - Project opinion, not Microsoft guidance; context source: <https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types> (verified `2026-10-18`)
@@ -1999,7 +2005,7 @@
   ```
 
 - Evidence:
-  - skipped: synthetic\-infrastructure
+  - skipped: input\-unavailable\: compiled ARM model unavailable
 
 ## Limitations
 
@@ -2009,6 +2015,6 @@
 - Control IDs are Foundry Doctor rule IDs\. They are not mapped to WAF checklist codes in this release, and pillar assignments come from the rule catalogue\.
 - The decision wording and the top\-action ranking are project opinion, not Microsoft guidance\.
 - PSRule for Azure, Azure Advisor and Microsoft Defender for Cloud recommendations were not imported\. Overlapping external check IDs are listed for reference only \(ADR\-020, ADR\-026\)\.
-- Deployed Azure state was not queried\: assess waf runs offline\. Controls that need deployment or runtime evidence and were not evaluated\: FND\-COST\-001, FND\-DEP\-001, FND\-DEP\-002, FND\-DEP\-003, FND\-DEP\-004, FND\-DEP\-005, FND\-DEP\-006, FND\-DEP\-007, FND\-DEP\-008, FND\-DEP\-009, FND\-DEP\-010, FND\-DEP\-011, FND\-DEP\-012, FND\-IDN\-002, FND\-IDN\-005, FND\-NET\-006, FND\-RUN\-001, FND\-RUN\-002, FND\-RUN\-003, FND\-RUN\-004, FND\-RUN\-006, FND\-RUN\-007, FND\-SEC\-008, FND\-SEC\-009\.
+- Deployed Azure state was not queried\: assess waf runs offline\. Controls that need deployment or runtime evidence and were not evaluated\: FND\-COST\-001, FND\-DEP\-001, FND\-DEP\-002, FND\-DEP\-003, FND\-DEP\-004, FND\-DEP\-005, FND\-DEP\-006, FND\-DEP\-007, FND\-DEP\-008, FND\-DEP\-009, FND\-DEP\-010, FND\-DEP\-011, FND\-DEP\-012, FND\-IDN\-002, FND\-IDN\-005, FND\-NET\-006, FND\-OPS\-009, FND\-RUN\-001, FND\-RUN\-002, FND\-RUN\-003, FND\-RUN\-004, FND\-RUN\-005, FND\-RUN\-006, FND\-RUN\-007, FND\-SEC\-008, FND\-SEC\-009\.
 - Compiled infrastructure \(Bicep to ARM\) was not available, so template\-dependent controls are SKIPPED\.
 - 30 catalogue rules are excluded from the WAF view with a recorded reason \(internal/assess/waf/mapping\.yaml\)\.

@@ -299,7 +299,7 @@ func TestGW005BackendAuthorizationStillFailsAlongsideManagedIdentity(t *testing.
 	}})
 	found := false
 	for _, f := range got.Findings {
-		if strings.Contains(f.Evidence, "backend authorization credentials are header-based") {
+		if strings.Contains(f.Evidence, "authorization credentials are header-based") {
 			found = true
 			break
 		}

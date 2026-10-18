@@ -1,4 +1,3 @@
-<!-- HAND-DERIVED SAMPLE, NOT ENGINE OUTPUT (ADR-026). Regenerate with: go test ./cmd/foundry-doctor -run TestAssessSampleReports -update-assess-samples; regeneration removes this comment. -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -39,13 +38,13 @@
         <tbody>
           <tr><th scope="row" class="state-FAIL">FAIL</th><td>0</td></tr>
           <tr><th scope="row" class="state-WARNING">WARNING</th><td>0</td></tr>
-          <tr><th scope="row" class="state-UNKNOWN">UNKNOWN</th><td>0</td></tr>
+          <tr><th scope="row" class="state-UNKNOWN">UNKNOWN</th><td>6</td></tr>
           <tr><th scope="row" class="state-QUESTION">QUESTION</th><td>2</td></tr>
-          <tr><th scope="row" class="state-SKIPPED">SKIPPED</th><td>60</td></tr>
+          <tr><th scope="row" class="state-SKIPPED">SKIPPED</th><td>64</td></tr>
           <tr><th scope="row" class="state-ATTESTED">ATTESTED</th><td>0</td></tr>
           <tr><th scope="row" class="state-INFO">INFO</th><td>0</td></tr>
-          <tr><th scope="row" class="state-NOT_APPLICABLE">NOT_APPLICABLE</th><td>2</td></tr>
-          <tr><th scope="row" class="state-PASS">PASS</th><td>14</td></tr>
+          <tr><th scope="row" class="state-NOT_APPLICABLE">NOT_APPLICABLE</th><td>6</td></tr>
+          <tr><th scope="row" class="state-PASS">PASS</th><td>0</td></tr>
           
         </tbody>
       </table>
@@ -54,12 +53,12 @@
     <section aria-labelledby="pillar-security">
       <h2 id="pillar-security">Security</h2>
       <article aria-labelledby="control-FND-CFG-005">
-        <h3 id="control-FND-CFG-005">No raw secrets in YAML/Bicep/environment blocks — <span class="state-PASS">PASS</span></h3>
+        <h3 id="control-FND-CFG-005">No raw secrets in YAML/Bicep/environment blocks — <span class="state-UNKNOWN">UNKNOWN</span></h3>
         <dl>
           <dt>Rule</dt><dd>FND-CFG-005 (version 4)</dd>
           <dt>Mandatory</dt><dd>true</dd>
-          <dt>Evidence basis</dt><dd>deterministic</dd>
-          <dt>Why this state</dt><dd>Evaluated with no remaining finding and no skipped check.</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>No evidence was recorded for this control.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference">https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference</a> (verified 2026-10-05)</dd>
           
@@ -80,12 +79,12 @@
         </dl>
       </article>
       <article aria-labelledby="control-FND-CFG-007">
-        <h3 id="control-FND-CFG-007">Outbound endpoints use HTTPS and reject unsafe local/metadata targets — <span class="state-PASS">PASS</span></h3>
+        <h3 id="control-FND-CFG-007">Outbound endpoints use HTTPS and reject unsafe local/metadata targets — <span class="state-UNKNOWN">UNKNOWN</span></h3>
         <dl>
           <dt>Rule</dt><dd>FND-CFG-007 (version 2)</dd>
           <dt>Mandatory</dt><dd>true</dd>
-          <dt>Evidence basis</dt><dd>deterministic</dd>
-          <dt>Why this state</dt><dd>Evaluated with no remaining finding and no skipped check.</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>No evidence was recorded for this control.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://learn.microsoft.com/azure/foundry/agents/how-to/tools/model-context-protocol">https://learn.microsoft.com/azure/foundry/agents/how-to/tools/model-context-protocol</a> (verified 2026-10-04)</dd>
           
@@ -128,7 +127,7 @@ az role assignment create --assignee &lt;deployer-object-id&gt; --role &#34;Role
           <dt>Rule</dt><dd>FND-IDN-001 (version 3)</dd>
           <dt>Mandatory</dt><dd>true</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: synthetic-infrastructure.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup">https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup</a> (verified 2026-10-04)</dd>
           
@@ -152,7 +151,7 @@ resource project &#39;Microsoft.CognitiveServices/accounts/projects@2026-09-01&#
   properties: {}
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: synthetic-infrastructure</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -190,7 +189,7 @@ resource project &#39;Microsoft.CognitiveServices/accounts/projects@2026-09-01&#
           <dt>Rule</dt><dd>FND-IDN-004 (version 6)</dd>
           <dt>Mandatory</dt><dd>true</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: synthetic-infrastructure.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/role-based-access-control/role-assignments-steps">https://learn.microsoft.com/azure/role-based-access-control/role-assignments-steps</a> (verified 2026-10-04)</dd>
           
@@ -209,7 +208,7 @@ resource projectUser &#39;Microsoft.Authorization/roleAssignments@2022-04-01&#39
   }
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: synthetic-infrastructure</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -219,7 +218,7 @@ resource projectUser &#39;Microsoft.Authorization/roleAssignments@2022-04-01&#39
           <dt>Rule</dt><dd>FND-IDN-005 (version 2)</dd>
           <dt>Mandatory</dt><dd>false</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: input-unavailable: control-plane evidence is not available offline (estimated reason).</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/role-based-access-control/best-practices">https://learn.microsoft.com/azure/role-based-access-control/best-practices</a> (verified 2026-10-04)</dd>
           <dt>Review question</dt><dd>Has the team reviewed standing human admin access with current business and support context?</dd>
@@ -231,7 +230,7 @@ resource projectUser &#39;Microsoft.Authorization/roleAssignments@2022-04-01&#39
 // Access control (IAM) &gt; Add role assignment &gt; Assignment type: Eligible
 // Time-bound active assignment through a role assignment schedule request is also acceptable.</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: input-unavailable: control-plane evidence is not available offline (estimated reason)</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -241,7 +240,7 @@ resource projectUser &#39;Microsoft.Authorization/roleAssignments@2022-04-01&#39
           <dt>Rule</dt><dd>FND-IDN-006 (version 1)</dd>
           <dt>Mandatory</dt><dd>true</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: synthetic-infrastructure.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://openid.net/specs/openid-connect-discovery-1_0.html#IssuerDiscovery">https://openid.net/specs/openid-connect-discovery-1_0.html#IssuerDiscovery</a> (verified 2026-10-04)</dd>
           
@@ -259,7 +258,7 @@ resource projectUser &#39;Microsoft.Authorization/roleAssignments@2022-04-01&#39
   }
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: synthetic-infrastructure</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -269,7 +268,7 @@ resource projectUser &#39;Microsoft.Authorization/roleAssignments@2022-04-01&#39
           <dt>Rule</dt><dd>FND-NET-001 (version 4)</dd>
           <dt>Mandatory</dt><dd>true</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: synthetic-infrastructure.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/concepts/networking-options">https://learn.microsoft.com/azure/foundry/agents/concepts/networking-options</a> (verified 2026-10-04)</dd>
           
@@ -301,7 +300,7 @@ resource pe &#39;Microsoft.Network/privateEndpoints@2024-05-01&#39; = {
   }
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: synthetic-infrastructure</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -311,7 +310,7 @@ resource pe &#39;Microsoft.Network/privateEndpoints@2024-05-01&#39; = {
           <dt>Rule</dt><dd>FND-NET-002 (version 3)</dd>
           <dt>Mandatory</dt><dd>true</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: synthetic-infrastructure.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks">https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks</a> (verified 2026-10-04)</dd>
           
@@ -337,7 +336,7 @@ resource searchPe &#39;Microsoft.Network/privateEndpoints@2024-05-01&#39; = {
   }
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: synthetic-infrastructure</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -347,7 +346,7 @@ resource searchPe &#39;Microsoft.Network/privateEndpoints@2024-05-01&#39; = {
           <dt>Rule</dt><dd>FND-NET-007 (version 2)</dd>
           <dt>Mandatory</dt><dd>true</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: synthetic-infrastructure.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/how-to/configure-private-link">https://learn.microsoft.com/azure/foundry/how-to/configure-private-link</a> (verified 2026-10-04)</dd>
           
@@ -364,7 +363,7 @@ resource searchPe &#39;Microsoft.Network/privateEndpoints@2024-05-01&#39; = {
   }
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: synthetic-infrastructure</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -374,7 +373,7 @@ resource searchPe &#39;Microsoft.Network/privateEndpoints@2024-05-01&#39; = {
           <dt>Rule</dt><dd>FND-NET-010 (version 3)</dd>
           <dt>Mandatory</dt><dd>false</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: synthetic-infrastructure.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>An Azure Monitor Private Link Scope is reached through a private endpoint, and Azure Monitor refers its cost to Azure Private Link pricing. (<a href="https://learn.microsoft.com/azure/azure-monitor/fundamentals/private-link-security">https://learn.microsoft.com/azure/azure-monitor/fundamentals/private-link-security</a>, verified 2026-10-18)</dd>
           <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://learn.microsoft.com/azure/azure-monitor/fundamentals/private-link-design">https://learn.microsoft.com/azure/azure-monitor/fundamentals/private-link-design</a> (verified 2026-10-04)</dd>
           
@@ -396,7 +395,7 @@ resource scoped &#39;Microsoft.Insights/privateLinkScopes/scopedResources@2021-0
 }
 // private endpoint with groupIds: [&#39;azuremonitor&#39;] and privateLinkServiceId: ampls.id</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: synthetic-infrastructure</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -406,7 +405,7 @@ resource scoped &#39;Microsoft.Insights/privateLinkScopes/scopedResources@2021-0
           <dt>Rule</dt><dd>FND-NET-011 (version 3)</dd>
           <dt>Mandatory</dt><dd>false</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: synthetic-infrastructure.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>DDoS Network Protection and DDoS IP Protection are priced per protected IP or per 100 protected IPs; only DDoS infrastructure protection is at no additional cost. (<a href="https://learn.microsoft.com/azure/ddos-protection/ddos-protection-sku-comparison">https://learn.microsoft.com/azure/ddos-protection/ddos-protection-sku-comparison</a>, verified 2026-10-18)</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.VNET.UseNSGs/">https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.VNET.UseNSGs/</a> (verified 2026-10-04)</dd>
           
@@ -424,17 +423,17 @@ resource vnet &#39;Microsoft.Network/virtualNetworks@2024-05-01&#39; = {
   }
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: synthetic-infrastructure</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
       <article aria-labelledby="control-FND-OPS-009">
-        <h3 id="control-FND-OPS-009">Data-residency regions and deployment SKU — <span class="state-PASS">PASS</span></h3>
+        <h3 id="control-FND-OPS-009">Data-residency regions and deployment SKU — <span class="state-SKIPPED">SKIPPED</span></h3>
         <dl>
           <dt>Rule</dt><dd>FND-OPS-009 (version 2)</dd>
           <dt>Mandatory</dt><dd>true</dd>
-          <dt>Evidence basis</dt><dd>deterministic</dd>
-          <dt>Why this state</dt><dd>Evaluated with no remaining finding and no skipped check.</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: profile-key-missing:dataResidency.scope.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types">https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types</a> (verified 2026-10-04)</dd>
           
@@ -450,16 +449,18 @@ services:
       - name: chat
         model: { format: OpenAI, name: gpt-5.4-mini, version: &#34;2026-03-17&#34; }
         sku: { name: DataZoneStandard, capacity: 10 }</code></pre></dd>
-          <dt>Evidence</dt><dd>No finding or skip record was present.</dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: profile-key-missing:dataResidency.scope</li>
+            </ul></dd>
         </dl>
       </article>
       <article aria-labelledby="control-FND-OPS-010">
-        <h3 id="control-FND-OPS-010">Model allow/deny lists remain consistent — <span class="state-PASS">PASS</span></h3>
+        <h3 id="control-FND-OPS-010">Model allow/deny lists remain consistent — <span class="state-SKIPPED">SKIPPED</span></h3>
         <dl>
           <dt>Rule</dt><dd>FND-OPS-010 (version 2)</dd>
           <dt>Mandatory</dt><dd>false</dd>
-          <dt>Evidence basis</dt><dd>deterministic</dd>
-          <dt>Why this state</dt><dd>Evaluated with no remaining finding and no skipped check.</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: profile-key-missing:models.allow.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://learn.microsoft.com/azure/foundry/how-to/model-deployment-policy">https://learn.microsoft.com/azure/foundry/how-to/model-deployment-policy</a> (verified 2026-10-04)</dd>
           
@@ -472,7 +473,9 @@ models:
   allow:
     publishers: [&#34;OpenAI&#34;]
   deny: []</code></pre></dd>
-          <dt>Evidence</dt><dd>No finding or skip record was present.</dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: profile-key-missing:models.allow</li>
+            </ul></dd>
         </dl>
       </article>
       <article aria-labelledby="control-FND-RUN-001">
@@ -481,7 +484,7 @@ models:
           <dt>Rule</dt><dd>FND-RUN-001 (version 4)</dd>
           <dt>Mandatory</dt><dd>true</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: synthetic-infrastructure.</dd>
+          <dt>Why this state</dt><dd>Skipped: not-implemented.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup">https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup</a> (verified 2026-10-04)</dd>
           
@@ -499,7 +502,7 @@ models:
   }
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: synthetic-infrastructure</li>
+            <li>skipped: not-implemented</li>
             </ul></dd>
         </dl>
       </article>
@@ -509,7 +512,7 @@ models:
           <dt>Rule</dt><dd>FND-SEC-001 (version 3)</dd>
           <dt>Mandatory</dt><dd>true</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: synthetic-infrastructure.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json</a> (verified 2026-10-04)</dd>
           
@@ -528,7 +531,7 @@ models:
   }
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: synthetic-infrastructure</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -538,7 +541,7 @@ models:
           <dt>Rule</dt><dd>FND-SEC-002 (version 3)</dd>
           <dt>Mandatory</dt><dd>true</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: synthetic-infrastructure.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json</a> (verified 2026-10-04)</dd>
           
@@ -555,7 +558,7 @@ models:
   }
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: synthetic-infrastructure</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -565,7 +568,7 @@ models:
           <dt>Rule</dt><dd>FND-SEC-003 (version 3)</dd>
           <dt>Mandatory</dt><dd>true</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: synthetic-infrastructure.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable/2026-03-15/openapi.json</a> (verified 2026-10-04)</dd>
           
@@ -584,7 +587,7 @@ models:
   }
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: synthetic-infrastructure</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -594,7 +597,7 @@ models:
           <dt>Rule</dt><dd>FND-SEC-004 (version 2)</dd>
           <dt>Mandatory</dt><dd>true</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: synthetic-infrastructure.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/storage/resource-manager/Microsoft.Storage/stable/2026-06-01/openapi.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/storage/resource-manager/Microsoft.Storage/stable/2026-06-01/openapi.json</a> (verified 2026-10-04)</dd>
           
@@ -615,7 +618,7 @@ models:
   }
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: synthetic-infrastructure</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -625,7 +628,7 @@ models:
           <dt>Rule</dt><dd>FND-SEC-006 (version 3)</dd>
           <dt>Mandatory</dt><dd>true</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: synthetic-infrastructure.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/storage/common/storage-network-security-limitations">https://learn.microsoft.com/azure/storage/common/storage-network-security-limitations</a> (verified 2026-10-04)</dd>
           
@@ -640,7 +643,7 @@ models:
   ]
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: synthetic-infrastructure</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -650,7 +653,7 @@ models:
           <dt>Rule</dt><dd>FND-SEC-008 (version 2)</dd>
           <dt>Mandatory</dt><dd>false</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: synthetic-infrastructure.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>Defender for Cloud plans beyond foundational CSPM are paid plans; charges begin after the 30-day trial or usage limit. (<a href="https://learn.microsoft.com/azure/defender-for-cloud/connect-azure-subscription">https://learn.microsoft.com/azure/defender-for-cloud/connect-azure-subscription</a>, verified 2026-10-18)</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/security/resource-manager/Microsoft.Security/Security/stable/2026-07-01/pricings.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/security/resource-manager/Microsoft.Security/Security/stable/2026-07-01/pricings.json</a> (verified 2026-10-04)</dd>
           
@@ -663,7 +666,7 @@ models:
   properties: { pricingTier: &#39;Standard&#39; }
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: synthetic-infrastructure</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -673,7 +676,7 @@ models:
           <dt>Rule</dt><dd>FND-SEC-009 (version 2)</dd>
           <dt>Mandatory</dt><dd>false</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: input-unavailable: control-plane evidence is not available offline (estimated reason).</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Authorization/policy/stable/2025-01-01/policyAssignments.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Authorization/policy/stable/2025-01-01/policyAssignments.json</a> (verified 2026-10-04)</dd>
           
@@ -689,7 +692,7 @@ models:
   }
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: input-unavailable: control-plane evidence is not available offline (estimated reason)</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -699,7 +702,7 @@ models:
           <dt>Rule</dt><dd>FND-SEC-010 (version 2)</dd>
           <dt>Mandatory</dt><dd>false</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: synthetic-infrastructure.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>Customer-managed keys require a billable Azure Key Vault (stated for Azure AI Search; the same Key Vault dependency applies to each service listed). (<a href="https://learn.microsoft.com/azure/search/search-sku-manage-costs">https://learn.microsoft.com/azure/search/search-sku-manage-costs</a>, verified 2026-10-18)</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json</a> (verified 2026-10-04)</dd>
           
@@ -712,17 +715,17 @@ properties: {
   encryptionWithCmk: { enforcement: &#39;Enabled&#39; }
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: synthetic-infrastructure</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
       <article aria-labelledby="control-FND-SEC-011">
-        <h3 id="control-FND-SEC-011">Controlled outbound egress informational — <span class="state-PASS">PASS</span></h3>
+        <h3 id="control-FND-SEC-011">Controlled outbound egress informational — <span class="state-SKIPPED">SKIPPED</span></h3>
         <dl>
           <dt>Rule</dt><dd>FND-SEC-011 (version 1)</dd>
           <dt>Mandatory</dt><dd>false</dd>
-          <dt>Evidence basis</dt><dd>deterministic</dd>
-          <dt>Why this state</dt><dd>Evaluated with no remaining finding and no skipped check.</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: unsupported-version.</dd>
           <dt>Costly recommendation</dt><dd>FQDN outbound rules in Allow Only Approved Outbound mode create a managed Azure Firewall, which adds Azure Firewall charges. (<a href="https://learn.microsoft.com/azure/foundry/how-to/managed-virtual-network">https://learn.microsoft.com/azure/foundry/how-to/managed-virtual-network</a>, verified 2026-10-18)</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json</a> (verified 2026-10-04)</dd>
           
@@ -736,7 +739,9 @@ network:
     vnet: ${VNET_RESOURCE_ID}
     name: private-endpoint-subnet
   isolationMode: AllowOnlyApprovedOutbound</code></pre></dd>
-          <dt>Evidence</dt><dd>No finding or skip record was present.</dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: unsupported-version</li>
+            </ul></dd>
         </dl>
       </article>
       <article aria-labelledby="control-FND-SEC-014">
@@ -745,7 +750,7 @@ network:
           <dt>Rule</dt><dd>FND-SEC-014 (version 2)</dd>
           <dt>Mandatory</dt><dd>true</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: synthetic-infrastructure.</dd>
+          <dt>Why this state</dt><dd>Skipped: unsupported-version.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/azure-resource-manager/bicep/linter-rule-outputs-should-not-contain-secrets">https://learn.microsoft.com/azure/azure-resource-manager/bicep/linter-rule-outputs-should-not-contain-secrets</a> (verified 2026-10-16)</dd>
           
@@ -755,7 +760,7 @@ network:
           <dt>Recommendation</dt><dd>Output the resourceId of the resource that holds the secret, or store the secret in Key Vault, and read it at the consuming resource. Do not output keys, connection strings or passwords.</dd>
           <dt>Fix</dt><dd><pre><code>output storageId string = stg.id // consumer calls listKeys(storageId, ...) when it needs the key; do not output keys</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: synthetic-infrastructure</li>
+            <li>skipped: unsupported-version</li>
             </ul></dd>
         </dl>
       </article>
@@ -764,12 +769,12 @@ network:
     <section aria-labelledby="pillar-reliability">
       <h2 id="pillar-reliability">Reliability</h2>
       <article aria-labelledby="control-FND-CFG-003">
-        <h3 id="control-FND-CFG-003">All inter-service references resolve — <span class="state-PASS">PASS</span></h3>
+        <h3 id="control-FND-CFG-003">All inter-service references resolve — <span class="state-UNKNOWN">UNKNOWN</span></h3>
         <dl>
           <dt>Rule</dt><dd>FND-CFG-003 (version 4)</dd>
           <dt>Mandatory</dt><dd>true</dd>
-          <dt>Evidence basis</dt><dd>deterministic</dd>
-          <dt>Why this state</dt><dd>Evaluated with no remaining finding and no skipped check.</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>No evidence was recorded for this control.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/how-to/author-azure-yaml">https://learn.microsoft.com/azure/foundry/agents/how-to/author-azure-yaml</a> (verified 2026-10-04)</dd>
           
@@ -802,12 +807,12 @@ services:
         </dl>
       </article>
       <article aria-labelledby="control-FND-CFG-004">
-        <h3 id="control-FND-CFG-004">Prompt model or hosted source/image is valid — <span class="state-PASS">PASS</span></h3>
+        <h3 id="control-FND-CFG-004">Prompt model or hosted source/image is valid — <span class="state-SKIPPED">SKIPPED</span></h3>
         <dl>
           <dt>Rule</dt><dd>FND-CFG-004 (version 4)</dd>
           <dt>Mandatory</dt><dd>true</dd>
-          <dt>Evidence basis</dt><dd>deterministic</dd>
-          <dt>Why this state</dt><dd>Evaluated with no remaining finding and no skipped check.</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: uncertain: assistant: no Dockerfile under &#34;./agents/assistant&#34; and no image, codeConfiguration, runtime, startupCommand or skill; the agent source is unclear.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference">https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference</a> (verified 2026-10-05)</dd>
           
@@ -830,16 +835,18 @@ services:
     name: helper
     model: gpt-5.4-mini
     instructions: Answer briefly.</code></pre></dd>
-          <dt>Evidence</dt><dd>No finding or skip record was present.</dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: uncertain: assistant: no Dockerfile under &#34;./agents/assistant&#34; and no image, codeConfiguration, runtime, startupCommand or skill; the agent source is unclear</li>
+            </ul></dd>
         </dl>
       </article>
       <article aria-labelledby="control-FND-CFG-012">
-        <h3 id="control-FND-CFG-012">Azure region values are valid — <span class="state-PASS">PASS</span></h3>
+        <h3 id="control-FND-CFG-012">Azure region values are valid — <span class="state-SKIPPED">SKIPPED</span></h3>
         <dl>
           <dt>Rule</dt><dd>FND-CFG-012 (version 4)</dd>
           <dt>Mandatory</dt><dd>false</dd>
-          <dt>Evidence basis</dt><dd>deterministic</dd>
-          <dt>Why this state</dt><dd>Evaluated with no remaining finding and no skipped check.</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: no-environment-selected.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/subscriptions/stable/2022-12-01/subscriptions.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/subscriptions/stable/2022-12-01/subscriptions.json</a> (verified 2026-10-04)</dd>
           
@@ -848,7 +855,9 @@ services:
           
           <dt>Recommendation</dt><dd>Use a location name returned by az account list-locations for your subscription (the name field, such as eastus2), and set it with azd env set AZURE_LOCATION. Check model and resource availability for the region before provisioning.</dd>
           <dt>Fix</dt><dd><pre><code>azd env set AZURE_LOCATION eastus2</code></pre></dd>
-          <dt>Evidence</dt><dd>No finding or skip record was present.</dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: no-environment-selected</li>
+            </ul></dd>
         </dl>
       </article>
       <article aria-labelledby="control-FND-DEP-004">
@@ -1029,12 +1038,12 @@ az lock delete --name &lt;lock-name&gt; --resource-group &lt;rg&gt;   # then red
         </dl>
       </article>
       <article aria-labelledby="control-FND-ENV-003">
-        <h3 id="control-FND-ENV-003">Prod does not reference non-prod resource IDs — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <h3 id="control-FND-ENV-003">Prod does not reference non-prod resource IDs — <span class="state-NOT_APPLICABLE">NOT_APPLICABLE</span></h3>
         <dl>
           <dt>Rule</dt><dd>FND-ENV-003 (version 4)</dd>
           <dt>Mandatory</dt><dd>true</dd>
-          <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: input-unavailable: azd environment values are not available (estimated reason).</dd>
+          <dt>Evidence basis</dt><dd>deterministic</dd>
+          <dt>Why this state</dt><dd>Not applicable: not-applicable: fewer than two azd environments.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview">https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview</a> (verified 2026-10-05)</dd>
           
@@ -1045,7 +1054,7 @@ az lock delete --name &lt;lock-name&gt; --resource-group &lt;rg&gt;   # then red
           <dt>Fix</dt><dd><pre><code># .azure/prod/.env
 AZURE_AI_PROJECT_ENDPOINT=https://prod-account.services.ai.azure.com/api/projects/prod-project</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: input-unavailable: azd environment values are not available (estimated reason)</li>
+            <li>skipped: not-applicable: fewer than two azd environments</li>
             </ul></dd>
         </dl>
       </article>
@@ -1055,7 +1064,7 @@ AZURE_AI_PROJECT_ENDPOINT=https://prod-account.services.ai.azure.com/api/project
           <dt>Rule</dt><dd>FND-IDN-003 (version 5)</dd>
           <dt>Mandatory</dt><dd>true</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: synthetic-infrastructure.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/role-based-access-control/role-assignments-template">https://learn.microsoft.com/azure/role-based-access-control/role-assignments-template</a> (verified 2026-10-04)</dd>
           
@@ -1073,7 +1082,7 @@ AZURE_AI_PROJECT_ENDPOINT=https://prod-account.services.ai.azure.com/api/project
   }
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: synthetic-infrastructure</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -1083,7 +1092,7 @@ AZURE_AI_PROJECT_ENDPOINT=https://prod-account.services.ai.azure.com/api/project
           <dt>Rule</dt><dd>FND-NET-003 (version 3)</dd>
           <dt>Mandatory</dt><dd>true</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: synthetic-infrastructure.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/private-link/private-endpoint-dns">https://learn.microsoft.com/azure/private-link/private-endpoint-dns</a> (verified 2026-10-04)</dd>
           
@@ -1109,7 +1118,7 @@ resource link &#39;Microsoft.Network/privateDnsZones/virtualNetworkLinks@2024-06
   properties: { virtualNetwork: { id: vnetId }, registrationEnabled: false }
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: synthetic-infrastructure</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -1119,7 +1128,7 @@ resource link &#39;Microsoft.Network/privateDnsZones/virtualNetworkLinks@2024-06
           <dt>Rule</dt><dd>FND-NET-004 (version 3)</dd>
           <dt>Mandatory</dt><dd>true</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: synthetic-infrastructure.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks">https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks</a> (verified 2026-10-04)</dd>
           
@@ -1141,7 +1150,7 @@ resource link &#39;Microsoft.Network/privateDnsZones/virtualNetworkLinks@2024-06
 // on the account:
 //   networkInjections: [{ scenario: &#39;agent&#39;, subnetArmId: agentSubnet.id, useMicrosoftManagedNetwork: false }]</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: synthetic-infrastructure</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -1151,7 +1160,7 @@ resource link &#39;Microsoft.Network/privateDnsZones/virtualNetworkLinks@2024-06
           <dt>Rule</dt><dd>FND-NET-005 (version 4)</dd>
           <dt>Mandatory</dt><dd>true</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: synthetic-infrastructure.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks">https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks</a> (verified 2026-10-04)</dd>
           
@@ -1164,7 +1173,7 @@ resource vnet &#39;Microsoft.Network/virtualNetworks@2024-05-01&#39; = { name: v
 resource account &#39;Microsoft.CognitiveServices/accounts@2026-09-01&#39; = { name: accountName, location: location, kind: &#39;AIServices&#39;, sku: { name: &#39;S0&#39; }, properties: { /* networkInjections -&gt; subnet in vnet */ } }
 resource pe &#39;Microsoft.Network/privateEndpoints@2024-05-01&#39; = { name: &#39;${accountName}-pe&#39;, location: location /* same region as the VNet */, properties: { subnet: { id: peSubnetId } } }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: synthetic-infrastructure</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -1174,7 +1183,7 @@ resource pe &#39;Microsoft.Network/privateEndpoints@2024-05-01&#39; = { name: &#
           <dt>Rule</dt><dd>FND-NET-006 (version 3)</dd>
           <dt>Mandatory</dt><dd>true</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: synthetic-infrastructure.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks">https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks</a> (verified 2026-10-04)</dd>
           
@@ -1191,7 +1200,7 @@ resource pe &#39;Microsoft.Network/privateEndpoints@2024-05-01&#39; = { name: &#
   }
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: synthetic-infrastructure</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -1201,7 +1210,7 @@ resource pe &#39;Microsoft.Network/privateEndpoints@2024-05-01&#39; = { name: &#
           <dt>Rule</dt><dd>FND-NET-008 (version 3)</dd>
           <dt>Mandatory</dt><dd>true</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: synthetic-infrastructure.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/search/service-create-private-endpoint">https://learn.microsoft.com/azure/search/service-create-private-endpoint</a> (verified 2026-10-04)</dd>
           
@@ -1216,7 +1225,7 @@ resource pe &#39;Microsoft.Network/privateEndpoints@2024-05-01&#39; = { name: &#
   properties: { publicNetworkAccess: &#39;Disabled&#39; }
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: synthetic-infrastructure</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -1226,7 +1235,7 @@ resource pe &#39;Microsoft.Network/privateEndpoints@2024-05-01&#39; = { name: &#
           <dt>Rule</dt><dd>FND-REL-001 (version 1)</dd>
           <dt>Mandatory</dt><dd>false</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: synthetic-infrastructure.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>Dedicated Azure AI Search bills per search unit (replicas x partitions); adding replicas raises cost. (<a href="https://learn.microsoft.com/azure/search/search-sku-manage-costs">https://learn.microsoft.com/azure/search/search-sku-manage-costs</a>, verified 2026-10-18)</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/search/search-limits-quotas-capacity">https://learn.microsoft.com/azure/search/search-limits-quotas-capacity</a> (verified 2026-10-04)</dd>
           
@@ -1244,7 +1253,7 @@ resource pe &#39;Microsoft.Network/privateEndpoints@2024-05-01&#39; = { name: &#
   }
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: synthetic-infrastructure</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -1254,7 +1263,7 @@ resource pe &#39;Microsoft.Network/privateEndpoints@2024-05-01&#39; = { name: &#
           <dt>Rule</dt><dd>FND-REL-002 (version 1)</dd>
           <dt>Mandatory</dt><dd>false</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: synthetic-infrastructure.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>LRS is the lowest-cost redundancy option; ZRS and GZRS trade higher cost for availability. (<a href="https://learn.microsoft.com/azure/storage/common/storage-redundancy">https://learn.microsoft.com/azure/storage/common/storage-redundancy</a>, verified 2026-10-18)</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency">https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency</a> (verified 2026-10-04)</dd>
           
@@ -1269,7 +1278,7 @@ resource pe &#39;Microsoft.Network/privateEndpoints@2024-05-01&#39; = { name: &#
   sku: { name: &#39;Standard_GZRS&#39; }
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: synthetic-infrastructure</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -1279,7 +1288,7 @@ resource pe &#39;Microsoft.Network/privateEndpoints@2024-05-01&#39; = { name: &#
           <dt>Rule</dt><dd>FND-REL-003 (version 1)</dd>
           <dt>Mandatory</dt><dd>false</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: synthetic-infrastructure.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>Continuous backup at the 30-day or 35-day tier carries a monthly backup storage charge and every restore is charged; the 7-day tier has no backup storage charge. The cost of zone redundancy is not cited here. (<a href="https://learn.microsoft.com/azure/cosmos-db/continuous-backup-restore-introduction">https://learn.microsoft.com/azure/cosmos-db/continuous-backup-restore-introduction</a>, verified 2026-10-18)</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency">https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency</a> (verified 2026-10-04)</dd>
           
@@ -1302,7 +1311,7 @@ resource pe &#39;Microsoft.Network/privateEndpoints@2024-05-01&#39; = { name: &#
   }
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: synthetic-infrastructure</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -1312,7 +1321,7 @@ resource pe &#39;Microsoft.Network/privateEndpoints@2024-05-01&#39; = { name: &#
           <dt>Rule</dt><dd>FND-REL-004 (version 2)</dd>
           <dt>Mandatory</dt><dd>false</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: synthetic-infrastructure.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency">https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency</a> (verified 2026-10-04)</dd>
           
@@ -1329,7 +1338,7 @@ resource pe &#39;Microsoft.Network/privateEndpoints@2024-05-01&#39; = { name: &#
   }
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: synthetic-infrastructure</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -1339,7 +1348,7 @@ resource pe &#39;Microsoft.Network/privateEndpoints@2024-05-01&#39; = { name: &#
           <dt>Rule</dt><dd>FND-REL-005 (version 1)</dd>
           <dt>Mandatory</dt><dd>true</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: synthetic-infrastructure.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/resource-manager/Microsoft.Search/Search/stable/2025-05-01/search.json</a> (verified 2026-10-04)</dd>
           
@@ -1357,7 +1366,7 @@ resource pe &#39;Microsoft.Network/privateEndpoints@2024-05-01&#39; = { name: &#
   }
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: synthetic-infrastructure</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -1392,7 +1401,7 @@ reliability:
           <dt>Rule</dt><dd>FND-REL-008 (version 1)</dd>
           <dt>Mandatory</dt><dd>false</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: synthetic-infrastructure.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/openai/how-to/spillover-traffic-management">https://learn.microsoft.com/azure/foundry/openai/how-to/spillover-traffic-management</a> (verified 2026-10-04)</dd>
           
@@ -1411,7 +1420,7 @@ reliability:
   dependsOn: [ standard ]
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: synthetic-infrastructure</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -1421,7 +1430,7 @@ reliability:
           <dt>Rule</dt><dd>FND-REL-009 (version 1)</dd>
           <dt>Mandatory</dt><dd>false</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: synthetic-infrastructure.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://learn.microsoft.com/azure/api-management/api-management-features">https://learn.microsoft.com/azure/api-management/api-management-features</a> (verified 2026-10-04)</dd>
           <dt>Review question</dt><dd>Which API Management SLA, zone-redundancy or multi-region objective does the workload need? (The rule reads reliability.apimSlaRequired, apimZoneRequired and apimRegionalRequired, which the configuration schema does not define yet; ADR-026.)</dd>
@@ -1447,7 +1456,7 @@ resource apim &#39;Microsoft.ApiManagement/service@2024-05-01&#39; = {
   }
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: synthetic-infrastructure</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -1457,7 +1466,7 @@ resource apim &#39;Microsoft.ApiManagement/service@2024-05-01&#39; = {
           <dt>Rule</dt><dd>FND-RUN-002 (version 4)</dd>
           <dt>Mandatory</dt><dd>true</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: input-unavailable: control-plane evidence is not available offline (estimated reason).</dd>
+          <dt>Why this state</dt><dd>Skipped: not-implemented.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks">https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks</a> (verified 2026-10-04)</dd>
           
@@ -1475,7 +1484,7 @@ resource apim &#39;Microsoft.ApiManagement/service@2024-05-01&#39; = {
   }
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: input-unavailable: control-plane evidence is not available offline (estimated reason)</li>
+            <li>skipped: not-implemented</li>
             </ul></dd>
         </dl>
       </article>
@@ -1485,7 +1494,7 @@ resource apim &#39;Microsoft.ApiManagement/service@2024-05-01&#39; = {
           <dt>Rule</dt><dd>FND-RUN-003 (version 3)</dd>
           <dt>Mandatory</dt><dd>true</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: input-unavailable: control-plane evidence is not available offline (estimated reason).</dd>
+          <dt>Why this state</dt><dd>Skipped: not-implemented.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json</a> (verified 2026-10-17)</dd>
           
@@ -1504,7 +1513,7 @@ resource apim &#39;Microsoft.ApiManagement/service@2024-05-01&#39; = {
   }
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: input-unavailable: control-plane evidence is not available offline (estimated reason)</li>
+            <li>skipped: not-implemented</li>
             </ul></dd>
         </dl>
       </article>
@@ -1514,7 +1523,7 @@ resource apim &#39;Microsoft.ApiManagement/service@2024-05-01&#39; = {
           <dt>Rule</dt><dd>FND-RUN-004 (version 4)</dd>
           <dt>Mandatory</dt><dd>true</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: input-unavailable: control-plane evidence is not available offline (estimated reason).</dd>
+          <dt>Why this state</dt><dd>Skipped: not-implemented.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://learn.microsoft.com/azure/azure-monitor/reference/supported-metrics/microsoft-cognitiveservices-accounts-metrics">https://learn.microsoft.com/azure/azure-monitor/reference/supported-metrics/microsoft-cognitiveservices-accounts-metrics</a> (verified 2026-10-18)</dd>
           
@@ -1531,17 +1540,17 @@ resource apim &#39;Microsoft.ApiManagement/service@2024-05-01&#39; = {
   }
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: input-unavailable: control-plane evidence is not available offline (estimated reason)</li>
+            <li>skipped: not-implemented</li>
             </ul></dd>
         </dl>
       </article>
       <article aria-labelledby="control-FND-RUN-005">
-        <h3 id="control-FND-RUN-005">Agent tools/connections respond — <span class="state-PASS">PASS</span></h3>
+        <h3 id="control-FND-RUN-005">Agent tools/connections respond — <span class="state-SKIPPED">SKIPPED</span></h3>
         <dl>
           <dt>Rule</dt><dd>FND-RUN-005 (version 4)</dd>
           <dt>Mandatory</dt><dd>false</dd>
-          <dt>Evidence basis</dt><dd>deterministic</dd>
-          <dt>Why this state</dt><dd>Evaluated with no remaining finding and no skipped check.</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: not-implemented.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://github.com/Azure/azure-dev/blob/main/cli/azd/extensions/azure.ai.agents/internal/project/service_target_agent.go">https://github.com/Azure/azure-dev/blob/main/cli/azd/extensions/azure.ai.agents/internal/project/service_target_agent.go</a> (verified 2026-10-18)</dd>
           
@@ -1553,7 +1562,9 @@ resource apim &#39;Microsoft.ApiManagement/service@2024-05-01&#39; = {
 services:
   support-agent:
     host: azure.ai.agent</code></pre></dd>
-          <dt>Evidence</dt><dd>No finding or skip record was present.</dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: not-implemented</li>
+            </ul></dd>
         </dl>
       </article>
       <article aria-labelledby="control-FND-RUN-006">
@@ -1562,7 +1573,7 @@ services:
           <dt>Rule</dt><dd>FND-RUN-006 (version 5)</dd>
           <dt>Mandatory</dt><dd>true</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: input-unavailable: control-plane evidence is not available offline (estimated reason).</dd>
+          <dt>Why this state</dt><dd>Skipped: not-implemented.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/data-plane/Search/stable/2026-04-01/search.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/data-plane/Search/stable/2026-04-01/search.json</a> (verified 2026-10-17)</dd>
           
@@ -1578,7 +1589,7 @@ services:
   &#34;vectorSearchProfile&#34;: &#34;default-profile&#34;
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: input-unavailable: control-plane evidence is not available offline (estimated reason)</li>
+            <li>skipped: not-implemented</li>
             </ul></dd>
         </dl>
       </article>
@@ -1587,12 +1598,12 @@ services:
     <section aria-labelledby="pillar-operations">
       <h2 id="pillar-operations">Operational Excellence</h2>
       <article aria-labelledby="control-FND-CFG-001">
-        <h3 id="control-FND-CFG-001">Valid YAML, duplicate-key detection and compatible azure.ai.* schema — <span class="state-PASS">PASS</span></h3>
+        <h3 id="control-FND-CFG-001">Valid YAML, duplicate-key detection and compatible azure.ai.* schema — <span class="state-UNKNOWN">UNKNOWN</span></h3>
         <dl>
           <dt>Rule</dt><dd>FND-CFG-001 (version 7)</dd>
           <dt>Mandatory</dt><dd>true</dd>
-          <dt>Evidence basis</dt><dd>deterministic</dd>
-          <dt>Why this state</dt><dd>Evaluated with no remaining finding and no skipped check.</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>No evidence was recorded for this control.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference">https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference</a> (verified 2026-10-05)</dd>
           
@@ -1614,12 +1625,12 @@ services:
         </dl>
       </article>
       <article aria-labelledby="control-FND-CFG-002">
-        <h3 id="control-FND-CFG-002">Unique service names by kind — <span class="state-PASS">PASS</span></h3>
+        <h3 id="control-FND-CFG-002">Unique service names by kind — <span class="state-UNKNOWN">UNKNOWN</span></h3>
         <dl>
           <dt>Rule</dt><dd>FND-CFG-002 (version 2)</dd>
           <dt>Mandatory</dt><dd>true</dd>
-          <dt>Evidence basis</dt><dd>deterministic</dd>
-          <dt>Why this state</dt><dd>Evaluated with no remaining finding and no skipped check.</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>No evidence was recorded for this control.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference">https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference</a> (verified 2026-10-04)</dd>
           
@@ -1646,12 +1657,12 @@ services:
         </dl>
       </article>
       <article aria-labelledby="control-FND-CFG-006">
-        <h3 id="control-FND-CFG-006">Every variable has an environment or infrastructure producer — <span class="state-PASS">PASS</span></h3>
+        <h3 id="control-FND-CFG-006">Every variable has an environment or infrastructure producer — <span class="state-SKIPPED">SKIPPED</span></h3>
         <dl>
           <dt>Rule</dt><dd>FND-CFG-006 (version 5)</dd>
           <dt>Mandatory</dt><dd>true</dd>
-          <dt>Evidence basis</dt><dd>deterministic</dd>
-          <dt>Why this state</dt><dd>Evaluated with no remaining finding and no skipped check.</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: no-environment-selected.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference">https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference</a> (verified 2026-10-04)</dd>
           
@@ -1672,16 +1683,18 @@ services:
     env:
       MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME: ${MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME}
       LOG_LEVEL: ${LOG_LEVEL:-info}</code></pre></dd>
-          <dt>Evidence</dt><dd>No finding or skip record was present.</dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: no-environment-selected</li>
+            </ul></dd>
         </dl>
       </article>
       <article aria-labelledby="control-FND-CFG-011">
-        <h3 id="control-FND-CFG-011">Preview/retired fields are version-aware — <span class="state-PASS">PASS</span></h3>
+        <h3 id="control-FND-CFG-011">Preview/retired fields are version-aware — <span class="state-UNKNOWN">UNKNOWN</span></h3>
         <dl>
           <dt>Rule</dt><dd>FND-CFG-011 (version 5)</dd>
           <dt>Mandatory</dt><dd>true</dd>
-          <dt>Evidence basis</dt><dd>deterministic</dd>
-          <dt>Why this state</dt><dd>Evaluated with no remaining finding and no skipped check.</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>No evidence was recorded for this control.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference">https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference</a> (verified 2026-10-04)</dd>
           
@@ -1772,12 +1785,12 @@ azd env set AZURE_LOCATION &lt;allowed-region&gt;</code></pre></dd>
         </dl>
       </article>
       <article aria-labelledby="control-FND-ENV-001">
-        <h3 id="control-FND-ENV-001">Environments do not unintentionally share resource groups — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <h3 id="control-FND-ENV-001">Environments do not unintentionally share resource groups — <span class="state-NOT_APPLICABLE">NOT_APPLICABLE</span></h3>
         <dl>
           <dt>Rule</dt><dd>FND-ENV-001 (version 5)</dd>
           <dt>Mandatory</dt><dd>true</dd>
-          <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: input-unavailable: azd environment values are not available (estimated reason).</dd>
+          <dt>Evidence basis</dt><dd>deterministic</dd>
+          <dt>Why this state</dt><dd>Not applicable: not-applicable: fewer than two azd environments.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview">https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview</a> (verified 2026-10-05)</dd>
           
@@ -1788,17 +1801,17 @@ azd env set AZURE_LOCATION &lt;allowed-region&gt;</code></pre></dd>
           <dt>Fix</dt><dd><pre><code>name: my-agent-project
 resourceGroup: rg-${AZURE_ENV_NAME}</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: input-unavailable: azd environment values are not available (estimated reason)</li>
+            <li>skipped: not-applicable: fewer than two azd environments</li>
             </ul></dd>
         </dl>
       </article>
       <article aria-labelledby="control-FND-ENV-002">
-        <h3 id="control-FND-ENV-002">Environment-bound names/IDs/rules were not copied unchanged — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <h3 id="control-FND-ENV-002">Environment-bound names/IDs/rules were not copied unchanged — <span class="state-NOT_APPLICABLE">NOT_APPLICABLE</span></h3>
         <dl>
           <dt>Rule</dt><dd>FND-ENV-002 (version 4)</dd>
           <dt>Mandatory</dt><dd>false</dd>
-          <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: input-unavailable: azd environment values are not available (estimated reason).</dd>
+          <dt>Evidence basis</dt><dd>deterministic</dd>
+          <dt>Why this state</dt><dd>Not applicable: not-applicable: fewer than two azd environments.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview">https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview</a> (verified 2026-10-05)</dd>
           
@@ -1810,17 +1823,17 @@ resourceGroup: rg-${AZURE_ENV_NAME}</code></pre></dd>
 AZURE_RESOURCE_GROUP=rg-myapp-prod
 AZURE_AI_PROJECT_ENDPOINT=https://prod-account.services.ai.azure.com/api/projects/prod-project</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: input-unavailable: azd environment values are not available (estimated reason)</li>
+            <li>skipped: not-applicable: fewer than two azd environments</li>
             </ul></dd>
         </dl>
       </article>
       <article aria-labelledby="control-FND-ENV-004">
-        <h3 id="control-FND-ENV-004">Informational difference summary — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <h3 id="control-FND-ENV-004">Informational difference summary — <span class="state-NOT_APPLICABLE">NOT_APPLICABLE</span></h3>
         <dl>
           <dt>Rule</dt><dd>FND-ENV-004 (version 3)</dd>
           <dt>Mandatory</dt><dd>false</dd>
-          <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: input-unavailable: azd environment values are not available (estimated reason).</dd>
+          <dt>Evidence basis</dt><dd>deterministic</dd>
+          <dt>Why this state</dt><dd>Not applicable: not-applicable: fewer than two azd environments.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview">https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview</a> (verified 2026-10-05)</dd>
           
@@ -1830,7 +1843,7 @@ AZURE_AI_PROJECT_ENDPOINT=https://prod-account.services.ai.azure.com/api/project
           <dt>Recommendation</dt><dd>Review the summary before promoting a release; use azd env get-values per environment for the details you are entitled to see.</dd>
           <dt>Fix</dt><dd><pre><code>foundry-doctor compare --env dev --env prod</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: input-unavailable: azd environment values are not available (estimated reason)</li>
+            <li>skipped: not-applicable: fewer than two azd environments</li>
             </ul></dd>
         </dl>
       </article>
@@ -1840,7 +1853,7 @@ AZURE_AI_PROJECT_ENDPOINT=https://prod-account.services.ai.azure.com/api/project
           <dt>Rule</dt><dd>FND-OPS-001 (version 2)</dd>
           <dt>Mandatory</dt><dd>true</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: synthetic-infrastructure.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-cognitiveservices-accounts-logs">https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-cognitiveservices-accounts-logs</a> (verified 2026-10-04)</dd>
           
@@ -1859,7 +1872,7 @@ AZURE_AI_PROJECT_ENDPOINT=https://prod-account.services.ai.azure.com/api/project
   }
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: synthetic-infrastructure</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -1892,7 +1905,7 @@ AZURE_AI_PROJECT_ENDPOINT=https://prod-account.services.ai.azure.com/api/project
           <dt>Rule</dt><dd>FND-OPS-003 (version 2)</dd>
           <dt>Mandatory</dt><dd>false</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: synthetic-infrastructure.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://learn.microsoft.com/azure/foundry/how-to/stay-informed-service-health">https://learn.microsoft.com/azure/foundry/how-to/stay-informed-service-health</a> (verified 2026-10-04)</dd>
           
@@ -1917,7 +1930,7 @@ AZURE_AI_PROJECT_ENDPOINT=https://prod-account.services.ai.azure.com/api/project
   }
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: synthetic-infrastructure</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -1927,7 +1940,7 @@ AZURE_AI_PROJECT_ENDPOINT=https://prod-account.services.ai.azure.com/api/project
           <dt>Rule</dt><dd>FND-OPS-004 (version 2)</dd>
           <dt>Mandatory</dt><dd>false</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: synthetic-infrastructure.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://learn.microsoft.com/azure/azure-resource-manager/management/tag-resources">https://learn.microsoft.com/azure/azure-resource-manager/management/tag-resources</a> (verified 2026-10-04)</dd>
           
@@ -1947,17 +1960,17 @@ resource account &#39;Microsoft.CognitiveServices/accounts@2026-09-01&#39; = {
   tags: tags
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: synthetic-infrastructure</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
       <article aria-labelledby="control-FND-OPS-005">
-        <h3 id="control-FND-OPS-005">Resource-name provider constraints — <span class="state-PASS">PASS</span></h3>
+        <h3 id="control-FND-OPS-005">Resource-name provider constraints — <span class="state-SKIPPED">SKIPPED</span></h3>
         <dl>
           <dt>Rule</dt><dd>FND-OPS-005 (version 2)</dd>
           <dt>Mandatory</dt><dd>true</dd>
-          <dt>Evidence basis</dt><dd>deterministic</dd>
-          <dt>Why this state</dt><dd>Evaluated with no remaining finding and no skipped check.</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/azure-resource-manager/management/resource-name-rules">https://learn.microsoft.com/azure/azure-resource-manager/management/resource-name-rules</a> (verified 2026-10-04)</dd>
           
@@ -1975,7 +1988,9 @@ resource sa &#39;Microsoft.Storage/storageAccounts@2024-01-01&#39; = {
   sku: { name: &#39;Standard_LRS&#39; }
   kind: &#39;StorageV2&#39;
 }</code></pre></dd>
-          <dt>Evidence</dt><dd>No finding or skip record was present.</dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
         </dl>
       </article>
       <article aria-labelledby="control-FND-OPS-006">
@@ -1984,7 +1999,7 @@ resource sa &#39;Microsoft.Storage/storageAccounts@2024-01-01&#39; = {
           <dt>Rule</dt><dd>FND-OPS-006 (version 2)</dd>
           <dt>Mandatory</dt><dd>false</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: synthetic-infrastructure.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>Log Analytics charges for data retention in addition to ingestion; longer retention adds cost. (<a href="https://learn.microsoft.com/azure/azure-monitor/logs/cost-logs">https://learn.microsoft.com/azure/azure-monitor/logs/cost-logs</a>, verified 2026-10-18)</dd>
           <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://learn.microsoft.com/azure/azure-monitor/logs/data-retention-configure">https://learn.microsoft.com/azure/azure-monitor/logs/data-retention-configure</a> (verified 2026-10-04)</dd>
           
@@ -2000,7 +2015,7 @@ resource sa &#39;Microsoft.Storage/storageAccounts@2024-01-01&#39; = {
   }
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: synthetic-infrastructure</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -2051,7 +2066,7 @@ resource sa &#39;Microsoft.Storage/storageAccounts@2024-01-01&#39; = {
           <dt>Rule</dt><dd>FND-RUN-007 (version 4)</dd>
           <dt>Mandatory</dt><dd>false</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: input-unavailable: control-plane evidence is not available offline (estimated reason).</dd>
+          <dt>Why this state</dt><dd>Skipped: not-implemented.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/how-to/diagnostic-logging">https://learn.microsoft.com/azure/foundry/how-to/diagnostic-logging</a> (verified 2026-10-04)</dd>
           
@@ -2071,7 +2086,7 @@ resource sa &#39;Microsoft.Storage/storageAccounts@2024-01-01&#39; = {
   }
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: input-unavailable: control-plane evidence is not available offline (estimated reason)</li>
+            <li>skipped: not-implemented</li>
             </ul></dd>
         </dl>
       </article>
@@ -2085,7 +2100,7 @@ resource sa &#39;Microsoft.Storage/storageAccounts@2024-01-01&#39; = {
           <dt>Rule</dt><dd>FND-COST-001 (version 4)</dd>
           <dt>Mandatory</dt><dd>false</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: synthetic-infrastructure.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://github.com/Azure/azure-rest-api-specs/tree/main/specification/consumption/resource-manager/Microsoft.Consumption/Consumption/stable/2023-11-01">https://github.com/Azure/azure-rest-api-specs/tree/main/specification/consumption/resource-manager/Microsoft.Consumption/Consumption/stable/2023-11-01</a> (verified 2026-10-04)</dd>
           
@@ -2114,7 +2129,7 @@ resource budget &#39;Microsoft.Consumption/budgets@2023-11-01&#39; = {
   }
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: synthetic-infrastructure</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -2124,7 +2139,7 @@ resource budget &#39;Microsoft.Consumption/budgets@2023-11-01&#39; = {
           <dt>Rule</dt><dd>FND-COST-002 (version 4)</dd>
           <dt>Mandatory</dt><dd>false</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: synthetic-infrastructure.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types">https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types</a> (verified 2026-10-18)</dd>
           
@@ -2143,7 +2158,7 @@ resource chat &#39;Microsoft.CognitiveServices/accounts/deployments@2026-09-01&#
   }
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: synthetic-infrastructure</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -2160,7 +2175,7 @@ resource chat &#39;Microsoft.CognitiveServices/accounts/deployments@2026-09-01&#
         <li>Control IDs are Foundry Doctor rule IDs. They are not mapped to WAF checklist codes in this release, and pillar assignments come from the rule catalogue.</li>
         <li>The decision wording and the top-action ranking are project opinion, not Microsoft guidance.</li>
         <li>PSRule for Azure, Azure Advisor and Microsoft Defender for Cloud recommendations were not imported. Overlapping external check IDs are listed for reference only (ADR-020, ADR-026).</li>
-        <li>Deployed Azure state was not queried: assess waf runs offline. Controls that need deployment or runtime evidence and were not evaluated: FND-COST-001, FND-DEP-001, FND-DEP-002, FND-DEP-003, FND-DEP-004, FND-DEP-005, FND-DEP-006, FND-DEP-007, FND-DEP-008, FND-DEP-009, FND-DEP-010, FND-DEP-011, FND-DEP-012, FND-IDN-002, FND-IDN-005, FND-NET-006, FND-RUN-001, FND-RUN-002, FND-RUN-003, FND-RUN-004, FND-RUN-006, FND-RUN-007, FND-SEC-008, FND-SEC-009.</li>
+        <li>Deployed Azure state was not queried: assess waf runs offline. Controls that need deployment or runtime evidence and were not evaluated: FND-COST-001, FND-DEP-001, FND-DEP-002, FND-DEP-003, FND-DEP-004, FND-DEP-005, FND-DEP-006, FND-DEP-007, FND-DEP-008, FND-DEP-009, FND-DEP-010, FND-DEP-011, FND-DEP-012, FND-IDN-002, FND-IDN-005, FND-NET-006, FND-OPS-009, FND-RUN-001, FND-RUN-002, FND-RUN-003, FND-RUN-004, FND-RUN-005, FND-RUN-006, FND-RUN-007, FND-SEC-008, FND-SEC-009.</li>
         <li>Compiled infrastructure (Bicep to ARM) was not available, so template-dependent controls are SKIPPED.</li>
         <li>30 catalogue rules are excluded from the WAF view with a recorded reason (internal/assess/waf/mapping.yaml).</li>
         

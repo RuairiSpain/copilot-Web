@@ -184,6 +184,13 @@ func assessWAF(ctx context.Context, svc Services, req AssessRequest, stdout io.W
 	}
 	findings.Sort(fs)
 	skips := slices.Clone(rep.Skipped)
+	// The selectors above name every WAF rule, which the engine treats as an
+	// explicit request and marks each skip Required. An assessment reports a
+	// skipped control as unassessed instead of failing the run, so the flag is
+	// cleared; --strict still counts the skips that hid a check.
+	for i := range skips {
+		skips[i].Required = false
+	}
 	slices.SortFunc(skips, func(a, b sdk.Skip) int {
 		if a.RuleID != b.RuleID {
 			if a.RuleID < b.RuleID {

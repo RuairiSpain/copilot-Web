@@ -12,16 +12,16 @@
     "Control IDs are Foundry Doctor rule IDs. They are not mapped to WAF checklist codes in this release, and pillar assignments come from the rule catalogue.",
     "The decision wording and the top-action ranking are project opinion, not Microsoft guidance.",
     "PSRule for Azure, Azure Advisor and Microsoft Defender for Cloud recommendations were not imported. Overlapping external check IDs are listed for reference only (ADR-020, ADR-026).",
-    "Deployed Azure state was not queried: assess waf runs offline. Controls that need deployment or runtime evidence and were not evaluated: FND-COST-001, FND-DEP-001, FND-DEP-002, FND-DEP-003, FND-DEP-004, FND-DEP-005, FND-DEP-006, FND-DEP-007, FND-DEP-008, FND-DEP-009, FND-DEP-010, FND-DEP-011, FND-DEP-012, FND-IDN-002, FND-IDN-005, FND-NET-006, FND-RUN-001, FND-RUN-002, FND-RUN-003, FND-RUN-004, FND-RUN-006, FND-RUN-007, FND-SEC-008, FND-SEC-009.",
+    "Deployed Azure state was not queried: assess waf runs offline. Controls that need deployment or runtime evidence and were not evaluated: FND-COST-001, FND-DEP-001, FND-DEP-002, FND-DEP-003, FND-DEP-004, FND-DEP-005, FND-DEP-006, FND-DEP-007, FND-DEP-008, FND-DEP-009, FND-DEP-010, FND-DEP-011, FND-DEP-012, FND-IDN-002, FND-IDN-005, FND-NET-006, FND-OPS-009, FND-RUN-001, FND-RUN-002, FND-RUN-003, FND-RUN-004, FND-RUN-005, FND-RUN-006, FND-RUN-007, FND-SEC-008, FND-SEC-009.",
     "Compiled infrastructure (Bicep to ARM) was not available, so template-dependent controls are SKIPPED.",
     "30 catalogue rules are excluded from the WAF view with a recorded reason (internal/assess/waf/mapping.yaml)."
   ],
   "summary": {
     "states": {
-      "NOT_APPLICABLE": 2,
-      "PASS": 14,
+      "NOT_APPLICABLE": 6,
       "QUESTION": 2,
-      "SKIPPED": 60
+      "SKIPPED": 64,
+      "UNKNOWN": 6
     },
     "pillars": {
       "cost": {
@@ -31,23 +31,24 @@
       },
       "operations": {
         "states": {
-          "NOT_APPLICABLE": 2,
-          "PASS": 5,
+          "NOT_APPLICABLE": 5,
           "QUESTION": 1,
-          "SKIPPED": 11
+          "SKIPPED": 10,
+          "UNKNOWN": 3
         }
       },
       "reliability": {
         "states": {
-          "PASS": 4,
+          "NOT_APPLICABLE": 1,
           "QUESTION": 1,
-          "SKIPPED": 26
+          "SKIPPED": 28,
+          "UNKNOWN": 1
         }
       },
       "security": {
         "states": {
-          "PASS": 5,
-          "SKIPPED": 21
+          "SKIPPED": 24,
+          "UNKNOWN": 2
         }
       }
     }
@@ -59,7 +60,7 @@
       "title": "Budget and alerts exist",
       "pillar": "cost",
       "state": "SKIPPED",
-      "stateReason": "Skipped: synthetic-infrastructure."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
       "controlId": "FND-COST-002",
@@ -67,7 +68,39 @@
       "title": "Dev avoids production-sized fixed SKUs",
       "pillar": "cost",
       "state": "SKIPPED",
-      "stateReason": "Skipped: synthetic-infrastructure."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
+    },
+    {
+      "controlId": "FND-CFG-001",
+      "ruleId": "FND-CFG-001",
+      "title": "Valid YAML, duplicate-key detection and compatible azure.ai.* schema",
+      "pillar": "operations",
+      "state": "UNKNOWN",
+      "stateReason": "No evidence was recorded for this control."
+    },
+    {
+      "controlId": "FND-CFG-002",
+      "ruleId": "FND-CFG-002",
+      "title": "Unique service names by kind",
+      "pillar": "operations",
+      "state": "UNKNOWN",
+      "stateReason": "No evidence was recorded for this control."
+    },
+    {
+      "controlId": "FND-CFG-006",
+      "ruleId": "FND-CFG-006",
+      "title": "Every variable has an environment or infrastructure producer",
+      "pillar": "operations",
+      "state": "SKIPPED",
+      "stateReason": "Skipped: input-unavailable: no-environment-selected."
+    },
+    {
+      "controlId": "FND-CFG-011",
+      "ruleId": "FND-CFG-011",
+      "title": "Preview/retired fields are version-aware",
+      "pillar": "operations",
+      "state": "UNKNOWN",
+      "stateReason": "No evidence was recorded for this control."
     },
     {
       "controlId": "FND-DEP-001",
@@ -94,36 +127,12 @@
       "stateReason": "Skipped: not-implemented."
     },
     {
-      "controlId": "FND-ENV-001",
-      "ruleId": "FND-ENV-001",
-      "title": "Environments do not unintentionally share resource groups",
-      "pillar": "operations",
-      "state": "SKIPPED",
-      "stateReason": "Skipped: input-unavailable: azd environment values are not available (estimated reason)."
-    },
-    {
-      "controlId": "FND-ENV-002",
-      "ruleId": "FND-ENV-002",
-      "title": "Environment-bound names/IDs/rules were not copied unchanged",
-      "pillar": "operations",
-      "state": "SKIPPED",
-      "stateReason": "Skipped: input-unavailable: azd environment values are not available (estimated reason)."
-    },
-    {
-      "controlId": "FND-ENV-004",
-      "ruleId": "FND-ENV-004",
-      "title": "Informational difference summary",
-      "pillar": "operations",
-      "state": "SKIPPED",
-      "stateReason": "Skipped: input-unavailable: azd environment values are not available (estimated reason)."
-    },
-    {
       "controlId": "FND-OPS-001",
       "ruleId": "FND-OPS-001",
       "title": "Diagnostic settings to Log Analytics",
       "pillar": "operations",
       "state": "SKIPPED",
-      "stateReason": "Skipped: synthetic-infrastructure."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
       "controlId": "FND-OPS-002",
@@ -139,7 +148,7 @@
       "title": "Baseline alerts exist",
       "pillar": "operations",
       "state": "SKIPPED",
-      "stateReason": "Skipped: synthetic-infrastructure."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
       "controlId": "FND-OPS-004",
@@ -147,7 +156,15 @@
       "title": "Required tags exist",
       "pillar": "operations",
       "state": "SKIPPED",
-      "stateReason": "Skipped: synthetic-infrastructure."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
+    },
+    {
+      "controlId": "FND-OPS-005",
+      "ruleId": "FND-OPS-005",
+      "title": "Resource-name provider constraints",
+      "pillar": "operations",
+      "state": "SKIPPED",
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
       "controlId": "FND-OPS-006",
@@ -155,7 +172,7 @@
       "title": "Log retention meets policy",
       "pillar": "operations",
       "state": "SKIPPED",
-      "stateReason": "Skipped: synthetic-infrastructure."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
       "controlId": "FND-RUN-007",
@@ -163,7 +180,31 @@
       "title": "Diagnostic logs are arriving",
       "pillar": "operations",
       "state": "SKIPPED",
-      "stateReason": "Skipped: input-unavailable: control-plane evidence is not available offline (estimated reason)."
+      "stateReason": "Skipped: not-implemented."
+    },
+    {
+      "controlId": "FND-CFG-003",
+      "ruleId": "FND-CFG-003",
+      "title": "All inter-service references resolve",
+      "pillar": "reliability",
+      "state": "UNKNOWN",
+      "stateReason": "No evidence was recorded for this control."
+    },
+    {
+      "controlId": "FND-CFG-004",
+      "ruleId": "FND-CFG-004",
+      "title": "Prompt model or hosted source/image is valid",
+      "pillar": "reliability",
+      "state": "SKIPPED",
+      "stateReason": "Skipped: uncertain: assistant: no Dockerfile under \"./agents/assistant\" and no image, codeConfiguration, runtime, startupCommand or skill; the agent source is unclear."
+    },
+    {
+      "controlId": "FND-CFG-012",
+      "ruleId": "FND-CFG-012",
+      "title": "Azure region values are valid",
+      "pillar": "reliability",
+      "state": "SKIPPED",
+      "stateReason": "Skipped: input-unavailable: no-environment-selected."
     },
     {
       "controlId": "FND-DEP-004",
@@ -230,20 +271,12 @@
       "stateReason": "Skipped: not-implemented."
     },
     {
-      "controlId": "FND-ENV-003",
-      "ruleId": "FND-ENV-003",
-      "title": "Prod does not reference non-prod resource IDs",
-      "pillar": "reliability",
-      "state": "SKIPPED",
-      "stateReason": "Skipped: input-unavailable: azd environment values are not available (estimated reason)."
-    },
-    {
       "controlId": "FND-IDN-003",
       "ruleId": "FND-IDN-003",
       "title": "Role assignments use object IDs and principalType",
       "pillar": "reliability",
       "state": "SKIPPED",
-      "stateReason": "Skipped: synthetic-infrastructure."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
       "controlId": "FND-NET-003",
@@ -251,7 +284,7 @@
       "title": "Private endpoint DNS zone groups and VNet links",
       "pillar": "reliability",
       "state": "SKIPPED",
-      "stateReason": "Skipped: synthetic-infrastructure."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
       "controlId": "FND-NET-004",
@@ -259,7 +292,7 @@
       "title": "Agent subnet delegation and sizing",
       "pillar": "reliability",
       "state": "SKIPPED",
-      "stateReason": "Skipped: synthetic-infrastructure."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
       "controlId": "FND-NET-005",
@@ -267,7 +300,7 @@
       "title": "Private-mode VNet/region consistency",
       "pillar": "reliability",
       "state": "SKIPPED",
-      "stateReason": "Skipped: synthetic-infrastructure."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
       "controlId": "FND-NET-006",
@@ -275,7 +308,7 @@
       "title": "Private address space and overlap",
       "pillar": "reliability",
       "state": "SKIPPED",
-      "stateReason": "Skipped: synthetic-infrastructure."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
       "controlId": "FND-NET-008",
@@ -283,7 +316,7 @@
       "title": "Search SKU supports private endpoints",
       "pillar": "reliability",
       "state": "SKIPPED",
-      "stateReason": "Skipped: synthetic-infrastructure."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
       "controlId": "FND-REL-001",
@@ -291,7 +324,7 @@
       "title": "Search replica/SLA posture",
       "pillar": "reliability",
       "state": "SKIPPED",
-      "stateReason": "Skipped: synthetic-infrastructure."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
       "controlId": "FND-REL-002",
@@ -299,7 +332,7 @@
       "title": "Storage redundancy posture",
       "pillar": "reliability",
       "state": "SKIPPED",
-      "stateReason": "Skipped: synthetic-infrastructure."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
       "controlId": "FND-REL-003",
@@ -307,7 +340,7 @@
       "title": "Cosmos zone redundancy and continuous backup",
       "pillar": "reliability",
       "state": "SKIPPED",
-      "stateReason": "Skipped: synthetic-infrastructure."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
       "controlId": "FND-REL-004",
@@ -315,7 +348,7 @@
       "title": "Delete locks on stateful services",
       "pillar": "reliability",
       "state": "SKIPPED",
-      "stateReason": "Skipped: synthetic-infrastructure."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
       "controlId": "FND-REL-005",
@@ -323,7 +356,7 @@
       "title": "Search sizing within platform limits",
       "pillar": "reliability",
       "state": "SKIPPED",
-      "stateReason": "Skipped: synthetic-infrastructure."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
       "controlId": "FND-REL-007",
@@ -339,7 +372,7 @@
       "title": "Provisioned throughput spillover recommendation",
       "pillar": "reliability",
       "state": "SKIPPED",
-      "stateReason": "Skipped: synthetic-infrastructure."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
       "controlId": "FND-REL-009",
@@ -347,7 +380,7 @@
       "title": "APIM availability tier recommendation",
       "pillar": "reliability",
       "state": "SKIPPED",
-      "stateReason": "Skipped: synthetic-infrastructure."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
       "controlId": "FND-RUN-002",
@@ -355,7 +388,7 @@
       "title": "Private DNS resolves from an appropriate vantage point",
       "pillar": "reliability",
       "state": "SKIPPED",
-      "stateReason": "Skipped: input-unavailable: control-plane evidence is not available offline (estimated reason)."
+      "stateReason": "Skipped: not-implemented."
     },
     {
       "controlId": "FND-RUN-003",
@@ -363,7 +396,7 @@
       "title": "Capability host and project connections healthy",
       "pillar": "reliability",
       "state": "SKIPPED",
-      "stateReason": "Skipped: input-unavailable: control-plane evidence is not available offline (estimated reason)."
+      "stateReason": "Skipped: not-implemented."
     },
     {
       "controlId": "FND-RUN-004",
@@ -371,7 +404,15 @@
       "title": "Model deployment state and throttling signal",
       "pillar": "reliability",
       "state": "SKIPPED",
-      "stateReason": "Skipped: input-unavailable: control-plane evidence is not available offline (estimated reason)."
+      "stateReason": "Skipped: not-implemented."
+    },
+    {
+      "controlId": "FND-RUN-005",
+      "ruleId": "FND-RUN-005",
+      "title": "Agent tools/connections respond",
+      "pillar": "reliability",
+      "state": "SKIPPED",
+      "stateReason": "Skipped: not-implemented."
     },
     {
       "controlId": "FND-RUN-006",
@@ -379,7 +420,23 @@
       "title": "Search index/documents/vector/indexer health",
       "pillar": "reliability",
       "state": "SKIPPED",
-      "stateReason": "Skipped: input-unavailable: control-plane evidence is not available offline (estimated reason)."
+      "stateReason": "Skipped: not-implemented."
+    },
+    {
+      "controlId": "FND-CFG-005",
+      "ruleId": "FND-CFG-005",
+      "title": "No raw secrets in YAML/Bicep/environment blocks",
+      "pillar": "security",
+      "state": "UNKNOWN",
+      "stateReason": "No evidence was recorded for this control."
+    },
+    {
+      "controlId": "FND-CFG-007",
+      "ruleId": "FND-CFG-007",
+      "title": "Outbound endpoints use HTTPS and reject unsafe local/metadata targets",
+      "pillar": "security",
+      "state": "UNKNOWN",
+      "stateReason": "No evidence was recorded for this control."
     },
     {
       "controlId": "FND-DEP-003",
@@ -395,7 +452,7 @@
       "title": "Managed identities used for Foundry and workloads",
       "pillar": "security",
       "state": "SKIPPED",
-      "stateReason": "Skipped: synthetic-infrastructure."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
       "controlId": "FND-IDN-002",
@@ -411,7 +468,7 @@
       "title": "No broad Owner/Contributor for application identities",
       "pillar": "security",
       "state": "SKIPPED",
-      "stateReason": "Skipped: synthetic-infrastructure."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
       "controlId": "FND-IDN-005",
@@ -419,7 +476,7 @@
       "title": "Standing human admin access reviewed",
       "pillar": "security",
       "state": "SKIPPED",
-      "stateReason": "Skipped: input-unavailable: control-plane evidence is not available offline (estimated reason)."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
       "controlId": "FND-IDN-006",
@@ -427,7 +484,7 @@
       "title": "Federated credentials use HTTPS issuer and specific subject",
       "pillar": "security",
       "state": "SKIPPED",
-      "stateReason": "Skipped: synthetic-infrastructure."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
       "controlId": "FND-NET-001",
@@ -435,7 +492,7 @@
       "title": "Foundry public access/private endpoint posture",
       "pillar": "security",
       "state": "SKIPPED",
-      "stateReason": "Skipped: synthetic-infrastructure."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
       "controlId": "FND-NET-002",
@@ -443,7 +500,7 @@
       "title": "Dependent services public access/default-deny/private endpoints",
       "pillar": "security",
       "state": "SKIPPED",
-      "stateReason": "Skipped: synthetic-infrastructure."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
       "controlId": "FND-NET-007",
@@ -451,7 +508,7 @@
       "title": "Restricted mode has allowed IP range",
       "pillar": "security",
       "state": "SKIPPED",
-      "stateReason": "Skipped: synthetic-infrastructure."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
       "controlId": "FND-NET-010",
@@ -459,7 +516,7 @@
       "title": "Azure Monitor private-link choice is explicit",
       "pillar": "security",
       "state": "SKIPPED",
-      "stateReason": "Skipped: synthetic-infrastructure."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
       "controlId": "FND-NET-011",
@@ -467,7 +524,23 @@
       "title": "NSG/DDoS recommendations",
       "pillar": "security",
       "state": "SKIPPED",
-      "stateReason": "Skipped: synthetic-infrastructure."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
+    },
+    {
+      "controlId": "FND-OPS-009",
+      "ruleId": "FND-OPS-009",
+      "title": "Data-residency regions and deployment SKU",
+      "pillar": "security",
+      "state": "SKIPPED",
+      "stateReason": "Skipped: profile-key-missing:dataResidency.scope."
+    },
+    {
+      "controlId": "FND-OPS-010",
+      "ruleId": "FND-OPS-010",
+      "title": "Model allow/deny lists remain consistent",
+      "pillar": "security",
+      "state": "SKIPPED",
+      "stateReason": "Skipped: profile-key-missing:models.allow."
     },
     {
       "controlId": "FND-RUN-001",
@@ -475,7 +548,7 @@
       "title": "Effective project identity access",
       "pillar": "security",
       "state": "SKIPPED",
-      "stateReason": "Skipped: synthetic-infrastructure."
+      "stateReason": "Skipped: not-implemented."
     },
     {
       "controlId": "FND-SEC-001",
@@ -483,7 +556,7 @@
       "title": "Foundry local authentication disabled",
       "pillar": "security",
       "state": "SKIPPED",
-      "stateReason": "Skipped: synthetic-infrastructure."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
       "controlId": "FND-SEC-002",
@@ -491,7 +564,7 @@
       "title": "AI Search key authentication disabled or RBAC-only",
       "pillar": "security",
       "state": "SKIPPED",
-      "stateReason": "Skipped: synthetic-infrastructure."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
       "controlId": "FND-SEC-003",
@@ -499,7 +572,7 @@
       "title": "Cosmos DB local authentication disabled",
       "pillar": "security",
       "state": "SKIPPED",
-      "stateReason": "Skipped: synthetic-infrastructure."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
       "controlId": "FND-SEC-004",
@@ -507,7 +580,7 @@
       "title": "Storage shared key/anonymous access disabled; HTTPS/TLS required",
       "pillar": "security",
       "state": "SKIPPED",
-      "stateReason": "Skipped: synthetic-infrastructure."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
       "controlId": "FND-SEC-006",
@@ -515,7 +588,7 @@
       "title": "Firewall rules reject private/open ranges",
       "pillar": "security",
       "state": "SKIPPED",
-      "stateReason": "Skipped: synthetic-infrastructure."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
       "controlId": "FND-SEC-008",
@@ -523,7 +596,7 @@
       "title": "Relevant Defender plans enabled",
       "pillar": "security",
       "state": "SKIPPED",
-      "stateReason": "Skipped: synthetic-infrastructure."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
       "controlId": "FND-SEC-009",
@@ -531,7 +604,7 @@
       "title": "Policy coverage and compliance evidence",
       "pillar": "security",
       "state": "SKIPPED",
-      "stateReason": "Skipped: input-unavailable: control-plane evidence is not available offline (estimated reason)."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
       "controlId": "FND-SEC-010",
@@ -539,7 +612,15 @@
       "title": "Customer-managed keys informational",
       "pillar": "security",
       "state": "SKIPPED",
-      "stateReason": "Skipped: synthetic-infrastructure."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
+    },
+    {
+      "controlId": "FND-SEC-011",
+      "ruleId": "FND-SEC-011",
+      "title": "Controlled outbound egress informational",
+      "pillar": "security",
+      "state": "SKIPPED",
+      "stateReason": "Skipped: unsupported-version."
     },
     {
       "controlId": "FND-SEC-014",
@@ -547,7 +628,7 @@
       "title": "Secrets not emitted as Bicep outputs",
       "pillar": "security",
       "state": "SKIPPED",
-      "stateReason": "Skipped: synthetic-infrastructure."
+      "stateReason": "Skipped: unsupported-version."
     }
   ],
   "costlyRecommendations": [
@@ -694,10 +775,98 @@
       "costBasis": "Customer-managed keys require a billable Azure Key Vault (stated for Azure AI Search; the same Key Vault dependency applies to each service listed).",
       "costSourceUrl": "https://learn.microsoft.com/azure/search/search-sku-manage-costs",
       "costLastVerified": "2026-10-18"
+    },
+    {
+      "controlId": "FND-SEC-011",
+      "ruleId": "FND-SEC-011",
+      "title": "Controlled outbound egress informational",
+      "pillar": "security",
+      "state": "SKIPPED",
+      "mandatory": false,
+      "recommendation": "If you need to control data exfiltration, set the managed network to AllowOnlyApprovedOutbound or restrict outbound access with an allowed FQDN list, and confirm required dependencies are reachable. Otherwise record the decision.",
+      "sourceUrl": "https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json",
+      "lastVerified": "2026-10-04",
+      "projectOpinion": false,
+      "costly": true,
+      "costBasis": "FQDN outbound rules in Allow Only Approved Outbound mode create a managed Azure Firewall, which adds Azure Firewall charges.",
+      "costSourceUrl": "https://learn.microsoft.com/azure/foundry/how-to/managed-virtual-network",
+      "costLastVerified": "2026-10-18"
     }
   ],
   "controls": {
     "not_applicable": [
+      {
+        "controlId": "FND-ENV-001",
+        "ruleId": "FND-ENV-001",
+        "ruleVersion": 5,
+        "title": "Environments do not unintentionally share resource groups",
+        "pillar": "operations",
+        "state": "NOT_APPLICABLE",
+        "basis": "deterministic",
+        "stateReason": "Not applicable: not-applicable: fewer than two azd environments.",
+        "mandatory": true,
+        "costly": false,
+        "projectOpinion": false,
+        "sourceUrl": "https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview",
+        "lastVerified": "2026-10-05",
+        "recommendation": "Give each environment its own resource group, for example by including the environment name in the group name (resourceGroup: rg-${AZURE_ENV_NAME}), or record an explicit suppression with a reason and expiry when sharing is intentional.",
+        "fix": "name: my-agent-project\nresourceGroup: rg-${AZURE_ENV_NAME}",
+        "skipped": [
+          {
+            "ruleId": "FND-ENV-001",
+            "reason": "not-applicable: fewer than two azd environments"
+          }
+        ],
+        "evaluated": false
+      },
+      {
+        "controlId": "FND-ENV-002",
+        "ruleId": "FND-ENV-002",
+        "ruleVersion": 4,
+        "title": "Environment-bound names/IDs/rules were not copied unchanged",
+        "pillar": "operations",
+        "state": "NOT_APPLICABLE",
+        "basis": "deterministic",
+        "stateReason": "Not applicable: not-applicable: fewer than two azd environments.",
+        "mandatory": false,
+        "costly": false,
+        "projectOpinion": true,
+        "sourceUrl": "https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview",
+        "lastVerified": "2026-10-05",
+        "recommendation": "Review each reported key and give the environment its own value, or suppress the finding with a reason and an expiry where the shared value is intentional. Prefer deriving names from AZURE_ENV_NAME.",
+        "fix": "# .azure/prod/.env\nAZURE_RESOURCE_GROUP=rg-myapp-prod\nAZURE_AI_PROJECT_ENDPOINT=https://prod-account.services.ai.azure.com/api/projects/prod-project",
+        "skipped": [
+          {
+            "ruleId": "FND-ENV-002",
+            "reason": "not-applicable: fewer than two azd environments"
+          }
+        ],
+        "evaluated": false
+      },
+      {
+        "controlId": "FND-ENV-004",
+        "ruleId": "FND-ENV-004",
+        "ruleVersion": 3,
+        "title": "Informational difference summary",
+        "pillar": "operations",
+        "state": "NOT_APPLICABLE",
+        "basis": "deterministic",
+        "stateReason": "Not applicable: not-applicable: fewer than two azd environments.",
+        "mandatory": false,
+        "costly": false,
+        "projectOpinion": true,
+        "sourceUrl": "https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview",
+        "lastVerified": "2026-10-05",
+        "recommendation": "Review the summary before promoting a release; use azd env get-values per environment for the details you are entitled to see.",
+        "fix": "foundry-doctor compare --env dev --env prod",
+        "skipped": [
+          {
+            "ruleId": "FND-ENV-004",
+            "reason": "not-applicable: fewer than two azd environments"
+          }
+        ],
+        "evaluated": false
+      },
       {
         "controlId": "FND-OPS-007",
         "ruleId": "FND-OPS-007",
@@ -746,263 +915,30 @@
           }
         ],
         "evaluated": false
-      }
-    ],
-    "pass": [
+      },
       {
-        "controlId": "FND-CFG-001",
-        "ruleId": "FND-CFG-001",
-        "ruleVersion": 7,
-        "title": "Valid YAML, duplicate-key detection and compatible azure.ai.* schema",
-        "pillar": "operations",
-        "state": "PASS",
+        "controlId": "FND-ENV-003",
+        "ruleId": "FND-ENV-003",
+        "ruleVersion": 4,
+        "title": "Prod does not reference non-prod resource IDs",
+        "pillar": "reliability",
+        "state": "NOT_APPLICABLE",
         "basis": "deterministic",
-        "stateReason": "Evaluated with no remaining finding and no skipped check.",
+        "stateReason": "Not applicable: not-applicable: fewer than two azd environments.",
         "mandatory": true,
         "costly": false,
-        "projectOpinion": false,
-        "sourceUrl": "https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference",
+        "projectOpinion": true,
+        "sourceUrl": "https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview",
         "lastVerified": "2026-10-05",
-        "recommendation": "Fix the YAML syntax or the reported schema violation. Add the yaml-language-server schema comment to azure.yaml so the editor flags the same errors, and install azure.ai.agents and azure.ai.projects at the versions declared in requiredVersions.",
-        "fix": "# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json\nname: my-agent-project\nservices:\n  ai-project:\n    host: azure.ai.project\n  my-agent:\n    host: azure.ai.agent\n    project: src/my-agent\n    uses: [ai-project]\n    kind: hosted",
-        "evaluated": true
-      },
-      {
-        "controlId": "FND-CFG-002",
-        "ruleId": "FND-CFG-002",
-        "ruleVersion": 2,
-        "title": "Unique service names by kind",
-        "pillar": "operations",
-        "state": "PASS",
-        "basis": "deterministic",
-        "stateReason": "Evaluated with no remaining finding and no skipped check.",
-        "mandatory": true,
-        "costly": false,
-        "projectOpinion": false,
-        "sourceUrl": "https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference",
-        "lastVerified": "2026-10-04",
-        "recommendation": "Give separate logical agents distinct names. If the services intentionally represent versions of one agent, keep one service definition and deploy the intended version through that service.",
-        "fix": "services:\n  ai-project:\n    host: azure.ai.project\n  triage:\n    host: azure.ai.agent\n    project: src/triage\n    uses: [ai-project]\n    kind: hosted\n    name: triage-agent\n  summarizer:\n    host: azure.ai.agent\n    project: src/summarizer\n    uses: [ai-project]\n    kind: hosted\n    name: summarizer-agent",
-        "evaluated": true
-      },
-      {
-        "controlId": "FND-CFG-006",
-        "ruleId": "FND-CFG-006",
-        "ruleVersion": 5,
-        "title": "Every variable has an environment or infrastructure producer",
-        "pillar": "operations",
-        "state": "PASS",
-        "basis": "deterministic",
-        "stateReason": "Evaluated with no remaining finding and no skipped check.",
-        "mandatory": true,
-        "costly": false,
-        "projectOpinion": false,
-        "sourceUrl": "https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference",
-        "lastVerified": "2026-10-04",
-        "recommendation": "Set the variable in the active azd environment (azd env set), emit it from a Bicep output, give it an inline default, or remove the reference. Do not declare FOUNDRY_ or AGENT_ prefixed names in the azure.yaml service env (FND-CFG-011).",
-        "fix": "# Produce the value\n#   azd env set MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME gpt-5.4-mini\nservices:\n  ai-project:\n    host: azure.ai.project\n  my-agent:\n    host: azure.ai.agent\n    project: src/my-agent\n    uses: [ai-project]\n    kind: hosted\n    env:\n      MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME: ${MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME}\n      LOG_LEVEL: ${LOG_LEVEL:-info}",
-        "evaluated": true
-      },
-      {
-        "controlId": "FND-CFG-011",
-        "ruleId": "FND-CFG-011",
-        "ruleVersion": 5,
-        "title": "Preview/retired fields are version-aware",
-        "pillar": "operations",
-        "state": "PASS",
-        "basis": "deterministic",
-        "stateReason": "Evaluated with no remaining finding and no skipped check.",
-        "mandatory": true,
-        "costly": false,
-        "projectOpinion": false,
-        "sourceUrl": "https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference",
-        "lastVerified": "2026-10-04",
-        "recommendation": "Move to the unified service-level shape: put env on the agent service, use kind voice, use host azure.ai.project instead of microsoft.foundry, drop fields the hosted-agent create request ignores, and declare requiredVersions for extension versions verified by this catalogue. Do not infer a field's introduction version from the current schema.",
-        "fix": "requiredVersions:\n  extensions:\n    azure.ai.agents: \"\u003e=1.0.0-beta.18\"\n    azure.ai.projects: \"\u003e=1.0.0-beta.13\"\nservices:\n  ai-project:\n    host: azure.ai.project\n  my-agent:\n    host: azure.ai.agent\n    project: src/my-agent\n    uses: [ai-project]\n    kind: hosted\n    env:\n      MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME: ${MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME}",
-        "evaluated": true
-      },
-      {
-        "controlId": "FND-OPS-005",
-        "ruleId": "FND-OPS-005",
-        "ruleVersion": 2,
-        "title": "Resource-name provider constraints",
-        "pillar": "operations",
-        "state": "PASS",
-        "basis": "deterministic",
-        "stateReason": "Evaluated with no remaining finding and no skipped check.",
-        "mandatory": true,
-        "costly": false,
-        "projectOpinion": false,
-        "sourceUrl": "https://learn.microsoft.com/azure/azure-resource-manager/management/resource-name-rules",
-        "lastVerified": "2026-10-04",
-        "recommendation": "Choose names that satisfy the provider limits for every environment name azd can produce, constrain name parameters with @minLength and @maxLength, and keep a short resource token for globally scoped resources (Storage 24, Key Vault 24, Cosmos DB 44, APIM 50, Search 60).",
-        "fix": "@minLength(3)\n@maxLength(24)\nparam storageName string\n\nresource sa 'Microsoft.Storage/storageAccounts@2024-01-01' = {\n  name: toLower(replace(storageName, '-', ''))\n  location: location\n  sku: { name: 'Standard_LRS' }\n  kind: 'StorageV2'\n}",
-        "evaluated": true
-      },
-      {
-        "controlId": "FND-CFG-003",
-        "ruleId": "FND-CFG-003",
-        "ruleVersion": 4,
-        "title": "All inter-service references resolve",
-        "pillar": "reliability",
-        "state": "PASS",
-        "basis": "deterministic",
-        "stateReason": "Evaluated with no remaining finding and no skipped check.",
-        "mandatory": true,
-        "costly": false,
-        "projectOpinion": false,
-        "sourceUrl": "https://learn.microsoft.com/azure/foundry/agents/how-to/author-azure-yaml",
-        "lastVerified": "2026-10-04",
-        "recommendation": "Make each referenced name match a service key defined under services, and add toolbox and connection services to the consuming agent uses list as well as its toolboxes or connections list.",
-        "fix": "# Partial fragment: category, target and authentication fields for the\n# connection, plus toolbox-specific required fields, depend on the selected\n# documented tool. Merge this graph into a schema-valid manifest.\nservices:\n  ai-project:\n    host: azure.ai.project\n  github-conn:\n    host: azure.ai.connection\n    uses: [ai-project]\n  agent-tools:\n    host: azure.ai.toolbox\n    uses: [ai-project, github-conn]\n    tools:\n      - type: mcp\n        connection: github-conn\n  my-agent:\n    host: azure.ai.agent\n    project: src/my-agent\n    uses: [ai-project, github-conn, agent-tools]\n    kind: hosted\n    toolboxes: [agent-tools]",
-        "evaluated": true
-      },
-      {
-        "controlId": "FND-CFG-004",
-        "ruleId": "FND-CFG-004",
-        "ruleVersion": 4,
-        "title": "Prompt model or hosted source/image is valid",
-        "pillar": "reliability",
-        "state": "PASS",
-        "basis": "deterministic",
-        "stateReason": "Evaluated with no remaining finding and no skipped check.",
-        "mandatory": true,
-        "costly": false,
-        "projectOpinion": false,
-        "sourceUrl": "https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference",
-        "lastVerified": "2026-10-05",
-        "recommendation": "Set model to the name of a deployment declared on the project, provide instructions for prompt agents, and for hosted agents provide either source with a Dockerfile, a codeConfiguration, or a prebuilt image.",
-        "fix": "services:\n  ai-project:\n    host: azure.ai.project\n    deployments:\n      - name: gpt-5.4-mini\n        model: {format: OpenAI, name: gpt-5.4-mini, version: \"2026-03-17\"}\n        sku: {name: GlobalStandard, capacity: 10}\n  helper:\n    host: azure.ai.agent\n    project: src/helper\n    uses: [ai-project]\n    kind: prompt\n    name: helper\n    model: gpt-5.4-mini\n    instructions: Answer briefly.",
-        "evaluated": true
-      },
-      {
-        "controlId": "FND-CFG-012",
-        "ruleId": "FND-CFG-012",
-        "ruleVersion": 4,
-        "title": "Azure region values are valid",
-        "pillar": "reliability",
-        "state": "PASS",
-        "basis": "deterministic",
-        "stateReason": "Evaluated with no remaining finding and no skipped check.",
-        "mandatory": false,
-        "costly": false,
-        "projectOpinion": true,
-        "sourceUrl": "https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/subscriptions/stable/2022-12-01/subscriptions.json",
-        "lastVerified": "2026-10-04",
-        "recommendation": "Use a location name returned by az account list-locations for your subscription (the name field, such as eastus2), and set it with azd env set AZURE_LOCATION. Check model and resource availability for the region before provisioning.",
-        "fix": "azd env set AZURE_LOCATION eastus2",
-        "evaluated": true
-      },
-      {
-        "controlId": "FND-RUN-005",
-        "ruleId": "FND-RUN-005",
-        "ruleVersion": 4,
-        "title": "Agent tools/connections respond",
-        "pillar": "reliability",
-        "state": "PASS",
-        "basis": "deterministic",
-        "stateReason": "Evaluated with no remaining finding and no skipped check.",
-        "mandatory": false,
-        "costly": false,
-        "projectOpinion": true,
-        "sourceUrl": "https://github.com/Azure/azure-dev/blob/main/cli/azd/extensions/azure.ai.agents/internal/project/service_target_agent.go",
-        "lastVerified": "2026-10-18",
-        "recommendation": "Open the failing agent version or connection in the Foundry portal, read its error, and redeploy the agent or recreate the connection. Test tool calls with an explicit, operator-run test; the doctor does not call tools.",
-        "fix": "# azure.yaml: keep the agent service and the connection names it uses aligned with the project\nservices:\n  support-agent:\n    host: azure.ai.agent",
-        "evaluated": true
-      },
-      {
-        "controlId": "FND-CFG-005",
-        "ruleId": "FND-CFG-005",
-        "ruleVersion": 4,
-        "title": "No raw secrets in YAML/Bicep/environment blocks",
-        "pillar": "security",
-        "state": "PASS",
-        "basis": "deterministic",
-        "stateReason": "Evaluated with no remaining finding and no skipped check.",
-        "mandatory": true,
-        "costly": false,
-        "projectOpinion": false,
-        "sourceUrl": "https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference",
-        "lastVerified": "2026-10-05",
-        "recommendation": "Store the secret in the azd environment as a secret (azd env set-secret) or in Key Vault, and reference it with ${VAR} in azure.yaml. In Bicep, mark secret parameters @secure() with no default and never output them. Prefer Entra ID or managed identity authentication where the target supports it.",
-        "fix": "services:\n  github-conn:\n    host: azure.ai.connection\n    uses: [ai-project]\n    category: RemoteTool\n    target: https://api.githubcopilot.com/mcp\n    authType: CustomKeys\n    credentials:\n      Authorization: ${GITHUB_PAT}   # set with: azd env set-secret GITHUB_PAT",
-        "evaluated": true
-      },
-      {
-        "controlId": "FND-CFG-007",
-        "ruleId": "FND-CFG-007",
-        "ruleVersion": 2,
-        "title": "Outbound endpoints use HTTPS and reject unsafe local/metadata targets",
-        "pillar": "security",
-        "state": "PASS",
-        "basis": "deterministic",
-        "stateReason": "Evaluated with no remaining finding and no skipped check.",
-        "mandatory": true,
-        "costly": false,
-        "projectOpinion": true,
-        "sourceUrl": "https://learn.microsoft.com/azure/foundry/agents/how-to/tools/model-context-protocol",
-        "lastVerified": "2026-10-04",
-        "recommendation": "Use https endpoints reachable from the service that calls them. For internal servers, publish them on a private endpoint or an internal Container Apps ingress and use their private DNS name over https instead of an IP literal. Remove localhost and metadata addresses from deployed configuration.",
-        "fix": "services:\n  github-conn:\n    host: azure.ai.connection\n    category: RemoteTool\n    target: https://api.githubcopilot.com/mcp",
-        "evaluated": true
-      },
-      {
-        "controlId": "FND-OPS-009",
-        "ruleId": "FND-OPS-009",
-        "ruleVersion": 2,
-        "title": "Data-residency regions and deployment SKU",
-        "pillar": "security",
-        "state": "PASS",
-        "basis": "deterministic",
-        "stateReason": "Evaluated with no remaining finding and no skipped check.",
-        "mandatory": true,
-        "costly": false,
-        "projectOpinion": false,
-        "sourceUrl": "https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types",
-        "lastVerified": "2026-10-04",
-        "recommendation": "Choose a deployment SKU that matches the residency requirement - Data Zone Standard or Data Zone Provisioned for a data zone, Standard or Regional Provisioned for a geography - in a region that belongs to that zone or geography, and keep the region list in the profile current.",
-        "fix": "# azure.yaml\nservices:\n  ai-project:\n    host: azure.ai.project\n    deployments:\n      - name: chat\n        model: { format: OpenAI, name: gpt-5.4-mini, version: \"2026-03-17\" }\n        sku: { name: DataZoneStandard, capacity: 10 }",
-        "evaluated": true
-      },
-      {
-        "controlId": "FND-OPS-010",
-        "ruleId": "FND-OPS-010",
-        "ruleVersion": 2,
-        "title": "Model allow/deny lists remain consistent",
-        "pillar": "security",
-        "state": "PASS",
-        "basis": "deterministic",
-        "stateReason": "Evaluated with no remaining finding and no skipped check.",
-        "mandatory": false,
-        "costly": false,
-        "projectOpinion": true,
-        "sourceUrl": "https://learn.microsoft.com/azure/foundry/how-to/model-deployment-policy",
-        "lastVerified": "2026-10-04",
-        "recommendation": "Keep one source of truth for approved models, mirror it in the policy assignment parameters allowedPublishers and allowedAssetIds, and remove any model from azure.yaml that the lists exclude. Assign the policy with Audit first and move to Deny after the compliance dashboard is clean.",
-        "fix": "# profile excerpt (allow list) - mirror the same values in the policy assignment parameters\nmodels:\n  allow:\n    publishers: [\"OpenAI\"]\n  deny: []",
-        "evaluated": true
-      },
-      {
-        "controlId": "FND-SEC-011",
-        "ruleId": "FND-SEC-011",
-        "ruleVersion": 1,
-        "title": "Controlled outbound egress informational",
-        "pillar": "security",
-        "state": "PASS",
-        "basis": "deterministic",
-        "stateReason": "Evaluated with no remaining finding and no skipped check.",
-        "mandatory": false,
-        "costly": true,
-        "costBasis": "FQDN outbound rules in Allow Only Approved Outbound mode create a managed Azure Firewall, which adds Azure Firewall charges.",
-        "costSourceUrl": "https://learn.microsoft.com/azure/foundry/how-to/managed-virtual-network",
-        "costLastVerified": "2026-10-18",
-        "projectOpinion": false,
-        "sourceUrl": "https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json",
-        "lastVerified": "2026-10-04",
-        "recommendation": "If you need to control data exfiltration, set the managed network to AllowOnlyApprovedOutbound or restrict outbound access with an allowed FQDN list, and confirm required dependencies are reachable. Otherwise record the decision.",
-        "fix": "# azure.yaml (azure.ai.project service)\nnetwork:\n  peSubnet:\n    vnet: ${VNET_RESOURCE_ID}\n    name: private-endpoint-subnet\n  isolationMode: AllowOnlyApprovedOutbound",
-        "evaluated": true
+        "recommendation": "Point the production environment at production resources, or provision the dependency in production. Re-run provisioning for the production environment so its outputs are written to its own .env.",
+        "fix": "# .azure/prod/.env\nAZURE_AI_PROJECT_ENDPOINT=https://prod-account.services.ai.azure.com/api/projects/prod-project",
+        "skipped": [
+          {
+            "ruleId": "FND-ENV-003",
+            "reason": "not-applicable: fewer than two azd environments"
+          }
+        ],
+        "evaluated": false
       }
     ],
     "question": [
@@ -1095,7 +1031,7 @@
         "pillar": "cost",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: synthetic-infrastructure.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": false,
         "costly": false,
         "projectOpinion": true,
@@ -1106,8 +1042,7 @@
         "skipped": [
           {
             "ruleId": "FND-COST-001",
-            "reason": "synthetic-infrastructure",
-            "missingCapability": "compiled ARM template"
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
@@ -1120,7 +1055,7 @@
         "pillar": "cost",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: synthetic-infrastructure.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": false,
         "costly": false,
         "projectOpinion": true,
@@ -1131,8 +1066,31 @@
         "skipped": [
           {
             "ruleId": "FND-COST-002",
-            "reason": "synthetic-infrastructure",
-            "missingCapability": "compiled ARM template"
+            "reason": "input-unavailable: compiled ARM model unavailable"
+          }
+        ],
+        "evaluated": false
+      },
+      {
+        "controlId": "FND-CFG-006",
+        "ruleId": "FND-CFG-006",
+        "ruleVersion": 5,
+        "title": "Every variable has an environment or infrastructure producer",
+        "pillar": "operations",
+        "state": "SKIPPED",
+        "basis": "none",
+        "stateReason": "Skipped: input-unavailable: no-environment-selected.",
+        "mandatory": true,
+        "costly": false,
+        "projectOpinion": false,
+        "sourceUrl": "https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference",
+        "lastVerified": "2026-10-04",
+        "recommendation": "Set the variable in the active azd environment (azd env set), emit it from a Bicep output, give it an inline default, or remove the reference. Do not declare FOUNDRY_ or AGENT_ prefixed names in the azure.yaml service env (FND-CFG-011).",
+        "fix": "# Produce the value\n#   azd env set MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME gpt-5.4-mini\nservices:\n  ai-project:\n    host: azure.ai.project\n  my-agent:\n    host: azure.ai.agent\n    project: src/my-agent\n    uses: [ai-project]\n    kind: hosted\n    env:\n      MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME: ${MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME}\n      LOG_LEVEL: ${LOG_LEVEL:-info}",
+        "skipped": [
+          {
+            "ruleId": "FND-CFG-006",
+            "reason": "input-unavailable: no-environment-selected"
           }
         ],
         "evaluated": false
@@ -1210,78 +1168,6 @@
         "evaluated": false
       },
       {
-        "controlId": "FND-ENV-001",
-        "ruleId": "FND-ENV-001",
-        "ruleVersion": 5,
-        "title": "Environments do not unintentionally share resource groups",
-        "pillar": "operations",
-        "state": "SKIPPED",
-        "basis": "none",
-        "stateReason": "Skipped: input-unavailable: azd environment values are not available (estimated reason).",
-        "mandatory": true,
-        "costly": false,
-        "projectOpinion": false,
-        "sourceUrl": "https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview",
-        "lastVerified": "2026-10-05",
-        "recommendation": "Give each environment its own resource group, for example by including the environment name in the group name (resourceGroup: rg-${AZURE_ENV_NAME}), or record an explicit suppression with a reason and expiry when sharing is intentional.",
-        "fix": "name: my-agent-project\nresourceGroup: rg-${AZURE_ENV_NAME}",
-        "skipped": [
-          {
-            "ruleId": "FND-ENV-001",
-            "reason": "input-unavailable: azd environment values are not available (estimated reason)"
-          }
-        ],
-        "evaluated": false
-      },
-      {
-        "controlId": "FND-ENV-002",
-        "ruleId": "FND-ENV-002",
-        "ruleVersion": 4,
-        "title": "Environment-bound names/IDs/rules were not copied unchanged",
-        "pillar": "operations",
-        "state": "SKIPPED",
-        "basis": "none",
-        "stateReason": "Skipped: input-unavailable: azd environment values are not available (estimated reason).",
-        "mandatory": false,
-        "costly": false,
-        "projectOpinion": true,
-        "sourceUrl": "https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview",
-        "lastVerified": "2026-10-05",
-        "recommendation": "Review each reported key and give the environment its own value, or suppress the finding with a reason and an expiry where the shared value is intentional. Prefer deriving names from AZURE_ENV_NAME.",
-        "fix": "# .azure/prod/.env\nAZURE_RESOURCE_GROUP=rg-myapp-prod\nAZURE_AI_PROJECT_ENDPOINT=https://prod-account.services.ai.azure.com/api/projects/prod-project",
-        "skipped": [
-          {
-            "ruleId": "FND-ENV-002",
-            "reason": "input-unavailable: azd environment values are not available (estimated reason)"
-          }
-        ],
-        "evaluated": false
-      },
-      {
-        "controlId": "FND-ENV-004",
-        "ruleId": "FND-ENV-004",
-        "ruleVersion": 3,
-        "title": "Informational difference summary",
-        "pillar": "operations",
-        "state": "SKIPPED",
-        "basis": "none",
-        "stateReason": "Skipped: input-unavailable: azd environment values are not available (estimated reason).",
-        "mandatory": false,
-        "costly": false,
-        "projectOpinion": true,
-        "sourceUrl": "https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview",
-        "lastVerified": "2026-10-05",
-        "recommendation": "Review the summary before promoting a release; use azd env get-values per environment for the details you are entitled to see.",
-        "fix": "foundry-doctor compare --env dev --env prod",
-        "skipped": [
-          {
-            "ruleId": "FND-ENV-004",
-            "reason": "input-unavailable: azd environment values are not available (estimated reason)"
-          }
-        ],
-        "evaluated": false
-      },
-      {
         "controlId": "FND-OPS-001",
         "ruleId": "FND-OPS-001",
         "ruleVersion": 2,
@@ -1289,7 +1175,7 @@
         "pillar": "operations",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: synthetic-infrastructure.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": true,
         "costly": false,
         "projectOpinion": false,
@@ -1300,8 +1186,7 @@
         "skipped": [
           {
             "ruleId": "FND-OPS-001",
-            "reason": "synthetic-infrastructure",
-            "missingCapability": "compiled ARM template"
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
@@ -1314,7 +1199,7 @@
         "pillar": "operations",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: synthetic-infrastructure.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": false,
         "costly": false,
         "projectOpinion": true,
@@ -1325,8 +1210,7 @@
         "skipped": [
           {
             "ruleId": "FND-OPS-003",
-            "reason": "synthetic-infrastructure",
-            "missingCapability": "compiled ARM template"
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
@@ -1339,7 +1223,7 @@
         "pillar": "operations",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: synthetic-infrastructure.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": false,
         "costly": false,
         "projectOpinion": true,
@@ -1350,8 +1234,31 @@
         "skipped": [
           {
             "ruleId": "FND-OPS-004",
-            "reason": "synthetic-infrastructure",
-            "missingCapability": "compiled ARM template"
+            "reason": "input-unavailable: compiled ARM model unavailable"
+          }
+        ],
+        "evaluated": false
+      },
+      {
+        "controlId": "FND-OPS-005",
+        "ruleId": "FND-OPS-005",
+        "ruleVersion": 2,
+        "title": "Resource-name provider constraints",
+        "pillar": "operations",
+        "state": "SKIPPED",
+        "basis": "none",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
+        "mandatory": true,
+        "costly": false,
+        "projectOpinion": false,
+        "sourceUrl": "https://learn.microsoft.com/azure/azure-resource-manager/management/resource-name-rules",
+        "lastVerified": "2026-10-04",
+        "recommendation": "Choose names that satisfy the provider limits for every environment name azd can produce, constrain name parameters with @minLength and @maxLength, and keep a short resource token for globally scoped resources (Storage 24, Key Vault 24, Cosmos DB 44, APIM 50, Search 60).",
+        "fix": "@minLength(3)\n@maxLength(24)\nparam storageName string\n\nresource sa 'Microsoft.Storage/storageAccounts@2024-01-01' = {\n  name: toLower(replace(storageName, '-', ''))\n  location: location\n  sku: { name: 'Standard_LRS' }\n  kind: 'StorageV2'\n}",
+        "skipped": [
+          {
+            "ruleId": "FND-OPS-005",
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
@@ -1364,7 +1271,7 @@
         "pillar": "operations",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: synthetic-infrastructure.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": false,
         "costly": true,
         "costBasis": "Log Analytics charges for data retention in addition to ingestion; longer retention adds cost.",
@@ -1378,8 +1285,7 @@
         "skipped": [
           {
             "ruleId": "FND-OPS-006",
-            "reason": "synthetic-infrastructure",
-            "missingCapability": "compiled ARM template"
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
@@ -1392,7 +1298,7 @@
         "pillar": "operations",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: input-unavailable: control-plane evidence is not available offline (estimated reason).",
+        "stateReason": "Skipped: not-implemented.",
         "mandatory": false,
         "costly": false,
         "projectOpinion": false,
@@ -1403,7 +1309,55 @@
         "skipped": [
           {
             "ruleId": "FND-RUN-007",
-            "reason": "input-unavailable: control-plane evidence is not available offline (estimated reason)"
+            "reason": "not-implemented"
+          }
+        ],
+        "evaluated": false
+      },
+      {
+        "controlId": "FND-CFG-004",
+        "ruleId": "FND-CFG-004",
+        "ruleVersion": 4,
+        "title": "Prompt model or hosted source/image is valid",
+        "pillar": "reliability",
+        "state": "SKIPPED",
+        "basis": "none",
+        "stateReason": "Skipped: uncertain: assistant: no Dockerfile under \"./agents/assistant\" and no image, codeConfiguration, runtime, startupCommand or skill; the agent source is unclear.",
+        "mandatory": true,
+        "costly": false,
+        "projectOpinion": false,
+        "sourceUrl": "https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference",
+        "lastVerified": "2026-10-05",
+        "recommendation": "Set model to the name of a deployment declared on the project, provide instructions for prompt agents, and for hosted agents provide either source with a Dockerfile, a codeConfiguration, or a prebuilt image.",
+        "fix": "services:\n  ai-project:\n    host: azure.ai.project\n    deployments:\n      - name: gpt-5.4-mini\n        model: {format: OpenAI, name: gpt-5.4-mini, version: \"2026-03-17\"}\n        sku: {name: GlobalStandard, capacity: 10}\n  helper:\n    host: azure.ai.agent\n    project: src/helper\n    uses: [ai-project]\n    kind: prompt\n    name: helper\n    model: gpt-5.4-mini\n    instructions: Answer briefly.",
+        "skipped": [
+          {
+            "ruleId": "FND-CFG-004",
+            "reason": "uncertain: assistant: no Dockerfile under \"./agents/assistant\" and no image, codeConfiguration, runtime, startupCommand or skill; the agent source is unclear"
+          }
+        ],
+        "evaluated": false
+      },
+      {
+        "controlId": "FND-CFG-012",
+        "ruleId": "FND-CFG-012",
+        "ruleVersion": 4,
+        "title": "Azure region values are valid",
+        "pillar": "reliability",
+        "state": "SKIPPED",
+        "basis": "none",
+        "stateReason": "Skipped: input-unavailable: no-environment-selected.",
+        "mandatory": false,
+        "costly": false,
+        "projectOpinion": true,
+        "sourceUrl": "https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/subscriptions/stable/2022-12-01/subscriptions.json",
+        "lastVerified": "2026-10-04",
+        "recommendation": "Use a location name returned by az account list-locations for your subscription (the name field, such as eastus2), and set it with azd env set AZURE_LOCATION. Check model and resource availability for the region before provisioning.",
+        "fix": "azd env set AZURE_LOCATION eastus2",
+        "skipped": [
+          {
+            "ruleId": "FND-CFG-012",
+            "reason": "input-unavailable: no-environment-selected"
           }
         ],
         "evaluated": false
@@ -1601,30 +1555,6 @@
         "evaluated": false
       },
       {
-        "controlId": "FND-ENV-003",
-        "ruleId": "FND-ENV-003",
-        "ruleVersion": 4,
-        "title": "Prod does not reference non-prod resource IDs",
-        "pillar": "reliability",
-        "state": "SKIPPED",
-        "basis": "none",
-        "stateReason": "Skipped: input-unavailable: azd environment values are not available (estimated reason).",
-        "mandatory": true,
-        "costly": false,
-        "projectOpinion": true,
-        "sourceUrl": "https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview",
-        "lastVerified": "2026-10-05",
-        "recommendation": "Point the production environment at production resources, or provision the dependency in production. Re-run provisioning for the production environment so its outputs are written to its own .env.",
-        "fix": "# .azure/prod/.env\nAZURE_AI_PROJECT_ENDPOINT=https://prod-account.services.ai.azure.com/api/projects/prod-project",
-        "skipped": [
-          {
-            "ruleId": "FND-ENV-003",
-            "reason": "input-unavailable: azd environment values are not available (estimated reason)"
-          }
-        ],
-        "evaluated": false
-      },
-      {
         "controlId": "FND-IDN-003",
         "ruleId": "FND-IDN-003",
         "ruleVersion": 5,
@@ -1632,7 +1562,7 @@
         "pillar": "reliability",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: synthetic-infrastructure.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": true,
         "costly": false,
         "projectOpinion": false,
@@ -1643,8 +1573,7 @@
         "skipped": [
           {
             "ruleId": "FND-IDN-003",
-            "reason": "synthetic-infrastructure",
-            "missingCapability": "compiled ARM template"
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
@@ -1657,7 +1586,7 @@
         "pillar": "reliability",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: synthetic-infrastructure.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": true,
         "costly": false,
         "projectOpinion": false,
@@ -1668,8 +1597,7 @@
         "skipped": [
           {
             "ruleId": "FND-NET-003",
-            "reason": "synthetic-infrastructure",
-            "missingCapability": "compiled ARM template"
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
@@ -1682,7 +1610,7 @@
         "pillar": "reliability",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: synthetic-infrastructure.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": true,
         "costly": false,
         "projectOpinion": false,
@@ -1693,8 +1621,7 @@
         "skipped": [
           {
             "ruleId": "FND-NET-004",
-            "reason": "synthetic-infrastructure",
-            "missingCapability": "compiled ARM template"
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
@@ -1707,7 +1634,7 @@
         "pillar": "reliability",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: synthetic-infrastructure.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": true,
         "costly": false,
         "projectOpinion": false,
@@ -1718,8 +1645,7 @@
         "skipped": [
           {
             "ruleId": "FND-NET-005",
-            "reason": "synthetic-infrastructure",
-            "missingCapability": "compiled ARM template"
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
@@ -1732,7 +1658,7 @@
         "pillar": "reliability",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: synthetic-infrastructure.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": true,
         "costly": false,
         "projectOpinion": false,
@@ -1743,8 +1669,7 @@
         "skipped": [
           {
             "ruleId": "FND-NET-006",
-            "reason": "synthetic-infrastructure",
-            "missingCapability": "compiled ARM template"
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
@@ -1757,7 +1682,7 @@
         "pillar": "reliability",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: synthetic-infrastructure.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": true,
         "costly": false,
         "projectOpinion": false,
@@ -1768,8 +1693,7 @@
         "skipped": [
           {
             "ruleId": "FND-NET-008",
-            "reason": "synthetic-infrastructure",
-            "missingCapability": "compiled ARM template"
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
@@ -1782,7 +1706,7 @@
         "pillar": "reliability",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: synthetic-infrastructure.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": false,
         "costly": true,
         "costBasis": "Dedicated Azure AI Search bills per search unit (replicas x partitions); adding replicas raises cost.",
@@ -1810,8 +1734,7 @@
         "skipped": [
           {
             "ruleId": "FND-REL-001",
-            "reason": "synthetic-infrastructure",
-            "missingCapability": "compiled ARM template"
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
@@ -1824,7 +1747,7 @@
         "pillar": "reliability",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: synthetic-infrastructure.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": false,
         "costly": true,
         "costBasis": "LRS is the lowest-cost redundancy option; ZRS and GZRS trade higher cost for availability.",
@@ -1846,8 +1769,7 @@
         "skipped": [
           {
             "ruleId": "FND-REL-002",
-            "reason": "synthetic-infrastructure",
-            "missingCapability": "compiled ARM template"
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
@@ -1860,7 +1782,7 @@
         "pillar": "reliability",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: synthetic-infrastructure.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": false,
         "costly": true,
         "costBasis": "Continuous backup at the 30-day or 35-day tier carries a monthly backup storage charge and every restore is charged; the 7-day tier has no backup storage charge. The cost of zone redundancy is not cited here.",
@@ -1888,8 +1810,7 @@
         "skipped": [
           {
             "ruleId": "FND-REL-003",
-            "reason": "synthetic-infrastructure",
-            "missingCapability": "compiled ARM template"
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
@@ -1902,7 +1823,7 @@
         "pillar": "reliability",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: synthetic-infrastructure.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": false,
         "costly": false,
         "projectOpinion": false,
@@ -1913,8 +1834,7 @@
         "skipped": [
           {
             "ruleId": "FND-REL-004",
-            "reason": "synthetic-infrastructure",
-            "missingCapability": "compiled ARM template"
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
@@ -1927,7 +1847,7 @@
         "pillar": "reliability",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: synthetic-infrastructure.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": true,
         "costly": false,
         "projectOpinion": false,
@@ -1938,8 +1858,7 @@
         "skipped": [
           {
             "ruleId": "FND-REL-005",
-            "reason": "synthetic-infrastructure",
-            "missingCapability": "compiled ARM template"
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
@@ -1952,7 +1871,7 @@
         "pillar": "reliability",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: synthetic-infrastructure.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": false,
         "costly": false,
         "projectOpinion": false,
@@ -1971,8 +1890,7 @@
         "skipped": [
           {
             "ruleId": "FND-REL-008",
-            "reason": "synthetic-infrastructure",
-            "missingCapability": "compiled ARM template"
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
@@ -1985,7 +1903,7 @@
         "pillar": "reliability",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: synthetic-infrastructure.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": false,
         "costly": false,
         "projectOpinion": true,
@@ -2023,8 +1941,7 @@
         "skipped": [
           {
             "ruleId": "FND-REL-009",
-            "reason": "synthetic-infrastructure",
-            "missingCapability": "compiled ARM template"
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
@@ -2037,7 +1954,7 @@
         "pillar": "reliability",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: input-unavailable: control-plane evidence is not available offline (estimated reason).",
+        "stateReason": "Skipped: not-implemented.",
         "mandatory": true,
         "costly": false,
         "projectOpinion": false,
@@ -2048,7 +1965,7 @@
         "skipped": [
           {
             "ruleId": "FND-RUN-002",
-            "reason": "input-unavailable: control-plane evidence is not available offline (estimated reason)"
+            "reason": "not-implemented"
           }
         ],
         "evaluated": false
@@ -2061,7 +1978,7 @@
         "pillar": "reliability",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: input-unavailable: control-plane evidence is not available offline (estimated reason).",
+        "stateReason": "Skipped: not-implemented.",
         "mandatory": true,
         "costly": false,
         "projectOpinion": false,
@@ -2072,7 +1989,7 @@
         "skipped": [
           {
             "ruleId": "FND-RUN-003",
-            "reason": "input-unavailable: control-plane evidence is not available offline (estimated reason)"
+            "reason": "not-implemented"
           }
         ],
         "evaluated": false
@@ -2085,7 +2002,7 @@
         "pillar": "reliability",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: input-unavailable: control-plane evidence is not available offline (estimated reason).",
+        "stateReason": "Skipped: not-implemented.",
         "mandatory": true,
         "costly": false,
         "projectOpinion": true,
@@ -2096,7 +2013,31 @@
         "skipped": [
           {
             "ruleId": "FND-RUN-004",
-            "reason": "input-unavailable: control-plane evidence is not available offline (estimated reason)"
+            "reason": "not-implemented"
+          }
+        ],
+        "evaluated": false
+      },
+      {
+        "controlId": "FND-RUN-005",
+        "ruleId": "FND-RUN-005",
+        "ruleVersion": 4,
+        "title": "Agent tools/connections respond",
+        "pillar": "reliability",
+        "state": "SKIPPED",
+        "basis": "none",
+        "stateReason": "Skipped: not-implemented.",
+        "mandatory": false,
+        "costly": false,
+        "projectOpinion": true,
+        "sourceUrl": "https://github.com/Azure/azure-dev/blob/main/cli/azd/extensions/azure.ai.agents/internal/project/service_target_agent.go",
+        "lastVerified": "2026-10-18",
+        "recommendation": "Open the failing agent version or connection in the Foundry portal, read its error, and redeploy the agent or recreate the connection. Test tool calls with an explicit, operator-run test; the doctor does not call tools.",
+        "fix": "# azure.yaml: keep the agent service and the connection names it uses aligned with the project\nservices:\n  support-agent:\n    host: azure.ai.agent",
+        "skipped": [
+          {
+            "ruleId": "FND-RUN-005",
+            "reason": "not-implemented"
           }
         ],
         "evaluated": false
@@ -2109,7 +2050,7 @@
         "pillar": "reliability",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: input-unavailable: control-plane evidence is not available offline (estimated reason).",
+        "stateReason": "Skipped: not-implemented.",
         "mandatory": true,
         "costly": false,
         "projectOpinion": false,
@@ -2120,7 +2061,7 @@
         "skipped": [
           {
             "ruleId": "FND-RUN-006",
-            "reason": "input-unavailable: control-plane evidence is not available offline (estimated reason)"
+            "reason": "not-implemented"
           }
         ],
         "evaluated": false
@@ -2157,7 +2098,7 @@
         "pillar": "security",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: synthetic-infrastructure.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": true,
         "costly": false,
         "projectOpinion": false,
@@ -2168,8 +2109,7 @@
         "skipped": [
           {
             "ruleId": "FND-IDN-001",
-            "reason": "synthetic-infrastructure",
-            "missingCapability": "compiled ARM template"
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
@@ -2206,7 +2146,7 @@
         "pillar": "security",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: synthetic-infrastructure.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": true,
         "costly": false,
         "projectOpinion": false,
@@ -2217,8 +2157,7 @@
         "skipped": [
           {
             "ruleId": "FND-IDN-004",
-            "reason": "synthetic-infrastructure",
-            "missingCapability": "compiled ARM template"
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
@@ -2231,7 +2170,7 @@
         "pillar": "security",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: input-unavailable: control-plane evidence is not available offline (estimated reason).",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": false,
         "costly": false,
         "projectOpinion": false,
@@ -2243,7 +2182,7 @@
         "skipped": [
           {
             "ruleId": "FND-IDN-005",
-            "reason": "input-unavailable: control-plane evidence is not available offline (estimated reason)"
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
@@ -2256,7 +2195,7 @@
         "pillar": "security",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: synthetic-infrastructure.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": true,
         "costly": false,
         "projectOpinion": false,
@@ -2267,8 +2206,7 @@
         "skipped": [
           {
             "ruleId": "FND-IDN-006",
-            "reason": "synthetic-infrastructure",
-            "missingCapability": "compiled ARM template"
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
@@ -2281,7 +2219,7 @@
         "pillar": "security",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: synthetic-infrastructure.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": true,
         "costly": false,
         "projectOpinion": false,
@@ -2292,8 +2230,7 @@
         "skipped": [
           {
             "ruleId": "FND-NET-001",
-            "reason": "synthetic-infrastructure",
-            "missingCapability": "compiled ARM template"
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
@@ -2306,7 +2243,7 @@
         "pillar": "security",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: synthetic-infrastructure.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": true,
         "costly": false,
         "projectOpinion": false,
@@ -2317,8 +2254,7 @@
         "skipped": [
           {
             "ruleId": "FND-NET-002",
-            "reason": "synthetic-infrastructure",
-            "missingCapability": "compiled ARM template"
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
@@ -2331,7 +2267,7 @@
         "pillar": "security",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: synthetic-infrastructure.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": true,
         "costly": false,
         "projectOpinion": false,
@@ -2342,8 +2278,7 @@
         "skipped": [
           {
             "ruleId": "FND-NET-007",
-            "reason": "synthetic-infrastructure",
-            "missingCapability": "compiled ARM template"
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
@@ -2356,7 +2291,7 @@
         "pillar": "security",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: synthetic-infrastructure.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": false,
         "costly": true,
         "costBasis": "An Azure Monitor Private Link Scope is reached through a private endpoint, and Azure Monitor refers its cost to Azure Private Link pricing.",
@@ -2370,8 +2305,7 @@
         "skipped": [
           {
             "ruleId": "FND-NET-010",
-            "reason": "synthetic-infrastructure",
-            "missingCapability": "compiled ARM template"
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
@@ -2384,7 +2318,7 @@
         "pillar": "security",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: synthetic-infrastructure.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": false,
         "costly": true,
         "costBasis": "DDoS Network Protection and DDoS IP Protection are priced per protected IP or per 100 protected IPs; only DDoS infrastructure protection is at no additional cost.",
@@ -2398,8 +2332,55 @@
         "skipped": [
           {
             "ruleId": "FND-NET-011",
-            "reason": "synthetic-infrastructure",
-            "missingCapability": "compiled ARM template"
+            "reason": "input-unavailable: compiled ARM model unavailable"
+          }
+        ],
+        "evaluated": false
+      },
+      {
+        "controlId": "FND-OPS-009",
+        "ruleId": "FND-OPS-009",
+        "ruleVersion": 2,
+        "title": "Data-residency regions and deployment SKU",
+        "pillar": "security",
+        "state": "SKIPPED",
+        "basis": "none",
+        "stateReason": "Skipped: profile-key-missing:dataResidency.scope.",
+        "mandatory": true,
+        "costly": false,
+        "projectOpinion": false,
+        "sourceUrl": "https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types",
+        "lastVerified": "2026-10-04",
+        "recommendation": "Choose a deployment SKU that matches the residency requirement - Data Zone Standard or Data Zone Provisioned for a data zone, Standard or Regional Provisioned for a geography - in a region that belongs to that zone or geography, and keep the region list in the profile current.",
+        "fix": "# azure.yaml\nservices:\n  ai-project:\n    host: azure.ai.project\n    deployments:\n      - name: chat\n        model: { format: OpenAI, name: gpt-5.4-mini, version: \"2026-03-17\" }\n        sku: { name: DataZoneStandard, capacity: 10 }",
+        "skipped": [
+          {
+            "ruleId": "FND-OPS-009",
+            "reason": "profile-key-missing:dataResidency.scope"
+          }
+        ],
+        "evaluated": false
+      },
+      {
+        "controlId": "FND-OPS-010",
+        "ruleId": "FND-OPS-010",
+        "ruleVersion": 2,
+        "title": "Model allow/deny lists remain consistent",
+        "pillar": "security",
+        "state": "SKIPPED",
+        "basis": "none",
+        "stateReason": "Skipped: profile-key-missing:models.allow.",
+        "mandatory": false,
+        "costly": false,
+        "projectOpinion": true,
+        "sourceUrl": "https://learn.microsoft.com/azure/foundry/how-to/model-deployment-policy",
+        "lastVerified": "2026-10-04",
+        "recommendation": "Keep one source of truth for approved models, mirror it in the policy assignment parameters allowedPublishers and allowedAssetIds, and remove any model from azure.yaml that the lists exclude. Assign the policy with Audit first and move to Deny after the compliance dashboard is clean.",
+        "fix": "# profile excerpt (allow list) - mirror the same values in the policy assignment parameters\nmodels:\n  allow:\n    publishers: [\"OpenAI\"]\n  deny: []",
+        "skipped": [
+          {
+            "ruleId": "FND-OPS-010",
+            "reason": "profile-key-missing:models.allow"
           }
         ],
         "evaluated": false
@@ -2412,7 +2393,7 @@
         "pillar": "security",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: synthetic-infrastructure.",
+        "stateReason": "Skipped: not-implemented.",
         "mandatory": true,
         "costly": false,
         "projectOpinion": false,
@@ -2423,8 +2404,7 @@
         "skipped": [
           {
             "ruleId": "FND-RUN-001",
-            "reason": "synthetic-infrastructure",
-            "missingCapability": "compiled ARM template"
+            "reason": "not-implemented"
           }
         ],
         "evaluated": false
@@ -2437,7 +2417,7 @@
         "pillar": "security",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: synthetic-infrastructure.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": true,
         "costly": false,
         "projectOpinion": false,
@@ -2448,8 +2428,7 @@
         "skipped": [
           {
             "ruleId": "FND-SEC-001",
-            "reason": "synthetic-infrastructure",
-            "missingCapability": "compiled ARM template"
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
@@ -2462,7 +2441,7 @@
         "pillar": "security",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: synthetic-infrastructure.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": true,
         "costly": false,
         "projectOpinion": false,
@@ -2473,8 +2452,7 @@
         "skipped": [
           {
             "ruleId": "FND-SEC-002",
-            "reason": "synthetic-infrastructure",
-            "missingCapability": "compiled ARM template"
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
@@ -2487,7 +2465,7 @@
         "pillar": "security",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: synthetic-infrastructure.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": true,
         "costly": false,
         "projectOpinion": false,
@@ -2498,8 +2476,7 @@
         "skipped": [
           {
             "ruleId": "FND-SEC-003",
-            "reason": "synthetic-infrastructure",
-            "missingCapability": "compiled ARM template"
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
@@ -2512,7 +2489,7 @@
         "pillar": "security",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: synthetic-infrastructure.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": true,
         "costly": false,
         "projectOpinion": false,
@@ -2523,8 +2500,7 @@
         "skipped": [
           {
             "ruleId": "FND-SEC-004",
-            "reason": "synthetic-infrastructure",
-            "missingCapability": "compiled ARM template"
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
@@ -2537,7 +2513,7 @@
         "pillar": "security",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: synthetic-infrastructure.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": true,
         "costly": false,
         "projectOpinion": false,
@@ -2548,8 +2524,7 @@
         "skipped": [
           {
             "ruleId": "FND-SEC-006",
-            "reason": "synthetic-infrastructure",
-            "missingCapability": "compiled ARM template"
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
@@ -2562,7 +2537,7 @@
         "pillar": "security",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: synthetic-infrastructure.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": false,
         "costly": true,
         "costBasis": "Defender for Cloud plans beyond foundational CSPM are paid plans; charges begin after the 30-day trial or usage limit.",
@@ -2576,8 +2551,7 @@
         "skipped": [
           {
             "ruleId": "FND-SEC-008",
-            "reason": "synthetic-infrastructure",
-            "missingCapability": "compiled ARM template"
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
@@ -2590,7 +2564,7 @@
         "pillar": "security",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: input-unavailable: control-plane evidence is not available offline (estimated reason).",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": false,
         "costly": false,
         "projectOpinion": true,
@@ -2601,7 +2575,7 @@
         "skipped": [
           {
             "ruleId": "FND-SEC-009",
-            "reason": "input-unavailable: control-plane evidence is not available offline (estimated reason)"
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
@@ -2614,7 +2588,7 @@
         "pillar": "security",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: synthetic-infrastructure.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": false,
         "costly": true,
         "costBasis": "Customer-managed keys require a billable Azure Key Vault (stated for Azure AI Search; the same Key Vault dependency applies to each service listed).",
@@ -2628,8 +2602,34 @@
         "skipped": [
           {
             "ruleId": "FND-SEC-010",
-            "reason": "synthetic-infrastructure",
-            "missingCapability": "compiled ARM template"
+            "reason": "input-unavailable: compiled ARM model unavailable"
+          }
+        ],
+        "evaluated": false
+      },
+      {
+        "controlId": "FND-SEC-011",
+        "ruleId": "FND-SEC-011",
+        "ruleVersion": 1,
+        "title": "Controlled outbound egress informational",
+        "pillar": "security",
+        "state": "SKIPPED",
+        "basis": "none",
+        "stateReason": "Skipped: unsupported-version.",
+        "mandatory": false,
+        "costly": true,
+        "costBasis": "FQDN outbound rules in Allow Only Approved Outbound mode create a managed Azure Firewall, which adds Azure Firewall charges.",
+        "costSourceUrl": "https://learn.microsoft.com/azure/foundry/how-to/managed-virtual-network",
+        "costLastVerified": "2026-10-18",
+        "projectOpinion": false,
+        "sourceUrl": "https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json",
+        "lastVerified": "2026-10-04",
+        "recommendation": "If you need to control data exfiltration, set the managed network to AllowOnlyApprovedOutbound or restrict outbound access with an allowed FQDN list, and confirm required dependencies are reachable. Otherwise record the decision.",
+        "fix": "# azure.yaml (azure.ai.project service)\nnetwork:\n  peSubnet:\n    vnet: ${VNET_RESOURCE_ID}\n    name: private-endpoint-subnet\n  isolationMode: AllowOnlyApprovedOutbound",
+        "skipped": [
+          {
+            "ruleId": "FND-SEC-011",
+            "reason": "unsupported-version"
           }
         ],
         "evaluated": false
@@ -2642,7 +2642,7 @@
         "pillar": "security",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: synthetic-infrastructure.",
+        "stateReason": "Skipped: unsupported-version.",
         "mandatory": true,
         "costly": false,
         "projectOpinion": false,
@@ -2653,10 +2653,119 @@
         "skipped": [
           {
             "ruleId": "FND-SEC-014",
-            "reason": "synthetic-infrastructure",
-            "missingCapability": "compiled ARM template"
+            "reason": "unsupported-version"
           }
         ],
+        "evaluated": false
+      }
+    ],
+    "unknown": [
+      {
+        "controlId": "FND-CFG-001",
+        "ruleId": "FND-CFG-001",
+        "ruleVersion": 7,
+        "title": "Valid YAML, duplicate-key detection and compatible azure.ai.* schema",
+        "pillar": "operations",
+        "state": "UNKNOWN",
+        "basis": "none",
+        "stateReason": "No evidence was recorded for this control.",
+        "mandatory": true,
+        "costly": false,
+        "projectOpinion": false,
+        "sourceUrl": "https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference",
+        "lastVerified": "2026-10-05",
+        "recommendation": "Fix the YAML syntax or the reported schema violation. Add the yaml-language-server schema comment to azure.yaml so the editor flags the same errors, and install azure.ai.agents and azure.ai.projects at the versions declared in requiredVersions.",
+        "fix": "# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json\nname: my-agent-project\nservices:\n  ai-project:\n    host: azure.ai.project\n  my-agent:\n    host: azure.ai.agent\n    project: src/my-agent\n    uses: [ai-project]\n    kind: hosted",
+        "evaluated": false
+      },
+      {
+        "controlId": "FND-CFG-002",
+        "ruleId": "FND-CFG-002",
+        "ruleVersion": 2,
+        "title": "Unique service names by kind",
+        "pillar": "operations",
+        "state": "UNKNOWN",
+        "basis": "none",
+        "stateReason": "No evidence was recorded for this control.",
+        "mandatory": true,
+        "costly": false,
+        "projectOpinion": false,
+        "sourceUrl": "https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference",
+        "lastVerified": "2026-10-04",
+        "recommendation": "Give separate logical agents distinct names. If the services intentionally represent versions of one agent, keep one service definition and deploy the intended version through that service.",
+        "fix": "services:\n  ai-project:\n    host: azure.ai.project\n  triage:\n    host: azure.ai.agent\n    project: src/triage\n    uses: [ai-project]\n    kind: hosted\n    name: triage-agent\n  summarizer:\n    host: azure.ai.agent\n    project: src/summarizer\n    uses: [ai-project]\n    kind: hosted\n    name: summarizer-agent",
+        "evaluated": false
+      },
+      {
+        "controlId": "FND-CFG-011",
+        "ruleId": "FND-CFG-011",
+        "ruleVersion": 5,
+        "title": "Preview/retired fields are version-aware",
+        "pillar": "operations",
+        "state": "UNKNOWN",
+        "basis": "none",
+        "stateReason": "No evidence was recorded for this control.",
+        "mandatory": true,
+        "costly": false,
+        "projectOpinion": false,
+        "sourceUrl": "https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference",
+        "lastVerified": "2026-10-04",
+        "recommendation": "Move to the unified service-level shape: put env on the agent service, use kind voice, use host azure.ai.project instead of microsoft.foundry, drop fields the hosted-agent create request ignores, and declare requiredVersions for extension versions verified by this catalogue. Do not infer a field's introduction version from the current schema.",
+        "fix": "requiredVersions:\n  extensions:\n    azure.ai.agents: \"\u003e=1.0.0-beta.18\"\n    azure.ai.projects: \"\u003e=1.0.0-beta.13\"\nservices:\n  ai-project:\n    host: azure.ai.project\n  my-agent:\n    host: azure.ai.agent\n    project: src/my-agent\n    uses: [ai-project]\n    kind: hosted\n    env:\n      MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME: ${MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME}",
+        "evaluated": false
+      },
+      {
+        "controlId": "FND-CFG-003",
+        "ruleId": "FND-CFG-003",
+        "ruleVersion": 4,
+        "title": "All inter-service references resolve",
+        "pillar": "reliability",
+        "state": "UNKNOWN",
+        "basis": "none",
+        "stateReason": "No evidence was recorded for this control.",
+        "mandatory": true,
+        "costly": false,
+        "projectOpinion": false,
+        "sourceUrl": "https://learn.microsoft.com/azure/foundry/agents/how-to/author-azure-yaml",
+        "lastVerified": "2026-10-04",
+        "recommendation": "Make each referenced name match a service key defined under services, and add toolbox and connection services to the consuming agent uses list as well as its toolboxes or connections list.",
+        "fix": "# Partial fragment: category, target and authentication fields for the\n# connection, plus toolbox-specific required fields, depend on the selected\n# documented tool. Merge this graph into a schema-valid manifest.\nservices:\n  ai-project:\n    host: azure.ai.project\n  github-conn:\n    host: azure.ai.connection\n    uses: [ai-project]\n  agent-tools:\n    host: azure.ai.toolbox\n    uses: [ai-project, github-conn]\n    tools:\n      - type: mcp\n        connection: github-conn\n  my-agent:\n    host: azure.ai.agent\n    project: src/my-agent\n    uses: [ai-project, github-conn, agent-tools]\n    kind: hosted\n    toolboxes: [agent-tools]",
+        "evaluated": false
+      },
+      {
+        "controlId": "FND-CFG-005",
+        "ruleId": "FND-CFG-005",
+        "ruleVersion": 4,
+        "title": "No raw secrets in YAML/Bicep/environment blocks",
+        "pillar": "security",
+        "state": "UNKNOWN",
+        "basis": "none",
+        "stateReason": "No evidence was recorded for this control.",
+        "mandatory": true,
+        "costly": false,
+        "projectOpinion": false,
+        "sourceUrl": "https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference",
+        "lastVerified": "2026-10-05",
+        "recommendation": "Store the secret in the azd environment as a secret (azd env set-secret) or in Key Vault, and reference it with ${VAR} in azure.yaml. In Bicep, mark secret parameters @secure() with no default and never output them. Prefer Entra ID or managed identity authentication where the target supports it.",
+        "fix": "services:\n  github-conn:\n    host: azure.ai.connection\n    uses: [ai-project]\n    category: RemoteTool\n    target: https://api.githubcopilot.com/mcp\n    authType: CustomKeys\n    credentials:\n      Authorization: ${GITHUB_PAT}   # set with: azd env set-secret GITHUB_PAT",
+        "evaluated": false
+      },
+      {
+        "controlId": "FND-CFG-007",
+        "ruleId": "FND-CFG-007",
+        "ruleVersion": 2,
+        "title": "Outbound endpoints use HTTPS and reject unsafe local/metadata targets",
+        "pillar": "security",
+        "state": "UNKNOWN",
+        "basis": "none",
+        "stateReason": "No evidence was recorded for this control.",
+        "mandatory": true,
+        "costly": false,
+        "projectOpinion": true,
+        "sourceUrl": "https://learn.microsoft.com/azure/foundry/agents/how-to/tools/model-context-protocol",
+        "lastVerified": "2026-10-04",
+        "recommendation": "Use https endpoints reachable from the service that calls them. For internal servers, publish them on a private endpoint or an internal Container Apps ingress and use their private DNS name over https instead of an IP literal. Remove localhost and metadata addresses from deployed configuration.",
+        "fix": "services:\n  github-conn:\n    host: azure.ai.connection\n    category: RemoteTool\n    target: https://api.githubcopilot.com/mcp",
         "evaluated": false
       }
     ]

@@ -1,4 +1,3 @@
-<!-- HAND-DERIVED SAMPLE, NOT ENGINE OUTPUT (ADR-026). Regenerate with: go test ./cmd/foundry-doctor -run TestAssessSampleReports -update-assess-samples; regeneration removes this comment. -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -38,14 +37,14 @@
         <thead><tr><th scope="col">State</th><th scope="col">Count</th></tr></thead>
         <tbody>
           <tr><th scope="row" class="state-FAIL">FAIL</th><td>0</td></tr>
-          <tr><th scope="row" class="state-WARNING">WARNING</th><td>0</td></tr>
-          <tr><th scope="row" class="state-UNKNOWN">UNKNOWN</th><td>7</td></tr>
-          <tr><th scope="row" class="state-QUESTION">QUESTION</th><td>2</td></tr>
-          <tr><th scope="row" class="state-SKIPPED">SKIPPED</th><td>59</td></tr>
+          <tr><th scope="row" class="state-WARNING">WARNING</th><td>1</td></tr>
+          <tr><th scope="row" class="state-UNKNOWN">UNKNOWN</th><td>6</td></tr>
+          <tr><th scope="row" class="state-QUESTION">QUESTION</th><td>1</td></tr>
+          <tr><th scope="row" class="state-SKIPPED">SKIPPED</th><td>65</td></tr>
           <tr><th scope="row" class="state-ATTESTED">ATTESTED</th><td>1</td></tr>
           <tr><th scope="row" class="state-INFO">INFO</th><td>0</td></tr>
-          <tr><th scope="row" class="state-NOT_APPLICABLE">NOT_APPLICABLE</th><td>0</td></tr>
-          <tr><th scope="row" class="state-PASS">PASS</th><td>9</td></tr>
+          <tr><th scope="row" class="state-NOT_APPLICABLE">NOT_APPLICABLE</th><td>4</td></tr>
+          <tr><th scope="row" class="state-PASS">PASS</th><td>0</td></tr>
           
         </tbody>
       </table>
@@ -54,11 +53,11 @@
     <section aria-labelledby="top-actions">
       <h2 id="top-actions">Top five actions</h2>
       <ol>
-        <li><strong>Every variable has an environment or infrastructure producer</strong> (<span class="state-UNKNOWN">UNKNOWN</span>, Operational Excellence, mandatory): Set the variable in the active azd environment (azd env set), emit it from a Bicep output, give it an inline default, or remove the reference. Do not declare FOUNDRY_ or AGENT_ prefixed names in the azure.yaml service env (FND-CFG-011). Source: <a href="https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference">https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference</a> (verified 2026-10-04).</li>
-        <li><strong>Resource-name provider constraints</strong> (<span class="state-UNKNOWN">UNKNOWN</span>, Operational Excellence, mandatory): Choose names that satisfy the provider limits for every environment name azd can produce, constrain name parameters with @minLength and @maxLength, and keep a short resource token for globally scoped resources (Storage 24, Key Vault 24, Cosmos DB 44, APIM 50, Search 60). Source: <a href="https://learn.microsoft.com/azure/azure-resource-manager/management/resource-name-rules">https://learn.microsoft.com/azure/azure-resource-manager/management/resource-name-rules</a> (verified 2026-10-04).</li>
+        <li><strong>Valid YAML, duplicate-key detection and compatible azure.ai.* schema</strong> (<span class="state-UNKNOWN">UNKNOWN</span>, Operational Excellence, mandatory): Fix the YAML syntax or the reported schema violation. Add the yaml-language-server schema comment to azure.yaml so the editor flags the same errors, and install azure.ai.agents and azure.ai.projects at the versions declared in requiredVersions. Source: <a href="https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference">https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference</a> (verified 2026-10-05).</li>
+        <li><strong>Unique service names by kind</strong> (<span class="state-UNKNOWN">UNKNOWN</span>, Operational Excellence, mandatory): Give separate logical agents distinct names. If the services intentionally represent versions of one agent, keep one service definition and deploy the intended version through that service. Source: <a href="https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference">https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference</a> (verified 2026-10-04).</li>
+        <li><strong>Preview/retired fields are version-aware</strong> (<span class="state-UNKNOWN">UNKNOWN</span>, Operational Excellence, mandatory): Move to the unified service-level shape: put env on the agent service, use kind voice, use host azure.ai.project instead of microsoft.foundry, drop fields the hosted-agent create request ignores, and declare requiredVersions for extension versions verified by this catalogue. Do not infer a field&#39;s introduction version from the current schema. Source: <a href="https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference">https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference</a> (verified 2026-10-04).</li>
+        <li><strong>All inter-service references resolve</strong> (<span class="state-UNKNOWN">UNKNOWN</span>, Reliability, mandatory): Make each referenced name match a service key defined under services, and add toolbox and connection services to the consuming agent uses list as well as its toolboxes or connections list. Source: <a href="https://learn.microsoft.com/azure/foundry/agents/how-to/author-azure-yaml">https://learn.microsoft.com/azure/foundry/agents/how-to/author-azure-yaml</a> (verified 2026-10-04).</li>
         <li><strong>No raw secrets in YAML/Bicep/environment blocks</strong> (<span class="state-UNKNOWN">UNKNOWN</span>, Security, mandatory): Store the secret in the azd environment as a secret (azd env set-secret) or in Key Vault, and reference it with ${VAR} in azure.yaml. In Bicep, mark secret parameters @secure() with no default and never output them. Prefer Entra ID or managed identity authentication where the target supports it. Source: <a href="https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference">https://learn.microsoft.com/azure/foundry/agents/concepts/azure-yaml-reference</a> (verified 2026-10-05).</li>
-        <li><strong>Data-residency regions and deployment SKU</strong> (<span class="state-UNKNOWN">UNKNOWN</span>, Security, mandatory): Choose a deployment SKU that matches the residency requirement - Data Zone Standard or Data Zone Provisioned for a data zone, Standard or Regional Provisioned for a geography - in a region that belongs to that zone or geography, and keep the region list in the profile current. Source: <a href="https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types">https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types</a> (verified 2026-10-04).</li>
-        <li><strong>Azure region values are valid</strong> (<span class="state-UNKNOWN">UNKNOWN</span>, Reliability, optional): Use a location name returned by az account list-locations for your subscription (the name field, such as eastus2), and set it with azd env set AZURE_LOCATION. Check model and resource availability for the region before provisioning. <strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/subscriptions/stable/2022-12-01/subscriptions.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/subscriptions/stable/2022-12-01/subscriptions.json</a> (verified 2026-10-04).</li>
         
       </ol>
     </section>
@@ -75,7 +74,7 @@
         <li><strong>NSG/DDoS recommendations</strong> (<span class="state-SKIPPED">SKIPPED</span>, Security): Associate an NSG with each subnet that supports one and review inbound allow rules. If the design exposes public IP addresses, enable Azure DDoS Protection (IP Protection on the public IP, or Network Protection on the VNet with a plan). For a fully private design, rely on the default infrastructure protection and do not buy a plan for it. Cost basis: DDoS Network Protection and DDoS IP Protection are priced per protected IP or per 100 protected IPs; only DDoS infrastructure protection is at no additional cost. (<a href="https://learn.microsoft.com/azure/ddos-protection/ddos-protection-sku-comparison">https://learn.microsoft.com/azure/ddos-protection/ddos-protection-sku-comparison</a>, verified 2026-10-18). Source: <a href="https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.VNET.UseNSGs/">https://azure.github.io/PSRule.Rules.Azure/en/rules/Azure.VNET.UseNSGs/</a> (verified 2026-10-04).</li>
         <li><strong>Relevant Defender plans enabled</strong> (<span class="state-SKIPPED">SKIPPED</span>, Security): Enable the Defender plan for each resource type in use on the subscription (Standard tier), or confirm it is enforced at a parent scope. Enabling Defender plans has a cost; review pricing before enabling in non-production. Cost basis: Defender for Cloud plans beyond foundational CSPM are paid plans; charges begin after the 30-day trial or usage limit. (<a href="https://learn.microsoft.com/azure/defender-for-cloud/connect-azure-subscription">https://learn.microsoft.com/azure/defender-for-cloud/connect-azure-subscription</a>, verified 2026-10-18). Source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/security/resource-manager/Microsoft.Security/Security/stable/2026-07-01/pricings.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/security/resource-manager/Microsoft.Security/Security/stable/2026-07-01/pricings.json</a> (verified 2026-10-04).</li>
         <li><strong>Customer-managed keys informational</strong> (<span class="state-SKIPPED">SKIPPED</span>, Security): If your compliance regime requires customer-managed keys, configure them on each resource listed and use a Key Vault with soft delete and purge protection (see FND-SEC-005). Otherwise no action is needed. Cost basis: Customer-managed keys require a billable Azure Key Vault (stated for Azure AI Search; the same Key Vault dependency applies to each service listed). (<a href="https://learn.microsoft.com/azure/search/search-sku-manage-costs">https://learn.microsoft.com/azure/search/search-sku-manage-costs</a>, verified 2026-10-18). Source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json</a> (verified 2026-10-04).</li>
-        <li><strong>Controlled outbound egress informational</strong> (<span class="state-UNKNOWN">UNKNOWN</span>, Security): If you need to control data exfiltration, set the managed network to AllowOnlyApprovedOutbound or restrict outbound access with an allowed FQDN list, and confirm required dependencies are reachable. Otherwise record the decision. Cost basis: FQDN outbound rules in Allow Only Approved Outbound mode create a managed Azure Firewall, which adds Azure Firewall charges. (<a href="https://learn.microsoft.com/azure/foundry/how-to/managed-virtual-network">https://learn.microsoft.com/azure/foundry/how-to/managed-virtual-network</a>, verified 2026-10-18). Source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json</a> (verified 2026-10-04).</li>
+        <li><strong>Controlled outbound egress informational</strong> (<span class="state-SKIPPED">SKIPPED</span>, Security): If you need to control data exfiltration, set the managed network to AllowOnlyApprovedOutbound or restrict outbound access with an allowed FQDN list, and confirm required dependencies are reachable. Otherwise record the decision. Cost basis: FQDN outbound rules in Allow Only Approved Outbound mode create a managed Azure Firewall, which adds Azure Firewall charges. (<a href="https://learn.microsoft.com/azure/foundry/how-to/managed-virtual-network">https://learn.microsoft.com/azure/foundry/how-to/managed-virtual-network</a>, verified 2026-10-18). Source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json</a> (verified 2026-10-04).</li>
         
       </ul>
     </section>
@@ -92,21 +91,24 @@
       <ul>
         <li>Budget and alerts exist (<span class="state-SKIPPED">SKIPPED</span>, Cost Optimization): Skipped: input-unavailable: compiled ARM model unavailable.</li>
         <li>Dev avoids production-sized fixed SKUs (<span class="state-SKIPPED">SKIPPED</span>, Cost Optimization): Skipped: input-unavailable: compiled ARM model unavailable.</li>
-        <li>Every variable has an environment or infrastructure producer (<span class="state-UNKNOWN">UNKNOWN</span>, Operational Excellence): Partial evaluation: 1 check(s) skipped (input-unavailable: compiled ARM model unavailable).</li>
+        <li>Valid YAML, duplicate-key detection and compatible azure.ai.* schema (<span class="state-UNKNOWN">UNKNOWN</span>, Operational Excellence): No evidence was recorded for this control.</li>
+        <li>Unique service names by kind (<span class="state-UNKNOWN">UNKNOWN</span>, Operational Excellence): No evidence was recorded for this control.</li>
+        <li>Every variable has an environment or infrastructure producer (<span class="state-SKIPPED">SKIPPED</span>, Operational Excellence): Skipped: input-unavailable: no-environment-selected.</li>
+        <li>Preview/retired fields are version-aware (<span class="state-UNKNOWN">UNKNOWN</span>, Operational Excellence): No evidence was recorded for this control.</li>
         <li>Signed into matching tenant/subscription (<span class="state-SKIPPED">SKIPPED</span>, Operational Excellence): Skipped: not-implemented.</li>
         <li>Required providers registered (<span class="state-SKIPPED">SKIPPED</span>, Operational Excellence): Skipped: not-implemented.</li>
         <li>Likely policy denials identified (<span class="state-SKIPPED">SKIPPED</span>, Operational Excellence): Skipped: not-implemented.</li>
-        <li>Environments do not unintentionally share resource groups (<span class="state-SKIPPED">SKIPPED</span>, Operational Excellence): Skipped: input-unavailable: azd environment values are not available (estimated reason).</li>
-        <li>Environment-bound names/IDs/rules were not copied unchanged (<span class="state-SKIPPED">SKIPPED</span>, Operational Excellence): Skipped: input-unavailable: azd environment values are not available (estimated reason).</li>
-        <li>Informational difference summary (<span class="state-SKIPPED">SKIPPED</span>, Operational Excellence): Skipped: input-unavailable: azd environment values are not available (estimated reason).</li>
         <li>Diagnostic settings to Log Analytics (<span class="state-SKIPPED">SKIPPED</span>, Operational Excellence): Skipped: input-unavailable: compiled ARM model unavailable.</li>
         <li>Application Insights connected (<span class="state-QUESTION">QUESTION</span>, Operational Excellence): No requirement or objective is declared (no-explicit-observability-or-server-tracing-requirement); the control needs a team decision.</li>
         <li>Baseline alerts exist (<span class="state-SKIPPED">SKIPPED</span>, Operational Excellence): Skipped: input-unavailable: compiled ARM model unavailable.</li>
         <li>Required tags exist (<span class="state-SKIPPED">SKIPPED</span>, Operational Excellence): Skipped: input-unavailable: compiled ARM model unavailable.</li>
-        <li>Resource-name provider constraints (<span class="state-UNKNOWN">UNKNOWN</span>, Operational Excellence): Partial evaluation: 1 check(s) skipped (input-unavailable: compiled ARM model unavailable).</li>
+        <li>Resource-name provider constraints (<span class="state-SKIPPED">SKIPPED</span>, Operational Excellence): Skipped: input-unavailable: compiled ARM model unavailable.</li>
         <li>Log retention meets policy (<span class="state-SKIPPED">SKIPPED</span>, Operational Excellence): Skipped: input-unavailable: compiled ARM model unavailable.</li>
-        <li>Diagnostic logs are arriving (<span class="state-SKIPPED">SKIPPED</span>, Operational Excellence): Skipped: input-unavailable: control-plane evidence is not available offline (estimated reason).</li>
-        <li>Azure region values are valid (<span class="state-UNKNOWN">UNKNOWN</span>, Reliability): Partial evaluation: 1 check(s) skipped (input-unavailable: compiled ARM model unavailable).</li>
+        <li>CI/CD pipeline exists (<span class="state-SKIPPED">SKIPPED</span>, Operational Excellence): Skipped: uncertain: a pipeline run step uses shell constructs that were not followed (heredoc, function, eval or sh -c, computed azd arguments), so it may invoke azd provision, deploy or up.</li>
+        <li>Diagnostic logs are arriving (<span class="state-SKIPPED">SKIPPED</span>, Operational Excellence): Skipped: not-implemented.</li>
+        <li>All inter-service references resolve (<span class="state-UNKNOWN">UNKNOWN</span>, Reliability): No evidence was recorded for this control.</li>
+        <li>Prompt model or hosted source/image is valid (<span class="state-SKIPPED">SKIPPED</span>, Reliability): Skipped: uncertain: assistant: no Dockerfile under &#34;./agents/assistant&#34; and no image, codeConfiguration, runtime, startupCommand or skill; the agent source is unclear.</li>
+        <li>Azure region values are valid (<span class="state-SKIPPED">SKIPPED</span>, Reliability): Skipped: input-unavailable: no-environment-selected.</li>
         <li>Model/version/SKU offered in target region (<span class="state-SKIPPED">SKIPPED</span>, Reliability): Skipped: not-implemented.</li>
         <li>Quota covers requested capacity (<span class="state-SKIPPED">SKIPPED</span>, Reliability): Skipped: not-implemented.</li>
         <li>No blocking soft-deleted resource/name (<span class="state-SKIPPED">SKIPPED</span>, Reliability): Skipped: not-implemented.</li>
@@ -115,7 +117,6 @@
         <li>Locks do not block change (<span class="state-SKIPPED">SKIPPED</span>, Reliability): Skipped: not-implemented.</li>
         <li>Subnet delegation/capacity/use is compatible (<span class="state-SKIPPED">SKIPPED</span>, Reliability): Skipped: not-implemented.</li>
         <li>Target region supports selected setup (<span class="state-SKIPPED">SKIPPED</span>, Reliability): Skipped: not-implemented.</li>
-        <li>Prod does not reference non-prod resource IDs (<span class="state-SKIPPED">SKIPPED</span>, Reliability): Skipped: input-unavailable: azd environment values are not available (estimated reason).</li>
         <li>Role assignments use object IDs and principalType (<span class="state-SKIPPED">SKIPPED</span>, Reliability): Skipped: input-unavailable: compiled ARM model unavailable.</li>
         <li>Private endpoint DNS zone groups and VNet links (<span class="state-SKIPPED">SKIPPED</span>, Reliability): Skipped: input-unavailable: compiled ARM model unavailable.</li>
         <li>Agent subnet delegation and sizing (<span class="state-SKIPPED">SKIPPED</span>, Reliability): Skipped: input-unavailable: compiled ARM model unavailable.</li>
@@ -128,36 +129,38 @@
         <li>Delete locks on stateful services (<span class="state-SKIPPED">SKIPPED</span>, Reliability): Skipped: input-unavailable: compiled ARM model unavailable.</li>
         <li>Search sizing within platform limits (<span class="state-SKIPPED">SKIPPED</span>, Reliability): Skipped: input-unavailable: compiled ARM model unavailable.</li>
         <li>Provisioned throughput spillover recommendation (<span class="state-SKIPPED">SKIPPED</span>, Reliability): Skipped: input-unavailable: compiled ARM model unavailable.</li>
-        <li>APIM availability tier recommendation (<span class="state-QUESTION">QUESTION</span>, Reliability): No requirement or objective is declared (no-resilience-objective-declared); the control needs a team decision.</li>
-        <li>Private DNS resolves from an appropriate vantage point (<span class="state-SKIPPED">SKIPPED</span>, Reliability): Skipped: input-unavailable: control-plane evidence is not available offline (estimated reason).</li>
-        <li>Capability host and project connections healthy (<span class="state-SKIPPED">SKIPPED</span>, Reliability): Skipped: input-unavailable: control-plane evidence is not available offline (estimated reason).</li>
-        <li>Model deployment state and throttling signal (<span class="state-SKIPPED">SKIPPED</span>, Reliability): Skipped: input-unavailable: control-plane evidence is not available offline (estimated reason).</li>
-        <li>Search index/documents/vector/indexer health (<span class="state-SKIPPED">SKIPPED</span>, Reliability): Skipped: input-unavailable: control-plane evidence is not available offline (estimated reason).</li>
-        <li>No raw secrets in YAML/Bicep/environment blocks (<span class="state-UNKNOWN">UNKNOWN</span>, Security): Partial evaluation: 1 check(s) skipped (input-unavailable: compiled ARM model unavailable).</li>
+        <li>APIM availability tier recommendation (<span class="state-SKIPPED">SKIPPED</span>, Reliability): Skipped: input-unavailable: compiled ARM model unavailable.</li>
+        <li>Private DNS resolves from an appropriate vantage point (<span class="state-SKIPPED">SKIPPED</span>, Reliability): Skipped: not-implemented.</li>
+        <li>Capability host and project connections healthy (<span class="state-SKIPPED">SKIPPED</span>, Reliability): Skipped: not-implemented.</li>
+        <li>Model deployment state and throttling signal (<span class="state-SKIPPED">SKIPPED</span>, Reliability): Skipped: not-implemented.</li>
+        <li>Agent tools/connections respond (<span class="state-SKIPPED">SKIPPED</span>, Reliability): Skipped: not-implemented.</li>
+        <li>Search index/documents/vector/indexer health (<span class="state-SKIPPED">SKIPPED</span>, Reliability): Skipped: not-implemented.</li>
+        <li>No raw secrets in YAML/Bicep/environment blocks (<span class="state-UNKNOWN">UNKNOWN</span>, Security): No evidence was recorded for this control.</li>
+        <li>Outbound endpoints use HTTPS and reject unsafe local/metadata targets (<span class="state-UNKNOWN">UNKNOWN</span>, Security): No evidence was recorded for this control.</li>
         <li>Deployer can create resources and role assignments (<span class="state-SKIPPED">SKIPPED</span>, Security): Skipped: not-implemented.</li>
         <li>Managed identities used for Foundry and workloads (<span class="state-SKIPPED">SKIPPED</span>, Security): Skipped: input-unavailable: compiled ARM model unavailable.</li>
         <li>Project identity has required data roles (<span class="state-SKIPPED">SKIPPED</span>, Security): Skipped: not-implemented.</li>
         <li>No broad Owner/Contributor for application identities (<span class="state-SKIPPED">SKIPPED</span>, Security): Skipped: input-unavailable: compiled ARM model unavailable.</li>
-        <li>Standing human admin access reviewed (<span class="state-SKIPPED">SKIPPED</span>, Security): Skipped: input-unavailable: control-plane evidence is not available offline (estimated reason).</li>
+        <li>Standing human admin access reviewed (<span class="state-SKIPPED">SKIPPED</span>, Security): Skipped: input-unavailable: compiled ARM model unavailable.</li>
         <li>Federated credentials use HTTPS issuer and specific subject (<span class="state-SKIPPED">SKIPPED</span>, Security): Skipped: input-unavailable: compiled ARM model unavailable.</li>
         <li>Foundry public access/private endpoint posture (<span class="state-SKIPPED">SKIPPED</span>, Security): Skipped: input-unavailable: compiled ARM model unavailable.</li>
         <li>Dependent services public access/default-deny/private endpoints (<span class="state-SKIPPED">SKIPPED</span>, Security): Skipped: input-unavailable: compiled ARM model unavailable.</li>
         <li>Restricted mode has allowed IP range (<span class="state-SKIPPED">SKIPPED</span>, Security): Skipped: input-unavailable: compiled ARM model unavailable.</li>
         <li>Azure Monitor private-link choice is explicit (<span class="state-SKIPPED">SKIPPED</span>, Security): Skipped: input-unavailable: compiled ARM model unavailable.</li>
         <li>NSG/DDoS recommendations (<span class="state-SKIPPED">SKIPPED</span>, Security): Skipped: input-unavailable: compiled ARM model unavailable.</li>
-        <li>Data-residency regions and deployment SKU (<span class="state-UNKNOWN">UNKNOWN</span>, Security): Partial evaluation: 1 check(s) skipped (input-unavailable: compiled ARM model unavailable).</li>
-        <li>Model allow/deny lists remain consistent (<span class="state-UNKNOWN">UNKNOWN</span>, Security): Partial evaluation: 1 check(s) skipped (input-unavailable: compiled ARM model unavailable).</li>
-        <li>Effective project identity access (<span class="state-SKIPPED">SKIPPED</span>, Security): Skipped: input-unavailable: compiled ARM model unavailable.</li>
+        <li>Data-residency regions and deployment SKU (<span class="state-SKIPPED">SKIPPED</span>, Security): Skipped: profile-key-missing:dataResidency.scope.</li>
+        <li>Model allow/deny lists remain consistent (<span class="state-SKIPPED">SKIPPED</span>, Security): Skipped: profile-key-missing:models.allow.</li>
+        <li>Effective project identity access (<span class="state-SKIPPED">SKIPPED</span>, Security): Skipped: not-implemented.</li>
         <li>Foundry local authentication disabled (<span class="state-SKIPPED">SKIPPED</span>, Security): Skipped: input-unavailable: compiled ARM model unavailable.</li>
         <li>AI Search key authentication disabled or RBAC-only (<span class="state-SKIPPED">SKIPPED</span>, Security): Skipped: input-unavailable: compiled ARM model unavailable.</li>
         <li>Cosmos DB local authentication disabled (<span class="state-SKIPPED">SKIPPED</span>, Security): Skipped: input-unavailable: compiled ARM model unavailable.</li>
         <li>Storage shared key/anonymous access disabled; HTTPS/TLS required (<span class="state-SKIPPED">SKIPPED</span>, Security): Skipped: input-unavailable: compiled ARM model unavailable.</li>
         <li>Firewall rules reject private/open ranges (<span class="state-SKIPPED">SKIPPED</span>, Security): Skipped: input-unavailable: compiled ARM model unavailable.</li>
         <li>Relevant Defender plans enabled (<span class="state-SKIPPED">SKIPPED</span>, Security): Skipped: input-unavailable: compiled ARM model unavailable.</li>
-        <li>Policy coverage and compliance evidence (<span class="state-SKIPPED">SKIPPED</span>, Security): Skipped: input-unavailable: control-plane evidence is not available offline (estimated reason).</li>
+        <li>Policy coverage and compliance evidence (<span class="state-SKIPPED">SKIPPED</span>, Security): Skipped: input-unavailable: compiled ARM model unavailable.</li>
         <li>Customer-managed keys informational (<span class="state-SKIPPED">SKIPPED</span>, Security): Skipped: input-unavailable: compiled ARM model unavailable.</li>
-        <li>Controlled outbound egress informational (<span class="state-UNKNOWN">UNKNOWN</span>, Security): Partial evaluation: 1 check(s) skipped (input-unavailable: compiled ARM model unavailable).</li>
-        <li>Secrets not emitted as Bicep outputs (<span class="state-SKIPPED">SKIPPED</span>, Security): Skipped: input-unavailable: compiled ARM model unavailable.</li>
+        <li>Controlled outbound egress informational (<span class="state-SKIPPED">SKIPPED</span>, Security): Skipped: unsupported-version.</li>
+        <li>Secrets not emitted as Bicep outputs (<span class="state-SKIPPED">SKIPPED</span>, Security): Skipped: unsupported-version.</li>
         
       </ul>
     </section>
@@ -171,7 +174,7 @@
         <li>Control IDs are Foundry Doctor rule IDs. They are not mapped to WAF checklist codes in this release, and pillar assignments come from the rule catalogue.</li>
         <li>The decision wording and the top-action ranking are project opinion, not Microsoft guidance.</li>
         <li>PSRule for Azure, Azure Advisor and Microsoft Defender for Cloud recommendations were not imported. Overlapping external check IDs are listed for reference only (ADR-020, ADR-026).</li>
-        <li>Deployed Azure state was not queried: assess waf runs offline. Controls that need deployment or runtime evidence and were not evaluated: FND-COST-001, FND-DEP-001, FND-DEP-002, FND-DEP-003, FND-DEP-004, FND-DEP-005, FND-DEP-006, FND-DEP-007, FND-DEP-008, FND-DEP-009, FND-DEP-010, FND-DEP-011, FND-DEP-012, FND-IDN-002, FND-IDN-005, FND-NET-006, FND-RUN-001, FND-RUN-002, FND-RUN-003, FND-RUN-004, FND-RUN-006, FND-RUN-007, FND-SEC-008, FND-SEC-009.</li>
+        <li>Deployed Azure state was not queried: assess waf runs offline. Controls that need deployment or runtime evidence and were not evaluated: FND-COST-001, FND-DEP-001, FND-DEP-002, FND-DEP-003, FND-DEP-004, FND-DEP-005, FND-DEP-006, FND-DEP-007, FND-DEP-008, FND-DEP-009, FND-DEP-010, FND-DEP-011, FND-DEP-012, FND-IDN-002, FND-IDN-005, FND-NET-006, FND-OPS-009, FND-RUN-001, FND-RUN-002, FND-RUN-003, FND-RUN-004, FND-RUN-005, FND-RUN-006, FND-RUN-007, FND-SEC-008, FND-SEC-009.</li>
         <li>Compiled infrastructure (Bicep to ARM) was not available, so template-dependent controls are SKIPPED.</li>
         <li>30 catalogue rules are excluded from the WAF view with a recorded reason (internal/assess/waf/mapping.yaml).</li>
         

@@ -39,7 +39,7 @@ func TestAssessEvidenceJSON(t *testing.T) {
 
 func TestAssessInvalidYAMLExitsTwo(t *testing.T) {
 	dir := t.TempDir()
-	yaml := "name: assess-invalid\nname: assess-invalid-duplicate\nservices: {}\n"
+	yaml := "name: assess-invalid\nservices: [unclosed\n"
 	if err := os.WriteFile(filepath.Join(dir, "azure.yaml"), []byte(yaml), 0o644); err != nil {
 		t.Fatal(err)
 	}
