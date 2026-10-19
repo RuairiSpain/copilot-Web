@@ -1,12 +1,13 @@
 id: FND-CFG-009
-version: 4
+version: 5
 group: CFG
 title: "Cron expressions are valid"
 description: >-
-  In the reviewed azure.ai.routines 1.0.0-beta.8 schema shape, a trigger whose type is recurring and
-  whose schedule key is cron_expression must carry a valid 5-field cron expression with an interval
-  of at least five minutes. Other type/key spellings and time_zone requirements conflict across the
-  reviewed sources and are not treated as equivalent.
+  A routine trigger must carry a valid 5-field cron expression with an interval of at least five minutes.
+  Two spellings are evaluated: type recurring with cron_expression and time_zone (azure.ai.routines
+  1.0.0-beta.8 schema) and type schedule with cronExpression and timeZone (beta.9, beta.10 and main schemas).
+  Other type/key spellings and time_zone requirements conflict across the reviewed sources and are reported as
+  uncertain.
 status: verified
 phases: ["later"]
 inputs: ["azure.yaml"]
@@ -20,7 +21,7 @@ severity:
 compatibility:
   azd: ">=1.34.2 <=1.36.0"
   extensions:
-    azure.ai.routines: ">=1.0.0-beta.8 <=1.0.0-beta.8"
+    azure.ai.routines: ">=1.0.0-beta.8 <=1.0.0-beta.10"
   apiVersions: []
   preview: true
   notes: >-
@@ -30,15 +31,19 @@ compatibility:
     source were read; widen them in Phase 1 by reading older tags. Window widened 2026-10-16: azd to 1.36.0 (tag
     azure-dev-cli_1.36.0, acebba1, released 2026-10-14). The azd and extension changelogs and the schema and source
     diffs from the previously verified versions were read; none touches this rule's verified facts for the widened
-    fields (see docs/tool-compatibility.md section 6). azure.ai.routines stays at beta.8: beta.9 renamed
-    cron_expression, time_zone and agent_name to camelCase and the schema now describes type schedule.
+    fields (see docs/tool-compatibility.md section 6). azure.ai.routines window widened to beta.10 in rule
+    version 5: beta.9 renamed cron_expression, time_zone and agent_name to camelCase and the schema describes type
+    schedule; the beta.9, beta.10 and main schemas were read on 2026-10-19 and agree on cronExpression and timeZone.
 evidence:
   description: >-
-    Only for a trigger with literal type recurring and literal cron_expression, check exactly five
+    Only for a trigger with literal type recurring and literal cron_expression, or literal type schedule and literal
+    cronExpression (version 5), check exactly five
     fields with documented numeric ranges and evaluate the next firings over a fixed week to report
     an interval below five minutes. A ${VAR} expression is skipped. A schedule trigger, a cron key,
-    missing time_zone, or an otherwise unknown preview shape is Uncertain rather than silently
-    normalized. If time_zone is present on the proven shape, validate it against the bundled,
+    missing time zone, or an otherwise unknown preview shape is Uncertain rather than silently
+    normalized. Since version 5 the cron value is judged even when the time zone is missing or unrecognised; the
+    time zone then adds an uncertain note. A snake_case key under type schedule and a camelCase key under type
+    recurring are Uncertain (no schema pairs them). If the time zone (time_zone or timeZone) is present, validate it against the bundled,
     versioned IANA and Windows identifier data; unknown identifiers are Uncertain because the
     reviewed azure.yaml schema does not constrain that field.
   confidence: likely
@@ -111,14 +116,32 @@ tests:
     - recurring-cron-expression-with-six-fields-reports-a-violation
     - recurring-cron-expression-every-minute-reports-a-violation
     - recurring-cron-expression-field-out-of-range-reports-a-violation
+    - schedule-every-minute-too-frequent
+    - schedule-four-minute-step-too-frequent
+    - schedule-six-field-is-invalid
+    - schedule-out-of-range-is-invalid
+    - schedule-bad-cron-and-missing-timeZone-still-finding
+    - recurring-bad-cron-missing-tz-is-now-a-finding
   negative:
     - recurring-weekday-morning-five-field-expression-produces-no-finding
     - recurring-every-five-minutes-produces-no-finding
+    - schedule-valid-cron-passes
+    - schedule-five-minute-step-passes
+    - schedule-timeZone-iana-passes
   skipped:
+    - schedule-reference-is-unresolved
     - cron-from-env-reference
     - trigger-type-other-than-recurring-or-the-disputed-schedule-shape
   uncertain:
-    - trigger-type-schedule-with-cron-expression
+    - schedule-snake-case-key-is-uncertain
+    - schedule-without-cron-key-is-uncertain
+    - recurring-with-camelCase-key-stays-uncertain
+    - schedule-missing-timeZone-valid-cron-is-uncertain
+    - schedule-unknown-timeZone-is-uncertain
+    - schedule-timeZone-reference-is-uncertain
+    - recurring-missing-tz-valid-cron-uncertain
+    - recurring-unknown-tz-valid-cron-uncertain
+    - cron-names-are-uncertain
     - recurring-trigger-with-cron-key
     - missing-time-zone-under-conflicting-documentation
     - time-zone-not-in-bundled-versioned-identifier-data
@@ -137,3 +160,13 @@ notes: >-
   triggers (the shape in the catalogue examples). A list-shaped or scalar triggers value, or a singular trigger key,
   is reported as uncertain ("shape is not verified"), never as not-applicable. A null or empty triggers value, and a
   service that is not azure.ai.routine, are still not-applicable.
+  Version 5: type schedule with cronExpression and timeZone is evaluated. Basis: the beta.9, beta.10 and current main
+  azure.ai.routine.json schemas (read 2026-10-19) define triggers with type schedule, cronExpression ("Cron expression
+  for a schedule trigger") and timeZone and reject the snake_case keys; the Learn routines article (retrieved
+  2026-10-04) states the schedule trigger takes a 5-field cron expression with a five minute minimum interval and a
+  time zone. No schema types the cron value beyond string, so the five-field and five-minute facts rest on that
+  article. Cron validity no longer depends on the time zone: a missing or unrecognised time zone (bundled identifier
+  data only) is an uncertain note. UNVERIFIED and not evaluated: six-field (seconds) cron forms are reported as invalid
+  only because the article states five fields; the time zone requirement (Learn REST table versus azd example) stays
+  uncertain; the agents extension Routine.json shape (type schedule with a cron key) is a different manifest and is
+  not read.

@@ -6,10 +6,12 @@ import (
 	"net/url"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"go.yaml.in/yaml/v3"
 
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/armexpr"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/findings"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
@@ -58,9 +60,13 @@ func secretShaped(v string) bool {
 	return findings.Redact(v) != v || secretShapeRe.MatchString(v)
 }
 
-func evalCFG005(in *sdk.Input) sdk.Result {
+func evalCFG005(in *sdk.Input, pr Providers) sdk.Result {
 	d, okd := loadDoc(in)
 	if !okd {
+		// The compiled template can still be scanned without azure.yaml.
+		if armFs := cfg005ARM(in); len(armFs) > 0 {
+			return ok(armFs)
+		}
 		return skip(sdk.SkipInputUnavailable + ": azure.yaml unavailable")
 	}
 	var fs []sdk.Finding
@@ -85,6 +91,13 @@ func evalCFG005(in *sdk.Input) sdk.Result {
 			switch {
 			case (shape == shapeLiteral || shape == shapeDefaultLiteral) && secretShaped(lit):
 				fs = append(fs, finding(d, s, p.Val, "env-credential-shape:"+p.Key.Value, fmt.Sprintf("env.%s holds a literal with the shape of a credential", p.Key.Value)))
+			case (shape == shapeLiteral || shape == shapeDefaultLiteral) && endsInCredentialWord(p.Key.Value) && plausibleLiteralSecret(lit):
+				// A name that ends in a credential word with a literal that is
+				// not a placeholder, URL or plain word. Not a pure pattern match,
+				// so the finding carries lower confidence.
+				f := finding(d, s, p.Val, "env-secret-name-literal:"+p.Key.Value, fmt.Sprintf("env.%s is named like a credential and holds a literal that is not a reference or placeholder", p.Key.Value))
+				f.Confidence = sdk.ConfidenceMedium
+				fs = append(fs, f)
 			case named && shape != shapeEmpty && shape != shapeRef:
 				notes = append(notes, fmt.Sprintf("%s: env.%s looks secret-bearing by name only", s.Name, p.Key.Value))
 			}
@@ -101,22 +114,46 @@ func evalCFG005(in *sdk.Input) sdk.Result {
 			}
 		}
 	}
+	fs = append(fs, cfg005ARM(in)...)
+	notes = append(notes, cfg005Env(pr)...)
 	return withNotes(fs, notes)
 }
+
+// URL-typed keys, from the vendored azd schemas (descriptions say URL or
+// endpoint) and the FND-CFG-007 catalogue sources. serviceURLKeys sit on the
+// service; toolURLKeys on tools[] entries (tool items allow additional
+// properties, so server_url is known from extension source only);
+// publishURLKeys are the format: uri fields of activity.publish.
+var (
+	serviceURLKeys = []string{"target", "endpoint", "url", "serverUrl", "authorizationUrl", "tokenUrl", "refreshUrl"}
+	toolURLKeys    = []string{"endpoint", "url", "serverUrl", "server_url", "target"}
+	publishURLKeys = []string{"developerWebsiteUrl", "privacyUrl", "termsOfUseUrl"}
+)
 
 // urlFields returns URL-bearing scalar nodes of a service in stable order.
 func urlFields(s service) []nameAt {
 	var out []nameAt
-	for _, k := range []string{"target", "endpoint", "url", "serverUrl"} {
+	for _, k := range serviceURLKeys {
 		if n := s.get(k); n != nil && n.Kind == yaml.ScalarNode {
 			out = append(out, nameAt{k, n})
 		}
 	}
 	for i, t := range items(s.get("tools")) {
-		for _, k := range []string{"endpoint", "url", "serverUrl", "target"} {
+		for _, k := range toolURLKeys {
 			if n := child(t, k); n != nil && n.Kind == yaml.ScalarNode {
 				out = append(out, nameAt{fmt.Sprintf("tools[%d].%s", i, k), n})
 			}
+		}
+	}
+	for i, t := range items(s.get("toolConnections")) {
+		if n := child(t, "target"); n != nil && n.Kind == yaml.ScalarNode {
+			out = append(out, nameAt{fmt.Sprintf("toolConnections[%d].target", i), n})
+		}
+	}
+	pub := child(child(s.Node, "activity"), "publish")
+	for _, k := range publishURLKeys {
+		if n := child(pub, k); n != nil && n.Kind == yaml.ScalarNode {
+			out = append(out, nameAt{"activity.publish." + k, n})
 		}
 	}
 	for _, p := range pairs(s.get("env")) {
@@ -125,6 +162,25 @@ func urlFields(s service) []nameAt {
 		}
 	}
 	return out
+}
+
+// egressInjected reports whether a project declares network.agentSubnet, which
+// the azure.ai.project schema documents as injecting the agent runtime into a
+// customer subnet (BYO VNet). RFC 1918 targets can then be reachable.
+func egressInjected(d document) bool {
+	for _, s := range serviceList(d) {
+		if s.Host == hostProject && has(child(s.Node, "network"), "agentSubnet") {
+			return true
+		}
+	}
+	return false
+}
+
+// rfc1918Host reports a private-range IP literal that is neither loopback nor
+// link-local (so not the metadata address).
+func rfc1918Host(h string) bool {
+	ip := net.ParseIP(strings.Trim(h, "[]"))
+	return ip != nil && ip.IsPrivate() && !ip.IsLoopback() && !ip.IsLinkLocalUnicast()
 }
 
 func riskyHost(h string) bool {
@@ -146,6 +202,7 @@ func evalCFG007(in *sdk.Input) sdk.Result {
 		return skip(sdk.SkipInputUnavailable + ": azure.yaml unavailable")
 	}
 	var fs []sdk.Finding
+	injected := egressInjected(d)
 	for _, s := range serviceList(d) {
 		for _, u := range urlFields(s) {
 			v := strings.TrimSpace(scalar(u.Node))
@@ -159,7 +216,7 @@ func evalCFG007(in *sdk.Input) sdk.Result {
 			if !strings.EqualFold(pu.Scheme, "https") {
 				fs = append(fs, finding(d, s, u.Node, "non-https:"+u.Name, fmt.Sprintf("%s uses non-https scheme %q", u.Name, pu.Scheme)))
 			}
-			if riskyHost(pu.Hostname()) {
+			if riskyHost(pu.Hostname()) && !(injected && rfc1918Host(pu.Hostname())) {
 				fs = append(fs, finding(d, s, u.Node, "private-host:"+u.Name, fmt.Sprintf("%s targets local/private host %q", u.Name, pu.Hostname())))
 			}
 		}
@@ -431,31 +488,109 @@ func evalCFG006(in *sdk.Input, p Providers) sdk.Result {
 	return withNotes(fs, notes)
 }
 
+const (
+	cfg012ShapeRecommendation = "Use a location name from az account list-locations (the name field, such as eastus2); " +
+		"Azure location names are lowercase letters and digits only."
+	cfg012ShapeFix = "azd env set AZURE_LOCATION eastus2"
+)
+
+// regionShapeBad reports a value that is already in the lowercase,
+// whitespace-free name form but holds a character other than a lowercase
+// letter or digit. Every location name in the bundled lists is letters and
+// digits only; a display name (upper case or spaces) is never judged here.
+func regionShapeBad(v string) bool {
+	if v == "" || v != strings.ToLower(v) || strings.ContainsAny(v, " \t") {
+		return false
+	}
+	return !regionNameShape.MatchString(v)
+}
+
+// cfg012ARM judges literal resource locations of the compiled template. Only
+// a name-form value with a character outside [a-z0-9] is a finding; template
+// expressions, "global" and display names are not judged.
+func cfg012ARM(in *sdk.Input) []sdk.Finding {
+	if in == nil || in.ARM == nil {
+		return nil
+	}
+	var fs []sdk.Finding
+	for _, r := range in.ARM.Resources() {
+		v := strings.TrimSpace(r.Region)
+		if v == "" || strings.HasPrefix(v, "[") || containsRef(v) || v == "global" || !regionShapeBad(v) {
+			continue
+		}
+		fs = append(fs, sdk.Finding{
+			Key:            "arm-location-not-region-name:" + r.Type + "/" + armexpr.StripScope(r.Name),
+			Resource:       sdk.ResourceRef{Type: r.Type, Name: armexpr.StripScope(r.Name)},
+			Location:       r.Location,
+			Evidence:       "resource location " + strconv.Quote(clip(findings.Redact(v))) + " is not an Azure location name",
+			Recommendation: cfg012ShapeRecommendation + suggestion(v),
+			Fix:            cfg012ShapeFix,
+			Confidence:     sdk.ConfidenceLow,
+		})
+	}
+	return fs
+}
+
 func evalCFG012(in *sdk.Input, p Providers) sdk.Result {
+	armFs := cfg012ARM(in)
 	if r, bad := envSkip(p); bad {
+		if len(armFs) > 0 {
+			return ok(armFs)
+		}
 		return r
 	}
 	v, present := p.Env.Values()["AZURE_LOCATION"]
 	if !present {
+		if len(armFs) > 0 {
+			return ok(armFs)
+		}
 		return skip(sdk.SkipInputUnavailable + ": AZURE_LOCATION is not set in the selected environment")
 	}
 	if containsRef(v) {
 		// A single-quoted .env value keeps "${" literally; whether azd or a
 		// consumer expands it later is not decidable here.
-		return skip(uncertainPrefix + "AZURE_LOCATION is set but its value contains a variable reference (${...}); it was not judged")
+		return withEnvNote(armFs, uncertainPrefix+"AZURE_LOCATION is set but its value contains a variable reference (${...}); it was not judged")
 	}
 	if xk, isX := p.Env.(ExpandedKeys); isX && xk.ExpandedKeys()["AZURE_LOCATION"] {
 		// godotenv expands an undefined variable to the empty string; the parsed
 		// value does not show what the author or azd intends.
-		return skip(uncertainPrefix + "AZURE_LOCATION is defined by variable expansion in the .env file; its value cannot be judged statically")
+		return withEnvNote(armFs, uncertainPrefix+"AZURE_LOCATION is defined by variable expansion in the .env file; its value cannot be judged statically")
 	}
+	key := regionKey(v)
 	switch {
 	case strings.TrimSpace(v) == "":
-		return ok([]sdk.Finding{{Key: "location-empty", Evidence: "AZURE_LOCATION is empty"}})
+		return ok(append(armFs, sdk.Finding{Key: "location-empty", Evidence: "AZURE_LOCATION is empty"}))
+	case regionShapeBad(strings.TrimSpace(v)):
+		return ok(append(armFs, sdk.Finding{
+			Key:            "location-not-region-name",
+			Evidence:       "AZURE_LOCATION " + strconv.Quote(clip(findings.Redact(strings.TrimSpace(v)))) + " is not an Azure location name (letters and digits only)",
+			Recommendation: cfg012ShapeRecommendation + suggestion(key),
+			Fix:            cfg012ShapeFix,
+			Confidence:     sdk.ConfidenceLow,
+		}))
 	case v != strings.ToLower(v) || strings.ContainsAny(v, " \t"):
 		// No primary source says ARM or azd rejects a display name such as
 		// "East US", so this is inconclusive in every profile.
-		return skip(uncertainPrefix + "AZURE_LOCATION is not in the lowercase region-name form azd documents (for example eastus); no source says it is rejected")
+		msg := uncertainPrefix + "AZURE_LOCATION is not in the lowercase region-name form azd documents (for example eastus); no source says it is rejected"
+		if isKnownRegion(key) {
+			msg += "; it names the region " + key
+		} else {
+			msg += suggestion(key)
+		}
+		return withEnvNote(armFs, msg)
+	case !isKnownRegion(key):
+		// The bundled lists are point-in-time subsets (see azureRegionNames),
+		// so an unlisted alphanumeric name may be a new region or a typo.
+		return withEnvNote(armFs, uncertainPrefix+"AZURE_LOCATION "+strconv.Quote(clip(findings.Redact(key)))+" is not in the bundled list of Azure region names, which can lag new regions; compare it with az account list-locations."+suggestion(key))
 	}
-	return ok(nil)
+	return ok(armFs)
+}
+
+// withEnvNote returns the ARM findings with one uncertain skip, or a
+// rule-level uncertain skip when there are no findings.
+func withEnvNote(fs []sdk.Finding, msg string) sdk.Result {
+	if len(fs) == 0 {
+		return skip(msg)
+	}
+	return sdk.Result{Findings: fs, Skips: []sdk.Skip{{Reason: msg}}}
 }

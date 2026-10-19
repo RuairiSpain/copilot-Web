@@ -1,5 +1,5 @@
 id: FND-CFG-012
-version: 4
+version: 5
 group: CFG
 title: "Azure region values are valid"
 description: >-
@@ -32,7 +32,13 @@ compatibility:
     fields (see docs/tool-compatibility.md section 6).
 evidence:
   description: >-
-    Offline, check that the value is non-empty (an empty value is a finding) and report a value that is not a lower-case,
+    Offline, check that the value is non-empty (an empty value is a finding). Version 5: a value already in the
+    lowercase, space-free name form that holds a character other than a lowercase letter or digit (for example
+    eastus-typo) is a finding with low confidence and a "did you mean" suggestion (nearest bundled region by edit
+    distance, at most 3) in the finding recommendation; the same check applies to literal ARM resource locations.
+    A lowercase alphanumeric name that is in neither the bundled Azure SDK region list nor the documented Foundry
+    region table is uncertain with the same suggestion (the lists lag new regions). The Foundry table is used only to
+    recognise names, never as an allow list. Report a value that is not a lower-case,
     space-free location name in the form azd stores (for example eastus2) as uncertain, never as an error and that it is consistent across AZURE_LOCATION and parameter files. When a
     control-plane capability is available, compare it to the Subscriptions_ListLocations result (API
     2022-12-01) for the subscription and report values not in the list. Without that capability the
@@ -102,12 +108,34 @@ tests:
     - empty-azure-location
     - location-not-in-subscription-list
     - azure-location-differs-from-parameter-file
+    - typo-with-hyphen-is-a-finding
+    - underscore-is-a-finding
+    - punctuation-finding-has-low-confidence
+    - punctuated-literal-is-a-finding
+    - two-bad-resources-two-findings
+    - arm-finding-survives-missing-environment
   negative:
     - lowercase-region-in-subscription-list
+    - known-sdk-region-passes
+    - known-foundry-only-region-passes
+    - valid-literal-passes
+    - global-is-not-judged
+    - expression-is-not-judged
+    - display-name-is-not-judged
   skipped:
     - control-plane-unavailable
     - location-is-env-reference
     - location-with-space-and-capitals-is-uncertain
+    - reference-is-not-judged
+    - no-environment-is-input-unavailable
+    - no-environment-and-clean-arm-is-input-unavailable
+  uncertain:
+    - unlisted-alphanumeric-name-is-uncertain-with-suggestion
+    - unlisted-name-suggests-nearest
+    - far-name-has-no-suggestion
+    - display-name-of-known-region-is-uncertain
+    - display-name-with-parenthesis-is-never-a-finding
+    - mixed-case-known-region-is-uncertain
 notes: >-
   Product opinion: no source read states that a malformed or unlisted location fails deployment, so no platform basis
   is claimed. Unverified: that the azd environment stores the short name form (the docs example shows eastus); the
@@ -121,3 +149,13 @@ notes: >-
   empty: the .env parser (godotenv grammar) expands an undefined variable to an empty string, so the parsed value does not
   show the intent.
   Version 4: uncertain notes are no longer dropped when the rule also has findings. They are returned as uncertain skips next to the findings (one per distinct note), and the rule-level skip is kept only when there are no findings. An AZURE_LOCATION value that contains ${ (for example a single-quoted literal in the .env file) is uncertain, not input-unavailable: the value is set but it is not judged. A named environment that does not exist skips with input-unavailable: environment-not-found: <name>.
+  Version 5: the rule recognises region names. Source: the 68 public, US Government and China cloud location names
+  declared as static AzureLocation values in the Azure SDK for .NET (sdk/core/Azure.Core/src/AzureLocation.cs, main,
+  retrieved 2026-10-19, MIT licence), unioned with the documented Foundry region table in internal/azure
+  (foundry_regions.go, data date 2026-09-07). Both are point-in-time subsets: an absent name is not an invalid
+  region, so a lowercase alphanumeric name outside the lists is uncertain and the Foundry table is never an
+  allow list. UNVERIFIED: that every Azure location name is lowercase letters and digits only; this is inferred from
+  all names in both lists. For that reason the punctuation finding carries low confidence. The authoritative check
+  remains Subscriptions_ListLocations, which needs the control-plane capability and is not implemented here. Parameter
+  file and Bicep location consistency are not implemented because the rule input does not carry parameter files; ARM
+  resource locations are read from the compiled model when present. Display names ("East US") are still never errors.
