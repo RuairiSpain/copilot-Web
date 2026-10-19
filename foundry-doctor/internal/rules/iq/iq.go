@@ -483,7 +483,7 @@ func eval005(in *sdk.Input) sdk.Result {
 		switch strings.ToLower(kb.RetrievalReasoningKind) {
 		case "auto":
 			if len(kb.Models) == 0 {
-				a.add(kb.Location, "AzureAISearch/knowledgebases", kb.Name, "reasoning-auto", ev("auto retrieval reasoning requires at least one model", kbRef))
+				a.notes = append(a.notes, "knowledge base "+kb.Name+" sets retrieval reasoning auto without a model; the documentation says auto needs a model (not confirmed against a pinned REST specification)")
 			}
 			if version != "2026-08-01-preview" {
 				// The API versions that accept auto are documented only for the

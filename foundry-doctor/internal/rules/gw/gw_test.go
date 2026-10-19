@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	runtimegw "github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime/gateway"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
 
@@ -747,6 +748,59 @@ func TestHasTenantHint(t *testing.T) {
 	} {
 		if got := hasTenantHint(tt.issuer); got != tt.want {
 			t.Fatalf("hasTenantHint(%q) = %v, want %v", tt.issuer, got, tt.want)
+		}
+	}
+}
+
+func TestGW006LoggerResolution(t *testing.T) {
+	apim := res("Microsoft.ApiManagement/service", "apim", nil)
+	policy := policyRes("Microsoft.ApiManagement/service/apis/policies", "apim/chat/policy", `<policies><inbound><llm-emit-token-metric><dimension name="tenant" /></llm-emit-token-metric></inbound></policies>`)
+	logger := res("Microsoft.ApiManagement/service/loggers", "apim/appinsights", map[string]any{
+		"loggerType": "applicationInsights",
+		"resourceId": "/subscriptions/s/resourceGroups/r/providers/Microsoft.Insights/components/appi",
+	})
+	diag := func(loggerID string, metrics bool) sdk.ARMResource {
+		return res("Microsoft.ApiManagement/service/diagnostics", "apim/applicationinsights", map[string]any{"loggerId": loggerID, "metrics": metrics})
+	}
+	tests := []struct {
+		name          string
+		resources     model
+		wantFinding   bool
+		wantUncertain bool
+	}{
+		{"no diagnostic at all", model{apim, chatAPI(), policy}, true, false},
+		{"metrics disabled", model{apim, chatAPI(), policy, logger, diag("apim/appinsights", false)}, true, false},
+		{"logger declared elsewhere (existing)", model{apim, chatAPI(), policy, diag("apim/appinsights", true)}, false, true},
+		{"empty loggerId from an unresolved expression", model{apim, chatAPI(), policy, logger, diag("", true)}, false, true},
+		{"loggerId still an expression", model{apim, chatAPI(), policy, logger, diag("[parameters('id')]", true)}, false, true},
+		{"service/name form resolves to a declared logger whose component is not in the template", model{apim, chatAPI(), policy, logger, diag("apim/appinsights", true)}, true, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := mustEval(t, "FND-GW-006", &sdk.Input{ARM: tc.resources})
+			if (len(got.Findings) > 0) != tc.wantFinding {
+				t.Fatalf("findings = %+v, want finding %v", got.Findings, tc.wantFinding)
+			}
+			uncertain := got.Skipped != nil && strings.Contains(got.Skipped.Reason, "uncertain:")
+			if uncertain != tc.wantUncertain {
+				t.Fatalf("result = %+v, want uncertain %v", got, tc.wantUncertain)
+			}
+		})
+	}
+}
+
+func TestResolveLoggerMatchesExactForms(t *testing.T) {
+	svc := &runtimegw.Service{Name: "apim", Loggers: map[string]runtimegw.Logger{"appinsights": {LoggerType: "applicationInsights"}}}
+	for id, want := range map[string]bool{
+		"appinsights":      true,
+		"apim/appinsights": true,
+		"/providers/x/service/apim/loggers/appinsights": true,
+		"other/appinsights":                             false,
+		"apim/xappinsights":                             false,
+		"":                                              false,
+	} {
+		if _, ok := resolveLogger(svc, id); ok != want {
+			t.Errorf("resolveLogger(%q) = %v, want %v", id, ok, want)
 		}
 	}
 }

@@ -956,7 +956,10 @@ func metricDiagnosticUnresolved(svc *runtimegw.Service, api *runtimegw.API) bool
 		if id := strings.TrimSpace(d.LoggerID); id == "" || strings.HasPrefix(id, "[") {
 			return true
 		}
-		if logger, ok := resolveLogger(svc, d.LoggerID); ok && strings.HasPrefix(strings.TrimSpace(logger.ResourceID), "[") {
+		logger, ok := resolveLogger(svc, d.LoggerID)
+		// A logger that is not declared in the template is an existing resource
+		// deployed elsewhere; its Application Insights link cannot be read.
+		if !ok || strings.HasPrefix(strings.TrimSpace(logger.ResourceID), "[") {
 			return true
 		}
 	}
@@ -998,7 +1001,7 @@ func resolveLogger(svc *runtimegw.Service, loggerID string) (runtimegw.Logger, b
 	for name, logger := range svc.Loggers {
 		// A deployed logger ID ends in /loggers/<name>. The compiled template's
 		// resourceId() reduces to <service>/<name>, so that form matches too.
-		if loggerID == strings.ToLower(name) || strings.HasSuffix(loggerID, "/loggers/"+strings.ToLower(name)) || strings.HasSuffix(loggerID, "/"+strings.ToLower(name)) {
+		if loggerID == strings.ToLower(name) || strings.HasSuffix(loggerID, "/loggers/"+strings.ToLower(name)) || loggerID == strings.ToLower(svc.Name)+"/"+strings.ToLower(name) {
 			return logger, true
 		}
 	}

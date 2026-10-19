@@ -42,7 +42,7 @@ evidence:
     Applies only when the project states a document-level access requirement (a declared project setting; the rule is skipped,
     not passed, when no requirement is declared because the need cannot be inferred from metadata). Then, for each azureBlob,
     indexedOneLake and indexedSharePoint knowledge source in the knowledge base, fail when ingestionParameters.ingestionPermissionOptions
-    is empty or absent; fail when assetStore is also set; fail when the call API version is 2026-04-01. Header forwarding of
+    is empty or absent; fail when assetStore is also set; report a note, not a failure, when the call API version is 2026-04-01. Header forwarding of
     x-ms-query-source-authorization is configured on the agent MCP tool headers, which Foundry Doctor does not read from the
     repository, so that leg is always reported uncertain (header-forwarding-configured-outside-repo) and the rule never passes. Values must be
     in the spec enum userIds, groupIds, rbacScope, sensitivityLabels. Remote sources (remoteSharePoint, fabricDataAgent,

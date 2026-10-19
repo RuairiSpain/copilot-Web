@@ -32,11 +32,11 @@ compatibility:
 evidence:
   description: >-
     Read the knowledge base, each referenced knowledge source, the Search service resource (sku, location)
-    and the target API version. Fail on each documented incompatibility: retrievalReasoningEffort.kind auto
-    on an API version before 2026-08-01-preview or without a models entry; kind minimal with outputMode other
+    and the target API version. Fail on each documented incompatibility: kind minimal with outputMode other
     than extractiveData, or with answerSynthesis or a web knowledge source; kind medium only when the service
     location is in the documented medium-effort region list, otherwise report uncertainty because the documentation
-    is a positive allow-list; a models entry (LLM) on 2026-04-01; a web knowledge source without a model; more
+    is a positive allow-list; retrievalReasoningEffort.kind auto on an API version other than 2026-08-01-preview or
+    without a models entry is a note only, because it is not confirmed against a pinned REST specification; a models entry (LLM) on 2026-04-01; a web knowledge source without a model; more
     knowledge sources in the knowledge base than the tier maximum (Free 3, Basic 5 or 10 depending on service
     age, S1 to L2 10). Basic counts of 6 through 10 are uncertain until service creation evidence is available;
     Basic counts above 10 fail. An LLM configured with a Basic or higher requirement for managed-identity access when the

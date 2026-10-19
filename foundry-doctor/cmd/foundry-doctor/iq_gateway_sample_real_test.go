@@ -31,6 +31,9 @@ func gatewayRun(t *testing.T, dir string) gwRun {
 	t.Helper()
 	exe := os.Getenv("BICEP_PATH")
 	if exe == "" {
+		if os.Getenv("REQUIRE_SPIKE_DEPS") == "1" {
+			t.Fatal("BICEP_PATH is not set but REQUIRE_SPIKE_DEPS=1")
+		}
 		t.Skip("BICEP_PATH not set")
 	}
 	var out, errb bytes.Buffer
@@ -99,5 +102,84 @@ func TestIQGatewaySampleRealBicepNegative(t *testing.T) {
 		if !r.hasFinding(rule) {
 			t.Errorf("%s must report a finding when validate-jwt and authentication-managed-identity are gone: %+v", rule, r)
 		}
+	}
+}
+
+// Every gateway rule has a negative scenario through real Bicep. Each case
+// breaks one thing in a copy of the sample and expects exactly that rule to
+// fire, which also shows the unchanged sample's silence on GW-003 and GW-004
+// is a pass and not an unevaluated rule.
+func TestIQGatewaySampleRealBicepEachRuleCanFail(t *testing.T) {
+	cases := []struct {
+		name string
+		rule string
+		edit func(t *testing.T, dir string)
+	}{
+		{"fragment without token limit and metric", "FND-GW-002", func(t *testing.T, dir string) {
+			replaceFile(t, filepath.Join(dir, "infra", "policies", "token-governance.xml"), "", "<fragment><set-header name=\"x-sample\" exists-action=\"skip\"><value>1</value></set-header></fragment>\n")
+		}},
+		{"backend that is not declared", "FND-GW-003", func(t *testing.T, dir string) {
+			replaceFile(t, filepath.Join(dir, "infra", "policies", "foundry-chat.xml"), `<authentication-managed-identity`, `<set-backend-service backend-id="no-such-backend" /><authentication-managed-identity`)
+		}},
+		{"two APIs on one path", "FND-GW-004", func(t *testing.T, dir string) {
+			appendFile(t, filepath.Join(dir, "infra", "main.bicep"), `
+resource dupApi 'Microsoft.ApiManagement/service/apis@2024-05-01' = {
+  parent: apim
+  name: 'foundry-dup'
+  properties: {
+    displayName: 'Duplicate path'
+    path: 'foundry'
+    protocols: [
+      'https'
+    ]
+    serviceUrl: 'https://aif-iq-sample.openai.azure.com/openai'
+  }
+}
+`)
+		}},
+		{"metrics diagnostic switched off", "FND-GW-006", func(t *testing.T, dir string) {
+			replaceFile(t, filepath.Join(dir, "infra", "main.bicep"), "metrics: true", "metrics: false")
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.rule, func(t *testing.T) {
+			dir := copyTree(t, sample("iq-gateway"))
+			tc.edit(t, dir)
+			r := gatewayRun(t, dir)
+			if !r.hasFinding(tc.rule) {
+				t.Fatalf("%s (%s) must report a finding: findings=%+v skipped=%+v", tc.rule, tc.name, r.Findings, r.Skipped)
+			}
+		})
+	}
+}
+
+// replaceFile swaps old for new in a file; an empty old replaces the whole file.
+func replaceFile(t *testing.T, path, old, repl string) {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := repl
+	if old != "" {
+		if !strings.Contains(string(data), old) {
+			t.Fatalf("%s does not contain %q", path, old)
+		}
+		text = strings.Replace(string(data), old, repl, 1)
+	}
+	if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func appendFile(t *testing.T, path, text string) {
+	t.Helper()
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if _, err := f.WriteString(text); err != nil {
+		t.Fatal(err)
 	}
 }

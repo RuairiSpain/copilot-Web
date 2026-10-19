@@ -1,8 +1,10 @@
 package gateway
 
 import (
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
@@ -160,5 +162,67 @@ func TestBuildSnapshotReadsLargeLanguageModelLogsAndVersions(t *testing.T) {
 	issues := svc.UnverifiedVersions(svc.APIs["chat"])
 	if len(issues) != 1 || !strings.Contains(issues[0], "2023-05-01-preview") {
 		t.Fatalf("unverified versions = %v", issues)
+	}
+}
+
+// varModel is a model that also resolves template variables.
+type varModel struct {
+	model
+	vars map[string]any
+}
+
+func (m varModel) Variable(name string) (any, bool) { v, ok := m.vars[name]; return v, ok }
+
+func TestResolvePolicyValue(t *testing.T) {
+	m := varModel{vars: map[string]any{"ok": "<policies />", "expr": "[concat('a','b')]", "num": 3}}
+	tests := []struct {
+		name  string
+		model sdk.ARMModel
+		in    string
+		want  string
+	}{
+		{"literal", m, "<policies />", "<policies />"},
+		{"variable", m, "[variables('ok')]", "<policies />"},
+		{"variable with spaces", m, "[ variables( 'ok' ) ]", "<policies />"},
+		{"missing variable", m, "[variables('nope')]", "[variables('nope')]"},
+		{"expression variable", m, "[variables('expr')]", "[variables('expr')]"},
+		{"non-string variable", m, "[variables('num')]", "[variables('num')]"},
+		{"function over variable", m, "[replace(variables('ok'), 'a', 'b')]", "[replace(variables('ok'), 'a', 'b')]"},
+		{"model without variables", model(nil), "[variables('ok')]", "[variables('ok')]"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := resolvePolicyValue(tc.model, tc.in); got != tc.want {
+				t.Fatalf("resolvePolicyValue(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestFragmentExpansionIsBounded(t *testing.T) {
+	const n = 12
+	include := ""
+	for i := 0; i < n; i++ {
+		include += fmt.Sprintf(`<include-fragment fragment-id="f%d" />`, i)
+	}
+	resources := []sdk.ARMResource{
+		res("Microsoft.ApiManagement/service", "apim", nil),
+		res("Microsoft.ApiManagement/service/apis", "apim/chat", map[string]any{"path": "chat"}),
+		pol("Microsoft.ApiManagement/service/apis/policies", "apim/chat/policy", `<policies><inbound>`+include+`</inbound></policies>`),
+	}
+	for i := 0; i < n; i++ {
+		resources = append(resources, pol("Microsoft.ApiManagement/service/policyFragments", fmt.Sprintf("apim/f%d", i), `<fragment>`+include+`<set-header name="x" /></fragment>`))
+	}
+	svc, api := service(t, resources...)
+	start := time.Now()
+	variants := EffectivePoliciesForAPI(svc, api)
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("expansion took %s", elapsed)
+	}
+	if len(variants) != 1 || !variants[0].External {
+		t.Fatalf("an over-budget expansion must be unresolved: %+v", variants)
+	}
+	if !strings.Contains(strings.Join(variants[0].Unresolved, ";"), "analysis budget") {
+		t.Fatalf("unresolved = %v", variants[0].Unresolved)
 	}
 }

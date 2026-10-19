@@ -14,6 +14,12 @@ import (
 
 type phase8ARM struct{ resources []sdk.ARMResource }
 
+// searchARM is a template that deploys the Search service the sample
+// azure.yaml connections point at; the probe sends tokens only to such services.
+func searchARM() *phase8ARM {
+	return &phase8ARM{resources: []sdk.ARMResource{{Type: "Microsoft.Search/searchServices", Name: "sample-search"}}}
+}
+
 func (m *phase8ARM) Resources() []sdk.ARMResource { return m.resources }
 
 type fakeIQClient struct {
@@ -66,7 +72,7 @@ func testAzureYAML(t *testing.T, body string) sdk.AzureYAMLView {
 }
 
 func TestWithPhase8SnapshotSkipsLocalMode(t *testing.T) {
-	arm := &phase8ARM{}
+	arm := searchARM()
 	yaml := testAzureYAML(t, `name: sample
 services:
   iq:
@@ -83,6 +89,7 @@ services:
 func TestBuildPhase8SnapshotRecordsProbeFailures(t *testing.T) {
 	client := &fakeIQClient{kbErr: errors.New("boom")}
 	snap := buildPhase8Snapshot(context.Background(), RunInput{
+		ARM: searchARM(),
 		AzureYAML: testAzureYAML(t, `name: sample
 services:
   iq:
@@ -105,6 +112,7 @@ services:
 func TestBuildPhase8SnapshotIgnoresServiceRootConnectionForLiveReads(t *testing.T) {
 	client := &fakeIQClient{}
 	snap := buildPhase8Snapshot(context.Background(), RunInput{
+		ARM: searchARM(),
 		AzureYAML: testAzureYAML(t, `name: sample
 services:
   search:
@@ -127,6 +135,7 @@ services:
 func TestBuildPhase8SnapshotPreservesConnectionAPIVersion(t *testing.T) {
 	client := &fakeIQClient{}
 	_ = buildPhase8Snapshot(context.Background(), RunInput{
+		ARM: searchARM(),
 		AzureYAML: testAzureYAML(t, `name: sample
 services:
   iq:
@@ -143,6 +152,7 @@ services:
 func TestBuildPhase8SnapshotRequiresPinnedAPIVersion(t *testing.T) {
 	client := &fakeIQClient{}
 	snap := buildPhase8Snapshot(context.Background(), RunInput{
+		ARM: searchARM(),
 		AzureYAML: testAzureYAML(t, `name: sample
 services:
   iq:
@@ -160,7 +170,7 @@ services:
 }
 
 func TestWithPhase8SnapshotIsOptIn(t *testing.T) {
-	arm := &phase8ARM{}
+	arm := searchARM()
 	yaml := testAzureYAML(t, `name: sample
 services:
   iq:
@@ -179,6 +189,7 @@ services:
 func TestBuildPhase8SnapshotRejectsUnknownAPIVersion(t *testing.T) {
 	client := &fakeIQClient{}
 	snap := buildPhase8Snapshot(context.Background(), RunInput{
+		ARM: searchARM(),
 		AzureYAML: testAzureYAML(t, `name: sample
 services:
   iq:
@@ -201,6 +212,7 @@ func TestBuildPhase8SnapshotReadsGeneratedObjects(t *testing.T) {
 		source:  runtimeiq.KnowledgeSource{Kind: "azureBlob", GeneratedIndexName: "blob-ks-index", SkillsetName: "blob-ks-skillset"},
 	}
 	snap := buildPhase8Snapshot(context.Background(), RunInput{
+		ARM: searchARM(),
 		AzureYAML: testAzureYAML(t, `name: sample
 services:
   iq:
@@ -227,6 +239,7 @@ func TestBuildPhase8SnapshotSeparatesPermissionFailures(t *testing.T) {
 		sourceErr: &azure.UnavailableError{Capability: "GET knowledgesources", Reason: "data-plane permission or network access unavailable"},
 	}
 	snap := buildPhase8Snapshot(context.Background(), RunInput{
+		ARM: searchARM(),
 		AzureYAML: testAzureYAML(t, `name: sample
 services:
   iq:
@@ -237,5 +250,33 @@ services:
 	}, client)
 	if len(snap.ProbeIssues) != 1 || !strings.Contains(snap.ProbeIssues[0], "Search Service Contributor") {
 		t.Fatalf("probe issues = %#v", snap.ProbeIssues)
+	}
+}
+
+func TestBuildPhase8SnapshotNeverContactsServicesTheTemplateDoesNotDeploy(t *testing.T) {
+	for name, arm := range map[string]sdk.ARMModel{
+		"no template":           nil,
+		"other search":          &phase8ARM{resources: []sdk.ARMResource{{Type: "Microsoft.Search/searchServices", Name: "someone-else"}}},
+		"same name, wrong type": &phase8ARM{resources: []sdk.ARMResource{{Type: "Microsoft.Storage/storageAccounts", Name: "sample-search"}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			client := &fakeIQClient{}
+			snap := buildPhase8Snapshot(context.Background(), RunInput{
+				ARM: arm,
+				AzureYAML: testAzureYAML(t, `name: sample
+services:
+  iq:
+    host: azure.ai.connection
+    target: https://sample-search.search.windows.net/knowledgebases/sample-kb/mcp?api-version=2026-08-01-preview
+    authType: ProjectManagedIdentity
+`),
+			}, client)
+			if client.kbCalls != 0 || snap.LiveRead {
+				t.Fatalf("a request was made to a service the template does not deploy: calls=%d live=%v", client.kbCalls, snap.LiveRead)
+			}
+			if len(snap.ProbeIssues) != 1 || !strings.Contains(snap.ProbeIssues[0], "not deployed by the template") {
+				t.Fatalf("probe issues = %#v", snap.ProbeIssues)
+			}
+		})
 	}
 }

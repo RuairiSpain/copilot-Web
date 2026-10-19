@@ -26,6 +26,11 @@ const KnownAPIVersionList = "2024-05-01, 2025-09-01-preview"
 // maxFragmentDepth bounds nested include-fragment expansion.
 const maxFragmentDepth = 4
 
+// maxExpandedFragments bounds the include-fragment expansions performed for
+// one policy scope. Fragments may include several fragments each, so depth
+// alone does not bound the work; a repository file is untrusted input.
+const maxExpandedFragments = 200
+
 // KnownAPIVersion reports whether v is an API Management resource API version
 // listed in the FND-GW-* catalogue entries.
 func KnownAPIVersion(v string) bool {
@@ -507,26 +512,29 @@ func (s *Service) scopeInbound(scope string) scopeInbound {
 	}
 	parsed, err := ParsePolicy(doc.Value)
 	if err != nil {
-		out.unresolved = append(out.unresolved, "policy at scope "+scope+" does not parse as XML (format "+orNone(doc.Format)+")")
+		out.unresolved = append(out.unresolved, "policy at scope "+scope+" does not parse as XML or is an unresolved template expression (format "+orNone(doc.Format)+")")
 		return out
 	}
 	if !parsed.HasInbound {
 		out.unresolved = append(out.unresolved, "policy at scope "+scope+" has no inbound section")
 		return out
 	}
-	out.elements, out.unresolved = s.expandFragments(parsed.Inbound, 0)
+	budget := maxExpandedFragments
+	out.elements, out.unresolved = s.expandFragments(parsed.Inbound, 0, &budget)
 	return out
 }
 
+const fragmentBudgetIssue = "policy fragment expansion exceeds the analysis budget"
+
 // expandFragments replaces include-fragment with the fragment's elements when
 // the fragment is defined in the template; anything else is unresolved.
-func (s *Service) expandFragments(nodes []PolicyElement, depth int) ([]PolicyElement, []string) {
+func (s *Service) expandFragments(nodes []PolicyElement, depth int, budget *int) ([]PolicyElement, []string) {
 	var out []PolicyElement
 	var issues []string
 	for _, n := range nodes {
 		if n.Name != "include-fragment" {
 			if len(n.Children) > 0 {
-				kids, more := s.expandFragments(n.Children, depth)
+				kids, more := s.expandFragments(n.Children, depth, budget)
 				n.Children = kids
 				issues = append(issues, more...)
 			}
@@ -536,6 +544,10 @@ func (s *Service) expandFragments(nodes []PolicyElement, depth int) ([]PolicyEle
 		id := strings.TrimSpace(n.Attrs["fragment-id"])
 		frag, ok := s.Fragments[strings.ToLower(id)]
 		switch {
+		case *budget <= 0:
+			if len(issues) == 0 || issues[len(issues)-1] != fragmentBudgetIssue {
+				issues = append(issues, fragmentBudgetIssue)
+			}
 		case depth >= maxFragmentDepth:
 			issues = append(issues, "policy fragment "+id+" is nested too deeply")
 		case !ok:
@@ -548,7 +560,8 @@ func (s *Service) expandFragments(nodes []PolicyElement, depth int) ([]PolicyEle
 				issues = append(issues, "policy fragment "+id+" does not parse as XML")
 				continue
 			}
-			expanded, more := s.expandFragments(els, depth+1)
+			*budget--
+			expanded, more := s.expandFragments(els, depth+1, budget)
 			out = append(out, expanded...)
 			issues = append(issues, more...)
 		}
