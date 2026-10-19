@@ -1,11 +1,12 @@
 id: FND-SEC-008
-version: 2
+version: 3
 group: SEC
 title: Relevant Defender plans enabled
 description: >-
   Microsoft Defender for Cloud plans that match the resource types in the Foundry solution should be on the Standard tier
-  on the subscription: AI (when Foundry accounts exist), StorageAccounts, KeyVaults and CosmosDbs. The set of relevant plans
-  is derived from the resources found.
+  on the subscription: AI and Arm (when Foundry accounts exist), StorageAccounts, KeyVaults, CosmosDbs and AppServices (when
+  a web app exists in the template). The set of relevant plans is derived from the resources found. Plans absent from the
+  template are never passed: the rule skips with input-unavailable and names the missing capability (the live Defender state).
 status: verified
 phases:
 - '2'
@@ -33,8 +34,14 @@ evidence:
   description: >-
     GET Microsoft.Security/pricings/{name} at subscription scope for each relevant name; pricingTier is not Standard (enum
     Free | Standard). Plan names: AI (from Azure Policy ASC_Azure_Defender_AI_* definitions), StorageAccounts, KeyVaults,
-    CosmosDbs (from the PSRule Azure.Defender.* rule conditions). The inherited flag from the same resource is included
-    to show whether the setting comes from a parent scope. Needs Security Reader or equivalent.
+    CosmosDbs, Arm and AppServices (from the PSRule Azure.Defender.* rule conditions: where name equals StorageAccounts,
+    KeyVaults, CosmosDbs, Arm, AppServices). The inherited flag from the same resource is included
+    to show whether the setting comes from a parent scope. Needs Security Reader or equivalent. Bicep/ARM mode: a
+    Microsoft.Security/pricings resource in the template with pricingTier Free (or any value but Standard) for a relevant plan
+    is a finding; an expression tier or a conditional pricing resource is uncertain; a relevant plan with no pricings
+    resource in the template is reported as "input-unavailable: subscription-scope Defender state not in template" naming the
+    plans, with the missing capability "subscription-scope Microsoft.Security/pricings read (live Defender for Cloud check)",
+    and is shown as a per-plan skip next to any finding. The rule passes only when every relevant plan is declared Standard.
   confidence: certain
 recommendation: >-
   Enable the Defender plan for each resource type in use on the subscription (Standard tier), or confirm it is enforced
@@ -63,7 +70,9 @@ sources:
   lastVerified: '2026-10-04'
   verifiedVia: >-
     https://github.com/Azure/PSRule.Rules.Azure/blob/main/src/PSRule.Rules.Azure/rules/Azure.Defender.Rule.yaml
-  note: Plan names StorageAccounts, KeyVaults, CosmosDbs. Branch URL, not commit-pinned.
+  note: >-
+    Plan names StorageAccounts, KeyVaults, CosmosDbs, Arm (Azure.Defender.Arm) and AppServices
+    (Azure.Defender.AppServices); read again 2026-10-19. Branch URL, not commit-pinned.
 overlap:
   decision: adapt
   provisional: true
@@ -107,14 +116,19 @@ implementation:
   package: internal/rules/sec
 tests:
   positive:
-  - AI plan Free with a Foundry account present fails
-  - KeyVaults plan Free with a vault present fails
+  - Arm Free with an account fails
+  - KeyVaults Free with a vault fails
+  - AppServices relevant when a web app exists
   negative:
-  - AI plan Standard with a Foundry account present passes
+  - AI and Arm Standard with an account passes
   skipped:
+  - absent pricing for a present resource type is input-unavailable
+  - no pricings at all is input-unavailable
+  - no relevant resources is not applicable
   - no Security Reader permission is skipped
-  - Bicep-only mode with no pricings resource is skipped (subscription state unknown)
   uncertain:
+  - expression tier is uncertain
+  - conditional pricing is uncertain
   - pricing inherited from a management group scope that cannot be read
 testability: >-
   Deterministic given a pricings read; Skipped without control-plane access. Bicep mode can only inspect pricings resources
@@ -123,3 +137,7 @@ notes: >-
   Defender recommendation IDs (assessment keys) and Advisor IDs were not available in local clones and are left empty; this
   is listed as unverified. The waf basis was removed after the Phase 0 Azure black belt review because no WAF pillar tag
   or WARA recommendation is cited here; the WAF mapping is added in Phase 4 when the guidance is verified.
+  Version 3 (2026-10-19): Arm and AppServices were added to the relevant plans (plan names verified from the PSRule
+  conditions; the Microsoft.Security pricings spec does not enumerate plan names beyond a StorageAccounts example). Whether
+  a web app in the template is a Foundry workload is not provable, so AppServices is relevant for any Microsoft.Web/sites.
+  Absent plans were a generic unresolved skip in version 2; they now name the missing capability.

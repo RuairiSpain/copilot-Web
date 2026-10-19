@@ -54,10 +54,19 @@ func TestLaterRules(t *testing.T) {
 			findings: 1, contains: "DoNotEnforce",
 		},
 		{
-			name:     "sec010 cmk info",
+			// FND-SEC-010 v3 reports violations only: a compliant "cmk" account is a
+			// pass (see TestSEC010ViolationsOnly); platform-managed keys are a finding
+			// only when a customer-managed-key requirement is declared.
+			name:     "sec010 platform-managed under a declared cmk requirement",
+			id:       "FND-SEC-010",
+			in:       &sdk.Input{ARM: model{res(typeAccounts, "acct", props{"encryption": props{"keySource": "Microsoft.CognitiveServices"}}), res(typePolicyAssignment, "cmk", props{"policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/67121cc7-ff39-4ab8-b7e3-95b84dab487d"})}},
+			findings: 1, contains: "CMK posture: platform-managed",
+		},
+		{
+			name:     "sec010 compliant cmk account passes",
 			id:       "FND-SEC-010",
 			in:       &sdk.Input{ARM: model{res(typeAccounts, "acct", props{"encryption": props{"keySource": "Microsoft.KeyVault", "keyVaultProperties": props{"keyVaultUri": "https://kv"}}})}},
-			findings: 1, contains: "CMK posture: cmk",
+			findings: 0,
 		},
 		{
 			name:     "sec011 unrestricted egress",

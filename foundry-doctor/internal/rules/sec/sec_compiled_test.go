@@ -39,7 +39,6 @@ func TestCompiledBicepScope(t *testing.T) {
 		{"FND-SEC-002", 1, []string{"format('srch-{0}'"}, []string{"other-", "cond-"}},
 		{"FND-SEC-003", 1, []string{"format('cosmos-{0}'"}, []string{"unrelated-"}},
 		{"FND-SEC-006", 1, []string{"Azure datacenter"}, nil},
-		{"FND-SEC-010", 4, []string{"CMK posture"}, []string{"other-", "unrelated-", "'other{0}'"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.rule, func(t *testing.T) {
@@ -66,6 +65,42 @@ func TestCompiledBicepScope(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestCompiledSEC010 keeps the scope assertions of the former table row: only the
+// four Foundry-linked resources are evaluated, never the unrelated ones. FND-SEC-010
+// v3 reports violations only, so without a declared CMK requirement the golden
+// template yields no finding (platform-managed keys are notes), and with the
+// requirement every platform-managed linked resource is one finding.
+func TestCompiledSEC010(t *testing.T) {
+	m := rulestest.Model(t)
+	t.Run("no requirement declared", func(t *testing.T) {
+		out := run(t, "FND-SEC-010", &sdk.Input{ARM: m})
+		if out.Skipped != nil || len(out.Findings) != 0 {
+			t.Fatalf("want no findings, got %+v", out)
+		}
+		if len(out.Skips) != 4 {
+			t.Fatalf("want 4 platform-managed notes, got %d: %+v", len(out.Skips), out.Skips)
+		}
+	})
+	t.Run("requirement declared", func(t *testing.T) {
+		out := run(t, "FND-SEC-010", &sdk.Input{ARM: m, Policy: fakePolicy{PolicyKeyRequireCMK: true}})
+		if out.Skipped != nil || len(out.Findings) != 4 {
+			t.Fatalf("findings = %d want 4:\n%s", len(out.Findings), names(out.Findings))
+		}
+		all := names(out.Findings)
+		for _, f := range out.Findings {
+			all += "\n" + f.Evidence
+		}
+		if !strings.Contains(all, "CMK posture") {
+			t.Errorf("missing CMK posture evidence:\n%s", all)
+		}
+		for _, s := range []string{"other-", "unrelated-", "'other{0}'"} {
+			if strings.Contains(all, s) {
+				t.Errorf("unrelated resource %q reported:\n%s", s, all)
+			}
+		}
+	})
 }
 
 func TestCompiledSEC005UnrelatedVaultIsNotApplicable(t *testing.T) {

@@ -1,12 +1,14 @@
 id: FND-SEC-007
-version: 1
+version: 2
 group: SEC
 title: RAI/content filter bound to chat deployments
 description: >-
   Chat model deployments and hosted agents should be bound to a valid guardrail (RAI policy). A model deployment without
-  properties.raiPolicyName is assigned Microsoft.DefaultV2 by the platform; the rule fails when raiPolicyName names a policy
-  that is not Microsoft-provided or not declared, and when a hosted agent in azure.yaml has no rai_policy entry or a short
-  name instead of the full ARM resource ID.
+  properties.raiPolicyName is assigned Microsoft.DefaultV2 by the platform, which the rule reports as an informational
+  finding because the binding is not explicit in the template; the rule fails when raiPolicyName names a policy that the
+  template does not declare on the same account, when a declared policy has every content filter disabled, and when a hosted
+  agent in azure.yaml has no rai_policy entry or a short name instead of the full ARM resource ID (azure.yaml schemas that
+  have the policies field only).
 status: verified
 phases:
 - later
@@ -30,7 +32,7 @@ compatibility:
   - { plane: management, provider: Microsoft.CognitiveServices, resourceType: accounts, version: '2026-09-01' }
   preview: true
   notes: >-
-    azd: the lower bound 1.36.0-beta.1 is the first version read (clone); the upper bound is azd 1.36.0 (tag azure-dev-cli_1.36.0, acebba1e388b489a91ab8e2487a676359ab516a1, released 2026-10-14), read by tag diff on 2026-10-16. Extension ranges are exactly the versions whose schemas or source were
+    azd: >=1.34.2, open-ended (ADR-029). The azure.yaml hosted-agent policies entry exists only in azd azure.yaml schemas from 1.36.0-beta.1 (the first version read, verified through azd 1.36.0, tag azure-dev-cli_1.36.0, acebba1e388b489a91ab8e2487a676359ab516a1, read by tag diff on 2026-10-16), so the azure.yaml leg runs only when the azd version in use is >= 1.36.0-beta.1 or the service already has a policies key; older versions produce no finding. The Bicep/ARM legs have no azd dependency. Extension ranges are exactly the versions whose schemas or source were
     read; widen them in Phase 1 by reading older tags. Microsoft.CognitiveServices/accounts 2026-09-01 / 2026-09-01:
     stable) -
     cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable//cognitiveservices.json
@@ -40,12 +42,23 @@ compatibility:
     rule's verified facts for the widened fields (see docs/tool-compatibility.md section 6).
 evidence:
   description: >-
-    Bicep/ARM: Microsoft.CognitiveServices/accounts/deployments with properties.raiPolicyName set to a name that is neither
-    a Microsoft-managed policy nor a Microsoft.CognitiveServices/accounts/raiPolicies resource in the scanned deployment
-    or the live account. azure.yaml: a service with host azure.ai.agent and kind hosted that has no policies entry of type
-    rai_policy (docs: the agent then runs without a content safety guardrail), or whose raiPolicyName is not a full ARM
-    resource ID (docs: bare names are rejected by the extension) or does not resolve to a declared raiPolicies resource
-    (docs: a missing policy can fail open with no filtering). Confidence is likely, not certain: guardrails-overview.md
+    Bicep/ARM, per Microsoft.CognitiveServices/accounts/deployments: no properties.raiPolicyName (or an empty one) is an
+    informational finding (the platform applies Microsoft.DefaultV2 per guardrails-overview, but the guardrail is not explicit
+    in the template; severity is lowered to info); Microsoft.DefaultV2 passes; any other name starting with Microsoft. is
+    uncertain (only Microsoft.DefaultV2 is verified as a built-in name, Microsoft.Default is UNVERIFIED); a template-local name is
+    matched against Microsoft.CognitiveServices/accounts/raiPolicies resources of the same account: declared passes, not declared
+    while the parent account is in the template is a finding (the deployment would reference a policy that does not exist), and
+    a parent account outside the template or an expression name is uncertain. A declared raiPolicies resource whose
+    properties.contentFilters are all literal enabled=false (RaiPolicyContentFilter.enabled, boolean) is a finding; an
+    expression or missing enabled flag is uncertain; a policy without contentFilters is not judged (it may inherit from
+    basePolicyName). severityThreshold (Low|Medium|High) and blocking exist in the spec but the direction of strictness is
+    only described as "Level at which content is filtered", so they are not evaluated (UNVERIFIED semantics). azure.yaml: a
+    service with host azure.ai.agent and kind hosted that has no policies entry of type rai_policy (docs: the agent then runs
+    without a content safety guardrail), or whose raiPolicyName is not a full ARM resource ID (docs: bare names are rejected
+    by the extension) or does not resolve to a declared raiPolicies resource (docs: a missing policy can fail open with no
+    filtering). The missing-policies check applies only when the azd version in use is >= 1.36.0-beta.1; with an older azd
+    the schema has no policies field and the leg yields a not-applicable note, and with an unknown azd version it is
+    uncertain. A present policies key is always evaluated. Confidence is likely, not certain: guardrails-overview.md
     says an agent with no custom guardrail inherits the model deployment's guardrail, while add-hosted-agent-guardrails.md
     says an omitted rai_config means no guardrail, so the two Foundry articles conflict. A raiPolicyName that names a policy
     existing only in the live account (not in the scanned template) is uncertain.
@@ -91,8 +104,9 @@ sources:
   verifiedVia: >-
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
   note: >-
-    DeploymentProperties.raiPolicyName; RaiPolicyProperties (basePolicyName, mode, contentFilters). Branch
-    URL, not commit-pinned.
+    DeploymentProperties.raiPolicyName; RaiPolicyProperties (basePolicyName, mode, contentFilters);
+    RaiPolicyContentFilter (name, enabled boolean, severityThreshold Low|Medium|High, blocking, source), read again
+    2026-10-19. Branch URL, not commit-pinned.
 overlap:
   decision: native
   provisional: true
@@ -129,17 +143,29 @@ implementation:
   package: internal/rules/sec
 tests:
   positive:
-  - hosted agent with no policies entry fails
+  - hosted agent with no policies entry fails (azd 1.36.0)
   - raiPolicyName is a bare name fails
-  - raiPolicyName references an undeclared policy fails
+  - template-local name not declared is a finding
+  - policy declared on another account is a finding
+  - all content filters disabled is a finding
+  - no raiPolicyName is an info finding
   negative:
-  - deployment without raiPolicyName passes because Microsoft.DefaultV2 applies
+  - Microsoft.DefaultV2 passes
+  - declared on the same account passes
+  - one enabled filter passes
+  - policy without contentFilters is not judged
   - hosted agent with rai_policy full ARM ID matching a declared raiPolicies resource passes
+  - azd 1.34.2 has no policies field so no finding
   skipped:
+  - conditional deployment is skipped
+  - azd 1.35.0 has no policies field so no finding
   - policy defined outside scanned files and no control-plane access is skipped
   uncertain:
-  - raiPolicyName-references-existing-live-policy-not-in-template
-  - Microsoft-managed policy name other than Microsoft.DefaultV2 or Microsoft.Default is not enumerated
+  - parent account outside the template is uncertain
+  - expression raiPolicyName is uncertain
+  - Microsoft.Default is not verified so uncertain
+  - expression enabled flag is uncertain
+  - unknown azd and no key is uncertain
 testability: Deterministic for azure.yaml and Bicep; existence in the live account needs control-plane read.
 notes: >-
   Whether an omitted raiPolicyName means Microsoft.DefaultV2 versus Microsoft.Default on model deployments is documented
@@ -147,3 +173,9 @@ notes: >-
   from the model deployment. Preview data-plane Policy definitions use alias Microsoft.CognitiveServices.Data/accounts/deployments/raiPolicy.*.
   The waf basis was removed after the Phase 0 Azure black belt review because no WAF pillar tag or WARA recommendation is
   cited here; the WAF mapping is added in Phase 4 when the guidance is verified.
+  Version 2 (2026-10-19): a deployment without raiPolicyName is now an informational finding although Microsoft.DefaultV2
+  applies by default (guardrails-overview); whether embeddings or other non-chat models need a guardrail binding is UNVERIFIED,
+  so every deployment is treated alike and the finding stays info. Microsoft.Default was accepted silently in version 1; it
+  is UNVERIFIED (no source names it) and is now uncertain. Content filter fields were read in the CognitiveServices
+  2026-09-01 spec (RaiPolicyProperties.contentFilters, RaiPolicyContentFilter.enabled, severityThreshold, blocking, source)
+  on 2026-10-19; the azure.yaml leg is gated on the azd schema (ADR-029).
