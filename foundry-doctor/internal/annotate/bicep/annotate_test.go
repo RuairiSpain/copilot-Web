@@ -30,7 +30,9 @@ func TestApplyBannerWithoutComments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := "\uFEFF" + Banner + "\nparam p string\n"; string(got) != want {
+	// Line endings are kept: rewriting CRLF to LF changes the value of a
+	// multi-line string and so the compiled ARM template.
+	if want := "\uFEFF" + Banner + "\r\nparam p string\r\n"; string(got) != want {
 		t.Fatalf("got %q want %q", got, want)
 	}
 }
@@ -44,5 +46,29 @@ func TestApplyKeepsDisableNextLineAdjacent(t *testing.T) {
 	want := Banner + "\nparam a string\n// Foundry Doctor: BCP000 warning ref x\n#disable-next-line no-unused-params\nparam b string\n"
 	if string(got) != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestApplyKeepsCRLFAndMultilineString(t *testing.T) {
+	src := "var s = '''\r\nline\r\n'''\r\nparam p string\r\n"
+	got, err := Apply([]byte(src), []Comment{{Line: 4, Text: "BCP000 warning ref x"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := Banner + "\r\nvar s = '''\r\nline\r\n'''\r\n// Foundry Doctor: BCP000 warning ref x\r\nparam p string\r\n"
+	if string(got) != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
+// A lone CR ends a line for the Bicep lexer, so the finding's line number counts it.
+func TestApplyCountsLoneCRAsLineBreak(t *testing.T) {
+	got, err := Apply([]byte("param a string\rparam b string\n"), []Comment{{Line: 2, Text: "x"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := Banner + "\rparam a string\r// Foundry Doctor: x\rparam b string\n"
+	if string(got) != want {
+		t.Fatalf("got %q want %q", got, want)
 	}
 }

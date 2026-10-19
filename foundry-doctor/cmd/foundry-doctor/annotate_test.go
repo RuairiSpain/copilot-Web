@@ -74,3 +74,34 @@ func TestAnnotate(t *testing.T) {
 		t.Fatalf("azure.yaml was overwritten:\n%s", after)
 	}
 }
+
+// Phase 6 gate (lead B3): an azure.yaml that does not decode as YAML (a
+// duplicate key) is the project's problem, reported by the doctor as a
+// finding. Review mode must still write the bannered copy, keep the
+// findings in the manifest, and not exit 4.
+func TestAnnotateUnparseableYAMLIsManifestOnly(t *testing.T) {
+	dir := t.TempDir()
+	const dup = "name: demo\nname: demo-again\nservices: {}\n"
+	if err := os.WriteFile(filepath.Join(dir, "azure.yaml"), []byte(dup), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, _, errs := exec(t, "annotate", "--out", "r.review", "--dir", dir)
+	if code == 4 {
+		t.Fatalf("annotate exit=%d err=%q, want a review copy", code, errs)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "r.review", "azure.review.yaml"))
+	if err != nil {
+		t.Fatalf("review copy missing (exit %d, %q): %v", code, errs, err)
+	}
+	if !strings.HasPrefix(string(data), "# Foundry Doctor review copy") || strings.Contains(string(data), "# Foundry Doctor: ") {
+		t.Fatalf("copy must carry only the banner:\n%s", data)
+	}
+	manifest, err := os.ReadFile(filepath.Join(dir, "r.review", "annotations-manifest.json"))
+	if err != nil || strings.Contains(string(manifest), `"inline": true`) {
+		t.Fatalf("manifest must hold no inline entry: %v\n%s", err, manifest)
+	}
+	orig, _ := os.ReadFile(filepath.Join(dir, "azure.yaml"))
+	if string(orig) != dup {
+		t.Fatal("original changed")
+	}
+}

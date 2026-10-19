@@ -65,9 +65,19 @@ example `terraform`) is copied but never compiled with Bicep. An infra path of
   `metadata._generator` aside, ADR-024) and the same diagnostics. Both the
   original and the copy pass the ADR-018 file-load guard before they are
   compiled. Any failure removes the copy and fails the run.
-- `annotations.diff` is a full-file replacement per annotated file, with CRLF
-  shown as LF. It contains the full source of those files; handle it like
+- Line endings of the originals are kept (a CRLF file stays CRLF), because
+  rewriting them changes the value of a multi-line Bicep string. `annotations.diff`
+  is a full-file replacement per annotated file, with CRLF shown as LF. It contains the full source of those files; handle it like
   source.
+- The infra copy leaves out credential-like files (`.env*`, `*.pem`, `*.pfx`,
+  `*.p12`, `*.key`, `*.jks`, `*.keystore`, `*.tfstate*`) and files over 8 MiB, and
+  stops at 256 MiB in total. Each skipped file is named in a warning. A module
+  that loads a skipped file fails the recompile of the copy and the run stops.
+- The review directory contains its own `.gitignore` (`*`). A YAML file that does
+  not decode (for example a duplicate key) gets the banner only; its findings stay
+  in the manifest with the reason `source-not-parseable`.
+- Manifest `line` values refer to the original files; the copy is shifted by the
+  banner and the inserted comment lines.
 - Add `*.review/` to `.gitignore`, `.dockerignore` and `.funcignore` so a
   review copy is never committed or packaged with a service.
 
@@ -113,5 +123,6 @@ example `terraform`) is copied but never compiled with Bicep. An infra path of
   per-annotation fallback yet.
 - A `bicepconfig.json` between the project root and a nested infra directory is
   not copied, so the copy may compile differently and the run fails.
-- There is no size or file-count cap on the infra copy, and no large-repository
-  performance test yet (ADR-024).
+- A finding inside a Bicep `'''` string or a YAML block scalar cannot take a comment
+  line without changing the value, so the recompile or YAML check fails the whole
+  run. There is no per-annotation fallback yet (carried to Phase 9).

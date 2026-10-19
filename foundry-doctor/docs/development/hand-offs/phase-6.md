@@ -1,5 +1,13 @@
 # Phase 6 hand-off: annotate outputs
 
+Status: **gate PASSED in loop 2 of the post-merge gate (Go 1.26.9, 2026-10-19): foundry-lead APPROVE, azure-black-belt APPROVE, no
+blocking findings.** Loop 1 was REJECT x2; its blockers were fixed (see below) and re-verified from the real CLI with Bicep 0.48.1.
+Blockers fixed in loop 1: line breaks the YAML scanner counts (NEL, LS, PS, lone CR) now shift comments correctly; original line
+endings are kept (CRLF no longer changes a multi-line string's compiled value); a relative `--dir` no longer drops every Bicep
+diagnostic location; an unparseable `azure.yaml` is bannered with its findings in the manifest only (`source-not-parseable`)
+instead of exit 4; credential-like and oversized files are not copied, the tree has its own `.gitignore` (`*`) and is capped
+(8 MiB per file, 256 MiB total, exit 2 when exceeded).
+
 ## Delivered
 - `foundry-doctor annotate` CLI with `review`, `github`, and `sarif` formats.
 - Review-copy generation under `.review` with deterministic inline comments for `azure.yaml` and exact Bicep compiler diagnostics.
@@ -32,36 +40,13 @@
 - `foundry-doctor annotate --format sarif --out annotate.sarif`
 
 ## Tests executed and results
-- **Fix loop 1 (2026-10-18): `go build`, `go vet`, `go test ./...`, `go test -race`, `staticcheck`, `govulncheck` and
-  `scripts/claude/verify-phase.sh --strict` have NOT been run.** The fix environment has no Go toolchain. The maintainer must run them
-  and attach the output before re-review. Earlier gate results recorded for this phase are withdrawn: they could not be reproduced, and
-  they named Go 1.25.13 while `go.mod` declares `go 1.26.9` (black belt B6.6).
-- The real-Bicep recompile test `internal/app/annotate_bicep_real_test.go` (build tag `spike`, needs `BICEP_PATH`) has not been run.
-- Tests added in fix loop 1 (not yet executed):
-  - `internal/annotate`: foreign `.review` directory survives, empty directory accepted, `RemoveReview` ownership, copy permissions
-    never wider than the source, partial tree removed on error, symlinked output ancestor, output aliasing infra through a symlink,
-    symlinked `azure.yaml`, symlinked directory inside infra, case alias of infra (skips on case-sensitive file systems),
-    `WriteOutputFile` (replace, lexical overlap, directory target, symlink target, hard link to an input), plain canonical text with
-    single GitHub escaping, format-character stripping, Bicep adapter de-duplication and line-independent Bicep fingerprints, banner
-    with zero annotations, no `azure.yaml` in the review tree.
-  - `internal/annotate/bicep`, `internal/annotate/yaml`: banner without comments, BOM kept first, `#disable-next-line` adjacency.
-  - `internal/diff`: `-0,0` for an empty side and `\ No newline at end of file`.
-  - `internal/location`: bidirectional override stripped from paths.
-  - `internal/app/annotate_test.go`: `resolveInfra` table (defaults, `infra.path`/`infra.module`, subdirectory `azure.yaml`, config override,
-    terraform and extension providers, unsafe paths); review mode with `infra: {path: deploy, module: app}` and with `app/azure.yaml`
-    (original and copy compiled); terraform project never compiled; the ADR-018 guard blocks both compiles in review, github and sarif
-    formats; `validateReviewCopy` with a fake runner (identical, generator-metadata-only change passes; ARM drift, compile-status change
-    and diagnostic drift fail and remove the copy); YAML block-scalar drift fails and removes the copy; absolute `--out` inside the
-    project is validated; absolute `--out` outside is refused; SARIF has no region for manifest-only entries and plain `%`; github/sarif
-    `--out` through a symlink, a symlinked ancestor or a hard link is refused, and a review `--out` under a case alias of infra is refused; a regular `--out` is replaced; a foreign
-    `.review` directory survives; symlinked `azure.yaml`, infra directory, file inside infra and output ancestor are refused.
-  - `cmd/foundry-doctor/annotate_test.go` (moved from `main_test.go`): `TestAnnotate` now also checks that the review tree has no
-    `azure.yaml`, that `azure.review.yaml` carries the banner, that the original is unchanged, that a rerun works, that every github
-    line is a workflow command, and that `--out azure.yaml` is refused with exit 2 and leaves the original intact. The stderr assertion
-    on the github run was dropped because stderr carries host-dependent notes (azd/Bicep detection); the exit code must still be 0.
-- `TestAnnotate` and the Phase 7 hand-off: the Phase 7 hand-off said `TestAnnotate` "expects non-empty GitHub output". The test in this
-  tree never asserted that (the lead review reached the same conclusion). The conflict is unresolved until the maintainer runs
-  `go test -count=1 ./cmd/foundry-doctor`.
+Run on Go 1.26.9: `go build`, `go vet`, `gofmt -l`, `go test ./...` and the catalogue and secret checks pass. The real-Bicep
+tests (`go test -tags spike -run TestRealBicep ./internal/app` with `BICEP_PATH` set to Bicep 0.48.1) pass, including the two
+added in this loop. CI runs `-race`, staticcheck and govulncheck. The earlier "not run" and "Go 1.25.13" statements are withdrawn.
+Added in the gate (each verified to fail without its fix): YAML NEL/LS/PS/lone-CR line counting and CRLF preservation; Bicep
+CRLF and lone-CR; `lines` package; relative-root `safePath`; real-Bicep relative `--dir` and CRLF multi-line string;
+unparseable YAML exits non-4 with a manifest-only copy; credential-like and oversized files skipped; `.gitignore` written;
+a 1500-file tree copy.
 
 ## Security and privacy review
 - Output overlap is decided by file identity (`os.SameFile` over every existing ancestor) as well as by name (case-folded on Windows and
@@ -102,7 +87,7 @@
 - Layered-Bicep review validation: deferred; Phase 6 fails unavailable instead of claiming validated output.
 
 ## Compatibility matrix
-- Not re-validated in fix loop 1 (no Go toolchain). `go.mod` declares `go 1.26.9`; the code uses `os.Root` methods from Go 1.24/1.25.
+- Built and tested on Go 1.26.9 in the post-merge gate; the code uses `os.Root` methods from Go 1.24/1.25.
 - Review mode works offline for YAML-only projects and for Bicep projects when the Bicep CLI is available.
 - GitHub/SARIF formats work without Azure credentials and degrade gracefully when Bicep diagnostics are unavailable.
 
@@ -123,11 +108,28 @@ DoD items are PRD section 14, verbatim. "Met in code" means the code and tests e
 
 | DoD item | Status (met / unmet / requirement changed by ADR-NNN) | Current evidence |
 |---|---|---|
-| Original files are byte-for-byte unchanged. | met in code, tests not yet run | All writes go through `os.Root` under the `.review` directory or a confined `--out`; overlap by identity and name; symlink/junction refusal; `bicep build --stdout`. Tests: `TestWriteReview`, `TestWriteOutputFile`, `TestAnnotateFileOutputRefusesInputAliases`, `TestAnnotateReviewValidation`, cmd `TestAnnotate`. |
-| Annotated YAML parses and annotated Bicep compiles. | met in code, tests not yet run | One infra resolver (`resolveInfra`) for copy and compile; `validateReviewCopy` decodes every bannered/annotated YAML file and compares documents, recompiles the copy behind the ADR-018 guard and compares status, ARM (generator metadata aside, ADR-024) and diagnostics. Tests: `TestAnnotateReviewValidation`, `TestAnnotateReviewDetectsYAMLBlockScalarDrift`, `TestAnnotateReviewUsesAzureYAMLInfraPathAndModule`, `TestAnnotateReviewAzureYAMLInSubdirectory`; real-CLI `TestRealBicepReviewCopyRecompiles` (tag `spike`) not run. |
-| Rerunning produces no duplicate comments. | met in code, tests not yet run | The owned tree is reset and recopied from the originals. Tests: `TestWriteReviewRerunIsIdempotent`, cmd `TestAnnotate` rerun. |
-| Findings without reliable locations are placed only in report/manifest. | met in code, tests not yet run | `Collect` eligibility; `toFindings` drops line/column for non-inline entries. Tests: `TestCollectAndGitHubWorkflowCommands`, `TestAnnotateSARIFOmitsRegionForManifestOnlyEntries`. Out-of-root Bicep diagnostic paths: see Known limitations (lead N5). |
-| Output names include .review to prevent accidental deployment. | met in code, tests not yet run | `--out` must end in `.review`; `azure.yaml` copies are renamed `azure.review.yaml`; every copied `azure.yaml` and `.bicep` carries the banner (ADR-024). Tests: `TestWriteReviewZeroFindingManifestUsesArrays`, `TestWriteReview`, cmd `TestAnnotate`. |
+| Original files are byte-for-byte unchanged. | met (loop 1 fixes applied; re-reviewed in loop 2: APPROVE x2) | All writes go through `os.Root` under the `.review` directory or a confined `--out`; overlap by identity and name; symlink/junction refusal; `bicep build --stdout`. Tests: `TestWriteReview`, `TestWriteOutputFile`, `TestAnnotateFileOutputRefusesInputAliases`, `TestAnnotateReviewValidation`, cmd `TestAnnotate`. |
+| Annotated YAML parses and annotated Bicep compiles. | met (loop 1 fixes applied; re-reviewed in loop 2: APPROVE x2) | One infra resolver (`resolveInfra`) for copy and compile; `validateReviewCopy` decodes every bannered/annotated YAML file and compares documents, recompiles the copy behind the ADR-018 guard and compares status, ARM (generator metadata aside, ADR-024) and diagnostics. Tests: `TestAnnotateReviewValidation`, `TestAnnotateReviewDetectsYAMLBlockScalarDrift`, `TestAnnotateReviewUsesAzureYAMLInfraPathAndModule`, `TestAnnotateReviewAzureYAMLInSubdirectory`; real-CLI `TestRealBicepReviewCopyRecompiles` (tag `spike`) not run. |
+| Rerunning produces no duplicate comments. | met (loop 1 fixes applied; re-reviewed in loop 2: APPROVE x2) | The owned tree is reset and recopied from the originals. Tests: `TestWriteReviewRerunIsIdempotent`, cmd `TestAnnotate` rerun. |
+| Findings without reliable locations are placed only in report/manifest. | met (loop 1 fixes applied; re-reviewed in loop 2: APPROVE x2) | `Collect` eligibility; `toFindings` drops line/column for non-inline entries. Tests: `TestCollectAndGitHubWorkflowCommands`, `TestAnnotateSARIFOmitsRegionForManifestOnlyEntries`. Out-of-root Bicep diagnostic paths: see Known limitations (lead N5). |
+| Output names include .review to prevent accidental deployment. | met (loop 1 fixes applied; re-reviewed in loop 2: APPROVE x2) | `--out` must end in `.review`; `azure.yaml` copies are renamed `azure.review.yaml`; every copied `azure.yaml` and `.bicep` carries the banner (ADR-024). Tests: `TestWriteReviewZeroFindingManifestUsesArrays`, `TestWriteReview`, cmd `TestAnnotate`. |
 
 PRD testing-strategy categories: round-trip YAML, Bicep recompile (fake runner; real CLI gated), idempotence and permission/symlink tests
 exist; large-repository performance tests are not delivered (ADR-024).
+
+## Open non-blocking items (gate loop 1)
+- Prior tool-owned comments in an input are not stripped; idempotence comes from rebuilding the tree from the originals (the PRD
+  "remove prior doctor-owned comments" step is not implemented).
+- `annotations.diff` is a whole-file replacement hunk, not a line diff.
+- Whole-run fail-closed: a missing Bicep CLI for a Bicep project, `infra.layers`, or an `infra.path` outside the project gives
+  exit 2 instead of a YAML-only copy; only the entry module is recompiled (unreferenced `.bicep` files are bannered but not).
+- Manifest `line` values refer to the original file; the copy shifts by the banner and inserted lines.
+- Comment text uses positional labels and truncates at 240 bytes; rule recommendations are generic text.
+- The `.review` suffix is on the directory only; `infra/main.bicep` keeps its name inside it.
+- Windows junction behaviour is untested; `extension/commands_extra.go` duplicates the annotate command definition.
+- Loop 2 additions, open: a finding inside a Bicep `'''` string or a YAML block scalar fails the whole run (exit 4) instead of
+  becoming manifest-only; a module that loads a skipped credential-like file fails the recompile with a misleading guard message;
+  the skip list is a denylist (no `*.tfvars`, `.npmrc`, `*.ppk`) and `.env` prefix also skips `.environment.bicep`; skipped files
+  are reported on stderr only, not in the manifest; a symlink under infra aborts the copy; the cmd test for `source-not-parseable`
+  asserts no inline entry but the real engine produces no YAML finding to demote (the app-level path is covered with a fake engine
+  in the reviewers' scratch tests only).

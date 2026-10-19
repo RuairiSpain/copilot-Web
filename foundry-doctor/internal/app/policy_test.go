@@ -82,6 +82,7 @@ func TestArmLoaderClassifiesFailures(t *testing.T) {
 		}
 	}
 	t.Run("bicep entry with no CLI is a bicep failure", func(t *testing.T) {
+		t.Setenv("BICEP_PATH", "")
 		dir := t.TempDir()
 		write(t, dir, "azure.yaml", "name: demo\n")
 		write(t, dir, "infra/main.bicep", "targetScope = 'resourceGroup'\n")

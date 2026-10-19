@@ -1,6 +1,8 @@
 package bicep
 
 import (
+	"os"
+	"path/filepath"
 	"runtime"
 	"testing"
 )
@@ -45,5 +47,17 @@ func TestParseSARIFSplitsDocsURL(t *testing.T) {
 	if d.File != "main.bicep" || d.Line != 2 || d.Column != 7 || d.Message != `Parameter "p" is unused.` ||
 		d.DocsURL != "https://aka.ms/bicep/linter-diagnostics#no-unused-params" {
 		t.Fatalf("unexpected diagnostic %+v", d)
+	}
+}
+
+// Phase 6 gate (both reviewers): the default --dir "." is a relative root.
+func TestSafePathRelativeRoot(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(wd, "infra", "main.bicep")
+	if got := safePath(".", file); got != "infra/main.bicep" {
+		t.Fatalf("safePath(\".\", %q) = %q", file, got)
 	}
 }

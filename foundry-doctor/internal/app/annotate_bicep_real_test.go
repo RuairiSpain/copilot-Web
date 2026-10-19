@@ -58,3 +58,56 @@ func TestRealBicepReviewCopyRecompiles(t *testing.T) {
 		}
 	}
 }
+
+// Phase 6 gate (both reviewers): the default --dir "." is a relative path.
+// Bicep reports absolute file paths, so the root must be made absolute or
+// every diagnostic loses its location and is never placed inline.
+func TestRealBicepRelativeDirPlacesInlineComments(t *testing.T) {
+	exe := os.Getenv("BICEP_PATH")
+	if exe == "" {
+		t.Skip("BICEP_PATH not set")
+	}
+	dir := t.TempDir()
+	writeFile(t, dir, "azure.yaml", "name: demo\n")
+	writeFile(t, dir, "infra/main.bicep", "param unusedParam string = 'x'\noutput ok bool = true\n")
+	t.Chdir(dir)
+	svc, _ := newSvc(&fakeEngine{})
+	svc.ARM = armLoader{disc: bicep.DiscoverOptions{Path: exe}}
+	svc.Project = fakeProject{src: Source{Dir: ".", AzureYAML: []byte("name: demo\n"), AzureYAMLAt: "azure.yaml", InfraPath: "infra"}}
+	if code, err := Annotate(context.Background(), svc, AnnotateRequest{Format: "review", Out: "rel.review", Dir: "."}, io.Discard); err != nil || code != ExitOK {
+		t.Fatalf("code=%d err=%v", code, err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "rel.review", "infra", "main.bicep"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "// Foundry Doctor: no-unused-params") {
+		t.Fatalf("no inline comment with a relative --dir:\n%s", data)
+	}
+}
+
+// Phase 6 gate (black belt B2): a CRLF file with a multi-line string compiles
+// to a value containing CRLF, so the copy must keep CRLF or the recompile
+// check fails the run.
+func TestRealBicepCRLFMultilineStringKeepsLineEndings(t *testing.T) {
+	exe := os.Getenv("BICEP_PATH")
+	if exe == "" {
+		t.Skip("BICEP_PATH not set")
+	}
+	dir := t.TempDir()
+	writeFile(t, dir, "azure.yaml", "name: demo\n")
+	writeFile(t, dir, "infra/main.bicep", "param unusedParam string = 'x'\r\nvar d = '''\r\nline one\r\nline two\r\n'''\r\noutput o string = d\r\n")
+	svc, _ := newSvc(&fakeEngine{})
+	svc.ARM = armLoader{disc: bicep.DiscoverOptions{Path: exe}}
+	svc.Project = fakeProject{src: Source{Dir: dir, AzureYAML: []byte("name: demo\n"), AzureYAMLAt: "azure.yaml", InfraPath: "infra"}}
+	if code, err := Annotate(context.Background(), svc, AnnotateRequest{Format: "review", Out: "crlf.review", Dir: dir}, io.Discard); err != nil || code != ExitOK {
+		t.Fatalf("code=%d err=%v", code, err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "crlf.review", "infra", "main.bicep"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(strings.ReplaceAll(string(data), "\r\n", ""), "\n") {
+		t.Fatalf("copy mixed in bare LF line endings:\n%q", data)
+	}
+}
