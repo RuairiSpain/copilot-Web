@@ -1,5 +1,5 @@
 id: FND-CFG-003
-version: 4
+version: 5
 group: CFG
 title: "All inter-service references resolve"
 description: >-
@@ -8,9 +8,9 @@ description: >-
   azure.ai.toolbox services that are also listed in the agent uses; toolbox tools[].connection
   and prompt-agent connections entries must name azure.ai.connection services; a voice
   conversationEngine.name must be a hosted azure.ai.agent service in the same project;
-  and memory-store chatModel and embeddingModel must name model deployments. Generic uses entries
-  are checked only when they name a service; the schema also permits resource names and the
-  Foundry-specific resource resolution behaviour is not documented.
+  and memory-store chatModel and embeddingModel must name model deployments. Every uses entry on any
+  service must name a service key or a top-level resources key of the same file (azure.yaml.json: "List of
+  service names and resource names"); an entry that names neither is reported.
 status: verified
 phases: ["1"]
 inputs: ["azure.yaml"]
@@ -45,7 +45,10 @@ evidence:
     documented host kind. Check a uses entry only where the typed reference also requires that
     service to occur in uses. Memory-store model names are checked against
     azure.ai.project deployments names and are skipped when the project sets endpoint (existing
-    project, deployments not enumerable offline).
+    project, deployments not enumerable offline). Every uses entry of every service is looked up in the
+    service keys and the top-level resources keys; an unknown name is a finding (key uses-unknown:<name>).
+    An entry containing ${...} is not judged. When resources is present but is not a mapping the names
+    it holds cannot be enumerated and an unknown entry is an uncertain note instead of a finding.
   confidence: certain
 recommendation: >-
   Make each referenced name match a service key defined under services, and add toolbox and
@@ -129,18 +132,28 @@ tests:
     - toolbox-in-toolboxes-but-not-in-uses
     - toolbox-tool-names-missing-connection
     - voice-conversation-engine-unknown-target
+    - uses-unknown-service-name-is-a-finding
+    - uses-unknown-on-non-agent-service
+    - uses-unknown-reported-per-entry
   negative:
     - full-example-from-reference
     - uses-names-resources-entry
+    - uses-known-service-passes
+    - uses-absent-passes
   skipped:
+    - uses-reference-is-not-judged
     - memory-model-with-existing-project-endpoint
     - service-defined-in-missing-ref-file
   uncertain:
-    - generic-uses-target-not-found-in-services-or-resources
+    - uses-with-resources-not-a-mapping-is-uncertain
     - routine-agent-use-relationship-not-documented
     - memory-model-with-project-deployments-absent
 notes: >-
-  Generic uses and routine relationships remain uncertain and do not produce violations. The generic
-  schema permits resource names while the Foundry article discusses service names; compiled Bicep does
-  not prove how an extension resolves that name. Defender and Advisor overlap is unresearched.
+  Routine relationships remain uncertain and do not produce violations. Defender and Advisor overlap is unresearched.
+  Version 5: an unknown uses entry is a finding. Basis: the Foundry troubleshooting article states every uses
+  entry must match a service name, and the generic schema adds only the top-level resources map as the other
+  valid target, which the rule reads from the same file. Not covered, UNVERIFIED: whether a uses entry may point at
+  a service of a kind that cannot be used (for example a service naming itself, or a routine); no vendored schema
+  or source defines invalid kinds, so no kind check is made. Resource names that azd resolves from infrastructure
+  rather than from the top-level resources map are not known to the rule.
   Version 4: uncertain notes are no longer dropped when the rule also has findings. They are returned as uncertain skips next to the findings (one per distinct note), and the rule-level skip is kept only when there are no findings.

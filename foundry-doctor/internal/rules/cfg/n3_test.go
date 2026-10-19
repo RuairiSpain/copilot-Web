@@ -88,7 +88,7 @@ func TestCFG009UnderstoodAndUnknownTriggers(t *testing.T) {
 		{"beta.8 spelling, too frequent", routine("        type: recurring\n        cron_expression: \"* * * * *\"\n        time_zone: UTC\n"), "", 1},
 		{"beta.8 spelling, fine", routine("        type: recurring\n        cron_expression: \"0 * * * *\"\n        time_zone: UTC\n"), "", 0},
 		{"camelCase recurring is uncertain", routine("        type: recurring\n        cronExpression: \"* * * * *\"\n        timeZone: UTC\n"), uncertainPrefix + "r: recurring trigger default uses cronExpression", 0},
-		{"schedule type is uncertain", routine("        type: schedule\n        cronExpression: \"* * * * *\"\n        timeZone: UTC\n"), uncertainPrefix + "r: trigger default has type schedule", 0},
+		{"schedule type with cronExpression is evaluated (version 5)", routine("        type: schedule\n        cronExpression: \"* * * * *\"\n        timeZone: UTC\n"), "", 1},
 		{"schedule type with snake case keys is uncertain", routine("        type: schedule\n        cron_expression: \"* * * * *\"\n"), uncertainPrefix + "r: trigger default has type schedule", 0},
 		{"recurring without any cron key is uncertain", routine("        type: recurring\n"), uncertainPrefix + "r: recurring trigger default has no cron_expression", 0},
 		{"timer is not evaluated, not not-applicable", routine("        type: timer\n        at: \"2030-01-01T00:00:00Z\"\n"), uncertainPrefix + "r: trigger default type timer", 0},
@@ -128,7 +128,7 @@ func TestCFG009FindingKeepsOtherTriggerNotes(t *testing.T) {
 	if res.Skipped != nil || len(res.Findings) != 1 {
 		t.Fatalf("want one finding and no rule-level skip, got %+v", res)
 	}
-	wantSkipPrefixed(t, res, "trigger new has type schedule")
+	wantSkipPrefixed(t, res, "trigger new has no timeZone")
 }
 
 // N3-3: a named environment that does not exist is not "the default".

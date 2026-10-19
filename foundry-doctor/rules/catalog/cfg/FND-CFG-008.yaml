@@ -1,5 +1,5 @@
 id: FND-CFG-008
-version: 2
+version: 3
 group: CFG
 title: "MCP tools use allow lists"
 description: >-
@@ -35,7 +35,8 @@ compatibility:
     section 6).
 evidence:
   description: >-
-    Inspect only a direct inline tools[] entry with type mcp and a literal allowed_tools key. Report
+    Inspect only a direct inline tools[] entry (on an agent or on an azure.ai.toolbox service without endpoint) with
+    type mcp and a literal allowed_tools key. Report
     an empty literal list as a product-opinion finding. If allowed_tools is absent, report Uncertain:
     the documented MCP default is all tools, but the reviewed material does not prove that this
     azure.yaml shape maps to that service property. Skip toolbox endpoint-reuse mode, non-MCP tool
@@ -94,15 +95,27 @@ testability: Offline from azure.yaml. Allow-list accuracy against the live serve
 tests:
   positive:
     - direct-inline-mcp-tool-with-literal-empty-allowed-tools-reports-opinion-finding
+    - toolbox-inline-mcp-empty-allowed-tools-is-finding
+    - agent-mcp-with-empty-list-still-finding
+    - agent-mcp-mixed-case-type
   negative:
     - direct-inline-mcp-tool-with-nonempty-literal-allowed-tools-produces-no-finding
     - non-mcp-tool
+    - toolbox-inline-mcp-nonempty-allowed-tools-passes
+    - agent-allowed_tools-wins-over-alias
   skipped:
     - toolbox-endpoint-reuse-mode
     - tool-defined-in-unreadable-ref-file
     - mcp-tool-uses-an-unproven-allow-list-property-spelling
+    - toolbox-endpoint-reuse-mode-skipped
+    - toolbox-tool-from-ref-skipped
+    - toolbox-non-mcp-tools-not-applicable
   uncertain:
     - direct-inline-mcp-tool-omits-allowed-tools-because-azure-yaml-mapping-is-unverified
+    - toolbox-inline-mcp-omitting-allowed-tools-is-uncertain
+    - agent-allowedTools-camelCase-not-reported-as-omitted
+    - agent-allowedTools-empty-is-not-a-finding
+    - agent-allowed-tools-reference-unresolved
 notes: >-
   The allowed_tools best practice and service default are documented, but their mapping to
   azure.yaml is not. additionalProperties does not prove service acceptance or forwarding. The rule
@@ -110,3 +123,11 @@ notes: >-
   Uncertain rather than a violation. The exact extension package versions reviewed are recorded in
   compatibility; immutable repository revisions were unavailable.
   A project with nothing the rule applies to skips with the not-applicable reason head, not input-unavailable.
+  Version 3: toolbox services with inline tools (and no endpoint) are evaluated like agent tools; before, any
+  toolbox with tools was skipped as "endpoint-reuse mode", which was a mislabel (endpoint-reuse is the toolbox
+  endpoint key). The Learn toolbox article's troubleshooting row names the allowed_tools filter, which is the only
+  confirmed spelling. The vendored and current main azd schemas (agent and toolbox, read 2026-10-19) do not define
+  allowed_tools or any MCP tool property: agent and toolbox tools items allow additional properties. Because no schema
+  establishes the key as the allow-list mechanism for azure.yaml, a missing allow list stays Uncertain and is NOT a
+  finding (UNVERIFIED). The spellings allowedTools, allowed-tools, tool_filter and toolFilter are recognised only to
+  say they are unconfirmed and not evaluated; they are never treated as an omission or an empty list.
