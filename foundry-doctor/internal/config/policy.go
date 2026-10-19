@@ -30,6 +30,18 @@ type Policy struct {
 	Preflight             *PolicyPreflight   `yaml:"preflight,omitempty"`
 	Reliability           *PolicyReliability `yaml:"reliability,omitempty"`
 	Runtime               *PolicyRuntime     `yaml:"runtime,omitempty"`
+	AzurePolicy           *PolicyAzurePolicy `yaml:"azurePolicy,omitempty"`
+	Encryption            *PolicyEncryption  `yaml:"encryption,omitempty"`
+}
+
+// PolicyAzurePolicy lists the Azure Policy definitions that FND-SEC-009 treats as covering the baseline.
+type PolicyAzurePolicy struct {
+	MappedDefinitionIDs []string `yaml:"mappedDefinitionIds,omitempty"`
+}
+
+// PolicyEncryption declares an encryption requirement read by FND-SEC-010.
+type PolicyEncryption struct {
+	RequireCustomerManagedKeys *bool `yaml:"requireCustomerManagedKeys,omitempty"`
 }
 
 // PolicyReliability configures reliability expectations read by FND-REL-004 and FND-REL-007.
@@ -168,6 +180,7 @@ func PolicyKeys() []string {
 		"cost.devMaxCosmosThroughput", "cost.productionSizedSkuExemptions",
 		"preflight.deploymentHistoryMargin", "preflight.regionMatrixStalenessDays",
 		"reliability.locksManagedOutsideTemplate", "reliability.disasterRecovery",
+		"azurePolicy.mappedDefinitionIds", "encryption.requireCustomerManagedKeys",
 		"runtime.throttling.maxRate429", "runtime.throttling.windowMinutes", "runtime.throttling.minRequests",
 	}
 	slices.Sort(keys)
@@ -265,6 +278,12 @@ func (p Policy) flatten() map[string]any {
 	if r := p.Reliability; r != nil {
 		setB("reliability.locksManagedOutsideTemplate", r.LocksManagedOutsideTemplate)
 		setS("reliability.disasterRecovery", r.DisasterRecovery)
+	}
+	if a := p.AzurePolicy; a != nil {
+		setL("azurePolicy.mappedDefinitionIds", a.MappedDefinitionIDs)
+	}
+	if e := p.Encryption; e != nil {
+		setB("encryption.requireCustomerManagedKeys", e.RequireCustomerManagedKeys)
 	}
 	if r := p.Runtime; r != nil && r.Throttling != nil {
 		setF("runtime.throttling.maxRate429", r.Throttling.MaxRate429)
@@ -375,6 +394,14 @@ func (p Policy) validate(prefix string) []error {
 			add("cost.devMaxCosmosThroughput", "must be at least 1")
 		}
 		nonEmpty("cost.productionSizedSkuExemptions", c.ProductionSizedSkuExemptions)
+	}
+	if a := p.AzurePolicy; a != nil {
+		nonEmpty("azurePolicy.mappedDefinitionIds", a.MappedDefinitionIDs)
+		for _, id := range a.MappedDefinitionIDs {
+			if !guidRe.MatchString(id) {
+				add("azurePolicy.mappedDefinitionIds", "%q must be a GUID", id)
+			}
+		}
 	}
 	if r := p.Reliability; r != nil && r.DisasterRecovery != nil && !slices.Contains(drObjectives, *r.DisasterRecovery) {
 		add("reliability.disasterRecovery", "%q must be one of %s", *r.DisasterRecovery, strings.Join(drObjectives, ", "))
