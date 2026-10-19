@@ -1,13 +1,14 @@
 id: FND-RUN-008
-version: 1
+version: 2
 group: RUN
 title: Deployed properties versus compiled template drift
 description: >-
-  Placeholder for a future phase. Compare the properties of Foundry resources as deployed in Azure with the ARM JSON
-  compiled from the project Bicep, and report differences on properties that Foundry Doctor rules inspect. Which
-  differences count as drift versus expected service-populated values is a design decision; no primary source defines it.
+  Compare an allow-list of security- and availability-relevant properties of the Foundry account, project and model
+  deployments as deployed in Azure with the values in the ARM JSON compiled from the project Bicep, and report each
+  drifted property. Which properties count as drift is a product opinion (the allow-list below); expression-valued
+  and service-defaulted template properties are never reported as drift.
 status: product-opinion
-phases: ["future"]
+phases: ["3"]
 inputs: [bicep-arm, control-plane]
 basis: [opinion]
 category: nice-to-have
@@ -23,24 +24,48 @@ compatibility:
     - { plane: management, provider: Microsoft.Resources, resourceType: deployments, operation: whatIf, version: "2025-04-01" }
     - { plane: management, provider: Microsoft.Resources, resourceType: deployments, operation: whatIf, version: "2026-06-01" }
   preview: false
-  notes: "Not verified. azd supports provision preview (azd provision --preview, per extension-framework.md), which routes through the same validation call as other paths; exact azd version not pinned. Microsoft.Resources/deployments whatIf 2025-04-01 / 2026-06-01: stable; also present in the clone."
+  notes: "Control-plane GET reads only, through the Foundry management reads the runtime command already makes (account, project, deployments list); no what-if call and no deployment permission is needed. The earlier whatIf api-version entries are kept for the manual interim check. Microsoft.Resources/deployments whatIf 2025-04-01 / 2026-06-01: stable."
 evidence:
   description: >-
-    Not implemented in this phase. Candidate design: (a) read each deployed resource with ARM GET at the api-version of
-    the compiled template and compare only the property paths that other catalogue rules read; or (b) call the ARM what-if
-    operation (POST .../providers/Microsoft.Resources/deployments/{name}/whatIf, a long-running read-only analysis that
-    needs deployment permissions the doctor may not have). Required permission and noise filtering are unresolved.
-    Vantage point: control plane, any network. Metadata read: resource property values already visible to Reader; no
-    secrets, since secure properties are not returned by GET. Status per evidence: no tested evidence yet, so the rule
-    stays a documented placeholder, labelled product opinion.
-  confidence: uncertain
+    Implemented in the runtime command (needs the compiled ARM model and a deployed control-plane read). The doctor
+    matches template resources to deployed resources by literal name, then compares the allow-list: account
+    properties.publicNetworkAccess (read through the account GET), project identity.type (project GET; compared as an
+    unordered, case-insensitive set), and model deployment sku.name (deployments list). Each of these is a documented
+    property of Microsoft.CognitiveServices 2026-09-01 (cognitiveservices.json, read 2026-10-19). A drifted property is a
+    finding per property (key drift:{path}) on the deployed resource, located at the template resource, whose evidence
+    names the property path and the two non-secret values (enum or boolean or number) and nothing else; no other
+    property is ever read into evidence. Uncertain: a template value that is an unresolved expression or not a scalar, a
+    conditional or looped template resource, a deployed value that is not reported. A property the template does not
+    set is not compared (the service default applies). Resources that exist on one side only (template resource
+    not deployed, deployed model deployment not in the template, a template account or project other than the target, a
+    template resource whose name is not a literal) are notes, never findings; at most 10 such notes are listed
+    followed by a count. Skipped: no compiled ARM model (input-unavailable), no Foundry management read available or the
+    caller cannot read the resource (input-unavailable naming the capability and permission), no target
+    (--subscription, --resource-group, --account), or a template that declares none of account, project or deployment
+    (not-applicable). NOT compared yet because the runtime client does not expose the deployed value (a gap in
+    internal/azure, not a verified exclusion): account disableLocalAuth and networkAcls.defaultAction, account identity
+    type, deployment model name and version and sku.capacity. sku.capacity is additionally ambiguous because the client
+    folds properties.currentCapacity and sku.capacity together (UNVERIFIED mapping). The what-if alternative (POST
+    .../deployments/{name}/whatIf) is not used: it needs deployment permissions the doctor may not have and its noise
+    filtering is unresolved. Vantage point: control plane, any network. Metadata read: resource property values already
+    visible to Reader; secure properties are not returned by GET and none is read.
+  confidence: likely
 recommendation: >-
-  When implemented: redeploy from source control to reconcile drift, or update the Bicep to capture the intentional
-  change. Until then, run azd provision --preview manually before provisioning.
+  Redeploy from source control to reconcile the drift, or update the Bicep to capture the intentional change. Run
+  azd provision --preview to see the planned change before provisioning.
 fix: |-
-  # Manual interim check (read-only preview of the planned change)
+  # Reconcile the deployed resource with the template (read-only preview first)
   azd provision --preview
+  azd provision
 sources:
+  - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+    lastVerified: "2026-10-19"
+    verifiedVia: >-
+      https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json
+      (raw file read 2026-10-19)
+    note: >-
+      Account properties publicNetworkAccess, disableLocalAuth and networkAcls.defaultAction, the identity object and the
+      deployment sku and DeploymentState (Running, Paused) definitions exist. Branch URL, not commit-pinned.
   - url: https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/deployments/stable/2025-04-01/deployments.json
     lastVerified: "2026-10-04"
     verifiedVia: >-
@@ -80,14 +105,29 @@ implementation:
 tests:
   positive:
     - deployed publicNetworkAccess differs from the compiled template value
+    - project identity type differs from the compiled template value
+    - deployment sku.name differs from the compiled template value
+    - two drifted properties are two findings
   negative:
     - deployed property equals compiled value for every inspected property
+    - identity type set order does not matter
+    - a property the template does not set is not compared
   skipped:
     - no compiled ARM JSON available
     - caller cannot read the deployed resource
+    - no deployed control-plane read available
+    - template declares none of the inspected resource types
   uncertain:
     - property is service-populated or defaulted and cannot be compared
-testability: Not testable until the comparison scope is designed (Phase future).
+    - template property is an unresolved expression or not a scalar
+    - conditional or looped template resource
+    - resource exists on one side only (note, never a finding)
+testability: Deterministic against a fake ARM model and fake management reads; live mode needs ARM Reader on the account.
 notes: >-
-  Placeholder. Unverified: what-if noise handling, permission needed to call whatIf, and which Foundry properties are
-  safe to compare. Do not implement before an ADR defines the drift scope.
+  Version 2 (2026-10-19): moved from the future placeholder to Phase 3 as a control-plane comparison (severity unchanged:
+  info in dev and test, warning in prod). The drift scope is the allow-list in the evidence, a product opinion.
+  UNVERIFIED: that the allow-list is the right scope for every project; which service-populated values could differ from
+  a literal template value without being drift (the rule only compares properties the template sets to a literal);
+  sku.capacity versus currentCapacity mapping; what-if noise handling and its permission. To extend the allow-list to
+  disableLocalAuth, networkAcls.defaultAction, account identity type and model version, internal/azure must first
+  expose those deployed values (properties exist in cognitiveservices.json 2026-09-01).

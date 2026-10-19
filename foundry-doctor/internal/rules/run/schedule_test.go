@@ -102,7 +102,7 @@ func TestScheduleWithTheRealRulesAndStates(t *testing.T) {
 	d.RBAC = allGranted()
 	d.Options.Parallelism = 3
 	out := Schedule(context.Background(), d, baseInput(), RuleIDs())
-	if len(out) != 7 {
+	if len(out) != 8 {
 		t.Fatalf("rules = %d", len(out))
 	}
 	if res, err := out[0].Evaluate(context.Background(), baseInput()); err != nil || res.Skipped != nil || len(res.Findings) != 0 {

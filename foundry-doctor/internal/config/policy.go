@@ -13,21 +13,43 @@ import (
 // slice means the key is absent; rules that need an absent key are skipped with
 // a profile-key-missing reason rather than guessing.
 type Policy struct {
-	ResourceScope         *string          `yaml:"resourceScope,omitempty"`
-	AllowedExternalScopes []string         `yaml:"allowedExternalScopes,omitempty"`
-	Identity              *PolicyIdentity  `yaml:"identity,omitempty"`
-	Environments          *PolicyEnvs      `yaml:"environments,omitempty"`
-	Tags                  *PolicyTags      `yaml:"tags,omitempty"`
-	LogRetention          *PolicyRetention `yaml:"logRetention,omitempty"`
-	Models                *PolicyModels    `yaml:"models,omitempty"`
-	DataResidency         *PolicyResidency `yaml:"dataResidency,omitempty"`
-	DisasterRecovery      *PolicyDR        `yaml:"disasterRecovery,omitempty"`
-	Network               *PolicyNetwork   `yaml:"network,omitempty"`
-	Monitoring            *PolicyMonitor   `yaml:"monitoring,omitempty"`
-	ManagedByAzurePolicy  []string         `yaml:"managedByAzurePolicy,omitempty"`
-	Knowledge             *PolicyKnowledge `yaml:"knowledge,omitempty"`
-	Cost                  *PolicyCost      `yaml:"cost,omitempty"`
-	Preflight             *PolicyPreflight `yaml:"preflight,omitempty"`
+	ResourceScope         *string            `yaml:"resourceScope,omitempty"`
+	AllowedExternalScopes []string           `yaml:"allowedExternalScopes,omitempty"`
+	Identity              *PolicyIdentity    `yaml:"identity,omitempty"`
+	Environments          *PolicyEnvs        `yaml:"environments,omitempty"`
+	Tags                  *PolicyTags        `yaml:"tags,omitempty"`
+	LogRetention          *PolicyRetention   `yaml:"logRetention,omitempty"`
+	Models                *PolicyModels      `yaml:"models,omitempty"`
+	DataResidency         *PolicyResidency   `yaml:"dataResidency,omitempty"`
+	DisasterRecovery      *PolicyDR          `yaml:"disasterRecovery,omitempty"`
+	Network               *PolicyNetwork     `yaml:"network,omitempty"`
+	Monitoring            *PolicyMonitor     `yaml:"monitoring,omitempty"`
+	ManagedByAzurePolicy  []string           `yaml:"managedByAzurePolicy,omitempty"`
+	Knowledge             *PolicyKnowledge   `yaml:"knowledge,omitempty"`
+	Cost                  *PolicyCost        `yaml:"cost,omitempty"`
+	Preflight             *PolicyPreflight   `yaml:"preflight,omitempty"`
+	Reliability           *PolicyReliability `yaml:"reliability,omitempty"`
+	Runtime               *PolicyRuntime     `yaml:"runtime,omitempty"`
+}
+
+// PolicyReliability configures reliability expectations read by FND-REL-004 and FND-REL-007.
+type PolicyReliability struct {
+	// LocksManagedOutsideTemplate says management locks are applied outside the template, so a missing lock is uncertain.
+	LocksManagedOutsideTemplate *bool `yaml:"locksManagedOutsideTemplate,omitempty"`
+	// DisasterRecovery is the recovery objective: single-region, required, multi-region, hot-hot, hot-warm or hot-cold.
+	DisasterRecovery *string `yaml:"disasterRecovery,omitempty"`
+}
+
+// PolicyRuntime configures runtime diagnosis thresholds (FND-RUN-004).
+type PolicyRuntime struct {
+	Throttling *PolicyThrottling `yaml:"throttling,omitempty"`
+}
+
+// PolicyThrottling sets when sustained HTTP 429 responses fail FND-RUN-004.
+type PolicyThrottling struct {
+	MaxRate429    *float64 `yaml:"maxRate429,omitempty"`
+	WindowMinutes *int     `yaml:"windowMinutes,omitempty"`
+	MinRequests   *int     `yaml:"minRequests,omitempty"`
 }
 
 // PolicyIdentity configures identity-specific policy inputs.
@@ -117,6 +139,7 @@ var (
 	residencyScope   = []string{"global", "datazone-us", "datazone-eu", "datazone-apac", "geography"}
 	azurePolicyMgd   = []string{"private-dns-zone-group", "diagnostic-settings"}
 	environmentTiers = []string{"dev", "test", "prod"}
+	drObjectives     = []string{"single-region", "required", "multi-region", "hot-hot", "hot-warm", "hot-cold"}
 )
 
 // Policy defaults from ADR-007. Only keys with a documented default appear.
@@ -144,6 +167,8 @@ func PolicyKeys() []string {
 		"knowledge.requireDocumentLevelAccess",
 		"cost.devMaxCosmosThroughput", "cost.productionSizedSkuExemptions",
 		"preflight.deploymentHistoryMargin", "preflight.regionMatrixStalenessDays",
+		"reliability.locksManagedOutsideTemplate", "reliability.disasterRecovery",
+		"runtime.throttling.maxRate429", "runtime.throttling.windowMinutes", "runtime.throttling.minRequests",
 	}
 	slices.Sort(keys)
 	return keys
@@ -163,6 +188,11 @@ func (p Policy) flatten() map[string]any {
 		}
 	}
 	setI := func(k string, v *int) {
+		if v != nil {
+			m[k] = *v
+		}
+	}
+	setF := func(k string, v *float64) {
 		if v != nil {
 			m[k] = *v
 		}
@@ -231,6 +261,15 @@ func (p Policy) flatten() map[string]any {
 	if pf := p.Preflight; pf != nil {
 		setI("preflight.deploymentHistoryMargin", pf.DeploymentHistoryMargin)
 		setI("preflight.regionMatrixStalenessDays", pf.RegionMatrixStalenessDays)
+	}
+	if r := p.Reliability; r != nil {
+		setB("reliability.locksManagedOutsideTemplate", r.LocksManagedOutsideTemplate)
+		setS("reliability.disasterRecovery", r.DisasterRecovery)
+	}
+	if r := p.Runtime; r != nil && r.Throttling != nil {
+		setF("runtime.throttling.maxRate429", r.Throttling.MaxRate429)
+		setI("runtime.throttling.windowMinutes", r.Throttling.WindowMinutes)
+		setI("runtime.throttling.minRequests", r.Throttling.MinRequests)
 	}
 	return m
 }
@@ -336,6 +375,21 @@ func (p Policy) validate(prefix string) []error {
 			add("cost.devMaxCosmosThroughput", "must be at least 1")
 		}
 		nonEmpty("cost.productionSizedSkuExemptions", c.ProductionSizedSkuExemptions)
+	}
+	if r := p.Reliability; r != nil && r.DisasterRecovery != nil && !slices.Contains(drObjectives, *r.DisasterRecovery) {
+		add("reliability.disasterRecovery", "%q must be one of %s", *r.DisasterRecovery, strings.Join(drObjectives, ", "))
+	}
+	if r := p.Runtime; r != nil && r.Throttling != nil {
+		t := r.Throttling
+		if t.MaxRate429 != nil && (*t.MaxRate429 <= 0 || *t.MaxRate429 > 1) {
+			add("runtime.throttling.maxRate429", "must be a ratio above 0 and at most 1")
+		}
+		if t.WindowMinutes != nil && (*t.WindowMinutes < 5 || *t.WindowMinutes > 1440) {
+			add("runtime.throttling.windowMinutes", "must be from 5 to 1440")
+		}
+		if t.MinRequests != nil && *t.MinRequests < 1 {
+			add("runtime.throttling.minRequests", "must be at least 1")
+		}
 	}
 	if pf := p.Preflight; pf != nil {
 		if pf.DeploymentHistoryMargin != nil && *pf.DeploymentHistoryMargin < 0 {

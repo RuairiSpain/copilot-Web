@@ -148,6 +148,8 @@ mapped:
   pillar: reliability
 - rule: FND-RUN-007
   pillar: operations
+- rule: FND-RUN-008
+  pillar: operations
 - rule: FND-SEC-001
   pillar: security
 - rule: FND-SEC-002
@@ -219,8 +221,6 @@ excluded:
   reason: "Phase 8 Foundry IQ / AI gateway rule (phases: 8); it needs IQ or gateway metadata that `assess waf` does not load (ADR-026)."
 - rule: FND-REL-006
   reason: "Phase 8 Foundry IQ / AI gateway rule (phases: 8); it needs IQ or gateway metadata that `assess waf` does not load (ADR-026)."
-- rule: FND-RUN-008
-  reason: "Not scheduled in an implemented phase (phases: future); no evaluator ships in this release, so it would only ever be SKIPPED."
 - rule: FND-SEC-005
   reason: "Not scheduled in an implemented phase (phases: later); no evaluator ships in this release, so it would only ever be SKIPPED."
 - rule: FND-SEC-007

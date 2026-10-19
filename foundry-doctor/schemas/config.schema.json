@@ -215,6 +215,29 @@
             "deploymentHistoryMargin": { "type": "integer", "minimum": 0 },
             "regionMatrixStalenessDays": { "type": "integer", "minimum": 1 }
           }
+        },
+        "reliability": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "locksManagedOutsideTemplate": { "type": "boolean" },
+            "disasterRecovery": { "enum": ["single-region", "required", "multi-region", "hot-hot", "hot-warm", "hot-cold"] }
+          }
+        },
+        "runtime": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "throttling": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "maxRate429": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+                "windowMinutes": { "type": "integer", "minimum": 5, "maximum": 1440 },
+                "minRequests": { "type": "integer", "minimum": 1 }
+              }
+            }
+          }
         }
       }
     }

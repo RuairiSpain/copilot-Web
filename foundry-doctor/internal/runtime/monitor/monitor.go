@@ -6,6 +6,7 @@ package monitor
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/azure"
 )
@@ -70,9 +71,14 @@ type Client interface {
 }
 
 // FixedClient adapts azure.RuntimeMonitor to the monitor Client contract.
-type FixedClient struct{ Inner azure.RuntimeMonitor }
+type FixedClient struct {
+	Inner azure.RuntimeMonitor
+	// Window is the metric look-back; zero uses the adapter default (one hour).
+	Window time.Duration
+}
 
 func (c FixedClient) query(ctx context.Context, accountID string, q azure.MetricQuery) (Result, error) {
+	q.Window = c.Window
 	got, err := c.Inner.QueryAccountMetrics(ctx, accountID, q)
 	if err != nil {
 		return Result{}, err

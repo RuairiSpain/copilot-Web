@@ -39,6 +39,8 @@ policy:
   knowledge: {requireDocumentLevelAccess: true}
   cost: {devMaxCosmosThroughput: 1000, productionSizedSkuExemptions: [Standard]}
   preflight: {deploymentHistoryMargin: 70, regionMatrixStalenessDays: 30}
+  reliability: {locksManagedOutsideTemplate: true, disasterRecovery: multi-region}
+  runtime: {throttling: {maxRate429: 0.1, windowMinutes: 30, minRequests: 50}}
 `
 
 func TestEveryPolicyKeyIsLoadedAndFlattened(t *testing.T) {
