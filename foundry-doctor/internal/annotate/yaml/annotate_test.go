@@ -54,7 +54,11 @@ func TestApplyCountsUnicodeAndLoneCRBreaks(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
-		want := Banner + "\n" + "a: 1" + brk + "# Foundry Doctor: x\nb: 2\n"
+		eol := "\n"
+		if brk == "\r" {
+			eol = "\r" // inserted lines use the file's own first line ending
+		}
+		want := Banner + eol + "a: 1" + brk + "# Foundry Doctor: x" + eol + "b: 2\n"
 		if string(got) != want {
 			t.Errorf("%s: got %q want %q", name, got, want)
 		}

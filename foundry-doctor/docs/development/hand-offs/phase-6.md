@@ -1,11 +1,12 @@
 # Phase 6 hand-off: annotate outputs
 
-Status: **loop 1 of the post-merge gate (Go 1.26.9, 2026-10-19): both reviewers REJECT; blockers fixed in the same loop, pending
-loop 2 re-review.** Blockers fixed: line breaks the YAML scanner counts (NEL, LS, PS, lone CR) now shift comments correctly;
-original line endings are kept (CRLF no longer changes a multi-line string's compiled value); a relative `--dir` no longer
-drops every Bicep diagnostic location; an unparseable `azure.yaml` is bannered with its findings in the manifest only
-(`source-not-parseable`) instead of exit 4; credential-like and oversized files are not copied, the tree has its own
-`.gitignore` (`*`), and the tree is capped (8 MiB per file, 256 MiB total).
+Status: **gate PASSED in loop 2 of the post-merge gate (Go 1.26.9, 2026-10-19): foundry-lead APPROVE, azure-black-belt APPROVE, no
+blocking findings.** Loop 1 was REJECT x2; its blockers were fixed (see below) and re-verified from the real CLI with Bicep 0.48.1.
+Blockers fixed in loop 1: line breaks the YAML scanner counts (NEL, LS, PS, lone CR) now shift comments correctly; original line
+endings are kept (CRLF no longer changes a multi-line string's compiled value); a relative `--dir` no longer drops every Bicep
+diagnostic location; an unparseable `azure.yaml` is bannered with its findings in the manifest only (`source-not-parseable`)
+instead of exit 4; credential-like and oversized files are not copied, the tree has its own `.gitignore` (`*`) and is capped
+(8 MiB per file, 256 MiB total, exit 2 when exceeded).
 
 ## Delivered
 - `foundry-doctor annotate` CLI with `review`, `github`, and `sarif` formats.
@@ -107,11 +108,11 @@ DoD items are PRD section 14, verbatim. "Met in code" means the code and tests e
 
 | DoD item | Status (met / unmet / requirement changed by ADR-NNN) | Current evidence |
 |---|---|---|
-| Original files are byte-for-byte unchanged. | met (loop 1 fixes applied; pending loop 2 re-review) | All writes go through `os.Root` under the `.review` directory or a confined `--out`; overlap by identity and name; symlink/junction refusal; `bicep build --stdout`. Tests: `TestWriteReview`, `TestWriteOutputFile`, `TestAnnotateFileOutputRefusesInputAliases`, `TestAnnotateReviewValidation`, cmd `TestAnnotate`. |
-| Annotated YAML parses and annotated Bicep compiles. | met (loop 1 fixes applied; pending loop 2 re-review) | One infra resolver (`resolveInfra`) for copy and compile; `validateReviewCopy` decodes every bannered/annotated YAML file and compares documents, recompiles the copy behind the ADR-018 guard and compares status, ARM (generator metadata aside, ADR-024) and diagnostics. Tests: `TestAnnotateReviewValidation`, `TestAnnotateReviewDetectsYAMLBlockScalarDrift`, `TestAnnotateReviewUsesAzureYAMLInfraPathAndModule`, `TestAnnotateReviewAzureYAMLInSubdirectory`; real-CLI `TestRealBicepReviewCopyRecompiles` (tag `spike`) not run. |
-| Rerunning produces no duplicate comments. | met (loop 1 fixes applied; pending loop 2 re-review) | The owned tree is reset and recopied from the originals. Tests: `TestWriteReviewRerunIsIdempotent`, cmd `TestAnnotate` rerun. |
-| Findings without reliable locations are placed only in report/manifest. | met (loop 1 fixes applied; pending loop 2 re-review) | `Collect` eligibility; `toFindings` drops line/column for non-inline entries. Tests: `TestCollectAndGitHubWorkflowCommands`, `TestAnnotateSARIFOmitsRegionForManifestOnlyEntries`. Out-of-root Bicep diagnostic paths: see Known limitations (lead N5). |
-| Output names include .review to prevent accidental deployment. | met (loop 1 fixes applied; pending loop 2 re-review) | `--out` must end in `.review`; `azure.yaml` copies are renamed `azure.review.yaml`; every copied `azure.yaml` and `.bicep` carries the banner (ADR-024). Tests: `TestWriteReviewZeroFindingManifestUsesArrays`, `TestWriteReview`, cmd `TestAnnotate`. |
+| Original files are byte-for-byte unchanged. | met (loop 1 fixes applied; re-reviewed in loop 2: APPROVE x2) | All writes go through `os.Root` under the `.review` directory or a confined `--out`; overlap by identity and name; symlink/junction refusal; `bicep build --stdout`. Tests: `TestWriteReview`, `TestWriteOutputFile`, `TestAnnotateFileOutputRefusesInputAliases`, `TestAnnotateReviewValidation`, cmd `TestAnnotate`. |
+| Annotated YAML parses and annotated Bicep compiles. | met (loop 1 fixes applied; re-reviewed in loop 2: APPROVE x2) | One infra resolver (`resolveInfra`) for copy and compile; `validateReviewCopy` decodes every bannered/annotated YAML file and compares documents, recompiles the copy behind the ADR-018 guard and compares status, ARM (generator metadata aside, ADR-024) and diagnostics. Tests: `TestAnnotateReviewValidation`, `TestAnnotateReviewDetectsYAMLBlockScalarDrift`, `TestAnnotateReviewUsesAzureYAMLInfraPathAndModule`, `TestAnnotateReviewAzureYAMLInSubdirectory`; real-CLI `TestRealBicepReviewCopyRecompiles` (tag `spike`) not run. |
+| Rerunning produces no duplicate comments. | met (loop 1 fixes applied; re-reviewed in loop 2: APPROVE x2) | The owned tree is reset and recopied from the originals. Tests: `TestWriteReviewRerunIsIdempotent`, cmd `TestAnnotate` rerun. |
+| Findings without reliable locations are placed only in report/manifest. | met (loop 1 fixes applied; re-reviewed in loop 2: APPROVE x2) | `Collect` eligibility; `toFindings` drops line/column for non-inline entries. Tests: `TestCollectAndGitHubWorkflowCommands`, `TestAnnotateSARIFOmitsRegionForManifestOnlyEntries`. Out-of-root Bicep diagnostic paths: see Known limitations (lead N5). |
+| Output names include .review to prevent accidental deployment. | met (loop 1 fixes applied; re-reviewed in loop 2: APPROVE x2) | `--out` must end in `.review`; `azure.yaml` copies are renamed `azure.review.yaml`; every copied `azure.yaml` and `.bicep` carries the banner (ADR-024). Tests: `TestWriteReviewZeroFindingManifestUsesArrays`, `TestWriteReview`, cmd `TestAnnotate`. |
 
 PRD testing-strategy categories: round-trip YAML, Bicep recompile (fake runner; real CLI gated), idempotence and permission/symlink tests
 exist; large-repository performance tests are not delivered (ADR-024).
@@ -126,3 +127,9 @@ exist; large-repository performance tests are not delivered (ADR-024).
 - Comment text uses positional labels and truncates at 240 bytes; rule recommendations are generic text.
 - The `.review` suffix is on the directory only; `infra/main.bicep` keeps its name inside it.
 - Windows junction behaviour is untested; `extension/commands_extra.go` duplicates the annotate command definition.
+- Loop 2 additions, open: a finding inside a Bicep `'''` string or a YAML block scalar fails the whole run (exit 4) instead of
+  becoming manifest-only; a module that loads a skipped credential-like file fails the recompile with a misleading guard message;
+  the skip list is a denylist (no `*.tfvars`, `.npmrc`, `*.ppk`) and `.env` prefix also skips `.environment.bicep`; skipped files
+  are reported on stderr only, not in the manifest; a symlink under infra aborts the copy; the cmd test for `source-not-parseable`
+  asserts no inline entry but the real engine produces no YAML finding to demote (the app-level path is covered with a fake engine
+  in the reviewers' scratch tests only).

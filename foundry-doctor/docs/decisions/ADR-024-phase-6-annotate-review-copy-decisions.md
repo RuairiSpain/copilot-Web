@@ -32,8 +32,8 @@ deliver. It does not waive any PRD section 14 DoD item.
    edits is **unverified**. The review-copy check therefore compares the compiled ARM with `metadata._generator` removed at every nesting level;
    every other byte of the template (after JSON canonicalisation) must match.
 5. **Deferred test categories (disclosed, not waived).**
-   - PRD "Large repository performance tests": not delivered in Phase 6; carried to the Phase 9 audit. Until then there is no size or
-     file-count cap on the infra copy (reviewer N11).
+   - PRD "Large repository performance tests": a 1500-file copy test was added in the post-merge gate, with caps of 8 MiB per file
+     and 256 MiB per tree; larger-scale and deep-tree performance stays with the Phase 9 audit.
    - A Windows junction test: junctions and other reparse points are refused through `fs.ModeIrregular` (Go 1.23+ reports them so,
      https://go.dev/doc/go1.23#os), but the test needs a Windows runner and is not written in this loop.
    - The real-Bicep recompile test (`internal/app/annotate_bicep_real_test.go`, build tag `spike`) must be run by the maintainer with

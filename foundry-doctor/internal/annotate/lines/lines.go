@@ -28,7 +28,7 @@ func Split(text string, unicode bool) (lines, seps []string) {
 			lines, seps = append(lines, text[start:i]), append(seps, "\u0085")
 			i += len("\u0085")
 			start = i
-		case unicode && (strings.HasPrefix(text[i:], " ") || strings.HasPrefix(text[i:], " ")):
+		case unicode && (strings.HasPrefix(text[i:], "\u2028") || strings.HasPrefix(text[i:], "\u2029")):
 			lines, seps = append(lines, text[start:i]), append(seps, text[i:i+3])
 			i += 3
 			start = i
@@ -42,11 +42,15 @@ func Split(text string, unicode bool) (lines, seps []string) {
 	return lines, seps
 }
 
-// EOL returns the line ending to use for inserted lines: CRLF when the source
-// uses it anywhere, otherwise LF.
+// EOL returns the line ending to use for inserted lines: the source's first
+// line break (CRLF, CR or LF), so a copy never mixes endings. LF when the
+// source has no line break.
 func EOL(text string) string {
-	if strings.Contains(text, "\r\n") {
-		return "\r\n"
+	if i := strings.IndexAny(text, "\r\n"); i >= 0 {
+		if strings.HasPrefix(text[i:], "\r\n") {
+			return "\r\n"
+		}
+		return text[i : i+1]
 	}
 	return "\n"
 }

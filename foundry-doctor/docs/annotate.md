@@ -123,5 +123,6 @@ example `terraform`) is copied but never compiled with Bicep. An infra path of
   per-annotation fallback yet.
 - A `bicepconfig.json` between the project root and a nested infra directory is
   not copied, so the copy may compile differently and the run fails.
-- There is no size or file-count cap on the infra copy, and no large-repository
-  performance test yet (ADR-024).
+- A finding inside a Bicep `'''` string or a YAML block scalar cannot take a comment
+  line without changing the value, so the recompile or YAML check fails the whole
+  run. There is no per-annotation fallback yet (carried to Phase 9).

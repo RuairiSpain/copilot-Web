@@ -346,7 +346,7 @@ func copyTree(ctx context.Context, root *os.Root, outDir, rel string, seen map[s
 			return nil
 		}
 		if stats.total += info.Size(); stats.total > maxTreeBytes {
-			return fmt.Errorf("infra review copy is larger than %d MiB; point infra.path at the Bicep sources only", maxTreeBytes>>20)
+			return fmt.Errorf("%w: infra review copy is larger than %d MiB; point infra.path at the Bicep sources only", ErrUnsafeOutput, maxTreeBytes>>20)
 		}
 		f, err := copyFile(root, outDir, p)
 		if err != nil {

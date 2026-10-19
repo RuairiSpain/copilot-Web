@@ -33,7 +33,7 @@ func TestSplit(t *testing.T) {
 }
 
 func TestEOL(t *testing.T) {
-	if EOL("a\r\nb") != "\r\n" || EOL("a\nb") != "\n" || EOL("") != "\n" {
+	if EOL("a\r\nb") != "\r\n" || EOL("a\nb") != "\n" || EOL("") != "\n" || EOL("a\rb") != "\r" {
 		t.Fatal("EOL")
 	}
 }

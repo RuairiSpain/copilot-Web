@@ -67,7 +67,7 @@ func TestApplyCountsLoneCRAsLineBreak(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := Banner + "\nparam a string\r// Foundry Doctor: x\nparam b string\n"
+	want := Banner + "\rparam a string\r// Foundry Doctor: x\rparam b string\n"
 	if string(got) != want {
 		t.Fatalf("got %q want %q", got, want)
 	}
