@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -250,7 +251,7 @@ func (c Client) Lookup(ctx context.Context, q Query) (Record, error) {
 			if !strings.EqualFold(item.Type, PriceType) {
 				continue
 			}
-			if q.RequireHourly && !strings.Contains(strings.ToLower(item.UnitOfMeasure), "hour") {
+			if q.RequireHourly && !hourlyUnit(item.UnitOfMeasure) {
 				continue
 			}
 			if item.TierMinimumUnits != 0 {
@@ -430,6 +431,37 @@ func (c *Cache) Upsert(r Record) {
 	c.Records = append(c.Records, r)
 }
 
+// hourlyUnit reports whether unit is exactly one hour ("1 Hour" or "1/Hour").
+// A unit that merely contains "hour" ("100 Hours", "1 Hour per 100") is not
+// priced as one hour: the quantity would be scaled wrongly without a sign.
+func hourlyUnit(unit string) bool {
+	u := strings.ToLower(strings.Join(strings.Fields(unit), ""))
+	return u == "1hour" || u == "1/hour"
+}
+
+// clockSkew is how far a cached retrieval date may lie in the future.
+const clockSkew = 24 * time.Hour
+
+// Valid checks a record before it is trusted. The cache is a plain file in the
+// project directory, so a record in it is untrusted input: its price must be
+// finite and not negative, its currency and unit must match the query, and it
+// must not claim to be retrieved in the future (which would never go stale).
+func (r Record) Valid(q Query, now time.Time) error {
+	switch {
+	case math.IsNaN(r.UnitPrice) || math.IsInf(r.UnitPrice, 0) || r.UnitPrice < 0:
+		return fmt.Errorf("unit price %v is not a finite non-negative number", r.UnitPrice)
+	case !strings.EqualFold(r.CurrencyCode, q.currency()):
+		return fmt.Errorf("currency %q does not match the requested %q", r.CurrencyCode, q.currency())
+	case q.RequireHourly && !hourlyUnit(r.UnitOfMeasure):
+		return fmt.Errorf("unit of measure %q is not one hour", r.UnitOfMeasure)
+	case r.Type != "" && !strings.EqualFold(r.Type, PriceType):
+		return fmt.Errorf("price type %q is not %s", r.Type, PriceType)
+	case r.RetrievedAt.After(now.Add(clockSkew)):
+		return fmt.Errorf("retrieval date %s is in the future", r.RetrievedAt.Format(time.RFC3339))
+	}
+	return nil
+}
+
 // Stale reports whether r is older than maxAge.
 func Stale(r Record, now time.Time, maxAge time.Duration) bool {
 	if r.RetrievedAt.IsZero() {
@@ -478,6 +510,9 @@ func Resolve(ctx context.Context, c Client, cachePath string, offline bool, q Qu
 		return Record{}, false, fmt.Errorf("price cache unreadable: %w", cacheErr)
 	}
 	if cached, ok := cache.Lookup(q); ok {
+		if verr := cached.Valid(q, c.now()); verr != nil {
+			return Record{}, false, fmt.Errorf("cached retail price rejected (no price guessed): %w", verr)
+		}
 		switch {
 		case liveErr == nil:
 		case errors.Is(liveErr, os.ErrNotExist):

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"path/filepath"
 	"strings"
 
@@ -36,8 +37,8 @@ func (r *CostRequest) Validate() error {
 	default:
 		return Usagef("invalid --format %q (want console, json or markdown)", r.Format)
 	}
-	if r.HoursPerMonth < 0 {
-		return Usagef("--hours-per-month must be >= 0")
+	if math.IsNaN(r.HoursPerMonth) || r.HoursPerMonth < 0 || r.HoursPerMonth > 744 {
+		return Usagef("--hours-per-month must be between 0 (the default, 730) and 744, the hours in the longest month")
 	}
 	r.Currency = strings.ToUpper(strings.TrimSpace(r.Currency))
 	if r.Currency == "" {

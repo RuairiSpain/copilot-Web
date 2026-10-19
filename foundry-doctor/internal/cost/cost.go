@@ -132,13 +132,16 @@ func estimateEnv(ctx context.Context, client prices.Client, cachePath, currency 
 		if rec.Notice != "" {
 			out.Notes = append(out.Notes, d.Name+": "+rec.Notice)
 		}
-		if out.PriceRetrieved == "" || rec.RetrievedAt.Format(time.RFC3339) > out.PriceRetrieved {
-			out.PriceRetrieved = rec.RetrievedAt.Format(time.RFC3339)
-		}
-		if prices.Stale(rec, now, defaultPriceMaxAge) {
-			stale = true
+		// The oldest retrieval date is shown, so a mixed fresh and stale cache
+		// cannot hide its oldest price behind the newest one.
+		if retrieved := rec.RetrievedAt.UTC().Format(time.RFC3339); out.PriceRetrieved == "" || retrieved < out.PriceRetrieved {
+			out.PriceRetrieved = retrieved
 		}
 		lineNotes := slices.Clone(d.Notes)
+		if prices.Stale(rec, now, defaultPriceMaxAge) {
+			stale = true
+			lineNotes = append(lineNotes, "STALE: the cached retail price is older than 30 days")
+		}
 		if spec.Verified == "" {
 			lineNotes = append(lineNotes, "meter name follows the retail naming pattern only (UNVERIFIED)")
 		}
@@ -372,6 +375,13 @@ func (x *extraction) apim(r sdk.ARMResource) {
 	capacity, ok, _ := armcost.SKUCapacity(r)
 	if !ok {
 		x.unsupport(r, "API Management sku.capacity is missing or unresolved")
+		return
+	}
+	if strings.EqualFold(sku, "Premium") && capacity > 1 {
+		// Microsoft prices Premium units after the first at a lower rate, and
+		// the retail meter for them is not verified, so pricing every unit at
+		// the first-unit rate would overstate the cost.
+		x.unsupport(r, fmt.Sprintf("API Management Premium with %s units: units after the first are priced at a lower rate and that meter is not verified, so the capacity is not priced", strconv.FormatFloat(capacity, 'f', -1, 64)))
 		return
 	}
 	switch locs := r.Properties["additionalLocations"].(type) {

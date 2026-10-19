@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://foundry-doctor.local/schemas/price-cache.schema.json",
+  "title": "Foundry Doctor retail price cache",
+  "description": "Azure Retail Prices API answers kept by `foundry-doctor cost` (default .foundry-doctor/cache/prices.json). The file is untrusted input: a record is used only if its price is finite and not negative, its currency and unit match the query, its type is Consumption and its retrievedAt is not in the future. Prices are list prices for an advisory estimate, not a bill.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "records"],
+  "properties": {
+    "version": { "const": 2, "description": "A cache with another version is ignored, not migrated." },
+    "records": { "type": "array", "items": { "$ref": "#/$defs/record" } }
+  },
+  "$defs": {
+    "query": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["serviceName", "region", "meterName"],
+      "properties": {
+        "serviceName": { "type": "string", "minLength": 1 },
+        "productName": { "type": "string" },
+        "region": { "type": "string", "minLength": 1, "description": "armRegionName, lower case without spaces." },
+        "currencyCode": { "type": "string", "pattern": "^[A-Z]{3}$", "description": "Empty means USD." },
+        "meterName": { "type": "string", "minLength": 1 },
+        "requireHourly": { "type": "boolean", "description": "The meter must be priced per exactly one hour (\"1 Hour\" or \"1/Hour\")." }
+      }
+    },
+    "record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["query", "currencyCode", "unitOfMeasure", "unitPrice", "retrievedAt"],
+      "properties": {
+        "query": { "$ref": "#/$defs/query" },
+        "currencyCode": { "type": "string", "pattern": "^[A-Z]{3}$" },
+        "region": { "type": "string" },
+        "productName": { "type": "string" },
+        "skuName": { "type": "string" },
+        "armSkuName": { "type": "string" },
+        "meterName": { "type": "string" },
+        "meterId": { "type": "string" },
+        "unitOfMeasure": { "type": "string", "description": "As returned by the API, for example \"1 Hour\"." },
+        "unitPrice": { "type": "number", "minimum": 0 },
+        "type": { "type": "string", "description": "Retail price type; only Consumption rows are used." },
+        "isPrimaryMeterRegion": { "type": "boolean" },
+        "effectiveStartDate": { "type": "string", "description": "RFC 3339, from the API (the meter date)." },
+        "retrievedAt": { "type": "string", "format": "date-time", "description": "When Foundry Doctor read the price. Prices older than 30 days are reported as stale." }
+      }
+    }
+  }
+}

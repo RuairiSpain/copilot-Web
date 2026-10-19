@@ -138,7 +138,15 @@ incomplete and says so. If the live API no longer lists a meter or the call
 fails, the cached price is used with a notice that names the cause; an
 ambiguous or wrong-currency live answer is never replaced by a cached price. A
 cache that cannot be written does not discard the live price; the report notes
-it. Add `.foundry-doctor/cache/` to `.gitignore`.
+it. The cache file is untrusted input and is described by `schemas/price-cache.schema.json`. A record is used only if its
+price is finite and not negative, its currency and type match, its unit is exactly one hour for an hourly meter (`1 Hour` or
+`1/Hour`) and its retrieval date is not in the future; otherwise that line is reported as unsupported ("cached retail price
+rejected"), never priced. A cached price older than 30 days is still shown, marked STALE on its line, and flagged on the total
+with "(includes stale prices) (estimate incomplete)"; the report shows the oldest retrieval date. API Management Premium with
+more than one unit is not priced, because units after the first are billed at a lower rate and that meter is not verified.
+`--hours-per-month` must be 0 (the default, 730) to 744.
+
+Add `.foundry-doctor/cache/` to `.gitignore`.
 
 ## Limitations
 
