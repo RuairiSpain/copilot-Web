@@ -84,6 +84,8 @@ func TestResolveRejectsUntrustedCacheRecords(t *testing.T) {
 	good := Record{Query: q, CurrencyCode: "USD", UnitPrice: 1, UnitOfMeasure: "1 Hour", Type: "Consumption", RetrievedAt: now.Add(-time.Hour)}
 	for name, mutate := range map[string]func(*Record){
 		"negative price":    func(r *Record) { r.UnitPrice = -5 },
+		"zero price":        func(r *Record) { r.UnitPrice = 0 },
+		"overflowing price": func(r *Record) { r.UnitPrice = 1e308 },
 		"NaN price":         func(r *Record) { r.UnitPrice = math.NaN() },
 		"monthly unit":      func(r *Record) { r.UnitOfMeasure = "1 Month" },
 		"scaled unit":       func(r *Record) { r.UnitOfMeasure = "100 Hours" },
@@ -126,5 +128,22 @@ func TestResolveRejectsUntrustedCacheRecords(t *testing.T) {
 	}
 	if rec, used, err := Resolve(context.Background(), Client{Now: func() time.Time { return now }}, path, true, q); err != nil || !used || rec.UnitPrice != 1 {
 		t.Fatalf("a valid record must be used: rec=%+v used=%v err=%v", rec, used, err)
+	}
+}
+
+// Phase 7 gate (black belt N5): a live row whose unit is not exactly one hour
+// is never a candidate, so it cannot be scaled wrongly.
+func TestLookupIgnoresNonHourlyRows(t *testing.T) {
+	for _, unit := range []string{"100 Hours", "1 Month", "1 Hour per 100"} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"Items":[{"currencyCode":"USD","unitPrice":1.25,"armRegionName":"eastus","productName":"P","skuName":"K","meterName":"M","serviceName":"S","unitOfMeasure":"` + unit + `","effectiveStartDate":"2025-10-01T00:00:00Z","type":"Consumption"}]}`))
+		}))
+		c := Client{BaseURL: srv.URL, HTTP: srv.Client(), Now: func() time.Time { return time.Date(2026, 10, 19, 0, 0, 0, 0, time.UTC) }}
+		_, err := c.Lookup(context.Background(), Query{ServiceName: "S", ProductName: "P", Region: "eastus", MeterName: "M", RequireHourly: true})
+		srv.Close()
+		if !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("unit %q: err = %v, want not-exist", unit, err)
+		}
 	}
 }

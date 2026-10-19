@@ -32,7 +32,7 @@ func TestCostRequestValidateCurrencyAndCachePath(t *testing.T) {
 // Phase 7 gate (black belt N1): --hours-per-month is finite and at most the
 // hours of the longest month.
 func TestCostRequestValidateHoursPerMonth(t *testing.T) {
-	for _, h := range []float64{-1, 744.5, 100000, math.NaN(), math.Inf(1)} {
+	for _, h := range []float64{-1, 0.5, 744.5, 100000, math.NaN(), math.Inf(1)} {
 		r := CostRequest{HoursPerMonth: h}
 		if err := r.Validate(); err == nil {
 			t.Errorf("hours-per-month %v must be rejected", h)

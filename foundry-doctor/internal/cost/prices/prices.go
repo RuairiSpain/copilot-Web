@@ -404,7 +404,27 @@ func SaveCache(path string, c Cache) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o600)
+	// Write a temporary file and rename it, so two runs sharing a cache never
+	// leave a half-written file behind.
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".prices-*.tmp")
+	if err != nil {
+		return err
+	}
+	_, werr := tmp.Write(data)
+	cerr := tmp.Close()
+	if err := errors.Join(werr, cerr); err != nil {
+		_ = os.Remove(tmp.Name())
+		return err
+	}
+	if err := os.Chmod(tmp.Name(), 0o600); err != nil {
+		_ = os.Remove(tmp.Name())
+		return err
+	}
+	if err := os.Rename(tmp.Name(), path); err != nil {
+		_ = os.Remove(tmp.Name())
+		return err
+	}
+	return nil
 }
 
 // Lookup returns the cached record for q. A record in another currency is
@@ -439,6 +459,9 @@ func hourlyUnit(unit string) bool {
 	return u == "1hour" || u == "1/hour"
 }
 
+// maxUnitPrice is the largest hourly list price a cached record may claim.
+const maxUnitPrice = 1_000_000
+
 // clockSkew is how far a cached retrieval date may lie in the future.
 const clockSkew = 24 * time.Hour
 
@@ -448,8 +471,10 @@ const clockSkew = 24 * time.Hour
 // must not claim to be retrieved in the future (which would never go stale).
 func (r Record) Valid(q Query, now time.Time) error {
 	switch {
-	case math.IsNaN(r.UnitPrice) || math.IsInf(r.UnitPrice, 0) || r.UnitPrice < 0:
-		return fmt.Errorf("unit price %v is not a finite non-negative number", r.UnitPrice)
+	case math.IsNaN(r.UnitPrice) || math.IsInf(r.UnitPrice, 0) || r.UnitPrice <= 0 || r.UnitPrice > maxUnitPrice:
+		// A zero price (or a missing field, which decodes as zero) would show a
+		// fixed-capacity meter as free, and a huge one overflows the totals.
+		return fmt.Errorf("unit price %v is not a positive number up to %v", r.UnitPrice, float64(maxUnitPrice))
 	case !strings.EqualFold(r.CurrencyCode, q.currency()):
 		return fmt.Errorf("currency %q does not match the requested %q", r.CurrencyCode, q.currency())
 	case q.RequireHourly && !hourlyUnit(r.UnitOfMeasure):
