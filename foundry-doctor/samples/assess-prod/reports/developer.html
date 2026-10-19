@@ -39,8 +39,8 @@
           <tr><th scope="row" class="state-FAIL">FAIL</th><td>0</td></tr>
           <tr><th scope="row" class="state-WARNING">WARNING</th><td>1</td></tr>
           <tr><th scope="row" class="state-UNKNOWN">UNKNOWN</th><td>0</td></tr>
-          <tr><th scope="row" class="state-QUESTION">QUESTION</th><td>1</td></tr>
-          <tr><th scope="row" class="state-SKIPPED">SKIPPED</th><td>65</td></tr>
+          <tr><th scope="row" class="state-QUESTION">QUESTION</th><td>0</td></tr>
+          <tr><th scope="row" class="state-SKIPPED">SKIPPED</th><td>68</td></tr>
           <tr><th scope="row" class="state-ATTESTED">ATTESTED</th><td>1</td></tr>
           <tr><th scope="row" class="state-INFO">INFO</th><td>0</td></tr>
           <tr><th scope="row" class="state-NOT_APPLICABLE">NOT_APPLICABLE</th><td>4</td></tr>
@@ -55,7 +55,7 @@
       <article aria-labelledby="control-FND-CFG-005">
         <h3 id="control-FND-CFG-005">No raw secrets in YAML/Bicep/environment blocks — <span class="state-PASS">PASS</span></h3>
         <dl>
-          <dt>Rule</dt><dd>FND-CFG-005 (version 4)</dd>
+          <dt>Rule</dt><dd>FND-CFG-005 (version 5)</dd>
           <dt>Mandatory</dt><dd>true</dd>
           <dt>Evidence basis</dt><dd>deterministic</dd>
           <dt>Why this state</dt><dd>Evaluated with no remaining finding and no skipped check.</dd>
@@ -81,7 +81,7 @@
       <article aria-labelledby="control-FND-CFG-007">
         <h3 id="control-FND-CFG-007">Outbound endpoints use HTTPS and reject unsafe local/metadata targets — <span class="state-PASS">PASS</span></h3>
         <dl>
-          <dt>Rule</dt><dd>FND-CFG-007 (version 2)</dd>
+          <dt>Rule</dt><dd>FND-CFG-007 (version 3)</dd>
           <dt>Mandatory</dt><dd>true</dd>
           <dt>Evidence basis</dt><dd>deterministic</dd>
           <dt>Why this state</dt><dd>Evaluated with no remaining finding and no skipped check.</dd>
@@ -158,10 +158,10 @@ resource project &#39;Microsoft.CognitiveServices/accounts/projects@2026-09-01&#
       <article aria-labelledby="control-FND-IDN-002">
         <h3 id="control-FND-IDN-002">Project identity has required data roles — <span class="state-SKIPPED">SKIPPED</span></h3>
         <dl>
-          <dt>Rule</dt><dd>FND-IDN-002 (version 1)</dd>
+          <dt>Rule</dt><dd>FND-IDN-002 (version 2)</dd>
           <dt>Mandatory</dt><dd>true</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: not-implemented.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup">https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup</a> (verified 2026-10-04)</dd>
           
@@ -179,7 +179,7 @@ resource project &#39;Microsoft.CognitiveServices/accounts/projects@2026-09-01&#
   }
 }</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: not-implemented</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -647,10 +647,37 @@ models:
             </ul></dd>
         </dl>
       </article>
+      <article aria-labelledby="control-FND-SEC-007">
+        <h3 id="control-FND-SEC-007">RAI/content filter bound to chat deployments — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-SEC-007 (version 2)</dd>
+          <dt>Mandatory</dt><dd>true</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/foundry/guardrails/guardrails-overview">https://learn.microsoft.com/azure/foundry/guardrails/guardrails-overview</a> (verified 2026-10-04)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Set properties.raiPolicyName on each deployment to a policy defined on the account and, for hosted agents, add a policies entry of type rai_policy with the full ARM resource ID in azure.yaml. After deployment, test that the guardrail blocks a known-bad prompt.</dd>
+          <dt>Fix</dt><dd><pre><code># azure.yaml
+services:
+  my-agent:
+    host: azure.ai.agent
+    kind: hosted
+    policies:
+      - type: rai_policy
+        raiPolicyName: ${RAI_POLICY_RESOURCE_ID}  # full ARM resource ID of the raiPolicies resource</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
+            </ul></dd>
+        </dl>
+      </article>
       <article aria-labelledby="control-FND-SEC-008">
         <h3 id="control-FND-SEC-008">Relevant Defender plans enabled — <span class="state-SKIPPED">SKIPPED</span></h3>
         <dl>
-          <dt>Rule</dt><dd>FND-SEC-008 (version 2)</dd>
+          <dt>Rule</dt><dd>FND-SEC-008 (version 3)</dd>
           <dt>Mandatory</dt><dd>false</dd>
           <dt>Evidence basis</dt><dd>none</dd>
           <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
@@ -673,7 +700,7 @@ models:
       <article aria-labelledby="control-FND-SEC-009">
         <h3 id="control-FND-SEC-009">Policy coverage and compliance evidence — <span class="state-SKIPPED">SKIPPED</span></h3>
         <dl>
-          <dt>Rule</dt><dd>FND-SEC-009 (version 2)</dd>
+          <dt>Rule</dt><dd>FND-SEC-009 (version 3)</dd>
           <dt>Mandatory</dt><dd>false</dd>
           <dt>Evidence basis</dt><dd>none</dd>
           <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
@@ -699,7 +726,7 @@ models:
       <article aria-labelledby="control-FND-SEC-010">
         <h3 id="control-FND-SEC-010">Customer-managed keys informational — <span class="state-SKIPPED">SKIPPED</span></h3>
         <dl>
-          <dt>Rule</dt><dd>FND-SEC-010 (version 2)</dd>
+          <dt>Rule</dt><dd>FND-SEC-010 (version 3)</dd>
           <dt>Mandatory</dt><dd>false</dd>
           <dt>Evidence basis</dt><dd>none</dd>
           <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
@@ -722,10 +749,10 @@ properties: {
       <article aria-labelledby="control-FND-SEC-011">
         <h3 id="control-FND-SEC-011">Controlled outbound egress informational — <span class="state-SKIPPED">SKIPPED</span></h3>
         <dl>
-          <dt>Rule</dt><dd>FND-SEC-011 (version 1)</dd>
+          <dt>Rule</dt><dd>FND-SEC-011 (version 2)</dd>
           <dt>Mandatory</dt><dd>false</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: unsupported-version.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>FQDN outbound rules in Allow Only Approved Outbound mode create a managed Azure Firewall, which adds Azure Firewall charges. (<a href="https://learn.microsoft.com/azure/foundry/how-to/managed-virtual-network">https://learn.microsoft.com/azure/foundry/how-to/managed-virtual-network</a>, verified 2026-10-18)</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json</a> (verified 2026-10-04)</dd>
           
@@ -740,7 +767,7 @@ network:
     name: private-endpoint-subnet
   isolationMode: AllowOnlyApprovedOutbound</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: unsupported-version</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -750,7 +777,7 @@ network:
           <dt>Rule</dt><dd>FND-SEC-014 (version 2)</dd>
           <dt>Mandatory</dt><dd>true</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>Skipped: unsupported-version.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/azure-resource-manager/bicep/linter-rule-outputs-should-not-contain-secrets">https://learn.microsoft.com/azure/azure-resource-manager/bicep/linter-rule-outputs-should-not-contain-secrets</a> (verified 2026-10-16)</dd>
           
@@ -760,7 +787,7 @@ network:
           <dt>Recommendation</dt><dd>Output the resourceId of the resource that holds the secret, or store the secret in Key Vault, and read it at the consuming resource. Do not output keys, connection strings or passwords.</dd>
           <dt>Fix</dt><dd><pre><code>output storageId string = stg.id // consumer calls listKeys(storageId, ...) when it needs the key; do not output keys</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: unsupported-version</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -771,7 +798,7 @@ network:
       <article aria-labelledby="control-FND-CFG-003">
         <h3 id="control-FND-CFG-003">All inter-service references resolve — <span class="state-PASS">PASS</span></h3>
         <dl>
-          <dt>Rule</dt><dd>FND-CFG-003 (version 4)</dd>
+          <dt>Rule</dt><dd>FND-CFG-003 (version 5)</dd>
           <dt>Mandatory</dt><dd>true</dd>
           <dt>Evidence basis</dt><dd>deterministic</dd>
           <dt>Why this state</dt><dd>Evaluated with no remaining finding and no skipped check.</dd>
@@ -843,7 +870,7 @@ services:
       <article aria-labelledby="control-FND-CFG-012">
         <h3 id="control-FND-CFG-012">Azure region values are valid — <span class="state-SKIPPED">SKIPPED</span></h3>
         <dl>
-          <dt>Rule</dt><dd>FND-CFG-012 (version 4)</dd>
+          <dt>Rule</dt><dd>FND-CFG-012 (version 5)</dd>
           <dt>Mandatory</dt><dd>false</dd>
           <dt>Evidence basis</dt><dd>none</dd>
           <dt>Why this state</dt><dd>Skipped: input-unavailable: no-environment-selected.</dd>
@@ -1040,10 +1067,10 @@ az lock delete --name &lt;lock-name&gt; --resource-group &lt;rg&gt;   # then red
       <article aria-labelledby="control-FND-ENV-003">
         <h3 id="control-FND-ENV-003">Prod does not reference non-prod resource IDs — <span class="state-NOT_APPLICABLE">NOT_APPLICABLE</span></h3>
         <dl>
-          <dt>Rule</dt><dd>FND-ENV-003 (version 4)</dd>
+          <dt>Rule</dt><dd>FND-ENV-003 (version 5)</dd>
           <dt>Mandatory</dt><dd>true</dd>
           <dt>Evidence basis</dt><dd>deterministic</dd>
-          <dt>Why this state</dt><dd>Not applicable: not-applicable: fewer than two azd environments.</dd>
+          <dt>Why this state</dt><dd>Not applicable: not-applicable: fewer than two environments with visible values.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview">https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview</a> (verified 2026-10-05)</dd>
           
@@ -1054,7 +1081,7 @@ az lock delete --name &lt;lock-name&gt; --resource-group &lt;rg&gt;   # then red
           <dt>Fix</dt><dd><pre><code># .azure/prod/.env
 AZURE_AI_PROJECT_ENDPOINT=https://prod-account.services.ai.azure.com/api/projects/prod-project</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: not-applicable: fewer than two azd environments</li>
+            <li>skipped: not-applicable: fewer than two environments with visible values</li>
             </ul></dd>
         </dl>
       </article>
@@ -1318,7 +1345,7 @@ resource pe &#39;Microsoft.Network/privateEndpoints@2024-05-01&#39; = { name: &#
       <article aria-labelledby="control-FND-REL-004">
         <h3 id="control-FND-REL-004">Delete locks on stateful services — <span class="state-SKIPPED">SKIPPED</span></h3>
         <dl>
-          <dt>Rule</dt><dd>FND-REL-004 (version 2)</dd>
+          <dt>Rule</dt><dd>FND-REL-004 (version 3)</dd>
           <dt>Mandatory</dt><dd>false</dd>
           <dt>Evidence basis</dt><dd>none</dd>
           <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
@@ -1373,7 +1400,7 @@ resource pe &#39;Microsoft.Network/privateEndpoints@2024-05-01&#39; = { name: &#
       <article aria-labelledby="control-FND-REL-007">
         <h3 id="control-FND-REL-007">Multi-region/DR plan question — <span class="state-ATTESTED">ATTESTED</span></h3>
         <dl>
-          <dt>Rule</dt><dd>FND-REL-007 (version 1)</dd>
+          <dt>Rule</dt><dd>FND-REL-007 (version 2)</dd>
           <dt>Mandatory</dt><dd>false</dd>
           <dt>Evidence basis</dt><dd>attested</dd>
           <dt>Why this state</dt><dd>Answered by team attestation; not verified by Foundry Doctor.</dd>
@@ -1391,14 +1418,14 @@ reliability:
     recoveryRegion: northeurope
     notes: Recover from Cosmos point-in-time backup; rebuild Search index from source</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: not-implemented</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
       <article aria-labelledby="control-FND-REL-008">
         <h3 id="control-FND-REL-008">Provisioned throughput spillover recommendation — <span class="state-SKIPPED">SKIPPED</span></h3>
         <dl>
-          <dt>Rule</dt><dd>FND-REL-008 (version 1)</dd>
+          <dt>Rule</dt><dd>FND-REL-008 (version 2)</dd>
           <dt>Mandatory</dt><dd>false</dd>
           <dt>Evidence basis</dt><dd>none</dd>
           <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
@@ -1520,7 +1547,7 @@ resource apim &#39;Microsoft.ApiManagement/service@2024-05-01&#39; = {
       <article aria-labelledby="control-FND-RUN-004">
         <h3 id="control-FND-RUN-004">Model deployment state and throttling signal — <span class="state-SKIPPED">SKIPPED</span></h3>
         <dl>
-          <dt>Rule</dt><dd>FND-RUN-004 (version 4)</dd>
+          <dt>Rule</dt><dd>FND-RUN-004 (version 5)</dd>
           <dt>Mandatory</dt><dd>true</dd>
           <dt>Evidence basis</dt><dd>none</dd>
           <dt>Why this state</dt><dd>Skipped: not-implemented.</dd>
@@ -1790,7 +1817,7 @@ azd env set AZURE_LOCATION &lt;allowed-region&gt;</code></pre></dd>
           <dt>Rule</dt><dd>FND-ENV-001 (version 5)</dd>
           <dt>Mandatory</dt><dd>true</dd>
           <dt>Evidence basis</dt><dd>deterministic</dd>
-          <dt>Why this state</dt><dd>Not applicable: not-applicable: fewer than two azd environments.</dd>
+          <dt>Why this state</dt><dd>Not applicable: not-applicable: fewer than two environments with visible values.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd>Source: <a href="https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview">https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview</a> (verified 2026-10-05)</dd>
           
@@ -1801,17 +1828,17 @@ azd env set AZURE_LOCATION &lt;allowed-region&gt;</code></pre></dd>
           <dt>Fix</dt><dd><pre><code>name: my-agent-project
 resourceGroup: rg-${AZURE_ENV_NAME}</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: not-applicable: fewer than two azd environments</li>
+            <li>skipped: not-applicable: fewer than two environments with visible values</li>
             </ul></dd>
         </dl>
       </article>
       <article aria-labelledby="control-FND-ENV-002">
         <h3 id="control-FND-ENV-002">Environment-bound names/IDs/rules were not copied unchanged — <span class="state-NOT_APPLICABLE">NOT_APPLICABLE</span></h3>
         <dl>
-          <dt>Rule</dt><dd>FND-ENV-002 (version 4)</dd>
+          <dt>Rule</dt><dd>FND-ENV-002 (version 5)</dd>
           <dt>Mandatory</dt><dd>false</dd>
           <dt>Evidence basis</dt><dd>deterministic</dd>
-          <dt>Why this state</dt><dd>Not applicable: not-applicable: fewer than two azd environments.</dd>
+          <dt>Why this state</dt><dd>Not applicable: not-applicable: fewer than two environments with visible values.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview">https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview</a> (verified 2026-10-05)</dd>
           
@@ -1823,17 +1850,17 @@ resourceGroup: rg-${AZURE_ENV_NAME}</code></pre></dd>
 AZURE_RESOURCE_GROUP=rg-myapp-prod
 AZURE_AI_PROJECT_ENDPOINT=https://prod-account.services.ai.azure.com/api/projects/prod-project</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: not-applicable: fewer than two azd environments</li>
+            <li>skipped: not-applicable: fewer than two environments with visible values</li>
             </ul></dd>
         </dl>
       </article>
       <article aria-labelledby="control-FND-ENV-004">
         <h3 id="control-FND-ENV-004">Informational difference summary — <span class="state-NOT_APPLICABLE">NOT_APPLICABLE</span></h3>
         <dl>
-          <dt>Rule</dt><dd>FND-ENV-004 (version 3)</dd>
+          <dt>Rule</dt><dd>FND-ENV-004 (version 4)</dd>
           <dt>Mandatory</dt><dd>false</dd>
           <dt>Evidence basis</dt><dd>deterministic</dd>
-          <dt>Why this state</dt><dd>Not applicable: not-applicable: fewer than two azd environments.</dd>
+          <dt>Why this state</dt><dd>Not applicable: not-applicable: fewer than two environments with visible values.</dd>
           <dt>Costly recommendation</dt><dd>false</dd>
           <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview">https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview</a> (verified 2026-10-05)</dd>
           
@@ -1843,7 +1870,7 @@ AZURE_AI_PROJECT_ENDPOINT=https://prod-account.services.ai.azure.com/api/project
           <dt>Recommendation</dt><dd>Review the summary before promoting a release; use azd env get-values per environment for the details you are entitled to see.</dd>
           <dt>Fix</dt><dd><pre><code>foundry-doctor compare --env dev --env prod</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: not-applicable: fewer than two azd environments</li>
+            <li>skipped: not-applicable: fewer than two environments with visible values</li>
             </ul></dd>
         </dl>
       </article>
@@ -1877,12 +1904,12 @@ AZURE_AI_PROJECT_ENDPOINT=https://prod-account.services.ai.azure.com/api/project
         </dl>
       </article>
       <article aria-labelledby="control-FND-OPS-002">
-        <h3 id="control-FND-OPS-002">Application Insights connected — <span class="state-QUESTION">QUESTION</span></h3>
+        <h3 id="control-FND-OPS-002">Application Insights connected — <span class="state-SKIPPED">SKIPPED</span></h3>
         <dl>
-          <dt>Rule</dt><dd>FND-OPS-002 (version 1)</dd>
+          <dt>Rule</dt><dd>FND-OPS-002 (version 2)</dd>
           <dt>Mandatory</dt><dd>false</dd>
           <dt>Evidence basis</dt><dd>none</dd>
-          <dt>Why this state</dt><dd>No requirement or objective is declared (no-explicit-observability-or-server-tracing-requirement); the control needs a team decision.</dd>
+          <dt>Why this state</dt><dd>Skipped: input-unavailable: compiled ARM model unavailable.</dd>
           <dt>Costly recommendation</dt><dd>Workspace-based Application Insights data is billed for ingestion and retention by the Log Analytics workspace that stores it. (<a href="https://learn.microsoft.com/azure/azure-monitor/logs/cost-logs">https://learn.microsoft.com/azure/azure-monitor/logs/cost-logs</a>, verified 2026-10-18)</dd>
           <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://learn.microsoft.com/azure/foundry/observability/how-to/trace-agent-setup">https://learn.microsoft.com/azure/foundry/observability/how-to/trace-agent-setup</a> (verified 2026-10-04)</dd>
           <dt>Review question</dt><dd>Is server-side tracing or hosted-agent telemetry a declared requirement for this project? (No configuration key exists yet; ADR-026.)</dd>
@@ -1895,7 +1922,7 @@ AZURE_AI_PROJECT_ENDPOINT=https://prod-account.services.ai.azure.com/api/project
 # workspace-based Application Insights resource. Re-run the live inventory and
 # verify exactly one project connection whose category is AppInsights.</code></pre></dd>
           <dt>Evidence</dt><dd><ul>
-            <li>skipped: no-explicit-observability-or-server-tracing-requirement</li>
+            <li>skipped: input-unavailable: compiled ARM model unavailable</li>
             </ul></dd>
         </dl>
       </article>
@@ -2091,6 +2118,28 @@ resource sa &#39;Microsoft.Storage/storageAccounts@2024-01-01&#39; = {
             </ul></dd>
         </dl>
       </article>
+      <article aria-labelledby="control-FND-RUN-008">
+        <h3 id="control-FND-RUN-008">Deployed properties versus compiled template drift — <span class="state-SKIPPED">SKIPPED</span></h3>
+        <dl>
+          <dt>Rule</dt><dd>FND-RUN-008 (version 2)</dd>
+          <dt>Mandatory</dt><dd>false</dd>
+          <dt>Evidence basis</dt><dd>none</dd>
+          <dt>Why this state</dt><dd>Skipped: not-implemented.</dd>
+          <dt>Costly recommendation</dt><dd>false</dd>
+          <dt>Recommendation basis</dt><dd><strong>Project opinion</strong>, not Microsoft guidance; context source: <a href="https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json">https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json</a> (verified 2026-10-19)</dd>
+          
+          
+          
+          
+          <dt>Recommendation</dt><dd>Redeploy from source control to reconcile the drift, or update the Bicep to capture the intentional change. Run azd provision --preview to see the planned change before provisioning.</dd>
+          <dt>Fix</dt><dd><pre><code># Reconcile the deployed resource with the template (read-only preview first)
+azd provision --preview
+azd provision</code></pre></dd>
+          <dt>Evidence</dt><dd><ul>
+            <li>skipped: not-implemented</li>
+            </ul></dd>
+        </dl>
+      </article>
       
     </section>
     <section aria-labelledby="pillar-cost">
@@ -2177,9 +2226,9 @@ resource chat &#39;Microsoft.CognitiveServices/accounts/deployments@2026-09-01&#
         <li>A suppressed or baselined finding is shown as WARNING and stays visible in the evidence pack. It does not by itself produce a No-go decision, so the decision can be Proceed with conditions while accepted failures remain.</li>
         <li>The decision wording and the top-action ranking are project opinion, not Microsoft guidance.</li>
         <li>PSRule for Azure, Azure Advisor and Microsoft Defender for Cloud recommendations were not imported. Overlapping external check IDs are listed for reference only (ADR-020, ADR-026).</li>
-        <li>Deployed Azure state was not queried: assess waf runs offline. Controls that need deployment or runtime evidence and were not evaluated: FND-COST-001, FND-DEP-001, FND-DEP-002, FND-DEP-003, FND-DEP-004, FND-DEP-005, FND-DEP-006, FND-DEP-007, FND-DEP-008, FND-DEP-009, FND-DEP-010, FND-DEP-011, FND-DEP-012, FND-IDN-002, FND-IDN-005, FND-NET-006, FND-OPS-009, FND-RUN-001, FND-RUN-002, FND-RUN-003, FND-RUN-004, FND-RUN-005, FND-RUN-006, FND-RUN-007, FND-SEC-008, FND-SEC-009.</li>
+        <li>Deployed Azure state was not queried: assess waf runs offline. Controls that need deployment or runtime evidence and were not evaluated: FND-COST-001, FND-DEP-001, FND-DEP-002, FND-DEP-003, FND-DEP-004, FND-DEP-005, FND-DEP-006, FND-DEP-007, FND-DEP-008, FND-DEP-009, FND-DEP-010, FND-DEP-011, FND-DEP-012, FND-IDN-002, FND-IDN-005, FND-NET-006, FND-OPS-009, FND-RUN-001, FND-RUN-002, FND-RUN-003, FND-RUN-004, FND-RUN-005, FND-RUN-006, FND-RUN-007, FND-RUN-008, FND-SEC-008, FND-SEC-009.</li>
         <li>Compiled infrastructure (Bicep to ARM) was not available, so template-dependent controls are SKIPPED.</li>
-        <li>30 catalogue rules are excluded from the WAF view with a recorded reason (internal/assess/waf/mapping.yaml).</li>
+        <li>28 catalogue rules are excluded from the WAF view with a recorded reason (internal/assess/waf/mapping.yaml).</li>
         
       </ul>
     </section>

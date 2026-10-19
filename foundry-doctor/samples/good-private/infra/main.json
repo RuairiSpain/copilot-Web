@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.48.1.52935",
-      "templateHash": "18310728205560738043"
+      "templateHash": "107380301138414431"
     }
   },
   "variables": {
@@ -212,7 +212,8 @@
           "name": "gpt-4.1-mini",
           "version": "2026-03-17"
         },
-        "versionUpgradeOption": "NoAutoUpgrade"
+        "versionUpgradeOption": "NoAutoUpgrade",
+        "raiPolicyName": "Microsoft.DefaultV2"
       },
       "dependsOn": [
         "[resourceId('Microsoft.CognitiveServices/accounts', 'fdgoodsafe-acct')]"
@@ -647,14 +648,29 @@
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
       "scope": "[resourceId('Microsoft.Storage/storageAccounts', 'fdgoodsafestore')]",
-      "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', 'fdgoodsafestore'), resourceId('Microsoft.CognitiveServices/accounts', 'fdgoodsafe-acct'), 'Storage Blob Data Contributor')]",
+      "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', 'fdgoodsafestore'), resourceId('Microsoft.CognitiveServices/accounts/projects', 'fdgoodsafe-acct', 'fdgoodsafe-project'), 'Storage Blob Data Contributor')]",
       "properties": {
         "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')]",
-        "principalId": "[reference(resourceId('Microsoft.CognitiveServices/accounts', 'fdgoodsafe-acct'), '2026-07-15-preview', 'full').identity.principalId]",
+        "principalId": "[reference(resourceId('Microsoft.CognitiveServices/accounts/projects', 'fdgoodsafe-acct', 'fdgoodsafe-project'), '2026-07-15-preview', 'full').identity.principalId]",
         "principalType": "ServicePrincipal"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.CognitiveServices/accounts', 'fdgoodsafe-acct')]",
+        "[resourceId('Microsoft.CognitiveServices/accounts/projects', 'fdgoodsafe-acct', 'fdgoodsafe-project')]",
+        "[resourceId('Microsoft.Storage/storageAccounts', 'fdgoodsafestore')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.Storage/storageAccounts', 'fdgoodsafestore')]",
+      "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', 'fdgoodsafestore'), resourceId('Microsoft.CognitiveServices/accounts/projects', 'fdgoodsafe-acct', 'fdgoodsafe-project'), 'Storage Blob Data Owner')]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b')]",
+        "principalId": "[reference(resourceId('Microsoft.CognitiveServices/accounts/projects', 'fdgoodsafe-acct', 'fdgoodsafe-project'), '2026-07-15-preview', 'full').identity.principalId]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts/projects', 'fdgoodsafe-acct', 'fdgoodsafe-project')]",
         "[resourceId('Microsoft.Storage/storageAccounts', 'fdgoodsafestore')]"
       ]
     },
@@ -662,14 +678,29 @@
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
       "scope": "[resourceId('Microsoft.Search/searchServices', 'fdgoodsafesrch')]",
-      "name": "[guid(resourceId('Microsoft.Search/searchServices', 'fdgoodsafesrch'), resourceId('Microsoft.CognitiveServices/accounts', 'fdgoodsafe-acct'), 'Search Index Data Contributor')]",
+      "name": "[guid(resourceId('Microsoft.Search/searchServices', 'fdgoodsafesrch'), resourceId('Microsoft.CognitiveServices/accounts/projects', 'fdgoodsafe-acct', 'fdgoodsafe-project'), 'Search Index Data Contributor')]",
       "properties": {
         "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '8ebe5a00-799e-43f5-93ac-243d3dce84a7')]",
-        "principalId": "[reference(resourceId('Microsoft.CognitiveServices/accounts', 'fdgoodsafe-acct'), '2026-07-15-preview', 'full').identity.principalId]",
+        "principalId": "[reference(resourceId('Microsoft.CognitiveServices/accounts/projects', 'fdgoodsafe-acct', 'fdgoodsafe-project'), '2026-07-15-preview', 'full').identity.principalId]",
         "principalType": "ServicePrincipal"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.CognitiveServices/accounts', 'fdgoodsafe-acct')]",
+        "[resourceId('Microsoft.CognitiveServices/accounts/projects', 'fdgoodsafe-acct', 'fdgoodsafe-project')]",
+        "[resourceId('Microsoft.Search/searchServices', 'fdgoodsafesrch')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.Search/searchServices', 'fdgoodsafesrch')]",
+      "name": "[guid(resourceId('Microsoft.Search/searchServices', 'fdgoodsafesrch'), resourceId('Microsoft.CognitiveServices/accounts/projects', 'fdgoodsafe-acct', 'fdgoodsafe-project'), 'Search Service Contributor')]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7ca78c08-252a-4471-8644-bb5ff32d4ba0')]",
+        "principalId": "[reference(resourceId('Microsoft.CognitiveServices/accounts/projects', 'fdgoodsafe-acct', 'fdgoodsafe-project'), '2026-07-15-preview', 'full').identity.principalId]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts/projects', 'fdgoodsafe-acct', 'fdgoodsafe-project')]",
         "[resourceId('Microsoft.Search/searchServices', 'fdgoodsafesrch')]"
       ]
     },
@@ -677,16 +708,63 @@
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
       "scope": "[resourceId('Microsoft.DocumentDB/databaseAccounts', 'fdgoodsafecosmos')]",
-      "name": "[guid(resourceId('Microsoft.DocumentDB/databaseAccounts', 'fdgoodsafecosmos'), resourceId('Microsoft.CognitiveServices/accounts', 'fdgoodsafe-acct'), 'Cosmos DB Operator')]",
+      "name": "[guid(resourceId('Microsoft.DocumentDB/databaseAccounts', 'fdgoodsafecosmos'), resourceId('Microsoft.CognitiveServices/accounts/projects', 'fdgoodsafe-acct', 'fdgoodsafe-project'), 'Cosmos DB Operator')]",
       "properties": {
         "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '230815da-be43-4aae-9cb4-875f7bd000aa')]",
-        "principalId": "[reference(resourceId('Microsoft.CognitiveServices/accounts', 'fdgoodsafe-acct'), '2026-07-15-preview', 'full').identity.principalId]",
+        "principalId": "[reference(resourceId('Microsoft.CognitiveServices/accounts/projects', 'fdgoodsafe-acct', 'fdgoodsafe-project'), '2026-07-15-preview', 'full').identity.principalId]",
         "principalType": "ServicePrincipal"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.CognitiveServices/accounts', 'fdgoodsafe-acct')]",
-        "[resourceId('Microsoft.DocumentDB/databaseAccounts', 'fdgoodsafecosmos')]"
+        "[resourceId('Microsoft.DocumentDB/databaseAccounts', 'fdgoodsafecosmos')]",
+        "[resourceId('Microsoft.CognitiveServices/accounts/projects', 'fdgoodsafe-acct', 'fdgoodsafe-project')]"
       ]
+    },
+    {
+      "type": "Microsoft.Insights/components",
+      "apiVersion": "2020-02-02",
+      "name": "fdgoodsafe-appi",
+      "location": "swedencentral",
+      "kind": "web",
+      "tags": "[variables('tags')]",
+      "properties": {
+        "Application_Type": "web",
+        "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', 'fdgoodsafelaw')]",
+        "publicNetworkAccessForIngestion": "Enabled",
+        "publicNetworkAccessForQuery": "Disabled"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', 'fdgoodsafelaw')]"
+      ]
+    },
+    {
+      "type": "Microsoft.CognitiveServices/accounts/projects/connections",
+      "apiVersion": "2026-07-15-preview",
+      "name": "[format('{0}/{1}/{2}', 'fdgoodsafe-acct', 'fdgoodsafe-project', 'appinsights')]",
+      "properties": {
+        "category": "AppInsights",
+        "target": "[resourceId('Microsoft.Insights/components', 'fdgoodsafe-appi')]",
+        "authType": "ApiKey",
+        "isSharedToAll": false,
+        "credentials": {
+          "key": "[reference(resourceId('Microsoft.Insights/components', 'fdgoodsafe-appi'), '2020-02-02').ConnectionString]"
+        },
+        "metadata": {
+          "ResourceId": "[resourceId('Microsoft.Insights/components', 'fdgoodsafe-appi')]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Insights/components', 'fdgoodsafe-appi')]",
+        "[resourceId('Microsoft.CognitiveServices/accounts/projects', 'fdgoodsafe-acct', 'fdgoodsafe-project')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/locks",
+      "apiVersion": "2020-05-01",
+      "name": "fdgoodsafe-no-delete",
+      "properties": {
+        "level": "CanNotDelete",
+        "notes": "Protects the Foundry account, Search, Storage and Cosmos DB from accidental deletion."
+      }
     },
     {
       "type": "Microsoft.Insights/actionGroups",

@@ -176,6 +176,7 @@ resource deployment 'Microsoft.CognitiveServices/accounts/deployments@2026-09-01
       version: '2026-03-17'
     }
     versionUpgradeOption: 'NoAutoUpgrade'
+    raiPolicyName: 'Microsoft.DefaultV2'
   }
 }
 
@@ -269,6 +270,7 @@ resource searchZone 'Microsoft.Network/privateDnsZones@2020-06-01' = {
 }
 
 resource blobZone 'Microsoft.Network/privateDnsZones@2020-06-01' = {
+  #disable-next-line no-hardcoded-env-urls // private DNS zone names are fixed public-cloud values
   name: 'privatelink.blob.core.windows.net'
   location: 'global'
 }
@@ -512,32 +514,90 @@ resource cosmosLogs 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' =
 }
 
 resource storageBlobContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(storage.id, account.id, 'Storage Blob Data Contributor')
+  name: guid(storage.id, project.id, 'Storage Blob Data Contributor')
   scope: storage
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
-    principalId: account.identity.principalId
+    principalId: project.identity.principalId
     principalType: 'ServicePrincipal'
   }
 }
 
-resource searchContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(search.id, account.id, 'Search Index Data Contributor')
+resource storageBlobOwner 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(storage.id, project.id, 'Storage Blob Data Owner')
+  scope: storage
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b')
+    principalId: project.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource searchIndexContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(search.id, project.id, 'Search Index Data Contributor')
   scope: search
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '8ebe5a00-799e-43f5-93ac-243d3dce84a7')
-    principalId: account.identity.principalId
+    principalId: project.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource searchServiceContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(search.id, project.id, 'Search Service Contributor')
+  scope: search
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7ca78c08-252a-4471-8644-bb5ff32d4ba0')
+    principalId: project.identity.principalId
     principalType: 'ServicePrincipal'
   }
 }
 
 resource cosmosOperator 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(cosmos.id, account.id, 'Cosmos DB Operator')
+  name: guid(cosmos.id, project.id, 'Cosmos DB Operator')
   scope: cosmos
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '230815da-be43-4aae-9cb4-875f7bd000aa')
-    principalId: account.identity.principalId
+    principalId: project.identity.principalId
     principalType: 'ServicePrincipal'
+  }
+}
+
+resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
+  name: 'fdgoodsafe-appi'
+  location: 'swedencentral'
+  kind: 'web'
+  tags: tags
+  properties: {
+    Application_Type: 'web'
+    WorkspaceResourceId: workspace.id
+    publicNetworkAccessForIngestion: 'Enabled'
+    publicNetworkAccessForQuery: 'Disabled'
+  }
+}
+
+resource appInsightsConnection 'Microsoft.CognitiveServices/accounts/projects/connections@2026-07-15-preview' = {
+  parent: project
+  name: 'appinsights'
+  properties: {
+    category: 'AppInsights'
+    target: appInsights.id
+    authType: 'ApiKey'
+    isSharedToAll: false
+    credentials: {
+      key: appInsights.properties.ConnectionString
+    }
+    metadata: {
+      ResourceId: appInsights.id
+    }
+  }
+}
+
+resource deleteLock 'Microsoft.Authorization/locks@2020-05-01' = {
+  name: 'fdgoodsafe-no-delete'
+  properties: {
+    level: 'CanNotDelete'
+    notes: 'Protects the Foundry account, Search, Storage and Cosmos DB from accidental deletion.'
   }
 }
 

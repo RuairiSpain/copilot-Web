@@ -1,0 +1,134 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.48.1.52935",
+      "templateHash": "13859291330453199155"
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Search/searchServices",
+      "apiVersion": "2025-05-01",
+      "name": "fdbadprodsrch",
+      "location": "eastus-typo",
+      "sku": {
+        "name": "standard"
+      },
+      "properties": {
+        "replicaCount": 2,
+        "partitionCount": 1
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2023-01-01",
+      "name": "fdbadprodstore",
+      "location": "swedencentral",
+      "sku": {
+        "name": "Standard_GZRS"
+      },
+      "kind": "StorageV2",
+      "properties": {
+        "minimumTlsVersion": "TLS1_2",
+        "supportsHttpsTrafficOnly": true
+      }
+    },
+    {
+      "type": "Microsoft.DocumentDB/databaseAccounts",
+      "apiVersion": "2025-05-01-preview",
+      "name": "fdbadprodcosmos",
+      "location": "swedencentral",
+      "kind": "GlobalDocumentDB",
+      "properties": {
+        "databaseAccountOfferType": "Standard",
+        "locations": [
+          {
+            "locationName": "swedencentral",
+            "failoverPriority": 0,
+            "isZoneRedundant": true
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.CognitiveServices/accounts",
+      "apiVersion": "2026-07-15-preview",
+      "name": "fdbadprod-acct",
+      "location": "swedencentral",
+      "kind": "AIServices",
+      "sku": {
+        "name": "S0"
+      },
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "allowProjectManagement": true,
+        "customSubDomainName": "fdbadprod-acct",
+        "capabilitySettings": {
+          "documentStore": "[resourceId('Microsoft.DocumentDB/databaseAccounts', 'fdbadprodcosmos')]",
+          "vectorStore": "[resourceId('Microsoft.Search/searchServices', 'fdbadprodsrch')]",
+          "blobStore": "[resourceId('Microsoft.Storage/storageAccounts', 'fdbadprodstore')]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.DocumentDB/databaseAccounts', 'fdbadprodcosmos')]",
+        "[resourceId('Microsoft.Search/searchServices', 'fdbadprodsrch')]",
+        "[resourceId('Microsoft.Storage/storageAccounts', 'fdbadprodstore')]"
+      ]
+    },
+    {
+      "type": "Microsoft.CognitiveServices/accounts/projects",
+      "apiVersion": "2026-07-15-preview",
+      "name": "[format('{0}/{1}', 'fdbadprod-acct', 'fdbadprod-project')]",
+      "location": "swedencentral",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "displayName": "fdbadprod-project"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', 'fdbadprod-acct')]"
+      ]
+    },
+    {
+      "type": "Microsoft.CognitiveServices/accounts/deployments",
+      "apiVersion": "2026-09-01",
+      "name": "[format('{0}/{1}', 'fdbadprod-acct', 'chat-ptu')]",
+      "sku": {
+        "name": "ProvisionedManaged",
+        "capacity": 50
+      },
+      "properties": {
+        "model": {
+          "format": "OpenAI",
+          "name": "gpt-4.1-mini",
+          "version": "2026-03-17"
+        },
+        "versionUpgradeOption": "NoAutoUpgrade",
+        "raiPolicyName": "undeclared-strict-policy"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', 'fdbadprod-acct')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.CognitiveServices/accounts', 'fdbadprod-acct')]",
+      "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', 'fdbadprod-acct'), 'operators', 'Reader')]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'acdd72a7-3385-48ef-bd42-f606fba81ae7')]",
+        "principalId": "00000000-0000-0000-0000-000000000001",
+        "principalType": "Group"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', 'fdbadprod-acct')]"
+      ]
+    }
+  ]
+}

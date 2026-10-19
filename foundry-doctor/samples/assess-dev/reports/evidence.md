@@ -15,8 +15,8 @@
 | FAIL | 0 |
 | WARNING | 0 |
 | UNKNOWN | 0 |
-| QUESTION | 2 |
-| SKIPPED | 64 |
+| QUESTION | 1 |
+| SKIPPED | 67 |
 | ATTESTED | 0 |
 | INFO | 0 |
 | NOT_APPLICABLE | 6 |
@@ -36,25 +36,15 @@ None.
 
 ## QUESTION
 
-### Application Insights connected
-
-- Rule: `FND-OPS-002` (version 1)
-- Pillar: Operational Excellence
-- Mandatory: false
-- Evidence basis: none
-- Why this state: No requirement or objective is declared \(no\-explicit\-observability\-or\-server\-tracing\-requirement\); the control needs a team decision\.
-- Project opinion, not Microsoft guidance; context source: <https://learn.microsoft.com/azure/foundry/observability/how-to/trace-agent-setup> (verified `2026-10-04`)
-- skipped: no\-explicit\-observability\-or\-server\-tracing\-requirement
-
 ### Multi\-region/DR plan question
 
-- Rule: `FND-REL-007` (version 1)
+- Rule: `FND-REL-007` (version 2)
 - Pillar: Reliability
 - Mandatory: false
 - Evidence basis: none
 - Why this state: No answer recorded \(disasterRecovery\.declared\)\.
 - Project opinion, not Microsoft guidance; context source: <https://learn.microsoft.com/azure/foundry/how-to/high-availability-resiliency> (verified `2026-10-04`)
-- skipped: not\-implemented
+- skipped: input\-unavailable\: compiled ARM model unavailable
 
 ## SKIPPED
 
@@ -128,6 +118,16 @@ None.
 - Source: <https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-cognitiveservices-accounts-logs> (verified `2026-10-04`)
 - skipped: input\-unavailable\: compiled ARM model unavailable
 
+### Application Insights connected
+
+- Rule: `FND-OPS-002` (version 2)
+- Pillar: Operational Excellence
+- Mandatory: false
+- Evidence basis: none
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
+- Project opinion, not Microsoft guidance; context source: <https://learn.microsoft.com/azure/foundry/observability/how-to/trace-agent-setup> (verified `2026-10-04`)
+- skipped: input\-unavailable\: compiled ARM model unavailable
+
 ### Baseline alerts exist
 
 - Rule: `FND-OPS-003` (version 2)
@@ -178,6 +178,16 @@ None.
 - Source: <https://learn.microsoft.com/azure/foundry/how-to/diagnostic-logging> (verified `2026-10-04`)
 - skipped: not\-implemented
 
+### Deployed properties versus compiled template drift
+
+- Rule: `FND-RUN-008` (version 2)
+- Pillar: Operational Excellence
+- Mandatory: false
+- Evidence basis: none
+- Why this state: Skipped\: not\-implemented\.
+- Project opinion, not Microsoft guidance; context source: <https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json> (verified `2026-10-19`)
+- skipped: not\-implemented
+
 ### Prompt model or hosted source/image is valid
 
 - Rule: `FND-CFG-004` (version 4)
@@ -190,7 +200,7 @@ None.
 
 ### Azure region values are valid
 
-- Rule: `FND-CFG-012` (version 4)
+- Rule: `FND-CFG-012` (version 5)
 - Pillar: Reliability
 - Mandatory: false
 - Evidence basis: none
@@ -370,7 +380,7 @@ None.
 
 ### Delete locks on stateful services
 
-- Rule: `FND-REL-004` (version 2)
+- Rule: `FND-REL-004` (version 3)
 - Pillar: Reliability
 - Mandatory: false
 - Evidence basis: none
@@ -390,7 +400,7 @@ None.
 
 ### Provisioned throughput spillover recommendation
 
-- Rule: `FND-REL-008` (version 1)
+- Rule: `FND-REL-008` (version 2)
 - Pillar: Reliability
 - Mandatory: false
 - Evidence basis: none
@@ -430,7 +440,7 @@ None.
 
 ### Model deployment state and throttling signal
 
-- Rule: `FND-RUN-004` (version 4)
+- Rule: `FND-RUN-004` (version 5)
 - Pillar: Reliability
 - Mandatory: true
 - Evidence basis: none
@@ -480,13 +490,13 @@ None.
 
 ### Project identity has required data roles
 
-- Rule: `FND-IDN-002` (version 1)
+- Rule: `FND-IDN-002` (version 2)
 - Pillar: Security
 - Mandatory: true
 - Evidence basis: none
-- Why this state: Skipped\: not\-implemented\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Source: <https://learn.microsoft.com/azure/foundry/agents/concepts/standard-agent-setup> (verified `2026-10-04`)
-- skipped: not\-implemented
+- skipped: input\-unavailable\: compiled ARM model unavailable
 
 ### No broad Owner/Contributor for application identities
 
@@ -648,9 +658,19 @@ None.
 - Source: <https://learn.microsoft.com/azure/storage/common/storage-network-security-limitations> (verified `2026-10-04`)
 - skipped: input\-unavailable\: compiled ARM model unavailable
 
+### RAI/content filter bound to chat deployments
+
+- Rule: `FND-SEC-007` (version 2)
+- Pillar: Security
+- Mandatory: true
+- Evidence basis: none
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
+- Source: <https://learn.microsoft.com/azure/foundry/guardrails/guardrails-overview> (verified `2026-10-04`)
+- skipped: input\-unavailable\: compiled ARM model unavailable
+
 ### Relevant Defender plans enabled
 
-- Rule: `FND-SEC-008` (version 2)
+- Rule: `FND-SEC-008` (version 3)
 - Pillar: Security
 - Mandatory: false
 - Evidence basis: none
@@ -660,7 +680,7 @@ None.
 
 ### Policy coverage and compliance evidence
 
-- Rule: `FND-SEC-009` (version 2)
+- Rule: `FND-SEC-009` (version 3)
 - Pillar: Security
 - Mandatory: false
 - Evidence basis: none
@@ -670,7 +690,7 @@ None.
 
 ### Customer\-managed keys informational
 
-- Rule: `FND-SEC-010` (version 2)
+- Rule: `FND-SEC-010` (version 3)
 - Pillar: Security
 - Mandatory: false
 - Evidence basis: none
@@ -680,13 +700,13 @@ None.
 
 ### Controlled outbound egress informational
 
-- Rule: `FND-SEC-011` (version 1)
+- Rule: `FND-SEC-011` (version 2)
 - Pillar: Security
 - Mandatory: false
 - Evidence basis: none
-- Why this state: Skipped\: unsupported\-version\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Source: <https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json> (verified `2026-10-04`)
-- skipped: unsupported\-version
+- skipped: input\-unavailable\: compiled ARM model unavailable
 
 ### Secrets not emitted as Bicep outputs
 
@@ -694,9 +714,9 @@ None.
 - Pillar: Security
 - Mandatory: true
 - Evidence basis: none
-- Why this state: Skipped\: unsupported\-version\.
+- Why this state: Skipped\: input\-unavailable\: compiled ARM model unavailable\.
 - Source: <https://learn.microsoft.com/azure/azure-resource-manager/bicep/linter-rule-outputs-should-not-contain-secrets> (verified `2026-10-16`)
-- skipped: unsupported\-version
+- skipped: input\-unavailable\: compiled ARM model unavailable
 
 ## ATTESTED
 
@@ -714,29 +734,29 @@ None.
 - Pillar: Operational Excellence
 - Mandatory: true
 - Evidence basis: deterministic
-- Why this state: Not applicable\: not\-applicable\: fewer than two azd environments\.
+- Why this state: Not applicable\: not\-applicable\: fewer than two environments with visible values; the policy declares environments without visible values\: dev \(azd \.env files are normally git\-ignored; run where \.azure/&lt;env&gt;/\.env exist\)\.
 - Source: <https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview> (verified `2026-10-05`)
-- skipped: not\-applicable\: fewer than two azd environments
+- skipped: not\-applicable\: fewer than two environments with visible values; the policy declares environments without visible values\: dev \(azd \.env files are normally git\-ignored; run where \.azure/&lt;env&gt;/\.env exist\)
 
 ### Environment\-bound names/IDs/rules were not copied unchanged
 
-- Rule: `FND-ENV-002` (version 4)
+- Rule: `FND-ENV-002` (version 5)
 - Pillar: Operational Excellence
 - Mandatory: false
 - Evidence basis: deterministic
-- Why this state: Not applicable\: not\-applicable\: fewer than two azd environments\.
+- Why this state: Not applicable\: not\-applicable\: fewer than two environments with visible values; the policy declares environments without visible values\: dev \(azd \.env files are normally git\-ignored; run where \.azure/&lt;env&gt;/\.env exist\)\.
 - Project opinion, not Microsoft guidance; context source: <https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview> (verified `2026-10-05`)
-- skipped: not\-applicable\: fewer than two azd environments
+- skipped: not\-applicable\: fewer than two environments with visible values; the policy declares environments without visible values\: dev \(azd \.env files are normally git\-ignored; run where \.azure/&lt;env&gt;/\.env exist\)
 
 ### Informational difference summary
 
-- Rule: `FND-ENV-004` (version 3)
+- Rule: `FND-ENV-004` (version 4)
 - Pillar: Operational Excellence
 - Mandatory: false
 - Evidence basis: deterministic
-- Why this state: Not applicable\: not\-applicable\: fewer than two azd environments\.
+- Why this state: Not applicable\: not\-applicable\: fewer than two environments with visible values; the policy declares environments without visible values\: dev \(azd \.env files are normally git\-ignored; run where \.azure/&lt;env&gt;/\.env exist\)\.
 - Project opinion, not Microsoft guidance; context source: <https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview> (verified `2026-10-05`)
-- skipped: not\-applicable\: fewer than two azd environments
+- skipped: not\-applicable\: fewer than two environments with visible values; the policy declares environments without visible values\: dev \(azd \.env files are normally git\-ignored; run where \.azure/&lt;env&gt;/\.env exist\)
 
 ### CI/CD pipeline exists
 
@@ -760,13 +780,13 @@ None.
 
 ### Prod does not reference non\-prod resource IDs
 
-- Rule: `FND-ENV-003` (version 4)
+- Rule: `FND-ENV-003` (version 5)
 - Pillar: Reliability
 - Mandatory: true
 - Evidence basis: deterministic
-- Why this state: Not applicable\: not\-applicable\: fewer than two azd environments\.
+- Why this state: Not applicable\: not\-applicable\: fewer than two environments with visible values; the policy declares environments without visible values\: dev \(azd \.env files are normally git\-ignored; run where \.azure/&lt;env&gt;/\.env exist\)\.
 - Project opinion, not Microsoft guidance; context source: <https://learn.microsoft.com/azure/developer/azure-developer-cli/environments-overview> (verified `2026-10-05`)
-- skipped: not\-applicable\: fewer than two azd environments
+- skipped: not\-applicable\: fewer than two environments with visible values; the policy declares environments without visible values\: dev \(azd \.env files are normally git\-ignored; run where \.azure/&lt;env&gt;/\.env exist\)
 
 ## PASS
 
@@ -799,7 +819,7 @@ None.
 
 ### All inter\-service references resolve
 
-- Rule: `FND-CFG-003` (version 4)
+- Rule: `FND-CFG-003` (version 5)
 - Pillar: Reliability
 - Mandatory: true
 - Evidence basis: deterministic
@@ -808,7 +828,7 @@ None.
 
 ### No raw secrets in YAML/Bicep/environment blocks
 
-- Rule: `FND-CFG-005` (version 4)
+- Rule: `FND-CFG-005` (version 5)
 - Pillar: Security
 - Mandatory: true
 - Evidence basis: deterministic
@@ -817,7 +837,7 @@ None.
 
 ### Outbound endpoints use HTTPS and reject unsafe local/metadata targets
 
-- Rule: `FND-CFG-007` (version 2)
+- Rule: `FND-CFG-007` (version 3)
 - Pillar: Security
 - Mandatory: true
 - Evidence basis: deterministic
@@ -826,7 +846,7 @@ None.
 
 ## Costly recommendations (optional)
 
-- `FND-OPS-002` Application Insights connected (QUESTION): Workspace\-based Application Insights data is billed for ingestion and retention by the Log Analytics workspace that stores it\. (<https://learn.microsoft.com/azure/azure-monitor/logs/cost-logs>, verified `2026-10-18`)
+- `FND-OPS-002` Application Insights connected (SKIPPED): Workspace\-based Application Insights data is billed for ingestion and retention by the Log Analytics workspace that stores it\. (<https://learn.microsoft.com/azure/azure-monitor/logs/cost-logs>, verified `2026-10-18`)
 - `FND-OPS-006` Log retention meets policy (SKIPPED): Log Analytics charges for data retention in addition to ingestion; longer retention adds cost\. (<https://learn.microsoft.com/azure/azure-monitor/logs/cost-logs>, verified `2026-10-18`)
 - `FND-REL-001` Search replica/SLA posture (SKIPPED): Dedicated Azure AI Search bills per search unit \(replicas x partitions\); adding replicas raises cost\. (<https://learn.microsoft.com/azure/search/search-sku-manage-costs>, verified `2026-10-18`)
 - `FND-REL-002` Storage redundancy posture (SKIPPED): LRS is the lowest\-cost redundancy option; ZRS and GZRS trade higher cost for availability\. (<https://learn.microsoft.com/azure/storage/common/storage-redundancy>, verified `2026-10-18`)
@@ -846,6 +866,6 @@ None.
 - A suppressed or baselined finding is shown as WARNING and stays visible in the evidence pack\. It does not by itself produce a No\-go decision, so the decision can be Proceed with conditions while accepted failures remain\.
 - The decision wording and the top\-action ranking are project opinion, not Microsoft guidance\.
 - PSRule for Azure, Azure Advisor and Microsoft Defender for Cloud recommendations were not imported\. Overlapping external check IDs are listed for reference only \(ADR\-020, ADR\-026\)\.
-- Deployed Azure state was not queried\: assess waf runs offline\. Controls that need deployment or runtime evidence and were not evaluated\: FND\-COST\-001, FND\-DEP\-001, FND\-DEP\-002, FND\-DEP\-003, FND\-DEP\-004, FND\-DEP\-005, FND\-DEP\-006, FND\-DEP\-007, FND\-DEP\-008, FND\-DEP\-009, FND\-DEP\-010, FND\-DEP\-011, FND\-DEP\-012, FND\-IDN\-002, FND\-IDN\-005, FND\-NET\-006, FND\-OPS\-009, FND\-RUN\-001, FND\-RUN\-002, FND\-RUN\-003, FND\-RUN\-004, FND\-RUN\-005, FND\-RUN\-006, FND\-RUN\-007, FND\-SEC\-008, FND\-SEC\-009\.
+- Deployed Azure state was not queried\: assess waf runs offline\. Controls that need deployment or runtime evidence and were not evaluated\: FND\-COST\-001, FND\-DEP\-001, FND\-DEP\-002, FND\-DEP\-003, FND\-DEP\-004, FND\-DEP\-005, FND\-DEP\-006, FND\-DEP\-007, FND\-DEP\-008, FND\-DEP\-009, FND\-DEP\-010, FND\-DEP\-011, FND\-DEP\-012, FND\-IDN\-002, FND\-IDN\-005, FND\-NET\-006, FND\-OPS\-009, FND\-RUN\-001, FND\-RUN\-002, FND\-RUN\-003, FND\-RUN\-004, FND\-RUN\-005, FND\-RUN\-006, FND\-RUN\-007, FND\-RUN\-008, FND\-SEC\-008, FND\-SEC\-009\.
 - Compiled infrastructure \(Bicep to ARM\) was not available, so template\-dependent controls are SKIPPED\.
-- 30 catalogue rules are excluded from the WAF view with a recorded reason \(internal/assess/waf/mapping\.yaml\)\.
+- 28 catalogue rules are excluded from the WAF view with a recorded reason \(internal/assess/waf/mapping\.yaml\)\.
