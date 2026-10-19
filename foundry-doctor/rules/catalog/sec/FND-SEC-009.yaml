@@ -1,17 +1,19 @@
 id: FND-SEC-009
-version: 2
+version: 3
 group: SEC
 title: Policy coverage and compliance evidence
 description: Evidence report on whether Azure Policy assignments at the subscription or resource group scope cover
   the built-in definitions that Foundry Doctor maps in SEC-001 to SEC-006 and SEC-010, whether any assignment is
   in DoNotEnforce mode, and what the current compliance state is. Informational in dev, warning in prod. The expectation
-  that an environment assigns these policies is a product opinion.
+  that an environment assigns these policies is a product opinion. The static leg reads Microsoft.Authorization/policyAssignments in the
+  compiled template, and the list of mapped definition IDs can be replaced with the policy key azurePolicy.mappedDefinitionIds.
 status: product-opinion
 phases:
 - '2'
 - '4'
 inputs:
 - control-plane
+- bicep-arm
 basis:
 - opinion
 - security
@@ -34,6 +36,15 @@ evidence:
     against the mapped built-in policy IDs; report unmatched mapped IDs as not covered, enforcementMode DoNotEnforce
     as not enforced, and non-compliant resource counts from PolicyInsights policyStates summarize for matched assignments.
     Initiative (policySetDefinition) membership is resolved by reading the set.
+    The static leg (Bicep/ARM) matches policyAssignments in the template to the mapped definition GUIDs listed in the sources
+    below (the last path segment of policyDefinitionId). enforcementMode DoNotEnforce is a finding; absent or Default (the
+    spec default) counts as enforced; Enroll, an expression value, a conditional assignment or an initiative assignment
+    (membership not in the template) is uncertain. The rule passes only when every mapped definition has an enforced
+    assignment in the template; a mapped definition with no assignment is uncertain, not a gap, because the assignment may be
+    at a parent scope outside the template. No assignments at all in the template skips with input-unavailable naming the
+    missing capability (Policy Reader, live check). The mapped list is the five definitions below (all read in the
+    azure-policy repository); it can be replaced by the policy key azurePolicy.mappedDefinitionIds (list of GUIDs), a key that
+    is not yet in ADR-007 and the configuration schema (UNVERIFIED as a supported key until added).
   confidence: likely
 recommendation: Assign the built-in policies that correspond to the Foundry Doctor security rules (for example local-auth,
   public network access, CMK) at subscription or management-group scope, in Default enforcement mode once existing
@@ -53,6 +64,31 @@ sources:
   lastVerified: '2026-10-04'
   verifiedVia: https://raw.githubusercontent.com/Azure/azure-rest-api-specs/main/specification/policyinsights/resource-manager/Microsoft.PolicyInsights/PolicyInsights/stable/2024-10-01/openapi.json
   note: policyStates queryResults and summarize paths; PolicyState.complianceState is a free string in the spec.
+- url: >-
+    https://github.com/Azure/azure-policy/blob/master/built-in-policies/policyDefinitions/Azure%20Ai%20Services/DisableLocalAuth_Audit.json
+  lastVerified: '2026-10-19'
+  verifiedVia: azure-policy repository file built-in-policies/policyDefinitions/Azure Ai Services/DisableLocalAuth_Audit.json, name field read 2026-10-19
+  note: 71ef260a-8f18-47b7-abcb-62d0673d94dc, 'Azure AI Services resources should have key access disabled (disable local authentication)' (SEC-001).
+- url: >-
+    https://github.com/Azure/azure-policy/blob/master/built-in-policies/policyDefinitions/Key%20Vault/SoftDeleteMustBeEnabled_Audit.json
+  lastVerified: '2026-10-19'
+  verifiedVia: azure-policy repository file built-in-policies/policyDefinitions/Key Vault/SoftDeleteMustBeEnabled_Audit.json, name field read 2026-10-19
+  note: 1e66c121-a66a-4b1f-9b83-0fd99bf0fc2d, 'Key vaults should have soft delete enabled' (SEC-005).
+- url: >-
+    https://github.com/Azure/azure-policy/blob/master/built-in-policies/policyDefinitions/Key%20Vault/Recoverable_Audit.json
+  lastVerified: '2026-10-19'
+  verifiedVia: azure-policy repository file built-in-policies/policyDefinitions/Key Vault/Recoverable_Audit.json, name field read 2026-10-19
+  note: 0b60c0b2-2dc2-4e1c-b5c9-abbed971de53, 'Key vaults should have deletion protection enabled' (SEC-005).
+- url: >-
+    https://github.com/Azure/azure-policy/blob/master/built-in-policies/policyDefinitions/Key%20Vault/Should_Use_RBAC.json
+  lastVerified: '2026-10-19'
+  verifiedVia: azure-policy repository file built-in-policies/policyDefinitions/Key Vault/Should_Use_RBAC.json, name field read 2026-10-19
+  note: 12d4fa5e-1f9f-4c21-97a9-b99b3c6611b5, 'Azure Key Vault should use RBAC permission model' (SEC-005).
+- url: >-
+    https://github.com/Azure/azure-policy/blob/master/built-in-policies/policyDefinitions/Cognitive%20Services/CustomerManagedKey_Audit.json
+  lastVerified: '2026-10-19'
+  verifiedVia: azure-policy repository file built-in-policies/policyDefinitions/Cognitive Services/CustomerManagedKey_Audit.json, name field read 2026-10-19
+  note: 67121cc7-ff39-4ab8-b7e3-95b84dab487d, 'Azure AI Services resources should encrypt data at rest with a customer-managed key (CMK)' (SEC-010).
 overlap:
   decision: native
   provisional: true
@@ -76,18 +112,29 @@ overlap:
       state: unresearched
 implementation:
   owner: native
-  package: internal/policy
+  package: internal/rules/sec
 tests:
   positive:
-  - mapped definition not assigned reports a coverage gap
-  - assignment with DoNotEnforce reports not enforced
+  - DoNotEnforce is a finding
+  - policy list override DoNotEnforce is a finding
   negative:
-  - mapped definitions all assigned in Default mode passes
+  - all mapped policies enforced passes
+  - absent enforcementMode is Default per spec
+  - policy list override replaces the default list
+  - empty override falls back to the catalogue list
   skipped:
+  - no assignments is input-unavailable
   - no Policy Reader permission is skipped
-  - Bicep-only mode is skipped (assignments live outside the template)
   uncertain:
-  - initiative cannot be expanded
+  - missing mapped policy is uncertain
+  - Enroll mode is uncertain
+  - initiative assignment cannot be expanded
+  - expression definition id is uncertain
+  - unmapped assignment only is uncertain
 testability: Deterministic given the ARM reads; Skipped without Policy Reader.
 notes: PolicyState.complianceState values were not enumerated in the spec definition; do not hard-code them without
   reading the API response schema or docs.
+  Version 3 (2026-10-19) - the pass path now exists for Bicep/ARM input; the mapped definition IDs, previously unsourced in code,
+  were checked against the azure-policy repository (name and displayName read 2026-10-19). Coverage is not proven by an
+  absent assignment because assignments may live at a parent scope, so a gap is uncertain, never a finding. The
+  policy key azurePolicy.mappedDefinitionIds is read by the rule but is not defined in ADR-007 or the configuration schema yet.

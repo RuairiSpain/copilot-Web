@@ -1,5 +1,5 @@
 id: FND-IDN-002
-version: 1
+version: 2
 group: IDN
 title: "Project identity has required data roles"
 description: >-
@@ -58,6 +58,17 @@ evidence:
     absent. Emit uncertain when role definitions, inheritance, a condition, deny assignments, group
     membership, principal identity, or container scope cannot be completely resolved. If Azure
     access needed to obtain that evidence is unavailable, report skipped with the missing capability.
+    Implemented (version 2): for each Foundry project, or account that owns no project, with a system- or user-assigned identity,
+    the stores linked through connections, capability hosts and capabilitySettings (internal/foundrylink) are checked against the
+    Microsoft.Authorization/roleAssignments resources in the compiled template. A missing Search Index Data Contributor or Search
+    Service Contributor on Search, Storage Blob Data Contributor or Storage Blob Data Owner on Storage (a role at storage account
+    scope or above counts for either container), or Cosmos DB Operator on Cosmos DB is a finding naming the project, the target
+    and the role by name and GUID. A matching assignment on a child scope (container), with an unresolved principal or role
+    definition, or that is conditional is uncertain. Storage Account Contributor is reported only as a not-applicable note (not
+    confirmed as required). The Cosmos DB Built-in Data Contributor SQL role GUID and any Key Vault role are not verified, so a
+    Cosmos-linked project is always uncertain unless a finding exists, and a linked Key Vault yields a note. No role assignment
+    resource in the template skips with input-unavailable naming the missing capability. Hosted-agent roles (Foundry User,
+    AcrPull, Log Analytics Data Reader) are not checked statically (UNVERIFIED applicability).
   confidence: likely
 recommendation: >-
   Assign the project managed identity the documented data roles on each store before agents run:
@@ -148,25 +159,37 @@ testability: >-
   inventory. A template-only result is uncertain unless it proves the complete applicable set.
 tests:
   positive:
-    - search-missing-service-contributor
-    - blobstore-without-blob-data-owner-on-agent-container
-    - cosmos-operator-without-sql-data-contributor
-    - hosted-agent-acr-without-pull-role
+  - search linked with no role assignment for it
+  - search with Index Data Contributor only
+  - storage linked without blob roles
+  - cosmos linked without Cosmos DB Operator
+  - role granted to another project does not count
+  - role on a different store does not count
+  - literal principal GUID cannot be a system-assigned identity
   negative:
-    - all-documented-roles-assigned
-    - equivalent-custom-role-grants-required-data-actions
-    - store-not-referenced-by-capability-settings
-    - roles-granted-at-account-scope-containing-store
+  - system-assigned identity holds both search roles
+  - user-assigned identity holds both search roles
+  - storage roles present (account contributor missing is only a note)
+  - roles at resource group scope cover the store
+  - account-level connection applies to the project
+  - store linked only to another project is not evaluated for this one
+  - key vault linked has no verified role requirement
+  - unlinked store is not applicable
   skipped:
-    - live-role-assignments-not-readable
+  - no role assignment resource in the template
+  - project without identity is left to FND-IDN-001
+  - no Foundry project or account
+  - store deployed under a condition
+  - live-role-assignments-not-readable
   uncertain:
-    - principal-is-module-output
-    - inherited-role-definition-not-readable
-    - custom-role-actions-not-resolvable
-    - group-membership-unreadable
-    - applicable-deny-assignments-not-readable
-    - conditional-assignment-cannot-be-evaluated
-    - container-scope-uses-workspace-id-expression
+  - principalId is a parameter
+  - role assigned on a container of the storage account
+  - matching assignment is conditional
+  - role definition is an unresolved variable
+  - role scope is an expression that cannot be classified
+  - cosmos operator present but SQL data role is unverified
+  - connection target is a parameter so the store link is uncertain
+  - project identity type is an expression
 notes: >-
   Unverified: the Cosmos DB Built-in Data Contributor SQL role definition GUID (the Azure RBAC
   built-in roles reference does not list Cosmos data-plane roles and no local Cosmos doc was
@@ -184,3 +207,9 @@ notes: >-
   2026-07-15-preview spec (preview API; recheck before implementation). Defender and Advisor are
   unresearched for this rule; empty arrays do not mean searched-no-match. The native decision remains
   provisional until those catalogues are searched.
+  Version 2 (2026-10-19): the static (compiled ARM) leg is implemented in internal/rules/idn/idn002.go and registered with the IDN
+  rules; before this the check was not registered and reported not-implemented. The live leg (effective permissions, custom
+  roles, deny assignments, group membership, SQL role definitions) stays with preflight and runtime. Unverified and therefore
+  not checked statically: the Cosmos DB Built-in Data Contributor SQL role GUID, the Foundry Agent Consumer role, any Key
+  Vault role for the project identity, and the hosted-agent roles. Equivalent custom roles and role supersets (for example
+  Owner-type roles) are not recognised and a role other than the listed GUID is not accepted.
