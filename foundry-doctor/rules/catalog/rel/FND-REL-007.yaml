@@ -1,17 +1,18 @@
 id: FND-REL-007
-version: 1
+version: 2
 group: REL
 title: Multi-region/DR plan question
 description: >-
-  A question rather than a check: has the team decided on a multi-region or disaster recovery strategy for the Foundry project
-  and its stateful dependencies? Whether a region failover is needed is a business decision (RTO/RPO, cost) that cannot
-  be derived from resource configuration. The rule emits an informational prompt, and records the answer if the project
-  supplies one (for example a declared DR tier in the Foundry Doctor configuration). It never fails a deployment.
+  A question with an offline evidence summary: has the team decided on a multi-region or disaster recovery strategy for the
+  Foundry project and its stateful dependencies? Whether a region failover is needed is a business decision (RTO/RPO, cost) that
+  cannot be derived from resource configuration. Without a declared objective the rule skips with
+  no-resilience-objective-declared (the assessment shows it as a QUESTION) and carries the regions found in the template. With a
+  multi-region objective declared in configuration it reports each stateful component that is provably single-region, at info
+  severity. A declared single-region decision is a valid answer and produces nothing.
 status: product-opinion
 phases:
 - '4'
 inputs:
-- azure.yaml
 - bicep-arm
 basis:
 - opinion
@@ -32,11 +33,22 @@ compatibility:
   notes: 'No azd dependency: reads Foundry Doctor configuration and compiled ARM JSON'
 evidence:
   description: >-
-    No pass/fail evidence exists. Inputs: a DR declaration in Foundry Doctor configuration (name and format decided by the
-    configuration schema, not by this catalogue), and as context only the count of distinct locations among the Foundry
-    account, Cosmos DB (properties.locations), Search and API Management (additionalLocations) resources in compiled ARM.
-    Outputs: 'answered' with the declared strategy (the Foundry article names hot/hot, hot/warm, hot/cold), or 'unanswered'
-    as info. A single-region deployment with a declared single-region decision is a valid answer.
+    Policy keys, read through the policy interface and not yet in the configuration schema (the configuration owner must add
+    them): reliability.disasterRecovery (or reliability.disasterRecovery.strategy), a string. required, multi-region, hot-hot,
+    hot-warm or hot-cold declares a multi-region objective; single-region declares a single-region decision; absent or any other
+    value is no objective. The boolean disasterRecovery.declared of ADR-007 is a different thing (an attested recorded decision,
+    read by the assessment) and is not used as an objective. Compiled ARM only; no network. No objective - skip reason
+    no-resilience-objective-declared with a summary of template evidence (foundry-regions, search-regions, storage, cosmos-regions,
+    apim-multi-region, models-deployed-in-multiple-accounts). Multi-region objective - findings keyed per component:
+    single-region-foundry-account (all Foundry accounts, kind AIServices or OpenAI, resolve to one literal region),
+    single-region-search (all Search services in one region; no replication feature is read, so a second service in another region
+    is the only multi-region shape), single-region-storage (sku.name LRS or ZRS; GRS, GZRS, RA-GRS and RA-GZRS are geo-redundant),
+    single-region-cosmos (properties.locations[].locationName has one distinct value), single-region-apim (no Premium sku with
+    properties.additionalLocations). Uncertain, never a finding: a region, location, storage SKU or additionalLocations value that
+    is an expression or is not in the verified mapping, and conditional or looped resources. Cosmos automatic failover and
+    multiple-write-locations are not evaluated (the property names are not verified for this rule, UNVERIFIED), and model
+    deployment redundancy across accounts is reported only in the summary. Resources are never evaluated against actual region
+    pairs or RTO/RPO.
   confidence: uncertain
 recommendation: >-
   Decide and record the intended strategy: single region with backup and restore, or multi-region (hot/hot, hot/warm, hot/cold)
@@ -107,15 +119,41 @@ implementation:
   package: internal/rules/rel
 tests:
   positive:
-  - 'no declaration in configuration: reported as unanswered at info, never an error or warning'
-  - 'declared strategy present: reported as answered at info'
+  - single-region everything fails for each stateful type
+  - hot-hot strategy value also requires multi-region
+  - hot-warm strategy value also requires multi-region
+  - hot-cold strategy value also requires multi-region
+  - strategy key form is accepted
+  - ZRS storage is single-region
+  - cosmos with two identical locations is one region
+  - two accounts in one region are single-region
+  - APIM without additional locations fails
   negative:
-  - 'quiet or CI profile configured to suppress prompts: produces no finding'
+  - fully multi-region passes
+  - declared single-region decision is a valid answer
+  - RA-GRS storage is multi-region
+  - GRS storage is multi-region
+  - cosmos with two locations passes
+  - two search services in two regions pass
+  - APIM with additional locations passes
+  - no stateful resources in template
+  - literal false resource is ignored
   skipped:
-  - 'Foundry Doctor configuration input unavailable: skipped with reason'
+  - 'no policy, empty policy, unrecognised value, non string value and the ADR-007 declared key skip with no-resilience-objective-declared and the evidence summary (TestREL007NoObjectiveSkipsWithSummary)'
+  - missing compiled ARM model skips
   uncertain:
-  - 'declaration present but references a recovery region not found in the template: reported uncertain'
-testability: Unit tests on configuration fixtures; no Azure access.
+  - unknown storage sku is uncertain
+  - empty storage sku is uncertain
+  - cosmos locations missing is uncertain
+  - cosmos location expression is uncertain
+  - account region expression is uncertain
+  - one literal and one expression region is uncertain
+  - conditional resource is uncertain
+testability: Unit tests on compiled ARM and policy fixtures (internal/rules/rel/rel_dr_test.go); no Azure access.
 notes: >-
-  Product opinion: the Foundry article documents DR options, but not that every project needs them. The configuration key
-  is illustrative and must be decided by the configuration schema owner. Configuration key decided in ADR-007: policy.disasterRecovery.declared.
+  Version 2: the rule was not implemented (not-implemented skip). Product opinion: the Foundry article documents DR options, but
+  not that every project needs them, so findings exist only after the team declares a multi-region objective, and severity is info
+  in every profile. The policy keys are product decisions and must be added to the configuration schema by its owner; ADR-007 keeps
+  policy.disasterRecovery.declared for the attested question, which the assessment still uses. Hot/hot, hot/warm and hot/cold are
+  the strategy names in the Foundry article; this rule does not distinguish them. Azure region pairing, paired-region failover
+  and Cosmos failover priorities are not evaluated.

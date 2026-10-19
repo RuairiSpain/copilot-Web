@@ -29,6 +29,7 @@ func Register() []sdk.Rule {
 		rule{id: "FND-REL-004", fn: eval004},
 		rule{id: "FND-REL-005", fn: eval005},
 		rule{id: "FND-REL-006", fn: eval006},
+		rule{id: "FND-REL-007", fn: eval007},
 		rule{id: "FND-REL-008", fn: eval008},
 		rule{id: "FND-REL-009", fn: eval009},
 	}
@@ -367,6 +368,24 @@ func lockCoversResource(scope string, r sdk.ARMResource) lockCover {
 	return coverUnknown
 }
 
+// lockLevel reads properties.level of a Microsoft.Authorization/locks resource.
+func lockLevel(lock sdk.ARMResource) string {
+	if s, ok := mapProp(lock.Properties, "properties")["level"].(string); ok {
+		return strings.TrimSpace(s)
+	}
+	if s, ok := lock.Properties["level"].(string); ok {
+		return strings.TrimSpace(s)
+	}
+	return ""
+}
+
+// eval004 requires a CanNotDelete lock (directly, or on the deployment resource
+// group in the same template) on each stateful dependency the template deploys.
+// A ReadOnly lock is not a delete lock: it also blocks updates. Locks applied
+// outside the template are invisible in compiled ARM, so the policy key
+// reliability.locksManagedOutsideTemplate turns a missing lock into an
+// uncertain note instead of a finding. Key Vault is not a target: no verified
+// source names it for this rule (UNVERIFIED).
 func eval004(in *sdk.Input) sdk.Result {
 	o := newOutcome(in)
 	targets := []sdk.ARMResource{}
@@ -378,63 +397,63 @@ func eval004(in *sdk.Input) sdk.Result {
 		return o.result()
 	}
 	locks := o.of(typeLock)
-	if len(locks) == 0 {
-		if o.hasUncertain(typeLock) {
-			return o.result()
-		}
-		return sdk.Result{Skipped: &sdk.Skip{Reason: "uncertain: no lock resources are declared in the template and locks can be applied later or at parent scope"}}
-	}
-	groupCovered, unknown := false, false
-	covered := map[string]bool{}
+	unknown := o.hasUncertain(typeLock)
+	deleteGroup, readOnlyGroup := false, false
+	deleteCovered := map[string]bool{}
+	readOnlyCovered := map[string]bool{}
+	key := func(r sdk.ARMResource) string { return strings.ToLower(r.Type + "|" + r.Name) }
 	for _, lock := range locks {
-		level := ""
-		if s, ok := mapProp(lock.Properties, "properties")["level"].(string); ok {
-			level = strings.TrimSpace(s)
-		} else if s, ok := lock.Properties["level"].(string); ok {
-			level = strings.TrimSpace(s)
-		}
+		level := lockLevel(lock)
 		if isExpr(level) {
 			unknown = true
 			continue
 		}
-		if !strings.EqualFold(level, "CanNotDelete") && !strings.EqualFold(level, "ReadOnly") {
+		isDelete := strings.EqualFold(level, "CanNotDelete")
+		if !isDelete && !strings.EqualFold(level, "ReadOnly") {
 			continue
 		}
-		switch lockCoversGroup(lock.Scope) {
+		group := lockCoversGroup(lock.Scope)
+		switch group {
 		case coverYes:
-			groupCovered = true
+			if isDelete {
+				deleteGroup = true
+			} else {
+				readOnlyGroup = true
+			}
 		case coverUnknown:
 			unknown = true
+		}
+		if group == coverYes {
+			continue // a deployment-group lock names no single resource
 		}
 		for _, r := range targets {
 			switch lockCoversResource(lock.Scope, r) {
 			case coverYes:
-				covered[strings.ToLower(r.Type+"|"+r.Name)] = true
+				if isDelete {
+					deleteCovered[key(r)] = true
+				} else {
+					readOnlyCovered[key(r)] = true
+				}
 			case coverUnknown:
 				unknown = true
 			}
 		}
 	}
-	if groupCovered {
-		return sdk.Result{}
-	}
-	var missing []string
+	managedElsewhere := policyBool(in, "reliability.locksManagedOutsideTemplate")
 	for _, r := range targets {
-		if !covered[strings.ToLower(r.Type+"|"+r.Name)] {
-			missing = append(missing, r.Name)
+		switch {
+		case deleteGroup || deleteCovered[key(r)]:
+		case unknown:
+			o.notes = append(o.notes, r.Name+": a lock scope could not be correlated with the deployment resource group or the resource")
+		case readOnlyGroup || readOnlyCovered[key(r)]:
+			o.add(r, "readonly-lock-instead-of-delete-lock", "only a ReadOnly lock covers this resource; ReadOnly blocks updates as well as deletes, so it is not a delete lock. Use CanNotDelete")
+		case managedElsewhere:
+			o.notes = append(o.notes, r.Name+": delete locks are declared as managed outside the template (reliability.locksManagedOutsideTemplate), so none is checked here")
+		default:
+			o.add(r, "missing-delete-lock", "no CanNotDelete lock covers this resource or the deployment resource group in the template")
 		}
 	}
-	if len(missing) > 0 {
-		reason := "uncertain: delete locks may exist outside the template for "
-		if unknown {
-			reason = "uncertain: a lock scope could not be correlated with the deployment resource group or the resource for "
-		}
-		return sdk.Result{Skipped: &sdk.Skip{Reason: reason + strings.Join(missing, ", ")}}
-	}
-	if len(o.notes) > 0 {
-		return o.result()
-	}
-	return sdk.Result{}
+	return o.result()
 }
 
 func eval005(in *sdk.Input) sdk.Result {
@@ -541,21 +560,61 @@ func eval006(in *sdk.Input) sdk.Result {
 	return o.result()
 }
 
+func isProvisionedSKU(sku string) bool {
+	switch strings.TrimSpace(sku) {
+	case "ProvisionedManaged", "GlobalProvisionedManaged", "DataZoneProvisionedManaged":
+		return true
+	}
+	return false
+}
+
+// spilloverName reads properties.spilloverDeploymentName. present is false for
+// an absent, null, empty or blank value; known is false when the value is not a
+// string (a typed value the rule cannot interpret).
+func spilloverName(props map[string]any) (name string, present, known bool) {
+	v, ok := props["spilloverDeploymentName"]
+	if !ok || v == nil {
+		return "", false, true
+	}
+	s, isStr := v.(string)
+	if !isStr {
+		return "", true, false
+	}
+	s = strings.TrimSpace(s)
+	return s, s != "", true
+}
+
 func eval008(in *sdk.Input) sdk.Result {
 	o := newOutcome(in)
 	deploys := o.of(typeDeployment)
 	index := map[string]sdk.ARMResource{}
+	anyExprName := false
 	for _, r := range deploys {
 		index[strings.ToLower(r.Name)] = r
+		if isExpr(r.Name) {
+			anyExprName = true
+		}
+	}
+	// resolve finds the deployment named spill in the same account as r. A bare
+	// name is only the same account when r itself has no parent segment.
+	resolve := func(r sdk.ARMResource, spill string) (sdk.ARMResource, bool) {
+		if parent := parentName(r.Name); parent != "" {
+			s, ok := index[strings.ToLower(parent+"/"+spill)]
+			return s, ok
+		}
+		s, ok := index[strings.ToLower(spill)]
+		return s, ok
 	}
 	for _, r := range deploys {
-		switch strings.TrimSpace(r.SKUName) {
-		case "ProvisionedManaged", "GlobalProvisionedManaged", "DataZoneProvisionedManaged":
-		default:
+		if !isProvisionedSKU(r.SKUName) {
 			continue
 		}
-		spill := strings.TrimSpace(fmt.Sprint(r.Properties["spilloverDeploymentName"]))
-		if spill == "" {
+		spill, present, known := spilloverName(r.Properties)
+		if !known {
+			o.notes = append(o.notes, r.Name+": spilloverDeploymentName is not a string value")
+			continue
+		}
+		if !present {
 			o.add(r, "provisioned-deployment-spilloverdeploymentname-request-level-spillover", "provisioned deployment has no spilloverDeploymentName; request-level spillover may exist but is not visible offline")
 			continue
 		}
@@ -563,20 +622,24 @@ func eval008(in *sdk.Input) sdk.Result {
 			o.notes = append(o.notes, r.Name+": spilloverDeploymentName is unresolved")
 			continue
 		}
-		sibling, ok := index[strings.ToLower(parentName(r.Name)+"/"+spill)]
+		sibling, ok := resolve(r, spill)
 		if !ok {
-			sibling, ok = index[strings.ToLower(spill)]
-		}
-		if !ok {
-			if o.hasUncertain(typeDeployment) {
-				o.notes = append(o.notes, r.Name+": spilloverDeploymentName may refer to a conditional or looped deployment")
+			if o.hasUncertain(typeDeployment) || anyExprName || isExpr(r.Name) {
+				o.notes = append(o.notes, r.Name+": spilloverDeploymentName may refer to a conditional, looped or expression-named deployment")
 				continue
 			}
 			o.add(r, "spilloverdeploymentname-resolve-deployment-same-account", "spilloverDeploymentName does not resolve to a deployment in the same account")
 			continue
 		}
-		if strings.Contains(strings.ToLower(sibling.SKUName), "provisioned") {
+		if spilloverLoops(r, sibling, resolve) {
+			o.add(r, "spilloverdeploymentname-loop", "spilloverDeploymentName leads back to this deployment through provisioned deployments, so overflow has no standard target")
+		}
+		switch sku := strings.TrimSpace(sibling.SKUName); {
+		case isProvisionedSKU(sku) || strings.Contains(strings.ToLower(sku), "provisioned"):
 			o.add(r, "spilloverdeploymentname-must-refer-standard-deployment-another", "spilloverDeploymentName must refer to a standard deployment, not another provisioned deployment")
+		case sku == "" || isExpr(sku):
+			o.notes = append(o.notes, r.Name+": the spillover target SKU is unresolved, so it cannot be shown to be a standard deployment")
+			continue
 		}
 		if !sameModel(r, sibling) {
 			if modelHasExpr(r) || modelHasExpr(sibling) {
@@ -587,6 +650,33 @@ func eval008(in *sdk.Input) sdk.Result {
 		}
 	}
 	return o.result()
+}
+
+// spilloverLoops follows spilloverDeploymentName through provisioned
+// deployments and reports whether the chain returns to start. A chain that
+// passes through a non-provisioned deployment ends there: whether a standard
+// deployment may itself set spillover is not documented.
+func spilloverLoops(start, first sdk.ARMResource, resolve func(sdk.ARMResource, string) (sdk.ARMResource, bool)) bool {
+	seen := map[string]bool{strings.ToLower(start.Name): true}
+	cur := first
+	for {
+		if !isProvisionedSKU(cur.SKUName) {
+			return false
+		}
+		if seen[strings.ToLower(cur.Name)] {
+			return strings.EqualFold(cur.Name, start.Name)
+		}
+		seen[strings.ToLower(cur.Name)] = true
+		next, present, known := spilloverName(cur.Properties)
+		if !present || !known || unresolved(next) {
+			return false
+		}
+		n, ok := resolve(cur, next)
+		if !ok {
+			return false
+		}
+		cur = n
+	}
 }
 
 func eval009(in *sdk.Input) sdk.Result {
