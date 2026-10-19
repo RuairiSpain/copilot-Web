@@ -1,7 +1,7 @@
 # Phase 5 hand-off: dependency and deployment graph outputs
 
-Status: round 1 REJECT by both reviewers, fixes applied in fix loop 1; round 2 REJECT by both reviewers (one blocker each:
-FL B7, ABB B1), fixes applied in fix loop 2 (2026-10-18); pending re-review.
+Status: **gate PASSED in loop 1 of the post-merge gate run (Go 1.26.9, 2026-10-19): foundry-lead APPROVE, azure-black-belt
+APPROVE, no blocking findings.** Earlier rounds 1 and 2 were REJECT and are recorded below.
 Fix log: `docs/development/reviews/phase-5-fixlog-loop1.md`. Decisions and deferrals: ADR-027.
 
 ## Delivered
@@ -45,13 +45,13 @@ Fix log: `docs/development/reviews/phase-5-fixlog-loop1.md`. Decisions and defer
 - Formats: `mermaid`, `json`, `markdown`, `dot`, `html`, and optional `svg`, `png` (Graphviz).
 
 ## Tests executed and results
-- NOT RUN in fix loops 1 and 2. No Go toolchain is available in this environment and none could be installed. `gofmt`, `go vet`,
-  `go build`, `go test ./...`, `go test -race ./...`, `staticcheck`, `govulncheck` and `scripts/claude/verify-phase.sh --strict`
-  have NOT been run against this code and must be run by the maintainer, recording the exact `go version` output here.
-- The earlier claim that gates passed on "Go 1.25.13 with GOTOOLCHAIN=local" is withdrawn: `go.mod` declares `go 1.26.9`, so that
-  toolchain could not have built the module.
-- Goldens and samples were computed by hand (a Python port of the renderers was used to type them). If a golden differs, review
-  the diff, then regenerate with `go test ./internal/graph/mermaid ./internal/report/graph -update`.
+Run on Go 1.26.9 in the post-merge gate: `go build ./...`, `go vet`, `gofmt -l` and `go test ./...` pass; `-race` on
+`internal/graph/...`, `internal/report/graph/...`, `internal/app/...` and `cmd/foundry-doctor` passes (reviewers, `-count=5`
+for the graph packages); `TestLargeGraph` (3000 nodes) passes; the catalogue check passes. CI runs staticcheck, govulncheck and
+the cross-platform jobs. The earlier "not run" and "Go 1.25.13" statements are withdrawn. Goldens and samples now match the
+real renderers.
+Added in the gate: `TestOpaqueTokenReferenceIsNotALabel`, `TestMarkdownHostileLabelIsNotALink` (both verified to fail without
+the fix).
 - Tests added or changed in loop 1:
   - golden: Mermaid, JSON, DOT, Markdown, HTML; sample drift (`TestSamples`, `TestGraphSampleAzureYAMLOnly`).
   - Mermaid validity: subset parser over hostile labels, multi-class nodes and class definitions.
@@ -99,6 +99,14 @@ Fix log: `docs/development/reviews/phase-5-fixlog-loop1.md`. Decisions and defer
 - Deployed role assignments: need the Authorization list API on the allow-list (ADR-027).
 - Hash-based stable node IDs: deferred (ADR-027 decision 7).
 
+Gate non-blocking items, open (foundry-lead NB2-NB9, azure-black-belt N3-N8): Foundry source edges agent to model, toolbox
+and connection and toolbox to connection are not projected; capability-host connections match by name only (an ARM-ID form
+is unverified); Mermaid classDef order may mask diff colours (unverified); model deployments show under both project and
+account; schema `$id` is a placeholder; Mermaid has no separate schema; all external URLs share one label; Mermaid nodes do
+not show kind; `--subscription` is not format-checked; deployed graphs have no private endpoint, role or subnet nodes
+(ADR-027 decision 4). Fixed in the gate: opaque-token reference labels, Markdown table link injection, and the missing
+template-nodes caveat in `summary.notes`.
+
 ## Compatibility matrix
 - Not validated in fix loop 1 (no toolchain). The maintainer must record the `go version` used for the re-run.
 - Source mode needs no Azure credentials. Deployed and combined modes need Reader-level read on the inventory scope and,
@@ -116,7 +124,7 @@ Fix log: `docs/development/reviews/phase-5-fixlog-loop1.md`. Decisions and defer
 ## Definition of Done audit
 | DoD item (PRD section 13) | Status (met / unmet / requirement changed by ADR-NNN) | Current evidence |
 |---|---|---|
-| A graph can be generated without Azure login from source | met by inspection; tests not run in loop 1 | `TestGraphSourceOffline`, `TestGraphSampleAzureYAMLOnly`; source mode never calls `graphClient` |
-| Combined view correctly distinguishes local, Azure and external nodes | fixed in loops 1 and 2, pending re-review and test run; deployed PE/role edges deferred by ADR-027 | ARM-ID correlation, account dedupe, `unobserved` origin for declared nodes and in-scope references, `missing` only for observable types, deployed mode keeps dangling references; `TestCombinedInScopeChildAndExtensionRefsAreUnobserved`, `TestDeployedKeepsMissingAndUnobservedReferences`, `TestRuntimeResourceMergesIntoUnobservedRef`, `TestCombinedCorrelatedNodeKeepsARMID`, `TestCombinedAccountDeclaredInSourceIsNotDuplicated`, `TestCombinedUnobservedTypes`, `TestInScopeUnresolvedReferenceIsMissingNotExternal`, `samples/graph/combined.md` |
-| Graphs do not expose secrets or connection credentials | met by inspection; tests not run in loop 1 | `TestGraphNeverEmitsConnectionSecrets` (all formats), `TestRuntimeConnectionHealthSanitized`, `TestRedactIDs` |
-| Rendering order is deterministic for stable diffs | met by inspection (positional IDs, ADR-027 decision 7); tests not run in loop 1 | `TestBuildDeterministicAcrossOrderings`, `TestLargeGraph`, `TestDiffIsDeterministicAndOrderIndependent`, goldens |
+| A graph can be generated without Azure login from source | met (re-reviewed: APPROVE x2, Go 1.26.9) | `TestGraphSourceOffline`, `TestGraphSampleAzureYAMLOnly`; source mode never calls `graphClient` |
+| Combined view correctly distinguishes local, Azure and external nodes | met (re-reviewed: APPROVE x2); deployed PE/role edges deferred by ADR-027 | ARM-ID correlation, account dedupe, `unobserved` origin for declared nodes and in-scope references, `missing` only for observable types, deployed mode keeps dangling references; `TestCombinedInScopeChildAndExtensionRefsAreUnobserved`, `TestDeployedKeepsMissingAndUnobservedReferences`, `TestRuntimeResourceMergesIntoUnobservedRef`, `TestCombinedCorrelatedNodeKeepsARMID`, `TestCombinedAccountDeclaredInSourceIsNotDuplicated`, `TestCombinedUnobservedTypes`, `TestInScopeUnresolvedReferenceIsMissingNotExternal`, `samples/graph/combined.md` |
+| Graphs do not expose secrets or connection credentials | met (re-reviewed: APPROVE x2, Go 1.26.9) | `TestGraphNeverEmitsConnectionSecrets` (all formats), `TestRuntimeConnectionHealthSanitized`, `TestRedactIDs` |
+| Rendering order is deterministic for stable diffs | met (positional IDs, ADR-027 decision 7; byte-identical runs, `-count=5`) | `TestBuildDeterministicAcrossOrderings`, `TestLargeGraph`, `TestDiffIsDeterministicAndOrderIndependent`, goldens |

@@ -98,7 +98,12 @@ func edgeDetails(e view.Edge) string {
 }
 
 // cellEncoder makes text safe inside a Markdown table cell.
-var cellEncoder = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", "|", `\|`, "`", "&#96;", "\r\n", " ", "\r", " ", "\n", " ")
+//
+// Labels come from repository files, which are untrusted. Square brackets are
+// written as entities because they start every Markdown link and image, so a
+// hostile name cannot become a live link or tracking image in a rendered report.
+var cellEncoder = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", "|", `\|`, "`", "&#96;",
+	"[", "&#91;", "]", "&#93;", "\r\n", " ", "\r", " ", "\n", " ")
 
 func cell(s string) string { return cellEncoder.Replace(s) }
 

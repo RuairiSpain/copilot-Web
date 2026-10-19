@@ -170,6 +170,7 @@ func Graph(ctx context.Context, svc Services, req GraphRequest, stdout io.Writer
 					coreResources = append(coreResources, armResources(arm)...)
 				}
 			case errors.Is(loadErr, ErrARMUnavailable):
+				notes = append(notes, "template-only nodes (role, network, APIM, monitoring) are omitted because the Bicep/ARM model is unavailable")
 				if svc.Stderr != nil {
 					_, _ = fmt.Fprintf(svc.Stderr, "warning: %s; source graph omits template-only nodes\n", loadErr)
 				}
