@@ -38,16 +38,16 @@ func TestREL004LockScopes(t *testing.T) {
 		{"scope-less lock covers the deployment resource group", model{search, lock("")}, "pass", ""},
 		{"resourceGroup().id lock covers the deployment group", model{search, lock("[resourceGroup().id]")}, "pass", ""},
 		{"lock on the resource by identical expression", model{search, lock(searchScope)}, "pass", ""},
-		{"lock on another resource type does not cover", model{search, lock("[resourceId('Microsoft.Storage/storageAccounts', 'x')]")}, "skipped", "outside the template"},
+		{"lock on another resource type does not cover", model{search, lock("[resourceId('Microsoft.Storage/storageAccounts', 'x')]")}, "finding", "missing-delete-lock"},
 		{"lock on a literal resource group is not provably the deployment group", model{search, lock("/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/other-rg")}, "skipped", "could not be correlated"},
 		{"lock on another resource group by expression is unknown", model{search, lock("[resourceGroup(parameters('otherRg')).id]")}, "skipped", "could not be correlated"},
 		{"lock on a different expression name is unknown", model{search, lock("[resourceId('Microsoft.Search/searchServices', variables('searchName'))]")}, "skipped", "could not be correlated"},
-		{"no lock at all", model{search}, "skipped", "no lock resources"},
-		{"literal false lock does not count", model{search, cond(lock(""), "[false()]")}, "skipped", "no lock resources"},
+		{"no lock at all", model{search}, "finding", "missing-delete-lock"},
+		{"literal false lock does not count", model{search, cond(lock(""), "[false()]")}, "finding", "missing-delete-lock"},
 		{"parameter-driven lock is uncertain", model{search, cond(lock(""), "[parameters('lock')]")}, "skipped", ""},
 		{"literal false target is not deployed", model{cond(search, "false")}, "pass", ""},
 		{"no targets", model{}, "pass", ""},
-		{"ReadOnly lock counts", model{search, func() sdk.ARMResource { l := lock(""); l.Properties = map[string]any{"level": "ReadOnly"}; return l }()}, "pass", ""},
+		{"ReadOnly lock does not satisfy a delete lock requirement", model{search, func() sdk.ARMResource { l := lock(""); l.Properties = map[string]any{"level": "ReadOnly"}; return l }()}, "finding", "readonly-lock-instead-of-delete-lock"},
 		{"lock level from a parameter is unknown", model{search, func() sdk.ARMResource {
 			l := lock("")
 			l.Properties = map[string]any{"level": "[parameters('level')]"}
@@ -60,7 +60,12 @@ func TestREL004LockScopes(t *testing.T) {
 			if k := kind(got); k != tc.want {
 				t.Fatalf("got %s want %s: %+v", k, tc.want, got)
 			}
-			if tc.note != "" && !strings.Contains(strings.ToLower(got.Skipped.Reason), tc.note) {
+			switch {
+			case tc.want == "finding":
+				if got.Findings[0].Key != tc.note {
+					t.Fatalf("finding key %q want %q", got.Findings[0].Key, tc.note)
+				}
+			case tc.note != "" && !strings.Contains(strings.ToLower(got.Skipped.Reason), tc.note):
 				t.Fatalf("reason %q does not contain %q", got.Skipped.Reason, tc.note)
 			}
 		})

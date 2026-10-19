@@ -210,7 +210,7 @@ Rules whose phases include 1, including those shared with a later phase. The PRD
 | FND-RUN-005 | Agent tools/connections respond | 3 | product-opinion | adapt | info/warning/warning | [link](<https://github.com/Azure/azure-dev/blob/main/cli/azd/extensions/azure.ai.agents/internal/project/service_target_agent.go>) (2026-10-18) |
 | FND-RUN-006 | Search index/documents/vector/indexer health | 3 | verified | native | warning/error/error | [link](<https://github.com/Azure/azure-rest-api-specs/blob/main/specification/search/data-plane/Search/stable/2026-04-01/search.json>) (2026-10-17) |
 | FND-RUN-007 | Diagnostic logs are arriving | 3 | verified | native | info/warning/warning | [link](<https://learn.microsoft.com/azure/foundry/how-to/diagnostic-logging>) (2026-10-04) |
-| FND-RUN-008 | Deployed properties versus compiled template drift | future | product-opinion | adapt | info/info/warning | [link](<https://github.com/Azure/azure-rest-api-specs/blob/main/specification/resources/resource-manager/Microsoft.Resources/deployments/stable/2025-04-01/deployments.json>) (2026-10-04) |
+| FND-RUN-008 | Deployed properties versus compiled template drift | 3 | product-opinion | adapt | info/info/warning | [link](<https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json>) (2026-10-19) |
 
 ## SEC
 

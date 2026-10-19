@@ -56,7 +56,26 @@ type Environment struct {
 	// Shapes holds the shape of values that were replaced by a digest. A key
 	// absent here has its shape derived from the value.
 	Shapes map[string]Shape
+	// Origin says where the values came from. The zero value is the azd
+	// environment's own .azure/<name>/.env. A non-zero origin is a source whose
+	// mapping to an environment name is not an azd convention (UNVERIFIED), so
+	// a rule never reports a finding that depends on it: it reports a note.
+	Origin Origin
 }
+
+// Origin names the source of an Environment's values.
+type Origin string
+
+// Environment value origins.
+const (
+	OriginAzdEnv        Origin = ""               // .azure/<name>/.env
+	OriginParameterFile Origin = "parameter-file" // infra/main.parameters.<name>.json or main.<name>.parameters.json
+)
+
+// soft reports whether a pair involving e can only give notes, not findings.
+func (e Environment) soft() bool { return e.Origin != OriginAzdEnv }
+
+func softPair(a, b Environment) bool { return a.soft() || b.soft() }
 
 // Shape says what kind of non-secret identifier a value is. The app layer
 // digests values under secret-looking key names before the rules see them; it
@@ -146,7 +165,7 @@ func (r rule) Evaluate(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 	all := r.p.Environments()
 	if len(all) < 2 {
 		// Nothing to compare: the project has fewer than two environments.
-		return sdk.Result{Skipped: &sdk.Skip{RuleID: r.id, Reason: sdk.SkipNotApplicable + ": fewer than two azd environments"}}, nil
+		return sdk.Result{Skipped: &sdk.Skip{RuleID: r.id, Reason: sdk.SkipNotApplicable + ": fewer than two environments with visible values" + declaredHint(in, all)}}, nil
 	}
 	sort.SliceStable(all, func(i, j int) bool { return all[i].Name < all[j].Name })
 	var envs []Environment
@@ -156,7 +175,11 @@ func (r rule) Evaluate(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 			envs = append(envs, e)
 			continue
 		}
-		notes = append(notes, fmt.Sprintf("environment %s: .env %s", e.Name, e.Status))
+		label := ".env"
+		if e.Origin == OriginParameterFile {
+			label = "parameter file"
+		}
+		notes = append(notes, fmt.Sprintf("environment %s: %s %s", e.Name, label, e.Status))
 	}
 	if len(envs) < 2 {
 		return uncertain(r.id, notes), nil
@@ -231,8 +254,20 @@ func finding(key, resource, evidence string) sdk.Finding {
 	return sdk.Finding{Key: key, Resource: sdk.ResourceRef{Type: "azd-environment", Name: resource}, Evidence: evidence}
 }
 
-func eval001(_ context.Context, _ *sdk.Input, envs []Environment) outcome {
+func eval001(_ context.Context, _ *sdk.Input, all []Environment) outcome {
 	var out outcome
+	// Subscription and resource group are azd .env values; a parameter-file
+	// environment has neither, so it does not take part.
+	var envs []Environment
+	for _, e := range all {
+		if !e.soft() {
+			envs = append(envs, e)
+		}
+	}
+	if len(envs) < 2 {
+		out.notes = append(out.notes, "fewer than two environments with .env values (subscription and resource group come only from azd .env files)")
+		return out
+	}
 	seen := map[string][]string{}
 	var keys []string
 	for _, e := range envs {
@@ -308,6 +343,38 @@ func classify(k string, shape Shape) int {
 	return classNone
 }
 
+// softNote explains why a would-be finding is only a note: one of the pair's
+// values come from a source whose mapping to an environment name is not an azd
+// convention. Names and counts only, never values.
+func softNote(a, b Environment, what string, keys []string) string {
+	const top = 5
+	sort.Strings(keys)
+	more := ""
+	if len(keys) > top {
+		more = fmt.Sprintf(" and %d more", len(keys)-top)
+		keys = keys[:top]
+	}
+	return fmt.Sprintf("environments %s and %s: %s (%s%s), but the values of %s come from a %s, and azd defines no environment-specific parameter file naming (UNVERIFIED), so this is not reported as a finding",
+		a.Name, b.Name, what, strings.Join(keys, ", "), more, softName(a, b), softOrigin(a, b))
+}
+
+func softName(a, b Environment) string {
+	switch {
+	case a.soft() && b.soft():
+		return a.Name + " and " + b.Name
+	case a.soft():
+		return a.Name
+	}
+	return b.Name
+}
+
+func softOrigin(a, b Environment) string {
+	if a.soft() {
+		return string(a.Origin)
+	}
+	return string(b.Origin)
+}
+
 func eval002(_ context.Context, _ *sdk.Input, envs []Environment) outcome {
 	var out outcome
 	for i := 0; i < len(envs); i++ {
@@ -316,6 +383,14 @@ func eval002(_ context.Context, _ *sdk.Input, envs []Environment) outcome {
 			na, nb := a.Values["AZURE_ENV_NAME"], b.Values["AZURE_ENV_NAME"]
 			if na == "" || nb == "" || na == nb {
 				out.notes = append(out.notes, fmt.Sprintf("environments %s and %s: AZURE_ENV_NAME is empty or equal, so a copied value cannot be told from a shared one", a.Name, b.Name))
+				continue
+			}
+			if softPair(a, b) {
+				// Parameter names and .env keys are different namespaces, so a
+				// shared identifier is matched by value, not by key.
+				if keys := sharedIdentifierKeys(a, b); len(keys) > 0 {
+					out.notes = append(out.notes, softNote(a, b, fmt.Sprintf("%d identifier value(s) are identical", len(keys)), keys))
+				}
 				continue
 			}
 			var ks []string
@@ -340,8 +415,27 @@ func eval002(_ context.Context, _ *sdk.Input, envs []Environment) outcome {
 	return out
 }
 
+// sharedIdentifierKeys returns the key names in a whose identifier-shaped
+// value (resource ID or Azure endpoint) also appears under any key in b.
+func sharedIdentifierKeys(a, b Environment) []string {
+	inB := map[string]bool{}
+	for k, v := range b.Values {
+		if b.shapeOf(k, v) != ShapePlain {
+			inB[norm(v)] = true
+		}
+	}
+	var keys []string
+	for k, v := range a.Values {
+		if a.shapeOf(k, v) != ShapePlain && inB[norm(v)] {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	return keys
+}
+
 func tiers(in *sdk.Input) (map[string]string, bool) {
-	if in.Policy == nil {
+	if in == nil || in.Policy == nil {
 		return nil, false
 	}
 	v, ok := in.Policy.Get(TierPolicyKey)
@@ -407,21 +501,29 @@ func targets(e Environment) map[string]string {
 	return m
 }
 
+// eval003 needs no policy key: the tier of an environment comes from
+// environments.tiers (wins), then the environments.production / nonProduction /
+// development lists, then the documented name derivation (DerivedTierDoc).
+// When the derivation was used and the rule reports findings, a note names the
+// derived tiers so the classification is visible.
 func eval003(_ context.Context, in *sdk.Input, envs []Environment) outcome {
-	t, ok := tiers(in)
-	if !ok {
-		return outcome{skip: sdk.SkipMissingPolicyKey(TierPolicyKey)}
-	}
+	t := resolveTiers(in, envs)
 	var out outcome
 	prods, others := 0, 0
+	var derived []string
 	for _, e := range envs {
-		switch t[e.Name] {
-		case "prod":
+		ti, ok := t[e.Name]
+		switch {
+		case !ok:
+			out.notes = append(out.notes, fmt.Sprintf("environment %s: no tier in %s or the environments lists, and the name does not indicate one", e.Name, TierPolicyKey))
+			continue
+		case ti.tier == tierProd:
 			prods++
-		case "":
-			out.notes = append(out.notes, fmt.Sprintf("environment %s: no tier in %s", e.Name, TierPolicyKey))
 		default:
 			others++
+		}
+		if ti.derived {
+			derived = append(derived, e.Name+"="+ti.tier)
 		}
 	}
 	if prods == 0 {
@@ -431,7 +533,7 @@ func eval003(_ context.Context, in *sdk.Input, envs []Environment) outcome {
 		out.notes = append(out.notes, "no visible environment is configured as non-prod")
 	}
 	for _, p := range envs {
-		if t[p.Name] != "prod" {
+		if t[p.Name].tier != tierProd {
 			continue
 		}
 		pt := targets(p)
@@ -440,7 +542,7 @@ func eval003(_ context.Context, in *sdk.Input, envs []Environment) outcome {
 			continue
 		}
 		for _, o := range envs {
-			if o.Name == p.Name || t[o.Name] == "" || t[o.Name] == "prod" {
+			if o.Name == p.Name || t[o.Name].tier == "" || t[o.Name].tier == tierProd {
 				continue
 			}
 			ot := targets(o)
@@ -455,10 +557,26 @@ func eval003(_ context.Context, in *sdk.Input, envs []Environment) outcome {
 				}
 			}
 			sort.Strings(ks)
+			if softPair(p, o) && len(ks) > 0 {
+				names := make([]string, 0, len(ks))
+				for _, k := range ks {
+					names = append(names, targetVar(p, k))
+				}
+				out.notes = append(out.notes, softNote(p, o, fmt.Sprintf("prod environment %s shares %d target(s) with non-prod environment %s", p.Name, len(ks), o.Name), names))
+				continue
+			}
 			for _, k := range ks {
-				out.findings = append(out.findings, finding("prod-shares-target:"+pt[k]+":"+targetVar(p, k)+":"+envPair(p.Name, o.Name), p.Name, fmt.Sprintf("prod environment %s shares %s (fingerprint %s) with non-prod environment %s", p.Name, pt[k], Fingerprint(k), o.Name)))
+				ev := fmt.Sprintf("prod environment %s shares %s (fingerprint %s) with non-prod environment %s", p.Name, pt[k], Fingerprint(k), o.Name)
+				if t[p.Name].derived || t[o.Name].derived {
+					ev += " (a tier was derived from the environment name)"
+				}
+				out.findings = append(out.findings, finding("prod-shares-target:"+pt[k]+":"+targetVar(p, k)+":"+envPair(p.Name, o.Name), p.Name, ev))
 			}
 		}
+	}
+	if len(derived) > 0 && len(out.findings) > 0 {
+		sort.Strings(derived)
+		out.notes = append(out.notes, fmt.Sprintf("tiers of %s were not set in policy; %s", strings.Join(derived, ", "), DerivedTierDoc))
 	}
 	out.notes = dedupe(out.notes)
 	return out
@@ -486,8 +604,28 @@ func secretKey(k string) bool {
 	return false
 }
 
-func eval004(_ context.Context, _ *sdk.Input, envs []Environment) outcome {
+// MaxDiffKeys is the number of differing keys named in one FND-ENV-004 summary.
+const MaxDiffKeys = 10
+
+// eval004 emits at most one summary finding per environment pair (key
+// "env-diff-summary:<a>,<b>", stable per pair): the counts of keys only in
+// either environment and of keys with different values, and the first
+// MaxDiffKeys differing keys in name order. Values and fingerprints are not
+// printed, so a rotated value does not change the finding.
+func eval004(_ context.Context, _ *sdk.Input, all []Environment) outcome {
 	var out outcome
+	// Parameter-file environments carry parameter names, not azd .env keys, so a
+	// key-level difference against them is meaningless; they are not compared.
+	var envs []Environment
+	for _, e := range all {
+		if !e.soft() {
+			envs = append(envs, e)
+		}
+	}
+	if len(envs) < 2 {
+		out.notes = append(out.notes, "fewer than two environments with azd .env values to compare")
+		return out
+	}
 	for i := 0; i < len(envs); i++ {
 		for j := i + 1; j < len(envs); j++ {
 			a, b := envs[i], envs[j]
@@ -503,24 +641,39 @@ func eval004(_ context.Context, _ *sdk.Input, envs []Environment) outcome {
 				ks = append(ks, k)
 			}
 			sort.Strings(ks)
+			var onlyA, onlyB, differs int
+			var listed []string
+			add := func(s string) {
+				if len(listed) < MaxDiffKeys {
+					listed = append(listed, s)
+				}
+			}
 			for _, k := range ks {
 				va, ina := a.Values[k]
 				vb, inb := b.Values[k]
-				var ev, kind string
 				switch {
 				case ina && !inb:
-					ev, kind = fmt.Sprintf("key %s only in %s", k, a.Name), "key-only-in:"+a.Name
+					onlyA++
+					add(fmt.Sprintf("%s (only in %s)", k, a.Name))
 				case inb && !ina:
-					ev, kind = fmt.Sprintf("key %s only in %s", k, b.Name), "key-only-in:"+b.Name
-				case va != vb && secretKey(k):
-					ev, kind = fmt.Sprintf("key %s differs between %s and %s", k, a.Name, b.Name), "key-differs"
+					onlyB++
+					add(fmt.Sprintf("%s (only in %s)", k, b.Name))
 				case va != vb:
-					ev, kind = fmt.Sprintf("key %s differs between %s (%s) and %s (%s)", k, a.Name, Fingerprint(va), b.Name, Fingerprint(vb)), "key-differs"
-				default:
-					continue
+					differs++
+					add(fmt.Sprintf("%s (differs between %s and %s)", k, a.Name, b.Name))
 				}
-				out.findings = append(out.findings, finding(kind+":"+k+":"+envPair(a.Name, b.Name), k, ev))
 			}
+			total := onlyA + onlyB + differs
+			if total == 0 {
+				continue
+			}
+			more := ""
+			if total > len(listed) {
+				more = fmt.Sprintf(" and %d more", total-len(listed))
+			}
+			ev := fmt.Sprintf("environments %s and %s differ in %d key(s): %d only in %s, %d only in %s, %d with different values; first %d: %s%s",
+				a.Name, b.Name, total, onlyA, a.Name, onlyB, b.Name, differs, len(listed), strings.Join(listed, ", "), more)
+			out.findings = append(out.findings, finding("env-diff-summary:"+envPair(a.Name, b.Name), envPair(a.Name, b.Name), ev))
 		}
 	}
 	return out

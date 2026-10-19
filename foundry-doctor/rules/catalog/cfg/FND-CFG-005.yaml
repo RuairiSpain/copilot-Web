@@ -1,5 +1,5 @@
 id: FND-CFG-005
-version: 4
+version: 5
 group: CFG
 title: "No raw secrets in YAML/Bicep/environment blocks"
 description: >-
@@ -19,7 +19,7 @@ severity:
   test: error
   prod: error
 compatibility:
-  azd: ">=1.34.2 <=1.36.0"
+  azd: '>=1.34.2'
   extensions:
     azure.ai.agents: ">=1.0.0-beta.18 <=1.0.0-beta.20"
     azure.ai.connections: ">=1.0.0-beta.9 <=1.0.0-beta.10"
@@ -47,6 +47,18 @@ evidence:
     reference is uncertain. A SAS query string is a credential only with sig; sv alone is a version selector.
     Bicep and ARM findings are mapped from the Bicep linter, PSRule and Checkov results rather than
     re-derived. Findings never include the value.
+    Version 5 additions. (1) An env key whose last name token (or last two, as in API_KEY or CONNECTION_STRING) is
+    PASSWORD, PASSWD, PWD, SECRET, TOKEN, APIKEY, ACCESSKEY, ACCOUNTKEY or SHAREDKEY, or KEY after API, ACCESS,
+    ACCOUNT, SHARED, PRIMARY or SECONDARY, with a literal (or ${VAR:-literal} default) of at least eight characters
+    that has no whitespace, is not a placeholder (changeme, your-, <...>, example, todo and similar), is not a URL
+    without userinfo, and has a letter with a digit or three character classes, is a finding (key
+    env-secret-name-literal:<KEY>) with confidence lowered to medium. Every other name-only match stays uncertain.
+    (2) Literal string properties of compiled ARM resources (in.ARM) are scanned: a value with the shape of a
+    credential, or a plausible literal under a property whose name ends in a credential word, is a finding (key
+    arm-literal-credential:<type>/<name>:<property path>). Template expressions and ${...} values are skipped. (3) A
+    credential-like value in the selected azd environment (EnvView) is an uncertain note naming only the key, because
+    whether the .env file is tracked in source control is not known to the rule. (4) The URL-typed keys of FND-CFG-007
+    are also checked for embedded credentials.
   confidence: likely
 recommendation: >-
   Store the secret in the azd environment as a secret (azd env set-secret) or in Key Vault, and reference it
@@ -135,18 +147,45 @@ tests:
     - target-url-with-sas-signature
     - target-url-with-userinfo
     - dotenv-tracked-in-git
+    - password-name-with-strong-literal-is-finding
+    - client-secret-with-literal-is-finding
+    - api-key-pair-with-literal-is-finding
+    - default-literal-is-finding
+    - credential-shaped-literal
+    - credential-named-property-literal
+    - nested-array-literal
+    - tokenUrl-with-userinfo
   negative:
     - credentials-use-env-reference
     - token-limit-and-key-rotation-names
     - sas-version-without-signature
     - foundry-server-side-expression-passthrough
     - managed-identity-connection-no-credentials
+    - reference-passes
+    - empty-passes
+    - placeholder-is-not-a-finding
+    - partition-key-is-not-credential-named
+    - secret-name-suffix-is-not-credential-named
+    - url-value-is-not-a-literal-secret
+    - expression-is-not-literal
+    - reference-is-not-literal
+    - non-credential-property
+    - key-vault-uri-is-not-credential
+    - authorizationUrl-clean-passes
+    - env-ordinary-values-pass
   skipped:
+    - no-inputs-still-skips
+    - unselected-environment-is-not-read
+    - no-environment-provider-passes
     - bicep-cli-missing
     - checkov-not-configured
   uncertain:
     - env-secret-like-name-with-plain-value
     - credentials-mix-literal-and-reference
+    - short-plain-word-stays-uncertain
+    - long-lowercase-word-stays-uncertain
+    - env-credential-shape-is-uncertain-not-finding
+    - env-credential-name-literal-is-uncertain
 notes: >-
   The Learn guidance conflicts in emphasis: the Foundry reference stores connection secrets in the azd
   environment via ${VAR} (azd env set), while the azd docs say never to keep secrets in a .env file and
@@ -159,3 +198,8 @@ notes: >-
   substrings, so STORAGE_ACCOUNT_KEY and PROFILE_PASSWORD are not excluded. A literal under a secret-looking name that
   has no credential shape is reported as uncertain (name only).
   Version 4: uncertain notes are no longer dropped when the rule also has findings. They are returned as uncertain skips next to the findings (one per distinct note), and the rule-level skip is kept only when there are no findings.
+  Version 5: broadened as above. Not implemented, because the rule input does not carry them: Bicep and ARM
+  parameter files (for example main.parameters.json), secure-typed template parameters and their defaults (the
+  compiled model deliberately excludes secure defaults), and whether a .env file is tracked by git. Those parts of the
+  description stay deferred. UNVERIFIED: that every Azure property whose name ends in a credential word is a
+  credential; the property-name check therefore requires a plausible literal and is not applied to expressions.

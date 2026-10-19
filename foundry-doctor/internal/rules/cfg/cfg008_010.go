@@ -12,6 +12,11 @@ import (
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
 
+// unconfirmedAllowListSpellings are alternative spellings of the allow list
+// that no vendored azd schema or catalogued source confirms for azure.yaml.
+// They are recognised only so the rule does not claim the list is omitted.
+var unconfirmedAllowListSpellings = []string{"allowedTools", "allowed-tools", "tool_filter", "toolFilter"}
+
 func evalCFG008(in *sdk.Input) sdk.Result {
 	d, okd := loadDoc(in)
 	if !okd {
@@ -23,10 +28,8 @@ func evalCFG008(in *sdk.Input) sdk.Result {
 		evaluated bool
 	)
 	for _, s := range serviceList(d) {
-		if s.Host == hostToolbox {
-			if len(items(s.get("tools"))) > 0 {
-				skips = append(skips, s.Name+": toolbox endpoint-reuse mode")
-			}
+		if s.Host == hostToolbox && has(s.Node, "endpoint") {
+			skips = append(skips, s.Name+": toolbox endpoint-reuse mode")
 			continue
 		}
 		for ti, t := range items(s.get("tools")) {
@@ -41,6 +44,10 @@ func evalCFG008(in *sdk.Input) sdk.Result {
 			evaluated = true
 			allowed := child(t, "allowed_tools")
 			if allowed == nil {
+				if alias := firstPresent(t, unconfirmedAllowListSpellings); alias != "" {
+					skips = append(skips, fmt.Sprintf("%s: uncertain: tools[%d] uses %s, a spelling no verified source confirms for azure.yaml; it was not evaluated", s.Name, ti, alias))
+					continue
+				}
 				skips = append(skips, s.Name+": uncertain: direct inline MCP tool omits allowed_tools")
 				continue
 			}
@@ -79,6 +86,15 @@ func evalCFG008(in *sdk.Input) sdk.Result {
 	return sdk.Result{}
 }
 
+func firstPresent(n *yaml.Node, keys []string) string {
+	for _, k := range keys {
+		if has(n, k) {
+			return k
+		}
+	}
+	return ""
+}
+
 func evalCFG009(in *sdk.Input) sdk.Result {
 	d, okd := loadDoc(in)
 	if !okd {
@@ -113,13 +129,27 @@ func evalCFG009(in *sdk.Input) sdk.Result {
 	return withNotes(st.fs, st.skips)
 }
 
-// checkRoutineTrigger evaluates one trigger. The rule knows the beta.8
-// spelling only (type recurring, cron_expression, time_zone; compatibility
-// window azure.ai.routines beta.8). Routines beta.9 renamed authored keys to
-// camelCase and rejects the snake_case spellings, and the beta.10 schema names
-// the trigger type schedule with cronExpression and timeZone. No source states
-// that the beta.8 cadence facts carry over to those spellings, so every trigger
-// the rule does not understand is an uncertain note, never not-applicable.
+// routineSpelling names the keys of one verified trigger shape.
+type routineSpelling struct {
+	cron, tz string
+}
+
+var (
+	// azure.ai.routines 1.0.0-beta.8 schema: type recurring.
+	spellingBeta8 = routineSpelling{cron: "cron_expression", tz: "time_zone"}
+	// azure.ai.routines 1.0.0-beta.9 and 1.0.0-beta.10 schemas (and main): type
+	// schedule with camelCase keys; the same schemas reject the snake_case keys.
+	spellingBeta10 = routineSpelling{cron: "cronExpression", tz: "timeZone"}
+)
+
+// checkRoutineTrigger evaluates one trigger. Two shapes are understood: type
+// recurring with cron_expression and time_zone (azure.ai.routines beta.8), and
+// type schedule with cronExpression and timeZone (beta.9, beta.10 and main
+// schemas). The cadence facts (five-field expression, at least five minutes,
+// IANA or Windows time zone) come from the Learn routines article, which names
+// the trigger a schedule trigger; the schemas type the cron value as a plain
+// string. A mixed spelling, a cron key, or any other type is an uncertain note,
+// never not-applicable.
 func checkRoutineTrigger(d document, s service, key, trig *yaml.Node, st *cfgState) {
 	typNode := child(trig, "type")
 	typ := strings.ToLower(strings.TrimSpace(scalar(typNode)))
@@ -129,11 +159,11 @@ func checkRoutineTrigger(d document, s service, key, trig *yaml.Node, st *cfgSta
 	}
 	switch typ {
 	case "recurring":
-		cronNode := child(trig, "cron_expression")
-		if cronNode == nil {
+		sp := spellingBeta8
+		if child(trig, sp.cron) == nil {
 			switch {
 			case child(trig, "cronExpression") != nil:
-				st.skips = append(st.skips, s.Name+": recurring trigger "+key.Value+" uses cronExpression (azure.ai.routines beta.9 and later spelling); only the beta.8 spelling cron_expression is evaluated")
+				st.skips = append(st.skips, s.Name+": recurring trigger "+key.Value+" uses cronExpression, which the azure.ai.routines beta.9 and later schemas pair with type schedule, not recurring; it was not evaluated")
 			case child(trig, "cron") != nil:
 				st.skips = append(st.skips, s.Name+": recurring trigger "+key.Value+" uses cron instead of cron_expression")
 			default:
@@ -141,37 +171,53 @@ func checkRoutineTrigger(d document, s service, key, trig *yaml.Node, st *cfgSta
 			}
 			return
 		}
-		cron := strings.TrimSpace(scalar(cronNode))
-		if cron == "" || containsRef(cron) {
-			st.skips = append(st.skips, s.Name+": trigger "+key.Value+" cron_expression is unresolved")
-			return
-		}
-		tzNode := child(trig, "time_zone")
-		if tzNode == nil || strings.TrimSpace(scalar(tzNode)) == "" {
-			st.skips = append(st.skips, s.Name+": recurring trigger "+key.Value+" has no time_zone")
-			return
-		}
-		if !validRoutineTimeZone(strings.TrimSpace(scalar(tzNode))) {
-			st.skips = append(st.skips, s.Name+": recurring trigger "+key.Value+" time_zone is not in bundled identifier data")
-			return
-		}
-		expr, minGap, uncertain := parseRoutineCron(cron)
-		if uncertain != "" {
-			st.skips = append(st.skips, s.Name+": trigger "+key.Value+" "+uncertain)
-			return
-		}
-		st.evaluated = true
-		if expr == nil {
-			st.fs = append(st.fs, finding(d, s, cronNode, "cron-invalid:"+key.Value, fmt.Sprintf("trigger %q cron_expression %q is not a valid 5-field cron expression", key.Value, cron)))
-			return
-		}
-		if minGap < 5 {
-			st.fs = append(st.fs, finding(d, s, cronNode, "cron-too-frequent:"+key.Value, fmt.Sprintf("trigger %q cron_expression %q fires more often than every five minutes", key.Value, cron)))
-		}
+		checkRoutineCron(d, s, key, trig, sp, st)
 	case "schedule":
-		st.skips = append(st.skips, s.Name+": trigger "+key.Value+" has type schedule (azure.ai.routines beta.10 schema, cronExpression and timeZone); the rule evaluates only the beta.8 recurring spelling")
+		sp := spellingBeta10
+		if child(trig, sp.cron) == nil {
+			switch {
+			case child(trig, "cron_expression") != nil:
+				st.skips = append(st.skips, s.Name+": trigger "+key.Value+" has type schedule with cron_expression; the azure.ai.routines beta.9 and later schemas reject snake_case keys, so it was not evaluated")
+			default:
+				st.skips = append(st.skips, s.Name+": trigger "+key.Value+" has type schedule and no cronExpression key the rule understands")
+			}
+			return
+		}
+		checkRoutineCron(d, s, key, trig, sp, st)
 	default:
 		st.skips = append(st.skips, s.Name+": trigger "+key.Value+" type "+clip(typ)+" is not evaluated by this rule")
+	}
+}
+
+// checkRoutineCron validates the cron value and the time zone of one trigger
+// whose cron key is present. The cron value is judged whether or not the time
+// zone is set; a missing or unrecognised time zone is an uncertain note.
+func checkRoutineCron(d document, s service, key, trig *yaml.Node, sp routineSpelling, st *cfgState) {
+	cronNode := child(trig, sp.cron)
+	cron := strings.TrimSpace(scalar(cronNode))
+	if cron == "" || containsRef(cron) {
+		st.skips = append(st.skips, s.Name+": trigger "+key.Value+" "+sp.cron+" is unresolved")
+		return
+	}
+	if tz := strings.TrimSpace(scalar(child(trig, sp.tz))); tz == "" {
+		st.skips = append(st.skips, s.Name+": trigger "+key.Value+" has no "+sp.tz)
+	} else if !containsRef(tz) && !validRoutineTimeZone(tz) {
+		st.skips = append(st.skips, s.Name+": trigger "+key.Value+" "+sp.tz+" is not in bundled identifier data")
+	} else if containsRef(tz) {
+		st.skips = append(st.skips, s.Name+": trigger "+key.Value+" "+sp.tz+" is unresolved")
+	}
+	expr, minGap, uncertain := parseRoutineCron(cron)
+	if uncertain != "" {
+		st.skips = append(st.skips, s.Name+": trigger "+key.Value+" "+uncertain)
+		return
+	}
+	st.evaluated = true
+	if expr == nil {
+		st.fs = append(st.fs, finding(d, s, cronNode, "cron-invalid:"+key.Value, fmt.Sprintf("trigger %q %s %q is not a valid 5-field cron expression", key.Value, sp.cron, cron)))
+		return
+	}
+	if minGap < 5 {
+		st.fs = append(st.fs, finding(d, s, cronNode, "cron-too-frequent:"+key.Value, fmt.Sprintf("trigger %q %s %q fires more often than every five minutes", key.Value, sp.cron, cron)))
 	}
 }
 

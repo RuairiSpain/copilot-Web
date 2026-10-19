@@ -204,6 +204,9 @@ func (e *Engine) Run(ctx context.Context, in *sdk.Input) (*Report, error) {
 		}
 	}
 	rep.Findings, rep.Diagnostics = resolveFingerprintCollisions(rep.Findings)
+	if catalog.AzdNewerThanVerified(in.AzdVersion) {
+		rep.Diagnostics = append(rep.Diagnostics, fmt.Sprintf("azd %s is newer than %s, the newest version the rules were verified against; azd-dependent rules ran on it without verification (ADR-029)", in.AzdVersion, catalog.AzdVerifiedThrough))
+	}
 	findings.Sort(rep.Findings)
 	rep.SkippedByReason = SkippedByReason(rep.Skipped)
 	slices.SortFunc(rep.Skipped, func(a, b sdk.Skip) int {

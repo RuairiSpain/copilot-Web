@@ -12,6 +12,8 @@ policy:
       - Microsoft.Storage/storageAccounts
       - Microsoft.DocumentDB/databaseAccounts
       - Microsoft.OperationalInsights/workspaces
+  monitoring:
+    publicTelemetry: true
   logRetention:
     minimumDays: 30
   network:

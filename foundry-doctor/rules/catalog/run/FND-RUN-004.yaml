@@ -1,11 +1,13 @@
 id: FND-RUN-004
-version: 4
+version: 5
 group: RUN
 title: Model deployment state and throttling signal
 description: >-
   Every model deployment that a project, agent or gateway route depends on must be in a succeeded provisioning state, and
-  recent Azure Monitor metrics must not show HTTP 429 responses for it. The 429 threshold is a product opinion; the
-  meaning of the deployment state and of the 429 status code is documented.
+  recent Azure Monitor metrics must not show a sustained rate of HTTP 429 responses for it. The deployment must not be
+  paused (deploymentState Paused does not accept inference requests). The 429 rate threshold, the window and the minimum
+  request count are product opinion and policy keys (runtime.throttling.maxRate429, runtime.throttling.windowMinutes,
+  runtime.throttling.minRequests); the meaning of the deployment states and of the 429 status code is documented.
 status: verified
 phases: ["3"]
 inputs: [control-plane]
@@ -36,14 +38,21 @@ evidence:
     of AzureOpenAIRequests, and the Maximum, Average and Minimum aggregations and the ModelDeploymentName dimension of
     AzureOpenAIProvisionedManagedUtilizationV2, are VERIFIED in the azure-monitor-docs supported-metrics file
     microsoft-cognitiveservices-accounts-metrics.md, read 2026-10-18), an explicit
-    timespan of the form {startISO}/{endISO} (one hour ending now; product opinion; the doctor computes both ends, it
+    timespan of the form {startISO}/{endISO} (windowMinutes long, default one hour, ending now; product opinion; the doctor computes both ends, it
     does not use a relative duration), $filter=StatusCode eq '*' and ModelDeploymentName eq '*' so that the service
     splits the series by both dimensions, and top=50 (the spec says top defaults to 10 when $filter is set, so a split
     by deployment needs more). metricnamespace is not sent (UNVERIFIED whether a namespace is needed for these metrics).
     Attribution is by the returned ModelDeploymentName dimension value only (it must be a safe resource name; otherwise
-    the finding is attached to the account and says the series could not be attributed). StatusCode handling: a series
-    whose StatusCode value is exactly 429 with a total above 0 (threshold 0; product opinion) is a finding for its
-    deployment. The StatusCode VALUE domain stays UNVERIFIED: the docs describe the dimension by categories (successful,
+    the finding is attached to the account and says the series could not be attributed). StatusCode handling: per deployment (attributed by the ModelDeploymentName value) the doctor sums every series
+    into a request total and the series whose StatusCode value is exactly 429 into a 429 count over the window. The
+    rate is 429 count / request total. A rate above runtime.throttling.maxRate429 (default 0.05; product opinion; a ratio
+    greater than 0 and at most 1) with a request total of at least runtime.throttling.minRequests (default 100; product
+    opinion; whole number of at least 1) is a finding (key throttling-429). 429 responses on fewer requests than the
+    minimum are Uncertain (sample too small), and a rate at or below the threshold passes, so a single transient 429 is
+    never a finding. The window is runtime.throttling.windowMinutes (default 60; product opinion; whole minutes from 5
+    to 1440, bounds chosen conservatively because the metric retention and maximum timespan are UNVERIFIED); an invalid
+    policy value falls back to the default and adds an Uncertain note. The evidence names the window, the 429 count,
+    the request total, the rate and the thresholds with their policy keys. The StatusCode VALUE domain stays UNVERIFIED: the docs describe the dimension by categories (successful,
     clienterrors, server errors) and do not enumerate values, so in practice the 429 signal is usually Uncertain (loop 2).
     If every returned StatusCode value is a three-digit HTTP code (100 to 599) and none is 429, no throttling
     occurred in the window (Pass for this signal). If any value is not a three-digit code and no series is identified as
@@ -53,8 +62,13 @@ evidence:
     metric was not emitted). If the response reports an errorCode, or the series count reached the top=50 cap, the result
     is Uncertain with a truncation note (some deployments may be missing). For provisioned-managed deployments also read
     AzureOpenAIProvisionedManagedUtilizationV2 (aggregation Maximum, split by ModelDeploymentName, same window, interval
-    and cap): a maximum of 100 percent or above in the window means calls were throttled and is a finding for that
-    deployment. Required permission:
+    and cap): Learn states that utilization at or above 100 percent returns 429, but the Maximum over the window is a
+    single peak, so a peak of 100 percent or above is a finding (key utilization) only for a deployment that also has
+    a sustained 429 rate finding above; alone it is Uncertain. Probe 1 also reads properties.deploymentState
+    (DeploymentState enum Running or Paused in cognitiveservices.json 2026-09-01, VERIFIED 2026-10-19): Paused is a
+    finding (key deployment-state, confidence likely, because a pause can be deliberate), Running or absent passes and
+    any other value is Uncertain. properties.rateLimits against the configured capacity is NOT evaluated: how the rate
+    limit entries relate to capacity is UNVERIFIED. Required permission:
     ARM read on the account for probe 1 and permission to read Azure Monitor metrics on the account for probe 2
     (Microsoft.Insights/metrics/read; the built-in role carrying it was not verified). Vantage point: control plane, any
     network. Metadata read: deployment names, model names and versions, counts. No prompts or completions.
@@ -147,13 +161,24 @@ tests:
   positive:
     - deployment provisioningState Failed
     - a series with StatusCode 429 above the threshold, attributed to one deployment by its ModelDeploymentName value
-    - provisioned utilization at 100 percent
+    - 429 rate just above the default 5 percent with at least 100 requests is a finding with window, counts and thresholds in the evidence
+    - policy lowers maxRate429 or minRequests so a smaller rate or sample is judged
+    - provisioned utilization at 100 percent together with a sustained 429 rate
+    - deployment deploymentState Paused
   negative:
     - all deployments Succeeded and every returned StatusCode value is a three-digit code with none equal to 429 (no throttling occurred)
+    - one transient 429 among 499 requests passes
+    - 429 rate exactly at the threshold passes
+    - policy raises maxRate429 so the same rate passes
+    - deploymentState Running or absent passes
   skipped:
     - caller cannot read metrics
     - deployment is not used by the project (out of scope)
   uncertain:
+    - 429 responses on fewer requests than runtime.throttling.minRequests (sample too small)
+    - provisioned utilization peak of 100 percent without a sustained 429 rate
+    - invalid runtime.throttling policy value falls back to the default with a note
+    - deploymentState other than Running or Paused
     - deployment Creating or Updating
     - no time series returned (no traffic versus metric not emitted; distinct from a count of zero)
     - StatusCode values that are not three-digit codes and no series identified as 429
@@ -161,6 +186,14 @@ tests:
     - a series cannot be attributed to a deployment (no safe ModelDeploymentName value), attached to the account
 testability: Deterministic against recorded ARM and Metrics responses; live mode needs ARM and Monitor read access.
 notes: >-
+  Version 5 (2026-10-19): sustained-rate semantics. Before, any single 429 in a one-hour window and any utilization peak of
+  100 percent failed a production run (hard-coded thresholds). Now: rate and minimum-request policy keys, configurable
+  window, stable finding keys (throttling-429, utilization, provisioning-state, deployment-state) so fingerprints do not
+  move with the counts, a Paused deployment finding, and a lone utilization peak is Uncertain. The three
+  runtime.throttling.* keys are read through sdk.Policy; they are only settable from the policy file once internal/config
+  lists them in PolicyKeys (not part of this change; until then the documented defaults apply). UNVERIFIED: the default
+  values (product opinion), the window bounds, the relation of rateLimits to capacity (not evaluated), a metric name for
+  per-deployment total requests other than AzureOpenAIRequests (none is used).
   Loop 2 (2026-10-18): the Total aggregation for AzureOpenAIRequests, Maximum/Average/Minimum for utilisation, the
   dimensions ModelDeploymentName and StatusCode and the PT1M grain are now VERIFIED (azure-monitor-docs, commit 583ced4,
   ms.date 09/28/2026, file microsoft-cognitiveservices-accounts-metrics.md, read 2026-10-18). The StatusCode value domain

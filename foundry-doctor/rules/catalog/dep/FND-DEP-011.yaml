@@ -23,7 +23,7 @@ severity:
   test: error
   prod: error
 compatibility:
-  azd: '>=1.34.2 <=1.36.0'
+  azd: '>=1.34.2'
   extensions:
     azure.ai.projects: '>=1.0.0-beta.13 <=1.0.0-beta.14'
   apiVersions:

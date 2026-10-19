@@ -1,8 +1,8 @@
 // Package idn implements the Phase 1 FND-IDN-* rules as static checks over the
 // compiled ARM model. An unresolved ARM expression yields a skip, never a pass;
-// a missing ARM model yields SkipInputUnavailable. FND-IDN-002 needs effective
-// permission data and stays catalogue-only in Phase 1 (ADR-020): the pack lists it
-// but no check is registered, so it reports as skipped (not-implemented), never passed.
+// a missing ARM model yields SkipInputUnavailable. FND-IDN-002 implements the
+// static leg only (idn002.go): the role assignments declared in the compiled
+// template. Effective live permissions need the preflight or runtime check.
 package idn
 
 import (
@@ -53,6 +53,7 @@ var (
 func Register() []sdk.Rule {
 	return []sdk.Rule{
 		fn{"FND-IDN-001", evalIDN001},
+		fn{"FND-IDN-002", evalIDN002},
 		fn{"FND-IDN-003", evalIDN003},
 		fn{"FND-IDN-004", evalIDN004},
 		fn{"FND-IDN-005", evalIDN005},

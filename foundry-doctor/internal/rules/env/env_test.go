@@ -82,7 +82,8 @@ func TestRules(t *testing.T) {
 		{"002 one empty env name is uncertain", "FND-ENV-002", prov{{Name: "d", Values: vals("AZURE_ENV_NAME", "d")}, {Name: "p", Values: vals("X", "1")}}, nil, true, "AZURE_ENV_NAME", 0, ""},
 		{"002 truncated env is uncertain", "FND-ENV-002", prov{{Name: "d", Values: vals("AZURE_ENV_NAME", "d")}, {Name: "p", Status: StatusTruncated}}, nil, true, "environment p: .env truncated", 0, ""},
 
-		{"003 no policy skips", "FND-ENV-003", prov{{Name: "d"}, {Name: "p"}}, nil, true, sdk.SkipMissingPolicyKey(TierPolicyKey), 0, ""},
+		// Without environments.tiers the tier comes from the name (tiers_test.go); names "d" and "p" decide nothing, so the rule is uncertain, not a pass.
+		{"003 no policy and no tier in the names is uncertain", "FND-ENV-003", prov{{Name: "d"}, {Name: "p"}}, nil, true, "environment d: no tier", 0, ""},
 		{"003 shared rg", "FND-ENV-003", prov{{Name: "d", ResourceGroup: "RG"}, {Name: "p", ResourceGroup: "rg"}}, tiersPol, false, "", 1, "prod environment p"},
 		{"003 distinct", "FND-ENV-003", prov{{Name: "d", ResourceGroup: "a"}, {Name: "p", ResourceGroup: "b"}}, tiersPol, false, "", 0, ""},
 		{"003 prod without targets is uncertain", "FND-ENV-003", prov{{Name: "d", ResourceGroup: "a"}, {Name: "p"}}, tiersPol, true, "environment p: no resource group", 0, ""},

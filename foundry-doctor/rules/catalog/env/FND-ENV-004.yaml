@@ -1,5 +1,5 @@
 id: FND-ENV-004
-version: 3
+version: 4
 group: ENV
 title: "Informational difference summary"
 description: >-
@@ -17,16 +17,20 @@ severity:
   test: info
   prod: info
 compatibility:
-  azd: ">=1.34.2 <=1.36.0"
+  azd: '>=1.34.2'
   extensions: {}
   apiVersions: []
   preview: true
   notes: "azd range: the minimum is the lowest requiredAzdVersion among the Foundry extensions read (agents beta.18, projects beta.13 need >=1.34.2); the maximum is azd 1.36.0 (tag azure-dev-cli_1.36.0, acebba1e388b489a91ab8e2487a676359ab516a1, released 2026-10-14; the first clone read at 1.36.0-beta.1 is earlier evidence). The earlier >=1.27.1 lower bound came from a changelog and was not verified. Window widened 2026-10-16 (azd 1.36.0 = azure-dev-cli_1.36.0, acebba1e388b489a91ab8e2487a676359ab516a1, released 2026-10-14). Checked by git diff of the Azure/azure-dev tags azure-dev-cli_1.35.0 (170ebb858071da353cc9bf8657a377bff268ba36) and azure-dev-cli_1.36.0 (blobless clone https://github.com/Azure/azure-dev) over cli/azd/pkg/environment (azdcontext, local_file_data_store.go, environment.go), cli/azd/go.mod, cli/azd/pkg/project and cli/azd/pkg/infra/provisioning/bicep: unchanged are the godotenv version and .env read (godotenv.Read), the .azure/<env>/.env and .azure/config.json layout and constants, defaultEnvironment, the AZURE_* key constants, the environment name regexp ^[a-zA-Z0-9-\\(\\)_\\.]{1,64}$ and the resourceGroup resolution code. Tightened in 1.36.0 and recorded in docs/tool-compatibility.md section 6: dot-only names, trailing-dot names on Windows, symbolic-link state paths and an invalid defaultEnvironment now error. Example URL: https://github.com/Azure/azure-dev/compare/azure-dev-cli_1.35.0...azure-dev-cli_1.36.0"
 evidence:
   description: >-
-    Compute the key-level difference of two or more .azure/<env>/.env files and the azure.yaml after per-environment
-    substitution. Output lists key names with one of: only-in-A, only-in-B, differs, same. Values are not printed;
-    differing values are shown as salted hash fingerprints, and keys that look secret-bearing are shown by name only.
+    Compute the key-level difference of two or more .azure/<env>/.env files. Output is at most one summary finding per
+    pair of environments (key env-diff-summary:<a>,<b>, stable per pair): the number of keys only in each environment and
+    of keys with different values, and the first 10 differing keys in name order, each with its kind (only in A, only in B,
+    differs), followed by a count of the remaining keys. Values and value fingerprints are not printed, so a rotated
+    value does not change the finding, and secret-bearing keys are shown by name only. Pairs with no difference give no
+    finding. Environments that come from parameter files are not compared (their keys are parameter names, not .env
+    keys). The rule stays info.
   confidence: certain
 recommendation: >-
   Review the summary before promoting a release; use azd env get-values per environment for the details you are
@@ -81,12 +85,18 @@ tests:
   positive:
     - key-only-in-one-environment
     - value-differs-between-environments
+    - many-differences-give-one-summary-with-top-keys
+    - three-environments-give-one-finding-per-pair
   negative:
     - identical-environments
+    - rotated-value-keeps-the-same-key
   skipped:
     - single-environment-visible
     - env-file-missing-or-unparseable-uncertain
 notes: >-
+  Version 4 (2026-10-19): one summary finding per environment pair instead of one finding per differing key (the
+  one-finding-per-key noise); the key is the pair, so the fingerprint is stable per pair and no longer changes with a
+  rotated value. The top-N limit (10) is a product opinion.
   Product opinion; this rule emits a summary, not pass/fail findings. The "foundry-doctor compare" command name in the
   fix example is a placeholder for the product command and the public namespace is decided by ADR-003. Phase 1 fact
   check (2026-10-05): azd lists every subdirectory of .azure as an environment, sorted by name, whether or not it

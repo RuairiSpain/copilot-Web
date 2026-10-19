@@ -1,5 +1,5 @@
 id: FND-REL-008
-version: 1
+version: 2
 group: REL
 title: Provisioned throughput spillover recommendation
 description: A provisioned-throughput model deployment (sku.name ProvisionedManaged, GlobalProvisionedManaged or DataZoneProvisionedManaged)
@@ -31,13 +31,21 @@ compatibility:
   preview: false
   notes: "No azd dependency: reads compiled ARM JSON or ARM control plane Microsoft.CognitiveServices/accounts/deployments 2026-05-01 / 2024-10-01: stable) - properties.spilloverDeploymentName in cognitiveservices.json; Learn REST example uses."
 evidence:
-  description: 'Compiled ARM or live Microsoft.CognitiveServices/accounts/deployments. In scope when sku.name is one of the
-    provisioned names read in the Learn article (ProvisionedManaged, GlobalProvisionedManaged, DataZoneProvisionedManaged).
-    Finding: properties.spilloverDeploymentName unset. When set, check (platform-documented precondition, reported as part
-    of this rule) that the named deployment exists in the same account and is a standard deployment of the same model and
-    version. Per-request header use (x-ms-spillover-deployment) is application behaviour and invisible to the doctor, so an
-    unset property is reported at the stated severity with a note that request-level spillover may be in use; confidence is
-    likely.'
+  description: >-
+    Compiled ARM. In scope when sku.name is one of the provisioned names read in the Learn article (ProvisionedManaged,
+    GlobalProvisionedManaged, DataZoneProvisionedManaged). Finding provisioned-deployment-spilloverdeploymentname-request-level-spillover:
+    properties.spilloverDeploymentName is absent, null, empty or blank (a typed check - version 1 formatted a missing value
+    as the text "<nil>", so it reported a failed lookup instead of the absent property). The finding states that request-level
+    spillover (x-ms-spillover-deployment header) may be in use and is invisible offline; confidence is likely. When the property
+    is set, the named deployment must resolve in the same account (a bare name resolves only for a deployment without a parent
+    segment, never across accounts) - otherwise spilloverdeploymentname-resolve-deployment-same-account; it must not itself be
+    a provisioned deployment - spilloverdeploymentname-must-refer-standard-deployment-another; and it must have the same model
+    format, name and version - spilloverdeploymentname-target-same-model-version. A chain of provisioned deployments that
+    returns to the starting deployment (including a deployment naming itself) is reported as spilloverdeploymentname-loop; a chain
+    that passes through a non-provisioned deployment is not followed, because whether a standard deployment may itself set
+    spillover is not documented (UNVERIFIED). Uncertain, never a finding: an expression or non-string spilloverDeploymentName,
+    a conditional, looped or expression-named target, an expression model identity, and a target whose sku.name is unresolved
+    (it cannot be shown to be standard). Live control-plane listing is not implemented by this rule.
   confidence: likely
 recommendation: Create a standard (pay-as-you-go) deployment of the same model and version in the same account, then set spilloverDeploymentName
   on the provisioned deployment to its name. Spillover initiates on 429, 500 and 503 (and on 400 for long-context requests)
@@ -92,17 +100,35 @@ implementation:
   package: internal/rules/rel
 tests:
   positive:
-  - GlobalProvisionedManaged deployment without spilloverDeploymentName reports missing spillover
-  - spilloverDeploymentName names a deployment that does not exist in the account
+  - 'absent, null, empty and blank spilloverDeploymentName report the absent-property key and evidence (TestREL008AbsentSpilloverProperty)'
+  - target does not exist
+  - target exists only in another account
+  - target is another PTU deployment
+  - target is a different model
+  - target is the same model, different version
+  - self reference is a loop
+  - two PTU deployments spilling to each other loop
+  - PTU chain is flagged at the first hop
+  - literal false target is absent
   negative:
-  - provisioned deployment with spilloverDeploymentName naming an existing standard deployment of the same model passes
+  - standard sibling same model passes
+  - global standard sibling passes
+  - data zone standard sibling passes
+  - non-provisioned deployment is out of scope
   skipped:
-  - 'standard (non-provisioned) deployment: out of scope'
-  - 'no control-plane access in live mode: skipped with the missing capability'
+  - missing compiled ARM model skips
   uncertain:
-  - 'unset property while application may use the per-request header: reported with the note'
   - spilloverDeploymentName is an unresolved expression
-testability: Unit tests on compiled ARM fixtures; live mode tests use recorded deployment list responses.
-notes: The Learn example payload shows spilloverDeploymentName at properties level with an API version of 2024-10-01; the
-  stable spec 2026-05-01 was used for the property description. Whether spillover supports a given provisioned SKU or model
-  beyond the global and data zone recommendation is not asserted.
+  - target without a literal sku is uncertain
+  - target name resolved only through expressions is uncertain
+  - conditional spillover target is uncertain
+  - expression model identity is uncertain
+testability: Unit tests on compiled ARM fixtures (internal/rules/rel/rel_spillover_test.go).
+notes: >-
+  Version 2 (behaviour change). The absent-property case now reports its own key and evidence; before, it fell through to
+  the lookup branch (key spilloverdeploymentname-resolve-deployment-same-account), so baselined fingerprints for that case
+  change. New: loop detection, cross-account bare-name resolution fixed, unresolved target SKU is uncertain. The Learn example
+  payload shows spilloverDeploymentName at properties level with an API version of 2024-10-01; the stable spec 2026-05-01 was
+  used for the property description. Whether spillover supports a given provisioned SKU or model beyond the global and data zone
+  recommendation is not asserted. The same-model requirement is the documented precondition; broader model-family equivalence
+  is not asserted (UNVERIFIED).

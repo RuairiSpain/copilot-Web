@@ -111,9 +111,10 @@ func contractRoutes() map[string]string {
 }
 
 const contractMetrics = `{"timespan":"x","value":[{"id":"m","type":"t","name":{"value":"m"},"unit":"Count","errorCode":"Success","timeseries":[
- {"metadatavalues":[{"name":{"value":"ModelDeploymentName"},"value":"gpt-main"},{"name":{"value":"StatusCode"},"value":"429"}],"data":[{"timeStamp":"a","total":7}]},
- {"metadatavalues":[{"name":{"value":"ModelDeploymentName"},"value":"gpt-main"},{"name":{"value":"StatusCode"},"value":"200"}],"data":[{"timeStamp":"a","total":70}]},
- {"metadatavalues":[{"name":{"value":"ModelDeploymentName"},"value":"gpt-ptu"}],"data":[{"timeStamp":"a","total":1,"maximum":100}]}]}]}`
+ {"metadatavalues":[{"name":{"value":"ModelDeploymentName"},"value":"gpt-main"},{"name":{"value":"StatusCode"},"value":"429"}],"data":[{"timeStamp":"a","total":70}]},
+ {"metadatavalues":[{"name":{"value":"ModelDeploymentName"},"value":"gpt-main"},{"name":{"value":"StatusCode"},"value":"200"}],"data":[{"timeStamp":"a","total":700}]},
+ {"metadatavalues":[{"name":{"value":"ModelDeploymentName"},"value":"gpt-ptu"},{"name":{"value":"StatusCode"},"value":"429"}],"data":[{"timeStamp":"a","total":60}]},
+ {"metadatavalues":[{"name":{"value":"ModelDeploymentName"},"value":"gpt-ptu"},{"name":{"value":"StatusCode"},"value":"200"}],"data":[{"timeStamp":"a","total":540,"maximum":100}]}]}]}`
 
 func contractDeps(t *testing.T, h *hostRT) Deps {
 	t.Helper()
@@ -163,12 +164,13 @@ func TestRealAdapterRoutesEveryRuntimeRuleThroughTheAllowList(t *testing.T) {
 	if r := results["FND-RUN-003"]; r.Skipped != nil || len(r.Findings) != 0 {
 		t.Errorf("RUN-003 = %+v", r)
 	}
-	// 004: the 429 finding is attributed to the deployment, utilisation to the other.
+	// 004: a sustained 429 rate on gpt-main; gpt-ptu has a sustained 429 rate and a
+	// utilisation peak of 100 percent (two findings, both attributed to it).
 	var ids []string
 	for _, f := range results["FND-RUN-004"].Findings {
 		ids = append(ids, f.Resource.ID)
 	}
-	if len(ids) != 2 || ids[0] != acctPath+"/deployments/gpt-main" || ids[1] != acctPath+"/deployments/gpt-ptu" {
+	if len(ids) != 3 || ids[0] != acctPath+"/deployments/gpt-main" || ids[1] != acctPath+"/deployments/gpt-ptu" || ids[2] != acctPath+"/deployments/gpt-ptu" {
 		t.Errorf("RUN-004 resource IDs = %v", ids)
 	}
 	// 005, 006, 007: clean.

@@ -1,17 +1,19 @@
 id: FND-OPS-002
-version: 1
+version: 2
 group: OPS
 title: "Application Insights connected"
 description: >-
-  When a workload explicitly requires Foundry server-side tracing, hosted-agent telemetry, or an
-  Application Insights observability destination, the Foundry project (or its parent account) should
-  have a connection of category AppInsights that points to an Application Insights resource.
+  Each Foundry project in the compiled template should have a connection of category AppInsights, at project scope or at
+  its parent account, so server-side tracing and hosted-agent telemetry have an Application Insights destination.
   Foundry documents that server-side tracing is enabled after an Application Insights resource is connected, and that
   hosted agents receive the APPLICATIONINSIGHTS_CONNECTION_STRING setting only when project monitoring is configured.
-  Foundry does not document an Application Insights connection as mandatory for every production project.
+  Foundry does not document an Application Insights connection as mandatory for every production project, so the rule is a
+  product opinion at warning severity, not a platform error. Version 2 evaluates the compiled template; the earlier
+  hard-coded skip for a missing observability requirement is removed because no policy key for it exists in the
+  configuration schema (ADR-007, ADR-026 decision 4).
 status: product-opinion
 phases: ["4"]
-inputs: ["control-plane"]
+inputs: ["bicep-arm", "control-plane"]
 basis: ["operations", "waf", "opinion"]
 category: nice-to-have
 pillar: operations
@@ -28,14 +30,21 @@ compatibility:
   notes: "Control-plane inventory only. Resource=Microsoft.CognitiveServices/accounts/projects/connections; plane=control; API=2026-09-01."
 evidence:
   description: >-
-    First read the profile's explicit observability/server-tracing requirement. With no such
-    requirement, skip: environment name or production status alone does not imply one. When required,
-    list deployed project connections through the control plane and inspect category only; credentials and connection
-    metadata are never requested or retained. Report no AppInsights category connection for an in-scope project, or
-    more than one at the same scope. Do not infer the linked component from target or metadata and do not inspect
-    compiled ARM or azure.yaml: no primary source reviewed here verifies that authoring shape. If connections cannot
-    be listed, skip. If category is present but the destination cannot be established without credentials or
-    undocumented metadata, report the category check as compliant and leave destination health to runtime evidence.
+    Compiled ARM, no network. For every live Microsoft.CognitiveServices/accounts/projects resource, look for a
+    Microsoft.CognitiveServices/accounts/projects/connections resource named under that project, or a
+    Microsoft.CognitiveServices/accounts/connections resource named under its parent account, whose properties.category is
+    AppInsights (ConnectionCategory enumeration and ConnectionPropertiesV2.category, cognitiveservices.json 2026-09-01).
+    Finding no-appinsights-connection: a project with none at either scope. Finding multiple-appinsights-connections: more
+    than one at one scope (only one connection per category is allowed). Uncertain, never a finding: a connection or project
+    name that is an unresolved ARM expression, a category that is an expression, or a conditional or looped connection
+    resource (it may be the AppInsights connection). Skipped not-applicable: no live project in the template. When at least
+    one project is connected, each live Microsoft.Insights/components resource is also checked for a properties.WorkspaceResourceId
+    (the workspace-based link also read by FND-OPS-006; the property name is read case-insensitively): absent is finding
+    component-not-workspace-based, an expression value is uncertain. The connection's target and metadata, credentials,
+    IngestionMode and the APPLICATIONINSIGHTS_CONNECTION_STRING setting on Container Apps, Functions or hosted agents are not
+    read: which component a connection points to, and whether a compute setting is linked to the project, have no verified
+    authoring shape (UNVERIFIED), so they never produce a pass or a finding. A control-plane inventory of the deployed
+    connections remains the live-mode source and is not implemented by this rule.
   confidence: certain
 recommendation: >-
   If server-side tracing or hosted-agent telemetry is a declared requirement, connect an Application
@@ -115,25 +124,43 @@ overlap:
 implementation:
   owner: native
   package: internal/rules/ops
-testability: >-
-  Deterministic against a recorded control-plane connection list with credentials and metadata stripped.
 tests:
   positive:
-    - declared-server-tracing-requirement-and-no-appinsights-connection-reports-a-finding
-    - declared-observability-requirement-and-two-appinsights-connections-reports-a-finding
+    - missing connection is a finding
+    - unrelated connection categories do not satisfy
+    - connection of another account does not cover
+    - connection of another project does not cover
+    - two connections at the same scope
+    - connected classic component is a finding
+    - component alone does not hide the missing connection
+    - two projects, one connected
+    - literal false connection does not count
+    - TestOPS002EvidenceHasNoConnectionTarget (evidence never carries the connection target)
   negative:
-    - declared-server-tracing-requirement-and-one-project-connection-category-appinsights-produces-no-finding
+    - project scoped AppInsights connection passes
+    - category compared case-insensitively
+    - account scoped AppInsights connection covers its project
+    - connected workspace based component passes
   skipped:
-    - no-explicit-observability-or-server-tracing-requirement
-    - control-plane-unavailable-while-the-requirement-is-declared
+    - no ARM model
+    - no project in template
   uncertain:
-    - project-scope-cannot-be-distinguished-from-account-scope
+    - expression category is uncertain
+    - expression connection name is uncertain
+    - conditional connection is uncertain
+    - expression workspace id is uncertain not a finding
+testability: >-
+  Deterministic against compiled ARM fixtures (internal/rules/ops/ops_appinsights_test.go); no Azure access.
 notes: >-
-  This is a product opinion conditioned on an explicit workload requirement. The Well-Architected
-  guidance text itself was not read (the source repository is not public). Foundry documents the
-  consequence of a missing connection (no server-side traces) but not that it is an invalid
-  configuration or a production error, so no platform basis is claimed. Application Insights and
-  Log Analytics ingestion and retention create a cost tradeoff. The unverified ARM target/metadata,
-  authType, credentials and azure.yaml claims were removed from evidence and remediation. Trace data retention follows
-  the connected component and workspace (see FND-OPS-006). Defender and Advisor are unresearched; the native overlap
-  decision is provisional until their catalogues are searched.
+  Version 2 (behaviour change): the rule was a hard-coded skip and could never pass or fail; it now evaluates the compiled
+  template, so the finding set and fingerprints change. The skip head no-explicit-observability-or-server-tracing-requirement
+  is no longer emitted by this rule (it stays in internal/rules/skipclass.go and the assessment mapping; the WAF assessment
+  then derives the control from evidence instead of a QUESTION). This is a product opinion conditioned on a workload that
+  wants server-side tracing; teams that do not want Application Insights cost should suppress the finding with a reason and
+  an expiry. The Well-Architected guidance text itself was not read (the source repository is not public). Foundry documents the
+  consequence of a missing connection (no server-side traces) but not that it is an invalid configuration or a production
+  error, so no platform basis is claimed. Application Insights and Log Analytics ingestion and retention create a cost tradeoff.
+  UNVERIFIED and not implemented as signals - the component a connection targets, connection metadata, IngestionMode and
+  compute-level APPLICATIONINSIGHTS_CONNECTION_STRING settings. Trace data retention follows the connected component and
+  workspace (see FND-OPS-006). Defender and Advisor are unresearched; the native overlap decision is provisional until their
+  catalogues are searched.

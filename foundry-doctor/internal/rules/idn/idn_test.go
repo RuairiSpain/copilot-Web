@@ -60,7 +60,7 @@ func run(t *testing.T, id string, in *sdk.Input) sdk.Result {
 }
 
 func TestRegisterIDs(t *testing.T) {
-	want := []string{"FND-IDN-001", "FND-IDN-003", "FND-IDN-004", "FND-IDN-005", "FND-IDN-006"}
+	want := []string{"FND-IDN-001", "FND-IDN-002", "FND-IDN-003", "FND-IDN-004", "FND-IDN-005", "FND-IDN-006"}
 	got := Register()
 	if len(got) != len(want) {
 		t.Fatalf("got %d rules", len(got))

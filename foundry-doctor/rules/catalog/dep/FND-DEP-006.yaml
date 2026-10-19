@@ -19,7 +19,7 @@ severity:
   test: error
   prod: error
 compatibility:
-  azd: ">=1.34.2 <=1.36.0"
+  azd: '>=1.34.2'
   extensions: {}
   apiVersions:
     - { plane: management, provider: Microsoft.CognitiveServices, resourceType: deletedAccounts, version: "2026-09-01" }

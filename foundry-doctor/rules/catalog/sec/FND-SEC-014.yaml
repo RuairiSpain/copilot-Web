@@ -20,12 +20,12 @@ severity:
   test: error
   prod: error
 compatibility:
-  azd: '>=1.36.0-beta.1 <=1.36.0'
+  azd: '>=1.34.2'
   extensions: {}
   apiVersions: []
   preview: true
   notes: >-
-    azd: the lower bound 1.36.0-beta.1 is the first version read (clone); the upper bound is azd 1.36.0 (tag azure-dev-cli_1.36.0, acebba1e388b489a91ab8e2487a676359ab516a1, released 2026-10-14), read by tag diff on 2026-10-16. Azd stores entry-point outputs as environment values per azd docs Bicep
+    azd: >=1.34.2, open-ended (ADR-029); verified through azd 1.36.0 (tag azure-dev-cli_1.36.0, acebba1e388b489a91ab8e2487a676359ab516a1, read by tag diff on 2026-10-16). The rule wraps the Bicep linter outputs-should-not-contain-secrets and has no azd dependency. Azd stores entry-point outputs as environment values per azd docs Bicep
     linter rule outputs-should-not-contain-secrets (Learn ms.date 10/30/2025) -
     https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/azure-resource-manager/bicep/linter-rule-outputs-should-not-contain-secrets.md
     (branch URL, not commit-pinned) Window widened 2026-10-16: azd to 1.36.0 (tag azure-dev-cli_1.36.0, acebba1,
@@ -120,6 +120,7 @@ tests:
   - output keyVaultUri of a vault property passes (name token key is not the last token)
   - '@secure() output of a secure parameter passes (exempt, as in the Bicep linter)'
   - a string literal that contains the text listKeys( passes
+  - the azd version does not change the result and the range accepts 1.34.2 and later
   skipped:
   - output named apiKeyName with a literal value is an uncertain per-output skip, not a finding
   - model that exposes only output names skips with input-unavailable when no name matches

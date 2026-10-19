@@ -52,11 +52,27 @@ func evalCFG003(in *sdk.Input) sdk.Result {
 	}
 	svcs := serviceList(d)
 	all := byName(svcs)
+	resources, resourcesKnown := resourceNames(d)
 	var fs []sdk.Finding
 	var notes []string
 	for _, s := range svcs {
 		add := func(key string, n *yaml.Node, f string, a ...any) {
 			fs = append(fs, finding(d, s, n, key, fmt.Sprintf(f, a...)))
+		}
+		// A uses entry resolves to a service key or a top-level resource name
+		// (azure.yaml.json: "List of service names and resource names").
+		for _, u := range refNames(s.get("uses")) {
+			if u.Name == "" || containsRef(u.Name) {
+				continue
+			}
+			if _, isSvc := all[u.Name]; isSvc || resources[u.Name] {
+				continue
+			}
+			if !resourcesKnown {
+				notes = append(notes, fmt.Sprintf("%s: uses %q is not a service and the resources section is not a literal mapping, so it cannot be ruled out as a resource name", s.Name, u.Name))
+				continue
+			}
+			add("uses-unknown:"+u.Name, u.Node, "uses entry %q names no service or resource", u.Name)
 		}
 		switch {
 		case s.Host == hostAgent:
@@ -89,6 +105,24 @@ func evalCFG003(in *sdk.Input) sdk.Result {
 		}
 	}
 	return withNotes(fs, notes)
+}
+
+// resourceNames returns the keys of the top-level resources mapping. known is
+// false when resources is present but is not a mapping (for example a
+// reference), so its names cannot be enumerated.
+func resourceNames(d document) (names map[string]bool, known bool) {
+	names = map[string]bool{}
+	r := child(d.Resolved(), "resources")
+	if r == nil || r.Tag == "!!null" {
+		return names, true
+	}
+	if r.Kind != yaml.MappingNode {
+		return names, false
+	}
+	for _, p := range pairs(r) {
+		names[p.Key.Value] = true
+	}
+	return names, true
 }
 
 func cfg003Conn(d document, s service, all map[string]service, r nameAt) []sdk.Finding {

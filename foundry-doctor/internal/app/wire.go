@@ -58,8 +58,8 @@ func builtinRules(in RunInput) (rs []sdk.Rule, cleanup func()) {
 		p.Layout = layout
 	}
 	rs = append(rs, cfg.RegisterWith(p)...)
-	rs = append(rs, costrules.Register()...)
-	rs = append(rs, env.RegisterWith(store)...)
+	rs = append(rs, costrules.RegisterWith(costrules.Providers{Estimate: costrules.CachedEstimator("")})...)
+	rs = append(rs, env.RegisterWith(env.WithParameterFiles(store, in.Source.Dir, defaultInfraPath(in.Source.InfraPath)))...)
 	rs = append(rs, sec.Register()...)
 	rs = append(rs, idn.Register()...)
 	rs = append(rs, netrules.Register()...)

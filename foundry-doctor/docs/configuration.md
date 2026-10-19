@@ -128,6 +128,14 @@ These keys remain part of the strict schema and follow ADR-007:
 | `policy.preflight.deploymentHistoryMargin` | integer >= 1 | `80` | DEP-010 |
 | `policy.preflight.regionMatrixStalenessDays` | integer >= 1 | `365` | DEP-012 |
 
+| `policy.azurePolicy.mappedDefinitionIds` | list of GUIDs | built-in list in the SEC-009 catalogue entry | SEC-009 |
+| `policy.encryption.requireCustomerManagedKeys` | boolean | `false` | SEC-010 (platform-managed keys become an info finding) |
+| `policy.reliability.locksManagedOutsideTemplate` | boolean | `false` | REL-004 (a missing lock is uncertain, not a finding) |
+| `policy.reliability.disasterRecovery` | `single-region`, `required`, `multi-region`, `hot-hot`, `hot-warm`, `hot-cold` | unset (REL-007 skips) | REL-007 |
+| `policy.runtime.throttling.maxRate429` | ratio > 0 and <= 1 | `0.05` | RUN-004 |
+| `policy.runtime.throttling.windowMinutes` | integer 5 to 1440 | `60` | RUN-004 |
+| `policy.runtime.throttling.minRequests` | integer >= 1 | `100` | RUN-004 |
+
 These keys are accepted in V1 so operators can tune the documented baseline
 without patching code.
 

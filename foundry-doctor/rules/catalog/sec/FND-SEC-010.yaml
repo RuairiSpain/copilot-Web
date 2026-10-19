@@ -1,10 +1,12 @@
 id: FND-SEC-010
-version: 2
+version: 3
 group: SEC
 title: Customer-managed keys informational
-description: Informational summary of whether customer-managed key (CMK) encryption is configured on the Foundry
-  account, AI Search, Cosmos DB and Storage resources of a solution. It never fails; it surfaces the posture so
-  teams with a CMK requirement can see the gaps.
+description: Reports customer-managed key (CMK) violations on the Foundry account, AI Search, Cosmos DB, Storage and
+  Container Registry resources of a solution. Findings are violations only and stay informational. A resource using
+  platform-managed keys is a finding only when the project declares a CMK requirement (policy key
+  encryption.requireCustomerManagedKeys, or an enforced assignment of a CMK built-in Azure Policy in the template);
+  otherwise it is a note. A resource that uses a customer-managed key passes.
 status: verified
 phases:
 - '4'
@@ -27,6 +29,7 @@ compatibility:
     - { plane: management, provider: Microsoft.Search, resourceType: searchServices, version: "2025-05-01" }
     - { plane: management, provider: Microsoft.DocumentDB, resourceType: databaseAccounts, version: "2026-03-15" }
     - { plane: management, provider: Microsoft.Storage, resourceType: storageAccounts, version: "2026-06-01" }
+    - { plane: management, provider: Microsoft.ContainerRegistry, resourceType: registries, version: "2025-04-01" }
   preview: false
   notes: "No azd dependency: reads compiled ARM JSON or ARM control plane Microsoft.CognitiveServices/accounts 2026-09-01 / 2026-09-01: stable) - cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable//cognitiveservices.json. Microsoft.Search/searchServices 2025-05-01 / 2025-05-01: stable) - search/resource-manager/Microsoft.Search/Search/stable//search.json. Microsoft.DocumentDB/databaseAccounts 2026-03-15 / 2026-03-15: stable) - cosmos-db/resource-manager/Microsoft.DocumentDB/DocumentDB/stable//openapi.json. Microsoft.Storage/storageAccounts 2026-06-01 / 2026-06-01: stable) - storage/resource-manager/Microsoft.Storage/stable//openapi.json."
 evidence:
@@ -34,7 +37,13 @@ evidence:
     with encryption.keyVaultProperties. Search: encryptionWithCmk.enforcement (Enabled | Disabled | Unspecified;
     Unspecified behaves as Disabled per spec). Cosmos DB: keyVaultKeyUri present. Storage: encryption.keySource
     Microsoft.Keyvault versus Microsoft.Storage (read-only in the response; set through the create parameters).
-    Reported as Info with the per-resource CMK state.'
+    Container Registry: encryption.status (enabled | disabled) with encryption.keyVaultProperties.keyIdentifier
+    (containerregistry.json 2025-04-01 stable). Only violations are findings: a resource with a customer-managed key passes;
+    platform-managed keys are an Info finding (Finding.Key empty, evidence "CMK posture: platform-managed (...)") when a CMK
+    requirement is declared (policy key encryption.requireCustomerManagedKeys true, or a Default-mode assignment of one of
+    the CMK built-in policies 67121cc7, 76a56461, 356da939, 1f905d99, 6fac406b) and a not-applicable note otherwise. An
+    expression value, an account encryption block without keySource (the spec default is Microsoft.KeyVault) or keySource
+    Microsoft.KeyVault without keyVaultProperties is uncertain.'
   confidence: likely
 recommendation: If your compliance regime requires customer-managed keys, configure them on each resource listed
   and use a Key Vault with soft delete and purge protection (see FND-SEC-005). Otherwise no action is needed.
@@ -63,6 +72,21 @@ sources:
   verifiedVia: >-
     https://github.com/Azure/azure-rest-api-specs/blob/main/specification/storage/resource-manager/Microsoft.Storage/Storage/stable/2026-06-01/openapi.json
   note: Encryption.keySource enum (Microsoft.Storage | Microsoft.Keyvault). Branch URL, not commit-pinned.
+- url: >-
+    https://github.com/Azure/azure-rest-api-specs/blob/main/specification/containerregistry/resource-manager/Microsoft.ContainerRegistry/Registry/stable/2025-04-01/containerregistry.json
+  lastVerified: '2026-10-19'
+  verifiedVia: >-
+    https://raw.githubusercontent.com/Azure/azure-rest-api-specs/main/specification/containerregistry/resource-manager/Microsoft.ContainerRegistry/Registry/stable/2025-04-01/containerregistry.json
+  note: >-
+    EncryptionProperty.status (enabled | disabled) and keyVaultProperties.keyIdentifier. Branch URL, not commit-pinned.
+- url: >-
+    https://github.com/Azure/azure-policy/blob/master/built-in-policies/policyDefinitions/Cognitive%20Services/CustomerManagedKey_Audit.json
+  lastVerified: '2026-10-19'
+  verifiedVia: azure-policy repository built-in-policies/policyDefinitions (name and displayName fields read 2026-10-19)
+  note: >-
+    CMK built-ins whose enforced assignment declares a CMK requirement: 67121cc7 (Cognitive Services CMK_Audit), 76a56461
+    (Search/CMK_Audit), 356da939 (Search/CMK_Deny), 1f905d99 (Cosmos DB/Cosmos_CMK_Deny), 6fac406b
+    (Storage/StorageAccountCustomerManagedKeyEnabled_Audit).
 overlap:
   decision: adapt
   provisional: true
@@ -70,7 +94,7 @@ overlap:
   rationale: Azure Policy has per-service CMK audits (67121cc7 AI Services, 76a56461 and 356da939 Search, 1f905d99
     Cosmos DB, 6fac406b Storage) and Checkov has CKV_AZURE_100 for Cosmos DB; PSRule has no CMK rule in the reviewed
     clone. They are per-resource compliance checks. Foundry Doctor adapts the idea into one informational cross-resource
-    view, deliberately without a fail state, so it is not a duplicate of the Policy enforcement path.
+    view, informational only (never above Info) and reporting violations only, so it is not a duplicate of the Policy enforcement path.
   research:
     psrule:
       state: unresearched
@@ -97,14 +121,32 @@ implementation:
   package: internal/rules/sec
 tests:
   positive:
-  - resource with platform-managed keys reports Info with state platform-managed (never an error)
-  - all resources with CMK reports Info with state cmk
+  - platform-managed with policy-key requirement is a finding
+  - enforced CMK policy assignment declares the requirement
+  - search Unspecified is a violation when required
+  - cosmos without key uri is a violation when required
+  - storage Microsoft.Storage is a violation when required
+  - registry without encryption is a violation when required
   negative:
-  - no in-scope resources produces no finding
+  - compliant account passes
+  - search enforcement Enabled passes
+  - cosmos key uri passes
+  - storage Keyvault source passes
+  - registry CMK passes
+  - DoNotEnforce CMK policy assignment declares nothing
+  - unlinked storage is out of scope
   skipped:
+  - no resources is not applicable
   - Storage encryption not present in Bicep skipped for template mode
   uncertain:
-  - Search encryptionWithCmk is Unspecified
+  - expression keySource is uncertain
+  - account KeyVault source without key properties is uncertain
+  - platform-managed without requirement is a note
 testability: Deterministic on ARM JSON; the Storage encryption property is read-only in responses so live mode is
   preferred for Storage.
 notes: Basis is security guidance, not a platform constraint; the rule is Info-only in every profile.
+  Version 3 (2026-10-19) - findings now report violations only (version 2 reported a finding for every state, including the
+  compliant cmk state; that state is now a pass). The existing tests that asserted a finding per state were adapted, not
+  removed (see the commit message). The policy key encryption.requireCustomerManagedKeys is read by the rule but is not defined
+  in ADR-007 or the configuration schema yet (UNVERIFIED as a supported key until added). The Cosmos keyVaultKeyUri check
+  treats any non-empty value as customer-managed.

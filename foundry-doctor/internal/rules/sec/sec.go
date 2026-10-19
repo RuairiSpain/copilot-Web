@@ -96,6 +96,19 @@ type acc struct {
 	// findings, they are returned as Skips next to the findings so the
 	// unevaluated resources stay visible (review M3, ADR-008 amendment 3).
 	notes []string
+	// infos are informational per-resource notes that never block a pass. They
+	// are returned as Skips next to the verdict (findings or a pass).
+	infos []string
+}
+
+// info records an informational note about r (it does not block a pass). The
+// reason reads "head: resource: detail" so it starts with a reason head.
+func (a *acc) info(r sdk.ARMResource, head, why string) {
+	n := armexpr.StripScope(r.Name)
+	if len(n) > 60 {
+		n = n[:57] + "..."
+	}
+	a.infos = append(a.infos, head+": "+n+": "+why)
 }
 
 // note records why r was not evaluated.
@@ -142,7 +155,7 @@ func (a *acc) maybe(r sdk.ARMResource) bool {
 // result: findings win; otherwise uncertainty skips; otherwise pass.
 func (a *acc) result() sdk.Result {
 	if len(a.fs) > 0 {
-		notes := append([]string(nil), a.notes...)
+		notes := append(append([]string(nil), a.notes...), a.infos...)
 		if a.scopeUncertain {
 			notes = append(notes, foundrylink.SkipScopeUncertain+": a resource may be Foundry-related but could not be correlated")
 		}
@@ -164,7 +177,38 @@ func (a *acc) result() sdk.Result {
 	case a.unresolved:
 		return skip(SkipUnresolved)
 	}
-	return sdk.Result{}
+	return sdk.Result{Skips: skipsOf(a.infos)}
+}
+
+// skipsOf turns informational notes into sorted Skips (nil when empty).
+func skipsOf(notes []string) []sdk.Skip {
+	if len(notes) == 0 {
+		return nil
+	}
+	sorted := append([]string(nil), notes...)
+	sort.Strings(sorted)
+	out := make([]sdk.Skip, 0, len(sorted))
+	for i, n := range sorted {
+		if i > 0 && sorted[i-1] == n {
+			continue
+		}
+		out = append(out, sdk.Skip{Reason: n})
+	}
+	return out
+}
+
+// resultDetailed is result with the unresolved-expression skip naming what was
+// unresolved (the notes), so an operator can see what blocked the verdict.
+func (a *acc) resultDetailed() sdk.Result {
+	out := a.result()
+	if out.Skipped != nil && out.Skipped.Reason == SkipUnresolved && len(a.notes) > 0 {
+		var parts []string
+		for _, s := range skipsOf(a.notes) {
+			parts = append(parts, s.Reason)
+		}
+		out.Skipped = &sdk.Skip{Reason: SkipUnresolved + ": " + strings.Join(parts, "; ")}
+	}
+	return out
 }
 
 func presence(r sdk.ARMResource) armexpr.Presence {

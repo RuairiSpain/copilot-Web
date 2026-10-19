@@ -414,7 +414,7 @@ func RegisterWith(p Providers) []sdk.Rule {
 		rule{"FND-CFG-002", evalCFG002},
 		rule{"FND-CFG-003", evalCFG003},
 		rule{"FND-CFG-004", func(in *sdk.Input) sdk.Result { return evalCFG004(in, p) }},
-		rule{"FND-CFG-005", evalCFG005},
+		rule{"FND-CFG-005", func(in *sdk.Input) sdk.Result { return evalCFG005(in, p) }},
 		rule{"FND-CFG-006", func(in *sdk.Input) sdk.Result { return evalCFG006(in, p) }},
 		rule{"FND-CFG-007", evalCFG007},
 		rule{"FND-CFG-008", evalCFG008},

@@ -7,8 +7,9 @@ secrets or secret-shaped strings.
 |---|---|---|
 | `good/` | Valid `azure.yaml` with project, deployment and hosted agent | No findings |
 | `bad/` | Duplicate `name:` key, unresolved `${EXAMPLE_MISSING_VAR}`, `uses:` typo | Findings (exit 1) |
-| `good-private/` | Realistic private-networked Foundry + capability-settings sample with policy config and Bicep-backed infra | No error/warning findings from verified deterministic rules; info-only posture findings may remain |
+| `good-private/` | Realistic private-networked Foundry + capability-settings sample with policy config and Bicep-backed infra (project role assignments, delete lock, AppInsights connection, explicit `raiPolicyName`) | No error/warning findings from verified deterministic rules; info-only posture findings may remain |
 | `bad-private/` | Intentionally broken variant of `good-private/` with targeted reliability and security regressions | Findings for the injected defects with source locations under `infra/` |
+| `bad-prod/` | Small prod-profile negative sample with Bicep-backed infra (and compiled `infra/main.json`) that triggers the broadened IDN-002, OPS-002, REL-004, REL-008, SEC-007, SEC-010, CFG-003, CFG-005, CFG-007 and CFG-012 rules; see its README | Findings (exit 1) for each listed rule |
 | `azure-yaml-only/` | `azure.yaml` with no infra directory | Infra checks reported as skipped, not passed |
 | `bicep-backed/` | `azure.yaml` plus `infra/main.bicep` and a module (Bicep 0.48.1 valid) | Bicep analysed; no findings expected |
 | `cost-fixed/` | Bicep sample with Search, APIM, Cosmos RU/s and model deployments for the cost command | Advisory monthly estimate with explicit exclusions/unsupported items |

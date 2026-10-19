@@ -1,12 +1,13 @@
 id: FND-COST-004
-version: 3
+version: 4
 group: COST
 title: "Informational monthly fixed-capacity estimate"
 description: >-
-  Report an informational, per-environment monthly range for the fixed-capacity resources in the compiled plan (AI Search
-  units, API Management units, Cosmos DB provisioned RU/s and similar verified meters) using public retail prices, with the
-  assumptions, region, currency, price date and the resources that are excluded. It never produces a pass or fail and never
-  estimates token consumption.
+  Report an informational monthly range for the fixed-capacity resources in the compiled plan (AI Search units, API
+  Management units, Cosmos DB provisioned RU/s and similar verified meters) using public retail prices from the local price
+  cache, with the assumptions, currency, price date and the components that could not be priced. One info finding carries the
+  plan estimate; components that could not be priced or modelled are listed as separate incomplete items. It never produces a
+  pass or fail and never estimates token consumption.
 status: product-opinion
 phases: ["7"]
 inputs: ["bicep-arm", "external-tool"]
@@ -18,7 +19,7 @@ severity:
   test: info
   prod: info
 compatibility:
-  azd: ">=1.34.2 <=1.36.0"
+  azd: '>=1.34.2'
   extensions: {}
   apiVersions:
     - { plane: management, provider: Microsoft.Search, resourceType: searchServices, version: "2025-05-01" }
@@ -49,8 +50,17 @@ evidence:
     deployments with their PTU count and type, Cosmos autoscale, multi-region write, free tier or zone redundancy, API
     Management additionalLocations, Search confidential compute or HighDensity, unknown or unresolved deployment SKUs,
     sovereign-cloud regions, unresolved values) as unsupported. Totals cover estimated lines only. Offline mode uses a cached
-    price file and says so; no price is invented. Nothing is compared with actual spend. The check-time rule reports what makes
-    the estimate incomplete, using the same extraction as the cost command.
+    price file and says so; no price is invented. Nothing is compared with actual spend. At check time the rule uses the
+    same extraction as the cost command and, when an estimator is wired (the app wires internal/cost in offline mode over the
+    local price cache; the rule itself does no I/O and never uses the network), adds one finding keyed estimate for the whole
+    plan - the monthly low and high, currency, price retrieval date, cache use, staleness, the assumptions and the number of
+    components not priced - anchored on the first Foundry project by name (else the first Foundry account, else the first live
+    resource), because Search, API Management and Cosmos DB are shared by the plan and are not attributable to one project.
+    A component the estimator could not price for a reason other than a missing price (no meter mapping, sovereign region)
+    and that no extraction item already reports gets an incomplete:unpriced item. When nothing could be priced because no
+    cached retail price exists, the rule skips with price-cache-missing-and-offline instead of reporting one item per
+    component; no price is guessed. An estimator error is a skip with input-unavailable. Without a wired estimator only the
+    incomplete items are produced, as in version 3.
   confidence: uncertain
 recommendation: >-
   Treat the figure as a planning aid for comparing dev, test and prod fixed capacity, and confirm with the Azure pricing
@@ -134,10 +144,7 @@ overlap:
       state: unresearched
 implementation:
   owner: native
-  package: internal/cost
-testability: >-
-  Driver extraction is offline against fixture ARM JSON; pricing uses recorded Retail Prices API responses and a cache with a
-  retrieval date, as the PRD testing strategy states.
+  package: internal/rules/cost
 tests:
   positive:
     - supported-search-or-apim-fixed-capacity-is-omitted-from-the-estimate-reports-an-incomplete-estimate-finding
@@ -145,18 +152,41 @@ tests:
     - unknown-deployment-sku-or-provisioned-deployment-reports-an-incomplete-estimate-finding
     - unsupported-resource-is-not-listed-in-exclusions-reports-an-incomplete-estimate-finding
     - requested-dev-prod-comparison-omits-one-environment-reports-an-incomplete-comparison-finding
+    - 'TestCost004EstimateFinding: a priced plan reports exactly one estimate finding anchored on the first project by name'
+    - 'TestCost004EstimateRangeAndStale: low-to-high range, stale-cache note and first-resource anchor'
+    - 'TestCost004EstimateAnchorsOnAccountWithoutProject'
+    - 'TestCost004UnpricedComponents: only components that could not be priced get incomplete:unpriced'
+    - 'TestCost004NothingPricedForModellingGapKeepsIncompleteItem'
+    - 'TestCost004CachedEstimatorOfflineFromPopulatedCache: real internal/cost estimator over a populated cache, network closed'
   negative:
     - estimate-includes-supported-fixed-capacity-and-explicitly-excludes-token-based-deployments
+    - 'TestCost004NoEstimatorKeepsIncompleteOnly: no estimator wired, complete plan passes'
+    - 'TestCost004UnpricedNotDuplicatedWithExtractionItem: no second item for a resource the extraction already reports'
+    - 'TestCost004EstimateIsDeterministicAndKeyStable: same input gives the same result, a price change alters evidence but not the key'
   skipped:
     - price-cache-missing-and-offline
     - meter-not-in-supported-catalogue
     - sku-or-capacity-unresolved-parameter
+    - 'TestCost004NothingPricedHasNoEstimateFinding: empty price source skips with price-cache-missing-and-offline'
+    - 'TestCost004CachedEstimatorMissingCacheReportsUnpriced'
+    - 'TestCost004EstimatorFailureSkips: an estimator error is a skip, never a pass'
+    - 'TestCost004NoFixedCapacityDoesNotCallEstimator'
+testability: >-
+  Driver extraction is offline against fixture ARM JSON; pricing uses recorded Retail Prices API responses and a cache with a
+  retrieval date, as the PRD testing strategy states. The rule tests inject a fake estimator and also run the real offline
+  estimator over a cache populated from a local test server.
 notes: >-
-  Findings carry a Finding.Key per sub-check so fingerprints are stable.
-  Informational only (PRD section 15). Marked product opinion because there is no platform rule to verify; the capacity drivers
-  and property names are verified from the specifications and the Retail Prices API contract from Learn (2026-10-18). Verified
-  meter names (recorded response 2026-10-18) - Search Basic Unit, Standard S1 Unit, Standard S3 Unit; API Management Developer
-  Unit, Standard Unit, Basic v2 Unit. Unverified - the other Search and API Management meter names (naming pattern only), the
-  Cosmos 100 RU/s meter name, whether provisioned throughput (PTU) meters can be priced from the public API, the Search default
-  replica and partition counts when absent. Control-plane and Advisor inputs are deferred (ADR-025). Mapped IDs are intentionally
-  empty.
+  Version 4 (behaviour change): the rule only listed what made the estimate incomplete; it now also reports the estimate
+  itself, so a plan with fixed-capacity components gains an info finding (key estimate). Fingerprints include the rule version,
+  so version 4 changes every fingerprint of this rule. Findings carry a Finding.Key per sub-check so fingerprints are stable
+  across price changes. Layering: the estimate engine stays in internal/cost; the rule package defines a small Estimator
+  function type and Providers (like the OPS rules), and internal/app/wire.go passes costrules.CachedEstimator, which wraps
+  internal/cost in offline mode. internal/rules/cost depends on internal/cost, never on internal/app. The new skip head
+  price-cache-missing-and-offline is not yet in internal/rules/skipclass.go by-design heads (the integrator must add it, or a
+  strict run without a price cache reports a hidden check). Informational only (PRD section 15). Marked product opinion because
+  there is no platform rule to verify; the capacity drivers and property names are verified from the specifications and the Retail
+  Prices API contract from Learn (2026-10-18). Verified meter names (recorded response 2026-10-18) - Search Basic Unit, Standard
+  S1 Unit, Standard S3 Unit; API Management Developer Unit, Standard Unit, Basic v2 Unit. Unverified - the other Search and API
+  Management meter names (naming pattern only), the Cosmos 100 RU/s meter name, whether provisioned throughput (PTU) meters can be
+  priced from the public API, the Search default replica and partition counts when absent. Control-plane and Advisor inputs are
+  deferred (ADR-025). Mapped IDs are intentionally empty.

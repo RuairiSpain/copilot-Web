@@ -198,6 +198,25 @@ func TestSamplesEndToEnd(t *testing.T) {
 			}
 		}
 	})
+	t.Run("bad-prod ARM JSON fallback fires every intended rule", func(t *testing.T) {
+		dir := copyTree(t, sample("bad-prod"))
+		if err := os.Remove(filepath.Join(dir, "infra", "main.bicep")); err != nil {
+			t.Fatal(err)
+		}
+		code, r, stderr := runJSON(t, noBicep(&errb), "doctor", "--local", "--azd-version", "1.34.2", "--dir", dir)
+		if code != 1 {
+			t.Fatalf("exit=%d stderr=%s findings=%v", code, stderr, ids(r))
+		}
+		got := ids(r)
+		for _, want := range []string{
+			"FND-IDN-002", "FND-OPS-002", "FND-REL-004", "FND-REL-008", "FND-SEC-007", "FND-SEC-010",
+			"FND-CFG-003", "FND-CFG-005", "FND-CFG-007", "FND-CFG-012",
+		} {
+			if !slices.Contains(got, want) {
+				t.Errorf("missing %s in %v", want, got)
+			}
+		}
+	})
 	t.Run("bad-private ARM JSON fallback reports targeted findings", func(t *testing.T) {
 		dir := copyTree(t, sample("bad-private"))
 		if err := os.Remove(filepath.Join(dir, "infra", "main.bicep")); err != nil {

@@ -1,5 +1,5 @@
 id: FND-ENV-002
-version: 4
+version: 5
 group: ENV
 title: "Environment-bound names/IDs/rules were not copied unchanged"
 description: >-
@@ -18,7 +18,7 @@ severity:
   test: warning
   prod: warning
 compatibility:
-  azd: ">=1.34.2 <=1.36.0"
+  azd: '>=1.34.2'
   extensions: {}
   apiVersions: []
   preview: true
@@ -36,7 +36,15 @@ evidence:
     input. Values are never printed; the finding carries the key and a salted hash fingerprint. Values under secret-looking key
     names (KEY, SECRET, TOKEN and similar) are digested before the rule runs; the value shape (resource ID or bare
     endpoint URL) is classified first and carried next to the digest, so such a key is judged exactly like the same
-    value under another name. With fewer than two environments the rule is not applicable.
+    value under another name. Every pair of discovered environments is compared (three environments give three pairs).
+    Environments that come from environment-named parameter files (infra/main.parameters.<env>.json,
+    infra/main.<env>.parameters.json) are compared by identifier value (ARM resource ID or Azure endpoint), since
+    parameter names and .env keys are different namespaces, and a shared identifier is an uncertain skip naming the
+    parameter names, never a finding: azd reads only main.parameters.json and main.bicepparam, so the file-name-to-
+    environment mapping is an inference (UNVERIFIED). A main.<env>.bicepparam file is named in an uncertain skip and is
+    not read (no Bicep parser). With fewer than two environments the rule is not applicable and the skip names the
+    environments the policy declares (environments.tiers and the production, nonProduction and development lists) that
+    have no visible values.
   confidence: likely
 recommendation: >-
   Review each reported key and give the environment its own value, or suppress the finding with a reason and
@@ -104,7 +112,12 @@ tests:
     - equal-or-empty-azure-env-name-uncertain
     - identical-name-or-id-key-uncertain
     - env-file-unparseable-uncertain
+    - parameter-file-environment-shared-identifier-is-a-note
+    - three-environments-compare-every-pair
 notes: >-
+  Version 5 (2026-10-19): every pair of three or more environments is compared (tested); parameter-file environments
+  take part as notes only (UNVERIFIED mapping); the not-applicable skip names policy-declared environments without
+  visible values. Findings and their keys for azd .env environments are unchanged.
   Product opinion. The classification of keys as environment-bound is a heuristic of Foundry Doctor, not a documented
   azd property, which is why confidence is likely and severity never exceeds warning. Phase 1 fact check (2026-10-05):
   the .env grammar azd reads is verified (godotenv v1.5.1, see sources); values are compared after parsing, so quoting

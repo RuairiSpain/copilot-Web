@@ -13,16 +13,16 @@
     "A suppressed or baselined finding is shown as WARNING and stays visible in the evidence pack. It does not by itself produce a No-go decision, so the decision can be Proceed with conditions while accepted failures remain.",
     "The decision wording and the top-action ranking are project opinion, not Microsoft guidance.",
     "PSRule for Azure, Azure Advisor and Microsoft Defender for Cloud recommendations were not imported. Overlapping external check IDs are listed for reference only (ADR-020, ADR-026).",
-    "Deployed Azure state was not queried: assess waf runs offline. Controls that need deployment or runtime evidence and were not evaluated: FND-COST-001, FND-DEP-001, FND-DEP-002, FND-DEP-003, FND-DEP-004, FND-DEP-005, FND-DEP-006, FND-DEP-007, FND-DEP-008, FND-DEP-009, FND-DEP-010, FND-DEP-011, FND-DEP-012, FND-IDN-002, FND-IDN-005, FND-NET-006, FND-OPS-009, FND-RUN-001, FND-RUN-002, FND-RUN-003, FND-RUN-004, FND-RUN-005, FND-RUN-006, FND-RUN-007, FND-SEC-008, FND-SEC-009.",
+    "Deployed Azure state was not queried: assess waf runs offline. Controls that need deployment or runtime evidence and were not evaluated: FND-COST-001, FND-DEP-001, FND-DEP-002, FND-DEP-003, FND-DEP-004, FND-DEP-005, FND-DEP-006, FND-DEP-007, FND-DEP-008, FND-DEP-009, FND-DEP-010, FND-DEP-011, FND-DEP-012, FND-IDN-002, FND-IDN-005, FND-NET-006, FND-OPS-009, FND-RUN-001, FND-RUN-002, FND-RUN-003, FND-RUN-004, FND-RUN-005, FND-RUN-006, FND-RUN-007, FND-RUN-008, FND-SEC-008, FND-SEC-009.",
     "Compiled infrastructure (Bicep to ARM) was not available, so template-dependent controls are SKIPPED.",
-    "30 catalogue rules are excluded from the WAF view with a recorded reason (internal/assess/waf/mapping.yaml)."
+    "28 catalogue rules are excluded from the WAF view with a recorded reason (internal/assess/waf/mapping.yaml)."
   ],
   "summary": {
     "states": {
       "NOT_APPLICABLE": 6,
       "PASS": 6,
-      "QUESTION": 2,
-      "SKIPPED": 64
+      "QUESTION": 1,
+      "SKIPPED": 67
     },
     "pillars": {
       "cost": {
@@ -34,8 +34,7 @@
         "states": {
           "NOT_APPLICABLE": 5,
           "PASS": 3,
-          "QUESTION": 1,
-          "SKIPPED": 10
+          "SKIPPED": 12
         }
       },
       "reliability": {
@@ -49,7 +48,7 @@
       "security": {
         "states": {
           "PASS": 2,
-          "SKIPPED": 24
+          "SKIPPED": 25
         }
       }
     }
@@ -116,8 +115,8 @@
       "ruleId": "FND-OPS-002",
       "title": "Application Insights connected",
       "pillar": "operations",
-      "state": "QUESTION",
-      "stateReason": "No requirement or objective is declared (no-explicit-observability-or-server-tracing-requirement); the control needs a team decision."
+      "state": "SKIPPED",
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
       "controlId": "FND-OPS-003",
@@ -155,6 +154,14 @@
       "controlId": "FND-RUN-007",
       "ruleId": "FND-RUN-007",
       "title": "Diagnostic logs are arriving",
+      "pillar": "operations",
+      "state": "SKIPPED",
+      "stateReason": "Skipped: not-implemented."
+    },
+    {
+      "controlId": "FND-RUN-008",
+      "ruleId": "FND-RUN-008",
+      "title": "Deployed properties versus compiled template drift",
       "pillar": "operations",
       "state": "SKIPPED",
       "stateReason": "Skipped: not-implemented."
@@ -413,7 +420,7 @@
       "title": "Project identity has required data roles",
       "pillar": "security",
       "state": "SKIPPED",
-      "stateReason": "Skipped: not-implemented."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
       "controlId": "FND-IDN-004",
@@ -544,6 +551,14 @@
       "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
+      "controlId": "FND-SEC-007",
+      "ruleId": "FND-SEC-007",
+      "title": "RAI/content filter bound to chat deployments",
+      "pillar": "security",
+      "state": "SKIPPED",
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
+    },
+    {
       "controlId": "FND-SEC-008",
       "ruleId": "FND-SEC-008",
       "title": "Relevant Defender plans enabled",
@@ -573,7 +588,7 @@
       "title": "Controlled outbound egress informational",
       "pillar": "security",
       "state": "SKIPPED",
-      "stateReason": "Skipped: unsupported-version."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     },
     {
       "controlId": "FND-SEC-014",
@@ -581,7 +596,7 @@
       "title": "Secrets not emitted as Bicep outputs",
       "pillar": "security",
       "state": "SKIPPED",
-      "stateReason": "Skipped: unsupported-version."
+      "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable."
     }
   ],
   "costlyRecommendations": [
@@ -590,9 +605,9 @@
       "ruleId": "FND-OPS-002",
       "title": "Application Insights connected",
       "pillar": "operations",
-      "state": "QUESTION",
+      "state": "SKIPPED",
       "mandatory": false,
-      "recommendation": "Obtain evidence for this control before relying on it. No requirement or objective is declared (no-explicit-observability-or-server-tracing-requirement); the control needs a team decision.",
+      "recommendation": "Obtain evidence for this control before relying on it. Skipped: input-unavailable: compiled ARM model unavailable.",
       "sourceUrl": "https://learn.microsoft.com/azure/foundry/observability/how-to/trace-agent-setup",
       "lastVerified": "2026-10-04",
       "projectOpinion": true,
@@ -736,7 +751,7 @@
       "pillar": "security",
       "state": "SKIPPED",
       "mandatory": false,
-      "recommendation": "Obtain evidence for this control before relying on it. Skipped: unsupported-version.",
+      "recommendation": "Obtain evidence for this control before relying on it. Skipped: input-unavailable: compiled ARM model unavailable.",
       "sourceUrl": "https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json",
       "lastVerified": "2026-10-04",
       "projectOpinion": false,
@@ -756,7 +771,7 @@
         "pillar": "operations",
         "state": "NOT_APPLICABLE",
         "basis": "deterministic",
-        "stateReason": "Not applicable: not-applicable: fewer than two azd environments.",
+        "stateReason": "Not applicable: not-applicable: fewer than two environments with visible values; the policy declares environments without visible values: dev (azd .env files are normally git-ignored; run where .azure/\u003cenv\u003e/.env exist).",
         "mandatory": true,
         "costly": false,
         "projectOpinion": false,
@@ -767,7 +782,7 @@
         "skipped": [
           {
             "ruleId": "FND-ENV-001",
-            "reason": "not-applicable: fewer than two azd environments"
+            "reason": "not-applicable: fewer than two environments with visible values; the policy declares environments without visible values: dev (azd .env files are normally git-ignored; run where .azure/\u003cenv\u003e/.env exist)"
           }
         ],
         "evaluated": false
@@ -775,12 +790,12 @@
       {
         "controlId": "FND-ENV-002",
         "ruleId": "FND-ENV-002",
-        "ruleVersion": 4,
+        "ruleVersion": 5,
         "title": "Environment-bound names/IDs/rules were not copied unchanged",
         "pillar": "operations",
         "state": "NOT_APPLICABLE",
         "basis": "deterministic",
-        "stateReason": "Not applicable: not-applicable: fewer than two azd environments.",
+        "stateReason": "Not applicable: not-applicable: fewer than two environments with visible values; the policy declares environments without visible values: dev (azd .env files are normally git-ignored; run where .azure/\u003cenv\u003e/.env exist).",
         "mandatory": false,
         "costly": false,
         "projectOpinion": true,
@@ -791,7 +806,7 @@
         "skipped": [
           {
             "ruleId": "FND-ENV-002",
-            "reason": "not-applicable: fewer than two azd environments"
+            "reason": "not-applicable: fewer than two environments with visible values; the policy declares environments without visible values: dev (azd .env files are normally git-ignored; run where .azure/\u003cenv\u003e/.env exist)"
           }
         ],
         "evaluated": false
@@ -799,12 +814,12 @@
       {
         "controlId": "FND-ENV-004",
         "ruleId": "FND-ENV-004",
-        "ruleVersion": 3,
+        "ruleVersion": 4,
         "title": "Informational difference summary",
         "pillar": "operations",
         "state": "NOT_APPLICABLE",
         "basis": "deterministic",
-        "stateReason": "Not applicable: not-applicable: fewer than two azd environments.",
+        "stateReason": "Not applicable: not-applicable: fewer than two environments with visible values; the policy declares environments without visible values: dev (azd .env files are normally git-ignored; run where .azure/\u003cenv\u003e/.env exist).",
         "mandatory": false,
         "costly": false,
         "projectOpinion": true,
@@ -815,7 +830,7 @@
         "skipped": [
           {
             "ruleId": "FND-ENV-004",
-            "reason": "not-applicable: fewer than two azd environments"
+            "reason": "not-applicable: fewer than two environments with visible values; the policy declares environments without visible values: dev (azd .env files are normally git-ignored; run where .azure/\u003cenv\u003e/.env exist)"
           }
         ],
         "evaluated": false
@@ -872,12 +887,12 @@
       {
         "controlId": "FND-ENV-003",
         "ruleId": "FND-ENV-003",
-        "ruleVersion": 4,
+        "ruleVersion": 5,
         "title": "Prod does not reference non-prod resource IDs",
         "pillar": "reliability",
         "state": "NOT_APPLICABLE",
         "basis": "deterministic",
-        "stateReason": "Not applicable: not-applicable: fewer than two azd environments.",
+        "stateReason": "Not applicable: not-applicable: fewer than two environments with visible values; the policy declares environments without visible values: dev (azd .env files are normally git-ignored; run where .azure/\u003cenv\u003e/.env exist).",
         "mandatory": true,
         "costly": false,
         "projectOpinion": true,
@@ -888,7 +903,7 @@
         "skipped": [
           {
             "ruleId": "FND-ENV-003",
-            "reason": "not-applicable: fewer than two azd environments"
+            "reason": "not-applicable: fewer than two environments with visible values; the policy declares environments without visible values: dev (azd .env files are normally git-ignored; run where .azure/\u003cenv\u003e/.env exist)"
           }
         ],
         "evaluated": false
@@ -952,7 +967,7 @@
       {
         "controlId": "FND-CFG-003",
         "ruleId": "FND-CFG-003",
-        "ruleVersion": 4,
+        "ruleVersion": 5,
         "title": "All inter-service references resolve",
         "pillar": "reliability",
         "state": "PASS",
@@ -970,7 +985,7 @@
       {
         "controlId": "FND-CFG-005",
         "ruleId": "FND-CFG-005",
-        "ruleVersion": 4,
+        "ruleVersion": 5,
         "title": "No raw secrets in YAML/Bicep/environment blocks",
         "pillar": "security",
         "state": "PASS",
@@ -988,7 +1003,7 @@
       {
         "controlId": "FND-CFG-007",
         "ruleId": "FND-CFG-007",
-        "ruleVersion": 2,
+        "ruleVersion": 3,
         "title": "Outbound endpoints use HTTPS and reject unsafe local/metadata targets",
         "pillar": "security",
         "state": "PASS",
@@ -1006,37 +1021,9 @@
     ],
     "question": [
       {
-        "controlId": "FND-OPS-002",
-        "ruleId": "FND-OPS-002",
-        "ruleVersion": 1,
-        "title": "Application Insights connected",
-        "pillar": "operations",
-        "state": "QUESTION",
-        "basis": "none",
-        "stateReason": "No requirement or objective is declared (no-explicit-observability-or-server-tracing-requirement); the control needs a team decision.",
-        "mandatory": false,
-        "costly": true,
-        "costBasis": "Workspace-based Application Insights data is billed for ingestion and retention by the Log Analytics workspace that stores it.",
-        "costSourceUrl": "https://learn.microsoft.com/azure/azure-monitor/logs/cost-logs",
-        "costLastVerified": "2026-10-18",
-        "projectOpinion": true,
-        "sourceUrl": "https://learn.microsoft.com/azure/foundry/observability/how-to/trace-agent-setup",
-        "lastVerified": "2026-10-04",
-        "recommendation": "If server-side tracing or hosted-agent telemetry is a declared requirement, connect an Application Insights resource to the Foundry project (a connection with category AppInsights) and link the component to a Log Analytics workspace. Keep exactly one AppInsights connection per scope. Choose sampling, retention and daily-cap settings deliberately: telemetry ingestion and retention incur cost, so a project that does not require this observability path should not be forced to enable it.",
-        "fix": "# Safe remediation (no unverified ARM wiring):\n# In the Foundry portal, open the project, Monitoring, and connect the intended\n# workspace-based Application Insights resource. Re-run the live inventory and\n# verify exactly one project connection whose category is AppInsights.",
-        "questionPrompt": "Is server-side tracing or hosted-agent telemetry a declared requirement for this project? (No configuration key exists yet; ADR-026.)",
-        "skipped": [
-          {
-            "ruleId": "FND-OPS-002",
-            "reason": "no-explicit-observability-or-server-tracing-requirement"
-          }
-        ],
-        "evaluated": false
-      },
-      {
         "controlId": "FND-REL-007",
         "ruleId": "FND-REL-007",
-        "ruleVersion": 1,
+        "ruleVersion": 2,
         "title": "Multi-region/DR plan question",
         "pillar": "reliability",
         "state": "QUESTION",
@@ -1079,7 +1066,7 @@
         "skipped": [
           {
             "ruleId": "FND-REL-007",
-            "reason": "not-implemented"
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
@@ -1255,6 +1242,34 @@
         "evaluated": false
       },
       {
+        "controlId": "FND-OPS-002",
+        "ruleId": "FND-OPS-002",
+        "ruleVersion": 2,
+        "title": "Application Insights connected",
+        "pillar": "operations",
+        "state": "SKIPPED",
+        "basis": "none",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
+        "mandatory": false,
+        "costly": true,
+        "costBasis": "Workspace-based Application Insights data is billed for ingestion and retention by the Log Analytics workspace that stores it.",
+        "costSourceUrl": "https://learn.microsoft.com/azure/azure-monitor/logs/cost-logs",
+        "costLastVerified": "2026-10-18",
+        "projectOpinion": true,
+        "sourceUrl": "https://learn.microsoft.com/azure/foundry/observability/how-to/trace-agent-setup",
+        "lastVerified": "2026-10-04",
+        "recommendation": "If server-side tracing or hosted-agent telemetry is a declared requirement, connect an Application Insights resource to the Foundry project (a connection with category AppInsights) and link the component to a Log Analytics workspace. Keep exactly one AppInsights connection per scope. Choose sampling, retention and daily-cap settings deliberately: telemetry ingestion and retention incur cost, so a project that does not require this observability path should not be forced to enable it.",
+        "fix": "# Safe remediation (no unverified ARM wiring):\n# In the Foundry portal, open the project, Monitoring, and connect the intended\n# workspace-based Application Insights resource. Re-run the live inventory and\n# verify exactly one project connection whose category is AppInsights.",
+        "questionPrompt": "Is server-side tracing or hosted-agent telemetry a declared requirement for this project? (No configuration key exists yet; ADR-026.)",
+        "skipped": [
+          {
+            "ruleId": "FND-OPS-002",
+            "reason": "input-unavailable: compiled ARM model unavailable"
+          }
+        ],
+        "evaluated": false
+      },
+      {
         "controlId": "FND-OPS-003",
         "ruleId": "FND-OPS-003",
         "ruleVersion": 2,
@@ -1378,6 +1393,30 @@
         "evaluated": false
       },
       {
+        "controlId": "FND-RUN-008",
+        "ruleId": "FND-RUN-008",
+        "ruleVersion": 2,
+        "title": "Deployed properties versus compiled template drift",
+        "pillar": "operations",
+        "state": "SKIPPED",
+        "basis": "none",
+        "stateReason": "Skipped: not-implemented.",
+        "mandatory": false,
+        "costly": false,
+        "projectOpinion": true,
+        "sourceUrl": "https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/resource-manager/Microsoft.CognitiveServices/CognitiveServices/stable/2026-09-01/cognitiveservices.json",
+        "lastVerified": "2026-10-19",
+        "recommendation": "Redeploy from source control to reconcile the drift, or update the Bicep to capture the intentional change. Run azd provision --preview to see the planned change before provisioning.",
+        "fix": "# Reconcile the deployed resource with the template (read-only preview first)\nazd provision --preview\nazd provision",
+        "skipped": [
+          {
+            "ruleId": "FND-RUN-008",
+            "reason": "not-implemented"
+          }
+        ],
+        "evaluated": false
+      },
+      {
         "controlId": "FND-CFG-004",
         "ruleId": "FND-CFG-004",
         "ruleVersion": 4,
@@ -1404,7 +1443,7 @@
       {
         "controlId": "FND-CFG-012",
         "ruleId": "FND-CFG-012",
-        "ruleVersion": 4,
+        "ruleVersion": 5,
         "title": "Azure region values are valid",
         "pillar": "reliability",
         "state": "SKIPPED",
@@ -1881,7 +1920,7 @@
       {
         "controlId": "FND-REL-004",
         "ruleId": "FND-REL-004",
-        "ruleVersion": 2,
+        "ruleVersion": 3,
         "title": "Delete locks on stateful services",
         "pillar": "reliability",
         "state": "SKIPPED",
@@ -1929,7 +1968,7 @@
       {
         "controlId": "FND-REL-008",
         "ruleId": "FND-REL-008",
-        "ruleVersion": 1,
+        "ruleVersion": 2,
         "title": "Provisioned throughput spillover recommendation",
         "pillar": "reliability",
         "state": "SKIPPED",
@@ -2060,7 +2099,7 @@
       {
         "controlId": "FND-RUN-004",
         "ruleId": "FND-RUN-004",
-        "ruleVersion": 4,
+        "ruleVersion": 5,
         "title": "Model deployment state and throttling signal",
         "pillar": "reliability",
         "state": "SKIPPED",
@@ -2180,12 +2219,12 @@
       {
         "controlId": "FND-IDN-002",
         "ruleId": "FND-IDN-002",
-        "ruleVersion": 1,
+        "ruleVersion": 2,
         "title": "Project identity has required data roles",
         "pillar": "security",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: not-implemented.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": true,
         "costly": false,
         "projectOpinion": false,
@@ -2196,7 +2235,7 @@
         "skipped": [
           {
             "ruleId": "FND-IDN-002",
-            "reason": "not-implemented"
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
@@ -2593,9 +2632,33 @@
         "evaluated": false
       },
       {
+        "controlId": "FND-SEC-007",
+        "ruleId": "FND-SEC-007",
+        "ruleVersion": 2,
+        "title": "RAI/content filter bound to chat deployments",
+        "pillar": "security",
+        "state": "SKIPPED",
+        "basis": "none",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
+        "mandatory": true,
+        "costly": false,
+        "projectOpinion": false,
+        "sourceUrl": "https://learn.microsoft.com/azure/foundry/guardrails/guardrails-overview",
+        "lastVerified": "2026-10-04",
+        "recommendation": "Set properties.raiPolicyName on each deployment to a policy defined on the account and, for hosted agents, add a policies entry of type rai_policy with the full ARM resource ID in azure.yaml. After deployment, test that the guardrail blocks a known-bad prompt.",
+        "fix": "# azure.yaml\nservices:\n  my-agent:\n    host: azure.ai.agent\n    kind: hosted\n    policies:\n      - type: rai_policy\n        raiPolicyName: ${RAI_POLICY_RESOURCE_ID}  # full ARM resource ID of the raiPolicies resource",
+        "skipped": [
+          {
+            "ruleId": "FND-SEC-007",
+            "reason": "input-unavailable: compiled ARM model unavailable"
+          }
+        ],
+        "evaluated": false
+      },
+      {
         "controlId": "FND-SEC-008",
         "ruleId": "FND-SEC-008",
-        "ruleVersion": 2,
+        "ruleVersion": 3,
         "title": "Relevant Defender plans enabled",
         "pillar": "security",
         "state": "SKIPPED",
@@ -2622,7 +2685,7 @@
       {
         "controlId": "FND-SEC-009",
         "ruleId": "FND-SEC-009",
-        "ruleVersion": 2,
+        "ruleVersion": 3,
         "title": "Policy coverage and compliance evidence",
         "pillar": "security",
         "state": "SKIPPED",
@@ -2646,7 +2709,7 @@
       {
         "controlId": "FND-SEC-010",
         "ruleId": "FND-SEC-010",
-        "ruleVersion": 2,
+        "ruleVersion": 3,
         "title": "Customer-managed keys informational",
         "pillar": "security",
         "state": "SKIPPED",
@@ -2673,12 +2736,12 @@
       {
         "controlId": "FND-SEC-011",
         "ruleId": "FND-SEC-011",
-        "ruleVersion": 1,
+        "ruleVersion": 2,
         "title": "Controlled outbound egress informational",
         "pillar": "security",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: unsupported-version.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": false,
         "costly": true,
         "costBasis": "FQDN outbound rules in Allow Only Approved Outbound mode create a managed Azure Firewall, which adds Azure Firewall charges.",
@@ -2692,7 +2755,7 @@
         "skipped": [
           {
             "ruleId": "FND-SEC-011",
-            "reason": "unsupported-version"
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
@@ -2705,7 +2768,7 @@
         "pillar": "security",
         "state": "SKIPPED",
         "basis": "none",
-        "stateReason": "Skipped: unsupported-version.",
+        "stateReason": "Skipped: input-unavailable: compiled ARM model unavailable.",
         "mandatory": true,
         "costly": false,
         "projectOpinion": false,
@@ -2716,7 +2779,7 @@
         "skipped": [
           {
             "ruleId": "FND-SEC-014",
-            "reason": "unsupported-version"
+            "reason": "input-unavailable: compiled ARM model unavailable"
           }
         ],
         "evaluated": false
