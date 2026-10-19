@@ -553,10 +553,6 @@ func eval001(in *sdk.Input, _ Providers) sdk.Result {
 	return o.result()
 }
 
-func eval002(_ *sdk.Input, _ Providers) sdk.Result {
-	return sdk.Result{Skipped: &sdk.Skip{Reason: "no-explicit-observability-or-server-tracing-requirement"}}
-}
-
 func eval003(in *sdk.Input, _ Providers) sdk.Result {
 	if in.ARM == nil {
 		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable + ": compiled ARM model unavailable"}}

@@ -19,19 +19,25 @@ const (
 	typeDeployment = "Microsoft.CognitiveServices/accounts/deployments"
 )
 
-// Register returns the currently implemented COST rules.
-func Register() []sdk.Rule {
+// Register returns the currently implemented COST rules without a price
+// estimator: FND-COST-004 then reports only what makes the estimate incomplete.
+func Register() []sdk.Rule { return RegisterWith(Providers{}) }
+
+// RegisterWith returns the COST rules with the given providers.
+func RegisterWith(p Providers) []sdk.Rule {
 	return []sdk.Rule{
 		rule{id: "FND-COST-001", fn: eval001},
 		rule{id: "FND-COST-002", fn: eval002},
 		rule{id: "FND-COST-003", fn: eval003},
-		rule{id: "FND-COST-004", fn: eval004},
+		rule{id: "FND-COST-004", ctxFn: func(ctx context.Context, in *sdk.Input) sdk.Result { return eval004(ctx, in, p) }},
 	}
 }
 
 type rule struct {
 	id string
 	fn func(*sdk.Input) sdk.Result
+	// ctxFn is set instead of fn by rules that call an injected provider.
+	ctxFn func(context.Context, *sdk.Input) sdk.Result
 }
 
 func (r rule) ID() string { return r.id }
@@ -42,6 +48,9 @@ func (r rule) Evaluate(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 	}
 	if in == nil || in.ARM == nil {
 		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable + ": compiled ARM model unavailable"}}, nil
+	}
+	if r.ctxFn != nil {
+		return r.ctxFn(ctx, in), nil
 	}
 	return r.fn(in), nil
 }
@@ -370,7 +379,7 @@ func eval003(in *sdk.Input) sdk.Result {
 // the plan through the same armcost extraction as the cost engine, so
 // `check` and `cost` agree on deployment SKUs, Cosmos DB throughput and the
 // parent-account region.
-func eval004(in *sdk.Input) sdk.Result {
+func eval004(ctx context.Context, in *sdk.Input, p Providers) sdk.Result {
 	if in == nil || in.ARM == nil {
 		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable + ": compiled ARM model unavailable"}}
 	}
@@ -468,7 +477,10 @@ func eval004(in *sdk.Input) sdk.Result {
 		}
 		return sdk.Result{Skipped: &sdk.Skip{Reason: "no-supported-fixed-capacity-resources"}}
 	}
-	if len(o.findings) == 0 && !o.unresolved && !o.cond {
+	if p.Estimate != nil {
+		o.estimate(ctx, in, p.Estimate, live)
+	}
+	if len(o.findings) == 0 && !o.unresolved && !o.cond && o.skip == "" {
 		return sdk.Result{}
 	}
 	return o.result()

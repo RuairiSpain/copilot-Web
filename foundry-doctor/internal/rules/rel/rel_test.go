@@ -38,7 +38,7 @@ func res(typ, name, sku string, props map[string]any) sdk.ARMResource {
 }
 
 func TestRegisterIDs(t *testing.T) {
-	want := []string{"FND-REL-001", "FND-REL-002", "FND-REL-003", "FND-REL-004", "FND-REL-005", "FND-REL-006", "FND-REL-008", "FND-REL-009"}
+	want := []string{"FND-REL-001", "FND-REL-002", "FND-REL-003", "FND-REL-004", "FND-REL-005", "FND-REL-006", "FND-REL-007", "FND-REL-008", "FND-REL-009"}
 	got := Register()
 	if len(got) != len(want) {
 		t.Fatalf("got %d rules", len(got))

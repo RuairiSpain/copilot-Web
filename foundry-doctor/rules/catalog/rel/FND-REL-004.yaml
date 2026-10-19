@@ -1,5 +1,5 @@
 id: FND-REL-004
-version: 2
+version: 3
 group: REL
 title: Delete locks on stateful services
 description: The Foundry account and the customer-managed state stores it depends on (Cosmos DB, AI Search, Storage) should
@@ -29,15 +29,24 @@ compatibility:
   preview: false
   notes: "No azd dependency: reads compiled ARM JSON or ARM control plane Microsoft.Authorization/locks 2020-05-01 / 2020-05-01: stable) - resources/resource-manager/Microsoft.Authorization/locks/stable//locks.json."
 evidence:
-  description: 'Compiled ARM: a Microsoft.Authorization/locks resource with properties.level ''CanNotDelete'' (or ''ReadOnly'',
-    which is stricter) whose scope is the resource, or the deployment resource group (a lock without a scope, or scope resourceGroup().id,
-    in the same template). The input carries no deployment resource-group name, so a lock on a literally named or
-    otherwise computed resource group is uncertain. Live: list locks at the resource,
-    resource group and subscription (requires Microsoft.Authorization/locks/read). Locks inherit down from parent scopes and
-    the most restrictive applies. Finding: none of Microsoft.CognitiveServices/accounts, Microsoft.DocumentDB/databaseAccounts,
-    Microsoft.Search/searchServices, Microsoft.Storage/storageAccounts used by the project is covered. A lock created outside
-    the template (for example by policy or a later pipeline stage) is invisible in compiled ARM, so template-only mode reports
-    uncertain rather than fail.'
+  description: >-
+    Compiled ARM, no network. Targets are the live Microsoft.CognitiveServices/accounts, Microsoft.DocumentDB/databaseAccounts,
+    Microsoft.Search/searchServices and Microsoft.Storage/storageAccounts resources. A target is covered by a
+    Microsoft.Authorization/locks resource with properties.level CanNotDelete whose scope is the resource (resourceId of the
+    same type and name) or the deployment resource group (no scope, or resourceGroup().id, in the same template). The input
+    carries no deployment resource-group name, so a lock on a literally named or otherwise computed resource group, a
+    parameter-valued scope or level, or a conditional or looped lock is uncertain, never a finding. Findings, keyed per
+    target - missing-delete-lock - no CanNotDelete lock covers the resource or the deployment group in the template;
+    readonly-lock-instead-of-delete-lock - the resource is covered only by a ReadOnly lock, which blocks updates as well as
+    deletes (ManagementLockProperties.level enumeration, locks.json 2020-05-01; the lock-resources article describes ReadOnly
+    as read-only access) and so is not a delete lock. A ReadOnly lock never satisfies the check. Locks created outside the
+    template (policy, a later pipeline stage, the portal) are invisible in compiled ARM; the policy key
+    reliability.locksManagedOutsideTemplate (boolean, default false, product decision) turns a missing lock into an uncertain note
+    "delete locks are declared as managed outside the template" instead of missing-delete-lock; a ReadOnly-only resource is
+    still reported because that is in-template evidence. Live mode (list locks at resource, resource group and subscription,
+    which needs Microsoft.Authorization/locks/read) is not implemented by this rule. Key Vault is deliberately not a target:
+    the Foundry resiliency article read names the Foundry account and its state stores, and no verified source names Key Vault
+    for this rule (UNVERIFIED).
   confidence: likely
 recommendation: Add a CanNotDelete lock on the Foundry account and on each stateful dependency, or on the resource group that
   contains only that workload. Creating locks needs Microsoft.Authorization/locks/write (Owner or User Access Administrator,
@@ -101,15 +110,42 @@ implementation:
   package: internal/rules/rel
 tests:
   positive:
-  - Cosmos account referenced by the capability host with no lock at any scope reports missing delete lock
+  - every stateful dependency without a lock is a finding
+  - only the locked resource passes, the rest are findings
+  - ReadOnly resource group lock is reported for each uncovered target
+  - NotSpecified level does not count
+  - policy false behaves like absent
+  - locks managed outside the template still reports a ReadOnly-only resource
+  - lock on another resource type does not cover
+  - no lock at all
+  - literal false lock does not count
+  - ReadOnly lock does not satisfy a delete lock requirement
   negative:
-  - Foundry account with a CanNotDelete lock resource passes
-  - storage account covered by a resource-group-scope lock passes in live mode
+  - resource group CanNotDelete lock covers all
+  - ReadOnly plus CanNotDelete on the same group passes
+  - ReadOnly resource lock with CanNotDelete group lock passes
+  - scope-less lock covers the deployment resource group
+  - resourceGroup().id lock covers the deployment group
+  - lock on the resource by identical expression
+  - Key Vault is not a verified target
+  - locks managed outside the template with a covering lock passes
+  - literal false target is not deployed
+  - no targets
   skipped:
-  - 'no Microsoft.Authorization/locks/read permission in live mode: skipped with the missing capability'
-  - 'dependency not used by the project: out of scope'
+  - missing ARM model skips
   uncertain:
-  - 'template-only mode with no lock resource: uncertain because locks can be applied outside the template'
-testability: Unit tests on compiled ARM fixtures; live mode tests use recorded lock list responses at several scopes.
-notes: The Foundry article names the protection each lock gives; the rule does not claim more than that. The dev profile is
-  informational because locks complicate teardown (azd down) in dev environments.
+  - locks managed outside the template are uncertain, not a finding
+  - lock on a literal resource group is not provably the deployment group
+  - lock on another resource group by expression is unknown
+  - lock on a different expression name is unknown
+  - parameter-driven lock is uncertain
+  - lock level from a parameter is unknown
+testability: Unit tests on compiled ARM fixtures (internal/rules/rel/rel_fixes_test.go and rel_locks_test.go); live mode is not implemented.
+notes: >-
+  Version 3 (behaviour change). Before, the rule could only pass or skip: a missing lock was always an uncertain skip and a
+  ReadOnly lock counted as a delete lock. Now a missing CanNotDelete lock is a finding (severity per profile - info in dev and
+  test, warning in prod), and a ReadOnly lock is its own finding. Teams that manage locks with Azure Policy or a later pipeline
+  stage set reliability.locksManagedOutsideTemplate to true to get the uncertain note instead; the key is read through the
+  policy interface and is not yet in the configuration schema (the configuration owner must add it, default false). The Foundry
+  article names the protection each lock gives; the rule does not claim more than that. The dev profile is informational because
+  locks complicate teardown (azd down) in dev environments.
