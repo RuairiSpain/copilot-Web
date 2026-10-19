@@ -439,3 +439,24 @@ func TestBuildCombinedDoesNotCorrelateDuplicateAzureNames(t *testing.T) {
 		}
 	}
 }
+
+// Phase 5 gate (lead NB1): a long opaque string in a reference slot may be a
+// credential, so it must never become a label.
+func TestOpaqueTokenReferenceIsNotALabel(t *testing.T) {
+	for in, want := range map[string]bool{
+		"sk-proj-abcdefghijklmnopqrstuvwxyz0123456789ABCDEF": true,
+		"my-search-service":     false,
+		"aisearch-prod-eastus2": false,
+		"":                      false,
+	} {
+		if got := opaqueToken(in); got != want {
+			t.Errorf("opaqueToken(%q)=%v want %v", in, got, want)
+		}
+	}
+	var nodes []nodeRec
+	add := func(n nodeRec) *nodeRec { nodes = append(nodes, n); return &nodes[len(nodes)-1] }
+	addRefNode(add, "sk-proj-abcdefghijklmnopqrstuvwxyz0123456789ABCDEF", false, "", nil)
+	if len(nodes) != 1 || nodes[0].label != "unresolved-target" || nodes[0].name != "" {
+		t.Fatalf("nodes=%+v", nodes)
+	}
+}

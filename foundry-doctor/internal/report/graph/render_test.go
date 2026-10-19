@@ -56,3 +56,16 @@ func checkGolden(t *testing.T, name string, got []byte) {
 		t.Fatalf("golden mismatch\n--- got ---\n%s\n--- want ---\n%s", got, want)
 	}
 }
+
+// Phase 5 gate (black belt N1): a hostile label from azure.yaml must not become
+// a live Markdown link or image in the node table.
+func TestMarkdownHostileLabelIsNotALink(t *testing.T) {
+	g := reportGraph()
+	g.Nodes[0].Label = "[click](javascript:alert(1))![i](http://evil/x.png)"
+	// The Mermaid fence holds the raw label and is inert; only table rows render.
+	for _, line := range strings.Split(string(Markdown(g)), "\n") {
+		if strings.HasPrefix(line, "|") && strings.Contains(line, "](") {
+			t.Fatalf("table row produced Markdown link syntax: %s", line)
+		}
+	}
+}

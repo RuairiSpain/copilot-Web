@@ -679,9 +679,37 @@ func addRefNode(addNode func(nodeRec) *nodeRec, ref string, inTemplate bool, sco
 		return key, false, false
 	default:
 		key = unresolvedKeyFor(ref, false)
+		if opaqueToken(display) {
+			// A long opaque string in a reference slot may be a credential
+			// pasted into the wrong field; findings.Redact cannot recognise
+			// arbitrary tokens, so the string is never used as a label.
+			addNode(nodeRec{key: key, label: "unresolved-target", kind: "missing", origin: OriginMissing, missing: true})
+			return key, true, false
+		}
 		addNode(nodeRec{key: key, label: findings.Redact(display), kind: "missing", origin: OriginMissing, name: display, missing: true})
 		return key, true, false
 	}
+}
+
+// opaqueToken reports whether s looks like a secret rather than a name: 32 or
+// more characters of letters, digits and "-_." that mix letters and digits.
+func opaqueToken(s string) bool {
+	if len(s) < 32 {
+		return false
+	}
+	letters, digits := false, false
+	for _, r := range s {
+		switch {
+		case r >= '0' && r <= '9':
+			digits = true
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z':
+			letters = true
+		case r == '-', r == '_', r == '.':
+		default:
+			return false
+		}
+	}
+	return letters && digits
 }
 
 // notInResourceList lists top-level types Foundry Doctor does not treat as
