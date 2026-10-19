@@ -214,7 +214,7 @@ func phase8ProbeFailure(object, target string, err error) string {
 	var unavailable *azure.UnavailableError
 	switch {
 	case errors.As(err, &unavailable):
-		return object + " metadata for " + target + " is not readable (" + unavailable.Reason + "; needs Reader or Search Service Contributor on the search service, which must allow role-based access)"
+		return object + " metadata for " + target + " is not readable (" + unavailable.Reason + "; needs Search Service Contributor on the search service (Reader is not confirmed to be enough), which must allow role-based access)"
 	case rt.IsNotFound(err):
 		return object + " " + target + " was not found"
 	case errors.Is(err, context.DeadlineExceeded):

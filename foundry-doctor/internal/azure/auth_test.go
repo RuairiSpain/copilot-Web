@@ -145,3 +145,23 @@ func TestExecRunnerMissingBinary(t *testing.T) {
 		t.Error("expected error")
 	}
 }
+
+// Phase 8 gate (black belt B1): AZURE_ACCESS_TOKEN is an ARM token. A host named
+// by the repository (a Search service in azure.yaml) must never receive it.
+func TestEnvironmentTokenIsNotUsedForNonARMScopes(t *testing.T) {
+	t.Setenv("AZURE_ACCESS_TOKEN", "arm-env-token")
+	for _, sc := range []string{"https://search.azure.com/.default", "https://api.loganalytics.io/.default", "https://cognitiveservices.azure.com/.default"} {
+		r := &scriptRunner{fn: func(string) ([]byte, error) {
+			return []byte(`{"token":"cli-minted","expiresOn":"2999-01-01T00:00:00Z"}`), nil
+		}}
+		tok, err := newChain(r.run, time.Now).Token(context.Background(), sc)
+		if err != nil || tok.Token != "cli-minted" || len(r.calls) == 0 {
+			t.Errorf("scope %s: token=%+v err=%v calls=%v, want a CLI-minted token", sc, tok, err, r.calls)
+		}
+	}
+	// With no CLI available the env token is not a fallback for those scopes.
+	none := &scriptRunner{fn: func(string) ([]byte, error) { return nil, errors.New("not signed in") }}
+	if _, err := newChain(none.run, time.Now).Token(context.Background(), "https://search.azure.com/.default"); !errors.Is(err, ErrNoCredential) {
+		t.Errorf("err = %v, want ErrNoCredential", err)
+	}
+}

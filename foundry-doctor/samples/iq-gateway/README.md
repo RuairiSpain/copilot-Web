@@ -26,24 +26,31 @@ and tenants are fake. See `docs/iq-gateway.md` for the rule behaviour.
 
 Knowledge bases and knowledge sources are Search data-plane objects and are
 not created by the template. Create them with the Search REST API, then run
-`foundry-doctor doctor --iq-metadata` with Reader (or Search Service
-Contributor) on the search service and role-based access enabled on the
+`foundry-doctor doctor --iq-metadata` with Search Service
+Contributor (Reader is not confirmed to be enough) on the search service and role-based access enabled on the
 service; without `--iq-metadata`, or with `--local`, the IQ rules that need the
 data plane are skipped.
 
 ## Expected results (offline, `doctor --local`)
 
-| Rule | Expected | Why |
+Produced by running the binary with Bicep 0.48.1 and checked by
+`TestIQGatewaySampleRealBicepPositive` and `TestIQGatewaySampleRealBicepNegative`
+(`go test -tags spike -run TestIQGatewaySample ./cmd/foundry-doctor/` with
+`BICEP_PATH` set). The policy and fragment come from `loadTextContent`, which
+Bicep compiles to a template variable that the gateway normaliser resolves.
+
+| Rule | Result | Why |
 |---|---|---|
 | FND-GW-001 | pass | `validate-jwt` with audience and a tenant-specific OpenID configuration, inherited by every operation. |
 | FND-GW-002 | pass | `llm-token-limit` and `llm-emit-token-metric` resolved from the in-template fragment. |
 | FND-GW-003 | pass | The API has a literal `serviceUrl`. |
 | FND-GW-004 | pass | One API path. |
 | FND-GW-005 | pass | `authentication-managed-identity` with the system identity; the role assignment references the APIM identity and the Foundry account. |
-| FND-GW-006 | uncertain, or a finding if the compiled `loggerId` expression is not resolved to the `appinsights` logger | Application Insights diagnostic with `metrics: true`; custom metrics with dimensions is a portal setting that cannot be read. |
+| FND-GW-006 | uncertain | Application Insights diagnostic with `metrics: true` is found; custom metrics with dimensions is a portal setting that cannot be read. |
 | FND-IQ-008 | skipped | The azure.yaml connection leg passes; the data-plane legs were not read. |
 | FND-IQ-001..007, 009..011 | skipped | Data-plane metadata not read (`--iq-metadata` not given). |
 | FND-IQ-012 | skipped | The semantic leg needs the knowledge-source plane. |
 
-These expectations were derived by reading the rule code; they have not been
-produced by running the binary in this fix loop (no Go toolchain).
+Removing `validate-jwt` and `authentication-managed-identity` from
+`infra/policies/foundry-chat.xml` makes FND-GW-001 and FND-GW-005 fail
+(`TestIQGatewaySampleRealBicepNegative`).

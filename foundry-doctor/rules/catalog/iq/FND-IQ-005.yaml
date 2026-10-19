@@ -1,5 +1,5 @@
 id: FND-IQ-005
-version: 3
+version: 4
 group: IQ
 title: "Retrieval mode supported by index and service tier"
 description: >-
@@ -139,3 +139,4 @@ notes: >-
   Learn text dated up to 2026-08 and can change; they are data in the rule pack, not code. Current code has
   no deterministic service-age signal for Basic-tier services, so 6-10 knowledge sources stay uncertain.
   Round-1 fix (2026-10-18): the unverified answerSynthesis knowledge-base member is no longer read; tier and region legs are skipped when the Search service is not in the template. Unknown API versions are uncertain; no data plane read means skipped.
+  Post-merge gate loop 1 (2026-10-19): version 4. Claims that rest on version or model tables that could not be confirmed against a pinned REST specification are notes and not failures: reasoning auto on a version other than 2026-08-01-preview, knowledge base models on 2026-04-01, and a planning model missing from the table. A missing model for auto reasoning, minimal without extractiveData, and the Search tier checks stay failures.

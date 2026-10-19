@@ -12,6 +12,7 @@ package gateway
 import (
 	"encoding/xml"
 	"net/url"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -312,7 +313,7 @@ func BuildSnapshot(in *sdk.Input) Snapshot {
 				continue
 			}
 			s := ensureService(out.Services, svc)
-			s.Policies[scope] = policyDocument(scope, r)
+			s.Policies[scope] = policyDocument(in.ARM, scope, r)
 			if strings.Count(strings.Trim(r.Name, "/"), "/") >= 3 && strings.HasSuffix(strings.ToLower(r.Type), "/operations/policies") {
 				apiName := operationAPIName(r.Name)
 				if apiName != "" {
@@ -327,7 +328,7 @@ func BuildSnapshot(in *sdk.Input) Snapshot {
 				continue
 			}
 			s := ensureService(out.Services, svc)
-			s.Fragments[strings.ToLower(fragment)] = policyDocument("fragment:"+strings.ToLower(fragment), r)
+			s.Fragments[strings.ToLower(fragment)] = policyDocument(in.ARM, "fragment:"+strings.ToLower(fragment), r)
 		case "microsoft.apimanagement/service/products/apis":
 			parts := strings.Split(r.Name, "/")
 			if len(parts) != 3 {
@@ -388,16 +389,42 @@ func BuildSnapshot(in *sdk.Input) Snapshot {
 	return out
 }
 
-func policyDocument(scope string, r sdk.ARMResource) PolicyDocument {
+func policyDocument(model sdk.ARMModel, scope string, r sdk.ARMResource) PolicyDocument {
 	format := strProp(r.Properties, "format")
 	return PolicyDocument{
 		Scope:          scope,
 		Format:         format,
 		APIVersion:     r.APIVersion,
 		ExternalLink:   strings.Contains(strings.ToLower(format), "link"),
-		Value:          strProp(r.Properties, "value"),
+		Value:          resolvePolicyValue(model, strProp(r.Properties, "value")),
 		SourceLocation: r.Location,
 	}
+}
+
+// variablesOnlyRe matches a value that is exactly one variables() call, the
+// form Bicep compiles loadTextContent('policy.xml') to: "[variables('$fxv#0')]".
+var variablesOnlyRe = regexp.MustCompile(`^\[\s*variables\(\s*'([^']+)'\s*\)\s*\]$`)
+
+// resolvePolicyValue returns the policy XML for a value that reads one compiled
+// template variable, so a policy loaded from a file is analysed instead of
+// reported as unparseable. A variable that is missing, is not a string or is
+// still an expression leaves the value as it is, and the rules then treat the
+// policy as unresolved rather than as a pass.
+func resolvePolicyValue(model sdk.ARMModel, value string) string {
+	m := variablesOnlyRe.FindStringSubmatch(strings.TrimSpace(value))
+	if m == nil {
+		return value
+	}
+	lookup, ok := model.(interface{ Variable(string) (any, bool) })
+	if !ok {
+		return value
+	}
+	v, found := lookup.Variable(m[1])
+	lit, isStr := v.(string)
+	if !found || !isStr || strings.HasPrefix(strings.TrimSpace(lit), "[") {
+		return value
+	}
+	return lit
 }
 
 func ensureService(m map[string]*Service, name string) *Service {

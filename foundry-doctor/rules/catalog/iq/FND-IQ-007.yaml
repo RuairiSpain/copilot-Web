@@ -1,5 +1,5 @@
 id: FND-IQ-007
-version: 2
+version: 3
 group: IQ
 title: Knowledge source type/API and planning model supported
 description: >-
@@ -141,3 +141,4 @@ notes: >-
   longer a platform-basis error. The target Search API version is not an azure.yaml field and must come from the profile
   or the template.
   Round-1 fix (2026-10-18): objects read with an unknown API version are uncertain; no data plane read means skipped.
+  Post-merge gate loop 1 (2026-10-19): version 3. A planning model name missing from the version table is a note and not a failure, because the table changes with each preview and could not be confirmed against a pinned REST specification. An unsupported knowledge source kind for the pinned version stays a failure.

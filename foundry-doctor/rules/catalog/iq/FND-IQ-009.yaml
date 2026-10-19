@@ -1,5 +1,5 @@
 id: FND-IQ-009
-version: 3
+version: 4
 group: IQ
 title: Document-level access control configured when required
 description: >-
@@ -156,3 +156,4 @@ notes: >-
   x-ms-query-source-authorization for these indexed and remote-SharePoint retrieval paths. A decision on where that
   declaration lives (profile key) is needed before Phase 8.
   Round-1 fix (2026-10-18): ingestion options are read from azureBlobParameters, indexedSharePointParameters and indexedOneLakeParameters .ingestionParameters; an absent parameters object is uncertain. Only 2026-04-01 fails the version leg (documented unsupported); 2026-05-01-preview and unknown versions are uncertain. The header leg is never decided from the repository: Learn sets x-ms-query-source-authorization on the agent MCP tool headers with a {{placeholder}}, a shape Foundry Doctor does not read, so the rule reports header-forwarding-configured-outside-repo as uncertain and never passes. The azure.yaml headers/requestHeaders/forwardHeaders keys used before were unverified and are no longer read.
+  Post-merge gate loop 1 (2026-10-19): version 4. A knowledge source read at api-version 2026-04-01 is uncertain, not a failure: the read cannot be shown to return ingestionPermissionOptions even when they were set through a preview version, so the earlier api-version finding (and its contradiction with the missing-options finding) is removed. Pin 2026-08-01-preview to assess permission options.

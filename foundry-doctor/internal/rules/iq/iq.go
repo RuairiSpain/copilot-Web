@@ -482,8 +482,14 @@ func eval005(in *sdk.Input) sdk.Result {
 		}
 		switch strings.ToLower(kb.RetrievalReasoningKind) {
 		case "auto":
-			if version != "2026-08-01-preview" || len(kb.Models) == 0 {
-				a.add(kb.Location, "AzureAISearch/knowledgebases", kb.Name, "reasoning-auto", ev("auto retrieval reasoning requires API version 2026-08-01-preview and at least one model", kbRef))
+			if len(kb.Models) == 0 {
+				a.add(kb.Location, "AzureAISearch/knowledgebases", kb.Name, "reasoning-auto", ev("auto retrieval reasoning requires at least one model", kbRef))
+			}
+			if version != "2026-08-01-preview" {
+				// The API versions that accept auto are documented only for the
+				// newest preview, which could not be confirmed against the
+				// REST specification, so this is a note and not a failure.
+				a.notes = append(a.notes, "knowledge base "+kb.Name+" sets retrieval reasoning auto on api-version "+version+"; the documentation lists auto for 2026-08-01-preview only (not confirmed against a pinned REST specification)")
 			}
 		case "minimal":
 			if !strings.EqualFold(kb.OutputMode, "extractiveData") || kb.UsesWebKnowledgeSource {
@@ -502,7 +508,7 @@ func eval005(in *sdk.Input) sdk.Result {
 			}
 		}
 		if version == "2026-04-01" && len(kb.Models) > 0 {
-			a.add(kb.Location, "AzureAISearch/knowledgebases", kb.Name, "models-on-ga", ev("knowledge base models are not supported by API version 2026-04-01", kbRef))
+			a.notes = append(a.notes, "knowledge base "+kb.Name+" has models on api-version 2026-04-01, which the documentation lists as not supporting them (not confirmed against a pinned REST specification)")
 		}
 		if !svcKnown {
 			a.skips = append(a.skips, "search-service-resource-not-readable")
@@ -592,7 +598,9 @@ func eval007(in *sdk.Input) sdk.Result {
 				continue
 			}
 			if !supported {
-				a.add(kb.Location, "AzureAISearch/knowledgebases", kb.Name, "model-name:"+m.Path, ev("planning model "+m.ModelName+" is not in the documented model table for the targeted API version", kbRef))
+				// The planning-model table changes with each preview, so a name
+				// missing from it is not proof of an unsupported model.
+				a.notes = append(a.notes, "planning model "+m.ModelName+" of knowledge base "+kb.Name+" is not in the model table this release knows for api-version "+kb.APIVersion)
 			}
 			if isLegacyPlanningModel(m.ModelName) && strings.ToLower(kb.RetrievalReasoningKind) != "minimal" && anyStoredFilterSource(snap, kb) {
 				a.add(kb.Location, "AzureAISearch/knowledgebases", kb.Name, "legacy-model-filters:"+m.Path, ev("stored queryHints filters are incompatible with GPT-4o and GPT-4.1 planning models unless retrieval reasoning is minimal", kbRef))
@@ -743,6 +751,13 @@ func eval009(in *sdk.Input) sdk.Result {
 		}
 		ref := dataRef("knowledgesources", source.Name, source.APIVersion)
 		paramsKey := runtimeiq.ParametersKey(source.Kind)
+		if source.APIVersion == "2026-04-01" {
+			// A read at 2026-04-01 may not return ingestionPermissionOptions even
+			// when they were set through a preview version, so their absence says
+			// nothing. Read the source at 2026-08-01-preview to assess it.
+			a.notes = append(a.notes, "knowledge source "+source.Name+" was read at api-version 2026-04-01, which cannot be shown to return ingestionPermissionOptions; pin 2026-08-01-preview to assess permission options")
+			continue
+		}
 		if !source.ParametersRead || !source.IngestionRead {
 			a.notes = append(a.notes, "knowledge source "+source.Name+" response has no "+paramsKey+".ingestionParameters object")
 			continue
@@ -757,8 +772,6 @@ func eval009(in *sdk.Input) sdk.Result {
 		}
 		switch source.APIVersion {
 		case "2026-08-01-preview":
-		case "2026-04-01":
-			a.add(locOf(source), "AzureAISearch/knowledgesources", source.Name, "api-version", ev("ingestionPermissionOptions are not supported by API version 2026-04-01; use 2026-08-01-preview", ref))
 		default:
 			a.notes = append(a.notes, "knowledge source "+source.Name+" uses api-version "+source.APIVersion+", for which Learn does not document ingestionPermissionOptions enforcement")
 		}
@@ -912,6 +925,13 @@ func eval012(in *sdk.Input) sdk.Result {
 		if sem == "" {
 			a.notes = append(a.notes, "management-api-version-without-property: search service "+svc.Name+" does not set semanticSearch in the template")
 			continue
+		}
+		if compareAPIVersion(svc.APIVersion, "2026-03-01-preview") >= 0 && sem == "disabled" {
+			// From 2026-03-01-preview "disabled" is documented as no longer valid
+			// and is treated as free, so it is not a failure. Say so instead of
+			// passing in silence: the ranker an index-backed knowledge base
+			// needs is not confirmed on.
+			a.notes = append(a.notes, "search service "+svc.Name+" sets semanticSearch disabled on api-version "+svc.APIVersion+", which the documentation treats as free; the semantic ranker state is not confirmed")
 		}
 		if compareAPIVersion(svc.APIVersion, "2026-03-01-preview") < 0 && sem == "disabled" {
 			a.add(svc.SourceLocation, "Microsoft.Search/searchServices", svc.Name, "semantic-disabled",
