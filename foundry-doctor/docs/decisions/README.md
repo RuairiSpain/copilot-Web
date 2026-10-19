@@ -10,7 +10,7 @@ Foundry Doctor keeps its ADRs in two directories. Together they form one numbere
 Rules:
 
 - Numbers are unique across both directories. A number appears once.
-- A new ADR takes the next free number across both directories (the highest number in use is currently ADR-028). Check both before choosing.
+- A new ADR takes the next free number across both directories (the highest number in use is currently ADR-029). Check both before choosing.
 - ADR-014 always means `docs/adr/ADR-014-v1-command-and-config-surface.md`. The deferral of the Go principal and security
   reviews was first numbered ADR-014 in `docs/decisions/` by mistake and was renumbered ADR-019 to remove the collision.
 - Put an architecture or engineering decision in `docs/decisions/`; put a closed V1 product-surface decision in `docs/adr/`.

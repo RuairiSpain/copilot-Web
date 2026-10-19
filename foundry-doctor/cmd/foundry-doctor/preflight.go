@@ -11,10 +11,10 @@ import (
 
 func preflightCmd(_ context.Context, svc app.Services, exit *int) *cobra.Command {
 	var (
-		profile, minSev, failOn, baseline, suppress, format, out, dir string
-		subscription, tenant, location, resourceGroup                 string
-		strict, whatIf, preflightAlias                                bool
-		rules, approved, allowDelete                                  []string
+		profile, minSev, failOn, baseline, suppress, format, out, dir, azdVersion string
+		subscription, tenant, location, resourceGroup                             string
+		strict, whatIf, preflightAlias                                            bool
+		rules, approved, allowDelete                                              []string
 	)
 	cmd := &cobra.Command{
 		Use:   "preflight",
@@ -34,7 +34,7 @@ func preflightCmd(_ context.Context, svc app.Services, exit *int) *cobra.Command
 			req := app.PreflightRequest{
 				DoctorRequest: app.DoctorRequest{
 					Dir: dir, Profile: profile, Rules: rules, Baseline: baseline,
-					Suppress: suppress, Strict: strict, Format: format, Out: out,
+					Suppress: suppress, Strict: strict, Format: format, Out: out, AzdVersion: azdVersion,
 				},
 				Target: app.PreflightTarget{
 					TenantID: tenant, SubscriptionID: subscription,
@@ -65,6 +65,7 @@ func preflightCmd(_ context.Context, svc app.Services, exit *int) *cobra.Command
 	f.StringVar(&format, "format", "console", "report format: "+strings.Join(app.Formats, ", "))
 	f.StringVar(&out, "out", "", "write the report to this file instead of stdout")
 	f.StringVar(&dir, "dir", ".", "project directory containing azure.yaml")
+	f.StringVar(&azdVersion, "azd-version", "", "azd version to gate rules by when azd is not on PATH, for example 1.35.0 (env FOUNDRY_DOCTOR_AZD_VERSION)")
 	f.StringVar(&subscription, "subscription", "", "subscription ID (default AZURE_SUBSCRIPTION_ID)")
 	f.StringVar(&tenant, "tenant", "", "tenant ID (default AZURE_TENANT_ID)")
 	f.StringVar(&location, "location", "", "deployment location (default AZURE_LOCATION)")

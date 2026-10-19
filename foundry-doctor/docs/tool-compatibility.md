@@ -377,3 +377,9 @@ returns "invalid" only for a failure the differential fixture proves: the empty 
 leading or trailing `||`. A test asserts that every string the parser calls invalid is also rejected by `ParseRange`.
 
 Not verified: azd itself was not executed, and older azd releases may use another range parser.
+
+## 7. Open-ended azd ranges (ADR-029)
+
+Rules declare `compatibility.azd: ">=1.34.2"` with no upper bound. The newest azd release whose schemas and source were read
+is 1.36.0 (`catalog.AzdVerifiedThrough`); the engine warns when a later azd is used. When a new azd release is read and found
+compatible, raise `AzdVerifiedThrough` and record the release here.

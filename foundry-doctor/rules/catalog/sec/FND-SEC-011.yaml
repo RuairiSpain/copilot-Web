@@ -22,7 +22,7 @@ severity:
   test: info
   prod: info
 compatibility:
-  azd: ">=1.36.0-beta.1 <=1.36.0"
+  azd: '>=1.34.2'
   extensions:
     azure.ai.agents: ">=1.0.0-beta.18 <=1.0.0-beta.20"
   apiVersions:

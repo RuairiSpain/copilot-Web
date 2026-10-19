@@ -21,7 +21,7 @@ severity:
   test: info
   prod: warning
 compatibility:
-  azd: '>=1.34.2 <=1.36.0'
+  azd: '>=1.34.2'
   extensions: {}
   apiVersions:
   - { plane: management, provider: Microsoft.Consumption, resourceType: budgets, version: '2023-11-01' }

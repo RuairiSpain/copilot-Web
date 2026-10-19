@@ -24,7 +24,7 @@ severity:
   test: warning
   prod: error
 compatibility:
-  azd: '>=1.34.2 <=1.36.0'
+  azd: '>=1.34.2'
   extensions: {}
   apiVersions:
   - { plane: management, provider: Microsoft.Insights, resourceType: diagnosticSettings, version: '2021-05-01-preview' }

@@ -79,8 +79,8 @@ type Severity struct {
 
 // Compatibility declares the tool and API versions a rule was verified against, in a form the engine can compare.
 //
-// Azd and Extensions hold exact versions or semver ranges with both endpoints; an empty Azd means the rule does not
-// depend on azd behaviour. APIVersions contains exact, plane-specific API mappings. Preview must be true when any
+// Azd and Extensions hold exact versions or semver ranges; a range may omit the upper endpoint (">=1.34.2"), which
+// accepts every later version (ADR-029). An empty Azd means the rule does not depend on azd behaviour. APIVersions contains exact, plane-specific API mappings. Preview must be true when any
 // API version is a preview version or any azd or extension version is a prerelease; it means "verified
 // against prerelease tooling", not that the Azure API itself is preview (many rules carry it only because the azd
 // range ends at a prerelease build). A version outside a declared
@@ -184,10 +184,27 @@ func (r VersionRange) String() string {
 	if r.IncludeMinimum {
 		minOp = ">="
 	}
+	if r.Maximum == "" {
+		return minOp + r.Minimum
+	}
 	if r.IncludeMaximum {
 		maxOp = "<="
 	}
 	return minOp + r.Minimum + " " + maxOp + r.Maximum
+}
+
+// AzdVerifiedThrough is the newest azd release whose schemas and source were read when the rules were verified
+// (docs/tool-compatibility.md, ADR-029). Rules accept later azd versions, and the engine says so when one is used.
+const AzdVerifiedThrough = "1.36.0"
+
+// AzdNewerThanVerified reports whether v is a valid azd version above AzdVerifiedThrough.
+func AzdNewerThanVerified(v string) bool {
+	got, ok := parseSemVer(v)
+	if !ok {
+		return false
+	}
+	ref, _ := parseSemVer(AzdVerifiedThrough)
+	return compareSemVer(got, ref) > 0
 }
 
 // Contains reports whether v is valid SemVer and lies in the validated range.
@@ -203,8 +220,15 @@ func (r VersionRange) Contains(v string) bool {
 	if exact != nil {
 		return compareSemVer(got, *exact) == 0
 	}
-	lo, hi := compareSemVer(got, *min), compareSemVer(got, *max)
-	return (lo > 0 || minInc && lo == 0) && (hi < 0 || maxInc && hi == 0)
+	lo := compareSemVer(got, *min)
+	if !(lo > 0 || minInc && lo == 0) {
+		return false
+	}
+	if max == nil {
+		return true
+	}
+	hi := compareSemVer(got, *max)
+	return hi < 0 || maxInc && hi == 0
 }
 
 // UnmarshalYAML accepts both the structured contract and the legacy scalar.
@@ -1087,6 +1111,11 @@ func (r VersionRange) bounds() (exact, minimum, maximum *semVersion, minInclusiv
 	if r.legacy != "" {
 		fields := strings.Fields(r.legacy)
 		if len(fields) == 1 {
+			if op, rest := splitComparator(fields[0]); op == ">=" || op == ">" {
+				// Open-ended range: every version from the lower endpoint on.
+				lo, valid := parseSemVer(rest)
+				return nil, &lo, nil, op == ">=", false, valid
+			}
 			version := strings.TrimPrefix(fields[0], "=")
 			if strings.HasPrefix(version, ">") || strings.HasPrefix(version, "<") {
 				return nil, nil, nil, false, false, false
@@ -1113,10 +1142,16 @@ func (r VersionRange) bounds() (exact, minimum, maximum *semVersion, minInclusiv
 		v, valid := parseSemVer(r.Exact)
 		return &v, nil, nil, false, false, valid
 	}
-	if r.Minimum == "" || r.Maximum == "" {
+	if r.Minimum == "" {
 		return nil, nil, nil, false, false, false
 	}
 	lo, lok := parseSemVer(r.Minimum)
+	if r.Maximum == "" {
+		if r.IncludeMaximum {
+			return nil, nil, nil, false, false, false
+		}
+		return nil, &lo, nil, r.IncludeMinimum, false, lok
+	}
 	hi, hok := parseSemVer(r.Maximum)
 	return nil, &lo, &hi, r.IncludeMinimum, r.IncludeMaximum, lok && hok
 }
@@ -1135,6 +1170,9 @@ func validVersionRange(r VersionRange) bool {
 	if !ok || exact != nil {
 		return ok
 	}
+	if max == nil {
+		return true
+	}
 	order := compareSemVer(*min, *max)
 	return order < 0 || order == 0 && minInc && maxInc
 }
@@ -1147,5 +1185,5 @@ func (r VersionRange) hasPrerelease() bool {
 	if exact != nil {
 		return len(exact.pre) > 0
 	}
-	return len(min.pre) > 0 || len(max.pre) > 0
+	return len(min.pre) > 0 || max != nil && len(max.pre) > 0
 }

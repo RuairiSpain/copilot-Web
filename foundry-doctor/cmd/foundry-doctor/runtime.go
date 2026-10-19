@@ -13,12 +13,12 @@ import (
 
 func runtimeCmd(_ context.Context, svc app.Services, exit *int) *cobra.Command {
 	var (
-		profile, minSev, failOn, baseline, suppress, format, out, dir string
-		subscription, tenant, resourceGroup, account, project         string
-		vantage                                                       string
-		timeout                                                       time.Duration
-		strict                                                        bool
-		rules, approved                                               []string
+		profile, minSev, failOn, baseline, suppress, format, out, dir, azdVersion string
+		subscription, tenant, resourceGroup, account, project                     string
+		vantage                                                                   string
+		timeout                                                                   time.Duration
+		strict                                                                    bool
+		rules, approved                                                           []string
 	)
 	cmd := &cobra.Command{
 		Use:   "runtime",
@@ -37,7 +37,7 @@ func runtimeCmd(_ context.Context, svc app.Services, exit *int) *cobra.Command {
 			req := app.RuntimeRequest{
 				DoctorRequest: app.DoctorRequest{
 					Dir: dir, Profile: profile, Rules: rules, Baseline: baseline,
-					Suppress: suppress, Strict: strict, Format: format, Out: out,
+					Suppress: suppress, Strict: strict, Format: format, Out: out, AzdVersion: azdVersion,
 				},
 				Target: app.RuntimeTarget{
 					TenantID:       tenant,
@@ -73,6 +73,7 @@ func runtimeCmd(_ context.Context, svc app.Services, exit *int) *cobra.Command {
 	f.BoolVar(&strict, "strict", false, "exit 3 when any check was skipped")
 	f.StringVar(&format, "format", "console", "report format: "+strings.Join(app.Formats, ", "))
 	f.StringVar(&out, "out", "", "write the report to this file instead of stdout")
+	f.StringVar(&azdVersion, "azd-version", "", "azd version to gate rules by when azd is not on PATH, for example 1.35.0 (env FOUNDRY_DOCTOR_AZD_VERSION)")
 	f.StringVar(&dir, "dir", ".", "project directory containing azure.yaml")
 	f.StringVar(&subscription, "subscription", "", "subscription ID (default AZURE_SUBSCRIPTION_ID)")
 	f.StringVar(&tenant, "tenant", "", "tenant ID (reserved for future use)")

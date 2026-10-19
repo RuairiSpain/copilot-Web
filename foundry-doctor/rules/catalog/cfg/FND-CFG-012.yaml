@@ -18,7 +18,7 @@ severity:
   test: error
   prod: error
 compatibility:
-  azd: ">=1.34.2 <=1.36.0"
+  azd: '>=1.34.2'
   extensions: {}
   apiVersions:
     - { plane: management, provider: Microsoft.Resources, resourceType: subscriptions, version: "2022-12-01" }

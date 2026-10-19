@@ -23,7 +23,7 @@ severity:
   test: warning
   prod: error
 compatibility:
-  azd: '>=1.34.2 <=1.36.0'
+  azd: '>=1.34.2'
   extensions:
     azure.ai.agents: '>=1.0.0-beta.18 <=1.0.0-beta.20'
     azure.ai.connections: '>=1.0.0-beta.9 <=1.0.0-beta.10'
