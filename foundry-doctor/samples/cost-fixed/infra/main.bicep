@@ -4,7 +4,10 @@
 // model; see https://learn.microsoft.com/azure/foundry/foundry-models/concepts/deployment-types).
 targetScope = 'resourceGroup'
 
-param location string = resourceGroup().location
+// The cost estimator reads a literal region from the compiled plan, so the value
+// comes from main.parameters.json (an expression such as resourceGroup().location
+// cannot be resolved offline and leaves the resource unpriced).
+param location string
 
 resource search 'Microsoft.Search/searchServices@2025-05-01' = {
   name: 'fd-cost-search'
@@ -58,6 +61,20 @@ resource cosmosDb 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2025-04-15
     options: {
       throughput: 4000
     }
+  }
+}
+
+// The Foundry account that owns the deployments below. The estimator takes a
+// deployment's region from this account by the name prefix 'fdacct/'.
+resource account 'Microsoft.CognitiveServices/accounts@2026-09-01' = {
+  name: 'fdacct'
+  location: location
+  kind: 'AIServices'
+  sku: {
+    name: 'S0'
+  }
+  properties: {
+    customSubDomainName: 'fdacct'
   }
 }
 

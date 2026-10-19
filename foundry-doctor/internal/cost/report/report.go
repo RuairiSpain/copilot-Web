@@ -123,7 +123,14 @@ func console(w io.Writer, doc Document) error {
 				}
 			}
 		}
-		if _, err := fmt.Fprintf(w, "total (covered resources only): %.2f to %.2f %s/month\n", env.TotalLow, env.TotalHigh, env.Currency); err != nil {
+		flags := ""
+		if env.StalePricing {
+			flags += " (includes stale prices)"
+		}
+		if env.Incomplete {
+			flags += " (estimate incomplete)"
+		}
+		if _, err := fmt.Fprintf(w, "total (covered resources only): %.2f to %.2f %s/month%s\n", env.TotalLow, env.TotalHigh, env.Currency, flags); err != nil {
 			return err
 		}
 		if len(env.Excluded) > 0 {

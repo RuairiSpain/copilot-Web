@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -68,5 +69,18 @@ func TestRenderJSONRoundTrip(t *testing.T) {
 func TestRenderRejectsUnknownFormat(t *testing.T) {
 	if err := Render(&bytes.Buffer{}, "xml", goldenDoc()); err == nil {
 		t.Fatal("want an error for an unknown format")
+	}
+}
+
+// Phase 7 gate: the console total says when stale prices are in it.
+func TestConsoleTotalFlagsStalePricing(t *testing.T) {
+	doc := goldenDoc()
+	doc.Environments[0].StalePricing = true
+	var buf bytes.Buffer
+	if err := Render(&buf, "console", doc); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "USD/month (includes stale prices) (estimate incomplete)") {
+		t.Fatalf("total line lacks the stale flag:\n%s", buf.String())
 	}
 }

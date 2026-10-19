@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ruairispain/copilot-web/foundry-doctor/internal/cost/prices"
 	costreport "github.com/ruairispain/copilot-web/foundry-doctor/internal/cost/report"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
@@ -353,5 +354,96 @@ func TestEstimateOfflineMissingCacheMarksIncomplete(t *testing.T) {
 	}})
 	if !doc.Environments[0].Incomplete || len(doc.Environments[0].Unsupported) == 0 {
 		t.Fatalf("expected incomplete offline report: %+v", doc.Environments[0])
+	}
+}
+
+// cachedEstimate fills the price cache from the fake live API, lets mutate
+// change the cached records, then estimates offline from that cache.
+func cachedEstimate(t *testing.T, resources model, mutate func([]prices.Record)) costreport.EnvironmentReport {
+	t.Helper()
+	srv := priceServer(t)
+	cachePath := t.TempDir() + "/prices.json"
+	env := Environment{Name: "prod", Profile: "foundry-prod", ARM: resources}
+	live := Request{Environments: []Environment{env}, PriceCachePath: cachePath, Now: fixedNow, BaseURL: srv.URL, HTTPClient: srv.Client()}
+	if _, err := (Engine{}).Estimate(context.Background(), live); err != nil {
+		t.Fatal(err)
+	}
+	c, err := prices.LoadCache(cachePath)
+	if err != nil || len(c.Records) == 0 {
+		t.Fatalf("cache not written: %v %+v", err, c)
+	}
+	mutate(c.Records)
+	if err := prices.SaveCache(cachePath, c); err != nil {
+		t.Fatal(err)
+	}
+	doc, err := Engine{}.Estimate(context.Background(), Request{Environments: []Environment{env}, PriceCachePath: cachePath, Now: fixedNow, Offline: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return doc.Environments[0]
+}
+
+func searchAndCosmos() model {
+	return model{
+		{Type: "Microsoft.Search/searchServices", Name: "search", Region: "eastus", SKUName: "standard2", Properties: map[string]any{"replicaCount": float64(1), "partitionCount": float64(1)}},
+		cosmosAccount("acct", "eastus"),
+		{Type: "Microsoft.DocumentDB/databaseAccounts/sqlDatabases", Name: "acct/db", Region: "eastus", Properties: map[string]any{"options": map[string]any{"throughput": float64(400)}}},
+	}
+}
+
+// Phase 7 gate (both reviewers): stale pricing is reported at engine level.
+func TestStaleCachedPricesAreFlaggedNotHidden(t *testing.T) {
+	old := fixedNow().AddDate(0, 0, -60)
+	env := cachedEstimate(t, searchAndCosmos(), func(rs []prices.Record) {
+		for i := range rs {
+			rs[i].RetrievedAt = old
+		}
+	})
+	if !env.StalePricing || !env.Incomplete || len(env.Estimated) == 0 {
+		t.Fatalf("stale=%v incomplete=%v estimated=%d", env.StalePricing, env.Incomplete, len(env.Estimated))
+	}
+	if env.PriceRetrieved != old.Format(time.RFC3339) {
+		t.Fatalf("PriceRetrieved = %q, want the stale date %q", env.PriceRetrieved, old.Format(time.RFC3339))
+	}
+	for _, l := range env.Estimated {
+		if !strings.Contains(strings.Join(l.Notes, " "), "STALE") {
+			t.Errorf("line %s lacks the stale marker: %v", l.ResourceName, l.Notes)
+		}
+	}
+}
+
+func TestMixedAgeCacheShowsOldestRetrievalDate(t *testing.T) {
+	old := fixedNow().AddDate(0, 0, -60)
+	env := cachedEstimate(t, searchAndCosmos(), func(rs []prices.Record) {
+		rs[0].RetrievedAt = old // one stale record, the others stay fresh
+	})
+	if env.PriceRetrieved != old.Format(time.RFC3339) || !env.StalePricing {
+		t.Fatalf("PriceRetrieved=%q stale=%v, want the oldest date %q", env.PriceRetrieved, env.StalePricing, old.Format(time.RFC3339))
+	}
+}
+
+func TestTamperedCacheIsRejectedNotPriced(t *testing.T) {
+	env := cachedEstimate(t, searchAndCosmos(), func(rs []prices.Record) {
+		for i := range rs {
+			rs[i].UnitPrice = -5
+		}
+	})
+	if len(env.Estimated) != 0 || env.TotalHigh != 0 {
+		t.Fatalf("a negative cached price was priced: %+v", env.Estimated)
+	}
+	if !strings.Contains(reasons(env.Unsupported, "search"), "rejected") {
+		t.Fatalf("unsupported reasons = %q", reasons(env.Unsupported, "search"))
+	}
+}
+
+// Phase 7 gate (black belt B1): Premium units after the first cost less, so
+// the capacity is not priced at the first-unit rate.
+func TestApimPremiumWithMoreThanOneUnitIsNotPriced(t *testing.T) {
+	doc := estimate(t, priceServer(t), "", Environment{Name: "prod", Profile: "foundry-prod", ARM: model{
+		{Type: "Microsoft.ApiManagement/service", Name: "apim3", Region: "eastus", SKUName: "Premium", SKU: map[string]any{"capacity": float64(3)}},
+	}})
+	env := doc.Environments[0]
+	if len(env.Estimated) != 0 || !strings.Contains(reasons(env.Unsupported, "apim3"), "units after the first") {
+		t.Fatalf("estimated=%+v unsupported=%q", env.Estimated, reasons(env.Unsupported, "apim3"))
 	}
 }

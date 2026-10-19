@@ -1,6 +1,12 @@
 # Phase 7 hand-off
 
-Status: round 1 reviews REJECT (foundry-lead, azure-black-belt); fixes applied in fix loop 1 (2026-10-18); pending re-review.
+Status: **gate PASSED in loop 2 of the post-merge gate (Go 1.26.9, 2026-10-19): foundry-lead APPROVE, azure-black-belt APPROVE, no
+blocking findings.** Loop 1 was REJECT x2; its blockers are fixed and were re-verified with the real CLI and Bicep 0.48.1:
+the price-cache JSON schema (`schemas/price-cache.schema.json`); cached records validated as untrusted (finite positive price up
+to 1,000,000, matching currency, exact one-hour unit, Consumption type when set, no future retrieval date); stale pricing shown
+with the oldest retrieval date, a STALE marker per line and a flag on the console total; APIM Premium with more than one unit not
+priced; `samples/cost-fixed` yielding an estimate with a real-Bicep test; `--hours-per-month` limited to 0 or 1..744; region names
+with spaces normalised; cache writes are atomic.
 Fix log: `docs/development/reviews/phase-7-fixlog-loop1.md`. Decisions and deferrals: ADR-025.
 
 ## Delivered
@@ -48,14 +54,13 @@ Fix log: `docs/development/reviews/phase-7-fixlog-loop1.md`. Decisions and defer
 - `foundry-doctor cost` (`--environment`, `--compare`, `--currency`, `--hours-per-month`, `--offline`, `--price-cache`, `--format`, `--out`).
 
 ## Tests executed and results
-- **Not run in fix loop 1.** No Go toolchain was available, so `go build ./...`, `go test ./...`, `go vet`, `gofmt` and
-  `scripts/claude/verify-phase.sh --strict` have NOT been run on this code. The maintainer must run them before re-review. No
-  earlier run is claimed for the current code.
-- Tests added or changed (unexecuted): `internal/armmodel/sku_test.go`; `internal/cost/cost_test.go`;
-  `internal/cost/prices/prices_recorded_test.go` with recorded responses in `internal/cost/prices/testdata`;
-  `internal/cost/report/report_test.go` with `testdata/*.golden`; `internal/rules/cost/cost_phase7_test.go`; `internal/app/cost_test.go`.
-- `TestAnnotate` in `cmd/foundry-doctor` (round 1 failure) belongs to the Phase 6 fixer and was not touched; the round 1 hand-off
-  described its assertion wrongly (it checks exit 0 and empty stderr). Its status must come from the maintainer's run.
+Run on Go 1.26.9: `go build`, `go vet`, `gofmt -l`, `go test ./...` and the catalogue and secret checks pass. The real-Bicep
+sample test (`go test -tags spike -run TestCostFixedSampleEstimates ./cmd/foundry-doctor` with `BICEP_PATH` set to Bicep 0.48.1)
+passes and was checked to fail against the original sample. CI runs `-race`, staticcheck and govulncheck. The earlier "not run"
+statements are withdrawn.
+Added in the gate: hourly-unit table; rejected cache records (negative, NaN, monthly or scaled unit, reservation, future date);
+engine stale, mixed-age and tampered-cache tests; Premium capacity 3; console stale and incomplete flags; price-cache schema test;
+region normalisation; hours-per-month bounds.
 
 ## Security and privacy review
 - Public, unauthenticated Retail Prices API only; no credentials, tokens or tenant data are sent. Transport mitigations and the
@@ -99,7 +104,21 @@ Fix log: `docs/development/reviews/phase-7-fixlog-loop1.md`. Decisions and defer
 ## Definition of Done audit
 | DoD item | Status (met / unmet / requirement changed by ADR-NNN) | Current evidence |
 |---|---|---|
-| No cost finding fails CI by default | met by design, not executed in this loop | COST severities are info/warning, default `--fail-on` is error (`internal/app/app.go`); `cost` returns exit 0 when it renders |
-| Every estimate exposes assumptions and excluded costs | met in code, pending test run and re-review | every resource is Estimated, Excluded or Unsupported (`internal/cost/cost.go` `extract`); line notes; `docs/cost.md`; `internal/cost/cost_test.go` |
-| Stale or unavailable pricing is reported, not guessed | met in code, pending test run and re-review | `internal/cost/prices` (Consumption only, ambiguity refused, currency verified); `prices_recorded_test.go` |
-| Currency and region handling are tested | tests written, not executed in this loop | `TestCurrencyAndRegionHandling`, `TestCurrencyMismatchIsUnsupported`, `TestCurrencyMismatchIsRefused`, `TestRecordedSearchS1NonPrimary`, sovereign region case in `TestSearchAndAPIMEdgeCases` |
+| No cost finding fails CI by default | met (re-reviewed in loop 2: APPROVE x2) | COST severities are info/warning, default `--fail-on` is error (`internal/app/app.go`); `cost` returns exit 0 when it renders |
+| Every estimate exposes assumptions and excluded costs | met (loop 1 fixes applied; re-reviewed in loop 2: APPROVE x2) | every resource is Estimated, Excluded or Unsupported (`internal/cost/cost.go` `extract`); line notes; `docs/cost.md`; `internal/cost/cost_test.go` |
+| Stale or unavailable pricing is reported, not guessed | met (loop 1 fixes applied; re-reviewed in loop 2: APPROVE x2) | `internal/cost/prices` (Consumption only, ambiguity refused, currency verified); `prices_recorded_test.go` |
+| Currency and region handling are tested | met (tests run on Go 1.26.9) | `TestCurrencyAndRegionHandling`, `TestCurrencyMismatchIsUnsupported`, `TestCurrencyMismatchIsRefused`, `TestRecordedSearchS1NonPrimary`, sovereign region case in `TestSearchAndAPIMEdgeCases` |
+
+## Open non-blocking items (gate loop 1)
+- Meter date (`effectiveStartDate`) is JSON-only, not in the console or Markdown line.
+- Error text embeds the request URL; unverified meters (Search standard2 and storage optimized, APIM tiers, Cosmos `100 RU/s`) are
+  still priced with an UNVERIFIED note and counted in the total; recorded fixtures are from a search-engine snapshot, not the API.
+- No per-run memoisation or time budget for live calls; cache writes are not atomic; default cache sits under `--dir`.
+- Foundry dependency costs (Cosmos, Storage, Search behind agents) and `serviceTier` billing are not named in the exclusions.
+- `armcost` and `catalog` have only the small tests added here; tiered fixed meters are skipped rather than refused.
+- Price and API-version claims need a Learn and live Retail Prices re-check (both unreachable from the review sandbox).
+- Loop 2 additions, open: the real Cosmos `100 RU/s` meter name and its `1/Hour` unit are only in synthetic fixtures (the line fails
+  safe as unsupported if the live unit differs); `Valid` does not compare a cached record's own meter and region fields with the
+  query (a label could differ); the Premium Unit fixture price looks too low (test-only); the "units after the first cost less"
+  statement has no cited source; no CLI-level test pins exit 0 with unavailable pricing or every FND-COST severity below error;
+  `internal/cost/.foundry-doctor/` is a git-ignored leftover from some earlier test run that used the default cache path.

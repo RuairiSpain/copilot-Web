@@ -394,7 +394,9 @@ func LiteralRegion(region string) (string, bool) {
 	if region == "" || IsExpr(region) {
 		return "", false
 	}
-	return strings.ToLower(region), true
+	// "East US" and "eastus" name the same region; the retail API wants the
+	// armRegionName form.
+	return strings.ToLower(strings.ReplaceAll(region, " ", "")), true
 }
 
 // SovereignRegion reports whether region belongs to a sovereign cloud that
@@ -402,7 +404,7 @@ func LiteralRegion(region string) (string, bool) {
 // prices on Commercial Cloud", Retail Prices API overview, verified
 // 2026-10-18).
 func SovereignRegion(region string) bool {
-	r := strings.ToLower(strings.TrimSpace(region))
+	r := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(region), " ", ""))
 	return strings.HasPrefix(r, "usgov") || strings.HasPrefix(r, "usdod") || strings.HasPrefix(r, "usnat") ||
 		strings.HasPrefix(r, "ussec") || strings.HasPrefix(r, "china")
 }

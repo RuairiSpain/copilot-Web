@@ -78,3 +78,10 @@ choices and the items that are not delivered. It does not waive any PRD section 
 - The price cache schema is version 2; a version 1 cache is ignored (its keys lacked price type and API version).
 - The maintainer must run `go build ./...`, `go test ./...` and `scripts/claude/verify-phase.sh --strict`, and regenerate the
   catalogue docs with `go run ./cmd/rulecatalog generate-docs` and `generate-overlap`; fix loop 1 had no toolchain.
+
+## Post-merge gate loop 1 additions (2026-10-19)
+- The price cache is untrusted input (`prices.Record.Valid`): a record is used only if its price is finite and not negative, its
+  currency, unit and type match the query and its retrieval date is not in the future. An hourly meter means exactly one hour
+  (`1 Hour` or `1/Hour`). `schemas/price-cache.schema.json` documents the file.
+- APIM Premium with more than one unit is not priced: units after the first cost less, and the retail meter for them is unverified.
+- Stale prices stay in the total but are marked on each line and on the total, and the oldest retrieval date is reported.
