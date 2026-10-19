@@ -115,7 +115,7 @@ func Annotate(ctx context.Context, svc Services, req AnnotateRequest, stdout io.
 			OutDir:      out,
 			AzureYAML:   run.source.AzureYAMLAt,
 			InfraPath:   run.infra.Dir,
-			Entries:     run.entries,
+			Entries:     unparseableToManifestOnly(req.Dir, run.entries),
 			Profile:     run.settings.Profile,
 			ToolVersion: ToolVersion,
 			WriteDiff:   req.Diff,
@@ -123,6 +123,11 @@ func Annotate(ctx context.Context, svc Services, req AnnotateRequest, stdout io.
 		if err != nil {
 			err = outputError(err)
 			return ExitCodeForError(err), err
+		}
+		if svc.Stderr != nil {
+			for _, sk := range res.Skipped {
+				_, _ = fmt.Fprintf(svc.Stderr, "warning: not copied into the review tree: %s\n", findings.Redact(sk))
+			}
 		}
 		if err := validateReviewCopy(ctx, req.Dir, out, res.Manifest.Files, run.source.AzureYAMLAt, run.compile); err != nil {
 			_ = ann.RemoveReview(req.Dir, out)
@@ -507,7 +512,11 @@ func validateReviewCopy(ctx context.Context, rootDir, outDir string, files []ann
 		}
 		before, err := yamlDocuments(original)
 		if err != nil {
-			return fmt.Errorf("cannot verify annotated %s: original does not parse: %w", f.Path, err)
+			// The original is not valid YAML (a duplicate key, for example), so
+			// it got the banner only and no inline comments; there is no
+			// document to compare. That is the file's own problem and the
+			// doctor reports it as a finding.
+			continue
 		}
 		after, err := yamlDocuments(annotated)
 		if err != nil {
@@ -573,6 +582,39 @@ func stripGenerator(v any) {
 			stripGenerator(child)
 		}
 	}
+}
+
+// unparseableToManifestOnly keeps findings in a YAML file that does not decode
+// out of the review copy. A comment cannot be shown to be harmless in a file
+// whose meaning cannot be compared, so those findings stay in the manifest.
+func unparseableToManifestOnly(dir string, entries []ann.Entry) []ann.Entry {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return entries
+	}
+	defer root.Close()
+	bad := map[string]bool{}
+	out := make([]ann.Entry, len(entries))
+	for i, e := range entries {
+		out[i] = e
+		ext := strings.ToLower(path.Ext(e.File))
+		if !e.Inline || (ext != ".yaml" && ext != ".yml") {
+			continue
+		}
+		unparseable, seen := bad[e.File]
+		if !seen {
+			data, err := root.ReadFile(e.File)
+			if err == nil {
+				_, err = yamlDocuments(data)
+			}
+			unparseable = err != nil
+			bad[e.File] = unparseable
+		}
+		if unparseable {
+			out[i].Inline, out[i].InlineReason = false, "source-not-parseable"
+		}
+	}
+	return out
 }
 
 // yamlDocuments decodes every document in a YAML stream.

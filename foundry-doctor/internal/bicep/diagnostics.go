@@ -82,6 +82,16 @@ func safePath(root, file string) string {
 		return ""
 	}
 	if root != "" && filepath.IsAbs(file) {
+		if !filepath.IsAbs(root) {
+			// Bicep reports absolute paths. A relative root such as the default
+			// --dir "." cannot be compared with them, and falling back to the
+			// base name would match an unrelated file of the same name.
+			if abs, err := filepath.Abs(root); err == nil {
+				root = abs
+			} else {
+				return ""
+			}
+		}
 		if rel, err := filepath.Rel(root, file); err == nil && filepath.IsLocal(rel) {
 			return filepath.ToSlash(rel)
 		}

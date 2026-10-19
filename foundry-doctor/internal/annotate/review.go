@@ -38,6 +38,42 @@ type ReviewRequest struct {
 
 type ReviewResult struct {
 	Manifest Manifest
+	// Skipped lists project files left out of the review copy, each with the
+	// reason, for example a credential-like file or one over the size limit.
+	Skipped []string
+}
+
+const (
+	// maxFileBytes and maxTreeBytes bound what is copied. A review copy is for
+	// reading Bicep, so an infra tree holding large binaries is copied without
+	// them instead of being read into memory whole.
+	maxFileBytes = 8 << 20
+	maxTreeBytes = 256 << 20
+)
+
+// copyStats collects what the copy left out and how much it wrote.
+type copyStats struct {
+	skipped []string
+	total   int64
+}
+
+// skipReason says why a file is not copied into the review tree, or "".
+// The review tree sits outside the source's ignore rules, so credential-like
+// files are never duplicated into it. A module that loads one fails the
+// recompile of the copy, and the run stops with that error.
+func skipReason(rel string, size int64) string {
+	base := strings.ToLower(path.Base(rel))
+	switch ext := path.Ext(base); {
+	case strings.HasPrefix(base, ".env"),
+		strings.Contains(base, ".tfstate"),
+		base == "id_rsa" || base == "id_ed25519",
+		ext == ".pem" || ext == ".pfx" || ext == ".p12" || ext == ".key" || ext == ".jks" || ext == ".keystore":
+		return "credential-like file"
+	}
+	if size > maxFileBytes {
+		return fmt.Sprintf("larger than %d MiB", maxFileBytes>>20)
+	}
+	return ""
 }
 
 // copiedFile is one input copied into the review tree. ReviewRel differs from
@@ -85,7 +121,8 @@ func WriteReview(ctx context.Context, req ReviewRequest) (res ReviewResult, err 
 		}
 	}()
 
-	files, err := copyInputs(ctx, root, outRel, req.AzureYAML, req.InfraPath)
+	stats := &copyStats{}
+	files, err := copyInputs(ctx, root, outRel, req.AzureYAML, req.InfraPath, stats)
 	if err != nil {
 		return ReviewResult{}, err
 	}
@@ -190,7 +227,13 @@ func WriteReview(ctx context.Context, req ReviewRequest) (res ReviewResult, err 
 			return ReviewResult{}, fmt.Errorf("write diff: %w", err)
 		}
 	}
-	return ReviewResult{Manifest: manifest}, nil
+	// The tree holds copies of project files outside the source's ignore
+	// rules, so it ignores itself in git.
+	if err := writeNewFile(root, path.Join(outRel, ".gitignore"), []byte("*\n"), manifestPerm); err != nil {
+		return ReviewResult{}, fmt.Errorf("write .gitignore: %w", err)
+	}
+	slices.Sort(stats.skipped)
+	return ReviewResult{Manifest: manifest, Skipped: stats.skipped}, nil
 }
 
 func joinDiffs(parts [][]byte) []byte {
@@ -233,7 +276,7 @@ func reviewName(rel string) string {
 	return rel
 }
 
-func copyInputs(ctx context.Context, root *os.Root, outDir, azureYAML, infraPath string) ([]copiedFile, error) {
+func copyInputs(ctx context.Context, root *os.Root, outDir, azureYAML, infraPath string, stats *copyStats) ([]copiedFile, error) {
 	var copied []copiedFile
 	seen := map[string]bool{}
 	if azureYAML != "" {
@@ -252,7 +295,7 @@ func copyInputs(ctx context.Context, root *os.Root, outDir, azureYAML, infraPath
 				return nil, fmt.Errorf("infra path must not be a symlink or reparse point: %s", infraPath)
 			}
 			if info.IsDir() {
-				files, err := copyTree(ctx, root, outDir, infraPath, seen)
+				files, err := copyTree(ctx, root, outDir, infraPath, seen, stats)
 				if err != nil {
 					return nil, err
 				}
@@ -266,7 +309,7 @@ func copyInputs(ctx context.Context, root *os.Root, outDir, azureYAML, infraPath
 	return copied, nil
 }
 
-func copyTree(ctx context.Context, root *os.Root, outDir, rel string, seen map[string]bool) ([]copiedFile, error) {
+func copyTree(ctx context.Context, root *os.Root, outDir, rel string, seen map[string]bool, stats *copyStats) ([]copiedFile, error) {
 	var files []copiedFile
 	err := fs.WalkDir(root.FS(), rel, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -293,6 +336,17 @@ func copyTree(ctx context.Context, root *os.Root, outDir, rel string, seen map[s
 		}
 		if !d.Type().IsRegular() || seen[p] {
 			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		if reason := skipReason(p, info.Size()); reason != "" {
+			stats.skipped = append(stats.skipped, p+" ("+reason+")")
+			return nil
+		}
+		if stats.total += info.Size(); stats.total > maxTreeBytes {
+			return fmt.Errorf("infra review copy is larger than %d MiB; point infra.path at the Bicep sources only", maxTreeBytes>>20)
 		}
 		f, err := copyFile(root, outDir, p)
 		if err != nil {

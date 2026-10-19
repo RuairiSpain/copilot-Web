@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
+	srclines "github.com/ruairispain/copilot-web/foundry-doctor/internal/annotate/lines"
 )
 
 const (
@@ -24,13 +26,11 @@ const bom = "\uFEFF"
 // placed above the directives, so they still apply to the original line. A
 // leading UTF-8 byte order mark stays first.
 func Apply(src []byte, comments []Comment) ([]byte, error) {
-	text := strings.ReplaceAll(string(src), "\r\n", "\n")
+	text := string(src)
 	hasBOM := strings.HasPrefix(text, bom)
 	text = strings.TrimPrefix(text, bom)
-	lines := strings.Split(text, "\n")
-	if len(lines) > 0 && lines[len(lines)-1] == "" {
-		lines = lines[:len(lines)-1]
-	}
+	lines, seps := srclines.Split(text, false)
+	eol := srclines.EOL(text)
 	for _, c := range comments {
 		if c.Line <= 0 || c.Line > len(lines) {
 			return nil, fmt.Errorf("bicep comment line %d out of range", c.Line)
@@ -63,7 +63,7 @@ func Apply(src []byte, comments []Comment) ([]byte, error) {
 		b.WriteString(bom)
 	}
 	b.WriteString(Banner)
-	b.WriteByte('\n')
+	b.WriteString(eol)
 	for i, line := range lines {
 		lineNo := i + 1
 		if cs := grouped[lineNo]; len(cs) > 0 {
@@ -71,11 +71,11 @@ func Apply(src []byte, comments []Comment) ([]byte, error) {
 			for _, c := range cs {
 				b.WriteString(indent)
 				b.WriteString(c)
-				b.WriteByte('\n')
+				b.WriteString(eol)
 			}
 		}
 		b.WriteString(line)
-		b.WriteByte('\n')
+		b.WriteString(seps[i])
 	}
 	return []byte(b.String()), nil
 }

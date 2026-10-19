@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/bicep"
 	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
@@ -514,4 +516,55 @@ func TestWriteOutputFile(t *testing.T) {
 			t.Fatalf("input overwritten: %q", data)
 		}
 	})
+}
+
+// Phase 6 gate (black belt B3): the review tree is outside the source's ignore
+// rules, so credential-like and oversized files are not copied, and the tree
+// ignores itself in git.
+func TestWriteReviewSkipsCredentialLikeAndOversizedFiles(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, root, "azure.yaml", "name: demo\n", 0o644)
+	writeTestFile(t, root, "infra/main.bicep", "param p string\n", 0o644)
+	writeTestFile(t, root, "infra/.env", "KEY=value\n", 0o644)
+	writeTestFile(t, root, "infra/tls.pem", "pem\n", 0o644)
+	writeTestFile(t, root, "infra/terraform.tfstate", "{}\n", 0o644)
+	writeTestFile(t, root, "infra/big.bin", strings.Repeat("x", maxFileBytes+1), 0o644)
+	res, err := WriteReview(t.Context(), ReviewRequest{RootDir: root, OutDir: "r.review", AzureYAML: "azure.yaml", InfraPath: "infra"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{".env", "tls.pem", "terraform.tfstate", "big.bin"} {
+		if _, err := os.Stat(filepath.Join(root, "r.review", "infra", name)); err == nil {
+			t.Errorf("%s was copied into the review tree", name)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(root, "r.review", "infra", "main.bicep")); err != nil {
+		t.Errorf("main.bicep must be copied: %v", err)
+	}
+	if got := len(res.Skipped); got != 4 {
+		t.Errorf("skipped=%v", res.Skipped)
+	}
+	gi, err := os.ReadFile(filepath.Join(root, "r.review", ".gitignore"))
+	if err != nil || string(gi) != "*\n" {
+		t.Errorf(".gitignore=%q err=%v", gi, err)
+	}
+}
+
+// A large infra tree copies in bounded time and memory per file.
+func TestWriteReviewLargeTree(t *testing.T) {
+	if testing.Short() {
+		t.Skip("large tree")
+	}
+	root := t.TempDir()
+	writeTestFile(t, root, "azure.yaml", "name: demo\n", 0o644)
+	for i := 0; i < 1500; i++ {
+		writeTestFile(t, root, fmt.Sprintf("infra/mod%04d.bicep", i), "param p string\n", 0o644)
+	}
+	start := time.Now()
+	if _, err := WriteReview(t.Context(), ReviewRequest{RootDir: root, OutDir: "r.review", AzureYAML: "azure.yaml", InfraPath: "infra"}); err != nil {
+		t.Fatal(err)
+	}
+	if d := time.Since(start); d > 30*time.Second {
+		t.Fatalf("copying 1500 files took %s", d)
+	}
 }
