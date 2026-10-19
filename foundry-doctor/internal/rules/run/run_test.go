@@ -442,9 +442,11 @@ func deployDeps(m fakeMonitor, deps ...azure.AccountDeployment) Deps {
 
 func TestRun004AttributesSeriesToDeployments(t *testing.T) {
 	m := monitorFor(azure.MetricResult{}, azure.MetricResult{Series: []azure.MetricSeries{
-		mseries(5, "statuscode", "429", "modeldeploymentname", "gpt-main"),
-		mseries(40, "statuscode", "200", "modeldeploymentname", "gpt-main"),
+		mseries(50, "statuscode", "429", "modeldeploymentname", "gpt-main"),
+		mseries(450, "statuscode", "200", "modeldeploymentname", "gpt-main"),
 		mseries(0, "statuscode", "429", "modeldeploymentname", "quiet"),
+		mseries(60, "statuscode", "429", "modeldeploymentname", "gpt-ptu"),
+		mseries(540, "statuscode", "200", "modeldeploymentname", "gpt-ptu"),
 	}}, azure.MetricResult{Series: []azure.MetricSeries{
 		mseries(100, "modeldeploymentname", "gpt-ptu"),
 		mseries(60, "modeldeploymentname", "gpt-low"),
@@ -454,24 +456,27 @@ func TestRun004AttributesSeriesToDeployments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res.Findings) != 3 {
+	if len(res.Findings) != 4 {
 		t.Fatalf("findings = %+v", res.Findings)
 	}
 	acct := accountID(d.Target)
 	byID := map[string]sdk.Finding{}
 	for _, f := range res.Findings {
-		byID[f.Resource.ID] = f
+		byID[f.Resource.ID+"|"+f.Key] = f
+		if f.Key == "" {
+			t.Errorf("a RUN-004 finding has no stable key: %+v", f)
+		}
 		if f.Resource.Name == "AzureOpenAIRequests" || f.Resource.Name == "AzureOpenAIProvisionedManagedUtilizationV2" || strings.Contains(f.Resource.ID, "AzureOpenAI") {
 			t.Errorf("a metric name was used as a deployment: %+v", f.Resource)
 		}
 	}
-	if f, ok := byID[acct+"/deployments/gpt-main"]; !ok || !strings.Contains(f.Evidence, "5 HTTP 429") || f.Resource.Name != "gpt-main" {
+	if f, ok := byID[acct+"/deployments/gpt-main|throttling-429"]; !ok || !strings.Contains(f.Evidence, "50 HTTP 429 responses of 500 requests (10.0%)") || !strings.Contains(f.Evidence, "last 60 minutes") || !strings.Contains(f.Evidence, "at least 100 requests") || f.Resource.Name != "gpt-main" {
 		t.Errorf("429 finding = %+v", f)
 	}
-	if f, ok := byID[acct+"/deployments/gpt-ptu"]; !ok || !strings.Contains(f.Evidence, "100%") {
+	if f, ok := byID[acct+"/deployments/gpt-ptu|utilization"]; !ok || !strings.Contains(f.Evidence, "100%") {
 		t.Errorf("utilisation finding = %+v", f)
 	}
-	if _, ok := byID[acct+"/deployments/broken"]; !ok {
+	if _, ok := byID[acct+"/deployments/broken|provisioning-state"]; !ok {
 		t.Errorf("provisioning finding missing: %+v", byID)
 	}
 }
@@ -511,12 +516,14 @@ func TestRun004UncertainAndQuietCases(t *testing.T) {
 
 func TestRun004UnattributableAndHostileSeries(t *testing.T) {
 	m := monitorFor(azure.MetricResult{}, azure.MetricResult{Series: []azure.MetricSeries{
-		mseries(3, "statuscode", "429"),
-		mseries(2, "statuscode", "429", "modeldeploymentname", "x/../../y"),
+		mseries(30, "statuscode", "429"),
+		mseries(270, "statuscode", "200"),
+		mseries(20, "statuscode", "429", "modeldeploymentname", "x/../../y"),
+		mseries(180, "statuscode", "200", "modeldeploymentname", "x/../../y"),
 	}}, azure.MetricResult{Series: []azure.MetricSeries{mseries(120, "modeldeploymentname", "bad name")}})
 	d := deployDeps(m, azure.AccountDeployment{Name: "gpt-main", ProvisioningState: "Succeeded"})
 	res, err := evalRule(t, "FND-RUN-004", d, baseInput())
-	if err != nil || len(res.Findings) != 3 {
+	if err != nil || len(res.Findings) != 2 {
 		t.Fatalf("res=%+v err=%v", res, err)
 	}
 	for _, f := range res.Findings {
@@ -851,8 +858,8 @@ func TestRuleEvaluateNilInput(t *testing.T) {
 	if err != nil || res.Skipped == nil {
 		t.Fatalf("res=%+v err=%v", res, err)
 	}
-	if len(RuleIDs()) != 7 || len(rules) != 7 {
-		t.Fatal("seven runtime rules expected")
+	if len(RuleIDs()) != 8 || len(rules) != 8 {
+		t.Fatal("eight runtime rules expected")
 	}
 }
 

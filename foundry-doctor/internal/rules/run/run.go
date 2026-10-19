@@ -50,8 +50,8 @@ type Deps struct {
 
 // RuleIDs returns the runtime rule ids in order.
 func RuleIDs() []string {
-	ids := make([]string, 0, 7)
-	for i := 1; i <= 7; i++ {
+	ids := make([]string, 0, 8)
+	for i := 1; i <= 8; i++ {
 		ids = append(ids, fmt.Sprintf("FND-RUN-%03d", i))
 	}
 	return ids
@@ -66,6 +66,7 @@ var classes = map[string]runtime.Class{
 	"FND-RUN-005": runtime.ClassDataPlane,
 	"FND-RUN-006": runtime.ClassDataPlane,
 	"FND-RUN-007": runtime.ClassControlPlane,
+	"FND-RUN-008": runtime.ClassControlPlane,
 }
 
 // Register returns the runtime rules in ID order.
@@ -75,7 +76,7 @@ func Register(d Deps) []sdk.Rule {
 	}
 	e := &env{d: d}
 	fns := []func(context.Context, *sdk.Input) (sdk.Result, error){
-		e.run001, e.run002, e.run003, e.run004, e.run005, e.run006, e.run007,
+		e.run001, e.run002, e.run003, e.run004, e.run005, e.run006, e.run007, e.run008,
 	}
 	out := make([]sdk.Rule, len(fns))
 	ids := RuleIDs()
@@ -793,6 +794,99 @@ func seriesName(s monprobe.Series) (string, bool) {
 	return n, safeNameRe.MatchString(n)
 }
 
+// Throttling policy keys (product opinion; the status-code meaning of 429 is
+// documented, the thresholds are not). All three are read through
+// sdk.Policy and fall back to the defaults below when the key is absent.
+const (
+	PolicyThrottleMaxRate     = "runtime.throttling.maxRate429"
+	PolicyThrottleWindow      = "runtime.throttling.windowMinutes"
+	PolicyThrottleMinRequests = "runtime.throttling.minRequests"
+
+	// DefaultMaxRate429 is the share of requests that may return HTTP 429 in
+	// the window before the deployment is reported (5 percent).
+	DefaultMaxRate429 = 0.05
+	// DefaultThrottleWindowMinutes is the metric look-back (one hour).
+	DefaultThrottleWindowMinutes = 60
+	// DefaultThrottleMinRequests is the smallest request count in the window for
+	// which a 429 rate is judged; below it the sample is too small.
+	DefaultThrottleMinRequests = 100
+
+	// Product-opinion bounds for the window. The retention and the maximum
+	// timespan of the metric are UNVERIFIED, so the bounds are conservative.
+	minThrottleWindowMinutes = 5
+	maxThrottleWindowMinutes = 1440
+)
+
+// throttlePolicy is the effective 429 policy of one evaluation.
+type throttlePolicy struct {
+	MaxRate     float64
+	WindowMin   int
+	MinRequests int
+	// Notes records invalid policy values that fell back to the default.
+	Notes []string
+}
+
+// policyNumber returns the numeric policy value at key. present is true when
+// the key is set (even to a non-number, which reads as 0 and is then rejected
+// by the caller's range check).
+func policyNumber(in *sdk.Input, key string) (n float64, present bool) {
+	if in == nil || in.Policy == nil {
+		return 0, false
+	}
+	v, ok := in.Policy.Get(key)
+	if !ok {
+		return 0, false
+	}
+	switch x := v.(type) {
+	case int:
+		return float64(x), true
+	case int64:
+		return float64(x), true
+	case float64:
+		return x, true
+	}
+	return 0, true
+}
+
+func readThrottlePolicy(in *sdk.Input) throttlePolicy {
+	p := throttlePolicy{MaxRate: DefaultMaxRate429, WindowMin: DefaultThrottleWindowMinutes, MinRequests: DefaultThrottleMinRequests}
+	if n, ok := policyNumber(in, PolicyThrottleMaxRate); ok {
+		if n > 0 && n <= 1 {
+			p.MaxRate = n
+		} else {
+			p.Notes = append(p.Notes, "policy "+PolicyThrottleMaxRate+" must be a ratio above 0 and at most 1; the default "+strconv.FormatFloat(DefaultMaxRate429, 'f', -1, 64)+" was used")
+		}
+	}
+	if n, ok := policyNumber(in, PolicyThrottleWindow); ok {
+		if n == float64(int(n)) && int(n) >= minThrottleWindowMinutes && int(n) <= maxThrottleWindowMinutes {
+			p.WindowMin = int(n)
+		} else {
+			p.Notes = append(p.Notes, "policy "+PolicyThrottleWindow+" must be a whole number of minutes from "+strconv.Itoa(minThrottleWindowMinutes)+" to "+strconv.Itoa(maxThrottleWindowMinutes)+"; the default "+strconv.Itoa(DefaultThrottleWindowMinutes)+" was used")
+		}
+	}
+	if n, ok := policyNumber(in, PolicyThrottleMinRequests); ok {
+		if n == float64(int(n)) && int(n) >= 1 {
+			p.MinRequests = int(n)
+		} else {
+			p.Notes = append(p.Notes, "policy "+PolicyThrottleMinRequests+" must be a whole number of at least 1; the default "+strconv.Itoa(DefaultThrottleMinRequests)+" was used")
+		}
+	}
+	return p
+}
+
+// addKeyed adds a finding with a stable Key so its fingerprint does not move
+// when the evidence wording or the measured numbers change.
+func (a *acc) addKeyed(c runtime.Correlation, key, evidence string, likely bool) {
+	f := sdk.Finding{Key: key, Resource: c.Resource, Location: c.Source, Evidence: evidence}
+	if likely {
+		f.Confidence = sdk.ConfidenceMedium
+	}
+	a.findings = append(a.findings, f)
+}
+
+// depCounts are the request counts of one deployment in the window.
+type depCounts struct{ total, n429 float64 }
+
 func (e *env) run004(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 	if m := needTarget(e.d.Target, false); m != "" {
 		return sdk.Result{Skipped: &sdk.Skip{Reason: m}}, nil
@@ -807,25 +901,45 @@ func (e *env) run004(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 	if len(deploys) == 0 {
 		return sdk.Result{Skipped: &sdk.Skip{Reason: sdk.SkipInputUnavailable + ": account has no model deployments"}}, nil
 	}
+	pol := readThrottlePolicy(in)
 	corr := e.correlator(in)
 	a := &acc{}
+	for _, n := range pol.Notes {
+		a.note(n)
+	}
+	const depType = "Microsoft.CognitiveServices/accounts/deployments"
 	for _, d := range deploys {
-		rc := corr.Resource("Microsoft.CognitiveServices/accounts/deployments", d.Name, accountID(e.d.Target)+"/deployments/"+d.Name)
+		rc := corr.Resource(depType, d.Name, accountID(e.d.Target)+"/deployments/"+d.Name)
 		switch strings.ToLower(d.ProvisioningState) {
 		case "succeeded":
 		case "failed", "canceled", "disabled":
-			a.add(rc, "deployment provisioningState is "+d.ProvisioningState)
+			a.addKeyed(rc, "provisioning-state", "deployment provisioningState is "+d.ProvisioningState, false)
 		default:
 			a.note("deployment " + d.Name + " provisioningState is " + d.ProvisioningState)
 		}
+		// properties.deploymentState (cognitiveservices.json 2026-09-01):
+		// Running accepts inference requests, Paused does not.
+		switch strings.ToLower(strings.TrimSpace(d.DeploymentState)) {
+		case "", "running":
+		case "paused":
+			a.addKeyed(rc, "deployment-state", "deployment "+d.Name+" deploymentState is Paused: it is not accepting inference requests", true)
+		default:
+			a.note("deployment " + d.Name + " reports an unrecognised deploymentState")
+		}
 	}
-	mc := monprobe.FixedClient{Inner: e.d.Monitor}
+	window := time.Duration(pol.WindowMin) * time.Minute
+	mc := monprobe.FixedClient{Inner: e.d.Monitor, Window: window}
 	acct := accountID(e.d.Target)
 	acctCorr := corr.Resource("Microsoft.CognitiveServices/accounts", e.d.Target.Account, acct)
+	depCorr := func(name string) runtime.Correlation {
+		return corr.Resource(depType, name, acct+"/deployments/"+name)
+	}
 
 	// Throttling: split by StatusCode and match values client-side. The docs do
 	// not enumerate the StatusCode values (they speak of categories), so 429 is
-	// only reported when a value is literally 429.
+	// only reported when a value is literally 429. The finding is a sustained
+	// rate: 429 responses over all requests of the deployment in the window,
+	// with a minimum request count, never a single 429.
 	status, err := mc.QueryRequestsByStatus(ctx, acct)
 	if err != nil {
 		return sdk.Result{}, err
@@ -836,14 +950,16 @@ func (e *env) run004(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 	if status.Truncated {
 		a.note("the requests metric returned the maximum number of series; some deployments may be missing")
 	}
+	throttled := map[string]bool{} // deployment name ("" = unattributable) with a 429 finding
 	switch {
 	case len(status.Series) == 0:
 		// Not a zero count: no time series at all (no requests in the window, or
 		// the metric was not emitted).
-		a.note("Azure Monitor returned no time series for AzureOpenAIRequests in the last hour; this is not a count of zero, so throttling cannot be assessed")
+		a.note(fmt.Sprintf("Azure Monitor returned no time series for AzureOpenAIRequests in the last %d minutes; this is not a count of zero, so throttling cannot be assessed", pol.WindowMin))
 	default:
 		identified, numeric := false, true
 		observed := map[string]bool{}
+		counts := map[string]*depCounts{}
 		for _, s := range status.Series {
 			code := strings.TrimSpace(s.Dimensions[strings.ToLower(monprobe.DimStatusCode)])
 			if code != "" && safeNameRe.MatchString(code) {
@@ -852,17 +968,50 @@ func (e *env) run004(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 			if !httpCodeRe.MatchString(code) {
 				numeric = false
 			}
-			if code != "429" {
+			name, ok := seriesName(s)
+			if !ok {
+				name = ""
+			}
+			c := counts[name]
+			if c == nil {
+				c = &depCounts{}
+				counts[name] = c
+			}
+			c.total += s.Value
+			if code == "429" {
+				identified = true
+				c.n429 += s.Value
+			}
+		}
+		names := make([]string, 0, len(counts))
+		for n := range counts {
+			names = append(names, n)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			c := counts[name]
+			if c.n429 <= 0 {
 				continue
 			}
-			identified = true
-			if s.Value <= 0 {
+			label := "the account (series not attributable to a deployment)"
+			if name != "" {
+				label = "deployment " + name
+			}
+			if c.total < float64(pol.MinRequests) {
+				a.note(fmt.Sprintf("%s returned %.0f HTTP 429 responses of %.0f requests in the last %d minutes; below the minimum of %d requests (%s), so the 429 rate was not judged", label, c.n429, c.total, pol.WindowMin, pol.MinRequests, PolicyThrottleMinRequests))
 				continue
 			}
-			if name, ok := seriesName(s); ok {
-				a.add(corr.Resource("Microsoft.CognitiveServices/accounts/deployments", name, acct+"/deployments/"+name), fmt.Sprintf("deployment %s returned %.0f HTTP 429 responses in the last hour", name, s.Value))
+			rate := c.n429 / c.total
+			if rate <= pol.MaxRate {
+				continue
+			}
+			throttled[name] = true
+			ev := fmt.Sprintf("%s returned %.0f HTTP 429 responses of %.0f requests (%.1f%%) in the last %d minutes; thresholds: rate above %.1f%% (%s) with at least %d requests (%s)",
+				label, c.n429, c.total, rate*100, pol.WindowMin, pol.MaxRate*100, PolicyThrottleMaxRate, pol.MinRequests, PolicyThrottleMinRequests)
+			if name != "" {
+				a.addKeyed(depCorr(name), "throttling-429", ev, false)
 			} else {
-				a.add(acctCorr, fmt.Sprintf("the account returned %.0f HTTP 429 responses in the last hour (series not attributable to a deployment)", s.Value))
+				a.addKeyed(acctCorr, "throttling-429", ev, false)
 			}
 		}
 		if !identified && !numeric {
@@ -878,7 +1027,10 @@ func (e *env) run004(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 		}
 	}
 
-	// Provisioned utilisation: maximum per deployment.
+	// Provisioned utilisation: maximum per deployment. Learn states that
+	// utilisation at or above 100 percent returns 429, but the maximum over the
+	// window is a single peak. A peak is a finding only when the same
+	// deployment also has a sustained 429 rate above; alone it is uncertain.
 	util, err := mc.QueryProvisionedUtilization(ctx, acct)
 	if err != nil {
 		return sdk.Result{}, err
@@ -893,10 +1045,23 @@ func (e *env) run004(ctx context.Context, in *sdk.Input) (sdk.Result, error) {
 		if s.Value < 100 {
 			continue
 		}
-		if name, ok := seriesName(s); ok {
-			a.add(corr.Resource("Microsoft.CognitiveServices/accounts/deployments", name, acct+"/deployments/"+name), fmt.Sprintf("deployment %s reached %.0f%% provisioned-managed utilization (maximum in the last hour)", name, s.Value))
+		name, ok := seriesName(s)
+		if !ok {
+			name = ""
+		}
+		label := "a deployment (series not attributable to a deployment name)"
+		if name != "" {
+			label = "deployment " + name
+		}
+		if !throttled[name] {
+			a.note(fmt.Sprintf("%s reached %.0f%% provisioned-managed utilization at its peak in the last %d minutes, but no sustained 429 rate above %.1f%% was observed for it; a single peak is not treated as a failure", label, s.Value, pol.WindowMin, pol.MaxRate*100))
+			continue
+		}
+		ev := fmt.Sprintf("%s reached %.0f%% provisioned-managed utilization (maximum in the last %d minutes) while returning a sustained HTTP 429 rate above %.1f%%", label, s.Value, pol.WindowMin, pol.MaxRate*100)
+		if name != "" {
+			a.addKeyed(depCorr(name), "utilization", ev, false)
 		} else {
-			a.add(acctCorr, fmt.Sprintf("a deployment reached %.0f%% provisioned-managed utilization (series not attributable to a deployment name)", s.Value))
+			a.addKeyed(acctCorr, "utilization", ev, false)
 		}
 	}
 	return a.result(), nil
