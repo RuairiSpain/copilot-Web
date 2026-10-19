@@ -187,6 +187,12 @@ func parseExpiry(text string, unix int64) time.Time {
 	return time.Time{} // unknown expiry: treated as not cacheable
 }
 
+// isARMScope reports whether scope is the Azure Resource Manager audience.
+func isARMScope(scope string) bool {
+	return strings.EqualFold(strings.TrimSuffix(strings.TrimSpace(scope), "/"), "https://management.azure.com/.default") ||
+		strings.EqualFold(strings.TrimSuffix(strings.TrimSpace(scope), "/"), "https://management.azure.com")
+}
+
 func (c *chainCredential) Token(ctx context.Context, scope string) (AccessToken, error) {
 	c.mu.Lock()
 	if t, ok := c.cache[scope]; ok && t.ExpiresOn.After(c.now().Add(2*time.Minute)) {
@@ -196,6 +202,15 @@ func (c *chainCredential) Token(ctx context.Context, scope string) (AccessToken,
 	c.mu.Unlock()
 	var failures []string
 	for _, s := range c.sources {
+		if s.name == "env" && !isARMScope(scope) {
+			// AZURE_ACCESS_TOKEN carries an Azure Resource Manager token. Hosts
+			// reached with other scopes (a Search service named in azure.yaml, a
+			// Log Analytics workspace) are not bound to the caller's resources,
+			// so that token is never sent to them; azd or az mint a token for
+			// the requested audience instead.
+			failures = append(failures, "env: AZURE_ACCESS_TOKEN is used for the Azure Resource Manager scope only")
+			continue
+		}
 		if s.name != "env" && c.tenant != "" && !tenantRe.MatchString(c.tenant) {
 			failures = append(failures, s.name+": target tenant is not a GUID or domain name")
 			continue

@@ -1,7 +1,16 @@
 # Phase 8 hand-off
 
 Phase 8: Foundry IQ, Search and APIM gateway deep validation (PRD section 16).
-Status: **round 1: REJECT (foundry-lead and azure-black-belt), fixes applied in loop 1, pending re-review.**
+Status: **post-merge gate loop 1 (Go 1.26.9, 2026-10-19): both reviewers REJECT; blockers fixed in the same loop, pending loop 2
+re-review.** Fixed: an `AZURE_ACCESS_TOKEN` (an ARM token) is no longer used for any non-ARM scope, so it can no longer reach a
+Search host named by azure.yaml (the Phase 3 probes are covered too); a policy or fragment loaded with `loadTextContent`
+(compiled to a template variable) is resolved, so FND-GW-001..005 analyse the sample instead of skipping; the logger lookup
+matches the compiled `service/name` form, which removed a false FND-GW-006 error; an unresolved metrics-logger expression is
+uncertain; FND-IQ-012 matches its catalogue entry (a disabled ranker on 2026-03-01-preview or later is a note, an omitted
+`semanticSearch` is uncertain; rule version 3); version- and model-table claims that could not be confirmed against a pinned
+REST specification are notes and not failures (IQ-005 auto and models-on-GA, IQ-007 planning-model names, IQ-009 on
+2026-04-01; rule versions bumped); an end-to-end test runs the real HTTP client, the host checks, the snapshot builder and
+every FND-IQ rule on recorded Search responses; the shipped sample is checked with real Bicep, with a negative scenario.
 Fix log: `docs/development/reviews/phase-8-fixlog-loop1.md`. Decisions and deferrals: ADR-028.
 
 ## Delivered
@@ -50,23 +59,13 @@ Fix log: `docs/development/reviews/phase-8-fixlog-loop1.md`. Decisions and defer
 - `foundry-doctor doctor --iq-metadata` (opt-in data-plane metadata probe for the IQ rules).
 
 ## Tests executed and results
-**`go build`, `go vet`, `go test`, `scripts/claude/verify-phase.sh --strict` and `gofmt -l` have NOT been run in fix loop 1:
-there is no Go toolchain in this environment and none can be installed.** The maintainer must run them. No earlier test run
-is claimed for the current code.
-
-Tests added or rewritten (not executed):
-- `internal/runtime/iq`: contract tests per accepted api-version from Learn-shaped fixtures (`testdata/`: azureBlob,
-  indexedSharePoint, indexedOneLake, searchIndex knowledge sources; knowledge base; index), unknown version and unsafe names
-  send nothing, azure.yaml target parsing including `${VAR}` targets.
-- `internal/runtime/gateway` (new): strict parsing, per-operation `<base/>`, product variants, fragments resolved and
-  unresolved, `<choose>`, `largeLanguageModel.logs`, API-version gate, service declared after its children.
-- `internal/rules/iq`: unknown api-version for every IQ rule, no data plane never passes, filterable `Collection(Edm.String)`,
-  Learn `baseFilter` example and OData table, IQ-009 header leg and version legs, IQ-008 model keys and redaction, IQ-012
-  skips.
-- `internal/rules/gw`: operation dropping `<base/>`, product dropping `<base/>`, rawxml/external/fragment/`<choose>`
-  uncertainty, fragment resolution, unknown APIM version, unresolved path, realistic GW-005 templates without principal IDs,
-  `largeLanguageModel.logs`, tenant hints.
-- `internal/app`: opt-in and `--local` gating, unknown api-version, generated index/skillset reads, permission failure text.
+Run on Go 1.26.9: `go build`, `go vet`, `gofmt -l`, `go test ./...` and the catalogue checks pass. The real-Bicep sample tests
+(`go test -tags spike -run TestIQGatewaySample ./cmd/foundry-doctor` with `BICEP_PATH` set to Bicep 0.48.1) pass, and the
+positive test was checked to fail without the gateway fixes. CI runs `-race`, staticcheck and govulncheck. The earlier "not
+run" statements are withdrawn.
+Added in the gate: `AZURE_ACCESS_TOKEN` is not used for non-ARM scopes; IQ-012 on a newer version; the sample with real Bicep
+(positive and negative); the Search probe end to end on recorded responses (GET only, one host, bearer token only, only
+`api-version` in the query, no content paths).
 
 ## Security and privacy review
 - Data-plane reads are GET-only through `internal/runtime.DoJSON` (https, host suffix bound, no redirects), opt-in, bounded,
@@ -129,8 +128,21 @@ uncertain tests, or waived by a new dated ADR. Catalogue `phases` of these rules
 ## Definition of Done audit
 | DoD item | Status (met / unmet / requirement changed by ADR-NNN) | Current evidence |
 |---|---|---|
-| All field/property names verified against current sources | partly met | Search shapes re-read from Learn 2026-10-18 and corrected (B2, B3, B11); APIM `largeLanguageModel.logs`, policy fragments, include-fragment re-read; invented `vectorQueries` and azure.yaml header keys removed. Remaining UNVERIFIED items are listed in `docs/iq-gateway.md` and give uncertain results. Not confirmed by tests (no toolchain). |
-| Unsupported versions fail safely | met in code, untested | Probe sends only accepted versions; every IQ rule gates each object's version; GW rules gate APIM resource versions; unknown-version tests added but not run. |
-| No content is retrieved or logged | met in code, untested | Definition GETs only, opt-in; secrets classified, never emitted. |
-| Compound findings show evidence from each plane | met in code, untested | Findings carry `Key` and evidence naming the data-plane object and api-version, ARM resource and api-version, and azure.yaml service; index findings use the referencing connection location. |
-| All IQ/GW rules have positive and negative integration scenarios | partly met | Positive, negative, uncertain and skipped unit scenarios for every rule and Learn-shaped contract tests per version; live metadata smoke tests deferred (ADR-028 decision 4); no test has been run in this loop. |
+| All field/property names verified against current sources | partly met | Search shapes re-read from Learn 2026-10-18 and corrected; Learn was unreachable in gate loops 2 and 3, so no further re-verification. Remaining UNVERIFIED items (Search role for definition reads, reasoning-mode and planning-model version tables, `semanticSearch: disabled` semantics, `largeLanguageModel.logs`, sovereign-cloud Search hosts) are in `docs/iq-gateway.md` and give uncertain or note results. |
+| Unsupported versions fail safely | met | Probe sends only accepted versions; IQ and GW rules gate each object's version. Policy fragment expansion has a per-scope budget (200 expansions) and reports exceeding it as unresolved (`TestFragmentExpansionIsBounded`). |
+| No content is retrieved or logged | met | Definition GETs only, opt-in; secrets classified, never emitted. `AZURE_ACCESS_TOKEN` (an ARM token) is used for the ARM scope only; the Search token is sent only to a Search service the template deploys (`TestBuildPhase8SnapshotNeverContactsServicesTheTemplateDoesNotDeploy`). The Phase 3 runtime Search probe takes its service from live Foundry connections, not from azure.yaml. |
+| Compound findings show evidence from each plane | met | Findings carry `Key` and evidence naming the data-plane object and api-version, ARM resource and api-version, and azure.yaml service. `TestIQProbeEndToEndOnRecordedResponses` asserts named findings from recorded data-plane responses, with no probe issues. |
+| All IQ/GW rules have positive and negative integration scenarios | partly met | Unit scenarios for every rule; recorded-response end-to-end tests for the probe; real-Bicep tests of `samples/iq-gateway` for GW-001 to GW-006 (positive, negative, each rule failing on a targeted mutation), run in CI with `REQUIRE_SPIKE_DEPS=1`. IQ rules are covered by recorded responses, not by a real Search service. Live metadata smoke tests are deferred (ADR-028 decision 4). |
+
+## Open non-blocking items (gate loop 1)
+- 19 of about 110 catalogue test scenario ids have no test of that name (for example IQ-003 `dimensions-1`, IQ-011 interval
+  forms, IQ-009 `blob-ks-with-userIds-groupIds`, GW-004 `distinct-paths`); some behaviours are covered under other names and some
+  are not covered. The ids that name behaviour the code does not implement (IQ-005 answer synthesis) should be pruned.
+- All field and property names are still unverified against the live REST specifications and Learn (unreachable from the review
+  sandbox); the model table, medium-effort region list and knowledge-source limits are unverified.
+- `--iq-metadata` is silently ignored with `--local`; a failed probe can hide an offline IQ-008 finding; the probe ignores
+  `--rules` and needs compiled ARM; compound findings often cite one plane; IQ-003 and IQ-004 both flag the same dimension
+  mismatch; snapshot maps are keyed by object name only; a Search token goes to any `*.search.windows.net` host named in azure.yaml
+  (now with a Search-audience token minted by azd or az, never the ARM token).
+- Fragment expansion has no total node budget; GW-006's sink logic is loose; the IQ-011 `startTime` check is stricter than the API.
+- ADR-028 still needs the project lead delegate's confirmation and a named owner for the undelivered live checks.

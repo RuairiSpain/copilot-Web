@@ -224,6 +224,12 @@ jobs:
           chmod +x "$exe"
           "$exe" --version
           echo "BICEP_PATH=$exe" >> "$GITHUB_ENV"
+      - name: Real-Bicep sample tests (-tags spike)
+        # These compile the shipped samples with the pinned Bicep CLI. They are excluded from go test ./... by the
+        # spike build tag, so without this step a regression in loadTextContent policy handling would pass CI.
+        env:
+          REQUIRE_SPIKE_DEPS: "1"
+        run: go test -tags spike -count=1 -run 'TestIQGatewaySample' ./cmd/foundry-doctor
       - name: Build the binary and run it against samples/*
         # Skips with a visible warning while cmd/foundry-doctor or samples/ are absent; a skip is not a pass.
         run: |

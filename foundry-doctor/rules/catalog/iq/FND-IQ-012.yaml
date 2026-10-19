@@ -1,5 +1,5 @@
 id: FND-IQ-012
-version: 2
+version: 3
 group: IQ
 title: "Semantic ranking enabled when used"
 description: >-
@@ -39,7 +39,7 @@ evidence:
     is 2026-03-01-preview or later, do not report a disabled ranker: report "disabled is no longer a valid value
     and is treated as free" as an informational note, because the documentation says so while the ARM TypeSpec
     still lists the value. At any version, fail when semanticSearch or knowledgeRetrieval is standard and sku.name
-    is free. Where the template omits semanticSearch (default free) pass. Free plan is not a failure; quota exhaustion
+    is free. Where the template omits semanticSearch the rule is uncertain, because the service default is not read from the template. Free plan is not a failure; quota exhaustion
     behaviour (billing error after the monthly allowance) is reported as an informational note because usage is
     not readable metadata-only.
   confidence: likely
@@ -117,7 +117,7 @@ tests:
     - knowledge-retrieval-standard-on-free-sku
     - semantic-disabled-api-2026-03-01-preview-reports-note-not-failure
   negative:
-    - semantic-free-default
+    - semantic-free-explicit
     - semantic-standard-on-basic
     - semantic-not-used-and-disabled
   skipped:

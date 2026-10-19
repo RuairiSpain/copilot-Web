@@ -119,8 +119,16 @@ func buildPhase8Snapshot(ctx context.Context, in RunInput, client runtimeiq.Clie
 		Skillsets:   map[string]runtimeiq.Skillset{},
 	}
 	bases := 0
+	// A Search host named in azure.yaml is repository content. The bearer token
+	// is sent only to services the template deploys, never to a host an
+	// untrusted repository chose.
+	owned := runtimeiq.SearchServicesFromARM(&sdk.Input{ARM: in.ARM})
 	for _, conn := range connections {
 		if conn.TargetKind != runtimeiq.ConnectionTargetKnowledgeBaseMCP {
+			continue
+		}
+		if _, ok := owned[strings.ToLower(conn.SearchService)]; !ok {
+			snap.ProbeIssues = append(snap.ProbeIssues, sdk.SkipInputUnavailable+": knowledge base MCP connection "+conn.Name+" targets a Search service that is not deployed by the template, so no token was sent to it")
 			continue
 		}
 		if bases >= phase8MaxBases {
@@ -214,7 +222,7 @@ func phase8ProbeFailure(object, target string, err error) string {
 	var unavailable *azure.UnavailableError
 	switch {
 	case errors.As(err, &unavailable):
-		return object + " metadata for " + target + " is not readable (" + unavailable.Reason + "; needs Reader or Search Service Contributor on the search service, which must allow role-based access)"
+		return object + " metadata for " + target + " is not readable (" + unavailable.Reason + "; needs Search Service Contributor on the search service (Reader is not confirmed to be enough), which must allow role-based access)"
 	case rt.IsNotFound(err):
 		return object + " " + target + " was not found"
 	case errors.Is(err, context.DeadlineExceeded):

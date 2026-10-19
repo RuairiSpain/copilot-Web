@@ -318,8 +318,10 @@ func TestIQ007SupportedKindsAndModels(t *testing.T) {
 			"svc/kb": {Name: "kb", APIVersion: "2026-04-01", Models: []runtimeiq.ModelRef{{Kind: "azureOpenAI", ModelName: "gpt-5.6-sol", Path: "models[0]"}}},
 		},
 	}))
-	if len(got.Findings) != 2 {
-		t.Fatalf("expected two findings, got %+v", got)
+	// The unsupported source kind is a finding. A model name missing from the
+	// planning-model table is only a note (the table changes with each preview).
+	if len(got.Findings) != 1 || got.Findings[0].Key != "kind:indexedSharePoint" {
+		t.Fatalf("expected one finding for the source kind, got %+v", got)
 	}
 	uncertain := mustEval(t, "FND-IQ-007", inputFor(runtimeiq.Snapshot{
 		Sources: map[string]runtimeiq.KnowledgeSource{
@@ -472,8 +474,10 @@ func TestIQ009DocumentAccessRequirement(t *testing.T) {
 	got := mustEval(t, "FND-IQ-009", requireAccess(runtimeiq.Snapshot{
 		Sources: map[string]runtimeiq.KnowledgeSource{"s1": permissionSource("s1", "2026-04-01")},
 	}))
-	if len(got.Findings) != 2 {
-		t.Fatalf("expected options and api-version findings, got %+v", got)
+	// A read at 2026-04-01 cannot be shown to return ingestionPermissionOptions,
+	// so their absence is uncertain, not a failure.
+	if len(got.Findings) != 0 || got.Skipped == nil || !strings.Contains(got.Skipped.Reason, "uncertain:") {
+		t.Fatalf("expected an uncertain result at api-version 2026-04-01, got %+v", got)
 	}
 	headerOnly := mustEval(t, "FND-IQ-009", requireAccess(runtimeiq.Snapshot{
 		Sources: map[string]runtimeiq.KnowledgeSource{
@@ -754,3 +758,21 @@ func TestIQ002PermissionCollectionIsNotVector(t *testing.T) {
 }
 
 func boolPtr(v bool) *bool { return &v }
+
+// Phase 8 gate (lead B3): semanticSearch "disabled" on api-version 2026-03-01-preview
+// or later is documented as treated as free. It is not a failure, but it must not
+// pass in silence either: the ranker state is not confirmed.
+func TestIQ012DisabledOnNewerVersionIsANoteNotAPass(t *testing.T) {
+	bases := map[string]runtimeiq.KnowledgeBase{"svc/kb": {Name: "kb", KnowledgeSources: []string{"src"}}}
+	sources := map[string]runtimeiq.KnowledgeSource{"src": {Name: "src", SearchIndexName: "docs"}}
+	got := mustEval(t, "FND-IQ-012", inputFor(runtimeiq.Snapshot{
+		Bases: bases, Sources: sources,
+		Services: map[string]runtimeiq.SearchService{"svc": {Name: "svc", APIVersion: "2026-03-01-preview", SemanticSearch: "disabled", SKU: "basic"}},
+	}))
+	if len(got.Findings) != 0 {
+		t.Fatalf("a disabled ranker on 2026-03-01-preview is not a failure: %+v", got.Findings)
+	}
+	if got.Skipped == nil || !strings.Contains(got.Skipped.Reason, "uncertain:") {
+		t.Fatalf("expected an uncertain result carrying the note, not a pass: %+v", got)
+	}
+}

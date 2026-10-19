@@ -600,6 +600,10 @@ func eval006(in *sdk.Input) sdk.Result {
 				a.note = append(a.note, "custom metrics with dimensions cannot be verified metadata-only")
 				continue
 			}
+			if metricDiagnosticUnresolved(svc, api) {
+				a.note = append(a.note, "a metrics diagnostic of "+svc.Name+"/"+api.Name+" names its logger through an unresolved template expression, so the telemetry sink is uncertain")
+				continue
+			}
 			if !hasLLMLogSink(svc, api) {
 				a.add(api.SourceLocation, "Microsoft.ApiManagement/service/apis", api.Name, "telemetry-sink",
 					"token telemetry policy has no API Management diagnostic (metrics or largeLanguageModel.logs enabled) or Azure Monitor sink [ARM Microsoft.ApiManagement/service/apis/"+svc.Name+"/"+api.Name+" (api-version "+orNone(api.APIVersion)+"); ARM Microsoft.ApiManagement/service/diagnostics]")
@@ -937,6 +941,31 @@ func hasMetricDiagnostic(snap runtimegw.Snapshot, svc *runtimegw.Service, api *r
 	return false
 }
 
+// metricDiagnosticUnresolved reports whether a metrics-enabled diagnostic in
+// scope for api refers to its logger, or the logger to its Application
+// Insights component, through an ARM expression such as resourceId(...). The
+// compiled template of a correct Bicep file looks like that, so the sink can
+// neither be confirmed nor refuted and the rule must not fail.
+func metricDiagnosticUnresolved(svc *runtimegw.Service, api *runtimegw.API) bool {
+	for _, d := range svc.Diagnostics {
+		if !d.Metrics || !(d.Scope == "service" || d.Scope == "api:"+strings.ToLower(api.Name)) {
+			continue
+		}
+		// loggerId is required, so an empty value means the compiled model could
+		// not resolve the expression that produced it.
+		if id := strings.TrimSpace(d.LoggerID); id == "" || strings.HasPrefix(id, "[") {
+			return true
+		}
+		logger, ok := resolveLogger(svc, d.LoggerID)
+		// A logger that is not declared in the template is an existing resource
+		// deployed elsewhere; its Application Insights link cannot be read.
+		if !ok || strings.HasPrefix(strings.TrimSpace(logger.ResourceID), "[") {
+			return true
+		}
+	}
+	return false
+}
+
 func hasMetricPipeline(snap runtimegw.Snapshot, svc *runtimegw.Service, api *runtimegw.API) bool {
 	return hasMetricDiagnostic(snap, svc, api)
 }
@@ -970,7 +999,9 @@ func resolveLogger(svc *runtimegw.Service, loggerID string) (runtimegw.Logger, b
 		return logger, true
 	}
 	for name, logger := range svc.Loggers {
-		if loggerID == strings.ToLower(name) || strings.HasSuffix(loggerID, "/loggers/"+strings.ToLower(name)) {
+		// A deployed logger ID ends in /loggers/<name>. The compiled template's
+		// resourceId() reduces to <service>/<name>, so that form matches too.
+		if loggerID == strings.ToLower(name) || strings.HasSuffix(loggerID, "/loggers/"+strings.ToLower(name)) || loggerID == strings.ToLower(svc.Name)+"/"+strings.ToLower(name) {
 			return logger, true
 		}
 	}

@@ -12,6 +12,7 @@ package gateway
 import (
 	"encoding/xml"
 	"net/url"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -24,6 +25,11 @@ const KnownAPIVersionList = "2024-05-01, 2025-09-01-preview"
 
 // maxFragmentDepth bounds nested include-fragment expansion.
 const maxFragmentDepth = 4
+
+// maxExpandedFragments bounds the include-fragment expansions performed for
+// one policy scope. Fragments may include several fragments each, so depth
+// alone does not bound the work; a repository file is untrusted input.
+const maxExpandedFragments = 200
 
 // KnownAPIVersion reports whether v is an API Management resource API version
 // listed in the FND-GW-* catalogue entries.
@@ -312,7 +318,7 @@ func BuildSnapshot(in *sdk.Input) Snapshot {
 				continue
 			}
 			s := ensureService(out.Services, svc)
-			s.Policies[scope] = policyDocument(scope, r)
+			s.Policies[scope] = policyDocument(in.ARM, scope, r)
 			if strings.Count(strings.Trim(r.Name, "/"), "/") >= 3 && strings.HasSuffix(strings.ToLower(r.Type), "/operations/policies") {
 				apiName := operationAPIName(r.Name)
 				if apiName != "" {
@@ -327,7 +333,7 @@ func BuildSnapshot(in *sdk.Input) Snapshot {
 				continue
 			}
 			s := ensureService(out.Services, svc)
-			s.Fragments[strings.ToLower(fragment)] = policyDocument("fragment:"+strings.ToLower(fragment), r)
+			s.Fragments[strings.ToLower(fragment)] = policyDocument(in.ARM, "fragment:"+strings.ToLower(fragment), r)
 		case "microsoft.apimanagement/service/products/apis":
 			parts := strings.Split(r.Name, "/")
 			if len(parts) != 3 {
@@ -388,16 +394,42 @@ func BuildSnapshot(in *sdk.Input) Snapshot {
 	return out
 }
 
-func policyDocument(scope string, r sdk.ARMResource) PolicyDocument {
+func policyDocument(model sdk.ARMModel, scope string, r sdk.ARMResource) PolicyDocument {
 	format := strProp(r.Properties, "format")
 	return PolicyDocument{
 		Scope:          scope,
 		Format:         format,
 		APIVersion:     r.APIVersion,
 		ExternalLink:   strings.Contains(strings.ToLower(format), "link"),
-		Value:          strProp(r.Properties, "value"),
+		Value:          resolvePolicyValue(model, strProp(r.Properties, "value")),
 		SourceLocation: r.Location,
 	}
+}
+
+// variablesOnlyRe matches a value that is exactly one variables() call, the
+// form Bicep compiles loadTextContent('policy.xml') to: "[variables('$fxv#0')]".
+var variablesOnlyRe = regexp.MustCompile(`^\[\s*variables\(\s*'([^']+)'\s*\)\s*\]$`)
+
+// resolvePolicyValue returns the policy XML for a value that reads one compiled
+// template variable, so a policy loaded from a file is analysed instead of
+// reported as unparseable. A variable that is missing, is not a string or is
+// still an expression leaves the value as it is, and the rules then treat the
+// policy as unresolved rather than as a pass.
+func resolvePolicyValue(model sdk.ARMModel, value string) string {
+	m := variablesOnlyRe.FindStringSubmatch(strings.TrimSpace(value))
+	if m == nil {
+		return value
+	}
+	lookup, ok := model.(interface{ Variable(string) (any, bool) })
+	if !ok {
+		return value
+	}
+	v, found := lookup.Variable(m[1])
+	lit, isStr := v.(string)
+	if !found || !isStr || strings.HasPrefix(strings.TrimSpace(lit), "[") {
+		return value
+	}
+	return lit
 }
 
 func ensureService(m map[string]*Service, name string) *Service {
@@ -480,26 +512,29 @@ func (s *Service) scopeInbound(scope string) scopeInbound {
 	}
 	parsed, err := ParsePolicy(doc.Value)
 	if err != nil {
-		out.unresolved = append(out.unresolved, "policy at scope "+scope+" does not parse as XML (format "+orNone(doc.Format)+")")
+		out.unresolved = append(out.unresolved, "policy at scope "+scope+" does not parse as XML or is an unresolved template expression (format "+orNone(doc.Format)+")")
 		return out
 	}
 	if !parsed.HasInbound {
 		out.unresolved = append(out.unresolved, "policy at scope "+scope+" has no inbound section")
 		return out
 	}
-	out.elements, out.unresolved = s.expandFragments(parsed.Inbound, 0)
+	budget := maxExpandedFragments
+	out.elements, out.unresolved = s.expandFragments(parsed.Inbound, 0, &budget)
 	return out
 }
 
+const fragmentBudgetIssue = "policy fragment expansion exceeds the analysis budget"
+
 // expandFragments replaces include-fragment with the fragment's elements when
 // the fragment is defined in the template; anything else is unresolved.
-func (s *Service) expandFragments(nodes []PolicyElement, depth int) ([]PolicyElement, []string) {
+func (s *Service) expandFragments(nodes []PolicyElement, depth int, budget *int) ([]PolicyElement, []string) {
 	var out []PolicyElement
 	var issues []string
 	for _, n := range nodes {
 		if n.Name != "include-fragment" {
 			if len(n.Children) > 0 {
-				kids, more := s.expandFragments(n.Children, depth)
+				kids, more := s.expandFragments(n.Children, depth, budget)
 				n.Children = kids
 				issues = append(issues, more...)
 			}
@@ -509,6 +544,10 @@ func (s *Service) expandFragments(nodes []PolicyElement, depth int) ([]PolicyEle
 		id := strings.TrimSpace(n.Attrs["fragment-id"])
 		frag, ok := s.Fragments[strings.ToLower(id)]
 		switch {
+		case *budget <= 0:
+			if len(issues) == 0 || issues[len(issues)-1] != fragmentBudgetIssue {
+				issues = append(issues, fragmentBudgetIssue)
+			}
 		case depth >= maxFragmentDepth:
 			issues = append(issues, "policy fragment "+id+" is nested too deeply")
 		case !ok:
@@ -521,7 +560,8 @@ func (s *Service) expandFragments(nodes []PolicyElement, depth int) ([]PolicyEle
 				issues = append(issues, "policy fragment "+id+" does not parse as XML")
 				continue
 			}
-			expanded, more := s.expandFragments(els, depth+1)
+			*budget--
+			expanded, more := s.expandFragments(els, depth+1, budget)
 			out = append(out, expanded...)
 			issues = append(issues, more...)
 		}
