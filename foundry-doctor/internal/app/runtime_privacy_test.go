@@ -14,7 +14,21 @@ import (
 
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/azure"
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/runtime"
+	"github.com/ruairispain/copilot-web/foundry-doctor/pkg/sdk"
 )
+
+// pvARM gives FND-RUN-008 its compiled-template input: the account is declared
+// with the same publicNetworkAccess the synthetic Azure responses report, so the
+// rule runs and finds no drift.
+type pvARM struct{}
+
+func (pvARM) Load(context.Context, Source) (sdk.ARMModel, error) { return pvModel{}, nil }
+
+type pvModel struct{}
+
+func (pvModel) Resources() []sdk.ARMResource {
+	return []sdk.ARMResource{{Type: "Microsoft.CognitiveServices/accounts", Name: "acct", Properties: map[string]any{"publicNetworkAccess": "Disabled"}}}
+}
 
 // The privacy requirement (CLAUDE.md: never emit secrets, tokens, prompts or
 // document content) is tested end to end: the production runtime pipeline
@@ -125,6 +139,7 @@ func TestRuntimeCommandNeverEmitsContentSentinels(t *testing.T) {
 				},
 				RuntimeHTTP: hc, RuntimeCredential: tokenSentinelCred{}, RuntimeResolver: publicResolver{},
 			})
+			svc.ARM = pvARM{}
 			var out bytes.Buffer
 			code, err := Runtime(context.Background(), svc, RuntimeRequest{
 				DoctorRequest: DoctorRequest{Dir: dir, Format: format},

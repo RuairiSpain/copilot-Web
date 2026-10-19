@@ -1,5 +1,5 @@
 id: FND-ENV-003
-version: 4
+version: 5
 group: ENV
 title: "Prod does not reference non-prod resource IDs"
 description: >-
@@ -32,11 +32,22 @@ compatibility:
     section 6). Window widened 2026-10-16 (azd 1.36.0 = azure-dev-cli_1.36.0, acebba1e388b489a91ab8e2487a676359ab516a1, released 2026-10-14). Checked by git diff of the Azure/azure-dev tags azure-dev-cli_1.35.0 (170ebb858071da353cc9bf8657a377bff268ba36) and azure-dev-cli_1.36.0 (blobless clone https://github.com/Azure/azure-dev) over cli/azd/pkg/environment (azdcontext, local_file_data_store.go, environment.go), cli/azd/go.mod, cli/azd/pkg/project and cli/azd/pkg/infra/provisioning/bicep: unchanged are the godotenv version and .env read (godotenv.Read), the .azure/<env>/.env and .azure/config.json layout and constants, defaultEnvironment, the AZURE_* key constants, the environment name regexp ^[a-zA-Z0-9-\(\)_\.]{1,64}$ and the resourceGroup resolution code. Tightened in 1.36.0 and recorded in docs/tool-compatibility.md section 6: dot-only names, trailing-dot names on Windows, symbolic-link state paths and an invalid defaultEnvironment now error. Example URL: https://github.com/Azure/azure-dev/compare/azure-dev-cli_1.35.0...azure-dev-cli_1.36.0
 evidence:
   description: >-
-    Take the environment marked prod in Foundry Doctor configuration (the azd environment name is not assumed to indicate
-    tier). Extract ARM resource IDs, endpoint host names and resource group names from its .env values, azure.yaml
+    Take the environments marked prod. The tier of an environment is, in this order: its entry in the policy key
+    environments.tiers (dev, test or prod), then the lists environments.production, environments.nonProduction and
+    environments.development, then a derivation from the environment name (product opinion; azd treats the name as an
+    opaque label). The derivation splits the lower-cased name at every character that is not a letter or digit and
+    looks at each token: prod, production and prd are prod; dev, development, test, testing, stage, staging, uat and qa
+    are non-prod; a prod token directly after pre or non (pre-prod, non-prod) is non-prod; a name with both kinds of
+    token, or none, has no tier and is named in an uncertain skip. An explicit policy entry always wins over the
+    derivation. When the derivation decided a tier and the rule reports a finding, the finding says so and an uncertain
+    skip next to it lists the derived tiers and the policy key to override them with, so the classification is visible. Extract ARM resource IDs, endpoint host names and resource group names from its .env values, azure.yaml
     after substitution for that environment, and parameter files. Report any that reference the resource group, subscription
-    and resource name, or endpoint host of an environment configured as non-prod. Matching is exact on normalised IDs;
-    no naming heuristics are applied. Values under secret-looking key names (for example AZURE_KEYVAULT_ID) are digested
+    and resource name, or endpoint host of an environment classified as non-prod. Environments that come from
+    environment-named parameter files (infra/main.parameters.<env>.json, infra/main.<env>.parameters.json) take part
+    only as notes: azd reads only main.parameters.json and main.bicepparam, so a file-name-to-environment mapping is an
+    inference (UNVERIFIED) and a shared identifier found through it is an uncertain skip naming the parameter, never a
+    finding. A main.<env>.bicepparam file is named in an uncertain skip and is not read (no Bicep parser). Matching is exact on normalised IDs;
+    no naming heuristics are applied to matching (the name derivation above only decides tiers). Values under secret-looking key names (for example AZURE_KEYVAULT_ID) are digested
     before the rule runs; the value shape (resource ID or bare endpoint URL) is classified first and carried next to the
     digest, so a shared Key Vault resource ID is reported whatever the key is called. Actual secret shapes stay
     digested and never appear in evidence. With fewer than two environments the rule is not applicable.
@@ -107,15 +118,27 @@ tests:
   positive:
     - prod-project-endpoint-is-dev-project
     - prod-parameter-references-dev-resource-group-id
+    - tiers-derived-from-names-without-policy
+    - explicit-tiers-win-over-names
+    - environment-lists-classify-tiers
   negative:
     - prod-references-prod-resources
     - prod-references-shared-explicitly-allowed
+    - distinct-targets-with-derived-tiers-pass
   skipped:
-    - environment-tiers-not-configured
+    - environment-tiers-not-configured-and-names-decide-nothing
     - sibling-environments-not-visible
     - env-file-unparseable-uncertain
     - environment-without-tier-or-targets-uncertain
+    - ambiguous-names-uncertain
+    - parameter-file-environment-shared-identifier-is-a-note
 notes: >-
+  Version 5 (2026-10-19): the rule no longer needs environments.tiers. Tiers come from environments.tiers, then the
+  environments.production / nonProduction / development lists, then the documented name derivation, so the rule works by
+  default in CI checkouts. Inputs widened to environments named by parameter files, as notes only (UNVERIFIED mapping).
+  A not-applicable skip names policy-declared environments that have no visible values. UNVERIFIED: the token lists of the
+  derivation are a product opinion, not an Azure or azd fact; the environment-named parameter file patterns are
+  inferences (azd defines only main.parameters.json and main.bicepparam, bicep_provider.go).
   Product opinion: no source states a prohibition. Tier mapping is Foundry Doctor configuration (profiles), which does not
   exist in azd. Resources that a prod environment legitimately shares with non-prod (central registries, shared search)
   need an allow entry with a reason and expiry. Version 2 (2026-10-15): with no finding, an unusable .env, an
