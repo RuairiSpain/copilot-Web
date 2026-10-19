@@ -3,6 +3,7 @@ package view
 import (
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/ruairispain/copilot-web/foundry-doctor/internal/azure"
@@ -443,8 +444,10 @@ func TestBuildCombinedDoesNotCorrelateDuplicateAzureNames(t *testing.T) {
 // Phase 5 gate (lead NB1): a long opaque string in a reference slot may be a
 // credential, so it must never become a label.
 func TestOpaqueTokenReferenceIsNotALabel(t *testing.T) {
+	// Built at run time so the file holds no secret-shaped literal.
+	token := "sk-" + "proj-" + strings.Repeat("ab12", 10)
 	for in, want := range map[string]bool{
-		"sk-proj-abcdefghijklmnopqrstuvwxyz0123456789ABCDEF": true,
+		token:                   true,
 		"my-search-service":     false,
 		"aisearch-prod-eastus2": false,
 		"":                      false,
@@ -455,7 +458,7 @@ func TestOpaqueTokenReferenceIsNotALabel(t *testing.T) {
 	}
 	var nodes []nodeRec
 	add := func(n nodeRec) *nodeRec { nodes = append(nodes, n); return &nodes[len(nodes)-1] }
-	addRefNode(add, "sk-proj-abcdefghijklmnopqrstuvwxyz0123456789ABCDEF", false, "", nil)
+	addRefNode(add, token, false, "", nil)
 	if len(nodes) != 1 || nodes[0].label != "unresolved-target" || nodes[0].name != "" {
 		t.Fatalf("nodes=%+v", nodes)
 	}
