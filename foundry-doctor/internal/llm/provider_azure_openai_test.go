@@ -8,6 +8,9 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -254,5 +257,52 @@ func TestAzureOpenAIProviderNeverForwardsEnvironmentToken(t *testing.T) {
 	}
 	if gotScope != DefaultScope {
 		t.Fatalf("azd scope=%q", gotScope)
+	}
+}
+
+func TestAzureOpenAIProviderRejectsLookalikeEndpoints(t *testing.T) {
+	provider := NewAzureOpenAIProvider(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		t.Fatalf("request sent to %s", r.URL.Host)
+		return nil, nil
+	})}, staticCredential{})
+	for _, endpoint := range []string{
+		"https://evil.com",
+		"https://x.openai.azure.com.evil.com",
+		"https://evil.com/.openai.azure.com",
+		"https://x.openai.azure.us",
+		"https://user@x.openai.azure.com",
+		"https://x.openai.azure.com:8443",
+		"https://x.cognitiveservices.azure.com",
+		"https://openai.azure.com.",
+	} {
+		cfg := testConfig()
+		cfg.Endpoint = endpoint
+		if _, err := provider.Complete(context.Background(), cfg, testPrompt()); err == nil {
+			t.Errorf("endpoint %q was accepted", endpoint)
+		}
+	}
+}
+
+// The default provider (no injected credential) must mint its token with azd
+// or az, never from AZURE_ACCESS_TOKEN.
+func TestNewAzureOpenAIProviderDefaultCredentialIgnoresEnvironmentToken(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a shell script as a fake azd")
+	}
+	dir := t.TempDir()
+	script := "#!/bin/sh\necho '{\"token\":\"tok-from-azd\",\"expiresOn\":\"2099-01-01T00:00:00Z\"}'\n"
+	if err := os.WriteFile(filepath.Join(dir, "azd"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("AZURE_ACCESS_TOKEN", "arm-env-token")
+	client := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if got := r.Header.Get("Authorization"); got != "Bearer tok-from-azd" {
+			t.Fatalf("Authorization did not come from azd")
+		}
+		return okResponse(validCompletion), nil
+	})}
+	if _, err := NewAzureOpenAIProvider(client, nil).Complete(context.Background(), testConfig(), testPrompt()); err != nil {
+		t.Fatal(err)
 	}
 }

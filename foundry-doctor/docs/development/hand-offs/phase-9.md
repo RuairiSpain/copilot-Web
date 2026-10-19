@@ -1,7 +1,9 @@
 # Phase 9 hand-off: optional LLM explanations and narrative
 
-Status: **open**. Round 1 reviews (foundry-lead, azure-black-belt) REJECTED;
-fixes applied in fix loop 1 (2026-10-18), pending round 2 re-review. Fix log:
+Status: **gate passed for the Phase 9 DoD (gate loop 1, 2026-10-19)**; the ADR-019
+Go principal and security reviews, and PRD section 22 items, remain open.
+Round 1 reviews (foundry-lead, azure-black-belt) REJECTED; fixes applied in fix
+loop 1 (2026-10-18); both reviewers APPROVED on re-review with executed tests. Fix log:
 [phase-9-fixlog-loop1.md](../reviews/phase-9-fixlog-loop1.md).
 
 ## Delivered
@@ -67,27 +69,14 @@ fixes applied in fix loop 1 (2026-10-18), pending round 2 re-review. Fix log:
 - `foundry-doctor assess waf --llm-explain`
 
 ## Tests executed and results
-**Not run in fix loop 1.** No Go toolchain is available in this environment,
-so `go build ./...`, `go vet ./...`, `go test ./...` and
-`scripts/claude/verify-phase.sh --strict` have NOT been run against the current tree.
-The maintainer must run them before re-review. Earlier claims of passing gates
-are withdrawn for the current tree.
-
-Tests added or changed in loop 1 (unexecuted):
-- `internal/azure/auth_cli_test.go`: CLI chain ignores `AZURE_ACCESS_TOKEN`.
-- `internal/llm/provider_azure_openai_test.go`: ARM-audience env token never
-  forwarded; redirect refused (one transport call); exact request keys;
-  refusal and `length` rejection; port and scope rejection; default client
-  refuses redirects.
-- `internal/llm/config_test.go`: scope allow-list.
-- `internal/llm/validate/validate_test.go`: unknown IDs in `ruleIds` and in
-  free text rejected; known IDs in text accepted; rune-safe truncation.
-- `internal/llm/redact/project_test.go`: ARM IDs, GUIDs and host names
-  removed from skip reasons; rune-safe truncation.
-- `internal/app/llm_narrator_test.go`: `lazyNarrator` end to end through the
-  real redact -> prompts -> validate pipeline with a mock provider; scope
-  rejection before any provider call.
-- `cmd/foundry-doctor/main_test.go`: `exec` clears ambient LLM variables.
+Gate loop 1 (2026-10-19, Go 1.26.9, origin/main 075aff4 plus the tests below):
+`env -u BICEP_PATH go test ./...` passes and `go vet ./...` and `gofmt -l` are clean.
+Tests added in the gate: `TestAzureOpenAIProviderRejectsLookalikeEndpoints` and
+`TestNewAzureOpenAIProviderDefaultCredentialIgnoresEnvironmentToken`; each fails
+when its fix is reverted (host check changed to `Contains`; default credential
+changed to the chain with the environment source). Both reviewers also reverted
+each round 1 fix on a scratch copy and confirmed a test fails. `-race`,
+`staticcheck` and `govulncheck` were not run by the reviewers; CI runs them.
 
 ## Security and privacy self-assessment (not an independent review)
 - LLM integration is explicit opt-in and off by default.
@@ -98,13 +87,17 @@ Tests added or changed in loop 1 (unexecuted):
 - No payload logging or config-file credentials.
 
 ## Foundry lead review
-- Round 1: REJECT ([phase-9-foundry-lead-round1.md](../reviews/phase-9-foundry-lead-round1.md)).
-  Fixes applied in loop 1, pending re-review.
+- Round 1: REJECT. Gate loop 1: APPROVE, no blocking items. Non-blocking: no `AssessWAF` default-off
+  test; thin tests for markdown and HTML labels and for byte-identical evidence packs; redaction of finding
+  locations untested; the prohibited-claim list does not catch "compliant", "secure", "no action required" or
+  "resolved" (semantic contradictions are only partly mitigated by validation); skip-reason free text can pass
+  resource names.
 
 ## Azure black belt review
-- Round 1: REJECT ([phase-9-azure-black-belt-round1.md](../reviews/phase-9-azure-black-belt-round1.md)).
-  Fixes applied in loop 1, pending re-review. (An earlier "Approved" line in
-  this hand-off was unsupported: no Phase 9 black belt approval ever existed.)
+- Round 1: REJECT. Gate loop 1: APPROVE, no blocking items. Non-blocking: private endpoint guidance names only
+  `privatelink.openai.azure.com` (Foundry resources probably also need `privatelink.services.ai.azure.com` and
+  `privatelink.cognitiveservices.azure.com`); `*.cognitiveservices.azure.com` hosts are refused (fails closed)
+  and the docs should say so; role names and audiences in `docs/llm.md` are UNVERIFIED (Learn unreachable).
 
 ## Go principal engineer review (ADR-019)
 - Status: **NOT DONE.** ADR-019 moves this whole-code-base review to Phase 9.
