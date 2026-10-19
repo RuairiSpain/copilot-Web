@@ -51,6 +51,8 @@ var byDesignHeads = []string{
 	"backend-does-not-target-foundry-or-azure-openai",
 	"schedule-null",
 	"no-split-skill-in-project; no-explicit-query-definitions",
+	// FND-COST-004 reads only the local price cache (no network); an empty cache is an environment fact.
+	"price-cache-missing-and-offline",
 }
 
 // byDesignInputDetails lists input-unavailable details that mean "the project

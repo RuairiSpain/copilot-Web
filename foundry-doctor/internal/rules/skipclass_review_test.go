@@ -17,6 +17,7 @@ func TestSkipClassRound2Decisions(t *testing.T) {
 		{"no-split-skill-in-project; no-explicit-query-definitions", SkipByDesign},
 		{"project-has-no-agent-services", SkipByDesign},
 		{"no-resilience-objective-declared", SkipByDesign},
+		{"price-cache-missing-and-offline", SkipByDesign},
 		{"not-applicable: project declares no model deployments", SkipByDesign},
 		// Hiding: a required input is missing, so the check could not run.
 		{"budget-managed-outside-repository", SkipHidesCheck},
