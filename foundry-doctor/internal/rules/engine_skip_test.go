@@ -158,3 +158,33 @@ func TestClassifySkip(t *testing.T) {
 		t.Error("no skips, no hidden check")
 	}
 }
+
+// ADR-029: an open-ended azd range runs on a newer azd, and the engine says the version was not verified.
+func TestEngineOpenEndedAzdRange(t *testing.T) {
+	r := cr("FND-CFG-001", nil, ">=1.34.2")
+	e := &Engine{Catalog: []catalog.Rule{r}, Registry: reg(t, fake{id: "FND-CFG-001"})}
+	for _, tc := range []struct {
+		azd      string
+		evaluate bool
+		unsup    bool
+		warns    bool
+	}{
+		{"1.34.1", false, true, false},
+		{"1.34.2", true, false, false},
+		{"1.36.0", true, false, false},
+		{"1.37.0", true, false, true},
+		{"2.5.0", true, false, true},
+		{"", false, false, false},
+	} {
+		rep := run(t, e, "foundry-prod", tc.azd)
+		if got := len(rep.Evaluated) == 1; got != tc.evaluate {
+			t.Errorf("azd %q: evaluated=%v, want %v (skipped %+v)", tc.azd, got, tc.evaluate, rep.Skipped)
+		}
+		if got := len(rep.Skipped) == 1 && rep.Skipped[0].Reason == sdk.SkipUnsupportedVersion; got != tc.unsup {
+			t.Errorf("azd %q: unsupported-version=%v, want %v", tc.azd, got, tc.unsup)
+		}
+		if got := len(rep.Diagnostics) > 0; got != tc.warns {
+			t.Errorf("azd %q: diagnostics=%v, want warning=%v", tc.azd, rep.Diagnostics, tc.warns)
+		}
+	}
+}
