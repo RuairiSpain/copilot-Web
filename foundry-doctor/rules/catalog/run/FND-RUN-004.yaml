@@ -191,7 +191,7 @@ notes: >-
   window, stable finding keys (throttling-429, utilization, provisioning-state, deployment-state) so fingerprints do not
   move with the counts, a Paused deployment finding, and a lone utilization peak is Uncertain. The three
   runtime.throttling.* keys are read through sdk.Policy; they are only settable from the policy file once internal/config
-  lists them in PolicyKeys (not part of this change; until then the documented defaults apply). UNVERIFIED: the default
+  lists them in PolicyKeys (defined in the configuration schema as policy.runtime.throttling.*; the documented defaults apply when absent). UNVERIFIED: the default
   values (product opinion), the window bounds, the relation of rateLimits to capacity (not evaluated), a metric name for
   per-deployment total requests other than AzureOpenAIRequests (none is used).
   Loop 2 (2026-10-18): the Total aggregation for AzureOpenAIRequests, Maximum/Average/Minimum for utilisation, the

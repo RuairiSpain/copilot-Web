@@ -135,6 +135,19 @@ func TestIDN002(t *testing.T) {
 			rs:       join([]sdk.ARMResource{acct, proj("proj", sysID()), conn("proj", searchHost), target(typeSearch, "srch")}, searchRoles("11111111-1111-1111-1111-111111111111")),
 			findings: []string{"Search Index Data Contributor", "Search Service Contributor"}},
 
+		// a role outside the catalogue table at a covering scope may be a custom role or a superset,
+		// so the required roles are uncertain, not missing
+		{name: "custom role on the store makes the missing roles uncertain",
+			rs:       join([]sdk.ARMResource{acct, proj("proj", sysID()), conn("proj", searchHost), target(typeSearch, "srch"), roleOn(typeSearch, "srch", "99999999-9999-9999-9999-999999999999", sysPrincipal)}),
+			skipHead: "unresolved-expression"},
+		{name: "custom role at resource group scope makes the missing roles uncertain",
+			rs: []sdk.ARMResource{acct, proj("proj", sysID()), conn("proj", searchHost), target(typeSearch, "srch"),
+				{Type: typeRoleAssign, Name: "r1", Scope: "[resourceGroup().id]", Properties: props{"principalId": sysPrincipal, "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '99999999-9999-9999-9999-999999999999')]"}}},
+			skipHead: "unresolved-expression"},
+		{name: "custom role of another principal does not hide the missing roles",
+			rs:       join([]sdk.ARMResource{acct, proj("proj", sysID()), conn("proj", searchHost), target(typeSearch, "srch"), roleOn(typeSearch, "srch", "99999999-9999-9999-9999-999999999999", otherPrincipal)}),
+			findings: []string{"Search Index Data Contributor", "Search Service Contributor"}},
+
 		// negative: roles present
 		{name: "system-assigned identity holds both search roles",
 			rs: join([]sdk.ARMResource{acct, proj("proj", sysID()), conn("proj", searchHost), target(typeSearch, "srch")}, searchRoles(sysPrincipal))},
