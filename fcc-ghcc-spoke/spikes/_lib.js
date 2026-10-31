@@ -61,9 +61,10 @@ function createContext(env) {
             steps.push({ note: text });
         },
 
-        call: async function (step, method, urlPath, body) {
+        /* opts.token sends the request with a different credential, e.g. a GitHub App installation token. */
+        call: async function (step, method, urlPath, body, opts) {
             var headers = {
-                'Authorization': 'Bearer ' + token,
+                'Authorization': 'Bearer ' + ((opts && opts.token) || token),
                 'Accept': 'application/vnd.github+json',
                 'X-GitHub-Api-Version': lib.endpoints.API_VERSION
             };

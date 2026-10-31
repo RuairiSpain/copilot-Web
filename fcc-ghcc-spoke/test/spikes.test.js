@@ -3,36 +3,12 @@
 var test = require('node:test');
 var assert = require('node:assert/strict');
 var fs = require('node:fs');
-var os = require('node:os');
 var path = require('node:path');
-var mockServer = require('../mock/server');
+var withMock = require('./helpers').withMock;
 var harness = require('../spikes/_lib');
 var teams = require('../spikes/teams-as-resources');
 var property = require('../spikes/property-to-assignment');
 var overlap = require('../spikes/budget-overlap');
-
-async function withMock(mockOptions, fn) {
-    var mock = mockServer.createMock(Object.assign({ token: 'spike-secret-token' }, mockOptions));
-    var server = await mockServer.startServer(mock, 0);
-    var dir = fs.mkdtempSync(path.join(os.tmpdir(), 'spike-findings-'));
-    var env = {
-        GITHUB_TOKEN: 'spike-secret-token',
-        GITHUB_ENTERPRISE: 'acme',
-        GITHUB_API_BASE: 'http://127.0.0.1:' + server.address().port,
-        SPIKE_FINDINGS_DIR: dir,
-        SPIKE_TEAM: 'platform',
-        SPIKE_ORG: 'acme',
-        SPIKE_REPO: 'api',
-        SPIKE_USER: 'ada',
-        SPIKE_POLL_SECONDS: '0'
-    };
-    try {
-        await fn(mock, env, dir);
-    } finally {
-        server.close();
-        fs.rmSync(dir, { recursive: true, force: true });
-    }
-}
 
 function activeCostCenters(mock) {
     return mock.state.costCenters.filter(function (c) { return c.state === 'active'; });

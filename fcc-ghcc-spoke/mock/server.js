@@ -24,6 +24,11 @@ function createMock(options) {
         supportTeams: !!opts.supportTeams,
         /* When true, setting the cost_center repo property also assigns the repo, as GitHub might. Phase 0 decides. */
         autoAssignFromProperty: !!opts.autoAssignFromProperty,
+        /* Stand-ins for Phase 0 findings: does GitHub store an Azure subscription / a budget expiry? */
+        supportAzureSubscription: !!opts.supportAzureSubscription,
+        supportBudgetExpiry: !!opts.supportBudgetExpiry,
+        /* Requests allowed before a rate-limit response; 0 disables limiting and rate-limit headers. */
+        rateLimit: opts.rateLimit || 0,
         maxPerPage: 100
     };
     var state;
@@ -31,11 +36,21 @@ function createMock(options) {
     var requests;
 
     function reset() {
-        state = { nextId: 1, costCenters: [], budgets: [], properties: { schema: {}, values: {} } };
+        state = { nextId: 1, calls: 0, costCenters: [], budgets: [], audit: [], properties: { schema: {}, values: {} } };
         faults = [];
         requests = [];
     }
     reset();
+
+    function audit(action, data) {
+        var k, event = { '@timestamp': Date.now(), action: action, actor: 'mock-actor' };
+        for (k in data || {}) {
+            if (Object.prototype.hasOwnProperty.call(data, k)) {
+                event[k] = data[k];
+            }
+        }
+        state.audit.push(event);
+    }
 
     function id(prefix) {
         return prefix + '-' + (state.nextId++);
@@ -118,7 +133,11 @@ function createMock(options) {
             return err(422, 'Enterprise has reached the maximum number of cost centers (' + config.maxCostCenters + ')');
         }
         var cc = { id: id('cc'), name: body.name, state: 'active', azure_subscription: null, resources: [] };
+        if (config.supportAzureSubscription && body.azure_subscription) {
+            cc.azure_subscription = body.azure_subscription;
+        }
         state.costCenters.push(cc);
+        audit('cost_center.create', { cost_center: cc.name, cost_center_id: cc.id });
         return reply(201, cc);
     }
 
@@ -126,10 +145,15 @@ function createMock(options) {
         if (body && typeof body.name === 'string' && body.name) {
             cc.name = body.name;
         }
+        if (config.supportAzureSubscription && body && body.azure_subscription) {
+            cc.azure_subscription = body.azure_subscription;
+        }
+        audit('cost_center.update', { cost_center: cc.name, cost_center_id: cc.id });
         return reply(200, cc);
     }
 
     function deleteCostCenter(cc) {
+        audit('cost_center.delete', { cost_center: cc.name, cost_center_id: cc.id });
         cc.state = 'deleted';
         cc.resources = [];
         return reply(200, { message: 'Cost center successfully deleted' });
@@ -261,7 +285,11 @@ function createMock(options) {
         if (body.user) {
             budget.user = body.user;
         }
+        if (config.supportBudgetExpiry && body.expires_at) {
+            budget.expires_at = body.expires_at;
+        }
         state.budgets.push(budget);
+        audit('budget.create', { budget_id: budget.id, budget_scope: budget.budget_scope });
         return reply(201, { message: 'Budget successfully created.', budget: budget });
     }
 
@@ -280,6 +308,7 @@ function createMock(options) {
     }
 
     function deleteBudget(budget) {
+        audit('budget.delete', { budget_id: budget.id });
         state.budgets.splice(state.budgets.indexOf(budget), 1);
         return reply(200, { message: 'Budget successfully deleted.' });
     }
@@ -350,6 +379,9 @@ function createMock(options) {
         if (props) {
             return props;
         }
+        if (/^\/enterprises\/[^/]+\/audit-log$/.test(url.pathname) && method === 'GET') {
+            return reply(200, state.audit);
+        }
         var m = url.pathname.match(/^\/enterprises\/([^/]+)\/settings\/billing\/(cost-centers|budgets)(?:\/([^/]+))?(?:\/(resource|user-states))?$/);
         var kind, itemId, sub, item;
         if (!m) {
@@ -410,11 +442,32 @@ function createMock(options) {
             return err(401, 'Bad credentials');
         }
         url = new URL(req.path, 'http://mock.local');
+        state.calls++;
         fault = takeFault(method, url.pathname);
         if (fault) {
-            return fault;
+            return withRateHeaders(fault);
         }
-        return route(method, url, req.body);
+        if (config.rateLimit && state.calls > config.rateLimit) {
+            return withRateHeaders(err(403, 'API rate limit exceeded'));
+        }
+        return withRateHeaders(route(method, url, req.body));
+    }
+
+    function withRateHeaders(out) {
+        var k, h = {};
+        if (!config.rateLimit) {
+            return out;
+        }
+        for (k in out.headers) {
+            if (Object.prototype.hasOwnProperty.call(out.headers, k)) {
+                h[k] = out.headers[k];
+            }
+        }
+        h['x-ratelimit-limit'] = String(config.rateLimit);
+        h['x-ratelimit-remaining'] = String(Math.max(0, config.rateLimit - state.calls));
+        h['x-ratelimit-reset'] = String(Math.floor(Date.now() / 1000) + 3600);
+        h['x-ratelimit-resource'] = 'billing';
+        return { status: out.status, headers: h, body: out.body };
     }
 
     return {

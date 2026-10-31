@@ -9,7 +9,7 @@ This folder holds what can be built and tested without a ServiceNow instance:
 | `lib/` | `GHCCClient` and its parts. ES5 only, because it is packaged into a ServiceNow Script Include. |
 | `mock/server.js` | Mock GitHub enterprise billing API: a synchronous handler plus an HTTP wrapper. |
 | `test/` | Unit and mock-backed tests (`node:test`, no dependencies). |
-| `spikes/` | Phase 0 scripts (three written) that record real GitHub responses. See `spikes/README.md`. |
+| `spikes/` | Phase 0 scripts (all eleven written) that record real GitHub responses. See `spikes/README.md`. |
 
 The ServiceNow application files (tables, Script Include wrapper, REST Message, flows, ATF) are not created yet. They come from the instance through Studio source control; see "Next steps".
 
@@ -18,11 +18,11 @@ The ServiceNow application files (tables, Script Include wrapper, REST Message, 
 Needs Node 22 or later. No `npm install` is required.
 
 ```sh
-npm test            # 40 tests
+npm test            # 56 tests
 npm run mock        # mock API on http://127.0.0.1:4010, token "test-token"
 ```
 
-Environment for `npm run mock`: `MOCK_PORT`, `MOCK_TOKEN`, `MOCK_SUPPORT_TEAMS=1` (accept teams as cost center resources) and `MOCK_AUTO_ASSIGN=1` (setting the `cost_center` repo property also assigns the repo); both stand in for Phase 0 findings.
+Environment for `npm run mock`: `MOCK_PORT`, `MOCK_TOKEN`, `MOCK_SUPPORT_TEAMS=1` (accept teams as cost center resources) and `MOCK_AUTO_ASSIGN=1` (setting the `cost_center` repo property also assigns the repo); both stand in for Phase 0 findings. Library-level options (`supportAzureSubscription`, `supportBudgetExpiry`, `rateLimit`) are available to tests through `createMock`.
 
 Test helpers on the running server: `POST /__mock/reset`, and `POST /__mock/fault` with `{ "status": 429, "headers": { "retry-after": "3" }, "method": "GET", "pathIncludes": "budgets", "times": 2 }`. ATF suites use these to exercise retry, throttling and error paths.
 

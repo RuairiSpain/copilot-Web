@@ -16,6 +16,8 @@ SPIKE_ORG=my-org SPIKE_REPO=my-repo      node spikes/property-to-assignment.js
 SPIKE_USER=some-login                    node spikes/budget-overlap.js
 ```
 
+The other eight follow the same pattern; each file's header comment lists its inputs and what its verdicts mean.
+
 To rehearse against the mock instead, start `npm run mock` and set `GITHUB_API_BASE=http://127.0.0.1:4010`, `GITHUB_TOKEN=test-token`. No confirmation is needed. The mock's answers are guesses, so a rehearsal checks the script, not GitHub.
 
 ## Status
@@ -25,14 +27,14 @@ To rehearse against the mock instead, start `npm run mock` and set `GITHUB_API_B
 | teams-as-resources | written | Phase 2 | `SPIKE_TEAM` |
 | property-to-assignment | written | Phase 5 | `SPIKE_ORG`, `SPIKE_REPO`, optional `SPIKE_POLL_SECONDS` |
 | budget-overlap | written, precedence needs a manual step | Phase 3 | `SPIKE_USER`, optional `SPIKE_KEEP=yes` |
-| org-as-resource | not written | Phase 2 | |
-| org-vs-repo-precedence | not written | Phase 5 | |
-| override-expiry-field | not written | Phase 4 | |
-| user-state-response | not written | Phase 4 | |
-| azure-subscription-api | not written | Phase 2 | |
-| rate-limits | not written | Phase 3 | |
-| audit-log-actor | not written | Phase 3 | |
-| github-app-auth | not written | Risk mitigation | |
+| org-as-resource | written, billing attribution needs a manual step | Phase 2 | `SPIKE_ORG`, `SPIKE_USER` |
+| org-vs-repo-precedence | written, billing attribution needs a manual step | Phase 5 | `SPIKE_ORG`, `SPIKE_REPO` |
+| override-expiry-field | written | Phase 4 | `SPIKE_USER` |
+| user-state-response | written | Phase 4 | `SPIKE_USER` |
+| azure-subscription-api | written | Phase 2 | optional `SPIKE_AZURE_SUBSCRIPTION` (without it a rejection is inconclusive) |
+| rate-limits | written, read-only | Phase 3 | optional `SPIKE_RATE_CALLS` |
+| audit-log-actor | written; also rerun after a UI edit | Phase 3 | optional `SPIKE_AUDIT_ONLY`, `SPIKE_AUDIT_WAIT_SECONDS` |
+| github-app-auth | written | Risk mitigation | `SPIKE_APP_TOKEN` (an installation token you minted) |
 
 ## Reading a finding
 
