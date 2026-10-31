@@ -22,6 +22,8 @@ function createMock(options) {
         token: opts.token || 'test-token',
         maxCostCenters: opts.maxCostCenters || 1000,
         supportTeams: !!opts.supportTeams,
+        /* When true, setting the cost_center repo property also assigns the repo, as GitHub might. Phase 0 decides. */
+        autoAssignFromProperty: !!opts.autoAssignFromProperty,
         maxPerPage: 100
     };
     var state;
@@ -29,7 +31,7 @@ function createMock(options) {
     var requests;
 
     function reset() {
-        state = { nextId: 1, costCenters: [], budgets: [] };
+        state = { nextId: 1, costCenters: [], budgets: [], properties: { schema: {}, values: {} } };
         faults = [];
         requests = [];
     }
@@ -286,9 +288,68 @@ function createMock(options) {
         return reply(200, { budget_id: budget.id, users: budget.user_states || [] });
     }
 
+    /* ---------- repository custom properties (used by the Phase 0 property spike) ---------- */
+
+    function setProperties(org, body) {
+        var i, j, name, prop, key, i2, cc;
+        if (!body || !Array.isArray(body.repository_names) || !Array.isArray(body.properties)) {
+            return err(422, 'Validation Failed');
+        }
+        for (i = 0; i < body.repository_names.length; i++) {
+            name = body.repository_names[i];
+            key = org + '/' + name;
+            state.properties.values[key] = state.properties.values[key] || {};
+            for (j = 0; j < body.properties.length; j++) {
+                prop = body.properties[j];
+                if (prop.value === null) {
+                    delete state.properties.values[key][prop.property_name];
+                } else {
+                    state.properties.values[key][prop.property_name] = prop.value;
+                }
+                if (config.autoAssignFromProperty && prop.property_name === 'cost_center' && prop.value !== null) {
+                    for (i2 = 0; i2 < state.costCenters.length; i2++) {
+                        cc = state.costCenters[i2];
+                        if (cc.state === 'active' && cc.name === prop.value) {
+                            addResources(cc, { repositories: [key] });
+                        }
+                    }
+                }
+            }
+        }
+        return reply(204, undefined);
+    }
+
+    function routeProperties(method, url, body) {
+        var org = url.pathname.match(/^\/orgs\/([^/]+)\/properties\/(?:schema\/([^/]+)|values)$/);
+        var repo = url.pathname.match(/^\/repos\/([^/]+)\/([^/]+)\/properties\/values$/);
+        var values, out, k;
+        if (org && org[2] && method === 'PUT') {
+            state.properties.schema[org[1] + '/' + org[2]] = body || {};
+            return reply(200, { property_name: org[2], value_type: (body && body.value_type) || 'string' });
+        }
+        if (org && !org[2] && method === 'PATCH') {
+            return setProperties(org[1], body);
+        }
+        if (repo && method === 'GET') {
+            values = state.properties.values[repo[1] + '/' + repo[2]] || {};
+            out = [];
+            for (k in values) {
+                if (Object.prototype.hasOwnProperty.call(values, k)) {
+                    out.push({ property_name: k, value: values[k] });
+                }
+            }
+            return reply(200, out);
+        }
+        return null;
+    }
+
     /* ---------- routing ---------- */
 
     function route(method, url, body) {
+        var props = routeProperties(method, url, body);
+        if (props) {
+            return props;
+        }
         var m = url.pathname.match(/^\/enterprises\/([^/]+)\/settings\/billing\/(cost-centers|budgets)(?:\/([^/]+))?(?:\/(resource|user-states))?$/);
         var kind, itemId, sub, item;
         if (!m) {
@@ -457,7 +518,8 @@ if (require.main === module) {
     var port = parseInt(process.env.MOCK_PORT || '4010', 10);
     var mock = createMock({
         token: process.env.MOCK_TOKEN || 'test-token',
-        supportTeams: process.env.MOCK_SUPPORT_TEAMS === '1'
+        supportTeams: process.env.MOCK_SUPPORT_TEAMS === '1',
+        autoAssignFromProperty: process.env.MOCK_AUTO_ASSIGN === '1'
     });
     startServer(mock, port).then(function () {
         console.log('mock GitHub billing API on http://127.0.0.1:' + port + ' (token: ' + mock.token + ')');
