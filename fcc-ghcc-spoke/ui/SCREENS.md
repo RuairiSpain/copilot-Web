@@ -53,13 +53,13 @@ A catalog client script shows the policy checks as the amount changes. A flow ro
 
 ## Data model gaps found while designing these screens
 
-These are missing from PRD v0.2 section 5 and need adding before the screens can be built as shown:
+These were missing from PRD v0.2 section 5 and are fixed in PRD v0.3 (changes 14 to 18). They are listed here so the screens and the data model stay in step:
 
-1. **`request.type` has no value for a bulk repo assignment.** D7 needs one request with one approval for many repos. Add an `assign` type, or reuse `create` and say so.
-2. **`drift` has no `actor` field,** though X2 shows the actor on a drift record. Add it, with "not available" as a valid value.
-3. **`sync_run` has no call count or rate-limit remaining.** The Sync health tiles need both. Add `calls` and `rate_limit_remaining` (the second depends on Phase 0 showing that GitHub returns rate-limit headers on these endpoints).
-4. **The 75, 90 and 100 percent thresholds** are in `policy` as "thresholds", but the prototype also needs the override caps, the second-approver threshold and the total-overrides cap there as separate fields.
-5. **The sample forecast** is a run rate (month-to-date spend divided by days elapsed, times days in the month). The PRD says "forecast" without defining it; confirm with FCC finance.
+1. **`request.type` gains `assign`** for a bulk repo assignment: D7 needs one request with one approval for many repos.
+2. **`drift` gains `actor`,** because X2 shows the actor on a drift record. "Not available" is a valid value.
+3. **`sync_run` gains `calls` and `rate_limit_remaining`,** which the Sync health tiles need. The second depends on Phase 0 showing that GitHub returns rate-limit headers on these endpoints.
+4. **`policy` holds the override cap per role, the total overrides cap, the second-approver threshold and the 75, 90 and 100 percent alert thresholds** as separate fields.
+5. **Forecast is a run rate:** month-to-date spend divided by days elapsed, times days in the month. FCC finance still has to confirm it (open question 9).
 
 ## Not covered here
 
