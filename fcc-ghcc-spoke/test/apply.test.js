@@ -118,7 +118,7 @@ test('apply needs a request number', function () {
 test('apply without a replan function is refused unless the caller opts out', function () {
     var t = h.setup({ supportTeams: true });
     var p = planAgainstMock(t, f.desired());
-    assert.throws(function () { lib.apply(p, t.client, { requestNumber: 'RITM0100' }); }, function (e) { return e.kind === 'precondition' && /replan/.test(e.message); });
+    assert.throws(function () { lib.apply(p, t.client, { requestNumber: 'RITM0100', expectedFingerprint: p.fingerprint }); }, function (e) { return e.kind === 'precondition' && /replan/.test(e.message); });
     assert.equal(t.changeLog.entries.length, 0);
 });
 
@@ -135,8 +135,8 @@ test('apply refuses when GitHub changed after approval, and writes nothing', fun
     t.client.createCostCenter({ name: 'UNALLOCATED-acme-platform' }, REQ);
     var before = t.changeLog.entries.length;
     assert.throws(function () {
-        lib.apply(p, t.client, { requestNumber: 'RITM0100', replan: function () { return planAgainstMock(t, f.desired()); } });
-    }, function (e) { return e.kind === 'precondition' && /approved/.test(e.message); });
+        lib.apply(p, t.client, { requestNumber: 'RITM0100', expectedFingerprint: p.fingerprint, replan: function () { return planAgainstMock(t, f.desired()); } });
+    }, function (e) { return e.kind === 'precondition' && /changed since this plan was approved/.test(e.message); });
     assert.equal(t.changeLog.entries.length, before);
 });
 
@@ -171,8 +171,29 @@ test('apply refuses a plan with errors even when its blocked flag was cleared', 
     assert.throws(function () { lib.apply(p, t.client, { requestNumber: 'RITM0100', allowStale: true }); }, function (e) { return e.kind === 'precondition'; });
 });
 
-test('apply takes a remediation plan that has no stored fingerprint', function () {
+test('a hand-built plan with no fingerprint is refused, even with allowStale', function () {
     var t = h.setup({ supportTeams: true });
-    var plan = { operations: [{ id: 'op-1', kind: 'create_cost_center', costCenter: 'Payments', description: 'Create' }], errors: [], blocked: false };
-    assert.equal(lib.apply(plan, t.client, { requestNumber: 'RITM0100', allowStale: true }).ok, true);
+    var plan = { operations: [{ id: 'op-1', kind: 'delete_cost_center', githubId: 'cc-7', description: 'Delete' }], errors: [], blocked: false };
+    assert.throws(function () { lib.apply(plan, t.client, { requestNumber: 'RITM0100', allowStale: true }); }, function (e) { return e.kind === 'precondition' && /fingerprint/.test(e.message); });
+    assert.equal(t.changeLog.entries.length, 0);
+});
+
+test('apply needs the approved fingerprint unless allowStale is set', function () {
+    var t = h.setup({ supportTeams: true });
+    var p = planAgainstMock(t, f.desired());
+    assert.throws(function () {
+        lib.apply(p, t.client, { requestNumber: 'RITM0100', replan: function () { return planAgainstMock(t, f.desired()); } });
+    }, function (e) { return e.kind === 'precondition' && /expectedFingerprint/.test(e.message); });
+    assert.equal(t.changeLog.entries.length, 0);
+});
+
+test('a drift remediation carries a fingerprint, and an edited remediation is refused', function () {
+    var t = h.setup({ supportTeams: true });
+    lib.apply(planAgainstMock(t, f.desired()), t.client, REQ);
+    t.mock.state.budgets[0].budget_amount = 1;
+    var drift = lib.detectDrift(f.desired(), lib.observe(t.client), { policy: f.policy(), today: f.TODAY });
+    var rem = drift[0].remediation;
+    assert.ok(rem.fingerprint);
+    rem.operations.push({ id: 'op-9', kind: 'delete_cost_center', githubId: 'cc-1', description: 'Delete' });
+    assert.throws(function () { lib.apply(rem, t.client, { requestNumber: 'DR-1', allowStale: true }); }, function (e) { return e.kind === 'precondition'; });
 });

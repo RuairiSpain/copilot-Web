@@ -163,8 +163,14 @@ GHCCClient.prototype._write = function (method, path, payload, meta) {
     return resp.body;
 };
 
+/* Identity of a list item, to notice a server that keeps returning the same page. */
+function itemKey(item) {
+    return item && item.id !== undefined ? 'id:' + item.id : 'json:' + JSON.stringify(item);
+}
+
 GHCCClient.prototype._list = function (path, itemsKey, params, paginate) {
     var items = [];
+    var seen = Object.create(null);
     var page = 1;
     var self = this;
     while (true) {
@@ -182,9 +188,14 @@ GHCCClient.prototype._list = function (path, itemsKey, params, paginate) {
         var resp = self._read('GET', path + queryString(q));
         var body = resp.body;
         var pageItems = Array.isArray(body) ? body : ((body && body[itemsKey]) || []);
-        var i;
+        var i, fresh = 0, k;
         for (i = 0; i < pageItems.length; i++) {
-            items.push(pageItems[i]);
+            k = itemKey(pageItems[i]);
+            if (!seen[k]) {
+                seen[k] = true;
+                fresh++;
+                items.push(pageItems[i]);
+            }
         }
         if (!paginate) {
             return items;
@@ -195,8 +206,12 @@ GHCCClient.prototype._list = function (path, itemsKey, params, paginate) {
         } else if (resp.headers.link) {
             more = hasLinkNext(resp.headers);
         } else {
-            /* No signal from the server: a short page does not prove the last one, because the server may cap the page size. Read until an empty page. */
-            more = pageItems.length > 0;
+            /*
+             * No signal from the server. A short page does not prove the last one, because the server may cap the
+             * page size. Read until a page is empty or adds nothing new; the second case is a server that ignores
+             * `page` and returns the same list every time, which would otherwise run to maxPages.
+             */
+            more = fresh > 0;
         }
         if (!more) {
             return items;

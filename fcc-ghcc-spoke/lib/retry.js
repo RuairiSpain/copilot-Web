@@ -2,6 +2,7 @@
 
 var errors = require('./errors');
 
+var SECONDARY_LIMIT_WAIT_MS = 60000;
 var RETRYABLE_STATUS = { 429: true, 502: true, 503: true, 504: true };
 
 function num(v) {
@@ -58,6 +59,13 @@ function send(transport, req, opts) {
             return { response: resp, attempts: attempt };
         }
         var wait = serverDelayMs(resp, opts.now());
+        /*
+         * A rate-limited 403 with no wait hint is GitHub's secondary limit, which asks for at least a minute.
+         * Backing off for a few seconds would only extend it, so hand the pause to the caller.
+         */
+        if (wait === null && resp.status === 403 && errors.isRateLimited(resp)) {
+            throwThrottled(resp, SECONDARY_LIMIT_WAIT_MS, attempt, opts);
+        }
         if (wait !== null && wait > opts.maxDelayMs) {
             throwThrottled(resp, wait, attempt, opts);
         }

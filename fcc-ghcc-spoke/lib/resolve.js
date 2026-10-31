@@ -20,14 +20,14 @@ function resolve(desired, policy) {
     var errors = [];
     var warnings = [];
     var assignments = [];
-    var userCenter = {};
+    var userCenter = util.dict();
     var teams = desired.fundingTeams || [];
     var members = desired.teamMembers || {};
     var users = desired.users || [];
-    var centerNames = {};
-    var teamsOf = {};
-    var direct = {};
-    var logins = {};
+    var centerNames = util.dict();
+    var teamsOf = util.dict();
+    var direct = util.dict();
+    var logins = util.dict();
     var i, j, t, login, list, centers, u, c, repo, value;
 
     for (i = 0; i < (desired.costCenters || []).length; i++) {
@@ -39,7 +39,7 @@ function resolve(desired, policy) {
 
     for (i = 0; i < teams.length; i++) {
         t = teams[i];
-        list = members[t.slug] || [];
+        list = util.own(members, t.slug) || [];
         for (j = 0; j < list.length; j++) {
             login = lower(list[j]);
             teamsOf[login] = teamsOf[login] || [];
@@ -59,7 +59,7 @@ function resolve(desired, policy) {
     /* R2: a user in two funding teams. */
     for (login in teamsOf) {
         if (Object.prototype.hasOwnProperty.call(teamsOf, login) && teamsOf[login].length > 1) {
-            centers = {};
+            centers = util.dict();
             for (j = 0; j < teamsOf[login].length; j++) {
                 centers[lower(teamsOf[login][j].costCenter)] = true;
             }
@@ -78,7 +78,7 @@ function resolve(desired, policy) {
         if (Object.prototype.hasOwnProperty.call(logins, login)) {
             userCenter[login] = null;
             if (teamsOf[login] && teamsOf[login].length) {
-                centers = {};
+                centers = util.dict();
                 for (j = 0; j < teamsOf[login].length; j++) {
                     centers[lower(teamsOf[login][j].costCenter)] = teamsOf[login][j].costCenter;
                 }
@@ -109,7 +109,7 @@ function resolve(desired, policy) {
         if (policy.teamsSupported) {
             assignments.push({ type: 'Team', name: t.slug, costCenter: t.costCenter, source: 'team' });
         } else {
-            list = members[t.slug] || [];
+            list = util.own(members, t.slug) || [];
             for (j = 0; j < list.length; j++) {
                 login = lower(list[j]);
                 if (!direct[login]) {

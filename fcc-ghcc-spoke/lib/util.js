@@ -2,6 +2,20 @@
 
 /* Small helpers shared by the plan engine. ES5 only. */
 
+/*
+ * A map for keys that come from outside (logins, team slugs, cost center names, property values).
+ * A plain {} inherits constructor, toString and similar, so a user called "constructor" would
+ * read as present. These maps have no prototype.
+ */
+function dict() {
+    return Object.create(null);
+}
+
+/* obj[key] only when it is the object's own property; undefined otherwise. */
+function own(obj, key) {
+    return obj && Object.prototype.hasOwnProperty.call(obj, key) ? obj[key] : undefined;
+}
+
 function lower(s) {
     return String(s === undefined || s === null ? '' : s).toLowerCase();
 }
@@ -164,7 +178,11 @@ function sha256(text) {
     return hex;
 }
 
-/* SHA-256 of the value's canonical JSON. Approval of a plan is bound to this, so it must resist deliberate edits. */
+/*
+ * SHA-256 of the value's canonical JSON. It detects that a plan changed between approval and apply. It does
+ * not stop someone who can rewrite both the plan and the stored fingerprint, so keep the approved fingerprint
+ * in a record that the plan's editor cannot write.
+ */
 function fingerprint(value) {
     return sha256(stableStringify(value));
 }
@@ -182,6 +200,8 @@ function money(n) {
 }
 
 module.exports = {
+    dict: dict,
+    own: own,
     lower: lower,
     key: key,
     issue: issue,

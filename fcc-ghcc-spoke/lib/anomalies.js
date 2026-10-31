@@ -81,11 +81,11 @@ function detectAnomalies(desired, observed, usage, optionsIn) {
     var resolution = resolveMod.resolve(desired, o.policy);
     var scopeMap = o.policy.budgetScopeMap || budgetmap.DEFAULT_SCOPE_MAP;
     var items = [];
-    var location = {};
-    var budgetsByIdentity = {};
-    var centerBudget = {};
-    var knownValues = {};
-    var teamCenterOf = {};
+    var location = util.dict();
+    var budgetsByIdentity = util.dict();
+    var centerBudget = util.dict();
+    var knownValues = util.dict();
+    var teamCenterOf = util.dict();
 
     util.requireToday(today, 'detectAnomalies');
 
@@ -100,10 +100,10 @@ function detectAnomalies(desired, observed, usage, optionsIn) {
         });
     }
 
+    Object.keys(centers.location).forEach(function (k) {
+        location[k] = centers.observedActive[centers.location[k]].name;
+    });
     Object.keys(centers.observedActive).forEach(function (n) {
-        (centers.observedActive[n].resources || []).forEach(function (r) {
-            location[key(r.type, r.name)] = centers.observedActive[n].name;
-        });
         knownValues[n] = centers.observedActive[n].name;
     });
     Object.keys(centers.approved).forEach(function (n) { knownValues[n] = centers.approved[n].name; });
@@ -122,7 +122,7 @@ function detectAnomalies(desired, observed, usage, optionsIn) {
         Object.keys(desired.teamMembers || {}).sort().forEach(function (slug) {
             var placed = location[key('Team', slug)];
             if (!placed) { return; }
-            desired.teamMembers[slug].forEach(function (m) {
+            util.own(desired.teamMembers, slug).forEach(function (m) {
                 if (!teamCenterOf[lower(m)]) { teamCenterOf[lower(m)] = placed; }
             });
         });
@@ -212,16 +212,16 @@ function detectAnomalies(desired, observed, usage, optionsIn) {
     /* Spend against budget and pool, and spend spikes. */
     (function usageChecks() {
         var month = today.slice(0, 7);
-        var spendByCenter = {};
+        var spendByCenter = util.dict();
         var latest = null;
         var allDates = [];
-        var series = { center: {}, user: {} };
+        var series = { center: util.dict(), user: util.dict() };
 
         function collect(rows, kind, field) {
             (rows || []).forEach(function (r) {
                 var subject = lower(r[field]);
                 if (r.date > today) { return; }
-                series[kind][subject] = series[kind][subject] || { name: r[field], byDate: {} };
+                series[kind][subject] = series[kind][subject] || { name: r[field], byDate: util.dict() };
                 series[kind][subject].byDate[r.date] = (series[kind][subject].byDate[r.date] || 0) + r.usd;
                 allDates.push(r.date);
                 if (kind === 'center' && r.date.slice(0, 7) === month) {
@@ -241,7 +241,7 @@ function detectAnomalies(desired, observed, usage, optionsIn) {
         Object.keys(spendByCenter).sort().forEach(function (n) {
             var name = series.center[n].name;
             var b = centerBudget[n];
-            var pool = u.pools && u.pools[name];
+            var pool = util.own(u.pools, name);
             var spent = spendByCenter[n];
             var level;
             if (b && b.budget_amount > 0) {

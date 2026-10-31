@@ -31,14 +31,19 @@ function toResourceBody(resources) {
  *            replan               function () -> plan, built from a fresh observe(); required unless allowStale.
  *                                 apply() refuses to run when the fresh plan's operations differ from the plan
  *                                 that was approved, because GitHub changed between approval and apply.
- *            expectedFingerprint  optional; the fingerprint recorded at approval. It is compared with a fingerprint
- *                                 recomputed from plan.operations, so a plan edited since approval is refused.
- *            allowStale           true skips the freshness check (tests, or remediation plans built a moment ago)
+ *            expectedFingerprint  the fingerprint stored when the change was approved; required unless allowStale.
+ *                                 It is compared with a fingerprint recomputed from plan.operations, so a plan
+ *                                 edited since approval is refused. Keep it in a record the plan's editor cannot
+ *                                 write, because anyone who can write both the plan and its own fingerprint can
+ *                                 make them agree.
+ *            allowStale           true skips the approval and freshness checks. Only for a plan built moments ago in
+ *                                 the same script (a drift remediation, a test). The plan must still carry a
+ *                                 fingerprint that matches its operations.
  *
  * Returns { ok, results: [{ id, kind, status, error? }] }; status is done, failed or skipped.
  */
 function apply(plan, client, meta) {
-    var ids = {};
+    var ids = util.dict();
     var results = [];
     var failed = false;
     var i, op, res, body, fresh, actual;
@@ -55,8 +60,14 @@ function apply(plan, client, meta) {
     }
 
     actual = util.fingerprint(plan.operations);
-    if (plan.fingerprint !== undefined && plan.fingerprint !== actual) {
+    if (!plan.fingerprint) {
+        throw new errors.GHCCError(errors.KINDS.PRECONDITION, 'the plan has no fingerprint; build it with plan() or detectDrift()');
+    }
+    if (plan.fingerprint !== actual) {
         throw new errors.GHCCError(errors.KINDS.PRECONDITION, 'the plan operations do not match the plan fingerprint; the plan was edited, so plan again');
+    }
+    if (meta.allowStale !== true && !meta.expectedFingerprint) {
+        throw new errors.GHCCError(errors.KINDS.PRECONDITION, 'apply needs meta.expectedFingerprint, the fingerprint stored when the change was approved (or meta.allowStale for a plan built just now)');
     }
     if (meta.expectedFingerprint && meta.expectedFingerprint !== actual) {
         throw new errors.GHCCError(errors.KINDS.PRECONDITION, 'the plan changed after it was approved (fingerprint mismatch); review and approve it again');

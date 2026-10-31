@@ -84,12 +84,12 @@ function detectDrift(desired, observed, options) {
     var centers = planMod.indexCenters(desired, observed);
     var resolution = resolveMod.resolve(desired, policy);
     var items = [];
-    var location = {};
-    var assigned = {};
-    var missingCenters = {};
-    var desiredNames = {};
-    var desiredBudgetIds = {};
-    var observedBudgetById = {};
+    var location = centers.location;
+    var assigned = util.dict();
+    var missingCenters = util.dict();
+    var desiredNames = util.dict();
+    var desiredBudgetIds = util.dict();
+    var observedBudgetById = util.dict();
 
     (observed.budgets || []).forEach(function (o) { observedBudgetById[budgetmap.identityOfObserved(o)] = o; });
     (desired.costCenters || []).forEach(function (c) {
@@ -97,20 +97,22 @@ function detectDrift(desired, observed, options) {
     });
 
     function modeFor(type, org) {
-        var configured = (org && modes.orgs && modes.orgs[org] && modes.orgs[org][type]) || (modes.defaults && modes.defaults[type]) || 'report';
+        var configured = (org && util.own(util.own(modes.orgs, org), type)) || util.own(modes.defaults, type) || 'report';
         var max = MAX_MODE[type];
         var effective = MODE_RANK[configured] > MODE_RANK[max] ? max : configured;
         return { configured: configured, effective: effective, note: effective !== configured ? 'lowered from ' + configured + ': ' + type + ' can run at most in ' + max + ' mode' : null };
     }
 
     function remediation(ops, requiresApproval) {
+        var numbered = ops.map(function (o, i) {
+            var out = { id: 'op-' + (i + 1) };
+            var k;
+            for (k in o) { if (Object.prototype.hasOwnProperty.call(o, k)) { out[k] = o[k]; } }
+            return out;
+        });
         return {
-            operations: ops.map(function (o, i) {
-                var out = { id: 'op-' + (i + 1) };
-                var k;
-                for (k in o) { if (Object.prototype.hasOwnProperty.call(o, k)) { out[k] = o[k]; } }
-                return out;
-            }),
+            operations: numbered,
+            fingerprint: util.fingerprint(numbered),
             errors: [],
             warnings: [],
             blocked: false,
@@ -145,12 +147,6 @@ function detectDrift(desired, observed, options) {
         });
     }
 
-    /* Where each resource is today. */
-    Object.keys(centers.observedActive).forEach(function (n) {
-        (centers.observedActive[n].resources || []).forEach(function (r) {
-            location[key(r.type, r.name)] = n;
-        });
-    });
     resolution.assignments.forEach(function (a) { assigned[key(a.type, a.name)] = true; });
 
     /* Org baseline: the UNALLOCATED fallback and the cost_center property. */
@@ -263,7 +259,7 @@ function detectDrift(desired, observed, options) {
      */
     if (observed.repoProperties) {
         (function () {
-            var observedByRepo = {};
+            var observedByRepo = util.dict();
             observed.repoProperties.forEach(function (o) { observedByRepo[lower(o.org) + '/' + lower(o.repo)] = o; });
             (desired.repos || []).forEach(function (r) {
                 var o = observedByRepo[lower(r.org) + '/' + lower(r.repo)];

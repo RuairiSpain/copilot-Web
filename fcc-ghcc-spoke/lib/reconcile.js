@@ -1,5 +1,7 @@
 'use strict';
 
+var util = require('./util');
+
 /*
  * Reconciles freshly detected items (drift or anomalies) with the records
  * ServiceNow already holds, so a repeated sync never creates duplicates (X4).
@@ -14,9 +16,9 @@
  * resolved) does not block the same item being raised again if it recurs.
  */
 function reconcileRecords(detected, existing, trackedStates, openStates) {
-    var tracked = {};
-    var open = {};
-    var seen = {};
+    var tracked = util.dict();
+    var open = util.dict();
+    var seen = util.dict();
     var create = [];
     var unchanged = [];
     var resolve = [];

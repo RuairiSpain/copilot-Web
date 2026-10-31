@@ -24,7 +24,7 @@ function validate(desired, observed, policy, resolution, context) {
     var i, u, b, subject, seen, mapped, id, cap, role, total, byCenter, count;
 
     /* Duplicate cost center names. */
-    seen = {};
+    seen = util.dict();
     (desired.costCenters || []).forEach(function (center) {
         var n = lower(center.name);
         if (util.stateOf(center) === 'draft') {
@@ -80,7 +80,7 @@ function validate(desired, observed, policy, resolution, context) {
     });
 
     /* Every assignment must point at a cost center that exists or is created in this apply set. */
-    seen = {};
+    seen = util.dict();
     resolution.assignments.forEach(function (as) {
         var target = lower(as.costCenter);
         if (context.retired[target]) {
@@ -95,7 +95,7 @@ function validate(desired, observed, policy, resolution, context) {
 
     /* At most the GitHub limit of active cost centers. */
     count = 0;
-    seen = {};
+    seen = util.dict();
     Object.keys(context.known).forEach(function (n) {
         if (!context.retired[n] && !seen[n]) {
             seen[n] = true;
@@ -108,8 +108,8 @@ function validate(desired, observed, policy, resolution, context) {
     }
 
     /* Budgets. */
-    seen = {};
-    byCenter = {};
+    seen = util.dict();
+    byCenter = util.dict();
     for (i = 0; i < (desired.budgets || []).length; i++) {
         b = desired.budgets[i];
         if (util.stateOf(b) === 'draft' || util.stateOf(b) === 'retired') {
@@ -133,7 +133,7 @@ function validate(desired, observed, policy, resolution, context) {
         if (b.scope === 'override' && !b.user) {
             errors.push(issue('override_without_user', 'An individual override must name a user', subject));
         }
-        if (budgetmap.COST_CENTER_SCOPES[b.scope] && !context.known[lower(b.entity)]) {
+        if (util.own(budgetmap.COST_CENTER_SCOPES, b.scope) && !context.known[lower(b.entity)]) {
             errors.push(issue('budget_on_unknown_cost_center',
                 'Budget is on cost center "' + b.entity + '", which does not exist in GitHub and is not in this apply set', subject));
         }
@@ -148,7 +148,7 @@ function validate(desired, observed, policy, resolution, context) {
                 errors.push(issue('override_without_expiry', 'An individual override needs an expiry date', subject));
             }
             role = b.requesterRole;
-            cap = policy.overrideCapByRole[role] !== undefined ? policy.overrideCapByRole[role] : policy.defaultOverrideCap;
+            cap = util.own(policy.overrideCapByRole, role) !== undefined ? util.own(policy.overrideCapByRole, role) : policy.defaultOverrideCap;
             if (cap !== undefined && b.amount > cap) {
                 errors.push(issue('override_above_cap',
                     'Override of ' + util.money(b.amount) + ' is above the ' + util.money(cap) + ' cap for ' + (role || 'this role'), subject));

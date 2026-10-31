@@ -23,14 +23,14 @@ var COST_CENTER_SCOPES = { cost_center: true, cost_center_user: true };
 
 function toGithub(budget, scopeMap) {
     var map = scopeMap || DEFAULT_SCOPE_MAP;
-    var scope = map[budget.scope];
+    var scope = util.own(map, budget.scope);
     var out = {
         budget_scope: scope,
         budget_entity_name: '',
         budget_amount: budget.amount,
         prevent_further_usage: budget.preventUsage
     };
-    if (COST_CENTER_SCOPES[budget.scope]) {
+    if (util.own(COST_CENTER_SCOPES, budget.scope)) {
         out.budget_entity_name = budget.entity || '';
     }
     if (budget.scope === 'override') {

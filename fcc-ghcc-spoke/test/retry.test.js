@@ -121,3 +121,43 @@ test('listCostCenters reads every page when there are more than 100 cost centers
     }
     assert.equal(t.client.listCostCenters({ state: 'active' }).length, 150);
 });
+
+test('a list from a server that ignores page and sends no paging signal stops after the repeat', function () {
+    var calls = 0;
+    var client = new (require('../lib').GHCCClient)({
+        enterprise: 'acme',
+        sleep: function () {},
+        transport: function () {
+            calls++;
+            return { status: 200, headers: {}, body: { costCenters: [{ id: 'cc-1', name: 'x', state: 'active', resources: [] }, { id: 'cc-2', name: 'y', state: 'active', resources: [] }] } };
+        }
+    });
+    assert.equal(client.listCostCenters().length, 2);
+    assert.equal(calls, 2);
+});
+
+test('a list with no paging signal still reads every page when the server honours page and caps its size', function () {
+    var all = [];
+    var i;
+    for (i = 0; i < 25; i++) { all.push({ id: 'cc-' + i, name: 'n' + i, state: 'active', resources: [] }); }
+    var client = new (require('../lib').GHCCClient)({
+        enterprise: 'acme',
+        sleep: function () {},
+        pageSize: 100,
+        transport: function (req) {
+            var page = parseInt(/[?&]page=(\d+)/.exec(req.path)[1], 10);
+            return { status: 200, headers: {}, body: { costCenters: all.slice((page - 1) * 10, page * 10) } };
+        }
+    });
+    assert.equal(client.listCostCenters().length, 25);
+});
+
+test('a rate-limited 403 with no wait hint is handed to the caller as a one minute throttle, not retried in a loop', function () {
+    var seen = [];
+    var t = h.setup({}, { onThrottle: function (info) { seen.push(info); } });
+    t.mock.addFault({ status: 403, method: 'GET', times: 5, body: { message: 'You have exceeded a secondary rate limit.' } });
+    assert.throws(function () { t.client.listCostCenters(); }, function (e) { return e.kind === 'throttled'; });
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0].retryAfterMs, 60000);
+    assert.deepEqual(t.sleeps, []);
+});
