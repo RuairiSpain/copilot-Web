@@ -96,7 +96,7 @@ async function run(env) {
     }
     if (relevant.length) {
         return ctx.finish('audit-log-actor', 'accepted',
-            relevant.length + ' relevant event(s) found after ' + waited + 's; first action "' + relevant[0].action + '", actor "' + relevant[0].actor + '".', details);
+            relevant.length + ' relevant event(s) found after ' + waited + 's; first action "' + relevant[0].action + '", actor ' + (relevant[0].actor ? 'present' : 'absent') + '.', details);
     }
     return ctx.finish('audit-log-actor', 'inconclusive',
         'No matching events within ' + waited + 's. The log may lag, or billing changes may not be recorded. Rerun with SPIKE_AUDIT_ONLY=yes later.', details);

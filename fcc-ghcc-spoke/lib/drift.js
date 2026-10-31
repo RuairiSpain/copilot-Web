@@ -78,38 +78,41 @@ function budgetText(amount, prevent) {
  */
 function detectDrift(desired, observed, options) {
     var opts = options || {};
+    var today = util.requireToday(opts.today, 'detectDrift');
     var policy = planMod.withDefaults(opts.policy);
     var modes = opts.modes || {};
     var centers = planMod.indexCenters(desired, observed);
     var resolution = resolveMod.resolve(desired, policy);
     var items = [];
-    var location = {};
-    var assigned = {};
-    var missingCenters = {};
-    var desiredNames = {};
-    var desiredBudgetIds = {};
-    var knownValues = {};
+    var location = centers.location;
+    var assigned = util.dict();
+    var missingCenters = util.dict();
+    var desiredNames = util.dict();
+    var desiredBudgetIds = util.dict();
+    var observedBudgetById = util.dict();
 
+    (observed.budgets || []).forEach(function (o) { observedBudgetById[budgetmap.identityOfObserved(o)] = o; });
     (desired.costCenters || []).forEach(function (c) {
         desiredNames[lower(c.name)] = true;
-        if (util.stateOf(c) === 'approved') { knownValues[lower(c.name)] = c.name; }
     });
 
     function modeFor(type, org) {
-        var configured = (org && modes.orgs && modes.orgs[org] && modes.orgs[org][type]) || (modes.defaults && modes.defaults[type]) || 'report';
+        var configured = (org && util.own(util.own(modes.orgs, org), type)) || util.own(modes.defaults, type) || 'report';
         var max = MAX_MODE[type];
         var effective = MODE_RANK[configured] > MODE_RANK[max] ? max : configured;
         return { configured: configured, effective: effective, note: effective !== configured ? 'lowered from ' + configured + ': ' + type + ' can run at most in ' + max + ' mode' : null };
     }
 
     function remediation(ops, requiresApproval) {
+        var numbered = ops.map(function (o, i) {
+            var out = { id: 'op-' + (i + 1) };
+            var k;
+            for (k in o) { if (Object.prototype.hasOwnProperty.call(o, k)) { out[k] = o[k]; } }
+            return out;
+        });
         return {
-            operations: ops.map(function (o, i) {
-                var out = { id: 'op-' + (i + 1) };
-                var k;
-                for (k in o) { if (Object.prototype.hasOwnProperty.call(o, k)) { out[k] = o[k]; } }
-                return out;
-            }),
+            operations: numbered,
+            fingerprint: util.fingerprint(numbered),
             errors: [],
             warnings: [],
             blocked: false,
@@ -144,12 +147,6 @@ function detectDrift(desired, observed, options) {
         });
     }
 
-    /* Where each resource is today. */
-    Object.keys(centers.observedActive).forEach(function (n) {
-        (centers.observedActive[n].resources || []).forEach(function (r) {
-            location[key(r.type, r.name)] = n;
-        });
-    });
     resolution.assignments.forEach(function (a) { assigned[key(a.type, a.name)] = true; });
 
     /* Org baseline: the UNALLOCATED fallback and the cost_center property. */
@@ -181,7 +178,7 @@ function detectDrift(desired, observed, options) {
     (desired.budgets || []).forEach(function (b) {
         var s = util.stateOf(b);
         var mapped, id, obs, subject;
-        if (s !== 'approved' || (b.scope === 'override' && b.expiry && b.expiry < (opts.today || '0000-00-00'))) {
+        if (s !== 'approved' || (b.scope === 'override' && b.expiry && b.expiry < today)) {
             if (s !== 'draft') { desiredBudgetIds[budgetmap.identityOfMapped(budgetmap.toGithub(b, policy.budgetScopeMap))] = true; }
             return;
         }
@@ -189,9 +186,7 @@ function detectDrift(desired, observed, options) {
         id = budgetmap.identityOfMapped(mapped);
         desiredBudgetIds[id] = true;
         subject = 'Budget:' + b.scope + ':' + (b.entity || b.user || 'all');
-        (observed.budgets || []).forEach(function (o) {
-            if (budgetmap.identityOfObserved(o) === id) { obs = o; }
-        });
+        obs = observedBudgetById[id];
         if (!obs) {
             add(TYPES.MISSING_OBJECT, subject, budgetText(mapped.budget_amount, mapped.prevent_further_usage), 'not found in GitHub',
                 { remediation: remediation([{ kind: 'create_budget', budget: mapped, description: 'Create budget: ' + budgetText(mapped.budget_amount, mapped.prevent_further_usage) }], false) });
@@ -236,7 +231,7 @@ function detectDrift(desired, observed, options) {
     util.sortBy(Object.keys(centers.approved), function (n) { return n; }).forEach(function (n) {
         var obs = centers.observedActive[n];
         var name = centers.approved[n].name;
-        if (!obs || centers.approved[n].managed === false) { return; }
+        if (!obs || centers.approved[n].managed !== true) { return; }
         (obs.resources || []).forEach(function (r) {
             if (!assigned[key(r.type, r.name)]) {
                 add(TYPES.MEMBERSHIP_CHANGED, r.type + ':' + r.name, 'not in "' + name + '"', 'in "' + name + '"', {
@@ -257,32 +252,26 @@ function detectDrift(desired, observed, options) {
         }
     });
 
-    /* Repo properties. */
+    /*
+     * Repo properties: only repos ServiceNow has a record for. A repo whose property is missing
+     * or matches no cost center, with no ServiceNow record, is an anomaly (repo_property), not drift,
+     * so the same condition is not raised twice.
+     */
     if (observed.repoProperties) {
-        (desired.repos || []).forEach(function (r) {
-            observed.repoProperties.forEach(function (o) {
-                if (lower(o.org) === lower(r.org) && lower(o.repo) === lower(r.repo) && lower(o.value) !== lower(r.costCenterValue)) {
-                    add(TYPES.REPO_PROPERTY_DRIFT, 'Repo:' + r.org + '/' + r.repo, 'cost_center "' + (r.costCenterValue || '') + '"', 'cost_center "' + (o.value || '') + '"',
-                        { org: r.org, accept: { description: 'Accept "' + (o.value || '') + '" as the property value', set: { repo: r.org + '/' + r.repo, costCenterValue: o.value } } });
+        (function () {
+            var observedByRepo = util.dict();
+            observed.repoProperties.forEach(function (o) { observedByRepo[lower(o.org) + '/' + lower(o.repo)] = o; });
+            (desired.repos || []).forEach(function (r) {
+                var o = observedByRepo[lower(r.org) + '/' + lower(r.repo)];
+                var observedValue = o ? (o.value || '') : '';
+                if (lower(observedValue) !== lower(r.costCenterValue)) {
+                    add(TYPES.REPO_PROPERTY_DRIFT, 'Repo:' + r.org + '/' + r.repo, 'cost_center "' + (r.costCenterValue || '') + '"',
+                        observedValue ? 'cost_center "' + observedValue + '"' : 'no cost_center property',
+                        { org: r.org, accept: { description: observedValue ? 'Accept "' + observedValue + '" as the property value' : 'Accept that the repo has no cost_center property',
+                            set: { repo: r.org + '/' + r.repo, costCenterValue: observedValue } } });
                 }
             });
-        });
-        observed.repoProperties.forEach(function (o) {
-            var inDesired = (desired.repos || []).some(function (r) { return lower(r.org) === lower(o.org) && lower(r.repo) === lower(o.repo); });
-            var best = null;
-            var bestDistance = 3;
-            var name, d, text;
-            if (inDesired || (o.value && knownValues[lower(o.value)])) { return; }
-            for (name in knownValues) {
-                if (o.value && Object.prototype.hasOwnProperty.call(knownValues, name)) {
-                    d = util.distance(lower(o.value), name);
-                    if (d < bestDistance) { bestDistance = d; best = knownValues[name]; }
-                }
-            }
-            text = o.value ? 'cost_center "' + o.value + '" matches no cost center' : 'no cost_center property';
-            add(TYPES.REPO_PROPERTY_DRIFT, 'Repo:' + o.org + '/' + o.repo, 'a valid cost center name', text,
-                { org: o.org, accept: best ? { description: 'Set the property to "' + best + '"', set: { repo: o.org + '/' + o.repo, costCenterValue: best }, proposed: best } : null });
-        });
+        }());
     }
 
     items = util.sortBy(items, function (i) { return (100 + TYPE_ORDER.indexOf(i.type)) + '|' + i.subject + '|' + i.key; });
@@ -295,10 +284,10 @@ function detectDrift(desired, observed, options) {
  *
  *   existing  [{ key, state }]; state is open, awaiting_approval, dismissed, accepted, remediated or resolved
  *
- * Returns { create, resolve, unchanged }; see reconcile.js. Dismissed drift is not raised again.
+ * Returns { create, resolve, unchanged }; see reconcile.js. Dismissed drift is not raised again while it persists; once it disappears the dismissed record resolves, so a recurrence is raised afresh.
  */
 function reconcile(detected, existing) {
-    return reconcileMod.reconcileRecords(detected, existing, ['open', 'awaiting_approval', 'dismissed'], ['open', 'awaiting_approval']);
+    return reconcileMod.reconcileRecords(detected, existing, ['open', 'awaiting_approval', 'dismissed'], ['open', 'awaiting_approval', 'dismissed']);
 }
 
 module.exports = {

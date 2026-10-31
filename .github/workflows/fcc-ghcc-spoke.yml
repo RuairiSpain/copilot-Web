@@ -1,0 +1,29 @@
+name: fcc-ghcc-spoke
+
+# The ServiceNow spoke library is plain Node with no dependencies, so it only runs when it changes.
+on:
+  push:
+    branches: [main]
+    paths: ["fcc-ghcc-spoke/**", ".github/workflows/fcc-ghcc-spoke.yml"]
+  # No path filter on pull requests, so the check always reports and can be made required.
+  pull_request:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: fcc-ghcc-spoke
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 22
+
+      # Includes test/es5.test.js, which keeps lib/ ES5-only for the ServiceNow Script Include.
+      - run: npm test

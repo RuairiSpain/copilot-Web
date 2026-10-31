@@ -32,13 +32,19 @@ function header(headers, name) {
     return headers ? headers[name] : undefined;
 }
 
+/* GitHub's secondary rate limit answers 403 with a message and sometimes no rate-limit headers. */
+function bodyMessage(resp) {
+    var b = resp.body;
+    return b && typeof b === 'object' && typeof b.message === 'string' ? b.message : '';
+}
+
 function isRateLimited(resp) {
     var h = resp.headers || {};
     if (resp.status === 429) {
         return true;
     }
     if (resp.status === 403) {
-        return header(h, 'retry-after') !== undefined || header(h, 'x-ratelimit-remaining') === '0';
+        return header(h, 'retry-after') !== undefined || header(h, 'x-ratelimit-remaining') === '0' || /rate limit|abuse/i.test(bodyMessage(resp));
     }
     return false;
 }

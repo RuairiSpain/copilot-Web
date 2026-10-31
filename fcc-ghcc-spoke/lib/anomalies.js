@@ -81,14 +81,13 @@ function detectAnomalies(desired, observed, usage, optionsIn) {
     var resolution = resolveMod.resolve(desired, o.policy);
     var scopeMap = o.policy.budgetScopeMap || budgetmap.DEFAULT_SCOPE_MAP;
     var items = [];
-    var location = {};
-    var budgetsByIdentity = {};
-    var centerBudget = {};
-    var knownValues = {};
+    var location = util.dict();
+    var budgetsByIdentity = util.dict();
+    var centerBudget = util.dict();
+    var knownValues = util.dict();
+    var teamCenterOf = util.dict();
 
-    if (!today) {
-        throw new Error('options.today is required (YYYY-MM-DD)');
-    }
+    util.requireToday(today, 'detectAnomalies');
 
     function add(check, subject, severity, message, discriminator, details) {
         items.push({
@@ -101,10 +100,10 @@ function detectAnomalies(desired, observed, usage, optionsIn) {
         });
     }
 
+    Object.keys(centers.location).forEach(function (k) {
+        location[k] = centers.observedActive[centers.location[k]].name;
+    });
     Object.keys(centers.observedActive).forEach(function (n) {
-        (centers.observedActive[n].resources || []).forEach(function (r) {
-            location[key(r.type, r.name)] = centers.observedActive[n].name;
-        });
         knownValues[n] = centers.observedActive[n].name;
     });
     Object.keys(centers.approved).forEach(function (n) { knownValues[n] = centers.approved[n].name; });
@@ -119,18 +118,20 @@ function detectAnomalies(desired, observed, usage, optionsIn) {
     });
 
     /* Where a user really is in GitHub: a direct resource, else a team they belong to, else their org's placement. */
+    (function indexTeams() {
+        Object.keys(desired.teamMembers || {}).sort().forEach(function (slug) {
+            var placed = location[key('Team', slug)];
+            if (!placed) { return; }
+            util.own(desired.teamMembers, slug).forEach(function (m) {
+                if (!teamCenterOf[lower(m)]) { teamCenterOf[lower(m)] = placed; }
+            });
+        });
+    }());
+
     function observedCenterOf(user) {
-        var login = user.login;
-        var slugs, i, found;
-        if (location[key('User', login)]) { return location[key('User', login)]; }
-        slugs = Object.keys(desired.teamMembers || {}).sort();
-        for (i = 0; i < slugs.length; i++) {
-            if (desired.teamMembers[slugs[i]].some(function (m) { return lower(m) === lower(login); }) && location[key('Team', slugs[i])]) {
-                found = location[key('Team', slugs[i])];
-                break;
-            }
-        }
-        if (found) { return found; }
+        var direct = location[key('User', user.login)];
+        if (direct) { return direct; }
+        if (teamCenterOf[lower(user.login)]) { return teamCenterOf[lower(user.login)]; }
         if (user.org && location[key('Org', user.org)]) { return location[key('Org', user.org)]; }
         return null;
     }
@@ -187,17 +188,10 @@ function detectAnomalies(desired, observed, usage, optionsIn) {
 
     /* Repos with no property or an invalid value, with a likely intended value when one is close. */
     (observed.repoProperties || []).forEach(function (r) {
-        var best = null;
-        var bestDistance = 3;
-        var name, d, subject;
+        var best, subject;
         if (r.value && knownValues[lower(r.value)]) { return; }
         subject = 'Repo:' + r.org + '/' + r.repo;
-        for (name in knownValues) {
-            if (r.value && Object.prototype.hasOwnProperty.call(knownValues, name)) {
-                d = util.distance(lower(r.value), name);
-                if (d < bestDistance) { bestDistance = d; best = knownValues[name]; }
-            }
-        }
+        best = util.nearestName(r.value, knownValues);
         add(CHECKS.REPO_PROPERTY, subject, 'medium',
             r.value ? subject + ' has cost_center "' + r.value + '", which matches no cost center' + (best ? '; did you mean "' + best + '"?' : '') : subject + ' has no cost_center property',
             r.value || '', { value: r.value || null, proposed: best });
@@ -218,16 +212,16 @@ function detectAnomalies(desired, observed, usage, optionsIn) {
     /* Spend against budget and pool, and spend spikes. */
     (function usageChecks() {
         var month = today.slice(0, 7);
-        var spendByCenter = {};
+        var spendByCenter = util.dict();
         var latest = null;
         var allDates = [];
-        var series = { center: {}, user: {} };
+        var series = { center: util.dict(), user: util.dict() };
 
         function collect(rows, kind, field) {
             (rows || []).forEach(function (r) {
                 var subject = lower(r[field]);
                 if (r.date > today) { return; }
-                series[kind][subject] = series[kind][subject] || { name: r[field], byDate: {} };
+                series[kind][subject] = series[kind][subject] || { name: r[field], byDate: util.dict() };
                 series[kind][subject].byDate[r.date] = (series[kind][subject].byDate[r.date] || 0) + r.usd;
                 allDates.push(r.date);
                 if (kind === 'center' && r.date.slice(0, 7) === month) {
@@ -247,7 +241,7 @@ function detectAnomalies(desired, observed, usage, optionsIn) {
         Object.keys(spendByCenter).sort().forEach(function (n) {
             var name = series.center[n].name;
             var b = centerBudget[n];
-            var pool = u.pools && u.pools[name];
+            var pool = util.own(u.pools, name);
             var spent = spendByCenter[n];
             var level;
             if (b && b.budget_amount > 0) {

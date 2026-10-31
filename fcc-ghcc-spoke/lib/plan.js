@@ -16,6 +16,10 @@ function withDefaults(policy) {
     var p = policy || {};
     return {
         maxCostCenters: p.maxCostCenters !== undefined ? p.maxCostCenters : 1000,
+        /* Removing more resources than this in one plan blocks it, so a partial sync cannot strip cost centers. */
+        maxRemovals: p.maxRemovals !== undefined ? p.maxRemovals : 50,
+        /* Removing more than this share of one managed cost center's resources (when more than 5 go) blocks the plan. */
+        maxRemovalPercent: p.maxRemovalPercent !== undefined ? p.maxRemovalPercent : 50,
         teamsSupported: p.teamsSupported !== undefined ? p.teamsSupported : true,
         allowLicensedUnallocated: p.allowLicensedUnallocated === true,
         overrideCapByRole: p.overrideCapByRole || {},
@@ -39,10 +43,11 @@ function describeBudget(mapped) {
 }
 
 function indexCenters(desired, observed) {
-    var approved = {};
-    var retired = {};
-    var observedActive = {};
-    var known = {};
+    var approved = util.dict();
+    var retired = util.dict();
+    var observedActive = util.dict();
+    var known = util.dict();
+    var location = util.dict();
     (desired.costCenters || []).forEach(function (c) {
         var s = util.stateOf(c);
         if (s === 'approved') { approved[lower(c.name)] = c; }
@@ -53,7 +58,13 @@ function indexCenters(desired, observed) {
     });
     Object.keys(approved).forEach(function (n) { known[n] = true; });
     Object.keys(observedActive).forEach(function (n) { known[n] = true; });
-    return { approved: approved, retired: retired, observedActive: observedActive, known: known };
+    /* Where each observed resource sits: resource key -> lower-case name of its cost center. */
+    Object.keys(observedActive).forEach(function (n) {
+        (observedActive[n].resources || []).forEach(function (r) {
+            location[key(r.type, r.name)] = n;
+        });
+    });
+    return { approved: approved, retired: retired, observedActive: observedActive, known: known, location: location };
 }
 
 function displayName(centers, lowerName) {
@@ -67,13 +78,16 @@ function displayName(centers, lowerName) {
  *   desired   { orgs, costCenters, fundingTeams, teamMembers, users, repos, budgets, moves }
  *   observed  { costCenters: [{ id, name, state, resources: [{ type, name }] }], budgets: [...] }
  *   policy    see withDefaults
- *   today     'YYYY-MM-DD'; overrides with an earlier expiry are planned for deletion
+ *   today     'YYYY-MM-DD', required; overrides with an earlier expiry are planned for deletion
  *
  * Returns { operations, errors, warnings, blocked, summary }. When blocked is true
  * the operations show what would happen, but apply() refuses to run them.
  */
 function plan(desired, observed, policyIn, today) {
     var policy = withDefaults(policyIn);
+    var removalCount = 0;
+    var observedResourceCount = 0;
+    util.requireToday(today, 'plan');
     var centers = indexCenters(desired, observed);
     var resolution = resolveMod.resolve(desired, policy);
     var check = validateMod.validate(desired, observed, policy, resolution, {
@@ -82,13 +96,20 @@ function plan(desired, observed, policyIn, today) {
     var errors = resolution.errors.concat(check.errors);
     var warnings = resolution.warnings.concat(check.warnings);
     var ops = [];
-    var location = {};
-    var assigned = {};
-    var adds = {};
-    var moves = {};
-    var removes = {};
-    var observedBudgets = {};
-    var seenBudget = {};
+    var location = centers.location;
+    var assigned = util.dict();
+    var adds = util.dict();
+    var moves = util.dict();
+    var removes = util.dict();
+    var observedBudgets = util.dict();
+    var seenBudget = util.dict();
+    var movesByKey = util.dict();
+
+    (desired.moves || []).forEach(function (m) {
+        var k = key(m.type, m.name);
+        movesByKey[k] = movesByKey[k] || [];
+        movesByKey[k].push(m);
+    });
 
     /* Create approved cost centers that GitHub does not have yet. */
     util.sortBy(Object.keys(centers.approved), function (n) { return n; }).forEach(function (n) {
@@ -97,12 +118,6 @@ function plan(desired, observed, policyIn, today) {
         }
     });
 
-    /* Where each resource is today. */
-    Object.keys(centers.observedActive).forEach(function (n) {
-        (centers.observedActive[n].resources || []).forEach(function (r) {
-            location[key(r.type, r.name)] = n;
-        });
-    });
 
     /* Resources: add what is missing, move what sits in another cost center (needs approval, R5). */
     resolution.assignments.forEach(function (a) {
@@ -118,8 +133,8 @@ function plan(desired, observed, policyIn, today) {
             adds[target] = adds[target] || [];
             adds[target].push({ type: a.type, name: a.name });
         } else if (from !== target) {
-            approved = (desired.moves || []).some(function (m) {
-                return key(m.type, m.name) === k && lower(m.to) === target && (m.from === undefined || lower(m.from) === from) &&
+            approved = (movesByKey[k] || []).some(function (m) {
+                return lower(m.to) === target && (m.from === undefined || lower(m.from) === from) &&
                     m.approvals && m.approvals.from === true && m.approvals.to === true;
             });
             if (approved) {
@@ -148,16 +163,32 @@ function plan(desired, observed, policyIn, today) {
     util.sortBy(Object.keys(centers.approved), function (n) { return n; }).forEach(function (n) {
         var obs = centers.observedActive[n];
         var extra;
-        if (!obs || centers.approved[n].managed === false) {
+        if (!obs || centers.approved[n].managed !== true) {
             return;
         }
         extra = (obs.resources || []).filter(function (r) { return !assigned[key(r.type, r.name)]; })
             .map(function (r) { return { type: r.type, name: r.name }; });
+        observedResourceCount += (obs.resources || []).length;
         if (extra.length) {
             extra = util.sortBy(extra, function (r) { return key(r.type, r.name); });
             removes[n] = extra;
+            removalCount += extra.length;
+            if (extra.length > 5 && extra.length * 100 > policy.maxRemovalPercent * obs.resources.length) {
+                errors.push(util.issue('removal_majority',
+                    'The plan would remove ' + extra.length + ' of ' + obs.resources.length + ' resources from "' + centers.approved[n].name +
+                    '"; the desired state is probably incomplete. Check it, or raise policy.maxRemovalPercent', 'CostCenter:' + centers.approved[n].name));
+            }
         }
     });
+    /* Org fallbacks are always desired, so they do not count as evidence that the rest of the desired state loaded. */
+    if (removalCount > 0 && !resolution.assignments.some(function (a) { return a.source !== 'fallback'; })) {
+        errors.push(util.issue('desired_state_empty',
+            'The plan would remove ' + removalCount + ' resource(s) but no user, team, repo or direct assignment is desired anywhere; the desired state is probably incomplete', null));
+    } else if (removalCount > policy.maxRemovals) {
+        errors.push(util.issue('too_many_removals',
+            'The plan would remove ' + removalCount + ' of ' + observedResourceCount + ' resources in managed cost centers; the limit is ' + policy.maxRemovals +
+            '. Check that the desired state is complete, or raise policy.maxRemovals', null));
+    }
     util.sortBy(Object.keys(removes), function (n) { return n; }).forEach(function (n) {
         ops.push({ kind: 'remove_resources', costCenter: displayName(centers, n), resources: removes[n],
             description: 'Remove ' + removes[n].length + ' resource' + (removes[n].length === 1 ? '' : 's') + ' from "' + displayName(centers, n) + '": ' + listResources(removes[n]) });
@@ -191,7 +222,7 @@ function plan(desired, observed, policyIn, today) {
             }
             return;
         }
-        entityKnown = !budgetmap.COST_CENTER_SCOPES[b.scope] || centers.known[lower(b.entity)];
+        entityKnown = !util.own(budgetmap.COST_CENTER_SCOPES, b.scope) || centers.known[lower(b.entity)];
         if (!entityKnown) {
             return;
         }
@@ -207,7 +238,15 @@ function plan(desired, observed, policyIn, today) {
 
     /* Retire cost centers last, after their resources and budgets are handled. */
     util.sortBy(Object.keys(centers.retired), function (n) { return n; }).forEach(function (n) {
+        var orphans;
         if (centers.observedActive[n]) {
+            /* Deleting a cost center unplaces whatever is still in it. Anything nobody wants elsewhere would end up in no cost center. */
+            orphans = (centers.observedActive[n].resources || []).filter(function (r) { return !assigned[key(r.type, r.name)]; });
+            if (orphans.length) {
+                errors.push(util.issue('retired_cost_center_not_empty',
+                    'Cost center "' + centers.retired[n].name + '" is retired but still holds ' + orphans.length + ' resource(s) that nothing places elsewhere (' +
+                    listResources(orphans) + '); assign them to another cost center before deleting it', 'CostCenter:' + centers.retired[n].name));
+            }
             ops.push({ kind: 'delete_cost_center', costCenter: centers.retired[n].name, githubId: centers.observedActive[n].id,
                 description: 'Delete cost center "' + centers.retired[n].name + '"' });
         }
@@ -226,6 +265,7 @@ function plan(desired, observed, policyIn, today) {
 
     return {
         operations: ops,
+        fingerprint: util.fingerprint(ops),
         errors: errors,
         warnings: warnings,
         blocked: errors.length > 0,

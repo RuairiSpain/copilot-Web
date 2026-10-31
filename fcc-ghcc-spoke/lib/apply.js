@@ -26,21 +26,60 @@ function toResourceBody(resources) {
  *
  *   plan   the result of plan()
  *   client a GHCCClient
- *   meta   { requestNumber } shared by every operation in the plan
+ *   meta   { requestNumber, replan, expectedFingerprint, allowStale }
+ *            requestNumber        shared by every operation in the plan
+ *            replan               function () -> plan, built from a fresh observe(); required unless allowStale.
+ *                                 apply() refuses to run when the fresh plan's operations differ from the plan
+ *                                 that was approved, because GitHub changed between approval and apply.
+ *            expectedFingerprint  the fingerprint stored when the change was approved; required unless allowStale.
+ *                                 It is compared with a fingerprint recomputed from plan.operations, so a plan
+ *                                 edited since approval is refused. Keep it in a record the plan's editor cannot
+ *                                 write, because anyone who can write both the plan and its own fingerprint can
+ *                                 make them agree.
+ *            allowStale           true skips the approval and freshness checks. Only for a plan built moments ago in
+ *                                 the same script (a drift remediation, a test). The plan must still carry a
+ *                                 fingerprint that matches its operations.
  *
  * Returns { ok, results: [{ id, kind, status, error? }] }; status is done, failed or skipped.
  */
 function apply(plan, client, meta) {
-    var ids = {};
+    var ids = util.dict();
     var results = [];
     var failed = false;
-    var i, op, res, body;
+    var i, op, res, body, fresh, actual;
 
-    if (plan.blocked) {
-        throw new errors.GHCCError(errors.KINDS.PRECONDITION, 'the plan is blocked by ' + plan.errors.length + ' validation error(s); fix them before applying');
+    if (!plan || !Array.isArray(plan.operations)) {
+        throw new errors.GHCCError(errors.KINDS.PRECONDITION, 'apply needs a plan with an operations list');
+    }
+    /* Trust nothing stored on the plan: blocked and the fingerprint are recomputed from its contents. */
+    if (plan.blocked || (plan.errors && plan.errors.length > 0)) {
+        throw new errors.GHCCError(errors.KINDS.PRECONDITION, 'the plan is blocked by ' + (plan.errors ? plan.errors.length : 0) + ' validation error(s); fix them before applying');
     }
     if (!meta || !meta.requestNumber) {
         throw new errors.GHCCError(errors.KINDS.PRECONDITION, 'a request or change number is required to apply a plan');
+    }
+
+    actual = util.fingerprint(plan.operations);
+    if (!plan.fingerprint) {
+        throw new errors.GHCCError(errors.KINDS.PRECONDITION, 'the plan has no fingerprint; build it with plan() or detectDrift()');
+    }
+    if (plan.fingerprint !== actual) {
+        throw new errors.GHCCError(errors.KINDS.PRECONDITION, 'the plan operations do not match the plan fingerprint; the plan was edited, so plan again');
+    }
+    if (meta.allowStale !== true && !meta.expectedFingerprint) {
+        throw new errors.GHCCError(errors.KINDS.PRECONDITION, 'apply needs meta.expectedFingerprint, the fingerprint stored when the change was approved (or meta.allowStale for a plan built just now)');
+    }
+    if (meta.expectedFingerprint && meta.expectedFingerprint !== actual) {
+        throw new errors.GHCCError(errors.KINDS.PRECONDITION, 'the plan changed after it was approved (fingerprint mismatch); review and approve it again');
+    }
+    if (meta.allowStale !== true) {
+        if (typeof meta.replan !== 'function') {
+            throw new errors.GHCCError(errors.KINDS.PRECONDITION, 'apply needs meta.replan to confirm GitHub still matches the approved plan (or meta.allowStale for a plan built just now)');
+        }
+        fresh = meta.replan();
+        if (fresh.blocked || util.fingerprint(fresh.operations) !== actual) {
+            throw new errors.GHCCError(errors.KINDS.PRECONDITION, 'GitHub or ServiceNow changed since this plan was approved; re-plan and approve again');
+        }
     }
 
     client.listCostCenters({ state: 'active' }).forEach(function (c) {

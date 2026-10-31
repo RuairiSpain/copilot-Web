@@ -174,7 +174,7 @@ test('an org without the cost_center property defined is a baseline problem with
     assert.equal(d[0].remediation, null);
 });
 
-test('repo property drift: edited value, and a mistyped value gets a proposed fix', function () {
+test('repo property drift: a known repo whose property was edited or removed; unknown repos are anomalies, not drift', function () {
     var o = f.observedMatching();
     o.repoProperties = [
         { org: 'acme-platform', repo: 'api', value: 'Data' },
@@ -182,14 +182,14 @@ test('repo property drift: edited value, and a mistyped value gets a proposed fi
         { org: 'acme-platform', repo: 'bare', value: '' }
     ];
     var d = detect(o);
-    assert.deepEqual(types(d), ['repo_property_drift', 'repo_property_drift', 'repo_property_drift']);
-    var bySubject = {};
-    d.forEach(function (i) { bySubject[i.subject] = i; });
-    assert.equal(bySubject['Repo:acme-platform/api'].observed, 'cost_center "Data"');
-    assert.equal(bySubject['Repo:acme-platform/new-thing'].accept.proposed, 'Platform');
-    assert.equal(bySubject['Repo:acme-platform/bare'].accept, null);
-    assert.equal(bySubject['Repo:acme-platform/bare'].observed, 'no cost_center property');
-    assert.equal(bySubject['Repo:acme-platform/api'].org, 'acme-platform');
+    assert.deepEqual(types(d), ['repo_property_drift']);
+    assert.equal(d[0].subject, 'Repo:acme-platform/api');
+    assert.equal(d[0].observed, 'cost_center "Data"');
+    assert.equal(d[0].org, 'acme-platform');
+    o.repoProperties = [];
+    var gone = detect(o);
+    assert.equal(gone.length, 1);
+    assert.equal(gone[0].observed, 'no cost_center property');
 });
 
 test('repo properties are not checked when GitHub properties were not read', function () {
@@ -241,20 +241,29 @@ test('reconcile: a dismissed drift is not raised again, but an accepted or resol
     var d = detect(o);
     assert.equal(lib.reconcileDrift(d, [{ key: d[0].key, state: 'dismissed' }]).create.length, 0);
     assert.equal(lib.reconcileDrift(d, [{ key: d[0].key, state: 'resolved' }]).create.length, 1);
-    assert.equal(lib.reconcileDrift(d, [{ key: d[0].key, state: 'dismissed' }]).resolve.length, 0);
+});
+
+test('reconcile: a dismissed drift resolves when the difference goes, so a recurrence is raised again', function () {
+    var o = f.observedMatching();
+    o.budgets[0].budget_amount = 5000;
+    var d = detect(o);
+    var dismissed = [{ key: d[0].key, state: 'dismissed' }];
+    assert.deepEqual(lib.reconcileDrift(d, dismissed).resolve, []);
+    assert.deepEqual(lib.reconcileDrift([], dismissed).resolve, [d[0].key]);
+    assert.equal(lib.reconcileDrift(d, [{ key: d[0].key, state: 'resolved' }]).create.length, 1);
 });
 
 test('remediating budget drift through apply() against the mock restores GitHub, and drift disappears', function () {
     var t = h.setup({ supportTeams: true });
     var REQ = { requestNumber: 'RITM0200' };
-    assert.equal(lib.apply(lib.plan(f.desired(), lib.observe(t.client), f.policy(), f.TODAY), t.client, REQ).ok, true);
+    assert.equal(lib.apply(lib.plan(f.desired(), lib.observe(t.client), f.policy(), f.TODAY), t.client, { requestNumber: 'RITM0100', allowStale: true }).ok, true);
     assert.deepEqual(lib.detectDrift(f.desired(), lib.observe(t.client), { policy: f.policy(), today: f.TODAY }), []);
 
     t.client.updateBudget(t.mock.state.budgets[0].id, { budget_amount: 7777 }, { requestNumber: 'GITHUB-UI' });
     var drift = lib.detectDrift(f.desired(), lib.observe(t.client), { policy: f.policy(), today: f.TODAY });
     assert.deepEqual(types(drift), ['budget_changed']);
 
-    var result = lib.apply(drift[0].remediation, t.client, { requestNumber: 'DR-0001' });
+    var result = lib.apply(drift[0].remediation, t.client, { requestNumber: 'DR-0001', allowStale: true });
     assert.equal(result.ok, true, JSON.stringify(result.results));
     assert.equal(t.mock.state.budgets[0].budget_amount, 1000);
     assert.deepEqual(lib.detectDrift(f.desired(), lib.observe(t.client), { policy: f.policy(), today: f.TODAY }), []);
@@ -264,12 +273,12 @@ test('remediating budget drift through apply() against the mock restores GitHub,
 test('remediating a missing cost center and a membership change through apply() restores GitHub', function () {
     var t = h.setup({ supportTeams: true });
     var REQ = { requestNumber: 'RITM0200' };
-    lib.apply(lib.plan(f.desired(), lib.observe(t.client), f.policy(), f.TODAY), t.client, REQ);
+    lib.apply(lib.plan(f.desired(), lib.observe(t.client), f.policy(), f.TODAY), t.client, { requestNumber: 'RITM0100', allowStale: true });
     var platform = t.client.listCostCenters().filter(function (c) { return c.name === 'Platform'; })[0];
     t.client.removeResources(platform.id, { users: ['linus'] }, { requestNumber: 'GITHUB-UI' });
     var drift = lib.detectDrift(f.desired(), lib.observe(t.client), { policy: f.policy(), today: f.TODAY });
     assert.deepEqual(types(drift), ['membership_changed']);
-    assert.equal(lib.apply(drift[0].remediation, t.client, { requestNumber: 'DR-0002' }).ok, true);
+    assert.equal(lib.apply(drift[0].remediation, t.client, { requestNumber: 'DR-0002', allowStale: true }).ok, true);
     assert.deepEqual(lib.detectDrift(f.desired(), lib.observe(t.client), { policy: f.policy(), today: f.TODAY }), []);
 });
 
