@@ -36,7 +36,7 @@ Test helpers on the running server: `POST /__mock/reset`, and `POST /__mock/faul
 - **Blocked plans.** Any validation error sets `blocked`; the operations still show what would happen, but `apply` refuses to run them. Rules covered: R1, R2, R3, R5, B5 caps and second approver, the cost center limit, budgets on unknown cost centers, $0 or non-protective budgets, overrides without an expiry, duplicates, and licensed users left unallocated. Warnings do not block.
 - **Safety.** Resources are removed only from cost centers that say `managed: true` (the default is unmanaged), and only when no desired assignment exists for them anywhere. A resource that sits in another cost center is never moved without approval from both managers.
 - **Removal guards.** A plan that would remove more than `policy.maxRemovals` resources, or would remove any while nothing is desired anywhere, is blocked (`too_many_removals`, `desired_state_empty`). These catch a partial or empty desired state, for example after a failed sync.
-- **Approval and freshness.** `plan()` returns a `fingerprint` of its operations. `apply()` needs `meta.replan`, a function that observes GitHub again and returns a fresh plan; it refuses to run if the fresh operations differ from the approved ones. `meta.expectedFingerprint` rejects a plan edited after approval. `meta.allowStale` skips the check for tests and for remediation plans built a moment ago.
+- **Approval and freshness.** `plan()` returns a `fingerprint` of its operations. `apply()` needs `meta.replan`, a function that observes GitHub again and returns a fresh plan; it refuses to run if the fresh operations differ from the approved ones. The fingerprint is a SHA-256 of the operations. `apply()` recomputes it from `plan.operations` and refuses a plan whose stored fingerprint, `blocked` flag or `meta.expectedFingerprint` no longer match, so an edited plan cannot run. `meta.allowStale` skips the check for tests and for remediation plans built a moment ago.
 - **Re-running.** After a successful apply, planning again returns no operations. After a failed apply, the rest are marked skipped and re-planning picks up from where it stopped.
 
 **Assumption to confirm:** which GitHub budget scope stands for "every licensed user" and "each user in one cost center" (`lib/budgetmap.js`). The defaults are guesses until the Phase 0 budget spike runs; `policy.budgetScopeMap` replaces them without code changes.
@@ -109,3 +109,8 @@ Test helpers on the running server: `POST /__mock/reset`, and `POST /__mock/faul
 2. Correct `lib/endpoints.js` and the mock from the recordings.
 3. Add the plan engine and validation rules (PRD section 6) as pure functions in `lib/`, with tests.
 4. Create the scoped app on a developer instance, link it to this repository through Studio, and add a build step that wraps `lib/` into the `GHCCClient` Script Include.
+
+## Open items before a live apply
+
+- **DELETE with a body.** `removeResources` sends its resource list as a `DELETE` body, as GitHub documents. Confirm that ServiceNow's `RESTMessageV2` transport sends it before relying on this.
+- **Budget scope map.** `universal_user` and `cost_center_user` both map to `multi_user` by default (`lib/budgetmap.js`). Confirm the mapping with the budget-overlap spike and set `policy.budgetScopeMap` accordingly.

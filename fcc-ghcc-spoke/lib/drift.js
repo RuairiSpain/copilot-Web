@@ -288,10 +288,10 @@ function detectDrift(desired, observed, options) {
  *
  *   existing  [{ key, state }]; state is open, awaiting_approval, dismissed, accepted, remediated or resolved
  *
- * Returns { create, resolve, unchanged }; see reconcile.js. Dismissed drift is not raised again.
+ * Returns { create, resolve, unchanged }; see reconcile.js. Dismissed drift is not raised again while it persists; once it disappears the dismissed record resolves, so a recurrence is raised afresh.
  */
 function reconcile(detected, existing) {
-    return reconcileMod.reconcileRecords(detected, existing, ['open', 'awaiting_approval', 'dismissed'], ['open', 'awaiting_approval']);
+    return reconcileMod.reconcileRecords(detected, existing, ['open', 'awaiting_approval', 'dismissed'], ['open', 'awaiting_approval', 'dismissed']);
 }
 
 module.exports = {

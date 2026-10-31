@@ -25,8 +25,8 @@ test('listBudgets stops after one request when everything fits on a page', funct
     assert.equal(t.mock.requests.length, 1);
 });
 
-test('listBudgets ends on a short page when the server sends no has_next_page', function () {
-    var pages = { 1: 100, 2: 40 };
+test('listBudgets reads until an empty page when the server sends no has_next_page or Link header', function () {
+    var pages = { 1: 100, 2: 40, 3: 0 };
     var calls = 0;
     var t = h.setup({}, {
         transport: function (req) {
@@ -38,7 +38,22 @@ test('listBudgets ends on a short page when the server sends no has_next_page', 
         }
     });
     assert.equal(t.client.listBudgets().length, 140);
-    assert.equal(calls, 2);
+    assert.equal(calls, 3);
+});
+
+test('listBudgets does not stop early when the server caps the page size below the one requested', function () {
+    var calls = 0;
+    var t = h.setup({}, {
+        transport: function (req) {
+            calls++;
+            var page = parseInt(/[?&]page=(\d+)/.exec(req.path)[1], 10);
+            var items = [];
+            for (var i = 0; i < (page <= 3 ? 30 : 0); i++) { items.push({ id: 'b' + page + '-' + i }); }
+            return { status: 200, headers: {}, body: { budgets: items } };
+        }
+    });
+    assert.equal(t.client.listBudgets().length, 90);
+    assert.equal(calls, 4);
 });
 
 test('createBudget for a user scope requires the user field, checked before any request', function () {

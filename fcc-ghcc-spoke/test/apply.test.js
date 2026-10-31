@@ -148,3 +148,31 @@ test('apply refuses a plan edited after approval', function () {
     p.fingerprint = require('../lib/util').fingerprint(p.operations);
     assert.throws(function () { lib.apply(p, t.client, { requestNumber: 'RITM0100', allowStale: true, expectedFingerprint: approved }); }, function (e) { return e.kind === 'precondition'; });
 });
+
+test('apply refuses a plan whose operations were edited but whose stored fingerprint was kept', function () {
+    var t = h.setup({ supportTeams: true });
+    var p = planAgainstMock(t, f.desired());
+    var approved = p.fingerprint;
+    p.operations.pop();
+    var before = t.changeLog.entries.length;
+    [{ allowStale: true }, { allowStale: true, expectedFingerprint: approved }].forEach(function (extra) {
+        var meta = { requestNumber: 'RITM0100' };
+        Object.keys(extra).forEach(function (k) { meta[k] = extra[k]; });
+        assert.throws(function () { lib.apply(p, t.client, meta); }, function (e) { return e.kind === 'precondition' && /edited|fingerprint/.test(e.message); });
+    });
+    assert.equal(t.changeLog.entries.length, before);
+});
+
+test('apply refuses a plan with errors even when its blocked flag was cleared', function () {
+    var t = h.setup({ supportTeams: true });
+    var p = planAgainstMock(t, f.desired());
+    p.errors = [{ code: 'x', message: 'x', subject: null }];
+    p.blocked = false;
+    assert.throws(function () { lib.apply(p, t.client, { requestNumber: 'RITM0100', allowStale: true }); }, function (e) { return e.kind === 'precondition'; });
+});
+
+test('apply takes a remediation plan that has no stored fingerprint', function () {
+    var t = h.setup({ supportTeams: true });
+    var plan = { operations: [{ id: 'op-1', kind: 'create_cost_center', costCenter: 'Payments', description: 'Create' }], errors: [], blocked: false };
+    assert.equal(lib.apply(plan, t.client, { requestNumber: 'RITM0100', allowStale: true }).ok, true);
+});

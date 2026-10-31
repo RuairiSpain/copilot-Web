@@ -195,7 +195,8 @@ GHCCClient.prototype._list = function (path, itemsKey, params, paginate) {
         } else if (resp.headers.link) {
             more = hasLinkNext(resp.headers);
         } else {
-            more = pageItems.length >= self.pageSize;
+            /* No signal from the server: a short page does not prove the last one, because the server may cap the page size. Read until an empty page. */
+            more = pageItems.length > 0;
         }
         if (!more) {
             return items;

@@ -31,7 +31,8 @@ function toResourceBody(resources) {
  *            replan               function () -> plan, built from a fresh observe(); required unless allowStale.
  *                                 apply() refuses to run when the fresh plan's operations differ from the plan
  *                                 that was approved, because GitHub changed between approval and apply.
- *            expectedFingerprint  optional; the fingerprint recorded at approval. Refuses a plan edited since.
+ *            expectedFingerprint  optional; the fingerprint recorded at approval. It is compared with a fingerprint
+ *                                 recomputed from plan.operations, so a plan edited since approval is refused.
  *            allowStale           true skips the freshness check (tests, or remediation plans built a moment ago)
  *
  * Returns { ok, results: [{ id, kind, status, error? }] }; status is done, failed or skipped.
@@ -40,16 +41,24 @@ function apply(plan, client, meta) {
     var ids = {};
     var results = [];
     var failed = false;
-    var i, op, res, body, fresh;
+    var i, op, res, body, fresh, actual;
 
-    if (plan.blocked) {
-        throw new errors.GHCCError(errors.KINDS.PRECONDITION, 'the plan is blocked by ' + plan.errors.length + ' validation error(s); fix them before applying');
+    if (!plan || !Array.isArray(plan.operations)) {
+        throw new errors.GHCCError(errors.KINDS.PRECONDITION, 'apply needs a plan with an operations list');
+    }
+    /* Trust nothing stored on the plan: blocked and the fingerprint are recomputed from its contents. */
+    if (plan.blocked || (plan.errors && plan.errors.length > 0)) {
+        throw new errors.GHCCError(errors.KINDS.PRECONDITION, 'the plan is blocked by ' + (plan.errors ? plan.errors.length : 0) + ' validation error(s); fix them before applying');
     }
     if (!meta || !meta.requestNumber) {
         throw new errors.GHCCError(errors.KINDS.PRECONDITION, 'a request or change number is required to apply a plan');
     }
 
-    if (meta.expectedFingerprint && meta.expectedFingerprint !== plan.fingerprint) {
+    actual = util.fingerprint(plan.operations);
+    if (plan.fingerprint !== undefined && plan.fingerprint !== actual) {
+        throw new errors.GHCCError(errors.KINDS.PRECONDITION, 'the plan operations do not match the plan fingerprint; the plan was edited, so plan again');
+    }
+    if (meta.expectedFingerprint && meta.expectedFingerprint !== actual) {
         throw new errors.GHCCError(errors.KINDS.PRECONDITION, 'the plan changed after it was approved (fingerprint mismatch); review and approve it again');
     }
     if (meta.allowStale !== true) {
@@ -57,7 +66,7 @@ function apply(plan, client, meta) {
             throw new errors.GHCCError(errors.KINDS.PRECONDITION, 'apply needs meta.replan to confirm GitHub still matches the approved plan (or meta.allowStale for a plan built just now)');
         }
         fresh = meta.replan();
-        if (fresh.blocked || util.fingerprint(fresh.operations) !== util.fingerprint(plan.operations)) {
+        if (fresh.blocked || util.fingerprint(fresh.operations) !== actual) {
             throw new errors.GHCCError(errors.KINDS.PRECONDITION, 'GitHub or ServiceNow changed since this plan was approved; re-plan and approve again');
         }
     }

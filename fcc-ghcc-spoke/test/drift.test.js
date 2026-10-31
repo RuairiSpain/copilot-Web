@@ -241,7 +241,16 @@ test('reconcile: a dismissed drift is not raised again, but an accepted or resol
     var d = detect(o);
     assert.equal(lib.reconcileDrift(d, [{ key: d[0].key, state: 'dismissed' }]).create.length, 0);
     assert.equal(lib.reconcileDrift(d, [{ key: d[0].key, state: 'resolved' }]).create.length, 1);
-    assert.equal(lib.reconcileDrift(d, [{ key: d[0].key, state: 'dismissed' }]).resolve.length, 0);
+});
+
+test('reconcile: a dismissed drift resolves when the difference goes, so a recurrence is raised again', function () {
+    var o = f.observedMatching();
+    o.budgets[0].budget_amount = 5000;
+    var d = detect(o);
+    var dismissed = [{ key: d[0].key, state: 'dismissed' }];
+    assert.deepEqual(lib.reconcileDrift(d, dismissed).resolve, []);
+    assert.deepEqual(lib.reconcileDrift([], dismissed).resolve, [d[0].key]);
+    assert.equal(lib.reconcileDrift(d, [{ key: d[0].key, state: 'resolved' }]).create.length, 1);
 });
 
 test('remediating budget drift through apply() against the mock restores GitHub, and drift disappears', function () {
