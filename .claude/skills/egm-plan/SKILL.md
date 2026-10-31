@@ -19,6 +19,8 @@ Agree on a short kebab-case `<name>` for the design.
 
 ## 2. Draft
 
+If the design depends on facts about a library, API, standard or service that you are not certain of, run the `researcher` agent first (skip this if the agent is not installed) and cite its sources in the design. Do not write such facts from memory.
+
 Write `docs/designs/<name>.md` following the design standard, with Status `Draft`. Verify every statement about current code by reading it, and cite `path:line`. Put every design decision in the document. Show the user the Proposed design and Change list sections and take feedback before reviewing.
 
 ## 3. Review with fresh reviewers
@@ -30,6 +32,8 @@ Set Status to `In review`. Launch these subagents **in parallel, in one step**, 
 - `egm-implementation-readiness`
 - `egm-clarity-reviewer`
 - `egm-zoom-out`
+
+Also launch `egm-security-reviewer` with `Mode: DESIGN` when the design touches authentication, authorization, user input, secrets, stored data or network calls.
 
 Each prompt contains only: the design path, and the instruction to review it against `docs/egm/design-standard.md`. **Do not include conversation history, your reasoning, or your summary of the design.** The point of a Goldfish is that it does not share your assumptions.
 

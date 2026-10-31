@@ -39,9 +39,19 @@ Collect the reports. A `DEVIATION:` line is a design question: show it to the us
 
 Run the verification commands yourself and read the output. Fix failures by sending the failing packet back to its implementer with the exact error, not by editing across packet boundaries. Allow two repair rounds, then report what is still failing.
 
-## 4. Verify independently
+## 4. Review and verify independently
 
-Run `egm-verifier` with the design path, the base branch and the verification commands. Do not pass your own summary of what was done. If its verdict is `not ready`, fix the Blockers and Major findings through step 2 and verify again. Allow two rounds.
+Launch these **in parallel**, each as a new subagent. Give each only what is listed; do not pass your summary of what was done.
+
+- `egm-diff-reviewer`: the base branch only. It reads the diff without the design.
+- `egm-security-reviewer` with `Mode: DIFF` and the base branch, when the change touches authentication, authorization, user input, secrets, stored data or network calls.
+- `egm-test-adversary`: the design path, the base branch and the test command. It injects faults in a throwaway worktree and reports which no test catches.
+
+Then run `egm-verifier` with the design path, the base branch and the verification commands.
+
+Treat reviewer output as leads: check each finding that cites code before acting on it. Send Blocker and Major findings, and surviving faults, back through step 2 (surviving faults go to `egm-test-writer`). Verify again. Allow two rounds.
+
+If the diff reviewer's inferred intent differs from the design's goals, tell the user.
 
 ## 5. Report
 

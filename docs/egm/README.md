@@ -12,9 +12,9 @@ repository; the idea comes from that project.
 ## Workflow
 
 ```
- /egm-plan            clarify -> draft design -> 5 fresh reviewers -> resolve -> you approve
+ /egm-plan            clarify -> (research) -> draft design -> 5-6 fresh reviewers -> resolve -> you approve
    docs/designs/<name>.md   (Status: Approved)
- /egm-implement       packet plan -> implementers + test writer in parallel -> checks -> independent verifier
+ /egm-implement       packet plan -> implementers + test writer in parallel -> checks -> diff review, security review, fault injection -> independent verifier
 ```
 
 Use it when a change needs design decisions. For a small, clear fix, skip it.
@@ -39,9 +39,12 @@ GitHub Copilot: select the `egm-plan` or `egm-implement` skill (or ask for it by
 | `egm-implementation-readiness` | Plan | No | Reads as the implementer; finds decisions and details left out. |
 | `egm-clarity-reviewer` | Plan | No | Reads as a newcomer; finds ambiguity, contradictions, untestable criteria. |
 | `egm-zoom-out` | Plan | No | Right problem, right size, simpler option, rollout and rollback. |
+| `egm-security-reviewer` | Plan (design mode), Implement (diff mode) | No | Trust boundaries, input handling, authorization, secrets, injection. |
 | `egm-packet-planner` | Implement | No | Splits an approved design into packets with exclusive file ownership. |
 | `egm-implementer` | Implement | Owned files only | Implements one packet. |
 | `egm-test-writer` | Implement | Test files only | Writes tests from the acceptance criteria. |
+| `egm-diff-reviewer` | Implement | No | Reads the diff without the design to find defects the design does not mention. |
+| `egm-test-adversary` | Implement | No (works in a throwaway worktree) | Injects faults and reports which ones no test catches. |
 | `egm-verifier` | Implement | No | Audits the diff against the design, runs the checks, reports with evidence. |
 
 The skills `egm-plan` and `egm-implement` run in the main session because a
@@ -68,6 +71,10 @@ scripts/sync-egm-copilot.sh --check  # fail if stale, for CI
 - A review needs a harness that can start fresh subagents. If it cannot, `egm-plan` stops instead of reviewing in the main session.
 - Reviewer output is advice. The Elephant checks claims that cite code, and you decide what changes.
 - Neither skill commits, pushes or opens a pull request unless you ask.
+- `egm-plan` uses the existing `researcher` agent to verify external facts before drafting, if it is installed. It is not part of this set.
+- `egm-test-adversary` runs the test suite several times in a worktree, so it is slow on large suites. It needs the dependencies available there.
+- Project commands and conventions are in the root `AGENTS.md` (imported by `CLAUDE.md`). Keep them accurate; the planner and implementers rely on them.
+- `.github/workflows/egm-sync.yml` fails a pull request when the Copilot copies are stale.
 - Other agents in this repository (`go-implementer`, `lead-architect`, and so on) are specific to Foundry Doctor. These `egm-*` agents are general.
 
 ## Documents
