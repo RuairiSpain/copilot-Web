@@ -28,6 +28,32 @@ function stateOf(record) {
     return record.state || 'approved';
 }
 
+/* Short, stable fingerprint of a string (djb2), used to key drift records. */
+function hash(text) {
+    var h = 5381;
+    var i;
+    for (i = 0; i < text.length; i++) {
+        h = ((h << 5) + h + text.charCodeAt(i)) | 0;
+    }
+    return (h >>> 0).toString(36);
+}
+
+/* Edit distance, for suggesting the cost center a mistyped property value probably meant. */
+function distance(a, b) {
+    var prev = [];
+    var cur, i, j, cost;
+    for (j = 0; j <= b.length; j++) { prev.push(j); }
+    for (i = 1; i <= a.length; i++) {
+        cur = [i];
+        for (j = 1; j <= b.length; j++) {
+            cost = a.charAt(i - 1) === b.charAt(j - 1) ? 0 : 1;
+            cur.push(Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost));
+        }
+        prev = cur;
+    }
+    return prev[b.length];
+}
+
 function money(n) {
     return '$' + String(n);
 }
@@ -38,5 +64,7 @@ module.exports = {
     issue: issue,
     sortBy: sortBy,
     stateOf: stateOf,
+    hash: hash,
+    distance: distance,
     money: money
 };

@@ -26,6 +26,17 @@ function desired() {
     });
 }
 
+/* GitHub exactly as desired() says it should be. */
+function observedMatching() {
+    return clone({
+        costCenters: [
+            { id: 'cc-1', name: 'UNALLOCATED-acme-platform', state: 'active', resources: [{ type: 'Org', name: 'acme-platform' }] },
+            { id: 'cc-2', name: 'Platform', state: 'active', resources: [{ type: 'Team', name: 'platform-eng' }, { type: 'User', name: 'linus' }, { type: 'Repo', name: 'acme-platform/api' }] }
+        ],
+        budgets: [{ id: 'b-1', budget_scope: 'cost_center', budget_entity_name: 'Platform', budget_amount: 1000, prevent_further_usage: true }]
+    });
+}
+
 function observedEmpty() {
     return { costCenters: [], budgets: [] };
 }
@@ -57,4 +68,4 @@ function kinds(plan) {
     return plan.operations.map(function (o) { return o.kind; });
 }
 
-module.exports = { clone: clone, desired: desired, observedEmpty: observedEmpty, policy: policy, TODAY: TODAY, codes: codes, kinds: kinds };
+module.exports = { clone: clone, desired: desired, observedEmpty: observedEmpty, observedMatching: observedMatching, policy: policy, TODAY: TODAY, codes: codes, kinds: kinds };

@@ -236,4 +236,4 @@ function plan(desired, observed, policyIn, today) {
     };
 }
 
-module.exports = { plan: plan, withDefaults: withDefaults, KIND_ORDER: KIND_ORDER };
+module.exports = { plan: plan, withDefaults: withDefaults, indexCenters: indexCenters, KIND_ORDER: KIND_ORDER };

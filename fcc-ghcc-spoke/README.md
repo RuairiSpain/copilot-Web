@@ -6,7 +6,7 @@ This folder holds what can be built and tested without a ServiceNow instance:
 
 | Path | Purpose |
 | --- | --- |
-| `lib/` | `GHCCClient`, the plan engine and validation rules. ES5 only, because it is packaged into a ServiceNow Script Include. |
+| `lib/` | `GHCCClient`, the plan engine, validation rules and drift detection. ES5 only, because it is packaged into a ServiceNow Script Include. |
 | `mock/server.js` | Mock GitHub enterprise billing API: a synchronous handler plus an HTTP wrapper. |
 | `test/` | Unit and mock-backed tests (`node:test`, no dependencies). |
 | `ui/` | Clickable prototype of the seven screens (`ui/mockups/index.html`) and the build spec for UI Builder (`ui/SCREENS.md`). |
@@ -19,7 +19,7 @@ The ServiceNow application files (tables, Script Include wrapper, REST Message, 
 Needs Node 22 or later. No `npm install` is required.
 
 ```sh
-npm test            # 101 tests
+npm test            # 126 tests
 npm run mock        # mock API on http://127.0.0.1:4010, token "test-token"
 ```
 
@@ -38,6 +38,26 @@ Test helpers on the running server: `POST /__mock/reset`, and `POST /__mock/faul
 - **Re-running.** After a successful apply, planning again returns no operations. After a failed apply, the rest are marked skipped and re-planning picks up from where it stopped.
 
 **Assumption to confirm:** which GitHub budget scope stands for "every licensed user" and "each user in one cost center" (`lib/budgetmap.js`). The defaults are guesses until the Phase 0 budget spike runs; `policy.budgetScopeMap` replaces them without code changes.
+
+## Drift detection
+
+`lib.detectDrift(desired, observed, options)` compares GitHub with what ServiceNow has **already applied** and returns one item per difference. `desired` must hold only applied records: an approved change that has not been applied yet is pending, not drift, and `plan()` handles it. `lib.reconcileDrift(detected, existing)` keeps the ServiceNow drift table free of duplicates across repeated syncs (X4).
+
+| Drift type | Example | Fix offered |
+| --- | --- | --- |
+| `budget_changed` | Amount or stop usage edited in the GitHub UI | Revert, or accept as the new desired state |
+| `membership_changed` | User or team removed from, or added to, a managed cost center | Add back or remove, after approval |
+| `resource_moved` | A repo or user sits in a different cost center | A move request for both managers (R5); never an automatic fix |
+| `unmanaged_object` | A cost center or budget exists in GitHub but not in ServiceNow | Adopt it as an unmanaged record |
+| `missing_object` | An applied cost center or budget is gone from GitHub | Recreate it |
+| `repo_property_drift` | Property edited, missing or invalid; a likely intended value is proposed | Accept or correct by hand |
+| `org_baseline_missing` | No UNALLOCATED fallback, or the `cost_center` property is not defined | Create the fallback; the property is manual |
+
+- **Modes (X1).** Each type has a mode per org: `report`, `approve` or `auto`. Everything starts in `report`. A mode above what a type allows is lowered, with a note: membership and moves stop at `approve`, and unmanaged objects, property drift and baseline problems stop at `report`. `lib.DRIFT_RECOMMENDED_MODES` holds the settings PRD 4.5 suggests once an org has run in report mode.
+- **Org-scoped modes.** Per-org modes apply to drift that belongs to an org (repo properties, org baseline). Everything else uses the defaults.
+- **Fixes run through `apply()`.** `item.remediation` is a plan-shaped object, so a revert is applied, change-logged and checked like any plan. It is `null` when nothing safe can be done automatically.
+- **Not drift.** Resources inside a cost center that is itself missing are not listed separately; they return when it is recreated. Extras in a cost center marked unmanaged are ignored. A retired cost center that still exists is pending deletion.
+- **Not yet read from GitHub.** `observe()` returns cost centers and budgets only. Repo properties and org property definitions are optional inputs (`observed.repoProperties`, `observed.orgProperties`) until the ServiceNow sync reads them, and alert recipients are not compared because the budget model does not carry them yet.
 
 ## How the client is built
 

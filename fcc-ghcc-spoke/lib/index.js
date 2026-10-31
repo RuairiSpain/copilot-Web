@@ -7,6 +7,7 @@ var endpoints = require('./endpoints');
 var plan = require('./plan');
 var apply = require('./apply');
 var validate = require('./validate');
+var drift = require('./drift');
 
 module.exports = {
     GHCCClient: GHCCClient,
@@ -19,5 +20,10 @@ module.exports = {
     withPolicyDefaults: plan.withDefaults,
     validate: validate.validate,
     apply: apply.apply,
-    observe: apply.observe
+    observe: apply.observe,
+    detectDrift: drift.detectDrift,
+    reconcileDrift: drift.reconcile,
+    DRIFT_TYPES: drift.TYPES,
+    DRIFT_MAX_MODE: drift.MAX_MODE,
+    DRIFT_RECOMMENDED_MODES: drift.RECOMMENDED_MODES
 };
