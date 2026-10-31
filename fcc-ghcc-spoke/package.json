@@ -1,0 +1,13 @@
+{
+  "name": "fcc-ghcc-spoke",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ServiceNow GitHub Cost Center spoke: client library, mock GitHub billing API and tests",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test \"test/*.test.js\"",
+    "mock": "node mock/server.js"
+  }
+}
