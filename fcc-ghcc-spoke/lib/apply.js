@@ -1,0 +1,105 @@
+'use strict';
+
+var errors = require('./errors');
+var util = require('./util');
+
+var TYPE_KEY = { User: 'users', Org: 'organizations', Repo: 'repositories', Team: 'teams' };
+
+function toResourceBody(resources) {
+    var body = {};
+    resources.forEach(function (r) {
+        var k = TYPE_KEY[r.type];
+        if (!k) {
+            throw new errors.GHCCError(errors.KINDS.VALIDATION, 'Unknown resource type "' + r.type + '"');
+        }
+        body[k] = body[k] || [];
+        body[k].push(r.name);
+    });
+    return body;
+}
+
+/*
+ * Runs a plan's operations in order through GHCCClient, one change-log entry per
+ * GitHub write. Refuses a blocked plan. Stops at the first failure and marks the
+ * rest skipped, so a half-applied plan is visible and re-planning picks up from
+ * where it stopped.
+ *
+ *   plan   the result of plan()
+ *   client a GHCCClient
+ *   meta   { requestNumber } shared by every operation in the plan
+ *
+ * Returns { ok, results: [{ id, kind, status, error? }] }; status is done, failed or skipped.
+ */
+function apply(plan, client, meta) {
+    var ids = {};
+    var results = [];
+    var failed = false;
+    var i, op, res, body;
+
+    if (plan.blocked) {
+        throw new errors.GHCCError(errors.KINDS.PRECONDITION, 'the plan is blocked by ' + plan.errors.length + ' validation error(s); fix them before applying');
+    }
+    if (!meta || !meta.requestNumber) {
+        throw new errors.GHCCError(errors.KINDS.PRECONDITION, 'a request or change number is required to apply a plan');
+    }
+
+    client.listCostCenters({ state: 'active' }).forEach(function (c) {
+        ids[util.lower(c.name)] = c.id;
+    });
+
+    function idOf(name) {
+        var id = ids[util.lower(name)];
+        if (!id) {
+            throw new errors.GHCCError(errors.KINDS.NOT_FOUND, 'cost center "' + name + '" is not in GitHub');
+        }
+        return id;
+    }
+
+    function stepMeta(o) {
+        return { requestNumber: meta.requestNumber, operation: o.id + ': ' + o.description };
+    }
+
+    for (i = 0; i < plan.operations.length; i++) {
+        op = plan.operations[i];
+        if (failed) {
+            results.push({ id: op.id, kind: op.kind, status: 'skipped' });
+            continue;
+        }
+        try {
+            if (op.kind === 'create_cost_center') {
+                res = client.createCostCenter({ name: op.costCenter }, stepMeta(op));
+                ids[util.lower(op.costCenter)] = res.costCenter.id;
+            } else if (op.kind === 'add_resources' || op.kind === 'move_resources') {
+                client.addResources(idOf(op.costCenter), toResourceBody(op.resources), stepMeta(op));
+            } else if (op.kind === 'remove_resources') {
+                client.removeResources(idOf(op.costCenter), toResourceBody(op.resources), stepMeta(op));
+            } else if (op.kind === 'create_budget') {
+                client.createBudget(op.budget, stepMeta(op));
+            } else if (op.kind === 'update_budget') {
+                client.updateBudget(op.githubId, op.changes, stepMeta(op));
+            } else if (op.kind === 'delete_budget') {
+                client.deleteBudget(op.githubId, stepMeta(op));
+            } else if (op.kind === 'delete_cost_center') {
+                client.deleteCostCenter(op.githubId, stepMeta(op));
+            } else {
+                throw new errors.GHCCError(errors.KINDS.UNKNOWN, 'unknown operation kind "' + op.kind + '"');
+            }
+            results.push({ id: op.id, kind: op.kind, status: 'done' });
+        } catch (e) {
+            failed = true;
+            body = { id: op.id, kind: op.kind, status: 'failed', error: e.message, errorKind: e.kind };
+            results.push(body);
+        }
+    }
+    return { ok: !failed, results: results };
+}
+
+/* Reads the observed state the planner needs from GitHub. */
+function observe(client) {
+    return {
+        costCenters: client.listCostCenters({ state: 'active' }),
+        budgets: client.listBudgets()
+    };
+}
+
+module.exports = { apply: apply, observe: observe };
