@@ -6,7 +6,7 @@ This folder holds what can be built and tested without a ServiceNow instance:
 
 | Path | Purpose |
 | --- | --- |
-| `lib/` | `GHCCClient`, the plan engine, validation rules and drift detection. ES5 only, because it is packaged into a ServiceNow Script Include. |
+| `lib/` | `GHCCClient`, the plan engine, validation rules, drift detection and anomaly checks. ES5 only, because it is packaged into a ServiceNow Script Include. |
 | `mock/server.js` | Mock GitHub enterprise billing API: a synchronous handler plus an HTTP wrapper. |
 | `test/` | Unit and mock-backed tests (`node:test`, no dependencies). |
 | `ui/` | Clickable prototype of the seven screens (`ui/mockups/index.html`) and the build spec for UI Builder (`ui/SCREENS.md`). |
@@ -19,7 +19,7 @@ The ServiceNow application files (tables, Script Include wrapper, REST Message, 
 Needs Node 22 or later. No `npm install` is required.
 
 ```sh
-npm test            # 126 tests
+npm test            # 153 tests
 npm run mock        # mock API on http://127.0.0.1:4010, token "test-token"
 ```
 
@@ -58,6 +58,27 @@ Test helpers on the running server: `POST /__mock/reset`, and `POST /__mock/faul
 - **Fixes run through `apply()`.** `item.remediation` is a plan-shaped object, so a revert is applied, change-logged and checked like any plan. It is `null` when nothing safe can be done automatically.
 - **Not drift.** Resources inside a cost center that is itself missing are not listed separately; they return when it is recreated. Extras in a cost center marked unmanaged are ignored. A retired cost center that still exists is pending deletion.
 - **Not yet read from GitHub.** `observe()` returns cost centers and budgets only. Repo properties and org property definitions are optional inputs (`observed.repoProperties`, `observed.orgProperties`) until the ServiceNow sync reads them, and alert recipients are not compared because the budget model does not carry them yet.
+
+## Anomaly checks
+
+`lib.detectAnomalies(desired, observed, usage, options)` looks for misconfigurations and unusual spend (PRD 4.6) and returns items with a stable `key`, a `check`, a `subject`, a `severity` and a plain-language `message`. `options.today` is required, because the engine never reads a clock. `lib.reconcileAnomalies(detected, existing)` keeps the anomaly table free of duplicates: open, dismissed and accepted anomalies are not raised again, resolved ones can recur.
+
+| Check | Severity | What it looks at |
+| --- | --- | --- |
+| `licensed_user_unallocated` | high | A licensed user in an UNALLOCATED cost center, or in none, as GitHub sees it: a direct resource, else a team they belong to, else their org's placement |
+| `user_in_teams_of_two_cost_centers` | high | A user in funding teams that belong to different cost centers |
+| `cost_center_budget` | high | A cost center, including the UNALLOCATED fallback, with no budget or with stop usage off |
+| `overlapping_budgets` | medium | More than one budget for the same scope, entity and user |
+| `user_budget_zero` | medium | A per-user budget of $0 |
+| `repo_property` | medium | A repo with no `cost_center` property or an invalid value, with a likely intended value proposed |
+| `expired_override_active` | medium | An override past its expiry that is still in GitHub |
+| `spend_spike` | configurable (default medium) | The latest day's spend against the daily average of the 28 days before it, per cost center and per user |
+| `budget_threshold`, `pool_threshold` | alert | Month-to-date spend at 75, 90 or 100 percent of the budget or pool; only the highest level reached is reported, and a new level in the same month is a new alert |
+
+- **Usage input.** `usage` is `{ daily: [{ date, costCenter, usd }], userDaily: [{ date, login, usd }], pools: { costCenter: limitUsd } }`, matching the `usage_daily` and `usage_user_daily` tables. Every part is optional; a check that needs missing data is skipped.
+- **Spike settings.** `options.spike` takes `multiplier` (3), `baselineDays` (28), `minHistoryDays` (7), `minUsd` (25), `floorUsd` (5) and `severity`. Nothing is raised until `minHistoryDays` of history exist, and small amounts are ignored.
+- **Thresholds.** `options.thresholds` defaults to `[75, 90, 100]`, which is what the PRD's alert levels use. GitHub's own alert thresholds are preset, so these alerts come from ServiceNow's calculations.
+- **Not included.** Blocked-user detection (B6) needs the shape of GitHub's budget user states, which is unverified until the Phase 0 user-state spike runs.
 
 ## How the client is built
 
