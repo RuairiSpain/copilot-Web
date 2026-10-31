@@ -8,6 +8,7 @@ var plan = require('./plan');
 var apply = require('./apply');
 var validate = require('./validate');
 var drift = require('./drift');
+var anomalies = require('./anomalies');
 
 module.exports = {
     GHCCClient: GHCCClient,
@@ -25,5 +26,9 @@ module.exports = {
     reconcileDrift: drift.reconcile,
     DRIFT_TYPES: drift.TYPES,
     DRIFT_MAX_MODE: drift.MAX_MODE,
-    DRIFT_RECOMMENDED_MODES: drift.RECOMMENDED_MODES
+    DRIFT_RECOMMENDED_MODES: drift.RECOMMENDED_MODES,
+    detectAnomalies: anomalies.detectAnomalies,
+    reconcileAnomalies: anomalies.reconcileAnomalies,
+    ANOMALY_CHECKS: anomalies.CHECKS,
+    ANOMALY_SPIKE_DEFAULTS: anomalies.DEFAULT_SPIKE
 };

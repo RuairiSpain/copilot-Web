@@ -4,6 +4,7 @@ var util = require('./util');
 var budgetmap = require('./budgetmap');
 var resolveMod = require('./resolve');
 var planMod = require('./plan');
+var reconcileMod = require('./reconcile');
 
 var lower = util.lower;
 var key = util.key;
@@ -294,28 +295,10 @@ function detectDrift(desired, observed, options) {
  *
  *   existing  [{ key, state }]; state is open, awaiting_approval, dismissed, accepted, remediated or resolved
  *
- * Returns { create, resolve, unchanged } where create is detected items with no record yet,
- * resolve is keys of open records whose difference has gone, and unchanged is detected items already tracked.
+ * Returns { create, resolve, unchanged }; see reconcile.js. Dismissed drift is not raised again.
  */
 function reconcile(detected, existing) {
-    var tracked = {};
-    var open = {};
-    var seen = {};
-    var create = [];
-    var unchanged = [];
-    var resolve = [];
-    (existing || []).forEach(function (r) {
-        if (r.state === 'open' || r.state === 'awaiting_approval' || r.state === 'dismissed') { tracked[r.key] = true; }
-        if (r.state === 'open' || r.state === 'awaiting_approval') { open[r.key] = true; }
-    });
-    detected.forEach(function (d) {
-        seen[d.key] = true;
-        (tracked[d.key] ? unchanged : create).push(d);
-    });
-    Object.keys(open).forEach(function (k) {
-        if (!seen[k]) { resolve.push(k); }
-    });
-    return { create: create, resolve: resolve.sort(), unchanged: unchanged };
+    return reconcileMod.reconcileRecords(detected, existing, ['open', 'awaiting_approval', 'dismissed'], ['open', 'awaiting_approval']);
 }
 
 module.exports = {
