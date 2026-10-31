@@ -32,19 +32,28 @@ function GHCCClient(config) {
     this.transport = config.transport;
     this.changeLog = config.changeLog || null;
     this.killSwitch = config.killSwitch || function () { return false; };
-    this.pageSize = config.pageSize || 100;
-    this.maxPages = config.maxPages || 1000;
+    if (typeof config.sleep !== 'function') {
+        /* Without a real wait, retries would fire back to back and make rate limiting worse. */
+        throw new GHCCError(KINDS.PRECONDITION, 'sleep is required (in ServiceNow, a function that calls gs.sleep(ms))');
+    }
+    this.pageSize = pick(config.pageSize, 100);
+    this.maxPages = pick(config.maxPages, 1000);
     this.retryOpts = {
-        maxAttempts: config.maxAttempts || 4,
-        baseDelayMs: config.baseDelayMs || 1000,
-        maxDelayMs: config.maxDelayMs || 60000,
-        sleep: config.sleep || function () {},
+        maxAttempts: pick(config.maxAttempts, 4),
+        baseDelayMs: pick(config.baseDelayMs, 1000),
+        maxDelayMs: pick(config.maxDelayMs, 60000),
+        sleep: config.sleep,
         now: config.now || function () { return new Date().getTime(); },
         onThrottle: config.onThrottle
     };
 }
 
 /* ---------- helpers ---------- */
+
+/* A configured number wins, including 0; only undefined falls back. */
+function pick(value, fallback) {
+    return value === undefined || value === null ? fallback : value;
+}
 
 function lowerKeys(headers) {
     var out = {};
@@ -212,7 +221,7 @@ function findBy(list, predicate) {
 
 GHCCClient.prototype.listCostCenters = function (opts) {
     var state = opts && opts.state;
-    return this._list(endpoints.paths.costCenters(this.enterprise), endpoints.keys.costCenterList, { state: state }, false);
+    return this._list(endpoints.paths.costCenters(this.enterprise), endpoints.keys.costCenterList, { state: state }, true);
 };
 
 GHCCClient.prototype.getCostCenter = function (id) {
@@ -227,7 +236,22 @@ GHCCClient.prototype.createCostCenter = function (input, meta) {
     if (existing) {
         return { created: false, costCenter: existing };
     }
-    var body = this._write('POST', endpoints.paths.costCenters(this.enterprise), { name: input.name }, meta);
+    var body;
+    try {
+        body = this._write('POST', endpoints.paths.costCenters(this.enterprise), { name: input.name }, meta);
+    } catch (e) {
+        /* A gateway error on POST is not retried, because the create may have succeeded. Read back before giving up. */
+        if (e.kind !== KINDS.TRANSIENT) {
+            throw e;
+        }
+        existing = findBy(this.listCostCenters({ state: 'active' }), function (c) {
+            return c.name === input.name;
+        });
+        if (!existing) {
+            throw e;
+        }
+        return { created: true, costCenter: existing, recovered: true };
+    }
     return { created: true, costCenter: body };
 };
 
@@ -325,7 +349,22 @@ GHCCClient.prototype.createBudget = function (input, meta) {
                 existing.prevent_further_usage !== input.prevent_further_usage
         };
     }
-    var body = this._write('POST', endpoints.paths.budgets(this.enterprise), input, meta);
+    var body;
+    try {
+        body = this._write('POST', endpoints.paths.budgets(this.enterprise), input, meta);
+    } catch (e) {
+        /* See createCostCenter: an ambiguous POST failure is resolved by reading back, not by retrying. */
+        if (e.kind !== KINDS.TRANSIENT) {
+            throw e;
+        }
+        existing = findBy(this.listBudgets({ scope: input.budget_scope }), function (b) {
+            return sameBudgetTarget(b, input) && (input.user === undefined || b.user === input.user);
+        });
+        if (!existing) {
+            throw e;
+        }
+        return { created: true, budget: existing, recovered: true };
+    }
     return { created: true, budget: unwrap(body, endpoints.keys.budget) };
 };
 

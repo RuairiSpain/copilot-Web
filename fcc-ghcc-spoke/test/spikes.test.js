@@ -90,7 +90,7 @@ test('findings files never contain the token', async function () {
 test('spikes refuse to run against api.github.com without explicit confirmation', function () {
     assert.throws(function () {
         harness.createContext({ GITHUB_TOKEN: 't', GITHUB_ENTERPRISE: 'acme' });
-    }, /Refusing to run against api\.github\.com/);
+    }, /Refusing to run against https:\/\/api\.github\.com/);
     assert.doesNotThrow(function () {
         harness.createContext({ GITHUB_TOKEN: 't', GITHUB_ENTERPRISE: 'acme', SPIKE_CONFIRM_THROWAWAY: 'yes' });
     });
@@ -101,4 +101,29 @@ test('a spike names the input it is missing', async function () {
         delete env.SPIKE_TEAM;
         await assert.rejects(teams.run(env), /SPIKE_TEAM is required/);
     });
+});
+
+test('spikes also refuse any other non-local host, such as GHE.com or GHES', function () {
+    ['https://api.acme.ghe.com', 'https://ghes.example.com/api/v3', 'https://127.0.0.1.evil.example'].forEach(function (base) {
+        assert.throws(function () {
+            harness.createContext({ GITHUB_TOKEN: 't', GITHUB_ENTERPRISE: 'acme', GITHUB_API_BASE: base });
+        }, /Refusing to run against/);
+    });
+    assert.doesNotThrow(function () {
+        harness.createContext({ GITHUB_TOKEN: 't', GITHUB_ENTERPRISE: 'acme', GITHUB_API_BASE: 'http://localhost:4010' });
+    });
+});
+
+test('recorded findings drop emails and fields that name a person', function () {
+    var out = harness.scrub({
+        actor: 'ada', actor_ip: '10.0.0.1', email: 'ada@example.com', cost_center: 'Platform',
+        note: 'mail ada@example.com about it', events: [{ login: 'grace', action: 'budget.create' }]
+    });
+    assert.equal(out.actor, '[personal data removed]');
+    assert.equal(out.actor_ip, '[personal data removed]');
+    assert.equal(out.email, '[personal data removed]');
+    assert.equal(out.cost_center, 'Platform');
+    assert.equal(out.note, 'mail [email] about it');
+    assert.equal(out.events[0].login, '[personal data removed]');
+    assert.equal(out.events[0].action, 'budget.create');
 });

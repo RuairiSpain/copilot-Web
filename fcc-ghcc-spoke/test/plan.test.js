@@ -206,3 +206,74 @@ test('the scope map can be replaced from policy', function () {
     var created = p.operations.filter(function (o) { return o.kind === 'create_budget'; }).map(function (o) { return o.budget.budget_scope; });
     assert.deepEqual(created.sort(), ['cost_center', 'user_default']);
 });
+
+test('plan, drift and anomalies all refuse a missing or malformed today', function () {
+    [undefined, '', '2026-1-5', 20261031].forEach(function (bad) {
+        assert.throws(function () { lib.plan(f.desired(), f.observedEmpty(), f.policy(), bad); }, /today is required/);
+    });
+    assert.throws(function () { lib.detectDrift(f.desired(), f.observedEmpty(), { policy: f.policy() }); }, /today is required/);
+    assert.throws(function () { lib.detectAnomalies(f.desired(), f.observedEmpty(), {}, {}); }, /today is required/);
+});
+
+test('an expired override is deleted only because today is given', function () {
+    var d = f.desired();
+    d.budgets = [{ scope: 'override', user: 'grace', amount: 100, preventUsage: true, expiry: '2020-01-01', override: true, costCenter: 'Platform', requesterRole: 'team_manager' }];
+    var observed = f.observedEmpty();
+    observed.budgets = [{ id: 'b-9', budget_scope: 'user', budget_entity_name: '', user: 'grace', budget_amount: 100, prevent_further_usage: true }];
+    assert.ok(f.kinds(run(d, observed)).indexOf('delete_budget') !== -1);
+});
+
+test('a cost center is not managed unless it says so: extras are left alone by default', function () {
+    var d = f.desired();
+    delete d.costCenters[1].managed;
+    var observed = removalObserved(['mallory']);
+    assert.deepEqual(run(d, observed).operations, []);
+    d.costCenters[1].managed = true;
+    assert.deepEqual(f.kinds(run(d, observed)), ['remove_resources']);
+});
+
+function removalObserved(extraLogins) {
+    var resources = [{ type: 'Team', name: 'platform-eng' }, { type: 'User', name: 'linus' }, { type: 'Repo', name: 'acme-platform/api' }];
+    extraLogins.forEach(function (n) { resources.push({ type: 'User', name: n }); });
+    return {
+        costCenters: [
+            { id: 'cc-1', name: 'UNALLOCATED-acme-platform', state: 'active', resources: [{ type: 'Org', name: 'acme-platform' }] },
+            { id: 'cc-2', name: 'Platform', state: 'active', resources: resources }
+        ],
+        budgets: [{ id: 'b-1', budget_scope: 'cost_center', budget_entity_name: 'Platform', budget_amount: 1000, prevent_further_usage: true }]
+    };
+}
+
+test('removing more than policy.maxRemovals blocks the plan', function () {
+    var logins = [];
+    var i;
+    for (i = 0; i < 6; i++) { logins.push('extra' + i); }
+    var policy = f.policy();
+    policy.maxRemovals = 5;
+    var p = run(f.desired(), removalObserved(logins), policy);
+    assert.deepEqual(f.codes(p.errors), ['too_many_removals']);
+    assert.equal(p.blocked, true);
+    policy.maxRemovals = 6;
+    assert.equal(run(f.desired(), removalObserved(logins), policy).blocked, false);
+});
+
+test('a plan that removes resources while nothing is desired anywhere is blocked as an incomplete desired state', function () {
+    var d = f.desired();
+    d.orgs = [];
+    d.fundingTeams = [];
+    d.users = [];
+    d.repos = [];
+    d.budgets = [];
+    var p = run(d, removalObserved(['mallory']));
+    assert.ok(f.codes(p.errors).indexOf('desired_state_empty') !== -1);
+    assert.equal(p.blocked, true);
+});
+
+test('a plan has a fingerprint that changes when its operations change', function () {
+    var a = run(f.desired(), f.observedEmpty());
+    var b = run(f.desired(), f.observedEmpty());
+    assert.equal(a.fingerprint, b.fingerprint);
+    var d = f.desired();
+    d.budgets[0].amount = 1;
+    assert.notEqual(run(d, f.observedEmpty()).fingerprint, a.fingerprint);
+});

@@ -35,7 +35,7 @@ test('a clean estate has no anomalies', function () {
 });
 
 test('today is required, because the engine never reads a clock', function () {
-    assert.throws(function () { lib.detectAnomalies(f.desired(), clean(), {}, {}); }, /options\.today is required/);
+    assert.throws(function () { lib.detectAnomalies(f.desired(), clean(), {}, {}); }, /detectAnomalies: today is required/);
 });
 
 test('a cost center with no budget is high severity', function () {

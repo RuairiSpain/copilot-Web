@@ -56,7 +56,68 @@ test('maps 401 to a credential error', function () {
     var t = h.setup();
     var bad = new (require('../lib').GHCCClient)({
         enterprise: 'acme',
-        transport: require('../mock/server').inProcessTransport(t.mock, 'wrong')
+        transport: require('../mock/server').inProcessTransport(t.mock, 'wrong'),
+        sleep: function () {}
     });
     assert.throws(function () { bad.listCostCenters(); }, function (e) { return e.kind === 'credential' && e.status === 401; });
+});
+
+test('a client without a sleep function is refused, so retries cannot fire back to back', function () {
+    assert.throws(function () {
+        new (require('../lib').GHCCClient)({ enterprise: 'acme', transport: function () {} });
+    }, function (e) { return e.kind === 'precondition' && /sleep/.test(e.message); });
+});
+
+test('maxAttempts of 1 is honoured, not replaced by the default', function () {
+    var t = h.setup({}, { maxAttempts: 1 });
+    t.mock.addFault({ status: 503, method: 'GET', times: 1 });
+    assert.throws(function () { t.client.listCostCenters(); }, function (e) { return e.kind === 'transient'; });
+    assert.deepEqual(t.sleeps, []);
+});
+
+test('a 403 whose message names a rate limit is throttled, not a credential error', function () {
+    var t = h.setup({}, { maxAttempts: 2 });
+    t.mock.addFault({ status: 403, method: 'GET', times: 5, body: { message: 'You have exceeded a secondary rate limit.' } });
+    assert.throws(function () { t.client.listCostCenters(); }, function (e) { return e.kind === 'throttled'; });
+    t.mock.reset();
+    t.mock.addFault({ status: 403, method: 'GET', times: 1, body: { message: 'Resource not accessible' } });
+    assert.throws(function () { t.client.listCostCenters(); }, function (e) { return e.kind === 'credential'; });
+});
+
+test('a gateway error on POST is not retried; the create is read back and reported as recovered', function () {
+    var t = h.setup();
+    var real = require('../mock/server').inProcessTransport(t.mock);
+    var failedOnce = false;
+    var client = new (require('../lib').GHCCClient)({
+        enterprise: 'acme',
+        changeLog: t.changeLog,
+        sleep: function () {},
+        transport: function (req) {
+            var res = real(req);
+            if (req.method === 'POST' && !failedOnce) {
+                failedOnce = true;
+                return { status: 504, headers: {}, body: { message: 'gateway timeout' } };
+            }
+            return res;
+        }
+    });
+    var out = client.createCostCenter({ name: 'Platform' }, h.REQ);
+    assert.equal(out.recovered, true);
+    assert.equal(t.mock.state.costCenters.filter(function (c) { return c.name === 'Platform'; }).length, 1);
+});
+
+test('a gateway error on POST with nothing created is surfaced, not swallowed', function () {
+    var t = h.setup();
+    t.mock.addFault({ status: 504, method: 'POST', times: 1 });
+    assert.throws(function () { t.client.createCostCenter({ name: 'Platform' }, h.REQ); }, function (e) { return e.kind === 'transient'; });
+    assert.equal(t.mock.state.costCenters.length, 0);
+});
+
+test('listCostCenters reads every page when there are more than 100 cost centers', function () {
+    var t = h.setup();
+    var i;
+    for (i = 0; i < 150; i++) {
+        t.client.createCostCenter({ name: 'cc-' + i }, h.REQ);
+    }
+    assert.equal(t.client.listCostCenters({ state: 'active' }).length, 150);
 });

@@ -116,7 +116,10 @@ function createMock(options) {
                 out.push(c);
             }
         }
-        return reply(200, { costCenters: out });
+        /* Pages are capped at maxPerPage, so a client that never asks for page 2 sees a partial list. */
+        var perPage = Math.min(parseInt(query.get('per_page') || String(config.maxPerPage), 10) || config.maxPerPage, config.maxPerPage);
+        var page = Math.max(parseInt(query.get('page') || '1', 10) || 1, 1);
+        return reply(200, { costCenters: out.slice((page - 1) * perPage, page * perPage), has_next_page: page * perPage < out.length });
     }
 
     function createCostCenter(body) {

@@ -2,7 +2,7 @@
 
 One script per **Verify** item in the PRD. Each creates short-lived objects named `spike-<name>-<run id>`, records every request and response to `findings/<spike>.json` (token never recorded), prints a one-line verdict, and deletes what it created.
 
-**Run these only against a throwaway enterprise**, with a classic token that has `manage_billing:enterprise` (the property spike also needs organization admin rights). The scripts refuse to run against `api.github.com` unless `SPIKE_CONFIRM_THROWAWAY=yes` is set.
+**Run these only against a throwaway enterprise**, with a classic token that has `manage_billing:enterprise` (the property spike also needs organization admin rights). The scripts refuse to run against any host except the local mock (`127.0.0.1`, `localhost`) unless `SPIKE_CONFIRM_THROWAWAY=yes` is set. That covers `api.github.com`, GHE.com and GHES.
 
 ## Running
 
@@ -38,6 +38,6 @@ To rehearse against the mock instead, start `npm run mock` and set `GITHUB_API_B
 
 ## Reading a finding
 
-Each file has `verdict` (`accepted`, `rejected` or `inconclusive`), a plain-language `summary`, `details` with the facts the spike was after, and `steps` with every request and response. Commit findings after checking that no real user names or emails need removing; the mock server and `lib/endpoints.js` are corrected from them.
+Each file has `verdict` (`accepted`, `rejected` or `inconclusive`), a plain-language `summary`, `details` with the facts the spike was after, and `steps` with every request and response. `findings/` is gitignored. Recording removes email addresses and fields that name a person (`actor`, `login`, `ip` and similar), but cost center names, team slugs and logins you passed in as inputs stay. Read a finding, then add it deliberately with `git add -f` once you are satisfied it holds nothing private. The mock server and `lib/endpoints.js` are corrected from them.
 
 The budget spike cannot decide which overlapping budget wins, because that needs real usage. Run it with `SPIKE_KEEP=yes`, follow the manual step in its finding, then delete the budgets and cost center by hand.

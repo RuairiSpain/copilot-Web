@@ -85,10 +85,9 @@ function detectAnomalies(desired, observed, usage, optionsIn) {
     var budgetsByIdentity = {};
     var centerBudget = {};
     var knownValues = {};
+    var teamCenterOf = {};
 
-    if (!today) {
-        throw new Error('options.today is required (YYYY-MM-DD)');
-    }
+    util.requireToday(today, 'detectAnomalies');
 
     function add(check, subject, severity, message, discriminator, details) {
         items.push({
@@ -119,18 +118,20 @@ function detectAnomalies(desired, observed, usage, optionsIn) {
     });
 
     /* Where a user really is in GitHub: a direct resource, else a team they belong to, else their org's placement. */
+    (function indexTeams() {
+        Object.keys(desired.teamMembers || {}).sort().forEach(function (slug) {
+            var placed = location[key('Team', slug)];
+            if (!placed) { return; }
+            desired.teamMembers[slug].forEach(function (m) {
+                if (!teamCenterOf[lower(m)]) { teamCenterOf[lower(m)] = placed; }
+            });
+        });
+    }());
+
     function observedCenterOf(user) {
-        var login = user.login;
-        var slugs, i, found;
-        if (location[key('User', login)]) { return location[key('User', login)]; }
-        slugs = Object.keys(desired.teamMembers || {}).sort();
-        for (i = 0; i < slugs.length; i++) {
-            if (desired.teamMembers[slugs[i]].some(function (m) { return lower(m) === lower(login); }) && location[key('Team', slugs[i])]) {
-                found = location[key('Team', slugs[i])];
-                break;
-            }
-        }
-        if (found) { return found; }
+        var direct = location[key('User', user.login)];
+        if (direct) { return direct; }
+        if (teamCenterOf[lower(user.login)]) { return teamCenterOf[lower(user.login)]; }
         if (user.org && location[key('Org', user.org)]) { return location[key('Org', user.org)]; }
         return null;
     }
@@ -187,17 +188,10 @@ function detectAnomalies(desired, observed, usage, optionsIn) {
 
     /* Repos with no property or an invalid value, with a likely intended value when one is close. */
     (observed.repoProperties || []).forEach(function (r) {
-        var best = null;
-        var bestDistance = 3;
-        var name, d, subject;
+        var best, subject;
         if (r.value && knownValues[lower(r.value)]) { return; }
         subject = 'Repo:' + r.org + '/' + r.repo;
-        for (name in knownValues) {
-            if (r.value && Object.prototype.hasOwnProperty.call(knownValues, name)) {
-                d = util.distance(lower(r.value), name);
-                if (d < bestDistance) { bestDistance = d; best = knownValues[name]; }
-            }
-        }
+        best = util.nearestName(r.value, knownValues);
         add(CHECKS.REPO_PROPERTY, subject, 'medium',
             r.value ? subject + ' has cost_center "' + r.value + '", which matches no cost center' + (best ? '; did you mean "' + best + '"?' : '') : subject + ' has no cost_center property',
             r.value || '', { value: r.value || null, proposed: best });

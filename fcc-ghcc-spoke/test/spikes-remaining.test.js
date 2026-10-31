@@ -144,7 +144,7 @@ test('audit-log-actor: finds events for the objects it changed, with the actor',
         var r = await auditLog.run(env);
         assert.equal(r.verdict, 'accepted');
         assert.ok(r.details.events.length >= 4);
-        assert.equal(r.details.events[0].actor, 'mock-actor');
+        assert.equal(r.details.events[0].actor, '[personal data removed]', 'the actor is recorded as present, not by name');
         clean(mock);
     });
 });

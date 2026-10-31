@@ -23,8 +23,21 @@ function serverDelayMs(resp, nowMs) {
     return null;
 }
 
-function shouldRetry(resp) {
-    return RETRYABLE_STATUS[resp.status] === true || errors.isRateLimited(resp);
+/*
+ * A 502, 503 or 504 on POST is ambiguous: GitHub may have created the object
+ * before the gateway gave up, and a retry would create a second one. Rate
+ * limits (429, limited 403) are always safe to retry because the request was
+ * rejected before it ran. Callers recover from an ambiguous POST failure by
+ * reading back (see createCostCenter and createBudget).
+ */
+function shouldRetry(resp, method) {
+    if (errors.isRateLimited(resp)) {
+        return true;
+    }
+    if (String(method || '').toUpperCase() === 'POST') {
+        return false;
+    }
+    return RETRYABLE_STATUS[resp.status] === true;
 }
 
 /*
@@ -41,7 +54,7 @@ function send(transport, req, opts) {
     while (true) {
         attempt++;
         resp = transport(req);
-        if (resp.status < 400 || !shouldRetry(resp)) {
+        if (resp.status < 400 || !shouldRetry(resp, req.method)) {
             return { response: resp, attempts: attempt };
         }
         var wait = serverDelayMs(resp, opts.now());

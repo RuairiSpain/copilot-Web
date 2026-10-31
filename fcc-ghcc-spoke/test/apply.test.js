@@ -6,7 +6,7 @@ var lib = require('../lib');
 var h = require('./helpers');
 var f = require('./plan-fixtures');
 
-var REQ = { requestNumber: 'RITM0100' };
+var REQ = { requestNumber: 'RITM0100', allowStale: true };
 
 function planAgainstMock(t, desired, policy) {
     return lib.plan(desired, lib.observe(t.client), policy || f.policy(), f.TODAY);
@@ -113,4 +113,38 @@ test('apply needs a request number', function () {
     var t = h.setup({ supportTeams: true });
     var p = planAgainstMock(t, f.desired());
     assert.throws(function () { lib.apply(p, t.client, {}); }, function (e) { return e.kind === 'precondition'; });
+});
+
+test('apply without a replan function is refused unless the caller opts out', function () {
+    var t = h.setup({ supportTeams: true });
+    var p = planAgainstMock(t, f.desired());
+    assert.throws(function () { lib.apply(p, t.client, { requestNumber: 'RITM0100' }); }, function (e) { return e.kind === 'precondition' && /replan/.test(e.message); });
+    assert.equal(t.changeLog.entries.length, 0);
+});
+
+test('apply runs when a fresh plan matches the approved one', function () {
+    var t = h.setup({ supportTeams: true });
+    var p = planAgainstMock(t, f.desired());
+    var result = lib.apply(p, t.client, { requestNumber: 'RITM0100', replan: function () { return planAgainstMock(t, f.desired()); }, expectedFingerprint: p.fingerprint });
+    assert.equal(result.ok, true);
+});
+
+test('apply refuses when GitHub changed after approval, and writes nothing', function () {
+    var t = h.setup({ supportTeams: true });
+    var p = planAgainstMock(t, f.desired());
+    t.client.createCostCenter({ name: 'UNALLOCATED-acme-platform' }, REQ);
+    var before = t.changeLog.entries.length;
+    assert.throws(function () {
+        lib.apply(p, t.client, { requestNumber: 'RITM0100', replan: function () { return planAgainstMock(t, f.desired()); } });
+    }, function (e) { return e.kind === 'precondition' && /approved/.test(e.message); });
+    assert.equal(t.changeLog.entries.length, before);
+});
+
+test('apply refuses a plan edited after approval', function () {
+    var t = h.setup({ supportTeams: true });
+    var p = planAgainstMock(t, f.desired());
+    var approved = p.fingerprint;
+    p.operations.pop();
+    p.fingerprint = require('../lib/util').fingerprint(p.operations);
+    assert.throws(function () { lib.apply(p, t.client, { requestNumber: 'RITM0100', allowStale: true, expectedFingerprint: approved }); }, function (e) { return e.kind === 'precondition'; });
 });

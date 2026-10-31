@@ -14,6 +14,41 @@ var lib = require('../lib');
 var paths = lib.endpoints.paths;
 var KEPT_HEADERS = ['retry-after', 'link', 'x-github-request-id', 'x-ratelimit-limit', 'x-ratelimit-remaining', 'x-ratelimit-reset', 'x-ratelimit-resource'];
 var REAL_API = 'https://api.github.com';
+var LOCAL_HOSTS = { '127.0.0.1': true, 'localhost': true, '[::1]': true };
+/* Keys whose values identify a person. Recorded findings keep the shape of these fields but not the value. */
+var PERSONAL_KEYS = /^(email|actor|actor_login|actor_ip|actor_location|login|ip|user_agent)$/i;
+var EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+
+/* Deep copy with personal fields and anything shaped like an email replaced. */
+function scrub(value) {
+    var out, k;
+    if (typeof value === 'string') {
+        return value.replace(EMAIL, '[email]');
+    }
+    if (value === null || typeof value !== 'object') {
+        return value;
+    }
+    if (Array.isArray(value)) {
+        return value.map(scrub);
+    }
+    out = {};
+    for (k in value) {
+        if (Object.prototype.hasOwnProperty.call(value, k)) {
+            out[k] = PERSONAL_KEYS.test(k) && value[k] ? '[personal data removed]' : scrub(value[k]);
+        }
+    }
+    return out;
+}
+
+function isLocal(apiBase) {
+    var host;
+    try {
+        host = new URL(apiBase).hostname;
+    } catch (err) {
+        return false;
+    }
+    return LOCAL_HOSTS[host] === true || LOCAL_HOSTS['[' + host + ']'] === true;
+}
 
 function createContext(env) {
     var e = env || process.env;
@@ -27,9 +62,10 @@ function createContext(env) {
     if (!token || !enterprise) {
         throw new Error('GITHUB_TOKEN and GITHUB_ENTERPRISE are required');
     }
-    if (apiBase === REAL_API && e.SPIKE_CONFIRM_THROWAWAY !== 'yes') {
-        throw new Error('Refusing to run against api.github.com. Spikes create and delete billing objects. ' +
-            'Use a throwaway enterprise and set SPIKE_CONFIRM_THROWAWAY=yes, or point GITHUB_API_BASE at the mock.');
+    /* Anything that is not the local mock is treated as real: api.github.com, GHE.com or a GHES host. */
+    if (!isLocal(apiBase) && e.SPIKE_CONFIRM_THROWAWAY !== 'yes') {
+        throw new Error('Refusing to run against ' + apiBase + '. Spikes create and delete billing objects. ' +
+            'Use a throwaway enterprise and set SPIKE_CONFIRM_THROWAWAY=yes, or point GITHUB_API_BASE at the local mock.');
     }
 
     var ctx = {
@@ -134,9 +170,9 @@ function createContext(env) {
                 apiBase: apiBase,
                 enterprise: enterprise,
                 verdict: verdict,
-                summary: summary,
-                details: details || {},
-                steps: steps
+                summary: scrub(summary),
+                details: scrub(details || {}),
+                steps: scrub(steps)
             };
             fs.mkdirSync(dir, { recursive: true });
             fs.writeFileSync(path.join(dir, name + '.json'), JSON.stringify(result, null, 2) + '\n');
@@ -155,4 +191,4 @@ function main(run) {
     });
 }
 
-module.exports = { createContext: createContext, main: main };
+module.exports = { createContext: createContext, main: main, scrub: scrub, isLocal: isLocal };
