@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GitHub Cost Center: screen prototype</title>
+<style>
+:root {
+  --bg: #f4f6f8; --panel: #ffffff; --text: #1c2530; --muted: #59687a; --line: #d9dfe6;
+  --accent: #0b5cad; --accent-text: #ffffff; --accent-soft: #e3effb;
+  --ok: #17703f; --ok-bg: #e2f4ea; --warn: #8a4f00; --warn-bg: #fdf0d9; --bad: #a8261b; --bad-bg: #fbe5e2;
+  --info: #3a4b9b; --info-bg: #e8ebfa; --track: #e6eaef;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12171d; --panel: #1a2129; --text: #e6ebf1; --muted: #9aa8b8; --line: #2d3742;
+    --accent: #5aa7f0; --accent-text: #0b1118; --accent-soft: #1b2e44;
+    --ok: #66c98f; --ok-bg: #16301f; --warn: #f0b45a; --warn-bg: #3a2b10; --bad: #ff8d82; --bad-bg: #3d1a17;
+    --info: #9fb0ff; --info-bg: #1f2547; --track: #2a343f;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+button, select, input { font: inherit; color: inherit; }
+h1, h2, h3 { margin: 0; line-height: 1.25; }
+h1 { font-size: 20px; } h2 { font-size: 16px; } h3 { font-size: 14px; }
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.brand { font-weight: 600; display: flex; align-items: center; gap: 10px; }
+.tag { font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 10px; background: var(--info-bg); color: var(--info); }
+.top-r { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.top-r label { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+select, input[type=text], input[type=number], input[type=date] { padding: 5px 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+.shell { display: grid; grid-template-columns: 210px 1fr; min-height: calc(100vh - 53px); }
+nav { background: var(--panel); border-right: 1px solid var(--line); padding: 10px 8px; }
+nav button { display: block; width: 100%; text-align: left; padding: 8px 10px; margin-bottom: 2px; border: 0; border-radius: 6px; background: none; cursor: pointer; }
+nav button:hover { background: var(--bg); }
+nav button[aria-current=page] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+main { padding: 18px; min-width: 0; }
+.head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.head p { margin: 4px 0 0; color: var(--muted); }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; margin-bottom: 14px; }
+.panel > h2, .panel > .row > h2 { margin-bottom: 10px; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+.kpi .n { font-size: 24px; font-weight: 600; } .kpi .l { color: var(--muted); font-size: 12px; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; }
+th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: middle; white-space: nowrap; }
+td.wrap, th.wrap { white-space: normal; min-width: 110px; }
+th { font-size: 12px; font-weight: 600; color: var(--muted); }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+tr.sel td { background: var(--accent-soft); }
+.btn { padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); cursor: pointer; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.btn.danger { color: var(--bad); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn.sm { padding: 3px 8px; font-size: 13px; }
+.chip { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; font-weight: 500; }
+.chip.ok { background: var(--ok-bg); color: var(--ok); } .chip.warn { background: var(--warn-bg); color: var(--warn); }
+.chip.bad { background: var(--bad-bg); color: var(--bad); } .chip.info { background: var(--info-bg); color: var(--info); }
+.chip.mute { background: var(--track); color: var(--muted); }
+.meter { position: relative; height: 10px; min-width: 120px; background: var(--track); border-radius: 5px; }
+.meter > span { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 5px; background: var(--accent); }
+.meter.warn > span { background: var(--warn); } .meter.bad > span { background: var(--bad); }
+.meter i { position: absolute; top: -2px; bottom: -2px; width: 1px; background: var(--muted); opacity: .6; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 12px; flex-wrap: wrap; }
+.tabs button { padding: 7px 12px; border: 0; background: none; border-bottom: 2px solid transparent; cursor: pointer; color: var(--muted); }
+.tabs button[aria-selected=true] { color: var(--accent); border-color: var(--accent); font-weight: 600; }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 14px; }
+.two.wide { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); }
+td .chip { white-space: normal; }
+@media (max-width: 860px) { .shell { grid-template-columns: 1fr; } nav { display: flex; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); } nav button { white-space: nowrap; width: auto; } .two { grid-template-columns: 1fr; } }
+.filters { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+.filters label { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.op { display: flex; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); align-items: baseline; }
+.op:last-child { border-bottom: 0; }
+.op .k { min-width: 64px; font-weight: 600; }
+.k.create { color: var(--ok); } .k.update { color: var(--info); } .k.move { color: var(--warn); } .k.delete { color: var(--bad); }
+.note { padding: 10px 12px; border-radius: 6px; margin: 10px 0; }
+.note.bad { background: var(--bad-bg); color: var(--bad); } .note.ok { background: var(--ok-bg); color: var(--ok); } .note.warn { background: var(--warn-bg); color: var(--warn); } .note.info { background: var(--info-bg); color: var(--info); }
+.form { display: grid; gap: 12px; max-width: 520px; }
+.form label { display: grid; gap: 4px; font-weight: 500; }
+.form small { color: var(--muted); font-weight: 400; }
+.bar { position: sticky; bottom: 0; display: flex; gap: 10px; align-items: center; padding: 10px 14px; background: var(--accent-soft); border: 1px solid var(--line); border-radius: 8px; margin-top: 10px; flex-wrap: wrap; }
+.mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
+.muted { color: var(--muted); }
+[hidden] { display: none !important; }
+.kill { border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">GitHub Cost Center <span class="tag">Prototype with sample data</span></div>
+  <div class="top-r">
+    <span id="writeState" class="chip ok">Writes enabled</span>
+    <label>View as
+      <select id="role" aria-label="View as role">
+        <option value="admin">Admin</option>
+        <option value="cc_manager">Cost center manager</option>
+        <option value="team_manager">Team manager</option>
+        <option value="finance">Finance</option>
+        <option value="auditor">Auditor</option>
+      </select>
+    </label>
+  </div>
+</header>
+<div class="shell">
+  <nav id="nav" aria-label="Screens"></nav>
+  <main id="main" tabindex="-1"></main>
+</div>
+
+<script>
+/* ---------- sample data (invented; not FCC data) ---------- */
+var ME = 'A. Byrne';
+var CENTERS = [
+  { id: 'cc-101', name: 'Platform Engineering', gl: 'GL-4410', org: 'fcc-platform', owner: 'A. Byrne',   budget: 12000, spend: 9840,  forecast: 13100, users: 212, pool: true },
+  { id: 'cc-102', name: 'Digital Services',     gl: 'GL-4420', org: 'fcc-digital',  owner: 'M. Kowalski', budget: 18000, spend: 17200, forecast: 21400, users: 301, pool: true },
+  { id: 'cc-103', name: 'Data Science',         gl: 'GL-4430', org: 'fcc-data',     owner: 'R. Okafor',   budget: 9000,  spend: 4100,  forecast: 5900,  users: 96,  pool: true },
+  { id: 'cc-104', name: 'Security Operations',  gl: 'GL-4440', org: 'fcc-platform', owner: 'A. Byrne',   budget: 4000,  spend: 1500,  forecast: 2100,  users: 41,  pool: false },
+  { id: 'cc-105', name: 'Contact Centre Apps',  gl: 'GL-4450', org: 'fcc-corporate', owner: 'S. Lindqvist', budget: 7000, spend: 6600, forecast: 7700, users: 134, pool: true },
+  { id: 'cc-100', name: 'UNALLOCATED-fcc-platform', gl: 'none', org: 'fcc-platform', owner: 'Admin queue', budget: 500, spend: 380, forecast: 520, users: 4, pool: false }
+];
+var USERS = [
+  { login: 'dmurphy', cc: 'Digital Services', usd: 412.4 }, { login: 'ajones', cc: 'Platform Engineering', usd: 388.1 },
+  { login: 'kpatel', cc: 'Data Science', usd: 301.7 }, { login: 'tnguyen', cc: 'Digital Services', usd: 288.9 },
+  { login: 'lfischer', cc: 'Contact Centre Apps', usd: 240.3 }
+];
+var REPOS = [
+  { org: 'fcc-platform', repo: 'build-tools', prop: 'Platform Engineering', observed: 'Platform Engineering', source: 'property' },
+  { org: 'fcc-platform', repo: 'iam-gateway', prop: 'Security Operations', observed: 'Security Operations', source: 'property' },
+  { org: 'fcc-platform', repo: 'legacy-scripts', prop: '', observed: 'UNALLOCATED-fcc-platform', source: 'default' },
+  { org: 'fcc-digital', repo: 'portal-web', prop: 'Digital Services', observed: 'Digital Services', source: 'property' },
+  { org: 'fcc-digital', repo: 'forms-engine', prop: 'Digital Service', observed: 'UNALLOCATED-fcc-platform', source: 'property' },
+  { org: 'fcc-digital', repo: 'status-page', prop: 'Digital Services', observed: 'Platform Engineering', source: 'property' },
+  { org: 'fcc-data', repo: 'feature-store', prop: 'Data Science', observed: 'Data Science', source: 'property' },
+  { org: 'fcc-data', repo: 'notebooks-shared', prop: '', observed: 'UNALLOCATED-fcc-platform', source: 'default' },
+  { org: 'fcc-corporate', repo: 'ivr-flows', prop: 'Contact Centre Apps', observed: 'Contact Centre Apps', source: 'property' },
+  { org: 'fcc-corporate', repo: 'crm-connector', prop: 'Contact Centre Apps', observed: 'Contact Centre Apps', source: 'property' }
+];
+var REQUESTS = [
+  { id: 'RITM0010231', type: 'Credit', requester: 'ajones', subject: 'ajones, Platform Engineering', amount: 150, expiry: '2026-11-30', approver: 'A. Byrne', state: 'Awaiting approval', age: '2 h', second: false },
+  { id: 'RITM0010228', type: 'Credit', requester: 'dmurphy', subject: 'dmurphy, Digital Services', amount: 600, expiry: '2026-11-15', approver: 'M. Kowalski, Finance', state: 'Needs second approver', age: '1 d', second: true },
+  { id: 'RITM0010219', type: 'Move', requester: 'R. Okafor', subject: 'jlee: Data Science to Platform Engineering', amount: null, expiry: '', approver: 'R. Okafor, A. Byrne', state: 'Awaiting 1 of 2 managers', age: '3 d', second: false },
+  { id: 'RITM0010204', type: 'Credit', requester: 'kpatel', subject: 'kpatel, Data Science', amount: 80, expiry: '2026-11-08', approver: 'R. Okafor', state: 'Approved, applying', age: '4 d', second: false }
+];
+var DRIFT = [
+  { id: 'DR-0412', type: 'Budget changed', subject: 'Digital Services budget', desired: '$18,000, stop usage on', observed: '$25,000, stop usage on', actor: 'github-admin-2 (audit log)', mode: 'auto', state: 'Reverted at 09:00', age: '3 h' },
+  { id: 'DR-0411', type: 'Resource moved', subject: 'repo fcc-digital/status-page', desired: 'Digital Services', observed: 'Platform Engineering', actor: 'not available', mode: 'report', state: 'Open', age: '1 d' },
+  { id: 'DR-0409', type: 'Membership changed', subject: 'user nwilson', desired: 'Data Science', observed: 'no cost center', actor: 'not available', mode: 'approve', state: 'Awaiting manager', age: '1 d' },
+  { id: 'DR-0405', type: 'Unmanaged object', subject: 'budget "pilot-copilot" ($2,000)', desired: 'not in ServiceNow', observed: 'exists in GitHub', actor: 'github-admin-1 (audit log)', mode: 'report', state: 'Open', age: '5 d' },
+  { id: 'DR-0399', type: 'Repo property drift', subject: 'repo fcc-digital/forms-engine', desired: 'Digital Services', observed: 'property "Digital Service"', actor: 'not available', mode: 'report', state: 'Open', age: '6 d' }
+];
+var ANOMALIES = [
+  { check: 'Licensed user in UNALLOCATED', subject: 'nwilson, mpereira, +2', sev: 'High', age: '1 d', state: 'Open' },
+  { check: 'Cost center at 90% of budget', subject: 'Digital Services (96%)', sev: 'Alert', age: '2 h', state: 'Open' },
+  { check: 'Spend spike vs 4-week baseline', subject: 'dmurphy (3.1x)', sev: 'Configurable', age: '1 d', state: 'Open' },
+  { check: 'Expired override still active', subject: 'tnguyen ($200, expired 2026-10-28)', sev: 'Medium', age: '3 d', state: 'Reverting tonight' },
+  { check: 'Repo with no property', subject: 'legacy-scripts, notebooks-shared', sev: 'Medium', age: '6 d', state: 'Open' },
+  { check: 'Overlapping budgets', subject: 'Platform Engineering (2 budgets)', sev: 'Medium', age: '8 d', state: 'Accepted' }
+];
+var JOBS = [
+  { name: 'Budget poll', cadence: 'Hourly', last: '2026-10-31 09:00', status: 'OK', dur: '14 s', calls: 6, throttle: 0 },
+  { name: 'Full sync', cadence: 'Nightly', last: '2026-10-31 02:00', status: 'OK', dur: '6 min 40 s', calls: 188, throttle: 2 },
+  { name: 'Override expiry', cadence: 'Nightly', last: '2026-10-31 02:30', status: 'OK', dur: '3 s', calls: 4, throttle: 0 }
+];
+var CHANGELOG = [
+  { when: '2026-10-31 09:00', req: 'DR-0412', op: 'PATCH budget bud-882', status: 200, actor: 'svc.ghcc' },
+  { when: '2026-10-30 16:12', req: 'RITM0010204', op: 'POST budget (kpatel override)', status: 201, actor: 'svc.ghcc' },
+  { when: '2026-10-30 11:40', req: 'CHG0044120', op: 'POST cost-centers/cc-105/resource', status: 422, actor: 'svc.ghcc' }
+];
+
+/* ---------- roles ---------- */
+var SCREENS = [
+  { id: 'overview', label: 'Overview', roles: ['admin', 'cc_manager', 'finance'] },
+  { id: 'admin', label: 'Cost center admin', roles: ['admin', 'cc_manager'] },
+  { id: 'repos', label: 'Repo mapping', roles: ['admin', 'cc_manager'] },
+  { id: 'requests', label: 'Requests', roles: ['admin', 'cc_manager', 'team_manager'] },
+  { id: 'drift', label: 'Drift and anomalies', roles: ['admin', 'cc_manager', 'auditor'] },
+  { id: 'chargeback', label: 'Chargeback', roles: ['admin', 'finance'] },
+  { id: 'sync', label: 'Sync health', roles: ['admin', 'auditor'] }
+];
+var CAN = { write: ['admin'], approve: ['admin', 'cc_manager'], request: ['admin', 'cc_manager', 'team_manager'] };
+var state = { role: 'admin', screen: 'overview', killed: false, tab: {}, moveApproved: false, repoFilter: { org: '', cc: '', none: false }, picked: {}, reqSel: 'RITM0010228', requestForm: false, ccSel: 'cc-101', notice: '' };
+
+function can(what) { return CAN[what].indexOf(state.role) !== -1; }
+function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+function usd(n) { return '$' + Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 }); }
+function chip(text, kind) { return '<span class="chip ' + kind + '">' + esc(text) + '</span>'; }
+function ownCenters() { return CENTERS.filter(function (c) { return state.role !== 'cc_manager' || c.owner === ME; }); }
+function sevChip(s) { return chip(s, s === 'High' ? 'bad' : s === 'Medium' ? 'warn' : 'info'); }
+
+function level(c) {
+  var p = c.spend / c.budget * 100;
+  if (p >= 100) return { cls: 'bad', label: 'Over budget', chip: 'bad' };
+  if (p >= 90) return { cls: 'bad', label: 'Near limit', chip: 'bad' };
+  if (p >= 75) return { cls: 'warn', label: 'Watch', chip: 'warn' };
+  return { cls: '', label: 'On track', chip: 'ok' };
+}
+function meter(c) {
+  var p = Math.min(100, c.spend / c.budget * 100), l = level(c);
+  return '<div class="meter ' + l.cls + '" role="img" aria-label="' + Math.round(c.spend / c.budget * 100) + ' percent of budget used"><span style="width:' + p + '%"></span><i style="left:75%"></i><i style="left:90%"></i></div>';
+}
+function head(title, sub, right) {
+  return '<div class="head"><div><h1>' + esc(title) + '</h1><p>' + sub + '</p></div><div>' + (right || '') + '</div></div>';
+}
+function readonlyNote() { return can('write') || can('approve') ? '' : '<div class="note info">Read-only for your role.</div>'; }
+function killNote() { return state.killed ? '<div class="note warn">The kill switch is on. Reads and plans work; applying changes is halted.</div>' : ''; }
+
+/* ---------- screens ---------- */
+var VIEWS = {};
+
+VIEWS.overview = function () {
+  var rows = ownCenters();
+  var over = rows.filter(function (c) { return c.spend / c.budget >= 0.9; }).length;
+  var fo = rows.filter(function (c) { return c.forecast > c.budget; }).length;
+  var spend = rows.reduce(function (a, c) { return a + c.spend; }, 0), budget = rows.reduce(function (a, c) { return a + c.budget; }, 0);
+  return head('Overview', 'Spend against budget and pool for October 2026. Thresholds at 75, 90 and 100 percent.') +
+    '<div class="kpis">' +
+    '<div class="kpi"><div class="n">' + usd(spend) + '</div><div class="l">Spend of ' + usd(budget) + ' budget</div></div>' +
+    '<div class="kpi"><div class="n">' + rows.length + '</div><div class="l">Cost centers' + (state.role === 'cc_manager' ? ' you manage' : '') + '</div></div>' +
+    '<div class="kpi"><div class="n">' + over + '</div><div class="l">At or above 90% of budget</div></div>' +
+    '<div class="kpi"><div class="n">' + fo + '</div><div class="l">Forecast to exceed budget</div></div></div>' +
+    '<div class="panel"><h2>Cost centers</h2><div class="tablewrap"><table><thead><tr><th>Cost center</th><th>Manager</th><th class="num">Spend</th><th class="num">Budget</th><th>Used</th><th class="num">Forecast</th><th>Status</th></tr></thead><tbody>' +
+    rows.map(function (c) {
+      var l = level(c), fOver = c.forecast > c.budget;
+      return '<tr><td>' + esc(c.name) + (c.pool ? '' : ' <span class="muted">(no pool cap)</span>') + '</td><td>' + esc(c.owner) + '</td><td class="num">' + usd(c.spend) + '</td><td class="num">' + usd(c.budget) + '</td><td>' + meter(c) + '</td>' +
+        '<td class="num">' + usd(c.forecast) + '</td><td>' + chip(l.label, l.chip) + (fOver ? ' ' + chip('Forecast over', 'warn') : '') + '</td></tr>';
+    }).join('') + '</tbody></table></div><p class="muted">Forecast is the month-to-date run rate carried to month end.</p></div>' +
+    '<div class="panel"><h2>Top users this month</h2><div class="tablewrap"><table><thead><tr><th>User</th><th>Cost center</th><th class="num">Spend</th></tr></thead><tbody>' +
+    USERS.filter(function (u) { return rows.some(function (c) { return c.name === u.cc; }); }).map(function (u) {
+      return '<tr><td>' + esc(u.login) + '</td><td>' + esc(u.cc) + '</td><td class="num">$' + u.usd.toFixed(2) + '</td></tr>';
+    }).join('') + '</tbody></table></div></div>';
+};
+
+VIEWS.admin = function () {
+  var list = ownCenters();
+  if (!list.some(function (c) { return c.id === state.ccSel; })) { state.ccSel = list[0].id; }
+  var c = list.filter(function (x) { return x.id === state.ccSel; })[0];
+  var tab = state.tab.admin || 'details';
+  var tabs = [['details', 'Details'], ['teams', 'Funding teams'], ['users', 'Direct users'], ['budgets', 'Budgets']];
+  var body = '';
+  if (tab === 'details') {
+    body = '<div class="form"><label>Name<input type="text" value="' + esc(c.name) + '"></label>' +
+      '<label>Manager<input type="text" value="' + esc(c.owner) + '"></label>' +
+      '<label>ServiceNow cost center or GL code<input type="text" value="' + esc(c.gl) + '"></label>' +
+      '<label>AI credit pool cap<select><option' + (c.pool ? ' selected' : '') + '>On</option><option' + (c.pool ? '' : ' selected') + '>Off</option></select><small>GitHub calculates the pool limit from assigned licences.</small></label>' +
+      '<div class="muted">GitHub ID <span class="mono">' + c.id + '</span> · Managed: yes · State: active</div></div>';
+  } else if (tab === 'teams') {
+    body = '<table><thead><tr><th>Funding team</th><th>Group</th><th class="num">Members</th></tr></thead><tbody><tr><td>platform-eng</td><td>GRP-Platform</td><td class="num">180</td></tr><tr><td>platform-sre</td><td>GRP-SRE</td><td class="num">32</td></tr></tbody></table>' +
+      '<p class="muted">A user may be in one funding team only. A team belongs to one cost center.</p>';
+  } else if (tab === 'users') {
+    body = '<table><thead><tr><th>User</th><th>Request</th><th>Owner</th><th>Review by</th></tr></thead><tbody><tr><td>cdoyle</td><td>RITM0009871</td><td>A. Byrne</td><td>2027-01-31</td></tr></tbody></table><p class="muted">A direct assignment needs a request ID, an owner and a review date.</p>';
+  } else {
+    body = '<table><thead><tr><th>Scope</th><th>Entity</th><th class="num">Amount</th><th>Stop usage</th><th>Expiry</th></tr></thead><tbody>' +
+      '<tr><td>Cost center</td><td>' + esc(c.name) + '</td><td class="num">' + usd(c.budget) + '</td><td>On</td><td>none</td></tr>' +
+      '<tr><td>Cost center user default</td><td>each user</td><td class="num">$60</td><td>On</td><td>none</td></tr>' +
+      '<tr><td>Individual override</td><td>ajones</td><td class="num">$150</td><td>On</td><td>2026-11-30</td></tr></tbody></table>';
+  }
+  var blocked = !state.moveApproved;
+  var plan = '<div class="panel"><div class="row"><h2>Plan for this change set</h2>' + chip('Draft', 'mute') + '</div>' +
+    '<div class="op"><span class="k create">Create</span><span>Cost center "Legal Technology" with budget $3,000, stop usage on</span></div>' +
+    '<div class="op"><span class="k update">Update</span><span>Platform Engineering budget $12,000 to $14,000</span></div>' +
+    '<div class="op"><span class="k move">Move</span><span>User jlee from Data Science to Platform Engineering</span></div>' +
+    '<div class="op"><span class="k create">Add</span><span>14 users to Digital Services through team digital-core</span></div>' +
+    (blocked ? '<div class="note bad"><strong>Blocked:</strong> moving jlee out of Data Science needs an approved move request from both managers (rule R5).</div>'
+      : '<div class="note ok">All validation rules pass. Ready to submit for approval.</div>') +
+    '<label class="row" style="justify-content:flex-start"><input type="checkbox" id="moveApproved"' + (state.moveApproved ? ' checked' : '') + '> Demo: both managers have approved the move</label>' +
+    '<div class="row" style="margin-top:10px"><span class="muted">Changes apply to GitHub only after approval.</span><button class="btn primary" ' + (blocked || !can('approve') ? 'disabled' : '') + ' data-act="submit">Submit for approval</button></div></div>';
+  return head('Cost center admin', 'Create and edit cost centers, funding teams, direct users and budgets. The plan shows what will change on GitHub before you submit.',
+    can('write') ? '<button class="btn primary" data-act="newcc">New cost center</button>' : '') + readonlyNote() + killNote() +
+    '<div class="two"><div class="panel"><h2>Cost centers</h2><table><thead><tr><th>Name</th><th>State</th></tr></thead><tbody>' +
+    list.map(function (x) { return '<tr class="' + (x.id === c.id ? 'sel' : '') + '"><td><button class="btn sm" data-act="pickcc" data-id="' + x.id + '">' + esc(x.name) + '</button></td><td>' + chip('Active', 'ok') + '</td></tr>'; }).join('') +
+    '</tbody></table></div><div class="panel"><h2>' + esc(c.name) + '</h2><div class="tabs" role="tablist">' +
+    tabs.map(function (t) { return '<button role="tab" aria-selected="' + (tab === t[0]) + '" data-act="tab" data-scope="admin" data-id="' + t[0] + '">' + t[1] + '</button>'; }).join('') +
+    '</div>' + body + '</div></div>' + plan;
+};
+
+function repoStatus(r) {
+  var names = CENTERS.map(function (c) { return c.name; });
+  if (!r.prop) return { label: 'No property', kind: 'warn' };
+  if (names.indexOf(r.prop) === -1) return { label: 'Invalid value', kind: 'bad' };
+  if (r.prop !== r.observed) return { label: 'Mismatch', kind: 'bad' };
+  return { label: 'Mapped', kind: 'ok' };
+}
+VIEWS.repos = function () {
+  var f = state.repoFilter;
+  var orgs = Object.keys(REPOS.reduce(function (a, r) { a[r.org] = 1; return a; }, {}));
+  var rows = REPOS.filter(function (r) {
+    var st = repoStatus(r);
+    return (!f.org || r.org === f.org) && (!f.cc || r.observed === f.cc) && (!f.none || st.label === 'No property' || r.observed.indexOf('UNALLOCATED') === 0);
+  });
+  var picked = Object.keys(state.picked).filter(function (k) { return state.picked[k]; });
+  return head('Repo mapping', 'The <span class="mono">cost_center</span> repo property is the source of truth. Repos without a valid value fall back to the org UNALLOCATED cost center.') + readonlyNote() +
+    '<div class="panel"><div class="filters"><label>Org<select id="fOrg"><option value="">All</option>' + orgs.map(function (o) { return '<option' + (f.org === o ? ' selected' : '') + '>' + o + '</option>'; }).join('') + '</select></label>' +
+    '<label>Cost center<select id="fCc"><option value="">All</option>' + CENTERS.map(function (c) { return '<option' + (f.cc === c.name ? ' selected' : '') + '>' + esc(c.name) + '</option>'; }).join('') + '</select></label>' +
+    '<label><input type="checkbox" id="fNone"' + (f.none ? ' checked' : '') + '> No cost center only</label><span class="muted">' + rows.length + ' of ' + REPOS.length + ' repos</span></div>' +
+    '<div class="tablewrap"><table><thead><tr><th><span class="muted">Select</span></th><th>Repo</th><th>Property value</th><th>Observed cost center</th><th>Source</th><th>Status</th></tr></thead><tbody>' +
+    (rows.length ? rows.map(function (r) {
+      var k = r.org + '/' + r.repo, st = repoStatus(r);
+      return '<tr><td><input type="checkbox" data-pick="' + k + '" aria-label="Select ' + k + '"' + (state.picked[k] ? ' checked' : '') + (can('request') ? '' : ' disabled') + '></td><td class="mono">' + k + '</td><td>' + (r.prop ? esc(r.prop) : '<span class="muted">empty</span>') + '</td><td>' + esc(r.observed) + '</td><td>' + r.source + '</td><td>' + chip(st.label, st.kind) + '</td></tr>';
+    }).join('') : '<tr><td colspan="6" class="muted">No repos match these filters.</td></tr>') + '</tbody></table></div></div>' +
+    (picked.length ? '<div class="bar"><strong>' + picked.length + ' selected</strong><label>Assign to <select id="bulkCc">' + CENTERS.filter(function (c) { return c.id !== 'cc-100'; }).map(function (c) { return '<option>' + esc(c.name) + '</option>'; }).join('') + '</select></label><button class="btn primary" data-act="bulk">Create one request for ' + picked.length + ' repos</button></div>' : '') +
+    '';
+};
+
+function policyItems(amount) {
+  var cap = 500, total = 1850, totalCap = 2500, second = 400;
+  return [
+    { ok: amount <= cap, text: 'Amount ' + usd(amount) + ' against the ' + usd(cap) + ' cap for your role' },
+    { ok: total + amount <= totalCap, text: 'Cost center overrides would total ' + usd(total + amount) + ' of ' + usd(totalCap) },
+    { ok: amount <= second, text: amount <= second ? 'No second approver needed' : 'Second approver needed above ' + usd(second), warn: amount > second }
+  ];
+}
+function policyBlocked(amount) { return !(amount > 0) || policyItems(amount).some(function (i) { return !i.ok && !i.warn; }); }
+function policyCheck(amount) {
+  return policyItems(amount).map(function (i) { return '<div class="op"><span class="k">' + (i.ok ? chip('Pass', 'ok') : chip(i.warn ? 'Extra step' : 'Blocked', i.warn ? 'warn' : 'bad')) + '</span><span>' + i.text + '</span></div>'; }).join('');
+}
+VIEWS.requests = function () {
+  var tab = state.tab.requests || 'Credit';
+  var list = REQUESTS.filter(function (r) { return r.type === tab; });
+  var sel = REQUESTS.filter(function (r) { return r.id === state.reqSel; })[0] || list[0];
+  var form = '<div class="panel"><h2>Request more credits</h2><div class="form">' +
+    '<label>User<input type="text" id="rqUser" value="ajones"></label>' +
+    '<label>Amount (USD)<input type="number" id="rqAmt" min="1" value="150"><small>Added to the user\'s individual budget until the expiry date.</small></label>' +
+    '<label>Reason<input type="text" id="rqWhy" value="Release week, heavy agent use"></label>' +
+    '<label>Expires<input type="date" id="rqExp" value="2026-11-30"></label>' +
+    '<div id="rqPolicy"></div>' +
+    '<div class="note info">This is the intended way to get more credits. GitHub\'s own request button goes to org or enterprise admins and is not tracked here.</div>' +
+    '<div class="row" style="justify-content:flex-start"><button class="btn primary" data-act="sendreq">Submit request</button><button class="btn" data-act="closereq">Cancel</button></div></div></div>';
+  return head('Requests', 'Credit, move and create requests waiting for approval.', can('request') ? '<button class="btn primary" data-act="openreq">Request more credits</button>' : '') + readonlyNote() +
+    (state.requestForm ? form : '') +
+    '<div class="tabs" role="tablist">' + ['Credit', 'Move', 'Create'].map(function (t) { return '<button role="tab" aria-selected="' + (tab === t) + '" data-act="tab" data-scope="requests" data-id="' + t + '">' + t + '</button>'; }).join('') + '</div>' +
+    '<div class="two wide"><div class="panel"><div class="tablewrap"><table><thead><tr><th>Number</th><th>Subject</th><th class="num">Amount</th><th>State</th><th>Age</th></tr></thead><tbody>' +
+    (list.length ? list.map(function (r) {
+      return '<tr class="' + (sel && r.id === sel.id ? 'sel' : '') + '"><td><button class="btn sm mono" data-act="pickreq" data-id="' + r.id + '">' + r.id + '</button></td><td class="wrap">' + esc(r.subject) + '</td><td class="num">' + (r.amount ? usd(r.amount) : 'n/a') + '</td><td>' + chip(r.state, r.second ? 'warn' : 'info') + '</td><td>' + r.age + '</td></tr>';
+    }).join('') : '<tr><td colspan="5" class="muted">No open ' + tab.toLowerCase() + ' requests.</td></tr>') + '</tbody></table></div></div>' +
+    '<div class="panel">' + (sel && sel.type === tab ? '<h2>' + sel.id + '</h2><p>' + esc(sel.subject) + '</p><p class="muted">Requested by ' + esc(sel.requester) + ' · Approvers: ' + esc(sel.approver) + (sel.expiry ? ' · Expires ' + sel.expiry : '') + '</p>' +
+      (sel.amount ? '<h3>Policy checks</h3>' + policyCheck(sel.amount) : '<h3>Move rule</h3><p>GitHub moves a resource automatically when it is added elsewhere, so both managers must approve first.</p>') +
+      '<div class="row" style="justify-content:flex-start;margin-top:10px"><button class="btn primary" data-act="approve" ' + (can('approve') ? '' : 'disabled') + '>Approve</button><button class="btn danger" data-act="reject" ' + (can('approve') ? '' : 'disabled') + '>Reject</button></div>' : '<p class="muted">Select a request.</p>') + '</div></div>';
+};
+
+VIEWS.drift = function () {
+  var tab = state.tab.drift || 'drift';
+  var mode = { auto: 'ok', approve: 'info', report: 'mute' };
+  var t = '<div class="tabs" role="tablist"><button role="tab" aria-selected="' + (tab === 'drift') + '" data-act="tab" data-scope="drift" data-id="drift">Drift (' + DRIFT.length + ')</button><button role="tab" aria-selected="' + (tab === 'anom') + '" data-act="tab" data-scope="drift" data-id="anom">Anomalies (' + ANOMALIES.length + ')</button></div>';
+  if (tab === 'drift') {
+    return head('Drift and anomalies', 'Differences between ServiceNow and GitHub. Every org starts in report mode.') + readonlyNote() + killNote() + t +
+      '<div class="panel"><div class="tablewrap"><table><thead><tr><th>Number</th><th class="wrap">Change</th><th class="wrap">Desired</th><th class="wrap">Observed</th><th class="wrap">Changed by</th><th class="wrap">Mode and state</th><th class="wrap" style="min-width:150px">Action</th></tr></thead><tbody>' +
+      DRIFT.map(function (d) {
+        var open = d.state === 'Open' || d.state === 'Awaiting manager';
+        return '<tr><td class="mono">' + d.id + '<div class="muted">' + d.age + ' ago</div></td><td class="wrap"><strong>' + esc(d.type) + '</strong><div>' + esc(d.subject) + '</div></td><td class="wrap">' + esc(d.desired) + '</td><td class="wrap">' + esc(d.observed) + '</td><td class="wrap">' + esc(d.actor) + '</td><td class="wrap">' + chip(d.mode, mode[d.mode]) + '<div>' + esc(d.state) + '</div></td><td class="wrap">' +
+          (open ? '<button class="btn sm" data-act="remediate" ' + (can('approve') && !state.killed ? '' : 'disabled') + '>Remediate</button> <button class="btn sm" data-act="accept" ' + (can('approve') ? '' : 'disabled') + '>Accept as desired</button>' : '<span class="muted">none</span>') + '</td></tr>';
+      }).join('') + '</tbody></table></div><p class="muted">Accepting a difference creates an approved change record, so the new desired state has an audit trail. "Not available" means the audit log did not name an actor.</p></div>' +
+      '';
+  }
+  return head('Drift and anomalies', 'Misconfigurations and unusual spend.') + t + '<div class="panel"><div class="tablewrap"><table><thead><tr><th>Check</th><th>Subject</th><th>Severity</th><th>Age</th><th>State</th></tr></thead><tbody>' +
+    ANOMALIES.map(function (a) { return '<tr><td class="wrap">' + esc(a.check) + '</td><td class="wrap">' + esc(a.subject) + '</td><td>' + sevChip(a.sev) + '</td><td>' + a.age + '</td><td>' + esc(a.state) + '</td></tr>'; }).join('') + '</tbody></table></div></div>';
+};
+
+var CHARGE = CENTERS.filter(function (c) { return c.id !== 'cc-100'; }).map(function (c) { return { cc: c.name, gl: c.gl, org: c.org, credits: Math.round(c.spend * 100), usd: c.spend }; });
+VIEWS.chargeback = function () {
+  var total = CHARGE.reduce(function (a, r) { return a + r.usd; }, 0);
+  return head('Chargeback', 'Spend by cost center and GL code for October 2026.', '<button class="btn" data-act="csv">Export CSV</button>') +
+    '<div class="note warn">Licence fees are not included. How to allocate them is an FCC business decision and is not set yet.</div>' +
+    '<div class="panel"><div class="tablewrap"><table id="chargeTable"><thead><tr><th>Cost center</th><th>GL code</th><th>Org</th><th class="num">AI credits</th><th class="num">Spend (USD)</th></tr></thead><tbody>' +
+    CHARGE.map(function (r) { return '<tr><td>' + esc(r.cc) + '</td><td>' + r.gl + '</td><td>' + r.org + '</td><td class="num">' + r.credits.toLocaleString('en-US') + '</td><td class="num">$' + r.usd.toLocaleString('en-US') + '.00</td></tr>'; }).join('') +
+    '<tr><th>Total</th><td></td><td></td><td class="num"></td><th class="num">$' + total.toLocaleString('en-US') + '.00</th></tr></tbody></table></div></div>';
+};
+
+VIEWS.sync = function () {
+  var tab = state.tab.sync || 'health';
+  var t = '<div class="tabs" role="tablist"><button role="tab" aria-selected="' + (tab === 'health') + '" data-act="tab" data-scope="sync" data-id="health">Health</button><button role="tab" aria-selected="' + (tab === 'log') + '" data-act="tab" data-scope="sync" data-id="log">Change log</button></div>';
+  if (tab === 'log') {
+    return head('Sync health', 'Every write to GitHub, with its request number.') + t + '<div class="panel"><div class="tablewrap"><table><thead><tr><th>When</th><th>Request</th><th>Operation</th><th>HTTP</th><th>Actor</th></tr></thead><tbody>' +
+      CHANGELOG.map(function (l) { return '<tr><td>' + l.when + '</td><td class="mono">' + l.req + '</td><td>' + esc(l.op) + '</td><td>' + chip(String(l.status), l.status < 300 ? 'ok' : 'bad') + '</td><td>' + l.actor + '</td></tr>'; }).join('') + '</tbody></table></div></div>';
+  }
+  return head('Sync health', 'Last runs, throttling, write failures and the token.') + t + killNote() +
+    '<div class="kpis"><div class="kpi"><div class="n">41 days</div><div class="l">Token expires 2026-12-11 (alerts at 30 and 7 days)</div></div><div class="kpi"><div class="n">4,812</div><div class="l">GitHub calls left this hour</div></div><div class="kpi"><div class="n">1</div><div class="l">Failed write in the last 7 days</div></div></div>' +
+    '<div class="panel"><h2>Jobs</h2><div class="tablewrap"><table><thead><tr><th>Job</th><th>Cadence</th><th>Last run</th><th>Status</th><th>Duration</th><th class="num">GitHub calls</th><th class="num">Throttled</th></tr></thead><tbody>' +
+    JOBS.map(function (j) { return '<tr><td>' + j.name + '</td><td>' + j.cadence + '</td><td>' + j.last + '</td><td>' + chip(j.status, 'ok') + '</td><td>' + j.dur + '</td><td class="num">' + j.calls + '</td><td class="num">' + j.throttle + '</td></tr>'; }).join('') + '</tbody></table></div></div>' +
+    '<div class="panel kill"><h2>Kill switch</h2><p>Halts every write to GitHub. Reads, plans and reports keep working.</p>' +
+    '<label class="row" style="justify-content:flex-start"><input type="checkbox" id="kill"' + (state.killed ? ' checked' : '') + (can('write') ? '' : ' disabled') + '> Halt all writes</label>' + (can('write') ? '' : '<p class="muted">Only admins can change this.</p>') + '</div>';
+};
+
+/* ---------- shell ---------- */
+function visible() { return SCREENS.filter(function (s) { return s.roles.indexOf(state.role) !== -1; }); }
+function render() {
+  var vis = visible();
+  if (!vis.some(function (s) { return s.id === state.screen; })) { state.screen = vis[0].id; }
+  document.getElementById('nav').innerHTML = vis.map(function (s) { return '<button data-nav="' + s.id + '"' + (s.id === state.screen ? ' aria-current="page"' : '') + '>' + s.label + '</button>'; }).join('');
+  document.getElementById('main').innerHTML = (state.notice ? '<div class="note ok" role="status">' + esc(state.notice) + '</div>' : '') + VIEWS[state.screen]();
+  var w = document.getElementById('writeState');
+  w.textContent = state.killed ? 'Writes halted' : 'Writes enabled'; w.className = 'chip ' + (state.killed ? 'bad' : 'ok');
+  if (state.requestForm && state.screen === 'requests') { updatePolicy(); }
+}
+function updatePolicy() {
+  var el = document.getElementById('rqPolicy'), amt = document.getElementById('rqAmt');
+  var send = document.querySelector('[data-act=sendreq]');
+  if (el && amt) {
+    el.innerHTML = '<h3>Policy checks</h3>' + policyCheck(Number(amt.value) || 0);
+    send.disabled = policyBlocked(Number(amt.value) || 0);
+  }
+}
+function go(screen) { state.screen = screen; state.notice = ''; state.requestForm = false; render(); document.getElementById('main').focus(); }
+
+document.getElementById('role').addEventListener('change', function (e) { state.role = e.target.value; state.notice = ''; render(); });
+document.getElementById('nav').addEventListener('click', function (e) { var b = e.target.closest('[data-nav]'); if (b) go(b.dataset.nav); });
+document.getElementById('main').addEventListener('input', function (e) { if (e.target.id === 'rqAmt') updatePolicy(); });
+document.getElementById('main').addEventListener('change', function (e) {
+  var t = e.target;
+  if (t.id === 'fOrg') { state.repoFilter.org = t.value; render(); }
+  else if (t.id === 'fCc') { state.repoFilter.cc = t.value; render(); }
+  else if (t.id === 'fNone') { state.repoFilter.none = t.checked; render(); }
+  else if (t.id === 'moveApproved') { state.moveApproved = t.checked; render(); }
+  else if (t.id === 'kill') { state.killed = t.checked; render(); }
+  else if (t.dataset.pick) { state.picked[t.dataset.pick] = t.checked; state.notice = ''; render(); }
+});
+document.getElementById('main').addEventListener('click', function (e) {
+  var b = e.target.closest('[data-act]'); if (!b) return;
+  var act = b.dataset.act;
+  state.notice = '';
+  if (act === 'tab') { state.tab[b.dataset.scope] = b.dataset.id; }
+  else if (act === 'pickcc') { state.ccSel = b.dataset.id; }
+  else if (act === 'pickreq') { state.reqSel = b.dataset.id; }
+  else if (act === 'openreq') { state.requestForm = true; }
+  else if (act === 'closereq') { state.requestForm = false; }
+  else if (act === 'sendreq') { state.requestForm = false; state.notice = 'Request RITM0010232 created. The cost center manager has been asked to approve.'; }
+  else if (act === 'bulk') { var n = Object.keys(state.picked).filter(function (k) { return state.picked[k]; }).length; state.picked = {}; state.notice = 'Request CHG0044187 created for ' + n + ' repos, with one approval.'; }
+  else if (act === 'approve') { state.notice = 'Approved. The change is queued to apply to GitHub.'; }
+  else if (act === 'reject') { state.notice = 'Rejected. The requester has been notified.'; }
+  else if (act === 'submit') { state.notice = 'Change set submitted for approval.'; }
+  else if (act === 'remediate') { state.notice = 'Remediation queued as an approved change record.'; }
+  else if (act === 'accept') { state.notice = 'Accepted as the new desired state. An approved change record was created.'; }
+  else if (act === 'newcc') { state.notice = 'New cost center form would open here.'; }
+  else if (act === 'csv') {
+    var rows = [['Cost center', 'GL code', 'Org', 'AI credits', 'Spend USD']].concat(CHARGE.map(function (r) { return [r.cc, r.gl, r.org, r.credits, r.usd]; }));
+    var csv = rows.map(function (r) { return r.map(function (v) { return '"' + String(v).replace(/"/g, '""') + '"'; }).join(','); }).join('\n');
+    var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'chargeback-2026-10.csv'; a.click();
+    return;
+  }
+  render();
+});
+render();
+</script>
+</body>
+</html>

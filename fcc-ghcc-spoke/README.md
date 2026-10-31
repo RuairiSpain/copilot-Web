@@ -9,6 +9,7 @@ This folder holds what can be built and tested without a ServiceNow instance:
 | `lib/` | `GHCCClient` and its parts. ES5 only, because it is packaged into a ServiceNow Script Include. |
 | `mock/server.js` | Mock GitHub enterprise billing API: a synchronous handler plus an HTTP wrapper. |
 | `test/` | Unit and mock-backed tests (`node:test`, no dependencies). |
+| `ui/` | Clickable prototype of the seven screens (`ui/mockups/index.html`) and the build spec for UI Builder (`ui/SCREENS.md`). |
 | `spikes/` | Phase 0 scripts (all eleven written) that record real GitHub responses. See `spikes/README.md`. |
 
 The ServiceNow application files (tables, Script Include wrapper, REST Message, flows, ATF) are not created yet. They come from the instance through Studio source control; see "Next steps".
