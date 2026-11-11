@@ -13,7 +13,8 @@ from .config import Settings
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="teams-voice")
     sub = p.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("setup", help="create the voice agent and Teams telephony binding if missing; print JSON")
+    st = sub.add_parser("setup", help="create the voice agent and Teams telephony binding if missing; print JSON")
+    st.add_argument("--update-agent", action="store_true", help="publish a new agent version (use after changing instructions or wake words)")
     c = sub.add_parser("calls", help="list calls")
     c.add_argument("--all", action="store_true", help="include finished calls")
     w = sub.add_parser("watch", help="log call start/end and enforce MAX_CALL_SECONDS")
@@ -38,7 +39,7 @@ def main(argv: list[str] | None = None) -> int:
     from .foundry import FoundryVoice, val
     voice = FoundryVoice(Settings.from_env())
     if args.cmd == "setup":
-        agent = voice.ensure_agent()
+        agent = voice.ensure_agent(update=args.update_agent)
         b = voice.ensure_binding()
         print(json.dumps({"agent": agent, "binding_id": b.id, "status": b.status, "incoming_call_url": b.incoming_call_url}))
     elif args.cmd == "calls":

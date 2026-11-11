@@ -10,7 +10,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 ROOT="$(cd .. && pwd)"
 
-NAME=tvm LOCATION=westeurope ACS_DATA_LOCATION=Europe SUBSCRIPTION="" RA_ID="" PHONE="" LOCKDOWN=false AGENT=teams-voice-agent
+NAME=tvm LOCATION=westeurope ACS_DATA_LOCATION=Europe SUBSCRIPTION="" RA_ID="" PHONE="" LOCKDOWN=false AGENT=teams-voice-agent UPDATE_AGENT=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --name) NAME="$2"; shift 2 ;;
@@ -21,6 +21,7 @@ while [[ $# -gt 0 ]]; do
     --phone) PHONE="$2"; shift 2 ;;
     --agent-name) AGENT="$2"; shift 2 ;;
     --lockdown) LOCKDOWN=true; shift ;;
+    --update-agent) UPDATE_AGENT="--update-agent"; shift ;;
     -h|--help) sed -n '2,8p' "$0"; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
@@ -101,7 +102,7 @@ export RESOURCE_ACCOUNT_OBJECT_ID="$RA_ID" TEAMS_PHONE_NUMBER="$PHONE"
 log "Creating voice agent and Teams telephony binding (retrying while the role assignment propagates)"
 SETUP_JSON=""
 for attempt in 1 2 3 4 5 6; do
-  if SETUP_JSON="$("$CLI" setup)"; then break; fi
+  if SETUP_JSON="$("$CLI" setup $UPDATE_AGENT)"; then break; fi
   [[ $attempt -eq 6 ]] && { echo "setup failed; see README, Troubleshooting" >&2; exit 1; }
   sleep 20
 done

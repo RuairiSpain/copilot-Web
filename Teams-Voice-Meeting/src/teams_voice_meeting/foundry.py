@@ -48,19 +48,24 @@ class FoundryVoice:
         )
         self._telephony = self._client.beta.voice_agents.telephony
 
-    def ensure_agent(self) -> str:
-        """Create the voice agent if it does not exist. Returns 'exists' or 'created'."""
+    def ensure_agent(self, update: bool = False) -> str:
+        """Create the voice agent if missing, or add a new version when ``update`` is set.
+
+        Returns 'exists', 'created' or 'updated'. There is no greeting, so the agent is silent on join.
+        """
         s = self.settings
+        found = True
         try:
             self._client.agents.get(s.agent_name)
-            return "exists"
         except ResourceNotFoundError:
-            pass
+            found = False
+        if found and not update:
+            return "exists"
         self._client.agents.create_version(
             agent_name=s.agent_name,
-            definition=VoiceAgentDefinition(model_type="managed", model=s.model, instructions=s.instructions),
+            definition=VoiceAgentDefinition(model_type="managed", model=s.model, instructions=s.agent_instructions()),
         )
-        return "created"
+        return "updated" if found else "created"
 
     def ensure_binding(self) -> Binding:
         """Return the Teams binding for the resource account, creating it when missing."""

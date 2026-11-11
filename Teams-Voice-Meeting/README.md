@@ -66,6 +66,34 @@ Most of this estate cannot be private, and the template says so rather than pret
 ACS media bridge still work with it off. Test a call right after, and re-run without `--lockdown` if it fails.
 With it off, run the CLI from inside the VNet (a VM, Bastion or a peered network).
 
+## Wake and sleep words
+
+The agent starts every call silent (there is no greeting). It speaks only after it hears a wake word, and
+goes silent again, until the next wake word, when it hears a sleep word. Defaults: wake `hey assistant`,
+sleep `go quiet`. Change them with comma-separated environment variables before running `deploy.sh` or `setup`:
+
+```bash
+WAKE_WORDS="hey bob,ok bob" SLEEP_WORDS="bob stop" teams-voice setup --update-agent
+```
+
+Set `WAKE_WORDS=` (empty) to turn trigger mode off. After changing words, publish a new agent version with
+`--update-agent` (`deploy.sh` accepts it too).
+
+**Limit:** this is done in the agent's instructions, because Foundry runs the call and the managed realtime model
+decides when to speak. It is not a hard gate. The model can occasionally answer when it should stay silent, or
+miss a wake word that was transcribed badly. A guaranteed gate needs code between the transcript and the voice,
+which means a hosted-agent conversation engine (text in, text out, empty text while asleep). That is a larger build.
+
+## Scheduled and invited calls
+
+* **Someone in a Teams call invites the agent:** supported in principle. Add the resource account's phone number as a
+  participant in the call or meeting; it arrives as an ordinary incoming call. Needs the inviter to be allowed to
+  dial out to phone numbers. Not documented by Microsoft for this setup, so test it.
+* **Agent joins a scheduled meeting from a JSON file:** not built. The SDK has outbound call jobs
+  (`telephony.create_call_job`, with a `schedule` and an ACS/Teams connection), but the destination must be an E.164
+  phone number. It cannot join by meeting link. A Teams dial-in number asks for a conference ID, and the SDK shows
+  no way to enter digits, so that is unconfirmed.
+
 ## CLI
 
 ```bash

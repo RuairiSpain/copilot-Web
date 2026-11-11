@@ -133,3 +133,32 @@ def test_consent_signature_matches_acs_spec():
     sig = base64.b64encode(hmac.new(b"secret-key-bytes", to_sign.encode(), hashlib.sha256).digest()).decode()
     assert h["Authorization"].endswith("Signature=" + sig)
     assert h["x-ms-date"] == "Fri, 02 Jan 2026 03:04:05 GMT"
+
+
+def test_wake_and_sleep_words_in_instructions():
+    from teams_voice_meeting.config import build_instructions
+    text = build_instructions("BASE", ("hey bob", "ok bob"), ("bob stop",))
+    assert text.startswith("BASE") and '"hey bob" or "ok bob"' in text and '"bob stop"' in text
+    assert "ASLEEP" in text and "AWAKE" in text
+    assert build_instructions("BASE", (), ("x",)) == "BASE"   # no wake words: trigger mode off
+
+
+def test_settings_wake_words_from_env(monkeypatch):
+    for k, v in dict(FOUNDRY_PROJECT_ENDPOINT="https://x", VOICE_AGENT_NAME="a", ACS_CONNECTION_NAME="c",
+                     RESOURCE_ACCOUNT_OBJECT_ID=GUID, WAKE_WORDS="hey bob, ok bob", SLEEP_WORDS="bob stop").items():
+        monkeypatch.setenv(k, v)
+    s = Settings.from_env()
+    assert s.wake_words == ("hey bob", "ok bob") and s.sleep_words == ("bob stop",)
+    monkeypatch.setenv("WAKE_WORDS", "")
+    assert Settings.from_env().wake_words == () and Settings.from_env().agent_instructions() == s.instructions
+    monkeypatch.delenv("WAKE_WORDS")
+    assert Settings.from_env().wake_words == ("hey assistant",)
+
+
+def test_ensure_agent_update_publishes_new_version_with_triggers():
+    agents = FakeAgents(exists=True)
+    v = voice(FakeTelephony(), agents)
+    assert v.ensure_agent() == "exists" and not agents.created
+    assert v.ensure_agent(update=True) == "updated"
+    definition = agents.created[0][1]
+    assert "hey assistant" in definition.instructions and not definition.get("greeting")
