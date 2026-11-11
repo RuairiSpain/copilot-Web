@@ -10,7 +10,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 ROOT="$(cd .. && pwd)"
 
-NAME=tvm LOCATION=westeurope SUBSCRIPTION="" MAILBOX="" CALLBACK=""
+NAME=tvm LOCATION=westeurope SUBSCRIPTION="" MAILBOX="" CALLBACK="" GRANT_CONSENT=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --mode) shift 2 ;;
@@ -19,6 +19,7 @@ while [[ $# -gt 0 ]]; do
     --subscription) SUBSCRIPTION="$2"; shift 2 ;;
     --agent-mailbox) MAILBOX="$2"; shift 2 ;;
     --callback-url) CALLBACK="$2"; shift 2 ;;
+    --grant-consent) GRANT_CONSENT=true; shift ;;
     -h|--help) sed -n '2,8p' "$0"; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
@@ -50,10 +51,15 @@ fi
 
 log "Graph application permissions: Calendars.Read, Calls.JoinGroupCall.All"
 role_id() { az ad sp show --id "$GRAPH_APP" --query "appRoles[?value=='$1' && contains(allowedMemberTypes,'Application')].id | [0]" -o tsv; }
-az ad app permission add --id "$APP_ID" --api "$GRAPH_APP" \
-  --api-permissions "$(role_id Calendars.Read)=Role" "$(role_id Calls.JoinGroupCall.All)=Role" >/dev/null
-az ad app permission admin-consent --id "$APP_ID" >/dev/null 2>&1 \
-  || warn "Admin consent failed. A tenant admin must grant it: https://login.microsoftonline.com/$TENANT_ID/adminconsent?client_id=$APP_ID"
+CAL_ROLE="$(role_id Calendars.Read)"; JOIN_ROLE="$(role_id Calls.JoinGroupCall.All)"
+[[ -n "$CAL_ROLE" && -n "$JOIN_ROLE" ]] || { echo "Could not find the Graph app roles; check you can read service principals" >&2; exit 1; }
+az ad app permission add --id "$APP_ID" --api "$GRAPH_APP" --api-permissions "$CAL_ROLE=Role" "$JOIN_ROLE=Role" >/dev/null
+CONSENT_URL="https://login.microsoftonline.com/$TENANT_ID/adminconsent?client_id=$APP_ID"
+# Calendars.Read as an application permission reads EVERY mailbox in the tenant until an Exchange policy
+# limits it to the agent mailbox. So consent is not granted unless you pass --grant-consent.
+if [[ "$GRANT_CONSENT" == true ]]; then
+  az ad app permission admin-consent --id "$APP_ID" >/dev/null 2>&1 || warn "Admin consent failed. A tenant admin can grant it: $CONSENT_URL"
+fi
 
 log "Azure Bot with the Teams calling webhook set to $CALLBACK"
 az deployment group create --resource-group "$RG" --name teams-voice-calendar --template-file calendar.bicep \
@@ -83,9 +89,10 @@ log "Python CLI"
 
 log "Done. Remaining manual steps"
 cat <<EOT
-  1. Exchange admin: make the agent mailbox accept invites automatically, and limit the app to that mailbox:
+  1. Exchange admin, BEFORE consent: limit the app to the agent mailbox (Exchange application access policy or
+     RBAC for Applications scoped to $MAILBOX), and make the mailbox accept invites automatically:
        Set-CalendarProcessing -Identity $MAILBOX -AutomateProcessing AutoAccept
-       (and an Exchange application access policy or RBAC for Applications scoped to $MAILBOX)
+  1b. Then a tenant admin grants consent (or re-run with --grant-consent): $CONSENT_URL
   2. Host the receiver at $CALLBACK:
        set -a; . $ENV_FILE; set +a; $ROOT/.venv/bin/teams-voice run
   3. Test: $ROOT/.venv/bin/teams-voice calendar list   then invite $MAILBOX to a Teams meeting.

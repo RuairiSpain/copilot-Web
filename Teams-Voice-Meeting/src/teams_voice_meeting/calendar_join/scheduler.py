@@ -11,7 +11,7 @@ from typing import Callable
 
 from . import joiner
 from .graph import GraphClient
-from .meetings import Meeting, meetings_from_events
+from .meetings import Meeting, meetings_from_events, parse_join_url
 from .settings import CalendarSettings
 
 log = logging.getLogger(__name__)
@@ -48,7 +48,12 @@ class CalendarScheduler:
         now = self.now()
         lead = timedelta(seconds=self.s.join_lead_seconds)
         horizon = now + lead + timedelta(seconds=self.s.poll_seconds)
-        for m in meetings_from_events(self.graph.calendar_view(self.s.agent_mailbox, now, horizon)):
+        try:
+            meetings = meetings_from_events(self.graph.calendar_view(self.s.agent_mailbox, now, horizon))
+        except Exception as exc:  # still leave finished calls below
+            log.error("calendar read failed: %s", exc)
+            meetings = []
+        for m in meetings:
             entry = self.store.data.get(m.key)
             retry = entry and entry["status"] == "failed" and entry["attempts"] < self.s.max_join_attempts
             if (entry is None or retry) and m.start - lead <= now < m.end:
@@ -60,6 +65,12 @@ class CalendarScheduler:
         if not self.s.callback_url:
             raise RuntimeError("CALLBACK_URL is required to join: Graph posts call notifications to it")
         try:
+            target = parse_join_url(m.join_url, self.s.tenant_id)
+            if not self.s.allow_external_meetings and target.tenant_id != self.s.tenant_id:
+                self.store.data[m.key] = {"status": "skipped", "attempts": attempts, "subject": m.subject,
+                                          "end": m.end.isoformat(), "reason": "meeting is outside our tenant"}
+                log.warning("skipped %r: organised in another tenant (set ALLOW_EXTERNAL_MEETINGS=true to join)", m.subject)
+                return
             call_id = joiner.join(self.graph, m.join_url, self.s.callback_url, self.s.tenant_id)
             self.store.data[m.key] = {"status": "joined", "call_id": call_id, "subject": m.subject,
                                       "end": m.end.isoformat(), "attempts": attempts + 1}

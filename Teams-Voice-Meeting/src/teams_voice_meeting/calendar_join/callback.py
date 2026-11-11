@@ -41,7 +41,12 @@ def make_server(host: str, port: int, registry: CallRegistry) -> ThreadingHTTPSe
             self._reply(200 if self.path == "/healthz" else 404)
 
         def do_POST(self):
-            length = int(self.headers.get("Content-Length") or 0)
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                return self._reply(400)
+            if length < 0:
+                return self._reply(400)
             if length > MAX_BODY:
                 return self._reply(413)
             try:

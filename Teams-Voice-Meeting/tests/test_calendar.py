@@ -85,7 +85,7 @@ class FakeGraph:
 
 def scheduler(tmp_path, graph, clock, **kw):
     s = CalendarSettings(agent_mailbox="agent@x.com", callback_url="https://bot/api/calling",
-                         state_file=str(tmp_path / "state.json"), **kw)
+                         tenant_id=kw.pop("tenant_id", "tenant-1"), state_file=str(tmp_path / "state.json"), **kw)
     return CalendarScheduler(s, graph, StateStore(s.state_file), now=lambda: clock[0])
 
 
@@ -173,3 +173,45 @@ def test_run_rejects_unknown_join_mode(monkeypatch):
     monkeypatch.setenv("JOIN_MODE", "both")
     with pytest.raises(SystemExit, match="JOIN_MODE"):
         main(["run"])
+
+
+def test_calendar_outage_still_leaves_finished_calls(tmp_path):
+    g, clock = FakeGraph([event()]), [T0]
+    sch = scheduler(tmp_path, g, clock)
+    sch.tick()                                   # joined
+    def down(*a): raise RuntimeError("Graph 503")
+    g.calendar_view = down
+    clock[0] = T0 + timedelta(hours=2)
+    sch.tick()                                   # must not raise, must leave
+    assert g.deleted == ["call-1"]
+
+
+def test_meeting_from_another_tenant_is_skipped_unless_allowed(tmp_path):
+    g, clock = FakeGraph([event()]), [T0]
+    scheduler(tmp_path, g, clock, tenant_id="our-tenant").tick()
+    assert g.joined == []
+    other = tmp_path / "allowed"
+    other.mkdir()
+    scheduler(other, g, clock, tenant_id="our-tenant", allow_external_meetings=True).tick()
+    assert len(g.joined) == 1
+
+
+def test_callback_bad_content_length_is_400():
+    import http.client, threading
+    from teams_voice_meeting.calendar_join.callback import make_server
+    srv = make_server("127.0.0.1", 0, CallRegistry())
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        c = http.client.HTTPConnection("127.0.0.1", srv.server_address[1], timeout=3)
+        c.putrequest("POST", "/api/calling"); c.putheader("Content-Length", "abc"); c.endheaders()
+        assert c.getresponse().status == 400
+    finally:
+        srv.shutdown()
+
+
+def test_env_example_can_be_sourced_by_a_shell():
+    import pathlib, shlex
+    text = (pathlib.Path(__file__).parent.parent / ".env.example").read_text()
+    for line in text.splitlines():
+        if line.strip() and not line.startswith("#"):
+            assert len(shlex.split(line)) == 1, f"value needs quotes: {line}"

@@ -37,10 +37,18 @@ infra/deploy.sh --mode calendar --name tvm --agent-mailbox agent@contoso.com \
     --callback-url https://bot.contoso.com/api/calling
 ```
 
-This creates an Entra app with the Graph application permissions `Calendars.Read` and `Calls.JoinGroupCall.All`
-(admin consent is attempted), an Azure Bot whose calling webhook is your callback URL, and `.env.calendar`
-(holds a client secret, git-ignored). You host `teams-voice run` behind the callback URL; it listens on port 8080.
-Then an Exchange admin sets the agent mailbox to auto-accept invites and limits the app to that mailbox.
+This creates an Entra app that requests the Graph application permissions `Calendars.Read` and `Calls.JoinGroupCall.All`,
+an Azure Bot whose calling webhook is your callback URL, and `.env.calendar` (holds a client secret, git-ignored).
+You host `teams-voice run` behind the callback URL; it listens on port 8080.
+
+**Order matters.** `Calendars.Read` as an application permission can read every mailbox in the tenant. The script
+therefore does **not** grant admin consent unless you pass `--grant-consent`. First an Exchange admin limits the app
+to the agent mailbox (application access policy or RBAC for Applications) and sets the mailbox to auto-accept
+invites. Only then should a tenant admin grant consent.
+
+**Meetings from other tenants are skipped** (anyone who can invite the mailbox could otherwise send the agent into any
+meeting). Set `ALLOW_EXTERNAL_MEETINGS=true` to allow them. The check reads the tenant ID from long join URLs; a short
+`/meet/` URL carries none, so it cannot be checked.
 
 What `teams-voice calendar run` does, every `POLL_SECONDS`:
 
