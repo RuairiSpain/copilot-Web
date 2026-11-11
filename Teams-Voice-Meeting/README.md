@@ -16,7 +16,53 @@ Teams meeting / caller --> Teams Phone number (resource account) --> ACS --Incom
         --> Foundry binding (incoming_call_url) --> voice agent (media over ACS)
 ```
 
-## Deploy
+## Two join modes (switch with `JOIN_MODE`)
+
+| | `invite` (default) | `calendar` |
+| --- | --- | --- |
+| How the agent gets into a meeting | A participant adds the agent's phone number to the call | The agent is on the invite; it reads its own Outlook calendar and joins at start time |
+| Path | Teams Phone number, ACS, Foundry telephony binding | Microsoft Graph: calendar read, then `POST /communications/calls` |
+| Voice agent speaks | Yes, Foundry handles the audio | **Not yet.** See "Calendar mode limit" |
+| Network | Foundry private endpoint, no public endpoint of yours | One public HTTPS endpoint of yours for Graph call notifications |
+| Deploy | `infra/deploy.sh` | `infra/deploy.sh --mode calendar` |
+| Code | `foundry.py`, `consent.py`, `config.py` | `calendar_join/` |
+
+The two modes share no code. A test checks that neither imports the other; only `cli.py` knows about both.
+`teams-voice run` starts whichever mode `JOIN_MODE` names.
+
+## Calendar mode
+
+```bash
+infra/deploy.sh --mode calendar --name tvm --agent-mailbox agent@contoso.com \
+    --callback-url https://bot.contoso.com/api/calling
+```
+
+This creates an Entra app with the Graph application permissions `Calendars.Read` and `Calls.JoinGroupCall.All`
+(admin consent is attempted), an Azure Bot whose calling webhook is your callback URL, and `.env.calendar`
+(holds a client secret, git-ignored). You host `teams-voice run` behind the callback URL; it listens on port 8080.
+Then an Exchange admin sets the agent mailbox to auto-accept invites and limits the app to that mailbox.
+
+What `teams-voice calendar run` does, every `POLL_SECONDS`:
+
+1. `GET /users/{agent}/calendarView` for events starting within `JOIN_LEAD_SECONDS`, or already running.
+2. Keeps Teams meetings that are not cancelled and not declined.
+3. Parses the join URL (long `meetup-join` or short `/meet/<id>?p=` form, the two forms the Microsoft EchoBot sample accepts)
+   and posts a join request to Graph.
+4. Leaves `LEAVE_AFTER_END_SECONDS` after the scheduled end. State is kept in `.calendar-state.json`, so a restart
+   neither rejoins nor forgets to leave.
+
+Other commands: `teams-voice calendar list` shows the meetings it sees; `teams-voice calendar join-url <url>` joins one now.
+
+**Calendar mode limit.** The join uses Graph service-hosted media, so the agent appears in the meeting but has no live audio
+stream to Foundry. Live audio needs application-hosted media: Microsoft's media SDK (.NET, and in the EchoBot sample
+Windows with a public IP, ports and a certificate) bridging 16 kHz PCM audio to a voice model. That bridge is not built.
+Until it is, use calendar mode to prove the scheduling and join, or use `invite` mode for a working voice.
+
+**Unverified in calendar mode:** the organizer-meeting join body (built the way the EchoBot sample does), whether the
+callback must authenticate Graph's notifications (this MVP does not authenticate them and only logs them), the
+permission set a real tenant needs, and Entra Agent ID mailboxes (any mailbox you can read with `Calendars.Read` works).
+
+## Deploy (invite mode)
 
 Needs `az` (logged in), `python3` 3.10+, rights to create resources, role assignments and Entra app registrations.
 
@@ -89,10 +135,10 @@ which means a hosted-agent conversation engine (text in, text out, empty text wh
 * **Someone in a Teams call invites the agent:** supported in principle. Add the resource account's phone number as a
   participant in the call or meeting; it arrives as an ordinary incoming call. Needs the inviter to be allowed to
   dial out to phone numbers. Not documented by Microsoft for this setup, so test it.
-* **Agent joins a scheduled meeting from a JSON file:** not built. The SDK has outbound call jobs
-  (`telephony.create_call_job`, with a `schedule` and an ACS/Teams connection), but the destination must be an E.164
-  phone number. It cannot join by meeting link. A Teams dial-in number asks for a conference ID, and the SDK shows
-  no way to enter digits, so that is unconfirmed.
+* **Agent joins a scheduled meeting on its own:** see "Calendar mode" above (Graph, agent's Outlook calendar). It joins, but live
+  voice is not connected yet. A JSON-file schedule is not built. The SDK also has outbound call jobs
+  (`telephony.create_call_job`, with a `schedule`), but the destination must be an E.164 number, so it cannot join by link,
+  and a Teams dial-in number asks for a conference ID that the SDK shows no way to enter.
 
 ## CLI
 

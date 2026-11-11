@@ -4,11 +4,25 @@
 #   ./deploy.sh --name tvm --location westeurope                       # infrastructure, then stop for Teams admin
 #   ./deploy.sh --name tvm --location westeurope --resource-account-id <guid> [--phone +353...] [--lockdown]
 #
+# Join modes: invite (default, this script) or calendar (Graph; see deploy-calendar.sh):
+#   ./deploy.sh --mode calendar --name tvm --agent-mailbox agent@contoso.com --callback-url https://bot.contoso.com/api/calling
+#
 # Safe to re-run. Needs: az (logged in, Owner or Contributor + User Access Administrator on the
 # subscription, and permission to create Entra app registrations), python3 (3.10+).
 set -euo pipefail
 cd "$(dirname "$0")"
 ROOT="$(cd .. && pwd)"
+
+for ((i = 1; i <= $#; i++)); do
+  if [[ "${!i}" == "--mode" ]]; then
+    j=$((i + 1))
+    case "${!j:-}" in
+      calendar) exec ./deploy-calendar.sh "$@" ;;
+      invite) ;;
+      *) echo "--mode must be invite or calendar" >&2; exit 2 ;;
+    esac
+  fi
+done
 
 NAME=tvm LOCATION=westeurope ACS_DATA_LOCATION=Europe SUBSCRIPTION="" RA_ID="" PHONE="" LOCKDOWN=false AGENT=teams-voice-agent UPDATE_AGENT=""
 while [[ $# -gt 0 ]]; do
@@ -20,9 +34,10 @@ while [[ $# -gt 0 ]]; do
     --resource-account-id) RA_ID="$2"; shift 2 ;;
     --phone) PHONE="$2"; shift 2 ;;
     --agent-name) AGENT="$2"; shift 2 ;;
+    --mode) shift 2 ;;
     --lockdown) LOCKDOWN=true; shift ;;
     --update-agent) UPDATE_AGENT="--update-agent"; shift ;;
-    -h|--help) sed -n '2,8p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,11p' "$0"; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
 done
