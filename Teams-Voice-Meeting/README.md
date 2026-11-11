@@ -75,6 +75,17 @@ answers the Event Grid validation handshake.
 
 Endpoints: `POST /api/events`, `GET /api/calls`, `GET /healthz`.
 
+## Docker
+
+```bash
+docker build -t teams-voice-meeting Teams-Voice-Meeting
+docker run --rm -p 8000:8000 --env-file Teams-Voice-Meeting/.env teams-voice-meeting
+```
+
+The image runs as a non-root user. `DefaultAzureCredential` cannot use your `az login` inside the
+container. In Azure, run it with a managed identity. Locally, pass service principal variables
+(`AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`).
+
 ## Use
 
 Invite the service number to a Teams meeting. The call appears in the logs and at `/api/calls`.
