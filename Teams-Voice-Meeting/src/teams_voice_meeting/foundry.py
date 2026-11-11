@@ -1,4 +1,4 @@
-"""Thin wrapper over the azure-ai-projects voice agent telephony operations (preview)."""
+"""Voice agent, telephony binding and call operations (azure-ai-projects, voice agents preview)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,9 @@ from azure.ai.projects import AIProjectClient
 from azure.ai.projects.models import (
     CreateTeamsPhoneExtensibilityTelephonyBindingRequest,
     TelephonyProvider,
+    VoiceAgentDefinition,
 )
+from azure.core.exceptions import ResourceNotFoundError
 from azure.identity import DefaultAzureCredential
 
 from .config import Settings
@@ -22,6 +24,11 @@ TEAMS = TelephonyProvider.TEAMS_PHONE_EXTENSIBILITY
 IN_PROGRESS = "in_progress"
 
 
+def val(x: Any) -> Any:
+    """Plain string for an SDK enum. str(Enum) returns 'Class.MEMBER', so never compare with str()."""
+    return getattr(x, "value", x)
+
+
 @dataclass(frozen=True)
 class Binding:
     id: str
@@ -30,63 +37,81 @@ class Binding:
 
 
 class FoundryVoice:
-    """Operations on one voice agent. ``client`` is any AIProjectClient-compatible object."""
+    """``client`` is any AIProjectClient-compatible object (tests pass a fake)."""
 
     def __init__(self, settings: Settings, client: Any | None = None) -> None:
         self.settings = settings
-        if client is None:
-            # DefaultAzureCredential uses az login / VS Code / env vars locally and managed identity in Azure.
-            client = AIProjectClient(
-                endpoint=settings.project_endpoint,
-                credential=DefaultAzureCredential(),
-                allow_preview=True,  # voice agents are a preview feature
-            )
-        self._telephony = client.beta.voice_agents.telephony
+        self._client = client or AIProjectClient(
+            endpoint=settings.project_endpoint,
+            credential=DefaultAzureCredential(),
+            allow_preview=True,  # voice agents are a preview feature
+        )
+        self._telephony = self._client.beta.voice_agents.telephony
+
+    def ensure_agent(self, update: bool = False) -> str:
+        """Create the voice agent if missing, or add a new version when ``update`` is set.
+
+        Returns 'exists', 'created' or 'updated'. There is no greeting, so the agent is silent on join.
+        """
+        s = self.settings
+        found = True
+        try:
+            self._client.agents.get(s.agent_name)
+        except ResourceNotFoundError:
+            found = False
+        if found and not update:
+            return "exists"
+        self._client.agents.create_version(
+            agent_name=s.agent_name,
+            definition=VoiceAgentDefinition(model_type="managed", model=s.model, instructions=s.agent_instructions()),
+        )
+        return "updated" if found else "created"
 
     def ensure_binding(self) -> Binding:
         """Return the Teams binding for the resource account, creating it when missing."""
         s = self.settings
         for item in self._telephony.list_bindings(s.agent_name, provider=TEAMS):
             if getattr(item, "resource_account_object_id", None) == s.resource_account_object_id:
-                log.info("Reusing telephony binding %s", item.id)
-                return Binding(item.id, item.incoming_call_url, str(item.status))
+                return Binding(item.id, item.incoming_call_url, val(item.status))
         created = self._telephony.create_binding(
             s.agent_name,
             CreateTeamsPhoneExtensibilityTelephonyBindingRequest(
                 connection_name=s.connection_name,
                 resource_account_object_id=s.resource_account_object_id,
                 phone_number=s.phone_number,
-                label="teams-meeting",
+                label="teams",
             ),
         )
-        log.info("Created telephony binding %s", created.id)
-        return Binding(created.id, created.incoming_call_url, str(created.status))
+        return Binding(created.id, created.incoming_call_url, val(created.status))
 
-    def active_calls(self) -> list[Any]:
-        return list(self._telephony.list_calls(self.settings.agent_name, provider=TEAMS, status=IN_PROGRESS))
-
-    def get_call(self, call_id: str) -> Any:
-        return self._telephony.get_call(self.settings.agent_name, call_id)
+    def calls(self, in_progress_only: bool = True) -> list[Any]:
+        kwargs = {"status": IN_PROGRESS} if in_progress_only else {}
+        return list(self._telephony.list_calls(self.settings.agent_name, provider=TEAMS, **kwargs))
 
     def end_call(self, call_id: str) -> Any:
         return self._telephony.end_call(self.settings.agent_name, call_id)
 
-    def find_new_call(self, known_ids: set[str], since: float) -> Any | None:
-        """Newest in-progress call that is not in ``known_ids`` and started at or after ``since``."""
-        fresh = [
-            c for c in self.active_calls()
-            if c.id not in known_ids and (getattr(c, "started_at", None) or 0) >= since
-        ]
-        return max(fresh, key=lambda c: getattr(c, "started_at", 0) or 0, default=None)
-
-    def wait_for_end(self, call_id: str, poll_seconds: float, max_seconds: int) -> Any:
-        """Poll until the call leaves ``in_progress``. End it if it exceeds ``max_seconds``."""
-        deadline = time.monotonic() + max_seconds if max_seconds > 0 else None
+    def watch(self, poll_seconds: float = 3.0, iterations: int | None = None,
+              sleep=time.sleep, clock=time.monotonic) -> None:
+        """Log call start and end. End any call that runs longer than MAX_CALL_SECONDS."""
+        limit = self.settings.max_call_seconds
+        seen: dict[str, float] = {}
         while True:
-            call = self.get_call(call_id)
-            if str(call.status) != IN_PROGRESS:
-                return call
-            if deadline is not None and time.monotonic() >= deadline:
-                log.warning("Call %s exceeded %ss, ending it", call_id, max_seconds)
-                return self.end_call(call_id)
-            time.sleep(poll_seconds)
+            active = {c.id: c for c in self.calls()}
+            for cid in active.keys() - seen.keys():
+                seen[cid] = clock()
+                log.info("call started %s from %s", cid, getattr(active[cid], "caller_number", None))
+            for cid in list(seen.keys() - active.keys()):
+                final = self._telephony.get_call(self.settings.agent_name, cid)
+                log.info("call ended %s status=%s reason=%s", cid, val(final.status), val(final.end_reason))
+                del seen[cid]
+            if limit > 0:
+                for cid, t0 in seen.items():
+                    if cid in active and clock() - t0 > limit:
+                        log.warning("call %s exceeded %ss, ending it", cid, limit)
+                        self.end_call(cid)
+            if iterations is not None:
+                iterations -= 1
+                if iterations <= 0:
+                    return
+            sleep(poll_seconds)
