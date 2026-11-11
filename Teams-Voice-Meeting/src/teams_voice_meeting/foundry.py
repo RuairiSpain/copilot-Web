@@ -93,25 +93,34 @@ class FoundryVoice:
 
     def watch(self, poll_seconds: float = 3.0, iterations: int | None = None,
               sleep=time.sleep, clock=time.monotonic) -> None:
-        """Log call start and end. End any call that runs longer than MAX_CALL_SECONDS."""
-        limit = self.settings.max_call_seconds
+        """Log call start and end. End any call that runs longer than MAX_CALL_SECONDS.
+
+        A failed poll is logged and retried on the next one, so a Foundry outage does not stop the watcher.
+        """
         seen: dict[str, float] = {}
         while True:
-            active = {c.id: c for c in self.calls()}
-            for cid in active.keys() - seen.keys():
-                seen[cid] = clock()
-                log.info("call started %s from %s", cid, getattr(active[cid], "caller_number", None))
-            for cid in list(seen.keys() - active.keys()):
-                final = self._telephony.get_call(self.settings.agent_name, cid)
-                log.info("call ended %s status=%s reason=%s", cid, val(final.status), val(final.end_reason))
-                del seen[cid]
-            if limit > 0:
-                for cid, t0 in seen.items():
-                    if cid in active and clock() - t0 > limit:
-                        log.warning("call %s exceeded %ss, ending it", cid, limit)
-                        self.end_call(cid)
+            try:
+                self._poll(seen, clock)
+            except Exception as exc:
+                log.error("watch poll failed: %s", exc)
             if iterations is not None:
                 iterations -= 1
                 if iterations <= 0:
                     return
             sleep(poll_seconds)
+
+    def _poll(self, seen: dict[str, float], clock) -> None:
+        limit = self.settings.max_call_seconds
+        active = {c.id: c for c in self.calls()}
+        for cid in active.keys() - seen.keys():
+            seen[cid] = clock()
+            log.info("call started %s from %s", cid, getattr(active[cid], "caller_number", None))
+        for cid in list(seen.keys() - active.keys()):
+            final = self._telephony.get_call(self.settings.agent_name, cid)
+            log.info("call ended %s status=%s reason=%s", cid, val(final.status), val(final.end_reason))
+            del seen[cid]
+        if limit > 0:
+            for cid, t0 in seen.items():
+                if clock() - t0 > limit:
+                    log.warning("call %s exceeded %ss, ending it", cid, limit)
+                    self.end_call(cid)

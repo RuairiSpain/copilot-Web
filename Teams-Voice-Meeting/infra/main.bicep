@@ -168,31 +168,12 @@ resource acsConnection 'Microsoft.CognitiveServices/accounts/projects/connection
 }
 
 // ---------- Azure Bot (Teams calling channel) ----------
-resource bot 'Microsoft.BotService/botServices@2022-09-15' = {
-  name: botName
-  location: 'global'
-  kind: 'azurebot'
-  sku: { name: 'S1' }
-  properties: {
-    displayName: botName
-    endpoint: 'https://eventgrid.azure.net'
-    msaAppId: botAppId
-    msaAppTenantId: tenant().tenantId
-    msaAppType: 'SingleTenant'
-  }
-}
-
-resource teamsChannel 'Microsoft.BotService/botServices/channels@2022-09-15' = {
-  parent: bot
-  name: 'MsTeamsChannel'
-  location: 'global'
-  properties: {
-    channelName: 'MsTeamsChannel'
-    properties: {
-      isEnabled: true
-      enableCalling: true
-      callingWebhook: 'https://eventgrid.azure.net'
-    }
+module bot 'modules/bot.bicep' = {
+  name: 'bot'
+  params: {
+    name: botName
+    botAppId: botAppId
+    callingWebhook: 'https://eventgrid.azure.net'
   }
 }
 
@@ -203,4 +184,4 @@ output acsId string = acs.id
 output acsHost string = acs.properties.hostName
 output acsImmutableId string = acs.properties.immutableResourceId
 output connectionName string = connectionName
-output botName string = bot.name
+output botName string = bot.outputs.name

@@ -9,6 +9,7 @@ import base64
 import hashlib
 import hmac
 import json
+import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from email.utils import format_datetime
@@ -35,5 +36,8 @@ def grant_consent(acs_host: str, access_key: str, teams_tenant_id: str, resource
     body = json.dumps({"principalType": "teamsResourceAccount"}).encode()
     req = urllib.request.Request(f"https://{acs_host}{path}", data=body, method="PUT",
                                  headers=sign_request(acs_host, access_key, path, body))
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        return resp.status
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return resp.status
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(f"ACS consent failed: HTTP {exc.code} {exc.read()[:300]!r}") from exc

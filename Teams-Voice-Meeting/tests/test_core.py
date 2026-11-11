@@ -162,3 +162,20 @@ def test_ensure_agent_update_publishes_new_version_with_triggers():
     assert v.ensure_agent(update=True) == "updated"
     definition = agents.created[0][1]
     assert "hey assistant" in definition.instructions and not definition.get("greeting")
+
+
+def test_watch_survives_a_failed_poll_and_a_failed_end_call(caplog):
+    class Flaky(FakeTelephony):
+        polls = 0
+        def list_calls(self, agent, provider=None, status=None):
+            self.polls += 1
+            if self.polls == 1:
+                raise RuntimeError("Foundry 503")
+            return super().list_calls(agent, provider, status)
+        def end_call(self, agent, call_id):
+            raise RuntimeError("end failed")
+    tel = Flaky(calls=[real_call("c1")])
+    clock = iter([0, 0, 100, 100, 100, 100])
+    with caplog.at_level("ERROR"):
+        voice(tel, max_call_seconds=60).watch(iterations=4, sleep=lambda _: None, clock=lambda: next(clock))
+    assert caplog.text.count("watch poll failed") >= 2
