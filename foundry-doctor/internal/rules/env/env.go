@@ -594,16 +594,6 @@ func dedupe(in []string) []string {
 	return out
 }
 
-func secretKey(k string) bool {
-	u := strings.ToUpper(k)
-	for _, s := range []string{"KEY", "SECRET", "TOKEN", "PASSWORD", "PWD", "CONNECTIONSTRING"} {
-		if strings.Contains(u, s) {
-			return true
-		}
-	}
-	return false
-}
-
 // MaxDiffKeys is the number of differing keys named in one FND-ENV-004 summary.
 const MaxDiffKeys = 10
 

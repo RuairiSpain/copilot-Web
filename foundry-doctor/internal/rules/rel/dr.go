@@ -14,8 +14,8 @@ import (
 // the template. With a multi-region objective declared it reports every
 // stateful component that is provably single-region.
 //
-// Policy keys (not yet in the configuration schema; read through the policy
-// interface like the reliability.apim* keys of FND-REL-009):
+// Policy keys (policy.reliability.disasterRecovery is defined in the configuration
+// schema; the .strategy spelling is not and is accepted only for forward compatibility):
 //
 //	reliability.disasterRecovery          or reliability.disasterRecovery.strategy
 //	  required | multi-region | hot-hot | hot-warm | hot-cold  -> multi-region objective

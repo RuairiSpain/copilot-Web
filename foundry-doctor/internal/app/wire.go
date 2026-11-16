@@ -58,7 +58,7 @@ func builtinRules(in RunInput) (rs []sdk.Rule, cleanup func()) {
 		p.Layout = layout
 	}
 	rs = append(rs, cfg.RegisterWith(p)...)
-	rs = append(rs, costrules.RegisterWith(costrules.Providers{Estimate: costrules.CachedEstimator("")})...)
+	rs = append(rs, costrules.RegisterWith(costrules.Providers{Estimate: costrules.CachedEstimator(priceCachePath(in.Source.Dir))})...)
 	rs = append(rs, env.RegisterWith(env.WithParameterFiles(store, in.Source.Dir, defaultInfraPath(in.Source.InfraPath)))...)
 	rs = append(rs, sec.Register()...)
 	rs = append(rs, idn.Register()...)
@@ -777,4 +777,13 @@ func writeNotes(w io.Writer, f report.Format, notes []string) error {
 	}
 	_, err := io.WriteString(w, b.String())
 	return err
+}
+
+// priceCachePath is where the `cost` command writes the price cache for the project in dir
+// (internal/app/cost.go). The COST-004 estimate reads the same file, offline.
+func priceCachePath(dir string) string {
+	if dir == "" {
+		dir = "."
+	}
+	return filepath.Join(dir, ".foundry-doctor", "cache", "prices.json")
 }

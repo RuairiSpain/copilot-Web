@@ -7,7 +7,7 @@ secrets or secret-shaped strings.
 |---|---|---|
 | `good/` | Valid `azure.yaml` with project, deployment and hosted agent | No findings |
 | `bad/` | Duplicate `name:` key, unresolved `${EXAMPLE_MISSING_VAR}`, `uses:` typo | Findings (exit 1) |
-| `good-private/` | Realistic private-networked Foundry + capability-settings sample with policy config and Bicep-backed infra (project role assignments, delete lock, AppInsights connection, explicit `raiPolicyName`) | No error/warning findings from verified deterministic rules; info-only posture findings may remain |
+| `good-private/` | Realistic private-networked Foundry + capability-settings sample with policy config and Bicep-backed infra (project role assignments, delete lock, AppInsights connection, explicit `raiPolicyName`) | No error/warning findings at azd below 1.36.0 (at 1.36.0 and later FND-SEC-007 reports the hosted agent without a `policies` rai_policy entry, and FND-OPS-008 reports a missing CI pipeline when run inside this repository); info-only posture findings may remain |
 | `bad-private/` | Intentionally broken variant of `good-private/` with targeted reliability and security regressions | Findings for the injected defects with source locations under `infra/` |
 | `bad-prod/` | Small prod-profile negative sample with Bicep-backed infra (and compiled `infra/main.json`) that triggers the broadened IDN-002, OPS-002, REL-004, REL-008, SEC-007, SEC-010, CFG-003, CFG-005, CFG-007 and CFG-012 rules; see its README | Findings (exit 1) for each listed rule |
 | `azure-yaml-only/` | `azure.yaml` with no infra directory | Infra checks reported as skipped, not passed |

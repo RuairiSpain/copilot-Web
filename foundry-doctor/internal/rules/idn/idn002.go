@@ -39,6 +39,16 @@ var (
 	roleCosmosOperator             = roleReq{"230815da-be43-4aae-9cb4-875f7bd000aa", "Cosmos DB Operator"}
 )
 
+// isCatalogueRole reports whether guid is one of the roles this rule knows by GUID.
+func isCatalogueRole(guid string) bool {
+	for _, r := range []roleReq{roleSearchIndexDataContributor, roleSearchServiceContributor, roleBlobDataContributor, roleBlobDataOwner, roleStorageAccountContributor, roleCosmosOperator} {
+		if strings.EqualFold(r.guid, guid) {
+			return true
+		}
+	}
+	return false
+}
+
 // requiredRoles are the roles whose absence is a finding, by lower-cased target
 // type. Storage Account Contributor is reported only as a note (catalogue
 // notes: not confirmed as required), and the Cosmos DB Built-in Data
@@ -179,9 +189,6 @@ func roleStatus(in *sdk.Input, assignments []sdk.ARMResource, owner, target sdk.
 	for _, as := range assignments {
 		def, _ := rawStr(as.Properties, "roleDefinitionId")
 		guid, gwhy, ok := resolveRoleDefinition(in, def)
-		if ok && guid != role.guid {
-			continue
-		}
 		pid, _ := rawStr(as.Properties, "principalId")
 		pm := matchPrincipal(pid, owner)
 		if pm == triNo {
@@ -189,6 +196,17 @@ func roleStatus(in *sdk.Input, assignments []sdk.ARMResource, owner, target sdk.
 		}
 		cv := scopeCovers(as.Scope, target)
 		if cv == coverOther {
+			continue
+		}
+		if ok && guid != role.guid {
+			// A different role of the same principal at a covering scope. A role from the
+			// catalogue's own table is judged by its own check. Any other role (a custom
+			// role, or a built-in role outside the table) may include the required actions,
+			// and the template cannot show its definition, so the result is uncertain and
+			// never "missing".
+			if !isCatalogueRole(guid) {
+				uncertain("the project identity holds another role (" + guid + ") at a covering scope, which may be a custom role or a superset that includes " + role.name + "; the template cannot show its actions")
+			}
 			continue
 		}
 		switch {

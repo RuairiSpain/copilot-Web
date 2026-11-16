@@ -44,7 +44,7 @@ evidence:
     at a parent scope outside the template. No assignments at all in the template skips with input-unavailable naming the
     missing capability (Policy Reader, live check). The mapped list is the five definitions below (all read in the
     azure-policy repository); it can be replaced by the policy key azurePolicy.mappedDefinitionIds (list of GUIDs), a key that
-    is not yet in ADR-007 and the configuration schema (UNVERIFIED as a supported key until added).
+    is a policy key defined in the configuration schema (policy.azurePolicy.mappedDefinitionIds).
   confidence: likely
 recommendation: Assign the built-in policies that correspond to the Foundry Doctor security rules (for example local-auth,
   public network access, CMK) at subscription or management-group scope, in Default enforcement mode once existing
