@@ -1,0 +1,22 @@
+name: EGM agents in sync
+
+on:
+  pull_request:
+    paths:
+      - ".claude/agents/egm-*.md"
+      - ".claude/skills/egm-*/**"
+      - ".github/agents/egm-*.md"
+      - ".github/skills/egm-*/**"
+      - "scripts/sync-egm-copilot.sh"
+      - ".github/workflows/egm-sync.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Copilot copies match the Claude originals
+        run: bash scripts/sync-egm-copilot.sh --check
